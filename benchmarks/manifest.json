@@ -172,6 +172,45 @@
       "expected": []
     },
     {
+      "id": "javascript-nosql-auth-bypass",
+      "description": "Parsed JSON credential values flow into a document query without primitive-type enforcement, allowing MongoDB operator objects to select an account and install its identity and role in the attacker's session.",
+      "fixture": "fixtures/javascript-nosql-auth-bypass",
+      "findingsPaths": [
+        "javascript-nosql-auth-bypass/run-1/findings.json",
+        "javascript-nosql-auth-bypass/run-2/findings.json",
+        "javascript-nosql-auth-bypass/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "document-operator-login-bypass",
+          "cwe": ["CWE-943", "CWE-287"],
+          "locations": [
+            {
+              "path": "src/sessions.js",
+              "startLine": 8,
+              "endLine": 11,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-nosql-login",
+      "description": "The same document query accepts only bounded primitive credential strings, rejecting JSON objects, arrays, and query operators before database access.",
+      "fixture": "fixtures/javascript-safe-nosql-login",
+      "findingsPaths": [
+        "javascript-safe-nosql-login/run-1/findings.json",
+        "javascript-safe-nosql-login/run-2/findings.json",
+        "javascript-safe-nosql-login/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-ssrf",
       "description": "An unauthenticated caller controls the complete URL fetched by the server.",
       "fixture": "fixtures/javascript-ssrf",

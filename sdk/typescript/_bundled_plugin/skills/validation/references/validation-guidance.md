@@ -83,6 +83,16 @@ Use class-specific proof tuples:
   bounds in the same units, reserved metadata/terminator space, and valid
   ownership/lifetime; a bounded-function name or compiler hardening flag alone
   is not proof.
+- document-query/NoSQL operator injection: attacker-controlled parsed key,
+  primitive, array, object, selector document, aggregation stage, projection,
+  sort, update operator, or expression + exact parser/schema/coercion runtime
+  type + driver/ODM selector or operator semantics + selected/read/updated/
+  deleted object + authentication, authorization, tenant, confidentiality,
+  integrity, or availability effect. Object-literal syntax is not proof of
+  parameterization. Suppression requires a pre-query primitive-type or exact
+  schema/shape/key/operator allowlist that excludes every operator and coercion
+  needed by the witness, plus proof that the driver does not reinterpret the
+  surviving value.
 - injection/path traversal/file upload/header/open redirect: attacker-controlled bytes + sanitizer/canonicalization/allowlist result + dangerous sink/context
 - XSS/template/SSTI: attacker-controlled value + escaping/template context + browser/server-side template execution sink
 - server-side template source: attacker-controlled request, stored, tenant, configuration, or error text + compilation or parsing as template/expression source + exact sandbox/global/object-capability/recursion controls + reachable read, expression, code-execution, or secret-exposure effect. A fixed template receiving untrusted variables is a negative control unless those variables are reparsed or evaluated as source; autoescaping controls output encoding, not server-side expression execution.

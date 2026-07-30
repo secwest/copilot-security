@@ -481,7 +481,7 @@ export function scanQualityGatePrompt(
   return [
     "Mandatory Copilot Security quality gate. Continue the same scan; do not summarize or stop early.",
     "Reopen the repository source and all three draft artifacts.",
-    "Run an independent residual search for dangerous APIs and missing controls, including process/shell execution, query construction, path/archive/file writes, URL fetches, parsers/deserializers, templates, computed property writes and prototype mutation, bulk object binding and mass assignment, authentication, browser-ambient credential CSRF on security-relevant state changes, object/tenant authorization, cryptographic verification, TLS certificate and hostname verification, native memory allocation/copy/index/lifetime boundaries, state transitions, races, replay, and resource bounds.",
+    "Run an independent residual search for dangerous APIs and missing controls, including process/shell execution, SQL/NoSQL/query construction and document selector/operator injection, path/archive/file writes, URL fetches, parsers/deserializers, templates, computed property writes and prototype mutation, bulk object binding and mass assignment, authentication, browser-ambient credential CSRF on security-relevant state changes, object/tenant authorization, cryptographic verification, TLS certificate and hostname verification, native memory allocation/copy/index/lifetime boundaries, state transitions, races, replay, and resource bounds.",
     ...(residualRiskInventory === ""
       ? []
       : [

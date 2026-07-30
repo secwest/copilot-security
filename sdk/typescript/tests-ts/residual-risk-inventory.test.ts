@@ -94,6 +94,30 @@ describe("residual risk inventory", () => {
     expect(safe).toContain("[email]");
   });
 
+  test("pairs document-query operator values with primitive credential guards", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-nosql-auth-bypass"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-nosql-login"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"query-or-object-lookup"');
+    expect(vulnerable).toContain('"document-query-or-nosql-operator"');
+    expect(vulnerable).toContain("database.accounts.findOne");
+    expect(vulnerable).toContain("username: request.body.username");
+    expect(vulnerable).toContain("loginVerifier: request.body.loginVerifier");
+    expect(vulnerable).toContain("request.session.role = account.role");
+    expect(safe).toContain('"document-query-or-nosql-operator"');
+    expect(safe).toContain('typeof username !== "string"');
+    expect(safe).toContain('typeof loginVerifier !== "string"');
+    expect(safe).toContain("database.accounts.findOne");
+    expect(scanQualityGatePrompt("")).toContain(
+      "document selector/operator injection",
+    );
+  });
+
   test("surfaces SSRF input and fixed-destination controls", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-ssrf"),

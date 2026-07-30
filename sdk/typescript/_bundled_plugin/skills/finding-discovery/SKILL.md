@@ -78,6 +78,22 @@ Use this checklist to keep discovery specific without turning it into validation
 - When class-filter, allowlist, denylist, blacklist, whitelist, or resolver logic is duplicated across core, server, client, remoting, plugin, or import packages, include the runtime/exported equivalents as candidate locations when they implement the same broken control. A transport callsite proves reachability, but it does not replace the reusable resolver implementation.
 - In framework or library scans, stored client, tenant, application, identity-provider, exception, or imported-configuration values are cross-boundary inputs when later rendered, evaluated, parsed, or used for authorization and the instance has a plausible runtime path from an application, tenant, identity provider, import, or other boundary. Do not suppress solely because the writer is outside the current repository unless repository evidence proves the value is trusted-only for normal deployments.
 - For SQL/NoSQL/LDAP/XPath and similar query APIs, do not suppress a candidate solely because the endpoint already accepts user-controlled data, because the operation is an insert/update, or because a later business check appears to limit the final application effect. If attacker-controlled input reaches query syntax or selector operators through a plausible runtime path, carry the candidate to validation with the later check recorded as possible counterevidence.
+- For document-query and NoSQL APIs, preserve whether each attacker-controlled
+  value is a primitive, array, object, key, selector document, aggregation
+  stage, projection, sort, update operator, or executable expression after JSON,
+  form, GraphQL, RPC, schema, and framework parsing. Enumerate `$` operators,
+  dotted keys, implicit operator documents, object spreading, full-filter
+  assignment, and driver or ODM casting/sanitization behavior. An object literal
+  passed to `findOne`, `find`, `aggregate`, `update`, or `delete` is not
+  parameterization when request-controlled values can remain operator objects.
+  Preserve exact primitive-type, shape, key, and bounded-grammar guards as
+  negative controls.
+- For authentication, authorization, tenant, ownership, and secret-verification
+  queries, trace the selected record through session/principal installation or
+  the protected operation. Do not stop at “the query changes”: prove which
+  account or object an operator document can select and what privilege or data
+  the caller gains. Conversely, reject string-only values that cannot become
+  selectors or operators even when a document-query API appears nearby.
 - Do not collapse separate high-impact proof tuples into one candidate only because they share a route or helper. Split command execution, SSRF, path/file impact, XML/parser behavior, XSS/template execution, and authz/state-change impact when the sink, closest control, or impact differs.
 - For outbound request surfaces such as `downloadFrom`, URL importers, webhook/callback clients, preview/render fetchers, and redirect-following HTTP clients, enumerate each attacker-controlled destination source and its closest allow/deny/filter/redirect control. Do not suppress SSRF because the fetch/callback is an intended feature, because filters are optional or empty by default, or because a sibling route found a louder file/path issue; keep the network row when user input can select a destination and the hard boundary is incomplete, operator-configured, or only pre-request.
 - In XML/parser/deserializer surfaces, enumerate default parser factories, converters, validators, transformers, unmarshal/parse calls, and handler entrypoints independently. A safe sibling parser path is negative control for that sibling, not suppression evidence for a different default factory or converter.

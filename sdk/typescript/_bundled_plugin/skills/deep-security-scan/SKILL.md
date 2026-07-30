@@ -63,10 +63,11 @@ inventory and closure requirements.
 4. Apply these distinct lenses:
 
    - **source/control/sink**: authentication, browser-ambient credential CSRF,
-     authorization, tenant selection, injection, traversal, SSRF, XSS, unsafe
-     parsing or deserialization, filesystem, process, database, template, bulk
-     object binding and mass assignment, native memory allocation/copy/index/
-     lifetime boundaries, and network operations;
+     authorization, tenant selection, SQL and document-query selector/operator
+     injection, traversal, SSRF, XSS, unsafe parsing or deserialization,
+     filesystem, process, database, template, bulk object binding and mass
+     assignment, native memory allocation/copy/index/lifetime boundaries, and
+     network operations;
    - **systems**: concurrency, check/use races, distributed state, replay and
      idempotency, security-sensitive randomness and token entropy,
      cryptography, secret lifecycle, failure modes, denial of service, integer
@@ -151,6 +152,16 @@ inventory and closure requirements.
      control flow. A bounded API name is not proof that its bound matches the
      destination. Use a sibling path whose source availability, destination
      capacity, arithmetic, and lifetime are all checked as the negative control.
+   - document-query and NoSQL operator injection: every JSON, form, GraphQL,
+     RPC, configuration, or stored value that can become a selector key,
+     selector value, comparison/operator document, aggregation stage,
+     projection, sort, update operator, or JavaScript expression; preserve
+     parser-produced runtime types, schema/DTO coercion, key and `$`-operator
+     allowlists, query-builder behavior, and the selected/read/updated/deleted
+     object and later trust decision. Object-literal query syntax is not
+     parameterization. Use a sibling path that enforces the intended primitive
+     type, shape, keys, and bounded value grammar before query construction as
+     the negative control.
 
    Return uncovered work to discovery. Record the sweep under
    `artifacts/02_discovery/residual_sweep.md`.
@@ -181,6 +192,12 @@ inventory and closure requirements.
    and trace the corrupted/read object or control data to a realistic impact.
    Reject dangerous-API-name-only claims when exact bounds, checked arithmetic,
    object lifetime, and all relevant callsites prove the operation safe.
+   For document-query candidates, demonstrate the exact parsed input type and
+   operator shape the driver accepts, the resulting selector semantics, and the
+   unauthorized read, write, deletion, authentication, authorization, or
+   tenant-selection outcome. Reject the candidate when an exact schema or
+   primitive-type guard runs before construction and excludes every operator,
+   key, type, and coercion needed by the claimed query.
    Reject API-name-only, unreachable, already-contained, or equivalently safe
    behavior. Only reachable, exploitable defects with
    concrete adverse impact survive. Keep mitigated flows, rejected candidates,

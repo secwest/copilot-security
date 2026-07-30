@@ -87,6 +87,15 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   crash, or execution outcome. Distinguish a demonstrated adjacent-field or
   control-flow overwrite from generic undefined behavior, and do not infer code
   execution when the repository proves only a bounded crash.
+- For document-query and NoSQL findings, preserve the attacking JSON/form/RPC
+  shape and parsed runtime types; selector keys, values, operator documents,
+  aggregation stages, or expressions; schema/DTO/ODM coercion and sanitization;
+  driver query semantics; the exact selected/read/updated/deleted account,
+  tenant, or object; and the later session, authorization, or protected action.
+  Do not infer authentication bypass merely because `$ne` appears, or suppress
+  an operator object because the query uses an object literal. Prove the exact
+  witness against the effective driver semantics and nearest primitive/schema
+  control.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 

@@ -147,6 +147,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:execute|findById|findOne|getById|query|raw|select|where)\s*\(/iu,
   ],
   [
+    "document-query-or-nosql-operator",
+    96,
+    /\b(?:aggregate|findOne|findOneAndDelete|findOneAndReplace|findOneAndUpdate|mongo|mongoose)\s*\(|["'`]?\$(?:all|and|elemMatch|eq|expr|gt|gte|in|lt|lte|ne|nin|nor|not|or|regex|size|where)\b/iu,
+  ],
+  [
     "authorization-boundary",
     85,
     /\b(?:account_?id|customer_?id|object_?id|owner_?id|req\.params|request\.params|tenant_?id|user_?id)\b/iu,

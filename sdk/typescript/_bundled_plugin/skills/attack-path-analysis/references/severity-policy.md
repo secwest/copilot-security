@@ -20,6 +20,12 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
 - Severe sensitive data leak (LFI, path traversal, bad scoping of file downloads, access to data without authorization, trivial side-channels) with realistic attacker access (proof the attacker can read secrets, PII, signing keys, credential stores, private keys, classified or highly confidential information (model weights etc))
 - Trivial memory corruption exploits with known exploit patterns which require little effort to exploit
 - SQL or other Database or query injection with clear proof of path from attacker input from in-scope attack surface and impact of the injection (leaks sensitive data, inserts dangerous records)
+- Document-query or NoSQL operator injection that demonstrably selects another
+  account or tenant, bypasses authentication or authorization, exposes
+  sensitive records, or performs unauthorized update/deletion. Severity follows
+  the selected object's privilege and data impact; a `$` token, object-valued
+  request field, or document-query API without accepted operator semantics and
+  a protected outcome is not sufficient.
 - Sandbox, container, VM, browser, or interpreter escape that breaks an intended isolation boundary
 - Server-side template injection when it leads to RCE or leaking of secrets, with actual proof that the templating library can be exploited to do this (RCE escape or secrets/credentials in scope) and that this can be reached from an in-scope attack surface
 - Arbitrary file write in executable, startup, config, or firmware paths with a realistic path to persistence or code execution. Requires proof that an attacker can actually trigger this from in-scope attack surface.

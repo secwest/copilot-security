@@ -49,6 +49,7 @@ describe("effectiveness benchmark", () => {
       ["python-path-traversal", "python-safe-path"],
       ["javascript-idor", "javascript-safe-authorization"],
       ["javascript-sql-injection", "javascript-safe-sql"],
+      ["javascript-nosql-auth-bypass", "javascript-safe-nosql-login"],
       ["javascript-ssrf", "javascript-safe-fetch"],
       ["python-unsafe-deserialization", "python-safe-json"],
       ["javascript-reflected-xss", "javascript-safe-html"],
@@ -95,6 +96,11 @@ describe("effectiveness benchmark", () => {
         .get("c-packet-length-overflow")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-787", "CWE-120"]]);
+    expect(
+      cases
+        .get("javascript-nosql-auth-bypass")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-943", "CWE-287"]]);
     const adversarialVulnerable = join(
       benchmarkRoot,
       "fixtures",
@@ -134,6 +140,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "c-bounded-packet-copy",
+    );
+    const nosqlAuthBypass = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-nosql-auth-bypass",
+    );
+    const safeNosqlLogin = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-nosql-login",
     );
     expect(
       await readFile(join(adversarialVulnerable, "README.md"), "utf8"),
@@ -192,6 +208,18 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(boundedPacketCopy, "src", "session.c"), "utf8"),
     ).toContain("username_length > packet_size - 2");
+    expect(
+      await readFile(join(nosqlAuthBypass, "src", "sessions.js"), "utf8"),
+    ).toContain("username: request.body.username");
+    expect(
+      await readFile(join(nosqlAuthBypass, "src", "sessions.js"), "utf8"),
+    ).toContain("request.session.role = account.role");
+    expect(
+      await readFile(join(safeNosqlLogin, "src", "sessions.js"), "utf8"),
+    ).toContain('typeof username !== "string"');
+    expect(
+      await readFile(join(safeNosqlLogin, "src", "sessions.js"), "utf8"),
+    ).toContain('typeof loginVerifier !== "string"');
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -273,16 +301,21 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("browser-ambient credential CSRF");
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
+    expect(deepScan).toContain("document-query and NoSQL operator injection:");
     expect(standardScan).toContain("bulk object binding");
     expect(standardScan).toContain("mass assignment");
     expect(standardScan).toContain("browser-ambient credential CSRF");
     expect(standardScan).toContain(
       "native memory allocation/copy/index/lifetime",
     );
+    expect(standardScan).toContain(
+      "SQL and document-database query selectors/operators",
+    );
     expect(diffScan).toContain("mass-assignment field controls");
     expect(diffScan).toContain("writable-field sets");
     expect(diffScan).toContain("anti-CSRF token");
     expect(diffScan).toContain("terminator space");
+    expect(diffScan).toContain("request-controlled document selectors");
     expect(discovery).toContain(
       "distinguish attacker-controlled template source from attacker-controlled data",
     );
@@ -292,20 +325,29 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain("bearer-only APIs");
     expect(discovery).toContain("For native memory safety");
     expect(discovery).toContain("bounded API is neither vulnerable");
+    expect(discovery).toContain("For document-query and NoSQL APIs");
+    expect(discovery).toContain(
+      "parameterization when request-controlled values",
+    );
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
     expect(validation).toContain("browser CSRF:");
     expect(validation).toContain("native memory corruption:");
+    expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(attackPath).toContain("For mass-assignment findings");
     expect(attackPath).toContain("For CSRF findings");
     expect(attackPath).toContain("For native-memory findings");
+    expect(attackPath).toContain("For document-query and NoSQL findings");
     expect(severityPolicy).toContain(
       "CSRF when it enables important state-changing actions",
     );
     expect(severityPolicy).toContain("CSRF on low-impact actions");
     expect(severityPolicy).toContain(
       "Memory corruption that is theoretical, non-triggerable",
+    );
+    expect(severityPolicy).toContain(
+      "Document-query or NoSQL operator injection",
     );
     expect(threatModelGuidance).toContain(
       "allocation arithmetic, object bounds, ownership/lifetime",

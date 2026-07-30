@@ -34,9 +34,10 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
 3. Review every in-scope file. Trace attacker-controlled sources through
    validation, authentication, browser-ambient credential CSRF, authorization,
    state changes, interpreters, filesystem, network, deserialization, templates,
-   database queries, bulk object binding and mass assignment into persisted or
-   privileged fields, native memory allocation/copy/index/lifetime boundaries,
-   secrets, and resource consumption. Record candidates in
+   SQL and document-database query selectors/operators, bulk object binding and
+   mass assignment into persisted or privileged fields,
+   native memory allocation/copy/index/lifetime boundaries, secrets, and
+   resource consumption. Record candidates in
    `artifacts/02_discovery/candidate_ledger.jsonl`.
 4. Perform an independent residual sweep over high-risk files and source /
    control / sink families that produced no candidate. Record why each is safe
