@@ -365,6 +365,84 @@
         "python-safe-xml/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "javascript-prototype-pollution",
+      "description": "A dotted attacker-controlled path performs recursive computed writes through an ordinary object and permits __proto__ traversal.",
+      "fixture": "fixtures/javascript-prototype-pollution",
+      "findingsPaths": [
+        "javascript-prototype-pollution/run-1/findings.json",
+        "javascript-prototype-pollution/run-2/findings.json",
+        "javascript-prototype-pollution/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "recursive-preference-prototype-pollution",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/preferences.js",
+              "startLine": 4,
+              "endLine": 9,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-preferences",
+      "description": "The endpoint accepts only fixed preference names and stores them in a Map rather than traversing object properties.",
+      "fixture": "fixtures/javascript-safe-preferences",
+      "findingsPaths": [
+        "javascript-safe-preferences/run-1/findings.json",
+        "javascript-safe-preferences/run-2/findings.json",
+        "javascript-safe-preferences/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "python-disabled-tls-verification",
+      "description": "A settlement request sends a service credential and payment data with TLS certificate verification disabled.",
+      "fixture": "fixtures/python-disabled-tls-verification",
+      "findingsPaths": [
+        "python-disabled-tls-verification/run-1/findings.json",
+        "python-disabled-tls-verification/run-2/findings.json",
+        "python-disabled-tls-verification/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "settlement-tls-certificate-verification-disabled",
+          "cwe": ["CWE-295"],
+          "locations": [
+            {
+              "path": "src/settlement.py",
+              "startLine": 5,
+              "endLine": 10,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-safe-tls",
+      "description": "The settlement request keeps TLS certificate verification enabled and applies a network timeout.",
+      "fixture": "fixtures/python-safe-tls",
+      "findingsPaths": [
+        "python-safe-tls/run-1/findings.json",
+        "python-safe-tls/run-2/findings.json",
+        "python-safe-tls/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

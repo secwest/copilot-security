@@ -2463,6 +2463,20 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
     ):
         return "unsafe-deserialization", ["CWE-502"]
     if (
+        "prototype pollution" in text
+        or "__proto__" in text
+        or (
+            "object prototype" in text
+            and (
+                "attacker" in text
+                or "computed property" in text
+                or "mutation" in text
+                or "pollution" in text
+            )
+        )
+    ):
+        return "prototype-pollution", ["CWE-1321"]
+    if (
         "cross-site scripting" in text
         or "cross site scripting" in text
         or re.search(r"\b(?:reflected|stored|dom)[ -]?xss\b", text)
@@ -2475,6 +2489,21 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         or re.search(r"\bxxe\b", text)
     ):
         return "xml-external-entity", ["CWE-611"]
+    if (
+        (
+            "certificate verification" in text
+            and (
+                "disabled" in text
+                or "bypass" in text
+                or "false" in text
+                or "missing" in text
+            )
+        )
+        or "rejectunauthorized=false" in text
+        or "verify=false" in text
+        or "ssl.cert_none" in text
+    ):
+        return "improper-certificate-validation", ["CWE-295"]
     if (
         "signature verification" in text
         or "signature validation" in text

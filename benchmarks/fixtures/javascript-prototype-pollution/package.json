@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-javascript-prototype-pollution",
+  "private": true,
+  "type": "module"
+}

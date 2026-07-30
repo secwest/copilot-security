@@ -494,6 +494,16 @@ describe("malformed scan artifact recovery", () => {
         "The request parser permits XXE expansion of attacker-controlled entities.",
         { category: "xml-external-entity", cwe: ["CWE-611"] },
       ],
+      [
+        "Prototype pollution through recursive preference update",
+        "Attacker-controlled __proto__ path segments mutate the shared object prototype.",
+        { category: "prototype-pollution", cwe: ["CWE-1321"] },
+      ],
+      [
+        "TLS certificate verification disabled for settlement service",
+        "The HTTPS request uses verify=False while sending a service credential.",
+        { category: "improper-certificate-validation", cwe: ["CWE-295"] },
+      ],
     ] as const) {
       const fixture = await startDraftScan();
       const path = join(fixture.scanDir, "findings.json");

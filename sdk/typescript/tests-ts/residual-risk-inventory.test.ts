@@ -150,23 +150,110 @@ describe("residual risk inventory", () => {
     expect(safe).toContain("len(request.body) > 65536");
   });
 
-  test("prioritizes critical sinks instead of letting noisy files exhaust the prompt", async () => {
+  test("pairs recursive computed writes with fixed Map-backed preferences", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-prototype-pollution"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-preferences"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"dynamic-property-or-prototype"');
+    expect(vulnerable).toContain('split(\\".\\")');
+    expect(vulnerable).toContain("cursor[key] ??= {}");
+    expect(vulnerable).toContain("cursor[leaf] = request.body.value");
+    expect(safe).toContain("ALLOWED_PREFERENCES.has(key)");
+    expect(safe).toContain("settings.set(key, request.body.value)");
+  });
+
+  test("pairs disabled certificate checks with verified bounded HTTPS", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "python-disabled-tls-verification"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "python-safe-tls"),
+    );
+
+    expect(vulnerable).toContain('"disabled-security-control"');
+    expect(vulnerable).toContain("verify=False");
+    expect(vulnerable).toContain("Authorization");
+    expect(vulnerable).toContain("service_token");
+    expect(safe).toContain("verify=True");
+    expect(safe).toContain("timeout=5");
+  });
+
+  test("coalesces overlapping hits into bounded evidence windows", async () => {
     const repository = await mkdtemp(
       join(tmpdir(), "copilot-security-residual-risk-"),
     );
     temporaryPaths.push(repository);
     await writeFile(
       join(repository, "signals.py"),
-      `${Array.from({ length: 120 }, (_, index) => `open("file-${index}")`).join("\n")}
-subprocess.run(user_input, shell=True)
-`,
+      `${Array.from({ length: 40 }, (_, index) => `open("file-${index}")`).join("\n")}\n`,
     );
 
     const records = (await buildResidualRiskInventory(repository))
       .split("\n")
-      .map((line) => JSON.parse(line) as { categories: string[] });
+      .map(
+        (line) => JSON.parse(line) as { categories: string[]; excerpt: string },
+      );
 
-    expect(records).toHaveLength(96);
+    expect(records.length).toBeLessThan(10);
+    expect(
+      records.every((record) => record.excerpt.split("\n").length <= 16),
+    ).toBe(true);
+  });
+
+  test("preserves category and file diversity under adversarial prompt saturation", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-residual-risk-"),
+    );
+    temporaryPaths.push(repository);
+    await writeFile(
+      join(repository, "a-noise.py"),
+      Array.from(
+        { length: 4_200 },
+        (_, index) =>
+          `subprocess.run(command_${index}, shell=True)\n${"\n".repeat(9)}`,
+      ).join(""),
+    );
+    await writeFile(
+      join(repository, "z-certificate.py"),
+      'requests.post("https://service", verify=False)\n',
+    );
+    await writeFile(
+      join(repository, "z-prototype.js"),
+      "const key = request.body.key;\nsettings[key] = request.body.value;\n",
+    );
+
+    const records = (await buildResidualRiskInventory(repository))
+      .split("\n")
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            path: string;
+            categories: string[];
+          },
+      );
+
+    expect(records.length).toBeLessThanOrEqual(96);
+    expect(records.length).toBeGreaterThan(2);
     expect(records[0]?.categories).toContain("process-or-shell");
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        path: "z-certificate.py",
+        categories: expect.arrayContaining(["disabled-security-control"]),
+      }),
+    );
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        path: "z-prototype.js",
+        categories: expect.arrayContaining([
+          "dynamic-property-or-prototype",
+          "untrusted-input",
+        ]),
+      }),
+    );
   });
 });

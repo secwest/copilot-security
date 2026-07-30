@@ -6,8 +6,11 @@ const MAX_FILE_BYTES = 256 * 1024;
 const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_CANDIDATES = 4_096;
 const MAX_SIGNALS = 96;
+const MAX_SIGNALS_PER_FILE = MAX_SIGNALS;
 const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
+const MAX_EXCERPT_LINES = 16;
+const SOFT_SIGNALS_PER_FILE = 4;
 
 const SOURCE_EXTENSIONS = new Set([
   ".c",
@@ -97,6 +100,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:compile|eval|execScript|Function|render|renderString|template)\s*\(/iu,
   ],
   [
+    "dynamic-property-or-prototype",
+    96,
+    /\b(?:__proto__|Object\.assign|Object\.setPrototypeOf|prototype)\b|\[[A-Za-z_$][\w$]*\]\s*(?:=|\?\?=|\|\|=)/iu,
+  ],
+  [
     "query-or-object-lookup",
     85,
     /\b(?:execute|findById|findOne|getById|query|raw|select|where)\s*\(/iu,
@@ -139,7 +147,7 @@ const RISK_SIGNALS: ReadonlyArray<
   [
     "disabled-security-control",
     95,
-    /\b(?:rejectUnauthorized|verify|verify_mode)\s*[:=]\s*(?:false|0|none)\b/iu,
+    /\b(?:check_hostname|rejectUnauthorized|verify|verify_mode)\s*[:=]\s*(?:false|0|none|ssl\.CERT_NONE)\b|\bNODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["']?0\b/iu,
   ],
 ];
 
@@ -161,6 +169,8 @@ interface ResidualRiskRecord {
   line: number;
   categories: string[];
   priority: number;
+  startLine: number;
+  endLine: number;
   excerpt: string;
 }
 
@@ -181,7 +191,6 @@ export async function buildResidualRiskInventory(
   let totalBytes = 0;
 
   for (const candidatePath of paths.slice(0, MAX_FILES)) {
-    if (records.length >= MAX_CANDIDATES) break;
     const source = await readBoundedRepositoryFile(
       canonicalRepository,
       candidatePath,
@@ -192,38 +201,168 @@ export async function buildResidualRiskInventory(
     const text = source.toString("utf8");
     if (text.includes("\0")) continue;
     const lines = text.split(/\r?\n/u);
+    let fileRecords: ResidualRiskRecord[] = [];
+    const retainedFileRecords: ResidualRiskRecord[] = [];
     for (let index = 0; index < lines.length; index += 1) {
       const matchingSignals = RISK_SIGNALS.filter(([, , expression]) =>
         expression.test(lines[index] ?? ""),
       );
       const categories = matchingSignals.map(([category]) => category);
       if (categories.length === 0) continue;
-      const start = Math.max(0, index - CONTEXT_LINES_BEFORE);
-      const end = Math.min(lines.length, index + CONTEXT_LINES_AFTER + 1);
-      records.push({
+      const startLine = Math.max(1, index + 1 - CONTEXT_LINES_BEFORE);
+      const endLine = Math.min(lines.length, index + 1 + CONTEXT_LINES_AFTER);
+      mergeResidualRiskRecord(fileRecords, lines, {
         path: candidatePath.replaceAll("\\", "/"),
         line: index + 1,
         categories,
         priority: Math.max(...matchingSignals.map(([, priority]) => priority)),
-        excerpt: lines
-          .slice(start, end)
-          .map((line, offset) => `${start + offset + 1}: ${line}`)
-          .join("\n"),
+        startLine,
+        endLine,
+        excerpt: "",
       });
-      if (records.length >= MAX_CANDIDATES) break;
+      if (fileRecords.length >= MAX_CANDIDATES) {
+        retainedFileRecords.push(
+          ...selectResidualRiskRecords(fileRecords, MAX_SIGNALS_PER_FILE),
+        );
+        fileRecords = [];
+      }
+    }
+    records.push(
+      ...selectResidualRiskRecords(
+        [...retainedFileRecords, ...fileRecords],
+        MAX_SIGNALS_PER_FILE,
+      ),
+    );
+  }
+
+  return selectResidualRiskRecords(records, MAX_SIGNALS)
+    .map(
+      ({
+        priority: _priority,
+        startLine: _startLine,
+        endLine: _endLine,
+        ...record
+      }) => JSON.stringify(record),
+    )
+    .join("\n");
+}
+
+function mergeResidualRiskRecord(
+  records: ResidualRiskRecord[],
+  lines: readonly string[],
+  next: ResidualRiskRecord,
+): void {
+  const previous = records.at(-1);
+  if (
+    previous !== undefined &&
+    next.startLine <= previous.endLine + 1 &&
+    Math.max(previous.endLine, next.endLine) -
+      Math.min(previous.startLine, next.startLine) +
+      1 <=
+      MAX_EXCERPT_LINES
+  ) {
+    previous.categories = [
+      ...new Set([...previous.categories, ...next.categories]),
+    ];
+    if (next.priority > previous.priority) {
+      previous.line = next.line;
+    }
+    previous.priority = Math.max(previous.priority, next.priority);
+    previous.startLine = Math.min(previous.startLine, next.startLine);
+    previous.endLine = Math.max(previous.endLine, next.endLine);
+    previous.excerpt = sourceExcerpt(
+      lines,
+      previous.startLine,
+      previous.endLine,
+    );
+    return;
+  }
+  next.excerpt = sourceExcerpt(lines, next.startLine, next.endLine);
+  records.push(next);
+}
+
+function sourceExcerpt(
+  lines: readonly string[],
+  startLine: number,
+  endLine: number,
+): string {
+  return lines
+    .slice(startLine - 1, endLine)
+    .map((line, offset) => `${startLine + offset}: ${line}`)
+    .join("\n");
+}
+
+function selectResidualRiskRecords(
+  records: readonly ResidualRiskRecord[],
+  limit: number,
+): ResidualRiskRecord[] {
+  const ranked = [...records].sort(compareResidualRiskRecords);
+  const selected: ResidualRiskRecord[] = [];
+  const selectedRecords = new Set<ResidualRiskRecord>();
+  const add = (record: ResidualRiskRecord): void => {
+    if (selected.length >= limit || selectedRecords.has(record)) {
+      return;
+    }
+    selected.push(record);
+    selectedRecords.add(record);
+  };
+
+  const representedCategories = new Set<string>();
+  for (const record of ranked) {
+    if (
+      record.categories.some((category) => !representedCategories.has(category))
+    ) {
+      add(record);
+      record.categories.forEach((category) =>
+        representedCategories.add(category),
+      );
     }
   }
 
-  return records
-    .sort(
-      (left, right) =>
-        right.priority - left.priority ||
-        left.path.localeCompare(right.path) ||
-        left.line - right.line,
-    )
-    .slice(0, MAX_SIGNALS)
-    .map(({ priority: _priority, ...record }) => JSON.stringify(record))
-    .join("\n");
+  const representedPaths = new Set(selected.map((record) => record.path));
+  const pathSeedLimit = Math.floor(limit / 2);
+  for (const record of ranked) {
+    if (selected.length >= pathSeedLimit || representedPaths.has(record.path)) {
+      continue;
+    }
+    add(record);
+    representedPaths.add(record.path);
+  }
+
+  const selectedPerPath = new Map<string, number>();
+  for (const record of selected) {
+    selectedPerPath.set(
+      record.path,
+      (selectedPerPath.get(record.path) ?? 0) + 1,
+    );
+  }
+  for (const record of ranked) {
+    if ((selectedPerPath.get(record.path) ?? 0) >= SOFT_SIGNALS_PER_FILE) {
+      continue;
+    }
+    const before = selected.length;
+    add(record);
+    if (selected.length > before) {
+      selectedPerPath.set(
+        record.path,
+        (selectedPerPath.get(record.path) ?? 0) + 1,
+      );
+    }
+  }
+
+  for (const record of ranked) add(record);
+  return selected.sort(compareResidualRiskRecords);
+}
+
+function compareResidualRiskRecords(
+  left: ResidualRiskRecord,
+  right: ResidualRiskRecord,
+): number {
+  return (
+    right.priority - left.priority ||
+    left.path.localeCompare(right.path) ||
+    left.line - right.line
+  );
 }
 
 async function readModelInventoryPaths(

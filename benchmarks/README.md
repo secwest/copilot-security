@@ -17,11 +17,12 @@ negative-control pass rate, stable detection across repeated runs, validation
 coverage, attack-path coverage, code-evidence coverage, severity accuracy, and
 false positives per run.
 
-The versioned corpus currently contains nine vulnerable/control pairs: command
+The versioned corpus currently contains eleven vulnerable/control pairs: command
 injection, path traversal, object-level authorization, SQL injection,
 server-side request forgery, unsafe deserialization, reflected XSS, XML
-external entities, and JWT signature-verification bypass. Three runs per case
-produce 54 scans in the complete corpus.
+external entities, JWT signature-verification bypass, prototype pollution, and
+disabled TLS certificate verification. Three runs per case produce 66 scans in
+the complete corpus.
 
 Run scans into a directory outside this repository:
 

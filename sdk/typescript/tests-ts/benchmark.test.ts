@@ -46,6 +46,8 @@ describe("effectiveness benchmark", () => {
       ["javascript-reflected-xss", "javascript-safe-html"],
       ["javascript-jwt-bypass", "javascript-safe-jwt"],
       ["python-xxe", "python-safe-xml"],
+      ["javascript-prototype-pollution", "javascript-safe-preferences"],
+      ["python-disabled-tls-verification", "python-safe-tls"],
     ] as const;
     const cases = new Map(manifest.cases.map((item) => [item.id, item]));
 

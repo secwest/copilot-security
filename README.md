@@ -20,10 +20,12 @@ residual-miss review lenses before centralized validation.
 Every scan also receives a mandatory independent correction turn. The host
 builds a bounded, prioritized residual-risk inventory from exact source
 excerpts across common application, systems, infrastructure, and CI languages.
-The correction turn must trace those signals through attacker control and
-nearby guards, add missed exploitable defects, and reject safe or mitigated
-flows. This supplements model-led discovery without treating lexical matches as
-findings.
+Overlapping hits are coalesced into bounded evidence windows, and category and
+file diversity are preserved before the remaining prompt budget is filled by
+risk priority. The correction turn must trace those signals through attacker
+control and nearby guards, add missed exploitable defects, and reject safe or
+mitigated flows. This supplements model-led discovery without treating lexical
+matches as findings.
 
 ## Requirements
 
@@ -95,10 +97,11 @@ state.
 `benchmarks/manifest.json` defines paired vulnerable and fixed fixtures for
 command injection, path traversal, object-level authorization, SQL injection,
 server-side request forgery, unsafe deserialization, reflected XSS, XML
-external entities, and JWT signature-verification bypass. Each case is scanned
-three times to measure both accuracy and model variance. The evaluator uses
-one-to-one CWE-plus-location matching, counts duplicate reports as false
-positives, and records missing scan artifacts as completion failures.
+external entities, JWT signature-verification bypass, prototype pollution, and
+disabled TLS certificate verification. Each case is scanned three times to
+measure both accuracy and model variance. The evaluator uses one-to-one
+CWE-plus-location matching, counts duplicate reports as false positives, and
+records missing scan artifacts as completion failures.
 
 ```powershell
 # Evaluate existing outputs
