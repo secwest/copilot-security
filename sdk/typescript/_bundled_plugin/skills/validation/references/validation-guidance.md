@@ -63,6 +63,16 @@ Use class-specific proof tuples:
   transition. Suppression requires an exact allowlist or equivalent binding
   control that excludes the claimed field; authentication, ownership of the
   edited object, or a repository comment is not field-level counterevidence.
+- browser CSRF: security-relevant state-changing route + credential the victim
+  browser attaches cross-site + exact cross-site-sendable method, content type,
+  parser, and request shape + SameSite cookie behavior + Origin/Referer, Fetch
+  Metadata, or anti-CSRF token semantics + realistic victim interaction and
+  protected-action impact. Authentication, POST, an intended JSON content
+  type, or CORS response policy alone is not a categorical defense. Suppression
+  requires proof that the exact request cannot carry ambient credentials, is
+  rejected before the state change by an enforced origin/fetch-metadata
+  predicate, or requires an unpredictable token bound to the victim session or
+  request and compared correctly.
 - injection/path traversal/file upload/header/open redirect: attacker-controlled bytes + sanitizer/canonicalization/allowlist result + dangerous sink/context
 - XSS/template/SSTI: attacker-controlled value + escaping/template context + browser/server-side template execution sink
 - server-side template source: attacker-controlled request, stored, tenant, configuration, or error text + compilation or parsing as template/expression source + exact sandbox/global/object-capability/recursion controls + reachable read, expression, code-execution, or secret-exposure effect. A fixed template receiving untrusted variables is a negative control unless those variables are reparsed or evaluated as source; autoescaping controls output encoding, not server-side expression execution.

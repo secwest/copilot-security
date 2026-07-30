@@ -52,8 +52,9 @@ publish findings, open issues, or contact third parties. Write only beneath
 3. Review every changed file and trace changed behavior through its callers,
    callees, guards, sanitizers, selectors, interpreters, filesystem, network,
    database, template, parser, deserializer, bulk object binding and
-   mass-assignment field controls, cryptographic, state, concurrency, and
-   resource-control boundaries.
+   mass-assignment field controls, browser-ambient credential and CSRF
+   controls, cryptographic, state, concurrency, and resource-control
+   boundaries.
 4. Compare the patch with the exact pre-change behavior. Look specifically for:
 
    - removed, reordered, weakened, or bypassable validation and authorization;
@@ -62,6 +63,8 @@ publish findings, open issues, or contact third parties. Write only beneath
    - tenant, object, role, or ownership selector drift;
    - widened DTO, schema, serializer, model, or ORM writable-field sets that
      expose role, tenant, owner, identity, recovery, billing, or trust state;
+   - weakened SameSite, Origin/Referer, Fetch Metadata, or anti-CSRF token
+     controls on browser-credentialed state-changing routes;
    - unsafe default, configuration, dependency, build, plugin, or update changes;
    - race, replay, idempotency, lifecycle, error-handling, and rollback changes;
    - newly affected sibling instances behind a changed shared dependency.

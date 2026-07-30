@@ -62,10 +62,10 @@ inventory and closure requirements.
    model, but no other pass's candidates.
 4. Apply these distinct lenses:
 
-   - **source/control/sink**: authentication, authorization, tenant selection,
-     injection, traversal, SSRF, XSS, unsafe parsing or deserialization,
-     filesystem, process, database, template, bulk object binding and mass
-     assignment, and network operations;
+   - **source/control/sink**: authentication, browser-ambient credential CSRF,
+     authorization, tenant selection, injection, traversal, SSRF, XSS, unsafe
+     parsing or deserialization, filesystem, process, database, template, bulk
+     object binding and mass assignment, and network operations;
    - **systems**: concurrency, check/use races, distributed state, replay and
      idempotency, security-sensitive randomness and token entropy,
      cryptography, secret lifecycle, failure modes, denial of service, integer
@@ -132,6 +132,16 @@ inventory and closure requirements.
      hooks, and later privileged readers. Treat explicit assignment of a fixed
      public-field allowlist as a negative control, not evidence that a sibling
      bulk-binding path is safe.
+   - browser-ambient credential CSRF: every cookie, client-certificate, or
+     automatically attached browser credential protecting a state-changing
+     route; record the exact method, content type and parser, whether a simple
+     cross-site form or navigation can reach it, SameSite cookie behavior,
+     Origin/Referer and Fetch Metadata enforcement, token generation and
+     session binding, token transport and comparison, victim interaction, and
+     protected action. A method name, JSON expectation, authentication, or
+     framework middleware name is not proof of protection. Use a sibling route
+     with an exact origin or session-bound unpredictable-token check as the
+     negative control.
 
    Return uncovered work to discovery. Record the sweep under
    `artifacts/02_discovery/residual_sweep.md`.
@@ -149,8 +159,13 @@ inventory and closure requirements.
    writable fields through request parsing, DTO/schema selection, ORM/model
    configuration, setters, and hooks, then prove a security-sensitive field is
    persisted and later trusted; reject the candidate when an exact allowlist or
-   equivalent binding control excludes every privileged field. Reject
-   API-name-only, unreachable, already-contained, or equivalently safe
+   equivalent binding control excludes every privileged field. For CSRF
+   candidates, prove that the victim browser can submit the exact request with
+   ambient credentials, that the server parser accepts it, and that no
+   effective SameSite, Origin/Referer, Fetch Metadata, or session-bound token
+   control blocks the protected action; reject low-impact or unrealistic
+   interactions at policy calibration rather than inventing account impact.
+   Reject API-name-only, unreachable, already-contained, or equivalently safe
    behavior. Only reachable, exploitable defects with
    concrete adverse impact survive. Keep mitigated flows, rejected candidates,
    documentation notes, hardening ideas, and defense-in-depth observations out

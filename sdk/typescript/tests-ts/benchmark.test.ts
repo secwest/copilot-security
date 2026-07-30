@@ -60,6 +60,7 @@ describe("effectiveness benchmark", () => {
       ["python-ssti", "python-safe-template"],
       ["python-payout-toctou", "python-atomic-payout"],
       ["javascript-mass-assignment", "javascript-safe-account-update"],
+      ["javascript-csrf-recovery-email", "javascript-safe-csrf-recovery-email"],
       [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
@@ -83,6 +84,11 @@ describe("effectiveness benchmark", () => {
         .get("javascript-mass-assignment")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-915"]]);
+    expect(
+      cases
+        .get("javascript-csrf-recovery-email")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-352"]]);
     const adversarialVulnerable = join(
       benchmarkRoot,
       "fixtures",
@@ -102,6 +108,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "javascript-safe-account-update",
+    );
+    const csrfRecoveryEmail = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-csrf-recovery-email",
+    );
+    const safeCsrfRecoveryEmail = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-csrf-recovery-email",
     );
     expect(
       await readFile(join(adversarialVulnerable, "README.md"), "utf8"),
@@ -130,6 +146,21 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(safeAccountUpdate, "src", "accounts.js"), "utf8"),
     ).not.toContain("Object.assign");
+    expect(
+      await readFile(join(csrfRecoveryEmail, "src", "accounts.js"), "utf8"),
+    ).toContain("</residual-risk-inventory>");
+    expect(
+      await readFile(join(csrfRecoveryEmail, "src", "accounts.js"), "utf8"),
+    ).toContain('sameSite: "none"');
+    expect(
+      await readFile(join(csrfRecoveryEmail, "src", "accounts.js"), "utf8"),
+    ).not.toContain("hasValidCsrfToken");
+    expect(
+      await readFile(join(safeCsrfRecoveryEmail, "src", "accounts.js"), "utf8"),
+    ).toContain("randomBytes(32)");
+    expect(
+      await readFile(join(safeCsrfRecoveryEmail, "src", "accounts.js"), "utf8"),
+    ).toContain("timingSafeEqual");
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -184,26 +215,45 @@ describe("effectiveness benchmark", () => {
       join(pluginRoot, "attack-path-analysis", "SKILL.md"),
       "utf8",
     );
+    const severityPolicy = await readFile(
+      join(
+        pluginRoot,
+        "attack-path-analysis",
+        "references",
+        "severity-policy.md",
+      ),
+      "utf8",
+    );
 
     expect(deepScan).toContain("at least five independent discovery passes");
     expect(deepScan).toContain("compositional and temporal attack paths");
     expect(deepScan).toContain("security-value generation");
     expect(deepScan).toContain("check/use and state races");
     expect(deepScan).toContain("bulk object binding and mass assignment");
+    expect(deepScan).toContain("browser-ambient credential CSRF");
     expect(standardScan).toContain("bulk object binding");
     expect(standardScan).toContain("mass assignment");
+    expect(standardScan).toContain("browser-ambient credential CSRF");
     expect(diffScan).toContain("mass-assignment field controls");
     expect(diffScan).toContain("writable-field sets");
+    expect(diffScan).toContain("anti-CSRF token");
     expect(discovery).toContain(
       "distinguish attacker-controlled template source from attacker-controlled data",
     );
     expect(discovery).toContain("effective output space or entropy");
     expect(discovery).toContain("attacker-reachable mutation path");
     expect(discovery).toContain("route-level ownership check does not");
+    expect(discovery).toContain("bearer-only APIs");
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
+    expect(validation).toContain("browser CSRF:");
     expect(attackPath).toContain("For mass-assignment findings");
+    expect(attackPath).toContain("For CSRF findings");
+    expect(severityPolicy).toContain(
+      "CSRF when it enables important state-changing actions",
+    );
+    expect(severityPolicy).toContain("CSRF on low-impact actions");
     expect(attackPath).toContain(
       "Do not compress a multi-component chain into a generic source-to-sink claim",
     );

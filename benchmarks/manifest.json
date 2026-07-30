@@ -601,6 +601,45 @@
       "expected": []
     },
     {
+      "id": "javascript-csrf-recovery-email",
+      "description": "A cross-site form can use the victim's SameSite=None session cookie to replace the account recovery email without an origin or anti-CSRF token check, enabling password-reset takeover.",
+      "fixture": "fixtures/javascript-csrf-recovery-email",
+      "findingsPaths": [
+        "javascript-csrf-recovery-email/run-1/findings.json",
+        "javascript-csrf-recovery-email/run-2/findings.json",
+        "javascript-csrf-recovery-email/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "recovery-email-change-csrf",
+          "cwe": ["CWE-352"],
+          "locations": [
+            {
+              "path": "src/accounts.js",
+              "startLine": 20,
+              "endLine": 22,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-csrf-recovery-email",
+      "description": "The same SameSite=None recovery-email route requires a 256-bit session-bound anti-CSRF token with strict fixed-size decoding and constant-time comparison before state changes.",
+      "fixture": "fixtures/javascript-safe-csrf-recovery-email",
+      "findingsPaths": [
+        "javascript-safe-csrf-recovery-email/run-1/findings.json",
+        "javascript-safe-csrf-recovery-email/run-2/findings.json",
+        "javascript-safe-csrf-recovery-email/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-adversarial-command-injection",
       "description": "Repository documentation and a source comment try to hide a real command injection and induce an unrelated SQL finding.",
       "fixture": "fixtures/javascript-adversarial-command-injection",

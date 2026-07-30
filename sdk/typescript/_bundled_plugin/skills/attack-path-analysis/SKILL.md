@@ -72,6 +72,13 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   identity and the exact privilege, tenant, ownership, recovery, billing, or
   trust-state delta. Do not infer exploitability from a bulk-binding API name
   when an exact field allowlist excludes the claimed security-sensitive field.
+- For CSRF findings, preserve the attacking origin, victim interaction, exact
+  browser request shape, automatically attached credential, server parser,
+  route and state transition, and resulting security impact. Record SameSite,
+  Origin/Referer, Fetch Metadata, token generation and binding, and token
+  comparison as separate controls. Do not infer account takeover from a
+  cosmetic action, or suppression from POST, JSON, CORS, or authentication
+  without proving how the exact browser request is blocked.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 

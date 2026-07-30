@@ -32,10 +32,10 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    operations, sensitive assets, attacker capabilities, and highest-risk data
    flows. Save it under `artifacts/01_context/threat_model.md`.
 3. Review every in-scope file. Trace attacker-controlled sources through
-   validation, authorization, state changes, interpreters, filesystem,
-   network, deserialization, templates, database queries, bulk object binding
-   and mass assignment into persisted or privileged fields, secrets, and
-   resource consumption. Record candidates in
+   validation, authentication, browser-ambient credential CSRF, authorization,
+   state changes, interpreters, filesystem, network, deserialization, templates,
+   database queries, bulk object binding and mass assignment into persisted or
+   privileged fields, secrets, and resource consumption. Record candidates in
    `artifacts/02_discovery/candidate_ledger.jsonl`.
 4. Perform an independent residual sweep over high-risk files and source /
    control / sink families that produced no candidate. Record why each is safe

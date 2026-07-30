@@ -573,6 +573,59 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs cross-site ambient session state changes with a session-bound CSRF token", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-csrf-recovery-email"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-csrf-recovery-email"),
+    );
+
+    expect(vulnerable).toContain('"browser-ambient-credential-or-csrf"');
+    expect(vulnerable).toContain('"parser-or-deserializer"');
+    expect(vulnerable).toContain('sameSite: "none"');
+    expect(vulnerable).toContain("formParser.urlencoded({ extended: false })");
+    expect(vulnerable).toContain("request.session.userId");
+    expect(vulnerable).toContain(
+      "account.recoveryEmail = String(request.body.recoveryEmail)",
+    );
+    expect(vulnerable).toContain("sendPasswordReset(account.recoveryEmail)");
+    expect(vulnerable).toContain("SameSite=None blocks CSRF");
+    expect(safe).toContain('"browser-ambient-credential-or-csrf"');
+    expect(safe).toContain("randomBytes(32)");
+    expect(safe).toContain("/^[a-f0-9]{64}$/");
+    expect(safe).toContain("timingSafeEqual");
+    expect(safe.indexOf("hasValidCsrfToken(request)")).toBeLessThan(
+      safe.indexOf("database.accounts.findById(request.session.userId)"),
+    );
+    expect(scanQualityGatePrompt("")).toContain(
+      "browser-ambient credential CSRF",
+    );
+  });
+
+  test("keeps bearer-only state changes out of the specialized CSRF signal", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-bearer-api-"),
+    );
+    temporaryPaths.push(repository);
+    await writeFile(
+      join(repository, "api.js"),
+      [
+        "export function updateApiProfile(request, response) {",
+        "  const authorization = request.headers.authorization;",
+        "  if (!authorization?.startsWith('Bearer ')) return response.status(401).end();",
+        "  return response.status(204).end();",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+
+    expect(inventory).toContain('"authentication-or-session"');
+    expect(inventory).not.toContain('"browser-ambient-credential-or-csrf"');
+  });
+
   test("reconciles exact immutable inventory paths against draft coverage", async () => {
     const scanDirectory = await mkdtemp(
       join(tmpdir(), "copilot-security-coverage-gap-"),

@@ -102,6 +102,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:authorization|bearer|cookie|jwt|login|oauth|oidc|session|token)\b|\b(?:authenticate|decode|verify)\s*\(/iu,
   ],
   [
+    "browser-ambient-credential-or-csrf",
+    96,
+    /\b(?:anti[_-]?forgery|antiforgery|csrf|xsrf)\b|\b(?:SameSite|Sec-Fetch-Site)\b|\bsame_?site\s*[:=]\s*["']?none\b|\bValidateAntiForgeryToken\b/iu,
+  ],
+  [
     "security-sensitive-randomness",
     97,
     /\b(?:Math\.random|crypto\.randomBytes|randomBytes|randomUUID|SecureRandom|secrets\.(?:choice|randbelow|token_bytes|token_hex|token_urlsafe)|crypto\.getRandomValues|random\.(?:random|randint|randrange)|mt_rand|srand|uuid1)\s*\(/iu,
@@ -159,7 +164,7 @@ const RISK_SIGNALS: ReadonlyArray<
   [
     "parser-or-deserializer",
     90,
-    /\b(?:deserialize|load|loads|ObjectInputStream|parse|pickle|readObject|unmarshal|yaml\.load)\s*\(/iu,
+    /\b(?:deserialize|load|loads|ObjectInputStream|parse|pickle|readObject|unmarshal|urlencoded|yaml\.load)\s*\(/iu,
   ],
   [
     "xml-or-entity-parser",

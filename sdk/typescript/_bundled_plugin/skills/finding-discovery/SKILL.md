@@ -106,6 +106,18 @@ Use this checklist to keep discovery specific without turning it into validation
   Preserve explicit DTO/schema allowlists and fixed per-field assignment as
   negative controls; do not infer filtering from a framework, model, ORM, or
   repository comment without the exact configuration or code.
+- For CSRF, enumerate cookie-authenticated and otherwise browser-ambient
+  credential routes that change credentials, recovery channels, MFA, roles,
+  permissions, billing, payments, security settings, or other meaningful
+  state. Preserve the route method, accepted parser and content types, session
+  or cookie configuration, SameSite behavior, cross-site form/navigation or
+  CORS/preflight request shape, Origin/Referer and Fetch Metadata enforcement,
+  anti-CSRF token generation, session or request binding, transport and
+  comparison, and the protected action. Authentication, POST, JSON, CORS, or a
+  middleware name alone does not close the row. Compare against the closest
+  route with an exact allowed-origin check or unpredictable session-bound token
+  as a negative control, and do not report bearer-only APIs whose credentials
+  an attacking site cannot cause the browser to attach.
 - When a template or config pattern appears repeatedly, enumerate each affected file/line and note any nearby safe control that should not be reported.
 - For diff-scoped scans, include `relevant_lines` only when the bug overlaps the diff and those lines are genuinely relevant to the issue.
 - For recursive placeholder or template findings, include the helper/parser setup line that enables recursive expansion or expression evaluation along with the resolver/evaluation/render line.
