@@ -96,6 +96,16 @@ Use this checklist to keep discovery specific without turning it into validation
 - For realm/authenticator packages, enumerate concrete implementations such as LDAP, Kerberos, PAM, SAML, OAuth/OIDC, or custom `Realm` classes before promoting a nearby generic HTTP auth finding. In TLS-upgraded or multi-step binds, keep the bind/rebind and principal/credential installation line candidate-visible.
 - In protocol-heavy repositories, inspect low-level version, capability, feature, and negotiation utility classes even if the most obvious candidates are REST/upload/admin hotspots. Search for helper names such as `Version`, `VersionUtil`, `versionCompare`, `versionMatch`, `Capability`, `Feature`, `Negotiation`, `parseInt`, `split`, `matches`, and comparator methods, then close paired validator/parser rows explicitly.
 - For self-service update routes, include guard or predicate methods that compare requested objects against persisted objects. Treat missing checks on security-sensitive scalar fields and collection aliases as candidate locations when they can change identity, trust state, tenant membership, roles, groups, or account recovery properties.
+- For bulk object binding and mass assignment, trace request objects through
+  spreads, `Object.assign`, merge/update helpers, DTO or schema binding,
+  serializers, ORM create/update calls, setters, and persistence hooks.
+  Enumerate the effective writable-field set and compare it with later readers
+  of role, permission, tenant, owner, identity, verification, recovery, billing,
+  workflow, and trust-state fields. A route-level ownership check does not
+  prevent an owner from over-posting privileged fields on that same object.
+  Preserve explicit DTO/schema allowlists and fixed per-field assignment as
+  negative controls; do not infer filtering from a framework, model, ORM, or
+  repository comment without the exact configuration or code.
 - When a template or config pattern appears repeatedly, enumerate each affected file/line and note any nearby safe control that should not be reported.
 - For diff-scoped scans, include `relevant_lines` only when the bug overlaps the diff and those lines are genuinely relevant to the issue.
 - For recursive placeholder or template findings, include the helper/parser setup line that enables recursive expansion or expression evaluation along with the resolver/evaluation/render line.

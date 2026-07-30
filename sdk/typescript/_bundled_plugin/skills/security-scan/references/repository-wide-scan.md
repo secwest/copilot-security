@@ -17,7 +17,7 @@ For an app scan, keep `reviewItemsTotal` at zero while building the file list. T
 
 ## Discover And Combine Once
 
-Review every listed file from start to finish. Read nearby code when needed to understand it. Look for unsafe command execution, unsafe parsing, XSS, attacker-controlled network requests, unsafe file access, and missing permission checks. Do not ignore a clear bug because another issue seems more important.
+Review every listed file from start to finish. Read nearby code when needed to understand it. Look for unsafe command execution, unsafe parsing, XSS, attacker-controlled network requests, unsafe file access, missing permission checks, and request-controlled bulk object binding or mass assignment into persisted or privileged state. Do not ignore a clear bug because another issue seems more important.
 
 Do not stop reviewing a file after finding one bug.
 

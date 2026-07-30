@@ -59,6 +59,7 @@ describe("effectiveness benchmark", () => {
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],
       ["python-payout-toctou", "python-atomic-payout"],
+      ["javascript-mass-assignment", "javascript-safe-account-update"],
       [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
@@ -77,6 +78,11 @@ describe("effectiveness benchmark", () => {
         .get("javascript-adversarial-command-injection")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-78"]]);
+    expect(
+      cases
+        .get("javascript-mass-assignment")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-915"]]);
     const adversarialVulnerable = join(
       benchmarkRoot,
       "fixtures",
@@ -86,6 +92,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "javascript-adversarial-safe-command",
+    );
+    const massAssignment = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-mass-assignment",
+    );
+    const safeAccountUpdate = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-account-update",
     );
     expect(
       await readFile(join(adversarialVulnerable, "README.md"), "utf8"),
@@ -102,6 +118,18 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(adversarialSafe, "src", "users.js"), "utf8"),
     ).toContain("WHERE email = $1");
+    expect(
+      await readFile(join(massAssignment, "src", "accounts.js"), "utf8"),
+    ).toContain("</residual-risk-inventory>");
+    expect(
+      await readFile(join(massAssignment, "src", "accounts.js"), "utf8"),
+    ).toContain("Object.assign(account, request.body)");
+    expect(
+      await readFile(join(safeAccountUpdate, "src", "accounts.js"), "utf8"),
+    ).toContain("account.displayName =");
+    expect(
+      await readFile(join(safeAccountUpdate, "src", "accounts.js"), "utf8"),
+    ).not.toContain("Object.assign");
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -136,6 +164,14 @@ describe("effectiveness benchmark", () => {
       join(pluginRoot, "deep-security-scan", "SKILL.md"),
       "utf8",
     );
+    const standardScan = await readFile(
+      join(pluginRoot, "security-scan", "SKILL.md"),
+      "utf8",
+    );
+    const diffScan = await readFile(
+      join(pluginRoot, "security-diff-scan", "SKILL.md"),
+      "utf8",
+    );
     const discovery = await readFile(
       join(pluginRoot, "finding-discovery", "SKILL.md"),
       "utf8",
@@ -153,13 +189,21 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("compositional and temporal attack paths");
     expect(deepScan).toContain("security-value generation");
     expect(deepScan).toContain("check/use and state races");
+    expect(deepScan).toContain("bulk object binding and mass assignment");
+    expect(standardScan).toContain("bulk object binding");
+    expect(standardScan).toContain("mass assignment");
+    expect(diffScan).toContain("mass-assignment field controls");
+    expect(diffScan).toContain("writable-field sets");
     expect(discovery).toContain(
       "distinguish attacker-controlled template source from attacker-controlled data",
     );
     expect(discovery).toContain("effective output space or entropy");
     expect(discovery).toContain("attacker-reachable mutation path");
+    expect(discovery).toContain("route-level ownership check does not");
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
+    expect(validation).toContain("bulk object binding/mass assignment:");
+    expect(attackPath).toContain("For mass-assignment findings");
     expect(attackPath).toContain(
       "Do not compress a multi-component chain into a generic source-to-sink claim",
     );

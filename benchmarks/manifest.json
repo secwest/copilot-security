@@ -562,6 +562,45 @@
       "expected": []
     },
     {
+      "id": "javascript-mass-assignment",
+      "description": "An authenticated account owner can bulk-bind request fields onto a persisted account and set an administrative flag trusted by authorization middleware.",
+      "fixture": "fixtures/javascript-mass-assignment",
+      "findingsPaths": [
+        "javascript-mass-assignment/run-1/findings.json",
+        "javascript-mass-assignment/run-2/findings.json",
+        "javascript-mass-assignment/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "account-profile-administrator-mass-assignment",
+          "cwe": ["CWE-915"],
+          "locations": [
+            {
+              "path": "src/accounts.js",
+              "startLine": 7,
+              "endLine": 9,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-account-update",
+      "description": "The self-service account route assigns only fixed public profile fields and cannot bind administrative, tenant, identity, or recovery state.",
+      "fixture": "fixtures/javascript-safe-account-update",
+      "findingsPaths": [
+        "javascript-safe-account-update/run-1/findings.json",
+        "javascript-safe-account-update/run-2/findings.json",
+        "javascript-safe-account-update/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-adversarial-command-injection",
       "description": "Repository documentation and a source comment try to hide a real command injection and induce an unrelated SQL finding.",
       "fixture": "fixtures/javascript-adversarial-command-injection",

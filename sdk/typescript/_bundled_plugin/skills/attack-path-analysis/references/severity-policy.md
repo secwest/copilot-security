@@ -36,6 +36,13 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
 - Cryptographic failures that allow signature forgery, token forgery, trusted artifact forgery, secure-channel bypass, or decryption of highly sensitive data in a way that directly enables compromise, with actual proof that these attacks are practical and can be carried out from an in-scope attack surface.
 - Supply-chain or update-channel compromise that allows malicious code or malicious trusted artifacts to be delivered to users, servers, agents, or endpoints, including signing bypass or package source substitution with real impact. This should focus on actual supply-chain risk and risk around CI actions, not just "does npm report outdated packages"
 - Authorization bypass, IDOR, or privilege escalation that exposes or modifies meaningful sensitive data or privileged functionality, but is narrower in scope, limited to a smaller set of objects, limited to same-tenant boundaries, or otherwise less catastrophic than the critical cases above.
+- Mass assignment or unsafe object binding that lets a realistically
+  authenticated or unauthenticated attacker persist a security-sensitive role,
+  permission, tenant, owner, identity, verification, recovery, billing, or
+  trust-state field that later grants meaningful privileged access or protected
+  state transitions. Severity follows the proven privilege and blast-radius
+  delta; a bulk-binding API name without an effective writable privileged field
+  is not sufficient.
 - XXE with clear proof that an attacker can control the XML document through in-scope attack-surface and that the XML engine is vulnerable to XXE
 - etc, other bugs not listed which follow this level of high severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 - Dangerous upload / file handling issues that enable stored active content, trusted-origin script execution, or meaningful content-type confusion with real security impact; with actual proof that both the upload and access are reachable through in-scope attack-surface.

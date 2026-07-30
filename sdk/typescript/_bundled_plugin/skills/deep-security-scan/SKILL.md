@@ -64,7 +64,8 @@ inventory and closure requirements.
 
    - **source/control/sink**: authentication, authorization, tenant selection,
      injection, traversal, SSRF, XSS, unsafe parsing or deserialization,
-     filesystem, process, database, template, and network operations;
+     filesystem, process, database, template, bulk object binding and mass
+     assignment, and network operations;
    - **systems**: concurrency, check/use races, distributed state, replay and
      idempotency, security-sensitive randomness and token entropy,
      cryptography, secret lifecycle, failure modes, denial of service, integer
@@ -123,6 +124,14 @@ inventory and closure requirements.
      effect. Include filesystem name-to-handle races, database read/modify/write
      workflows, queued jobs, approval flows, cache invalidation, and
      validated-object/consumed-object mismatches.
+   - bulk object binding and mass assignment: every path that copies, spreads,
+     merges, deserializes, or ORM-binds request-controlled fields into a
+     persisted or privileged object; record the complete writable-field set,
+     security-sensitive role, tenant, trust, identity, recovery, ownership, and
+     workflow fields, schema/DTO/serializer allowlists, model-level guards,
+     hooks, and later privileged readers. Treat explicit assignment of a fixed
+     public-field allowlist as a negative control, not evidence that a sibling
+     bulk-binding path is safe.
 
    Return uncovered work to discovery. Record the sweep under
    `artifacts/02_discovery/residual_sweep.md`.
@@ -136,8 +145,13 @@ inventory and closure requirements.
    a non-cryptographic generator by name alone. For race candidates, prove that
    an attacker-controlled mutation can occur between the exact check and use
    and that the consumed value is not transactionally or identity-bound to the
-   checked value. Reject API-name-only, unreachable, already-contained, or
-   equivalently safe behavior. Only reachable, exploitable defects with
+   checked value. For mass-assignment candidates, enumerate the effective
+   writable fields through request parsing, DTO/schema selection, ORM/model
+   configuration, setters, and hooks, then prove a security-sensitive field is
+   persisted and later trusted; reject the candidate when an exact allowlist or
+   equivalent binding control excludes every privileged field. Reject
+   API-name-only, unreachable, already-contained, or equivalently safe
+   behavior. Only reachable, exploitable defects with
    concrete adverse impact survive. Keep mitigated flows, rejected candidates,
    documentation notes, hardening ideas, and defense-in-depth observations out
    of `findings.json`; an empty findings array is valid. Record commands,

@@ -136,9 +136,9 @@ command injection, path traversal, object-level authorization, SQL injection,
 server-side request forgery, unsafe deserialization, reflected XSS, XML
 external entities, JWT signature-verification bypass, prototype pollution,
 disabled TLS certificate verification, predictable security tokens,
-server-side template injection, check/use state races, and adversarial
-repository instructions. Each of the 30 cases is scanned three times, producing
-90 scans that measure both accuracy and model variance. The evaluator uses
+server-side template injection, check/use state races, unsafe mass assignment,
+and adversarial repository instructions. Each of the 32 cases is scanned three
+times, producing 96 scans that measure both accuracy and model variance. The evaluator uses
 one-to-one CWE-plus-location matching, counts duplicate reports as false
 positives, and records missing scan artifacts as completion failures.
 

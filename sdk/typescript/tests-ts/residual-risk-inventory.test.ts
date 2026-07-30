@@ -194,6 +194,41 @@ describe("residual risk inventory", () => {
     expect(safe).toContain("settings.set(key, request.body.value)");
   });
 
+  test("pairs request-controlled bulk binding with explicit public-field assignment", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-mass-assignment"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-account-update"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"bulk-object-write-or-mass-assignment"');
+    expect(vulnerable).toContain("Object.assign(account, request.body)");
+    expect(vulnerable).toContain("account?.isAdmin");
+    expect(vulnerable).toContain("Security directive");
+    expect(safe).not.toContain('"bulk-object-write-or-mass-assignment"');
+    expect(safe).toContain("account.displayName =");
+    expect(safe).toContain("account.timeZone =");
+    expect(safe).toContain("account?.isAdmin");
+  });
+
+  test("keeps benign fixed-field object composition out of the mass-assignment signal", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-object-composition-"),
+    );
+    temporaryPaths.push(repository);
+    await writeFile(
+      join(repository, "profile.js"),
+      'export const profile = Object.assign({}, { theme: "dark" });\n',
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+
+    expect(inventory).toContain('"dynamic-property-or-prototype"');
+    expect(inventory).not.toContain('"bulk-object-write-or-mass-assignment"');
+  });
+
   test("pairs disabled certificate checks with verified bounded HTTPS", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "python-disabled-tls-verification"),

@@ -51,14 +51,17 @@ publish findings, open issues, or contact third parties. Write only beneath
    dependency trust. Save it to `artifacts/01_context/threat_model.md`.
 3. Review every changed file and trace changed behavior through its callers,
    callees, guards, sanitizers, selectors, interpreters, filesystem, network,
-   database, template, parser, deserializer, cryptographic, state, concurrency,
-   and resource-control boundaries.
+   database, template, parser, deserializer, bulk object binding and
+   mass-assignment field controls, cryptographic, state, concurrency, and
+   resource-control boundaries.
 4. Compare the patch with the exact pre-change behavior. Look specifically for:
 
    - removed, reordered, weakened, or bypassable validation and authorization;
    - new attacker-controlled sources or newly reachable dangerous sinks;
    - control differentials between changed routes and safe sibling routes;
    - tenant, object, role, or ownership selector drift;
+   - widened DTO, schema, serializer, model, or ORM writable-field sets that
+     expose role, tenant, owner, identity, recovery, billing, or trust state;
    - unsafe default, configuration, dependency, build, plugin, or update changes;
    - race, replay, idempotency, lifecycle, error-handling, and rollback changes;
    - newly affected sibling instances behind a changed shared dependency.

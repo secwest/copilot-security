@@ -56,6 +56,13 @@ When the input contains multiple candidate instances, preserve that instance inv
 Use class-specific proof tuples:
 
 - authz/tenant/object/state change: attacker path + missing/wrong guard + protected object/comparison/state transition
+- bulk object binding/mass assignment: attacker-controlled request fields +
+  effective DTO/schema/serializer/ORM writable-field set + persisted
+  security-sensitive role, tenant, owner, identity, verification, recovery,
+  billing, workflow, or trust-state field + later privileged reader or state
+  transition. Suppression requires an exact allowlist or equivalent binding
+  control that excludes the claimed field; authentication, ownership of the
+  edited object, or a repository comment is not field-level counterevidence.
 - injection/path traversal/file upload/header/open redirect: attacker-controlled bytes + sanitizer/canonicalization/allowlist result + dangerous sink/context
 - XSS/template/SSTI: attacker-controlled value + escaping/template context + browser/server-side template execution sink
 - server-side template source: attacker-controlled request, stored, tenant, configuration, or error text + compilation or parsing as template/expression source + exact sandbox/global/object-capability/recursion controls + reachable read, expression, code-execution, or secret-exposure effect. A fixed template receiving untrusted variables is a negative control unless those variables are reparsed or evaluated as source; autoescaping controls output encoding, not server-side expression execution.

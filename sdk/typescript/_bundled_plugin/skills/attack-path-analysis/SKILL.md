@@ -66,6 +66,12 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   only template data, which expression/object capabilities the environment
   exposes, and the exact demonstrated or source-supported effect. Do not infer
   code execution merely from output injection.
+- For mass-assignment findings, preserve the request-controlled field, the
+  effective binder/DTO/schema/ORM writable-field decision, persistence, and the
+  later privileged reader or state transition. State the attacker's starting
+  identity and the exact privilege, tenant, ownership, recovery, billing, or
+  trust-state delta. Do not infer exploitability from a bulk-binding API name
+  when an exact field allowlist excludes the claimed security-sensitive field.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 
