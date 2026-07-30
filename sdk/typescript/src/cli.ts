@@ -919,6 +919,12 @@ export async function main(
           .boolean()
           .default(true)
           .describe("Exit 1 when any case or configured threshold fails."),
+        requireStatus: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Require a successful runner status receipt for every benchmark run.",
+          ),
       }),
       examples: [
         {
@@ -932,6 +938,7 @@ export async function main(
           const directory = dependencies.currentDirectory();
           const report = await evaluateBenchmark({
             manifestPath: resolve(directory, args.manifest),
+            requireRunStatus: options.requireStatus,
             ...(options.resultsDir === undefined
               ? {}
               : { resultsDirectory: resolve(directory, options.resultsDir) }),

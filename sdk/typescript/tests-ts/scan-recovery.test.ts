@@ -240,6 +240,12 @@ describe("malformed scan artifact recovery", () => {
       scan: Record<string, unknown>;
     }>(path);
     manifest.scan["artifacts"] = { path: fixture.scanDir };
+    manifest.scan["scope"] = {
+      includePaths: ["."],
+      excludePaths: [],
+      repo_root: fixture.repository,
+      type: "repository",
+    };
     delete manifest.scan["coverageRef"];
     delete manifest.scan["findingsRef"];
     await writeJson(path, manifest);
@@ -254,11 +260,14 @@ describe("malformed scan artifact recovery", () => {
         coverageRef: string;
         findingsRef: string;
         sealedAt: string;
+        scope: Record<string, unknown>;
       };
     }>(path);
     expect(recovered.scan.coverageRef).toBe("coverage.json");
     expect(recovered.scan.findingsRef).toBe("findings.json");
     expect(recovered.scan.sealedAt).toBeString();
+    expect(recovered.scan.scope).not.toHaveProperty("repo_root");
+    expect(recovered.scan.scope).not.toHaveProperty("type");
     expect(recovered.scan.artifacts).toBeArray();
     expect(recovered.scan.artifacts.map((artifact) => artifact.path)).toEqual(
       expect.arrayContaining(["coverage.json", "findings.json"]),
@@ -468,25 +477,39 @@ describe("malformed scan artifact recovery", () => {
     );
   });
 
-  test("infers a known CWE when a canonical Copilot finding leaves taxonomy empty", async () => {
-    const fixture = await startDraftScan();
-    const path = join(fixture.scanDir, "findings.json");
-    const document = await readJson<FindingsDocument>(path);
-    const finding = document.findings[0]!;
-    finding["title"] = "SQL injection in user search route";
-    finding.summary =
-      "Attacker-controlled email input is concatenated into a SQL query.";
-    finding["taxonomy"] = { category: "security-defect", cwe: [] };
-    await writeJson(path, document);
+  test("infers known CWEs when canonical Copilot findings leave taxonomy empty", async () => {
+    for (const [title, summary, taxonomy] of [
+      [
+        "SQL injection in user search route",
+        "Attacker-controlled email input is concatenated into a SQL query.",
+        { category: "sql-injection", cwe: ["CWE-89"] },
+      ],
+      [
+        "JWT signature verification bypass in administrative export",
+        "The route trusts an unverified JWT token and attacker-controlled admin claim.",
+        { category: "improper-signature-verification", cwe: ["CWE-347"] },
+      ],
+      [
+        "XML external entity expansion in invoice import",
+        "The request parser permits XXE expansion of attacker-controlled entities.",
+        { category: "xml-external-entity", cwe: ["CWE-611"] },
+      ],
+    ] as const) {
+      const fixture = await startDraftScan();
+      const path = join(fixture.scanDir, "findings.json");
+      const document = await readJson<FindingsDocument>(path);
+      const finding = document.findings[0]!;
+      finding["title"] = title;
+      finding.summary = summary;
+      finding["taxonomy"] = { category: "security-defect", cwe: [] };
+      await writeJson(path, document);
 
-    const completed = await completeScan(fixture);
-    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+      const completed = await completeScan(fixture);
+      const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
 
-    expect(completed.progress.status).toBe("complete");
-    expect(recovered["taxonomy"]).toEqual({
-      category: "sql-injection",
-      cwe: ["CWE-89"],
-    });
+      expect(completed.progress.status).toBe("complete");
+      expect(recovered["taxonomy"]).toEqual(taxonomy);
+    }
   });
 
   test("closes reviewed documentation and metadata instead of deferring coverage", async () => {

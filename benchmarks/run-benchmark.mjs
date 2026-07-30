@@ -13,6 +13,11 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  benchmarkFindingsPaths,
+  buildBenchmarkSelection,
+  selectBenchmarkCases,
+} from "../sdk/typescript/dist/benchmark-selection.js";
 
 const benchmarkRoot = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(benchmarkRoot, "..");
@@ -35,18 +40,16 @@ const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 if (manifest?.schemaVersion !== "1.0" || !Array.isArray(manifest.cases)) {
   throw new Error(`Invalid benchmark manifest: ${manifestPath}`);
 }
+const selectedCases = selectBenchmarkCases(manifest.cases, options.cases);
 
 let scanFailures = 0;
-for (const benchmarkCase of manifest.cases) {
+for (const benchmarkCase of selectedCases) {
   if (
     !benchmarkCase ||
     typeof benchmarkCase.id !== "string" ||
     typeof benchmarkCase.fixture !== "string"
   ) {
     throw new Error("Every runnable benchmark case must have id and fixture.");
-  }
-  if (options.cases.length > 0 && !options.cases.includes(benchmarkCase.id)) {
-    continue;
   }
   const fixture = resolve(manifestDirectory, benchmarkCase.fixture);
   requireContained(
@@ -58,17 +61,7 @@ for (const benchmarkCase of manifest.cases) {
   if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
     throw new Error(`Benchmark fixture is not a directory: ${fixture}`);
   }
-  const configuredFindingsPaths = Array.isArray(benchmarkCase.findingsPaths)
-    ? benchmarkCase.findingsPaths
-    : [
-        typeof benchmarkCase.findingsPath === "string"
-          ? benchmarkCase.findingsPath
-          : join(benchmarkCase.id, "findings.json"),
-      ];
-  const findingsPaths =
-    options.runs === undefined
-      ? configuredFindingsPaths
-      : configuredFindingsPaths.slice(0, options.runs);
+  const findingsPaths = benchmarkFindingsPaths(benchmarkCase, options.runs);
 
   for (let index = 0; index < findingsPaths.length; index += 1) {
     const findingsPath = findingsPaths[index];
@@ -190,24 +183,53 @@ for (const benchmarkCase of manifest.cases) {
   }
 }
 
+let evaluationManifestPath = manifestPath;
+if (options.selectionOnly) {
+  await mkdir(resultsDirectory, { recursive: true });
+  evaluationManifestPath = join(
+    resultsDirectory,
+    "benchmark-selection-manifest.json",
+  );
+  const selectionManifest = buildBenchmarkSelection(
+    manifest,
+    selectedCases,
+    options.runs,
+  );
+  await writeFile(
+    evaluationManifestPath,
+    `${JSON.stringify(selectionManifest, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+}
+
+const reportPath = join(resultsDirectory, "benchmark-report.json");
+await rm(reportPath, { force: true });
 const evaluation = spawnSync(
   process.execPath,
   [
     cli,
     "benchmark",
-    manifestPath,
+    evaluationManifestPath,
     "--results-dir",
     resultsDirectory,
+    "--require-status",
     "--format",
     "json",
   ],
   {
     cwd: repositoryRoot,
+    encoding: "utf8",
     env: process.env,
-    stdio: "inherit",
+    maxBuffer: 32 * 1024 * 1024,
+    stdio: ["inherit", "pipe", "inherit"],
     windowsHide: true,
   },
 );
+if (typeof evaluation.stdout === "string") {
+  process.stdout.write(evaluation.stdout);
+  await mkdir(resultsDirectory, { recursive: true });
+  await writeFile(reportPath, evaluation.stdout, { mode: 0o600 });
+}
 process.exitCode =
   scanFailures > 0 ? 1 : evaluation.status === null ? 1 : evaluation.status;
 
@@ -223,11 +245,16 @@ function parseArguments(args) {
     model: undefined,
     resultsDirectory: undefined,
     runs: undefined,
+    selectionOnly: false,
   };
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--force") {
       result.force = true;
+      continue;
+    }
+    if (argument === "--selection-only") {
+      result.selectionOnly = true;
       continue;
     }
     const value = args[index + 1];

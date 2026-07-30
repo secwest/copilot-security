@@ -3,6 +3,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 import { evaluateBenchmark } from "../src/benchmark.js";
+import {
+  benchmarkFindingsPaths,
+  buildBenchmarkSelection,
+  selectBenchmarkCases,
+} from "../src/benchmark-selection.js";
 
 const roots: string[] = [];
 
@@ -39,6 +44,8 @@ describe("effectiveness benchmark", () => {
       ["javascript-ssrf", "javascript-safe-fetch"],
       ["python-unsafe-deserialization", "python-safe-json"],
       ["javascript-reflected-xss", "javascript-safe-html"],
+      ["javascript-jwt-bypass", "javascript-safe-jwt"],
+      ["python-xxe", "python-safe-xml"],
     ] as const;
     const cases = new Map(manifest.cases.map((item) => [item.id, item]));
 
@@ -173,6 +180,50 @@ describe("effectiveness benchmark", () => {
     });
     expect(report.thresholds.every((threshold) => threshold.passed)).toBe(true);
     expect(report.cases[0]?.stableExpectations).toEqual(["shell-command"]);
+  });
+
+  test("builds an explicit selected-run manifest without weakening the full manifest", () => {
+    const manifest = {
+      schemaVersion: "1.0" as const,
+      thresholds: { minCompletionRate: 1 },
+      cases: [
+        {
+          id: "vulnerable",
+          findingsPaths: [
+            "vulnerable/run-1/findings.json",
+            "vulnerable/run-2/findings.json",
+            "vulnerable/run-3/findings.json",
+          ],
+          expected: [],
+        },
+        {
+          id: "control",
+          findingsPath: "control/findings.json",
+          expected: [],
+        },
+      ],
+    };
+    const selectedCases = selectBenchmarkCases(manifest.cases, ["vulnerable"]);
+    const selection = buildBenchmarkSelection(manifest, selectedCases, 1);
+
+    expect(selection).toEqual({
+      schemaVersion: "1.0",
+      thresholds: { minCompletionRate: 1 },
+      cases: [
+        {
+          id: "vulnerable",
+          findingsPaths: ["vulnerable/run-1/findings.json"],
+          expected: [],
+        },
+      ],
+    });
+    expect(manifest.cases[0]?.findingsPaths).toHaveLength(3);
+    expect(benchmarkFindingsPaths(manifest.cases[1]!)).toEqual([
+      "control/findings.json",
+    ]);
+    expect(() => selectBenchmarkCases(manifest.cases, ["missing"])).toThrow(
+      "Unknown benchmark case: missing",
+    );
   });
 
   test("counts duplicate reports and misses without matching CWE alone", async () => {
@@ -313,6 +364,100 @@ describe("effectiveness benchmark", () => {
     });
     expect(report.cases[0]?.runs[0]?.error).toContain(
       "Could not read findings for benchmark case missing-positive",
+    );
+  });
+
+  test("does not count partial findings from a failed or mismatched scan process", async () => {
+    for (const status of [
+      { caseId: "failed-positive", run: 1, status: 2 },
+      { caseId: "different-case", run: 1, status: 0 },
+    ]) {
+      const root = await fixtureRoot();
+      await writeJson(join(root, "manifest.json"), {
+        schemaVersion: "1.0",
+        cases: [
+          {
+            id: "failed-positive",
+            findingsPath: "failed-positive/run-1/findings.json",
+            expected: [
+              {
+                id: "expected-command",
+                cwe: ["CWE-78"],
+                locations: [{ path: "src/server.js", startLine: 10 }],
+              },
+            ],
+          },
+        ],
+      });
+      await writeFindings(
+        join(root, "results", "failed-positive", "run-1", "findings.json"),
+        [
+          finding({
+            id: "partial-command",
+            cwe: ["CWE-78"],
+            path: "src/server.js",
+            line: 10,
+          }),
+        ],
+      );
+      await writeJson(
+        join(root, "results", "failed-positive", "run-1.status.json"),
+        status,
+      );
+
+      const report = await evaluateBenchmark({
+        manifestPath: join(root, "manifest.json"),
+        resultsDirectory: join(root, "results"),
+      });
+
+      expect(report.passed).toBe(false);
+      expect(report.metrics).toMatchObject({
+        completedRuns: 0,
+        truePositives: 0,
+        falseNegatives: 1,
+      });
+      expect(report.cases[0]?.runs[0]).toMatchObject({
+        completed: false,
+        findingCount: 0,
+        falseNegatives: 1,
+      });
+      expect(report.cases[0]?.runs[0]?.error).toMatch(
+        /Benchmark (?:scan process failed|run status does not match)/u,
+      );
+    }
+  });
+
+  test("can require runner status receipts for every evaluated artifact", async () => {
+    const root = await fixtureRoot();
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      cases: [
+        {
+          id: "manual-control",
+          findingsPath: "manual-control/run-1/findings.json",
+          expected: [],
+        },
+      ],
+    });
+    await writeFindings(
+      join(root, "results", "manual-control", "run-1", "findings.json"),
+      [],
+    );
+
+    const compatible = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+    });
+    const receiptBound = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+      requireRunStatus: true,
+    });
+
+    expect(compatible.metrics.completedRuns).toBe(1);
+    expect(receiptBound.metrics.completedRuns).toBe(0);
+    expect(receiptBound.cases[0]?.runs[0]?.error).toContain(
+      "Missing run status for benchmark case manual-control",
     );
   });
 });

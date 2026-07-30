@@ -1,0 +1,8 @@
+{
+  "name": "benchmark-javascript-jwt-bypass",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "jsonwebtoken": "9.0.2"
+  }
+}

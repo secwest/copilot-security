@@ -1,10 +1,11 @@
 import { readFile } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { CopilotSecurityError } from "./errors.js";
 import type { SeverityLevel } from "./models.js";
 
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
 const MAX_FINDINGS_BYTES = 64 * 1024 * 1024;
+const MAX_STATUS_BYTES = 64 * 1024;
 const MAX_CASES = 10_000;
 const MAX_RUNS_PER_CASE = 100;
 const MAX_EXPECTATIONS_PER_CASE = 10_000;
@@ -161,6 +162,7 @@ interface CandidateMatch {
 export async function evaluateBenchmark(options: {
   manifestPath: string;
   resultsDirectory?: string;
+  requireRunStatus?: boolean;
   now?: () => Date;
 }): Promise<BenchmarkReport> {
   const manifestPath = resolve(options.manifestPath);
@@ -187,6 +189,12 @@ export async function evaluateBenchmark(options: {
         : resolve(resultsDirectory, paths[index]!);
       const runId = `${benchmarkCase.id}#${index + 1}`;
       try {
+        await requireSuccessfulRunStatus(
+          findingsPath,
+          benchmarkCase.id,
+          index + 1,
+          options.requireRunStatus ?? false,
+        );
         const findings = parseFindings(
           await readBoundedFile(
             findingsPath,
@@ -244,6 +252,56 @@ export async function evaluateBenchmark(options: {
     thresholds,
     cases,
   };
+}
+
+async function requireSuccessfulRunStatus(
+  findingsPath: string,
+  caseId: string,
+  run: number,
+  required: boolean,
+): Promise<void> {
+  const statusPath = `${dirname(findingsPath)}.status.json`;
+  let contents: Buffer;
+  try {
+    contents = await readFile(statusPath);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      if (!required) return;
+      throw new CopilotSecurityError(
+        `Missing run status for benchmark case ${caseId}: ${statusPath}.`,
+        { cause: error },
+      );
+    }
+    throw new CopilotSecurityError(
+      `Could not read run status for benchmark case ${caseId}: ${statusPath}.`,
+      { cause: error },
+    );
+  }
+  if (contents.byteLength > MAX_STATUS_BYTES) {
+    throw new CopilotSecurityError(
+      `Run status for benchmark case ${caseId} exceeds the ${MAX_STATUS_BYTES}-byte limit: ${statusPath}.`,
+    );
+  }
+  const status = parseJson(contents.toString("utf8"), statusPath);
+  requireRecord(status, `Benchmark run status ${statusPath}`);
+  if (status["caseId"] !== caseId || status["run"] !== run) {
+    throw new CopilotSecurityError(
+      `Benchmark run status does not match ${caseId} run ${run}: ${statusPath}.`,
+    );
+  }
+  if (
+    !Number.isSafeInteger(status["status"]) ||
+    (status["status"] as number) !== 0
+  ) {
+    throw new CopilotSecurityError(
+      `Benchmark scan process failed for ${caseId} run ${run}: ${statusPath}.`,
+    );
+  }
 }
 
 function evaluateRun(

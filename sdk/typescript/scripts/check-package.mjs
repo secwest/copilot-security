@@ -139,6 +139,7 @@ const distFiles = new Set(
   [
     "api",
     "auth",
+    "benchmark-selection",
     "benchmark",
     "bulk-scan-discovery",
     "cli",

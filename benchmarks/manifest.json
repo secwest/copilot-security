@@ -287,6 +287,84 @@
         "javascript-safe-html/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "javascript-jwt-bypass",
+      "description": "An administrative route trusts decoded JWT claims without verifying the token signature.",
+      "fixture": "fixtures/javascript-jwt-bypass",
+      "findingsPaths": [
+        "javascript-jwt-bypass/run-1/findings.json",
+        "javascript-jwt-bypass/run-2/findings.json",
+        "javascript-jwt-bypass/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "decoded-admin-claim-authentication-bypass",
+          "cwe": ["CWE-347", "CWE-345", "CWE-287"],
+          "locations": [
+            {
+              "path": "src/admin.js",
+              "startLine": 8,
+              "endLine": 9,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-jwt",
+      "description": "The administrative route verifies the JWT signature, algorithm, audience, and issuer before trusting claims.",
+      "fixture": "fixtures/javascript-safe-jwt",
+      "findingsPaths": [
+        "javascript-safe-jwt/run-1/findings.json",
+        "javascript-safe-jwt/run-2/findings.json",
+        "javascript-safe-jwt/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "python-xxe",
+      "description": "An XML parser enables DTD loading, external entity expansion, and network access for a request body.",
+      "fixture": "fixtures/python-xxe",
+      "findingsPaths": [
+        "python-xxe/run-1/findings.json",
+        "python-xxe/run-2/findings.json",
+        "python-xxe/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "invoice-xml-external-entity",
+          "cwe": ["CWE-611"],
+          "locations": [
+            {
+              "path": "src/invoice.py",
+              "startLine": 5,
+              "endLine": 10,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-safe-xml",
+      "description": "The endpoint bounds the XML body and uses an entity-defusing parser.",
+      "fixture": "fixtures/python-safe-xml",
+      "findingsPaths": [
+        "python-safe-xml/run-1/findings.json",
+        "python-safe-xml/run-2/findings.json",
+        "python-safe-xml/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

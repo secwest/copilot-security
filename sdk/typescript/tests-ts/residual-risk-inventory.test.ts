@@ -115,6 +115,41 @@ describe("residual risk inventory", () => {
     expect(safe).toContain("escapeHtml");
   });
 
+  test("pairs decoded bearer claims with complete signature verification", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-jwt-bypass"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-jwt"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"authentication-or-session"');
+    expect(vulnerable).toContain("jwt.decode(token)");
+    expect(vulnerable).toContain("claims?.admin");
+    expect(safe).toContain("jwt.verify");
+    expect(safe).toContain('algorithms: [\\"RS256\\"]');
+    expect(safe).toContain('audience: \\"admin-api\\"');
+    expect(safe).toContain('issuer: \\"https://identity.example\\"');
+  });
+
+  test("pairs external-entity parser switches with bounded defused XML", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "python-xxe"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "python-safe-xml"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"xml-or-entity-parser"');
+    expect(vulnerable).toContain("load_dtd=True");
+    expect(vulnerable).toContain("resolve_entities=True");
+    expect(vulnerable).toContain("no_network=False");
+    expect(safe).toContain("defusedxml.ElementTree");
+    expect(safe).toContain("len(request.body) > 65536");
+  });
+
   test("prioritizes critical sinks instead of letting noisy files exhaust the prompt", async () => {
     const repository = await mkdtemp(
       join(tmpdir(), "copilot-security-residual-risk-"),

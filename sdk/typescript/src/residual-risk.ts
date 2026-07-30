@@ -6,6 +6,8 @@ const MAX_FILE_BYTES = 256 * 1024;
 const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_CANDIDATES = 4_096;
 const MAX_SIGNALS = 96;
+const CONTEXT_LINES_BEFORE = 3;
+const CONTEXT_LINES_AFTER = 5;
 
 const SOURCE_EXTENSIONS = new Set([
   ".c",
@@ -75,6 +77,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:req|request)\.(?:body|cookies|data|files|form|headers|params|query|values)\b|\b(?:process|sys)\.argv\b|\b(?:environ|getenv|stdin)\b|\bgetParameter\s*\(/iu,
   ],
   [
+    "authentication-or-session",
+    94,
+    /\b(?:authorization|bearer|cookie|jwt|login|oauth|oidc|session|token)\b|\b(?:authenticate|decode|verify)\s*\(/iu,
+  ],
+  [
     "filesystem-write",
     80,
     /\b(?:copyfile|createWriteStream|extract|extractall|makedirs|mkdir|move|open|rename|sendFile|write_bytes|write_text|writeFile|writeFileSync)\b/iu,
@@ -108,6 +115,11 @@ const RISK_SIGNALS: ReadonlyArray<
     "parser-or-deserializer",
     90,
     /\b(?:deserialize|load|loads|ObjectInputStream|parse|pickle|readObject|unmarshal|yaml\.load)\s*\(/iu,
+  ],
+  [
+    "xml-or-entity-parser",
+    93,
+    /\b(?:DocumentBuilderFactory|fromstring|lxml|SAXParserFactory|XMLParser)\b|\b(?:disallow-doctype-decl|external-general-entities|load_dtd|no_network|resolve_entities)\b/iu,
   ],
   [
     "cryptographic-verification",
@@ -186,8 +198,8 @@ export async function buildResidualRiskInventory(
       );
       const categories = matchingSignals.map(([category]) => category);
       if (categories.length === 0) continue;
-      const start = Math.max(0, index - 2);
-      const end = Math.min(lines.length, index + 3);
+      const start = Math.max(0, index - CONTEXT_LINES_BEFORE);
+      const end = Math.min(lines.length, index + CONTEXT_LINES_AFTER + 1);
       records.push({
         path: candidatePath.replaceAll("\\", "/"),
         line: index + 1,

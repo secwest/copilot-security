@@ -42,6 +42,16 @@ TARGET_REQUIRED_COORDINATE_FIELDS = {
     "git_diff": {"snapshotDigest"},
     "directory_snapshot": {"snapshotDigest"},
 }
+SCOPE_FIELDS = {
+    "includePaths",
+    "excludePaths",
+    "summary",
+    "artifactsReviewed",
+    "runtimeStatus",
+    "validationMode",
+    "context",
+    "limitations",
+}
 DISPOSITIONS = {"reported", "no_issue_found", "rejected", "not_applicable", "needs_follow_up"}
 SARIF_LEVELS = {
     "critical": "error",
@@ -1149,6 +1159,9 @@ def _populate_unsealed_manifest_envelope(
 
     scope = scan.get("scope")
     if isinstance(scope, dict):
+        for field in list(scope):
+            if field not in SCOPE_FIELDS:
+                scope.pop(field, None)
         scope.update(copy.deepcopy(completion_binding["scope"]))
 
 
@@ -2456,6 +2469,27 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         or re.search(r"\bxss\b", text)
     ):
         return "cross-site-scripting", ["CWE-79"]
+    if (
+        "xml external entity" in text
+        or "external xml entity" in text
+        or re.search(r"\bxxe\b", text)
+    ):
+        return "xml-external-entity", ["CWE-611"]
+    if (
+        "signature verification" in text
+        or "signature validation" in text
+        or "unverified jwt" in text
+        or "unsigned jwt" in text
+        or "jwt" in text
+        and (
+            "auth" in text
+            or "decode" in text
+            or "signature" in text
+            or "token" in text
+            or "verify" in text
+        )
+    ):
+        return "improper-signature-verification", ["CWE-347"]
     if (
         "path traversal" in text
         or "archive" in text

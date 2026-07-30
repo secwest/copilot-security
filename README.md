@@ -94,10 +94,11 @@ state.
 
 `benchmarks/manifest.json` defines paired vulnerable and fixed fixtures for
 command injection, path traversal, object-level authorization, SQL injection,
-server-side request forgery, unsafe deserialization, and reflected XSS. Each
-case is scanned three times to measure both accuracy and model variance. The
-evaluator uses one-to-one CWE-plus-location matching, counts duplicate reports
-as false positives, and records missing scan artifacts as completion failures.
+server-side request forgery, unsafe deserialization, reflected XSS, XML
+external entities, and JWT signature-verification bypass. Each case is scanned
+three times to measure both accuracy and model variance. The evaluator uses
+one-to-one CWE-plus-location matching, counts duplicate reports as false
+positives, and records missing scan artifacts as completion failures.
 
 ```powershell
 # Evaluate existing outputs
@@ -113,8 +114,9 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
-Use repeatable `--case <id>` options and `--runs 1` for a quick paired
-vulnerable/control diagnostic. Partial runs intentionally fail the
+Use repeatable `--case <id>` options, `--runs 1`, and `--selection-only` for a
+quick paired vulnerable/control diagnostic with its own durable report. Omit
+`--selection-only` when a partial run should intentionally exercise the
 full-corpus completion gate.
 
 The measured gates cover completion, precision, recall, F1, exact-case and
