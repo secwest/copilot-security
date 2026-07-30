@@ -124,6 +124,14 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   another object. A signature success without that object-continuity proof is
   not enough; claims derived only from the unique verified payload with complete
   semantic and replay binding are counterevidence.
+- For JWT/JWS/OIDC remote-key findings, preserve the compact token, protected
+  header, `alg`, `kid`, `jku`/`x5u` or embedded key, configured issuer and
+  metadata, final JWKS/certificate URL after redirects, cache scope, all matching
+  keys and their type/use/algorithm, signature result, accepted claims,
+  nonce/replay state, and installed principal. Prove the attacker can cause
+  their own key to become the trust root for a token that receives protected
+  identity or privileges. Signature success alone is not a control; a trusted
+  issuer-pinned key source and end-to-end claim binding are counterevidence.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 

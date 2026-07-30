@@ -57,12 +57,23 @@ path remains available for a transport failure after all drafts were written;
 an unsuccessful deterministic closure audit does not use that escape hatch.
 
 Recoverable Copilot model-call failures are retried by the CLI inside the
-existing turn, with a fixed two-retry ceiling. The host does not resubmit the
-scan or correction prompt, so a transient retry cannot duplicate completed
-tool work. Tool, system, user-input, terminal, and transport failures remain
-visible to the normal failure and artifact-recovery paths. Startup and session
-creation are cancellation-aware, and a partially started CLI runtime is
-gracefully stopped or force-stopped before the original error is returned.
+existing turn, with a fixed two-retry ceiling. Explicit safety-classifier,
+content-filter, Responsible AI, and policy-violation refusals receive a
+separate six-retry native budget even when the provider labels them terminal.
+If the provider still refuses, the host makes up to two additional prompt
+replays with progressively narrower authorized defensive framing. These
+replays preserve the original scan contract and existing correct drafts, use
+idempotent writes, forbid external targeting and weaponization, and apply to
+the initial, quality-gate, and final repair turns.
+
+The retry classifier is deliberately narrow: ordinary uses of words such as
+`policy`, `blocked`, `unsafe`, authentication errors, tool failures, transport
+failures, and scanner safety-limit diagnostics do not trigger prompt replay.
+Persistent safety refusal fails with a fixed diagnostic after three total
+prompt attempts rather than being reported as a successful or clean scan.
+Startup and session creation are cancellation-aware, and a partially started
+CLI runtime is gracefully stopped or force-stopped before the original error
+is returned.
 
 ## Requirements
 
@@ -112,6 +123,9 @@ node ./bin/copilot-security.mjs scan C:\code\project --mode deep
 
 Use `--model` and `--effort` to select a Copilot model and reasoning effort.
 The default is `gpt-5.6-sol` with `xhigh` effort.
+`--model auto` delegates model selection to Copilot and does not send a
+reasoning-effort override because Copilot rejects reasoning effort for the
+automatic model.
 Use `--max-ai-credits N` to have Copilot enforce a native credit limit across
 the root session and its subagents. Copilot CLI requires at least 30 credits.
 
@@ -123,28 +137,34 @@ private runtime subdirectory is named `copilot-security-home`.
 
 Scanner artifacts, locks, configuration, temporary directories, and output
 roots remain outside every other scanner's state tree. `COPILOT_HOME` is read
-only to obtain the user's existing Copilot CLI authentication and is copied
-into the isolated `copilot-security-home` runtime when needed. The deprecated
-`COPILOT_SECURITY_STATE_DIR` alias selects this scanner's state root only. This
-separation lets multiple scanners run concurrently without sharing mutable
-state.
+only to obtain the user's existing Copilot CLI authentication. File-backed
+credentials are copied into the isolated runtime when needed. For operating
+system credential stores, the scanner imports only Copilot's non-secret active
+account selector (`host` and `login`) so the isolated CLI chooses the same
+Copilot user instead of silently falling back to a different `gh` account. It
+does not copy tokens, trusted folders, settings, experiments, sessions, or
+other ambient state, and it preserves an account explicitly selected in the
+scanner home. The deprecated `COPILOT_SECURITY_STATE_DIR` alias selects this
+scanner's state root only. This separation lets multiple scanners run
+concurrently without sharing mutable state.
 
 ## Effectiveness benchmark
 
 `benchmarks/manifest.json` defines paired vulnerable and fixed fixtures for
 command injection, path traversal, object-level authorization, SQL injection,
 server-side request forgery, unsafe deserialization, reflected XSS, XML
-external entities, JWT signature-verification bypass, prototype pollution,
-SAML signed-versus-consumed assertion confusion, disabled TLS certificate
-verification, predictable security tokens, server-side template injection,
-check/use state races, unsafe mass assignment, cookie-authenticated cross-site
-request forgery, attacker-length native-memory corruption, document-query
-operator injection, executable file upload/content placement,
-cross-proxy/backend HTTP request smuggling, and adversarial repository
-instructions. Each of the 44 cases is scanned three times, producing 132 scans
-that measure both accuracy and model variance. The evaluator uses one-to-one
-CWE-plus-location matching, counts duplicate reports as false positives, and
-records missing scan artifacts as completion failures.
+external entities, JWT signature-verification bypass, attacker-controlled
+JWT/OIDC JWKS key origin, prototype pollution, SAML signed-versus-consumed
+assertion confusion, disabled TLS certificate verification, predictable
+security tokens, server-side template injection, check/use state races, unsafe
+mass assignment, cookie-authenticated cross-site request forgery,
+attacker-length native-memory corruption, document-query operator injection,
+executable file upload/content placement, cross-proxy/backend HTTP request
+smuggling, and adversarial repository instructions. Each of the 46 cases is
+scanned three times, producing 138 scans that measure both accuracy and model
+variance. The evaluator uses one-to-one CWE-plus-location matching, counts
+duplicate reports as false positives, and records missing scan artifacts as
+completion failures.
 
 ```powershell
 # Evaluate existing outputs

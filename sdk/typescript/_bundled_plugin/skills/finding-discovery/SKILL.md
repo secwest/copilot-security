@@ -136,6 +136,22 @@ Use this checklist to keep discovery specific without turning it into validation
 - In framework or library scans, do not suppress a high-impact candidate solely because the affected API is deprecated, opt-in, or documented as dangerous. State that as a precondition; keep the candidate when the shipped runtime code contains a bypassable control in the restricted or normal usage path and the instance has a plausible cross-boundary source and runtime/deployment path.
 - In auth/authz surfaces, enumerate public webhook, status, callback, and API endpoints that read protected objects, trigger builds/jobs, or mutate protected state independently from nearby credential or configuration bugs.
 - For stateful authentication protocols, include the line that installs or reuses principals, credentials, tokens, issuers, or protocol state after a pre-authentication, TLS-upgrade, redirect, assertion, or identity-provider transition. Missing rebind/reauthentication or validated-vs-consumed mismatches are candidate controls when they can authenticate the wrong identity.
+- For JWT/JWS/OIDC verification, preserve the protected header and every source
+  of `alg`, `kid`, `jku`, `x5u`, embedded JWK/certificate, issuer discovery,
+  metadata, JWKS URI, redirects, cache entries, and selected key provenance.
+  Follow the verified claims through issuer, audience, subject, lifetime, nonce,
+  replay, and final session or privilege installation. Treat a token-controlled
+  remote key URL, an attacker-derived issuer-to-JWKS mapping, multiple ambiguous
+  `kid` matches, or missing key-type/use/algorithm compatibility as a candidate
+  when an attacker can supply a verification key for a trusted identity.
+- Strong counterevidence requires that header-supplied key locators are rejected
+  or ignored, the remote key set is selected only from trusted allowlisted or
+  issuer-pinned configuration, redirects and cache scope preserve that origin,
+  exactly one compatible key is selected, the algorithm is fixed, and verified
+  claims plus nonce/replay state remain bound through principal creation.
+  Do not report `kid`, `jku`, JWKS fetching, or OIDC discovery by name alone
+  without proving attacker influence over key provenance and authentication
+  impact.
 - In SSO/SAML/federation packages, keep response/assertion validators distinct from generic claims authorizers and service-method authorization. Include assertion selection, list indexing, `getDOM`, `cloneNode`, signed-object lookup, subject confirmation, recipient, audience, destination, ACS URL, and issuer-binding lines when they decide which assertion is trusted or returned.
 - In auth/token/assertion validators, watch for a validation loop or `foundValid*` flag followed by a separate fixed-index, first/last-element, clone, serialization, or return path. Treat the later object-selection line as the broken control until exact counterevidence proves the validated object and consumed object are identical and equally bound.
 - For SAML and other signed federated identity objects, preserve the literal

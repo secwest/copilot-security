@@ -10,7 +10,13 @@ if (process.env["COPILOT_SECURITY_INTEGRATION"] === "1") {
   test(
     "real Copilot and unchanged-plugin integration smoke",
     async () => {
-      const client = new CopilotSecurity();
+      const integrationModel =
+        process.env["COPILOT_SECURITY_INTEGRATION_MODEL"]?.trim();
+      const client = new CopilotSecurity(
+        integrationModel
+          ? { copilotOverrides: { model: integrationModel } }
+          : undefined,
+      );
       let scanDir: string | null = null;
       try {
         const result = await client.run(REPOSITORY_ROOT, {

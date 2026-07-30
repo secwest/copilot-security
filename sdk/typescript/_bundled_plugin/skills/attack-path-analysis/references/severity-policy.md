@@ -45,6 +45,11 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   or control-plane identity despite a valid signature being checked elsewhere
   in the response. Critical requires proof of the exact verified-versus-consumed
   object mismatch and resulting principal, not merely incomplete SAML hygiene.
+- JWT/JWS/OIDC key-origin confusion that lets an unauthenticated attacker make
+  their own remote or embedded key authoritative, forge a trusted administrative
+  or cross-tenant identity, and install that principal. Critical requires the
+  exact token, attacker-controlled key-origin path, successful verification, and
+  compromise-equivalent identity impact.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
@@ -73,6 +78,10 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   subject, role, tenant, issuer, audience, or recipient and produce meaningful
   unauthorized access, with the signature reference, consumed claims, and
   installed session identity demonstrated.
+- JWT/JWS/OIDC verification that accepts an attacker-origin key through `jku`,
+  `x5u`, embedded material, untrusted discovery, redirect, cache confusion, or
+  ambiguous `kid` selection and thereby produces meaningful unauthorized access,
+  with the selected key and installed identity demonstrated.
 - XXE with clear proof that an attacker can control the XML document through in-scope attack-surface and that the XML engine is vulnerable to XXE
 - etc, other bugs not listed which follow this level of high severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 - Dangerous upload / file handling issues that enable stored active content, trusted-origin script execution, or meaningful content-type confusion with real security impact; with actual proof that both the upload and access are reachable through in-scope attack-surface.
@@ -107,6 +116,10 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   optional check without proving which exact bytes were signed, which object was
   consumed, which semantic binding failed, and what unauthorized principal or
   action resulted.
+- JWT/JWKS reports based only on the presence of `kid`, `jku`, `x5u`, remote key
+  fetching, dynamic issuer support, or a missing optional metadata check without
+  proving attacker control of the accepted verification-key origin and a forged
+  principal or protected action.
 - Missing headers, cookie flags, CSP weaknesses, TLS observations, or crypto hygiene issues without a concrete exploit path and meaningful demonstrated impact.
 - Reports that effectively say "this could be dangerous if combined with something else" but do not show the something else.
 - Denial of service that is transient, single-user, self-targeting, easy to mitigate, requires disproportionate attacker resources, or does not create severe and realistic business / safety impact.

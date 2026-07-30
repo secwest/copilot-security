@@ -463,6 +463,45 @@
       "expected": []
     },
     {
+      "id": "javascript-jwks-header-key-injection",
+      "description": "An OIDC verifier constrains jku to a shared JWKS-service origin but accepts the token's attacker-tenant path and key, installing forged administrative claims even though issuer, audience, lifetime, and nonce checks pass.",
+      "fixture": "fixtures/javascript-jwks-header-key-injection",
+      "findingsPaths": [
+        "javascript-jwks-header-key-injection/run-1/findings.json",
+        "javascript-jwks-header-key-injection/run-2/findings.json",
+        "javascript-jwks-header-key-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "attacker-controlled-jwks-key-origin-bypass",
+          "cwe": ["CWE-346", "CWE-347", "CWE-287"],
+          "locations": [
+            {
+              "path": "src/token.js",
+              "startLine": 24,
+              "endLine": 25,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-jwks-key-origin",
+      "description": "The OIDC verifier rejects token-supplied key URLs, resolves exactly one compatible key only from the configured issuer JWKS endpoint, and binds verified issuer, audience, lifetime, nonce, and session identity.",
+      "fixture": "fixtures/javascript-safe-jwks-key-origin",
+      "findingsPaths": [
+        "javascript-safe-jwks-key-origin/run-1/findings.json",
+        "javascript-safe-jwks-key-origin/run-2/findings.json",
+        "javascript-safe-jwks-key-origin/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-saml-signature-wrapping",
       "description": "A SAML validator verifies the assertion selected by the signature reference but creates the session from an attacker-controlled unsigned assertion at the first list position.",
       "fixture": "fixtures/javascript-saml-signature-wrapping",

@@ -54,11 +54,12 @@ publish findings, open issues, or contact third parties. Write only beneath
    SQL/document database query syntax and selector/operator types, template,
    parser, deserializer, file-upload parsing/storage and downstream content
    consumers, HTTP message framing and normalization across proxies/gateways/
-   backends, SAML/federated signature references and consumed identity objects,
-   bulk object binding and mass-assignment field controls, browser-ambient
-   credential and CSRF controls, native memory allocation/copy/index/lifetime
-   boundaries, cryptographic, state, concurrency, and resource-control
-   boundaries.
+   backends, JWT/OIDC protected headers, remote key sources, JWKS/issuer mapping,
+   algorithm and claim binding, SAML/federated signature references and consumed
+   identity objects, bulk object binding and mass-assignment field controls,
+   browser-ambient credential and CSRF controls, native memory allocation/copy/
+   index/lifetime boundaries, cryptographic, state, concurrency, and
+   resource-control boundaries.
 4. Compare the patch with the exact pre-change behavior. Look specifically for:
 
    - removed, reordered, weakened, or bypassable validation and authorization;
@@ -89,6 +90,10 @@ publish findings, open issues, or contact third parties. Write only beneath
      canonicalization, list indexing, cloning/return selection, claims parsing,
      issuer/audience/recipient/destination binding, assertion lifetime, replay
      handling, or session/principal installation;
+   - changed JWT/JWS/OIDC `alg`, `kid`, `jku`, `x5u`, embedded-key, discovery,
+     issuer-to-JWKS mapping, redirect, key-cache, matching-key cardinality,
+     key-type/use, signature, issuer/audience/lifetime/nonce, or principal
+     installation behavior;
    - unsafe default, configuration, dependency, build, plugin, or update changes;
    - race, replay, idempotency, lifecycle, error-handling, and rollback changes;
    - newly affected sibling instances behind a changed shared dependency.

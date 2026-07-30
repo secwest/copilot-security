@@ -128,6 +128,15 @@ Use class-specific proof tuples:
 - SSRF optional-filter/redirect control: attacker-controlled download/webhook/callback URL + optional, empty-by-default, regex-only, pre-request-only, or redirect-following destination control + internal/LAN/cloud metadata/file-backed fetch or server-side callback side effect
 - auth/token/assertion/protocol control: attacker-controlled token, assertion, protocol metadata, or version value + exact validator/control semantics + mismatch between validated value and trusted value, incomplete canonicalization/equality, unchecked parsing, or missing binding + authentication, authorization, or protocol-security impact
 - stateful auth protocol transition: attacker-controlled credentials, principal, token, issuer, assertion, server response, or protocol metadata + state transition after TLS upgrade, bind, redirect, callback, assertion validation, or identity-provider response + missing rebind/reauthentication, stale identity reuse, incomplete issuer/callback binding, or validated-vs-consumed mismatch + authentication bypass or identity confusion impact
+- JWT/JWS/OIDC remote key origin: attacker-controlled compact token and protected
+  header + `jku`, `x5u`, embedded key, issuer discovery, or other attacker-derived
+  verification-key source + actual JWKS/certificate URL and redirect/cache path +
+  selected `kid`, key metadata, algorithm, and signature result + forged trusted
+  issuer/audience/subject/role claims + installed session or privilege. A valid
+  signature is not counterevidence when the attacker supplied its trust root.
+  Suppression requires a trusted issuer-to-key-source mapping, one compatible
+  key, fixed algorithm, complete claim/lifetime/nonce binding, and continuity
+  through principal creation.
 - SAML/XML assertion binding: attacker-controlled response or assertion set + protocol/signature validation of one object + later use, clone, serialization, or storage of a different assertion/document node + authentication/session/token impact. Multi-object preconditions should be stated, but suppression needs exact evidence that the same object is cryptographically and semantically bound to the consumed object.
 - SSO/SAML response validator: attacker-controlled SSO response containing one or more assertions + response/assertion validator code that selects, indexes, clones, serializes, or returns an assertion + mismatch between the signed/validated assertion and the assertion later consumed by the session/token path, or missing recipient/audience/destination/ACS binding + authentication or authorization bypass impact. A generic claims-authorizer or service-method authorization finding does not validate or suppress this row.
 - found-valid selection mismatch: attacker-controlled list or set of tokens/assertions/identities + validator loop or `foundValid*` flag proves one element while later fixed-index, first/last, clone, serialization, or lookup consumes another element + authentication, authorization, or protocol-state impact. Suppression needs evidence that the consumed object is the same object already validated.
@@ -177,6 +186,13 @@ Use this checklist to keep validation close to the prompt contract:
   assertion. Use a reference-selected, verified-payload-derived session plus
   wrong-audience, wrong-recipient, expired, duplicate-ID, and replay cases as
   negative controls when feasible.
+- For JWT/OIDC remote-key candidates, create a real attacker key pair and compact
+  signed token when feasible. Record the token header, requested key URL,
+  redirects, returned key set, selected key, signature outcome, accepted claims,
+  and session. Use a header-supplied attacker JWKS as the exploit witness and a
+  fixed trusted-issuer JWKS plus wrong issuer/audience, expired token, replayed
+  nonce, duplicate `kid`, incompatible algorithm/key type, and tampered payload
+  as negative controls.
 - For HTTP request-smuggling candidates, save the literal request bytes and a
   per-hop framing table with normalized headers, message boundaries, residual
   bytes, routing/authorization decisions, connection reuse, and the protected

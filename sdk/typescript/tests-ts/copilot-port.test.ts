@@ -7,9 +7,12 @@ import {
   closureGapCounts,
   copilotModelErrorRecovery,
   COPILOT_SCANNER_SESSION_HOOKS,
+  isSafetyClassifierRefusal,
   prepareCopilotRuntime,
   resolveCopilotCli,
   runScanQualityCorrection,
+  safetyClassifierRetryPrompt,
+  sendCopilotPromptWithSafetyRecovery,
   startManagedCopilotSession,
   stopManagedCopilotClient,
   type CopilotScannerOptions,
@@ -137,6 +140,16 @@ describe("Copilot port", () => {
       errorHandling: "retry",
       retryCount: 2,
     });
+    expect(
+      copilotModelErrorRecovery({
+        recoverable: false,
+        errorContext: "model_call",
+        error: "Response blocked by content filtering policy",
+      }),
+    ).toEqual({
+      errorHandling: "retry",
+      retryCount: 6,
+    });
     for (const input of [
       {
         recoverable: false,
@@ -161,6 +174,81 @@ describe("Copilot port", () => {
     ]) {
       expect(copilotModelErrorRecovery(input)).toBeUndefined();
     }
+  });
+
+  test("retries only explicit safety-classifier refusals", async () => {
+    for (const refusal of [
+      "Safety classifier rejected the response.",
+      "Response blocked by content filtering policy.",
+      "Request was filtered by the Responsible AI Service.",
+      "This content was flagged for possible cybersecurity risk. If this seems wrong, try rephrasing your request. To get authorized for security work, join the Trusted Access for Cyber program.",
+      "policy_violation",
+      "I can't assist with harmful cyber activity.",
+    ]) {
+      expect(isSafetyClassifierRefusal(refusal)).toBeTrue();
+    }
+    for (const ordinaryFailure of [
+      "The severity policy blocked this release.",
+      "Plugin ZIP entry exceeds the safety limit.",
+      "Authentication failed.",
+      "The scanner found unsafe deserialization.",
+      "Request timed out.",
+    ]) {
+      expect(isSafetyClassifierRefusal(ordinaryFailure)).toBeFalse();
+    }
+
+    const prompts: string[] = [];
+    let sends = 0;
+    await sendCopilotPromptWithSafetyRecovery(
+      "scan the repository",
+      async (prompt) => {
+        prompts.push(prompt);
+        sends += 1;
+        if (sends === 1) {
+          throw new Error("Response blocked by content filtering policy.");
+        }
+        if (sends === 2) {
+          return {
+            data: {
+              content: "I can't assist with harmful cyber activity.",
+            },
+          };
+        }
+        return { data: { content: "Defensive scan completed." } };
+      },
+    );
+
+    expect(prompts).toHaveLength(3);
+    expect(prompts[0]).toBe("scan the repository");
+    expect(prompts[1]).toContain("safety-refusal recovery 1/2");
+    expect(prompts[2]).toContain("safety-refusal recovery 2/2");
+    expect(prompts[1]).toContain("scan the repository");
+    expect(safetyClassifierRetryPrompt("original", 1)).toContain(
+      "<authorized-defensive-scan-request>\noriginal\n",
+    );
+  });
+
+  test("fails transparently after bounded safety retries without replaying other errors", async () => {
+    let refusalAttempts = 0;
+    await expect(
+      sendCopilotPromptWithSafetyRecovery("scan", async () => {
+        refusalAttempts += 1;
+        throw new Error("Safety classifier refused the response.");
+      }),
+    ).rejects.toThrow(
+      "safety filtering rejected the authorized defensive scan after 3 prompt attempts",
+    );
+    expect(refusalAttempts).toBe(3);
+
+    const terminal = new Error("network stopped");
+    let terminalAttempts = 0;
+    await expect(
+      sendCopilotPromptWithSafetyRecovery("scan", async () => {
+        terminalAttempts += 1;
+        throw terminal;
+      }),
+    ).rejects.toBe(terminal);
+    expect(terminalAttempts).toBe(1);
   });
 
   test("completes after the correction turn only when the host re-audit closes", async () => {

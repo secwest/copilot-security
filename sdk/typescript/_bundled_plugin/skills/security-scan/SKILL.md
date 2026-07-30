@@ -32,9 +32,10 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    operations, sensitive assets, attacker capabilities, and highest-risk data
    flows. Save it under `artifacts/01_context/threat_model.md`.
 3. Review every in-scope file. Trace attacker-controlled sources through
-   validation, authentication, SAML/federated signed-assertion selection and
-   trust binding, browser-ambient credential CSRF, authorization, state changes,
-   interpreters, filesystem, network, deserialization, and templates;
+   validation, authentication, JWT/OIDC algorithm, remote-key URL, key-origin,
+   issuer, audience, and nonce binding, SAML/federated signed-assertion selection
+   and trust binding, browser-ambient credential CSRF, authorization, state
+   changes, interpreters, filesystem, network, deserialization, and templates;
    SQL and document-database query selectors/operators and bulk object binding;
    mass assignment into persisted or privileged fields, untrusted uploads and
    content placement into served, executable, plugin, startup, or configuration

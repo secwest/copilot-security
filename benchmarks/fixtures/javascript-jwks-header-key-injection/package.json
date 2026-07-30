@@ -1,0 +1,5 @@
+{
+  "name": "javascript-jwks-header-key-injection",
+  "private": true,
+  "type": "module"
+}

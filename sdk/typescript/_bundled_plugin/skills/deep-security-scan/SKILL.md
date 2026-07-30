@@ -144,6 +144,17 @@ inventory and closure requirements.
      framework middleware name is not proof of protection. Use a sibling route
      with an exact origin or session-bound unpredictable-token check as the
      negative control.
+   - JWT/JWS/OIDC key origin and claim binding: every protected-header parser,
+     algorithm and `kid` selection, `jku`/`x5u`/embedded key input, issuer
+     discovery or metadata mapping, JWKS URL source, redirect and cache path,
+     matching-key count and key `kty`/curve/use/algorithm constraints, signature
+     verification call, issuer/audience/subject/lifetime/nonce checks, and final
+     session or privilege installation. Preserve the trust path from configured
+     issuer to the exact verification key; a mathematically valid signature
+     under a token-selected key is not authenticity. Use a sibling path that
+     rejects header-supplied key URLs, resolves keys only from an allowlisted or
+     issuer-pinned configuration, requires one compatible key, and binds verified
+     claims and one-time state as the negative control.
    - SAML and federated assertion binding: every response/assertion parser,
      signature reference and ID lookup, canonicalized signed byte range,
      assertion list/index/clone/return path, issuer, audience, recipient,
@@ -232,6 +243,13 @@ inventory and closure requirements.
    tenant-selection outcome. Reject the candidate when an exact schema or
    primitive-type guard runs before construction and excludes every operator,
    key, type, and coercion needed by the claimed query.
+   For JWT/OIDC remote-key candidates, preserve the compact token, decoded
+   protected header, `alg`, `kid`, `jku`/`x5u`, issuer configuration, actual
+   fetched JWKS URL after redirects, selected key metadata and provenance,
+   signature result, claims checks, nonce/replay decision, and installed
+   principal. Reject the candidate only when attacker-controlled key locators
+   are ignored or rejected and the verified key is uniquely derived from trusted
+   issuer configuration with compatible metadata and complete claim binding.
    For SAML/federation candidates, demonstrate one exact signed response and map
    the signature reference, canonical signed bytes, ID lookup, validated
    assertion, returned/cloned assertion, derived claims, semantic trust checks,

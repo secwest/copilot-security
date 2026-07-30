@@ -57,6 +57,10 @@ describe("effectiveness benchmark", () => {
       ["javascript-reflected-xss", "javascript-safe-html"],
       ["javascript-jwt-bypass", "javascript-safe-jwt"],
       [
+        "javascript-jwks-header-key-injection",
+        "javascript-safe-jwks-key-origin",
+      ],
+      [
         "javascript-saml-signature-wrapping",
         "javascript-safe-saml-assertion-binding",
       ],
@@ -122,6 +126,11 @@ describe("effectiveness benchmark", () => {
         .get("javascript-saml-signature-wrapping")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-347", "CWE-345", "CWE-287"]]);
+    expect(
+      cases
+        .get("javascript-jwks-header-key-injection")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-346", "CWE-347", "CWE-287"]]);
     const adversarialVulnerable = join(
       benchmarkRoot,
       "fixtures",
@@ -191,6 +200,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "javascript-safe-http-framing",
+    );
+    const jwksHeaderKeyInjection = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-jwks-header-key-injection",
+    );
+    const safeJwksKeyOrigin = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-jwks-key-origin",
     );
     const samlSignatureWrapping = join(
       benchmarkRoot,
@@ -299,6 +318,18 @@ describe("effectiveness benchmark", () => {
       await readFile(join(safeHttpFraming, "src", "gateway.js"), "utf8"),
     ).toContain("request must contain exactly one complete message");
     expect(
+      await readFile(join(jwksHeaderKeyInjection, "src", "token.js"), "utf8"),
+    ).toContain("keyUrl.origin !== policy.allowedJwksOrigin");
+    expect(
+      await readFile(join(jwksHeaderKeyInjection, "src", "token.js"), "utf8"),
+    ).toContain("policy.fetchJwks(keyUrl.href)");
+    expect(
+      await readFile(join(safeJwksKeyOrigin, "src", "token.js"), "utf8"),
+    ).toContain("policy.fetchJwks(policy.expectedJwksUri)");
+    expect(
+      await readFile(join(safeJwksKeyOrigin, "src", "token.js"), "utf8"),
+    ).toContain('if ("jku" in header || "x5u" in header)');
+    expect(
       await readFile(join(samlSignatureWrapping, "src", "saml.js"), "utf8"),
     ).toContain("response.assertions[0].claims");
     expect(
@@ -391,6 +422,7 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
     expect(deepScan).toContain("untrusted upload and content placement:");
     expect(deepScan).toContain("HTTP request framing and smuggling:");
+    expect(deepScan).toContain("JWT/JWS/OIDC key origin and claim binding:");
     expect(deepScan).toContain("SAML and federated assertion binding:");
     expect(standardScan).toContain("bulk object binding");
     expect(standardScan).toContain("mass assignment");
@@ -403,6 +435,7 @@ describe("effectiveness benchmark", () => {
     );
     expect(standardScan).toContain("untrusted uploads and");
     expect(standardScan).toContain("HTTP message framing and parser agreement");
+    expect(standardScan).toContain("JWT/OIDC algorithm, remote-key URL");
     expect(standardScan).toContain("SAML/federated signed-assertion selection");
     expect(diffScan).toContain("mass-assignment field controls");
     expect(diffScan).toContain("writable-field sets");
@@ -414,6 +447,7 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain(
       "SAML/SSO assertion ID lookup, signature-reference resolution",
     );
+    expect(diffScan).toContain("JWT/JWS/OIDC `alg`, `kid`, `jku`, `x5u`");
     expect(discovery).toContain(
       "distinguish attacker-controlled template source from attacker-controlled data",
     );
@@ -438,6 +472,10 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain(
       "For SAML and other signed federated identity objects",
     );
+    expect(discovery).toContain("For JWT/JWS/OIDC verification");
+    expect(discovery).toContain(
+      "Do not report `kid`, `jku`, JWKS fetching, or OIDC discovery",
+    );
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
@@ -446,6 +484,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("untrusted upload/content placement:");
     expect(validation).toContain("HTTP request smuggling/desynchronization:");
+    expect(validation).toContain("JWT/JWS/OIDC remote key origin:");
     expect(validation).toContain("SAML signed-byte-to-session binding:");
     expect(attackPath).toContain("For mass-assignment findings");
     expect(attackPath).toContain("For CSRF findings");
@@ -458,6 +497,7 @@ describe("effectiveness benchmark", () => {
       "For HTTP request-smuggling and desynchronization findings",
     );
     expect(attackPath).toContain("For SAML/federated signed-object findings");
+    expect(attackPath).toContain("For JWT/JWS/OIDC remote-key findings");
     expect(severityPolicy).toContain(
       "CSRF when it enables important state-changing actions",
     );
@@ -483,10 +523,17 @@ describe("effectiveness benchmark", () => {
     expect(severityPolicy).toContain(
       "SAML/SSO reports based only on multiple assertions",
     );
+    expect(severityPolicy).toContain("JWT/JWS/OIDC key-origin confusion");
+    expect(severityPolicy).toContain(
+      "JWT/JWKS reports based only on the presence of `kid`",
+    );
     expect(threatModelGuidance).toContain(
       "HTTP framing/parser agreement across proxies",
     );
-    expect(threatModelGuidance).toContain("SAML/OIDC/federated signed-object");
+    expect(threatModelGuidance).toContain(
+      "JWT/JWS/OIDC algorithm, remote-key, issuer-to-JWKS",
+    );
+    expect(threatModelGuidance).toContain("SAML/federated signed-object");
     expect(threatModelGuidance).toContain(
       "allocation arithmetic, object bounds, ownership/lifetime",
     );

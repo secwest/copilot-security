@@ -56,6 +56,7 @@ const MAX_PLUGIN_MANIFEST_SIZE = 1024 * 1024;
 const MAX_PLUGIN_COPY_ENTRIES = 4_096;
 const MAX_PLUGIN_COPY_FILE_SIZE = 128 * 1024 * 1024;
 const MAX_PLUGIN_COPY_SIZE = 512 * 1024 * 1024;
+const MAX_COPILOT_ACCOUNT_CONFIG_SIZE = 1024 * 1024;
 const MODEL_UNSAFE_PATH = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u;
 const CREDENTIAL_LOCK_NAME = ".copilot-security-scan.lock";
 const CREDENTIAL_LOGOUT_MARKER = ".copilot-security-logged-out";
@@ -758,6 +759,21 @@ export async function importAmbientAuth(
   ambientHome: string,
   isolatedHome: string,
 ): Promise<boolean> {
+  const importedFileCredentials = await importAmbientFileCredentials(
+    ambientHome,
+    isolatedHome,
+  );
+  const importedAccountSelection = await importAmbientAccountSelection(
+    ambientHome,
+    isolatedHome,
+  );
+  return importedFileCredentials || importedAccountSelection;
+}
+
+async function importAmbientFileCredentials(
+  ambientHome: string,
+  isolatedHome: string,
+): Promise<boolean> {
   const source = join(expandHome(ambientHome), "auth.json");
   let metadata;
   try {
@@ -803,6 +819,125 @@ export async function importAmbientAuth(
     );
   } finally {
     await rm(temporary, { force: true }).catch(() => undefined);
+  }
+}
+
+/**
+ * Copilot CLI's OS credential-store entries are selected by the non-secret
+ * loggedInUsers/lastLoggedInUser metadata in config.json. A fresh isolated
+ * COPILOT_HOME otherwise silently falls back to gh auth, which may be a
+ * different account with different model entitlements. Import only the active
+ * account selector—not settings, experiments, trust state, sessions, or
+ * tokens—and never replace an account explicitly selected in the scanner home.
+ */
+async function importAmbientAccountSelection(
+  ambientHome: string,
+  isolatedHome: string,
+): Promise<boolean> {
+  const source = join(expandHome(ambientHome), "config.json");
+  const ambient = await readCopilotAccountConfig(source, true);
+  const selected = copilotAccountSelection(ambient);
+  if (selected === null) return false;
+
+  await mkdir(isolatedHome, { recursive: true, mode: 0o700 });
+  const destination = join(isolatedHome, "config.json");
+  const isolated = await readCopilotAccountConfig(destination, false);
+  if (copilotAccountSelection(isolated) !== null) return true;
+
+  const updated: JsonObject = {
+    ...(isRecord(isolated) ? (isolated as JsonObject) : {}),
+    loggedInUsers: [selected],
+    lastLoggedInUser: selected,
+  };
+  const temporary = join(isolatedHome, `.copilot-account-${randomUUID()}.tmp`);
+  try {
+    const handle = await open(temporary, "wx", 0o600);
+    try {
+      await handle.chmod(0o600);
+      await handle.writeFile(
+        `// User settings belong in settings.json.\n// This file is managed automatically.\n${JSON.stringify(updated, null, 2)}\n`,
+        "utf8",
+      );
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, destination);
+    return true;
+  } catch (error) {
+    throw new PluginBootstrapError(
+      "Unable to import the ambient Copilot account selection.",
+      { cause: error },
+    );
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined);
+  }
+}
+
+async function readCopilotAccountConfig(
+  path: string,
+  ambient: boolean,
+): Promise<unknown> {
+  let metadata: Stats;
+  try {
+    metadata = await lstat(path);
+  } catch (error) {
+    if (nodeErrorCode(error) === "ENOENT") return {};
+    throw new PluginBootstrapError(
+      `Unable to inspect ${ambient ? "ambient" : "isolated"} Copilot account metadata.`,
+      { cause: error },
+    );
+  }
+  if (
+    !metadata.isFile() ||
+    metadata.isSymbolicLink() ||
+    metadata.size > MAX_COPILOT_ACCOUNT_CONFIG_SIZE
+  ) {
+    throw new PluginBootstrapError(
+      `${ambient ? "Ambient" : "Isolated"} Copilot account metadata is not a bounded regular file.`,
+    );
+  }
+  try {
+    const contents = await readFile(path, "utf8");
+    const objectStart = contents.indexOf("{");
+    if (objectStart < 0) return {};
+    return JSON.parse(contents.slice(objectStart));
+  } catch (error) {
+    throw new PluginBootstrapError(
+      `Unable to read ${ambient ? "ambient" : "isolated"} Copilot account metadata.`,
+      { cause: error },
+    );
+  }
+}
+
+function copilotAccountSelection(value: unknown): JsonObject | null {
+  if (!isRecord(value) || !isRecord(value["lastLoggedInUser"])) return null;
+  const host = value["lastLoggedInUser"]["host"];
+  const login = value["lastLoggedInUser"]["login"];
+  if (
+    typeof host !== "string" ||
+    typeof login !== "string" ||
+    login.length < 1 ||
+    login.length > 256 ||
+    MODEL_UNSAFE_PATH.test(login)
+  ) {
+    return null;
+  }
+  try {
+    const parsed = new URL(host);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      parsed.search !== "" ||
+      parsed.hash !== "" ||
+      (parsed.pathname !== "" && parsed.pathname !== "/")
+    ) {
+      return null;
+    }
+    return { host: parsed.origin, login };
+  } catch {
+    return null;
   }
 }
 

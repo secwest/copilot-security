@@ -202,6 +202,16 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:crypto|decrypt|encrypt|hash|hmac|jwt|signature|verify)\b/iu,
   ],
   [
+    "jwt-oidc-remote-key-origin",
+    100,
+    /\b(?:createRemoteJWKSet|fetchJwks|jwksUri|jku|x5u)\b|\b(?:header|protectedHeader)\s*(?:\.|\[\s*["'])\s*(?:jku|kid|x5u)\b/iu,
+  ],
+  [
+    "jwt-oidc-claim-binding",
+    98,
+    /\b(?:expectedAudience|expectedIssuer|maxTokenAgeSeconds|pendingNonces)\b|\bclaims\s*\.\s*(?:aud|exp|iat|iss|nonce|sub)\b/iu,
+  ],
+  [
     "saml-federation-or-assertion-boundary",
     98,
     /\b(?:acsUrl|assertion|assertions|audience|identityProvider|recipient|SAML|SubjectConfirmation)\b/iu,

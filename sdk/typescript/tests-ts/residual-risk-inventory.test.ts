@@ -237,6 +237,32 @@ describe("residual risk inventory", () => {
     expect(safe).toContain('issuer: "https://identity.example"');
   });
 
+  test("pairs token-controlled JWKS key origin with issuer-pinned key selection", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-jwks-header-key-injection"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-jwks-key-origin"),
+    );
+
+    expect(vulnerable).toContain('"authentication-or-session"');
+    expect(vulnerable).toContain('"cryptographic-verification"');
+    expect(vulnerable).toContain('"jwt-oidc-remote-key-origin"');
+    expect(vulnerable).toContain('"jwt-oidc-claim-binding"');
+    expect(vulnerable).toContain("keyUrl.origin !== policy.allowedJwksOrigin");
+    expect(vulnerable).toContain("policy.fetchJwks(keyUrl.href)");
+    expect(vulnerable).toContain("createPublicKey({ key: jwk");
+    expect(safe).toContain('"jwt-oidc-remote-key-origin"');
+    expect(safe).toContain('"jwt-oidc-claim-binding"');
+    expect(safe).toContain('"jku" in header');
+    expect(safe).toContain("policy.fetchJwks(policy.expectedJwksUri)");
+    expect(safe).toContain("matchingKeys.length !== 1");
+    expect(safe).toContain("policy.pendingNonces.delete(claims.nonce)");
+    expect(scanQualityGatePrompt("")).toContain(
+      "JWT/OIDC algorithm and issuer-pinned JWKS key-origin binding",
+    );
+  });
+
   test("pairs SAML signed-object confusion with exact assertion and trust binding", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-saml-signature-wrapping"),
