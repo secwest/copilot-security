@@ -187,6 +187,62 @@ describe("residual risk inventory", () => {
     expect(safe).toContain("timeout=5");
   });
 
+  test("pairs predictable reset tokens with a digest-stored CSPRNG control", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-predictable-reset-token"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-secure-reset-token"),
+    );
+
+    expect(vulnerable).toContain('"security-sensitive-randomness"');
+    expect(vulnerable).toContain("Math.random()");
+    expect(vulnerable).toContain("1_000_000");
+    expect(vulnerable).toContain("saveResetToken");
+    expect(safe).toContain('"security-sensitive-randomness"');
+    expect(safe).toContain("randomBytes(32)");
+    expect(safe).toContain("tokenDigest");
+    expect(safe).toContain("saveResetTokenDigest");
+  });
+
+  test("distinguishes untrusted template source from fixed template data", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "python-ssti"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "python-safe-template"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"template-source-evaluation"');
+    expect(vulnerable).toContain('request.get_json()[\\"template\\"]');
+    expect(vulnerable).toContain("environment.from_string(template_source)");
+    expect(safe).toContain("select_autoescape");
+    expect(safe).toContain(
+      'environment.from_string(\\n7:     \\"<p>Hello {{ display_name }}',
+    );
+    expect(safe).toContain('request.get_json()[\\"display_name\\"]');
+  });
+
+  test("pairs mutable check/use state with an atomic snapshot control", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "python-payout-toctou"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "python-atomic-payout"),
+    );
+
+    expect(vulnerable).toContain('"state-or-check-use-boundary"');
+    expect(vulnerable).toContain("reviewed = await database.get_payout");
+    expect(vulnerable).toContain("await database.mark_approved");
+    expect(vulnerable).toContain("current = await database.get_payout");
+    expect(vulnerable).toContain("database.update_pending");
+    expect(safe).toContain("database.transaction()");
+    expect(safe).toContain("get_payout_for_update");
+    expect(safe).toContain("mark_approved_if_pending");
+    expect(safe).toContain("gateway.send(payout.destination, payout.amount)");
+  });
+
   test("coalesces overlapping hits into bounded evidence windows", async () => {
     const repository = await mkdtemp(
       join(tmpdir(), "copilot-security-residual-risk-"),

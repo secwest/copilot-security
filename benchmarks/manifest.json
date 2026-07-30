@@ -443,6 +443,123 @@
         "python-safe-tls/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "javascript-predictable-reset-token",
+      "description": "A public password-reset endpoint protects accounts with a six-digit Math.random token.",
+      "fixture": "fixtures/javascript-predictable-reset-token",
+      "findingsPaths": [
+        "javascript-predictable-reset-token/run-1/findings.json",
+        "javascript-predictable-reset-token/run-2/findings.json",
+        "javascript-predictable-reset-token/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "predictable-password-reset-token",
+          "cwe": ["CWE-338"],
+          "locations": [
+            {
+              "path": "src/reset.js",
+              "startLine": 4,
+              "endLine": 7,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-secure-reset-token",
+      "description": "The password-reset endpoint uses a 256-bit CSPRNG token and stores only its digest.",
+      "fixture": "fixtures/javascript-secure-reset-token",
+      "findingsPaths": [
+        "javascript-secure-reset-token/run-1/findings.json",
+        "javascript-secure-reset-token/run-2/findings.json",
+        "javascript-secure-reset-token/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "python-ssti",
+      "description": "An authenticated administrator supplies source text to an unsandboxed Jinja template evaluator.",
+      "fixture": "fixtures/python-ssti",
+      "findingsPaths": [
+        "python-ssti/run-1/findings.json",
+        "python-ssti/run-2/findings.json",
+        "python-ssti/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "notification-preview-template-injection",
+          "cwe": ["CWE-1336"],
+          "locations": [
+            {
+              "path": "src/preview.py",
+              "startLine": 9,
+              "endLine": 10,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-safe-template",
+      "description": "The renderer uses a fixed autoescaped Jinja template and supplies request input only as data.",
+      "fixture": "fixtures/python-safe-template",
+      "findingsPaths": [
+        "python-safe-template/run-1/findings.json",
+        "python-safe-template/run-2/findings.json",
+        "python-safe-template/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "python-payout-toctou",
+      "description": "Payout eligibility is checked on one record snapshot but a mutable replacement is fetched and paid after asynchronous operations.",
+      "fixture": "fixtures/python-payout-toctou",
+      "findingsPaths": [
+        "python-payout-toctou/run-1/findings.json",
+        "python-payout-toctou/run-2/findings.json",
+        "python-payout-toctou/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "payout-validation-use-race",
+          "cwe": ["CWE-367", "CWE-362"],
+          "locations": [
+            {
+              "path": "src/payouts.py",
+              "startLine": 3,
+              "endLine": 10,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-atomic-payout",
+      "description": "Payout approval locks and transitions the record atomically, then pays the exact validated snapshot.",
+      "fixture": "fixtures/python-atomic-payout",
+      "findingsPaths": [
+        "python-atomic-payout/run-1/findings.json",
+        "python-atomic-payout/run-2/findings.json",
+        "python-atomic-payout/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

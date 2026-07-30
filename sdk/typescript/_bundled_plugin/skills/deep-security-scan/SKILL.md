@@ -52,7 +52,7 @@ command and outcome are recorded.
    deployment assumptions, build/update inputs, cryptographic boundaries,
    distributed state, concurrency, resource limits, and business invariants.
    Save it to `artifacts/01_context/threat_model.md`.
-3. Run at least four independent discovery passes. Use native Copilot subagents
+3. Run at least five independent discovery passes. Use native Copilot subagents
    when available; otherwise run them sequentially with fresh reasoning and
    separate ledgers. Give every pass the same immutable inventory and threat
    model, but no other pass's candidates.
@@ -61,7 +61,8 @@ command and outcome are recorded.
    - **source/control/sink**: authentication, authorization, tenant selection,
      injection, traversal, SSRF, XSS, unsafe parsing or deserialization,
      filesystem, process, database, template, and network operations;
-   - **systems**: concurrency, races, distributed state, replay and idempotency,
+   - **systems**: concurrency, check/use races, distributed state, replay and
+     idempotency, security-sensitive randomness and token entropy,
      cryptography, secret lifecycle, failure modes, denial of service, integer
      and memory safety, and confused-deputy boundaries;
    - **product and supply chain**: business-logic abuse, state-machine bypass,
@@ -70,9 +71,17 @@ command and outcome are recorded.
    - **control differential**: compare security-equivalent sibling routes,
      operations, parsers, serializers, storage calls, and state transitions.
      Find paths that omit a control present on a safe sibling and explicitly
-     retain that safe sibling as a negative control.
+     retain that safe sibling as a negative control;
+   - **compositional and temporal attack paths**: correlate independently
+     reachable writers, readers, validators, queues, callbacks, redirects,
+     retries, caches, and privileged workers. Look for stored values that cross
+     a later trust boundary, values checked in one snapshot but consumed from
+     another, controls applied before a redirect or asynchronous handoff, and
+     individually low-impact primitives that combine into a meaningful exploit
+     path. Keep every chain step anchored to code and do not invent missing
+     reachability.
 
-   Add a fifth language/framework-specialist pass when the repository warrants
+   Add a sixth language/framework-specialist pass when the repository warrants
    it. Each pass writes its own candidate and completion ledger beneath
    `artifacts/02_discovery/passes/<pass-id>/`.
 5. Merge by root cause, independently reachable instance, and remediation
@@ -92,13 +101,38 @@ command and outcome are recorded.
    - state transitions, concurrency, replay, quotas, and resource bounds;
    - build, dependency, plugin, update, and deployment inputs.
 
+   Within those families, explicitly close these commonly missed proof
+   surfaces rather than treating a generic family mention as review:
+
+   - template construction: every path that turns request, stored, tenant,
+     configuration, or error text into template or expression source; distinguish
+     fixed templates receiving untrusted data from untrusted template source,
+     and record sandbox, escaping, object-capability, and recursion controls;
+   - security-value generation: password-reset and verification tokens, session
+     identifiers, API keys, nonces, invitations, CSRF values, temporary
+     credentials, and lottery/selection values that protect assets; record the
+     generator, encoded entropy, lifetime, storage form, comparison behavior,
+     attempt limits, and whether unpredictability is actually required;
+   - check/use and state races: the mutation path, checked snapshot or object,
+     intervening yield/transaction/process boundary, consumed snapshot or
+     object, lock/atomic predicate/version binding, and resulting security
+     effect. Include filesystem name-to-handle races, database read/modify/write
+     workflows, queued jobs, approval flows, cache invalidation, and
+     validated-object/consumed-object mismatches.
+
    Return uncovered work to discovery. Record the sweep under
    `artifacts/02_discovery/residual_sweep.md`.
 7. Centrally validate every candidate against the actual source. Trace the full
    attacker-to-impact path and all callers and controls. Seek the strongest
    counterevidence. Establish a concrete exploit witness and test the nearest
    plausible safe path as a negative control. Use bounded repository-native
-   tests when useful. Reject API-name-only, unreachable, already-contained, or
+   tests when useful. For template candidates, distinguish source compilation
+   from ordinary escaped variable rendering. For randomness candidates,
+   quantify effective entropy and online/offline attempts instead of reporting
+   a non-cryptographic generator by name alone. For race candidates, prove that
+   an attacker-controlled mutation can occur between the exact check and use
+   and that the consumed value is not transactionally or identity-bound to the
+   checked value. Reject API-name-only, unreachable, already-contained, or
    equivalently safe behavior. Only reachable, exploitable defects with
    concrete adverse impact survive. Keep mitigated flows, rejected candidates,
    documentation notes, hardening ideas, and defense-in-depth observations out

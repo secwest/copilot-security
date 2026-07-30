@@ -86,12 +86,17 @@ const RISK_SIGNALS: ReadonlyArray<
   [
     "untrusted-input",
     92,
-    /\b(?:req|request)\.(?:body|cookies|data|files|form|headers|params|query|values)\b|\b(?:process|sys)\.argv\b|\b(?:environ|getenv|stdin)\b|\bgetParameter\s*\(/iu,
+    /\b(?:req|request)\.(?:body|cookies|data|files|form|headers|json|params|query|values)\b|\b(?:req|request)\.get_json\s*\(|\b(?:process|sys)\.argv\b|\b(?:environ|getenv|stdin)\b|\bgetParameter\s*\(/iu,
   ],
   [
     "authentication-or-session",
     94,
     /\b(?:authorization|bearer|cookie|jwt|login|oauth|oidc|session|token)\b|\b(?:authenticate|decode|verify)\s*\(/iu,
+  ],
+  [
+    "security-sensitive-randomness",
+    97,
+    /\b(?:Math\.random|crypto\.randomBytes|randomBytes|randomUUID|SecureRandom|secrets\.(?:choice|randbelow|token_bytes|token_hex|token_urlsafe)|crypto\.getRandomValues|random\.(?:random|randint|randrange)|mt_rand|srand|uuid1)\s*\(/iu,
   ],
   [
     "filesystem-write",
@@ -109,6 +114,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:compile|eval|execScript|Function|render|renderString|template)\s*\(/iu,
   ],
   [
+    "template-source-evaluation",
+    98,
+    /\b(?:from_string|parseExpression|compileExpression|render_template_string)\s*\(|\bnew\s+(?:Function|Template)\s*\(|\bTemplate\s*\(/iu,
+  ],
+  [
     "dynamic-property-or-prototype",
     96,
     /\b(?:__proto__|Object\.assign|Object\.setPrototypeOf|prototype)\b|\[[A-Za-z_$][\w$]*\]\s*(?:=|\?\?=|\|\|=)/iu,
@@ -121,7 +131,12 @@ const RISK_SIGNALS: ReadonlyArray<
   [
     "authorization-boundary",
     85,
-    /\b(?:accountId|customerId|objectId|ownerId|req\.params|request\.params|tenantId|userId)\b/iu,
+    /\b(?:account_?id|customer_?id|object_?id|owner_?id|req\.params|request\.params|tenant_?id|user_?id)\b/iu,
+  ],
+  [
+    "state-or-check-use-boundary",
+    91,
+    /\b(?:compare_and_set|compareAndSet|for_update|get_[a-z][a-z0-9_]*|lstat|mark_[a-z][a-z0-9_]*|optimistic_lock|read_[a-z][a-z0-9_]*|row_version|transaction|update_[a-z][a-z0-9_]*)\s*\(|\b(?:access|exists|rename|replace|stat)\s*\(/iu,
   ],
   [
     "network-request",

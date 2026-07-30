@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -48,20 +55,33 @@ describe("effectiveness benchmark", () => {
       ["python-xxe", "python-safe-xml"],
       ["javascript-prototype-pollution", "javascript-safe-preferences"],
       ["python-disabled-tls-verification", "python-safe-tls"],
+      ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
+      ["python-ssti", "python-safe-template"],
+      ["python-payout-toctou", "python-atomic-payout"],
     ] as const;
     const cases = new Map(manifest.cases.map((item) => [item.id, item]));
 
     expect(manifest.cases).toHaveLength(pairs.length * 2);
+    expect(cases.size).toBe(manifest.cases.length);
     for (const [vulnerableId, safeId] of pairs) {
       expect(cases.get(vulnerableId)?.expected.length).toBeGreaterThan(0);
       expect(cases.get(safeId)?.expected).toEqual([]);
     }
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
+      const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
+      expect(
+        (await readFile(join(fixtureRoot, "README.md"), "utf8")).trim().length,
+      ).toBeGreaterThan(0);
+      expect(
+        (await readdir(join(fixtureRoot, "src"), { withFileTypes: true })).some(
+          (entry) => entry.isFile(),
+        ),
+      ).toBe(true);
       for (const expectation of benchmarkCase.expected) {
         for (const location of expectation.locations) {
           const source = await readFile(
-            join(benchmarkRoot, benchmarkCase.fixture, location.path),
+            join(fixtureRoot, location.path),
             "utf8",
           );
           const lineCount = source.split(/\r?\n/u).length;
@@ -73,6 +93,41 @@ describe("effectiveness benchmark", () => {
         }
       }
     }
+  });
+
+  test("keeps family-specific closure and compositional discovery mandatory", async () => {
+    const pluginRoot = resolve(process.cwd(), "_bundled_plugin", "skills");
+    const deepScan = await readFile(
+      join(pluginRoot, "deep-security-scan", "SKILL.md"),
+      "utf8",
+    );
+    const discovery = await readFile(
+      join(pluginRoot, "finding-discovery", "SKILL.md"),
+      "utf8",
+    );
+    const validation = await readFile(
+      join(pluginRoot, "validation", "references", "validation-guidance.md"),
+      "utf8",
+    );
+    const attackPath = await readFile(
+      join(pluginRoot, "attack-path-analysis", "SKILL.md"),
+      "utf8",
+    );
+
+    expect(deepScan).toContain("at least five independent discovery passes");
+    expect(deepScan).toContain("compositional and temporal attack paths");
+    expect(deepScan).toContain("security-value generation");
+    expect(deepScan).toContain("check/use and state races");
+    expect(discovery).toContain(
+      "distinguish attacker-controlled template source from attacker-controlled data",
+    );
+    expect(discovery).toContain("effective output space or entropy");
+    expect(discovery).toContain("attacker-reachable mutation path");
+    expect(validation).toContain("predictable security value:");
+    expect(validation).toContain("check/use or state race:");
+    expect(attackPath).toContain(
+      "Do not compress a multi-component chain into a generic source-to-sink claim",
+    );
   });
 
   test("measures repeated positive and negative cases with evidence quality", async () => {

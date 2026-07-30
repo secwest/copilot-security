@@ -32,6 +32,12 @@ That rendered facts section should explicitly cover:
   - what the attacker needs
   - whether those preconditions are plausible, unlikely, unachievable, or unknown
   - the evidence
+- Temporal and Compositional Sequence:
+  - the ordered check, mutation, handoff, redirect, queue, callback, retry, or
+    use steps when more than one component or snapshot is involved
+  - which identities, versions, objects, and destinations remain bound across
+    those steps
+  - the evidence for each transition and any unverified adjacency
 - Attacker Input Control:
   - whether attacker control is yes, plausible, no, or unknown
   - the evidence

@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-javascript-secure-reset-token",
+  "private": true,
+  "type": "module"
+}

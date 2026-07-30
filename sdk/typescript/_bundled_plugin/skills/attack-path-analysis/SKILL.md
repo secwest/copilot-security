@@ -52,6 +52,20 @@ Use this checklist before finalizing the attack-path facts or policy decision:
 - Establish identities, privileges, and trust boundaries that matter for the path.
 - Establish whether sensitive data, secrets references, or privileged control paths are involved.
 - Determine whether a realistic attacker can actually reach and use the issue from an in-scope attack surface.
+- For multi-stage or temporal findings, enumerate each required attacker action
+  and repository-backed transition in execution order. Identify which actor can
+  mutate state, which component checks it, the scheduling/queue/transaction or
+  request boundary that creates the interleaving, which component consumes it,
+  and whether the same identity, version, destination, or object remains bound
+  across the chain.
+- For security-token findings, state the effective search space, observable or
+  inferable generator state, token lifetime, number of attempts, rate limits,
+  and the protected action. Do not equate use of a particular random API with a
+  practical account or privilege compromise.
+- For template findings, state whether the attacker controls template source or
+  only template data, which expression/object capabilities the environment
+  exposes, and the exact demonstrated or source-supported effect. Do not infer
+  code execution merely from output injection.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 
@@ -104,6 +118,10 @@ Render attack-path facts using `references/attack-path-facts.md`.
 
 - Prefer repository evidence first, but use network connectivity when it materially helps confirm deployment context, reachable surfaces, or other reportability-relevant facts.
 - Do not invent attack chains that the code does not support.
+- Do not compress a multi-component chain into a generic source-to-sink claim.
+  Preserve the intermediate stored state, callback, redirect, queue, mutable
+  record, or privileged worker that makes the exploit possible, and distinguish
+  a proved chain from a plausible but unverified adjacency.
 - Do not leave candidate coverage implicit. In compact standard-scan mode, every candidate that reaches attack-path analysis must receive a nested `attack_path` record, even when the final policy decision is `ignore` or `deferred`. In other modes, every such candidate must leave an attack-path receipt in its candidate-ledger path from `../../references/scan-artifacts.md`.
 - Do not drop exact affected locations while converting validated findings into attack paths. Repository-wide seeded/root-control rows that survive validation must keep their root-control file:line even when a wrapper, route, or transport is easier to explain.
 - Do not skip a reportable validation row because a neighboring same-family finding has a cleaner story. Either produce attack-path facts for that exact row or make an explicit final policy decision with repository counterevidence.
