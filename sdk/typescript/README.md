@@ -14,6 +14,8 @@ The package is ESM-only and provides:
   reruns, comparison, bulk scans, and finding feedback
 - host-reconciled per-file coverage that preserves omitted inventory paths as
   deferred work instead of accepting a false complete claim
+- bounded native Copilot model-call retries without host prompt replay, plus
+  cancellation-safe cleanup of partially initialized CLI sessions
 - cancellation and streamed Copilot usage/subagent events
 
 ```ts

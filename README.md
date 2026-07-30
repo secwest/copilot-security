@@ -34,6 +34,14 @@ same reconciliation while sealing: an unreviewed inventory path is added as
 explicit deferred work and coverage is downgraded to `partial`, so a
 model-written `complete` claim cannot conceal a coverage gap.
 
+Recoverable Copilot model-call failures are retried by the CLI inside the
+existing turn, with a fixed two-retry ceiling. The host does not resubmit the
+scan or correction prompt, so a transient retry cannot duplicate completed
+tool work. Tool, system, user-input, terminal, and transport failures remain
+visible to the normal failure and artifact-recovery paths. Startup and session
+creation are cancellation-aware, and a partially started CLI runtime is
+gracefully stopped or force-stopped before the original error is returned.
+
 ## Requirements
 
 - GitHub Copilot CLI, installed and signed in (`copilot login`)

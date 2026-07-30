@@ -4,8 +4,12 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
+  copilotModelErrorRecovery,
+  COPILOT_SCANNER_SESSION_HOOKS,
   prepareCopilotRuntime,
   resolveCopilotCli,
+  startManagedCopilotSession,
+  stopManagedCopilotClient,
   type CopilotScannerOptions,
 } from "../src/copilot-client.js";
 import {
@@ -115,6 +119,182 @@ describe("Copilot port", () => {
       pluginRoot: "plugin",
     };
     expect(options.model).toBe("gpt-5.6-sol");
+  });
+
+  test("requests bounded native retries only for recoverable model calls", () => {
+    expect(COPILOT_SCANNER_SESSION_HOOKS.onErrorOccurred).toBe(
+      copilotModelErrorRecovery,
+    );
+    expect(
+      copilotModelErrorRecovery({
+        recoverable: true,
+        errorContext: "model_call",
+        error: "provider detail must not affect recovery",
+      }),
+    ).toEqual({
+      errorHandling: "retry",
+      retryCount: 2,
+    });
+    for (const input of [
+      {
+        recoverable: false,
+        errorContext: "model_call" as const,
+        error: "terminal model failure",
+      },
+      {
+        recoverable: true,
+        errorContext: "tool_execution" as const,
+        error: "do not replay a tool",
+      },
+      {
+        recoverable: true,
+        errorContext: "system" as const,
+        error: "do not guess about system recovery",
+      },
+      {
+        recoverable: true,
+        errorContext: "user_input" as const,
+        error: "noninteractive scanner",
+      },
+    ]) {
+      expect(copilotModelErrorRecovery(input)).toBeUndefined();
+    }
+  });
+
+  test("cleans up a partially started runtime without retrying session creation", async () => {
+    const events: string[] = [];
+    const expected = new Error("session creation failed");
+    const client = {
+      async start(): Promise<void> {
+        events.push("start");
+      },
+      async stop(): Promise<Error[]> {
+        events.push("stop");
+        return [];
+      },
+      async forceStop(): Promise<void> {
+        events.push("force-stop");
+      },
+    };
+    let createAttempts = 0;
+
+    await expect(
+      startManagedCopilotSession(
+        client,
+        new AbortController().signal,
+        async () => {
+          createAttempts += 1;
+          events.push("create");
+          throw expected;
+        },
+      ),
+    ).rejects.toBe(expected);
+
+    expect(createAttempts).toBe(1);
+    expect(events).toEqual(["start", "create", "stop"]);
+  });
+
+  test("force-stops failed graceful cleanup while preserving the startup error", async () => {
+    const events: string[] = [];
+    const expected = new Error("startup failed");
+    const client = {
+      async start(): Promise<void> {
+        events.push("start");
+        throw expected;
+      },
+      async stop(): Promise<Error[]> {
+        events.push("stop");
+        return [new Error("cleanup failed")];
+      },
+      async forceStop(): Promise<void> {
+        events.push("force-stop");
+      },
+    };
+
+    await expect(
+      startManagedCopilotSession(
+        client,
+        new AbortController().signal,
+        async () => {
+          events.push("create");
+          return {};
+        },
+      ),
+    ).rejects.toBe(expected);
+
+    expect(events).toEqual(["start", "stop", "force-stop"]);
+  });
+
+  test("bounds a hung graceful shutdown before forcing the runtime to stop", async () => {
+    const events: string[] = [];
+    const client = {
+      async start(): Promise<void> {},
+      async stop(): Promise<Error[]> {
+        events.push("stop");
+        return await new Promise<Error[]>(() => {});
+      },
+      async forceStop(): Promise<void> {
+        events.push("force-stop");
+      },
+    };
+
+    await stopManagedCopilotClient(client, 5);
+
+    expect(events).toEqual(["stop", "force-stop"]);
+  });
+
+  test("honors cancellation before and during session initialization", async () => {
+    const beforeStart = new AbortController();
+    const beforeReason = new Error("cancelled before start");
+    beforeStart.abort(beforeReason);
+    const beforeEvents: string[] = [];
+    const beforeClient = {
+      async start(): Promise<void> {
+        beforeEvents.push("start");
+      },
+      async stop(): Promise<Error[]> {
+        beforeEvents.push("stop");
+        return [];
+      },
+      async forceStop(): Promise<void> {
+        beforeEvents.push("force-stop");
+      },
+    };
+    await expect(
+      startManagedCopilotSession(beforeClient, beforeStart.signal, async () => {
+        beforeEvents.push("create");
+        return {};
+      }),
+    ).rejects.toBe(beforeReason);
+    expect(beforeEvents).toEqual([]);
+
+    const duringCreate = new AbortController();
+    const duringReason = new Error("cancelled during create");
+    const duringEvents: string[] = [];
+    const duringClient = {
+      async start(): Promise<void> {
+        duringEvents.push("start");
+      },
+      async stop(): Promise<Error[]> {
+        duringEvents.push("stop");
+        return [];
+      },
+      async forceStop(): Promise<void> {
+        duringEvents.push("force-stop");
+      },
+    };
+    await expect(
+      startManagedCopilotSession(
+        duringClient,
+        duringCreate.signal,
+        async () => {
+          duringEvents.push("create");
+          duringCreate.abort(duringReason);
+          return {};
+        },
+      ),
+    ).rejects.toBe(duringReason);
+    expect(duringEvents).toEqual(["start", "create", "stop"]);
   });
 
   test("keeps scanner state inside its dedicated Copilot namespace", () => {

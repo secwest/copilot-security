@@ -27,7 +27,26 @@ import { resolveTrustedExecutable } from "./trusted-executable.js";
 
 const MAX_WRAPPER_BYTES = 16 * 1024;
 const MAX_SCAN_MILLISECONDS = 24 * 60 * 60 * 1_000;
+const MODEL_CALL_RETRY_COUNT = 2;
+const CLIENT_STOP_TIMEOUT_MILLISECONDS = 5_000;
 type CopilotReasoningEffort = "low" | "medium" | "high" | "xhigh";
+
+interface ManagedCopilotClient {
+  start(): Promise<void>;
+  stop(): Promise<Error[]>;
+  forceStop(): Promise<void>;
+}
+
+interface CopilotModelError {
+  recoverable: boolean;
+  errorContext: "model_call" | "tool_execution" | "system" | "user_input";
+  error: string;
+}
+
+interface CopilotModelErrorRecovery {
+  errorHandling: "retry";
+  retryCount: number;
+}
 
 export interface CopilotScannerOptions {
   cliPath: string;
@@ -91,14 +110,7 @@ export async function copilotAuthStatus(
           .join(" "),
     };
   } finally {
-    const stopErrors = await client
-      .stop()
-      .catch((error: unknown) => [
-        error instanceof Error ? error : new Error(errorMessage(error)),
-      ]);
-    if (stopErrors.length > 0) {
-      await client.forceStop().catch(() => undefined);
-    }
+    await stopManagedCopilotClient(client);
   }
 }
 
@@ -151,30 +163,37 @@ class CopilotThread implements CopilotScannerThread {
       logLevel: "error",
     });
 
-    await client.start();
-    const session = await client.createSession({
-      clientName: "copilot-security",
-      model: this.#options.model,
-      reasoningEffort: requireReasoningEffort(this.#options.reasoningEffort),
-      workingDirectory: this.#workingDirectory,
-      streaming: true,
-      includeSubAgentStreamingEvents: true,
-      pluginDirectories: [this.#options.pluginRoot],
-      enableSkills: true,
-      enableConfigDiscovery: false,
-      skipCustomInstructions: true,
-      customAgentsLocalOnly: true,
-      coauthorEnabled: false,
-      remoteSession: "off",
-      enableSessionStore: false,
-      skipEmbeddingRetrieval: true,
-      embeddingCacheStorage: "in-memory",
-      ...(this.#options.maxAiCredits === undefined
-        ? {}
-        : { sessionLimits: { maxAiCredits: this.#options.maxAiCredits } }),
-      onPermissionRequest: approveAll,
-      onEvent: (event) => translateEvent(event, queue, usage),
-    });
+    const session = await startManagedCopilotSession(
+      client,
+      options.signal,
+      async () =>
+        await client.createSession({
+          clientName: "copilot-security",
+          model: this.#options.model,
+          reasoningEffort: requireReasoningEffort(
+            this.#options.reasoningEffort,
+          ),
+          workingDirectory: this.#workingDirectory,
+          streaming: true,
+          includeSubAgentStreamingEvents: true,
+          pluginDirectories: [this.#options.pluginRoot],
+          enableSkills: true,
+          enableConfigDiscovery: false,
+          skipCustomInstructions: true,
+          customAgentsLocalOnly: true,
+          coauthorEnabled: false,
+          remoteSession: "off",
+          enableSessionStore: false,
+          skipEmbeddingRetrieval: true,
+          embeddingCacheStorage: "in-memory",
+          hooks: COPILOT_SCANNER_SESSION_HOOKS,
+          ...(this.#options.maxAiCredits === undefined
+            ? {}
+            : { sessionLimits: { maxAiCredits: this.#options.maxAiCredits } }),
+          onPermissionRequest: approveAll,
+          onEvent: (event) => translateEvent(event, queue, usage),
+        }),
+    );
     this.id = session.sessionId;
     queue.push({ type: "thread.started", thread_id: session.sessionId });
 
@@ -182,6 +201,7 @@ class CopilotThread implements CopilotScannerThread {
       void session.abort().catch(() => undefined);
     };
     options.signal.addEventListener("abort", abort, { once: true });
+    if (options.signal.aborted) abort();
 
     // The Copilot SDK intentionally unrefs its child transport. A pending
     // Promise or async-generator waiter does not keep Node alive by itself, so
@@ -189,6 +209,7 @@ class CopilotThread implements CopilotScannerThread {
     const completionGuard = setInterval(() => undefined, 60_000);
     void (async () => {
       try {
+        options.signal.throwIfAborted();
         await session.sendAndWait({ prompt: input }, MAX_SCAN_MILLISECONDS);
         if (!options.signal.aborted) {
           try {
@@ -237,19 +258,73 @@ class CopilotThread implements CopilotScannerThread {
         clearInterval(completionGuard);
         options.signal.removeEventListener("abort", abort);
         await session.disconnect().catch(() => undefined);
-        const stopErrors = await client
-          .stop()
-          .catch((error: unknown) => [
-            error instanceof Error ? error : new Error(errorMessage(error)),
-          ]);
-        if (stopErrors.length > 0) {
-          await client.forceStop().catch(() => undefined);
-        }
+        await stopManagedCopilotClient(client);
         queue.close();
       }
     })();
 
     return { events: queue.events() };
+  }
+}
+
+export function copilotModelErrorRecovery(
+  input: CopilotModelError,
+): CopilotModelErrorRecovery | undefined {
+  if (input.recoverable !== true || input.errorContext !== "model_call") {
+    return undefined;
+  }
+  return {
+    errorHandling: "retry",
+    retryCount: MODEL_CALL_RETRY_COUNT,
+  };
+}
+
+export const COPILOT_SCANNER_SESSION_HOOKS = Object.freeze({
+  onErrorOccurred: copilotModelErrorRecovery,
+});
+
+export async function startManagedCopilotSession<T>(
+  client: ManagedCopilotClient,
+  signal: AbortSignal,
+  createSession: () => Promise<T>,
+): Promise<T> {
+  signal.throwIfAborted();
+  try {
+    await client.start();
+    signal.throwIfAborted();
+    const session = await createSession();
+    signal.throwIfAborted();
+    return session;
+  } catch (error) {
+    await stopManagedCopilotClient(client);
+    throw error;
+  }
+}
+
+export async function stopManagedCopilotClient(
+  client: ManagedCopilotClient,
+  timeoutMilliseconds = CLIENT_STOP_TIMEOUT_MILLISECONDS,
+): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const stopErrors = await Promise.race([
+    client
+      .stop()
+      .catch((error: unknown) => [
+        error instanceof Error ? error : new Error(errorMessage(error)),
+      ]),
+    new Promise<Error[]>((resolveTimeout) => {
+      timeout = setTimeout(
+        () =>
+          resolveTimeout([
+            new Error("Copilot CLI graceful shutdown timed out."),
+          ]),
+        timeoutMilliseconds,
+      );
+    }),
+  ]);
+  if (timeout !== undefined) clearTimeout(timeout);
+  if (stopErrors.length > 0) {
+    await client.forceStop().catch(() => undefined);
   }
 }
 
