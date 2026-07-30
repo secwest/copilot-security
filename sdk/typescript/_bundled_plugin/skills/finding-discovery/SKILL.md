@@ -21,6 +21,7 @@ Use the shared scan artifact path conventions in `../../references/scan-artifact
 Read `../../references/security-guidance.md` and resolve the applicable policy before inspecting each source file. A delegated file-review worker must do the same before reading its assigned source.
 
 ### Code Diff Workflow
+
 If the scan target is for a targeted code-diff:
 
 - Read `../security-scan/references/scan-artifacts-and-ledger.md`.
@@ -88,6 +89,19 @@ Use this checklist to keep discovery specific without turning it into validation
   parameterization when request-controlled values can remain operator objects.
   Preserve exact primitive-type, shape, key, and bounded-grammar guards as
   negative controls.
+- For LDAP searches used in authentication, group membership, role mapping, or
+  authorization, trace every request, SSO/federated claim, session value,
+  stored tenant value, UID, DN, CN, and group name into the effective filter
+  AST and onward to the selected entry and installed principal/session. Keep
+  unescaped assertion interpolation, presence and substring wildcards,
+  multi-valued attributes, nested `&`/`|`/`!` expressions, extensible matching,
+  and library-specific filter builders visible. RFC 4515 filter-assertion
+  escaping and DN escaping are different contexts; URL, HTML, SQL, or DN
+  escaping does not close a filter-injection candidate. Conversely, do not
+  report LDAP API or filter names alone: a server-owned canonical principal
+  passed as an RFC 4515-escaped assertion value or a correctly typed filter
+  builder is strong counterevidence unless the attacker can still change the
+  filter structure or security decision.
 - For authentication, authorization, tenant, ownership, and secret-verification
   queries, trace the selected record through session/principal installation or
   the protected operation. Do not stop at “the query changes”: prove which
@@ -265,7 +279,6 @@ Otherwise, for each candidate include:
 - enough evidence that a later reviewer can understand why the candidate is technically plausible before validation
 
 For diff-scoped discovery, when candidates are emitted, create the per-finding directory from `../../references/scan-artifacts.md` and append one discovery receipt to that finding's candidate ledger. The ledger row should identify the candidate, scan scope, discovery status, affected locations, and the discovery artifact or evidence that produced it.
-
 
 ## Hard Rules
 

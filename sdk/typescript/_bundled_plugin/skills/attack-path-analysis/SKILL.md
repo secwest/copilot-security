@@ -96,6 +96,17 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   an operator object because the query uses an object literal. Prove the exact
   witness against the effective driver semantics and nearest primitive/schema
   control.
+- For LDAP filter findings, preserve the attacker-controlled request,
+  SSO/federated claim, session field, or stored value; its placement and
+  context-specific escaping in the rendered RFC 4515 filter; the effective
+  filter AST including presence/substring and boolean operators; the exact
+  directory entry selected under multi-valued attribute semantics; and the
+  resulting bind, group membership, role mapping, application session, or
+  protected action. Distinguish LDAP filter-assertion escaping from DN escaping.
+  Do not infer authorization bypass from interpolation or an LDAP API alone,
+  and do not suppress when the attacker can reshape the filter despite a later
+  group-name check. Prove the witness and a legitimate literal-special-character
+  negative control through the same directory and authorization path.
 - For untrusted upload and content-placement findings, preserve the exact
   attacker-controlled filename, metadata, and bytes; multipart/parser limits;
   temporary and final paths after decoding, renaming, and canonicalization;
@@ -197,5 +208,6 @@ Render attack-path facts using `references/attack-path-facts.md`.
 - Outside compact standard-scan mode, save a final visible report for each candidate finding using that finding's attack-path analysis report path from `../../references/scan-artifacts.md`. Compact standard scans use the nested phase record instead.
 
 -- Considerations for attack path --
+
 - A bug matters if evidence shows an attacker could exploit it.
 - The attack surface should generally be one that is plausibly exposed to end users / external actors (or another actor explicitly in scope in the threat model).

@@ -91,6 +91,7 @@ inventory and closure requirements.
    Add a sixth language/framework-specialist pass when the repository warrants
    it. Each pass writes its own candidate and completion ledger beneath
    `artifacts/02_discovery/passes/<pass-id>/`.
+
 5. Merge by root cause, independently reachable instance, and remediation
    boundary. Preserve discovering pass IDs, supporting evidence,
    counterevidence, duplicate relationships, and unresolved ambiguity in
@@ -184,6 +185,16 @@ inventory and closure requirements.
      parameterization. Use a sibling path that enforces the intended primitive
      type, shape, keys, and bounded value grammar before query construction as
      the negative control.
+   - LDAP filter and directory authorization injection: every request,
+     SSO/federated claim, session field, stored tenant value, UID, DN, CN, group
+     name, filter template/builder, directory search or bind, matched
+     multi-valued attribute, group/role mapping, and installed application
+     principal or session. Preserve the rendered RFC 4515 filter AST, including
+     presence/substring wildcards and nested boolean or extensible matching.
+     Filter assertion escaping is not DN or generic escaping. Use a sibling path
+     that resolves a server-owned canonical principal and applies context-correct
+     RFC 4515 assertion escaping while retaining legitimate literal special
+     characters as the negative control.
    - untrusted upload and content placement: every multipart part, uploaded
      filename, byte stream, temporary file, archive member, decoded body, move,
      copy, and write; preserve parser limits, effective bytes after transforms,
@@ -210,6 +221,7 @@ inventory and closure requirements.
 
    Return uncovered work to discovery. Record the sweep under
    `artifacts/02_discovery/residual_sweep.md`.
+
 7. Centrally validate every candidate against the actual source. Trace the full
    attacker-to-impact path and all callers and controls. Seek the strongest
    counterevidence. Establish a concrete exploit witness and test the nearest

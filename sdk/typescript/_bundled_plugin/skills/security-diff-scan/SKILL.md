@@ -51,7 +51,8 @@ publish findings, open issues, or contact third parties. Write only beneath
    dependency trust. Save it to `artifacts/01_context/threat_model.md`.
 3. Review every changed file and trace changed behavior through its callers,
    callees, guards, sanitizers, selectors, interpreters, filesystem, network,
-   SQL/document database query syntax and selector/operator types, template,
+   SQL/document database query syntax and selector/operator types, LDAP filter
+   assertion construction and directory group/role mapping, template,
    parser, deserializer, file-upload parsing/storage and downstream content
    consumers, HTTP message framing and normalization across proxies/gateways/
    backends, JWT/OIDC protected headers, remote key sources, JWKS/issuer mapping,
@@ -70,6 +71,9 @@ publish findings, open issues, or contact third parties. Write only beneath
      request-controlled document selectors, or newly accepted `$` operators in
      authentication, authorization, tenancy, lookup, update, and deletion
      queries;
+   - new LDAP filter interpolation, changed RFC 4515 assertion escaping,
+     confusion between filter and DN escaping, attacker-influenced principal
+     DNs/group names, or changed directory-match-to-application-role binding;
    - widened DTO, schema, serializer, model, or ORM writable-field sets that
      expose role, tenant, owner, identity, recovery, billing, or trust state;
    - weakened SameSite, Origin/Referer, Fetch Metadata, or anti-CSRF token
@@ -100,6 +104,7 @@ publish findings, open issues, or contact third parties. Write only beneath
 
    Record candidate and reviewed-safe receipts in
    `artifacts/02_discovery/candidate_ledger.jsonl`.
+
 5. Run a second, miss-oriented residual pass over every changed file and every
    high-risk changed source/control/sink family with no candidate. Require an
    exact reviewed-safe reason or return the row to discovery. Save the result to

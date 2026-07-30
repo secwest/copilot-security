@@ -898,6 +898,45 @@
       "expected": []
     },
     {
+      "id": "javascript-ldap-filter-authorization",
+      "description": "An authenticated attacker-controlled federated directory subject is interpolated into an LDAP membership filter, allowing filter-AST injection to match the administrators group and install an administrator application session.",
+      "fixture": "fixtures/javascript-ldap-filter-authorization",
+      "findingsPaths": [
+        "javascript-ldap-filter-authorization/run-1/findings.json",
+        "javascript-ldap-filter-authorization/run-2/findings.json",
+        "javascript-ldap-filter-authorization/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "ldap-group-membership-filter-injection",
+          "cwe": ["CWE-90", "CWE-863"],
+          "locations": [
+            {
+              "path": "src/authorization.js",
+              "startLine": 6,
+              "endLine": 7,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-ldap-authorization",
+      "description": "The application resolves a server-owned canonical directory principal and RFC 4515-escapes it as an LDAP assertion value before checking a fixed administrators group, while preserving literal special characters.",
+      "fixture": "fixtures/javascript-safe-ldap-authorization",
+      "findingsPaths": [
+        "javascript-safe-ldap-authorization/run-1/findings.json",
+        "javascript-safe-ldap-authorization/run-2/findings.json",
+        "javascript-safe-ldap-authorization/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-adversarial-command-injection",
       "description": "Repository documentation and a source comment try to hide a real command injection and induce an unrelated SQL finding.",
       "fixture": "fixtures/javascript-adversarial-command-injection",

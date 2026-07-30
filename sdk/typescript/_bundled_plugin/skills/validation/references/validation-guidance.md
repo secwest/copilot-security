@@ -93,6 +93,20 @@ Use class-specific proof tuples:
   schema/shape/key/operator allowlist that excludes every operator and coercion
   needed by the witness, plus proof that the driver does not reinterpret the
   surviving value.
+- LDAP filter injection: attacker-controlled request, federated/session claim,
+  stored tenant value, UID, DN, CN, or group value + its exact rendered filter
+  assertion and effective RFC 4515 filter AST + directory matching semantics
+  for presence/substring operators, nested boolean expressions, multi-valued
+  attributes, and any extensible match + the selected identity/group and later
+  authentication, role, session, or protected action. Execute the exploit and
+  negative controls through the same parser, directory query, and
+  authorization path, recording the input, rendered filter, matched entry, and
+  resulting privilege. Suppression requires context-correct RFC 4515 assertion
+  escaping or a typed builder for every attacker-influenced assertion plus any
+  required server-owned canonical principal binding. DN escaping, generic
+  encoding, rejecting all special characters, or an API name alone is not
+  proof; include a legitimate literal-special-character control to distinguish
+  escaped data from an LDAP wildcard/operator.
 - injection/path traversal/header/open redirect: attacker-controlled bytes + sanitizer/canonicalization/allowlist result + dangerous sink/context
 - untrusted upload/content placement: attacker-controlled filename, metadata,
   and bytes + multipart/parser and size limits + effective byte transforms +

@@ -74,6 +74,10 @@ describe("effectiveness benchmark", () => {
       ["javascript-csrf-recovery-email", "javascript-safe-csrf-recovery-email"],
       ["c-packet-length-overflow", "c-bounded-packet-copy"],
       [
+        "javascript-ldap-filter-authorization",
+        "javascript-safe-ldap-authorization",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],
@@ -131,6 +135,11 @@ describe("effectiveness benchmark", () => {
         .get("javascript-jwks-header-key-injection")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-346", "CWE-347", "CWE-287"]]);
+    expect(
+      cases
+        .get("javascript-ldap-filter-authorization")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-90", "CWE-863"]]);
     const adversarialVulnerable = join(
       benchmarkRoot,
       "fixtures",
@@ -420,6 +429,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
+    expect(deepScan).toContain(
+      "LDAP filter and directory authorization injection:",
+    );
     expect(deepScan).toContain("untrusted upload and content placement:");
     expect(deepScan).toContain("HTTP request framing and smuggling:");
     expect(deepScan).toContain("JWT/JWS/OIDC key origin and claim binding:");
@@ -433,6 +445,7 @@ describe("effectiveness benchmark", () => {
     expect(standardScan).toContain(
       "SQL and document-database query selectors/operators",
     );
+    expect(standardScan).toContain("LDAP filter construction");
     expect(standardScan).toContain("untrusted uploads and");
     expect(standardScan).toContain("HTTP message framing and parser agreement");
     expect(standardScan).toContain("JWT/OIDC algorithm, remote-key URL");
@@ -442,6 +455,7 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain("anti-CSRF token");
     expect(diffScan).toContain("terminator space");
     expect(diffScan).toContain("request-controlled document selectors");
+    expect(diffScan).toContain("changed RFC 4515 assertion escaping");
     expect(diffScan).toContain("new multipart/file inputs");
     expect(diffScan).toContain("duplicate or conflicting `Content-Length` and");
     expect(diffScan).toContain(
@@ -458,6 +472,10 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain("For native memory safety");
     expect(discovery).toContain("bounded API is neither vulnerable");
     expect(discovery).toContain("For document-query and NoSQL APIs");
+    expect(discovery).toContain(
+      "For LDAP searches used in authentication, group membership",
+    );
+    expect(discovery).toContain("DN escaping are different contexts");
     expect(discovery).toContain(
       "parameterization when request-controlled values",
     );
@@ -482,6 +500,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("browser CSRF:");
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
+    expect(validation).toContain("LDAP filter injection:");
     expect(validation).toContain("untrusted upload/content placement:");
     expect(validation).toContain("HTTP request smuggling/desynchronization:");
     expect(validation).toContain("JWT/JWS/OIDC remote key origin:");
@@ -490,6 +509,7 @@ describe("effectiveness benchmark", () => {
     expect(attackPath).toContain("For CSRF findings");
     expect(attackPath).toContain("For native-memory findings");
     expect(attackPath).toContain("For document-query and NoSQL findings");
+    expect(attackPath).toContain("For LDAP filter findings");
     expect(attackPath).toContain(
       "For untrusted upload and content-placement findings",
     );
@@ -507,6 +527,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(severityPolicy).toContain(
       "Document-query or NoSQL operator injection",
+    );
+    expect(severityPolicy).toContain(
+      "LDAP filter injection that demonstrably bypasses authentication",
     );
     expect(severityPolicy).toContain(
       "Untrusted upload or content placement that writes attacker-controlled bytes",
@@ -532,6 +555,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(threatModelGuidance).toContain(
       "JWT/JWS/OIDC algorithm, remote-key, issuer-to-JWKS",
+    );
+    expect(threatModelGuidance).toContain(
+      "LDAP filter and directory group/role authorization binding",
     );
     expect(threatModelGuidance).toContain("SAML/federated signed-object");
     expect(threatModelGuidance).toContain(

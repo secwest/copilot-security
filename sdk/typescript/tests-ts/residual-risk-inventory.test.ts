@@ -171,6 +171,26 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs LDAP filter construction with directory authorization binding", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-ldap-filter-authorization"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-ldap-authorization"),
+    );
+
+    expect(vulnerable).toContain(
+      '"ldap-filter-construction-or-directory-query"',
+    );
+    expect(vulnerable).toContain('"ldap-authorization-membership-binding"');
+    expect(vulnerable).toContain("session.directorySubject");
+    expect(vulnerable).toContain("directory.searchOne(filter)");
+    expect(safe).toContain('"ldap-filter-construction-or-directory-query"');
+    expect(safe).toContain("accounts.principalDnForUser");
+    expect(safe).toContain("escapeLdapFilterAssertion");
+    expect(scanQualityGatePrompt("")).toContain("LDAP filter construction");
+  });
+
   test("surfaces SSRF input and fixed-destination controls", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-ssrf"),
