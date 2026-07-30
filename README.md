@@ -124,7 +124,9 @@ full-corpus completion gate.
 
 The measured gates cover completion, precision, recall, F1, exact-case and
 negative-control passes, repeated-run stability, validation, attack paths,
-code evidence, severity accuracy, and false positives per run. See
+code evidence, severity accuracy, and false positives per run. Validation,
+attack-path, and code-evidence rates reject nonempty placeholder objects and
+require substantive source-to-impact proof. See
 [`benchmarks/README.md`](benchmarks/README.md).
 
 ## Container

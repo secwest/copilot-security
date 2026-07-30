@@ -63,8 +63,11 @@ export interface BenchmarkMatch {
   findingId: string;
   score: number;
   validationPresent: boolean;
+  validationSubstantive: boolean;
   attackPathPresent: boolean;
+  attackPathSubstantive: boolean;
   codeEvidencePresent: boolean;
+  codeEvidenceSubstantive: boolean;
   severityAccepted: boolean | null;
 }
 
@@ -149,8 +152,11 @@ interface BenchmarkFinding {
   locations: FindingLocation[];
   severity: SeverityLevel | null;
   validationPresent: boolean;
+  validationSubstantive: boolean;
   attackPathPresent: boolean;
+  attackPathSubstantive: boolean;
   codeEvidencePresent: boolean;
+  codeEvidenceSubstantive: boolean;
 }
 
 interface CandidateMatch {
@@ -335,8 +341,11 @@ function evaluateRun(
         findingId: finding.id,
         score: match.score,
         validationPresent: finding.validationPresent,
+        validationSubstantive: finding.validationSubstantive,
         attackPathPresent: finding.attackPathPresent,
+        attackPathSubstantive: finding.attackPathSubstantive,
         codeEvidencePresent: finding.codeEvidencePresent,
+        codeEvidenceSubstantive: finding.codeEvidenceSubstantive,
         severityAccepted:
           expectation.acceptableSeverities === undefined
             ? null
@@ -360,9 +369,9 @@ function evaluateRun(
       (candidate) => candidate.id === match.expectationId,
     )!;
     return (
-      (!expectation.requireValidation || match.validationPresent) &&
-      (!expectation.requireAttackPath || match.attackPathPresent) &&
-      (!expectation.requireCodeEvidence || match.codeEvidencePresent) &&
+      (!expectation.requireValidation || match.validationSubstantive) &&
+      (!expectation.requireAttackPath || match.attackPathSubstantive) &&
+      (!expectation.requireCodeEvidence || match.codeEvidenceSubstantive) &&
       match.severityAccepted !== false
     );
   });
@@ -542,17 +551,17 @@ function benchmarkMetrics(cases: BenchmarkCaseResult[]): BenchmarkMetrics {
     ),
     stableDetectionRate: ratio(stableExpectations, positiveExpectations, 1),
     validationRate: ratio(
-      matches.filter((match) => match.validationPresent).length,
+      matches.filter((match) => match.validationSubstantive).length,
       matches.length,
       1,
     ),
     attackPathRate: ratio(
-      matches.filter((match) => match.attackPathPresent).length,
+      matches.filter((match) => match.attackPathSubstantive).length,
       matches.length,
       1,
     ),
     codeEvidenceRate: ratio(
-      matches.filter((match) => match.codeEvidencePresent).length,
+      matches.filter((match) => match.codeEvidenceSubstantive).length,
       matches.length,
       1,
     ),
@@ -862,6 +871,9 @@ function parseFindings(contents: string, path: string): BenchmarkFinding[] {
       optionalString(finding["occurrenceId"]) ??
       optionalString(finding["findingId"]) ??
       `finding-${index + 1}`;
+    const validation = finding["validation"];
+    const attackPath = finding["attackPath"];
+    const codeEvidence = finding["codeEvidence"];
     return {
       id: findingId,
       cwe,
@@ -870,18 +882,193 @@ function parseFindings(contents: string, path: string): BenchmarkFinding[] {
         isRecord(severity) && isSeverity(severity["level"])
           ? severity["level"]
           : null,
-      validationPresent: isNonemptyRecord(finding["validation"]),
-      attackPathPresent: isNonemptyRecord(finding["attackPath"]),
+      validationPresent: isNonemptyRecord(validation),
+      validationSubstantive: isSubstantiveValidation(validation),
+      attackPathPresent: isNonemptyRecord(attackPath),
+      attackPathSubstantive: isSubstantiveAttackPath(attackPath),
       codeEvidencePresent:
-        Array.isArray(finding["codeEvidence"]) &&
-        finding["codeEvidence"].some(
+        Array.isArray(codeEvidence) &&
+        codeEvidence.some(
           (evidence) =>
             isRecord(evidence) &&
             optionalString(evidence["code"]) !== undefined &&
             optionalString(evidence["explanation"]) !== undefined,
         ),
+      codeEvidenceSubstantive: isSubstantiveCodeEvidence(
+        codeEvidence,
+        parsedLocations,
+      ),
     };
   });
+}
+
+function isSubstantiveValidation(value: unknown): boolean {
+  if (!isNonemptyRecord(value)) return false;
+  const narrative = hasSubstantiveField(value, [
+    "evidence",
+    "explanation",
+    "rationale",
+    "summary",
+  ]);
+  if (!narrative) return false;
+  return (
+    hasNonplaceholderField(value, ["method"]) ||
+    hasSubstantiveField(value, [
+      "exploitWitness",
+      "poc",
+      "reproduce_steps",
+      "reproduction",
+    ]) ||
+    hasSubstantiveStringArray(value, [
+      "assertions",
+      "evidenceRefs",
+      "observations",
+    ]) ||
+    hasSubstantiveField(value, ["counterevidence", "negativeControl"]) ||
+    hasSubstantiveStringArray(value, ["counterevidence", "limitations"])
+  );
+}
+
+function isSubstantiveAttackPath(value: unknown): boolean {
+  if (!isNonemptyRecord(value)) return false;
+  const narrative = hasSubstantiveField(value, [
+    "exploit",
+    "impact",
+    "outcome",
+    "summary",
+  ]);
+  if (!narrative) return false;
+
+  const dataflow = value["dataflow"];
+  const structuredDataflow =
+    isRecord(dataflow) &&
+    hasNonplaceholderField(dataflow, ["source"]) &&
+    hasNonplaceholderField(dataflow, ["sink"]) &&
+    hasNonplaceholderField(dataflow, ["outcome"]);
+  const topLevelDataflow =
+    hasNonplaceholderField(value, ["source"]) &&
+    hasNonplaceholderField(value, ["sink"]) &&
+    hasNonplaceholderField(value, ["outcome"]);
+  const reachability = value["reachability"];
+  const structuredReachability =
+    isRecord(reachability) &&
+    hasNonplaceholderField(reachability, ["attacker"]) &&
+    hasNonplaceholderField(reachability, ["entrypoint", "outcome"]);
+  const compactBoundaryChain =
+    hasNonplaceholderField(value, ["source"]) &&
+    hasSubstantiveField(value, ["exploit"]) &&
+    (hasSubstantiveField(value, ["impact"]) ||
+      hasSubstantiveStringArray(value, ["controls_broken"]));
+
+  return (
+    structuredDataflow ||
+    topLevelDataflow ||
+    structuredReachability ||
+    compactBoundaryChain ||
+    hasSubstantiveSequence(value["steps"])
+  );
+}
+
+function isSubstantiveCodeEvidence(
+  value: unknown,
+  findingLocations: readonly FindingLocation[],
+): boolean {
+  return (
+    Array.isArray(value) &&
+    value.some((evidence) => {
+      if (!isRecord(evidence)) return false;
+      const path = optionalString(evidence["path"]);
+      const startLine = positiveInteger(evidence["startLine"]);
+      const endLine =
+        evidence["endLine"] === undefined
+          ? startLine
+          : positiveInteger(evidence["endLine"]);
+      return (
+        path !== undefined &&
+        startLine !== null &&
+        endLine !== null &&
+        endLine >= startLine &&
+        isSubstantiveText(evidence["code"], 3) &&
+        isSubstantiveText(evidence["explanation"]) &&
+        findingLocations.some((location) =>
+          locationsOverlap(
+            { path, startLine, endLine },
+            location,
+            DEFAULT_LINE_TOLERANCE,
+          ),
+        )
+      );
+    })
+  );
+}
+
+function locationsOverlap(
+  left: FindingLocation,
+  right: FindingLocation,
+  tolerance: number,
+): boolean {
+  if (normalizePath(left.path) !== normalizePath(right.path)) return false;
+  const leftEnd = left.endLine ?? left.startLine;
+  const rightEnd = right.endLine ?? right.startLine;
+  const distance =
+    left.startLine > rightEnd
+      ? left.startLine - rightEnd
+      : right.startLine > leftEnd
+        ? right.startLine - leftEnd
+        : 0;
+  return distance <= tolerance;
+}
+
+function hasSubstantiveField(
+  value: Record<string, unknown>,
+  fields: readonly string[],
+): boolean {
+  return fields.some((field) => isSubstantiveText(value[field]));
+}
+
+function hasNonplaceholderField(
+  value: Record<string, unknown>,
+  fields: readonly string[],
+): boolean {
+  return fields.some((field) => isSubstantiveText(value[field], 3));
+}
+
+function hasSubstantiveStringArray(
+  value: Record<string, unknown>,
+  fields: readonly string[],
+): boolean {
+  return fields.some((field) => {
+    const entries = value[field];
+    return (
+      Array.isArray(entries) &&
+      entries.some((entry) => isSubstantiveText(entry, 3))
+    );
+  });
+}
+
+function hasSubstantiveSequence(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length < 2) return false;
+  return value.every((step) => {
+    if (isSubstantiveText(step, 8)) return true;
+    return (
+      isRecord(step) &&
+      hasSubstantiveField(step, [
+        "action",
+        "description",
+        "outcome",
+        "source",
+        "summary",
+      ])
+    );
+  });
+}
+
+function isSubstantiveText(value: unknown, minimumLength = 20): boolean {
+  const text = optionalString(value);
+  if (text === undefined || text.length < minimumLength) return false;
+  return !/^(?:n\/?a|none|not tested|placeholder|tbd|todo|unknown)$/iu.test(
+    text,
+  );
 }
 
 async function readBoundedFile(
@@ -995,7 +1182,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isNonemptyRecord(value: unknown): boolean {
+function isNonemptyRecord(value: unknown): value is Record<string, unknown> {
   return isRecord(value) && Object.keys(value).length > 0;
 }
 

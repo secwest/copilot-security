@@ -15,7 +15,12 @@ reliability failure even if partial findings exist.
 Metrics include completion rate, precision, recall, F1, exact-case pass rate,
 negative-control pass rate, stable detection across repeated runs, validation
 coverage, attack-path coverage, code-evidence coverage, severity accuracy, and
-false positives per run.
+false positives per run. Evidence coverage requires substantive proof rather
+than field presence: validation needs a source-backed narrative plus a method,
+witness, assertion, or counterevidence; attack paths need a realistic narrative
+plus source-to-impact continuity; and code evidence needs a concrete
+path-and-line anchor, source text, and explanatory reasoning. Presence and
+substantive-quality flags are both retained in per-match diagnostics.
 
 The versioned corpus currently contains eleven vulnerable/control pairs: command
 injection, path traversal, object-level authorization, SQL injection,

@@ -135,10 +135,29 @@ describe("effectiveness benchmark", () => {
             cwe: ["CWE-78"],
             path: "src/server.js",
             line: 18,
-            validation: { disposition: "reportable" },
-            attackPath: { decision: "report" },
+            validation: {
+              method: "static source trace",
+              summary:
+                "Attacker-controlled command input reaches the shell execution call without an argument boundary.",
+              assertions: [
+                "The request value is preserved until the process invocation.",
+              ],
+            },
+            attackPath: {
+              summary:
+                "A remote caller supplies a command fragment that the server forwards to a command shell.",
+              steps: [
+                "The attacker controls the request command parameter.",
+                "The process API evaluates that parameter through a shell.",
+              ],
+            },
             codeEvidence: [
               {
+                id: "shell-sink",
+                label: "Untrusted shell invocation",
+                path: "src/server.js",
+                startLine: 18,
+                role: "sink",
                 code: "exec(input)",
                 explanation: "Untrusted input reaches the shell.",
               },
@@ -182,6 +201,83 @@ describe("effectiveness benchmark", () => {
     });
     expect(report.thresholds.every((threshold) => threshold.passed)).toBe(true);
     expect(report.cases[0]?.stableExpectations).toEqual(["shell-command"]);
+  });
+
+  test("does not credit placeholder objects as substantive evidence", async () => {
+    const root = await fixtureRoot();
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      thresholds: {
+        minValidationRate: 1,
+        minAttackPathRate: 1,
+        minCodeEvidenceRate: 1,
+      },
+      cases: [
+        {
+          id: "weak-command",
+          findingsPath: "weak-command/findings.json",
+          expected: [
+            {
+              id: "shell-command",
+              cwe: ["CWE-78"],
+              locations: [{ path: "src/server.js", startLine: 18 }],
+              requireValidation: true,
+              requireAttackPath: true,
+              requireCodeEvidence: true,
+            },
+          ],
+        },
+      ],
+    });
+    await writeFindings(
+      join(root, "results", "weak-command", "findings.json"),
+      [
+        finding({
+          id: "weak-shell-command",
+          cwe: ["CWE-78"],
+          path: "src/server.js",
+          line: 18,
+          validation: { disposition: "reportable" },
+          attackPath: { decision: "report" },
+          codeEvidence: [
+            {
+              path: "src/unrelated.js",
+              startLine: 1,
+              code: "dangerous(input)",
+              explanation:
+                "This looks descriptive but is anchored to unrelated source.",
+            },
+          ],
+        }),
+      ],
+    );
+
+    const report = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+    });
+
+    expect(report.passed).toBe(false);
+    expect(report.metrics).toMatchObject({
+      truePositives: 1,
+      validationRate: 0,
+      attackPathRate: 0,
+      codeEvidenceRate: 0,
+    });
+    expect(report.cases[0]?.runs[0]).toMatchObject({
+      completed: true,
+      passed: false,
+      matches: [
+        {
+          validationPresent: true,
+          validationSubstantive: false,
+          attackPathPresent: true,
+          attackPathSubstantive: false,
+          codeEvidencePresent: true,
+          codeEvidenceSubstantive: false,
+        },
+      ],
+    });
   });
 
   test("builds an explicit selected-run manifest without weakening the full manifest", () => {
