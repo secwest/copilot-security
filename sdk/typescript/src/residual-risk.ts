@@ -117,6 +117,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:copyfile|createWriteStream|extract|extractall|makedirs|mkdir|move|open|rename|sendFile|write_bytes|write_text|writeFile|writeFileSync)\b/iu,
   ],
   [
+    "untrusted-file-upload-or-content-placement",
+    99,
+    /\b(?:formidable|IFormFile|move_uploaded_file|MultipartFile|multipart|multer|originalname|uploadedFile|uploadPlugin)\b|\b(?:req|request)\.file\b/iu,
+  ],
+  [
     "process-or-shell",
     100,
     /\b(?:child_process|execFile|execSync|popen|ProcessBuilder|Runtime\.getRuntime|spawn|spawnSync|subprocess)\b|\b(?:exec|system)\s*\(|\bshell\s*[:=]\s*true\b/iu,
@@ -125,6 +130,11 @@ const RISK_SIGNALS: ReadonlyArray<
     "dynamic-code-or-template",
     95,
     /\b(?:compile|eval|execScript|Function|render|renderString|template)\s*\(/iu,
+  ],
+  [
+    "dynamic-module-or-plugin-load",
+    97,
+    /\b(?:activatePlugins|extensionDirectory|loadPlugins|pluginDirectory)\b|\bimport\s*\(\s*(?!["'`])/iu,
   ],
   [
     "template-source-evaluation",

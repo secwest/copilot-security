@@ -93,7 +93,18 @@ Use class-specific proof tuples:
   schema/shape/key/operator allowlist that excludes every operator and coercion
   needed by the witness, plus proof that the driver does not reinterpret the
   surviving value.
-- injection/path traversal/file upload/header/open redirect: attacker-controlled bytes + sanitizer/canonicalization/allowlist result + dangerous sink/context
+- injection/path traversal/header/open redirect: attacker-controlled bytes + sanitizer/canonicalization/allowlist result + dangerous sink/context
+- untrusted upload/content placement: attacker-controlled filename, metadata,
+  and bytes + multipart/parser and size limits + effective byte transforms +
+  temporary and final destination after rename/canonicalization + overwrite and
+  permission behavior + downstream static server, browser origin, plugin/
+  extension loader, startup hook, configuration reader, archive importer,
+  media/document processor, or interpreter + concrete active-content,
+  overwrite, parser, configuration, privilege, or code-execution effect.
+  Suppression requires controls that defeat the exact downstream consumer, not
+  a MIME/extension check alone; parsing into a bounded allowlisted data model,
+  canonical re-encoding, a server-generated name, and a non-served,
+  non-executable destination together form strong counterevidence.
 - XSS/template/SSTI: attacker-controlled value + escaping/template context + browser/server-side template execution sink
 - server-side template source: attacker-controlled request, stored, tenant, configuration, or error text + compilation or parsing as template/expression source + exact sandbox/global/object-capability/recursion controls + reachable read, expression, code-execution, or secret-exposure effect. A fixed template receiving untrusted variables is a negative control unless those variables are reparsed or evaluated as source; autoescaping controls output encoding, not server-side expression execution.
 - recursive placeholder/template injection: request, tenant/client metadata, stored configuration, or error value + placeholder/template helper that recursively expands, re-parses, or evaluates resolved values + missing escape/non-recursive guard + XSS, expression execution, credential exfiltration, or code execution impact

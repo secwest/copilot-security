@@ -96,6 +96,16 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   an operator object because the query uses an object literal. Prove the exact
   witness against the effective driver semantics and nearest primitive/schema
   control.
+- For untrusted upload and content-placement findings, preserve the exact
+  attacker-controlled filename, metadata, and bytes; multipart/parser limits;
+  temporary and final paths after decoding, renaming, and canonicalization;
+  overwrite and permission behavior; and the later static server, browser,
+  plugin/extension loader, startup hook, configuration reader, archive
+  importer, media/document processor, or interpreter. Prove that the same
+  stored object reaches that consumer and the resulting script execution,
+  active-content origin, configuration change, overwrite, parser exploit, or
+  other protected effect. MIME or extension checks alone are not suppression;
+  parse-and-re-encode plus storage outside every active consumer can be.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 

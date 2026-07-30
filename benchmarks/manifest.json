@@ -94,6 +94,51 @@
       "expected": []
     },
     {
+      "id": "javascript-executable-file-upload",
+      "description": "A public upload retains attacker-controlled JavaScript bytes and filename in the application extension directory, whose separate startup loader imports and activates every module.",
+      "fixture": "fixtures/javascript-executable-file-upload",
+      "findingsPaths": [
+        "javascript-executable-file-upload/run-1/findings.json",
+        "javascript-executable-file-upload/run-2/findings.json",
+        "javascript-executable-file-upload/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "uploaded-extension-code-execution",
+          "cwe": ["CWE-434", "CWE-94"],
+          "locations": [
+            {
+              "path": "src/uploads.js",
+              "startLine": 5,
+              "endLine": 10,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/plugin-runner.js",
+              "startLine": 6,
+              "endLine": 11,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-profile-upload",
+      "description": "Bounded JSON is validated as an exact profile-data model, canonically re-encoded under a server-generated name, and stored outside the separately provisioned extension directory.",
+      "fixture": "fixtures/javascript-safe-profile-upload",
+      "findingsPaths": [
+        "javascript-safe-profile-upload/run-1/findings.json",
+        "javascript-safe-profile-upload/run-2/findings.json",
+        "javascript-safe-profile-upload/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-idor",
       "description": "An authenticated customer can fetch another customer's invoice by identifier.",
       "fixture": "fixtures/javascript-idor",

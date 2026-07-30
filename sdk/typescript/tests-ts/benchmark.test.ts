@@ -47,6 +47,7 @@ describe("effectiveness benchmark", () => {
     const pairs = [
       ["javascript-command-injection", "javascript-safe-command"],
       ["python-path-traversal", "python-safe-path"],
+      ["javascript-executable-file-upload", "javascript-safe-profile-upload"],
       ["javascript-idor", "javascript-safe-authorization"],
       ["javascript-sql-injection", "javascript-safe-sql"],
       ["javascript-nosql-auth-bypass", "javascript-safe-nosql-login"],
@@ -101,6 +102,11 @@ describe("effectiveness benchmark", () => {
         .get("javascript-nosql-auth-bypass")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-943", "CWE-287"]]);
+    expect(
+      cases
+        .get("javascript-executable-file-upload")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-434", "CWE-94"]]);
     const adversarialVulnerable = join(
       benchmarkRoot,
       "fixtures",
@@ -150,6 +156,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "javascript-safe-nosql-login",
+    );
+    const executableFileUpload = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-executable-file-upload",
+    );
+    const safeProfileUpload = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-profile-upload",
     );
     expect(
       await readFile(join(adversarialVulnerable, "README.md"), "utf8"),
@@ -220,6 +236,21 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(safeNosqlLogin, "src", "sessions.js"), "utf8"),
     ).toContain('typeof loginVerifier !== "string"');
+    expect(
+      await readFile(join(executableFileUpload, "src", "uploads.js"), "utf8"),
+    ).toContain("request.file.buffer");
+    expect(
+      await readFile(
+        join(executableFileUpload, "src", "plugin-runner.js"),
+        "utf8",
+      ),
+    ).toContain("await import(location)");
+    expect(
+      await readFile(join(safeProfileUpload, "src", "uploads.js"), "utf8"),
+    ).toContain("JSON.stringify({ theme: profile.theme })");
+    expect(
+      await readFile(join(safeProfileUpload, "src", "uploads.js"), "utf8"),
+    ).toContain("randomUUID()");
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -302,6 +333,7 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
+    expect(deepScan).toContain("untrusted upload and content placement:");
     expect(standardScan).toContain("bulk object binding");
     expect(standardScan).toContain("mass assignment");
     expect(standardScan).toContain("browser-ambient credential CSRF");
@@ -311,11 +343,13 @@ describe("effectiveness benchmark", () => {
     expect(standardScan).toContain(
       "SQL and document-database query selectors/operators",
     );
+    expect(standardScan).toContain("untrusted uploads and");
     expect(diffScan).toContain("mass-assignment field controls");
     expect(diffScan).toContain("writable-field sets");
     expect(diffScan).toContain("anti-CSRF token");
     expect(diffScan).toContain("terminator space");
     expect(diffScan).toContain("request-controlled document selectors");
+    expect(diffScan).toContain("new multipart/file inputs");
     expect(discovery).toContain(
       "distinguish attacker-controlled template source from attacker-controlled data",
     );
@@ -329,16 +363,24 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain(
       "parameterization when request-controlled values",
     );
+    expect(discovery).toContain("For direct uploads and content placement");
+    expect(discovery).toContain(
+      "another file, process, startup phase, or worker",
+    );
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
     expect(validation).toContain("browser CSRF:");
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
+    expect(validation).toContain("untrusted upload/content placement:");
     expect(attackPath).toContain("For mass-assignment findings");
     expect(attackPath).toContain("For CSRF findings");
     expect(attackPath).toContain("For native-memory findings");
     expect(attackPath).toContain("For document-query and NoSQL findings");
+    expect(attackPath).toContain(
+      "For untrusted upload and content-placement findings",
+    );
     expect(severityPolicy).toContain(
       "CSRF when it enables important state-changing actions",
     );
@@ -348,6 +390,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(severityPolicy).toContain(
       "Document-query or NoSQL operator injection",
+    );
+    expect(severityPolicy).toContain(
+      "Untrusted upload or content placement that writes attacker-controlled bytes",
     );
     expect(threatModelGuidance).toContain(
       "allocation arithmetic, object bounds, ownership/lifetime",

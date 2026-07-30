@@ -162,6 +162,17 @@ inventory and closure requirements.
      parameterization. Use a sibling path that enforces the intended primitive
      type, shape, keys, and bounded value grammar before query construction as
      the negative control.
+   - untrusted upload and content placement: every multipart part, uploaded
+     filename, byte stream, temporary file, archive member, decoded body, move,
+     copy, and write; preserve parser limits, effective bytes after transforms,
+     generated versus retained names, canonical destination roots, overwrite
+     behavior, permissions, and every later static server, browser, plugin/
+     extension loader, startup hook, configuration reader, archive importer,
+     media/document processor, or interpreter that consumes the stored object.
+     Extension and MIME checks alone do not prove content safety. Use a sibling
+     path that parses and re-encodes a bounded allowlisted data model under a
+     server-generated name outside all served and executable roots as the
+     negative control.
 
    Return uncovered work to discovery. Record the sweep under
    `artifacts/02_discovery/residual_sweep.md`.
@@ -198,6 +209,14 @@ inventory and closure requirements.
    tenant-selection outcome. Reject the candidate when an exact schema or
    primitive-type guard runs before construction and excludes every operator,
    key, type, and coercion needed by the claimed query.
+   For upload/content-placement candidates, demonstrate the exact attacker
+   bytes and retained metadata, the destination after every rename and
+   canonicalization, and the downstream serving, parsing, loading, startup,
+   configuration, or execution operation. Reject the candidate when all
+   attacker-controlled bytes are rejected or parsed into a bounded data model,
+   only canonical re-encoded data is stored under a server-generated name, and
+   the destination cannot be reached by any executable or active-content
+   consumer.
    Reject API-name-only, unreachable, already-contained, or equivalently safe
    behavior. Only reachable, exploitable defects with
    concrete adverse impact survive. Keep mitigated flows, rejected candidates,

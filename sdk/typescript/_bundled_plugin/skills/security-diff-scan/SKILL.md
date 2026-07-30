@@ -52,10 +52,11 @@ publish findings, open issues, or contact third parties. Write only beneath
 3. Review every changed file and trace changed behavior through its callers,
    callees, guards, sanitizers, selectors, interpreters, filesystem, network,
    SQL/document database query syntax and selector/operator types, template,
-   parser, deserializer, bulk object binding and mass-assignment field controls,
-   browser-ambient credential and CSRF controls, native memory
-   allocation/copy/index/lifetime boundaries, cryptographic, state,
-   concurrency, and resource-control boundaries.
+   parser, deserializer, file-upload parsing/storage and downstream content
+   consumers, bulk object binding and mass-assignment field controls,
+   browser-ambient credential and CSRF controls, native memory allocation/copy/
+   index/lifetime boundaries, cryptographic, state, concurrency, and
+   resource-control boundaries.
 4. Compare the patch with the exact pre-change behavior. Look specifically for:
 
    - removed, reordered, weakened, or bypassable validation and authorization;
@@ -73,6 +74,10 @@ publish findings, open issues, or contact third parties. Write only beneath
    - changed integer units, signedness, allocation arithmetic, object extents,
      copy/read/write lengths, indexes, terminator space, ownership, or lifetime
      around attacker-influenced native-memory operations;
+   - new multipart/file inputs, attacker-retained names or bytes, weaker size/
+     type/content checks, destination-root changes, or new serving, import,
+     plugin, startup, configuration, archive, media-processing, or interpreter
+     consumers for stored content;
    - unsafe default, configuration, dependency, build, plugin, or update changes;
    - race, replay, idempotency, lifecycle, error-handling, and rollback changes;
    - newly affected sibling instances behind a changed shared dependency.

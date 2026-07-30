@@ -68,6 +68,33 @@ describe("residual risk inventory", () => {
     expect(inventory).toContain("raise ValueError");
   });
 
+  test("pairs upload placement with its separate loader and canonical data control", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-executable-file-upload"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-profile-upload"),
+    );
+
+    expect(vulnerable).toContain(
+      '"untrusted-file-upload-or-content-placement"',
+    );
+    expect(vulnerable).toContain('"filesystem-write"');
+    expect(vulnerable).toContain('"dynamic-module-or-plugin-load"');
+    expect(vulnerable).toContain("request.file.originalname");
+    expect(vulnerable).toContain("request.file.buffer");
+    expect(vulnerable).toContain("await import(location)");
+    expect(safe).toContain('"untrusted-file-upload-or-content-placement"');
+    expect(safe).toContain('"dynamic-module-or-plugin-load"');
+    expect(safe).toContain('request.file.mimetype !== "application/json"');
+    expect(safe).toContain("MAX_PROFILE_BYTES");
+    expect(safe).toContain("JSON.stringify({ theme: profile.theme })");
+    expect(safe).toContain("randomUUID()");
+    expect(scanQualityGatePrompt("")).toContain(
+      "untrusted file upload or content placement",
+    );
+  });
+
   test("surfaces object lookup and ownership boundaries together", async () => {
     const inventory = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-safe-authorization"),

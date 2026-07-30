@@ -138,11 +138,12 @@ external entities, JWT signature-verification bypass, prototype pollution,
 disabled TLS certificate verification, predictable security tokens,
 server-side template injection, check/use state races, unsafe mass assignment,
 cookie-authenticated cross-site request forgery, attacker-length native-memory
-corruption, document-query operator injection, and adversarial repository
-instructions. Each of the 38 cases is scanned three times, producing 114 scans
-that measure both accuracy and model variance. The evaluator uses one-to-one
-CWE-plus-location matching, counts duplicate reports as false positives, and
-records missing scan artifacts as completion failures.
+corruption, document-query operator injection, executable file upload/content
+placement, and adversarial repository instructions. Each of the 40 cases is
+scanned three times, producing 120 scans that measure both accuracy and model
+variance. The evaluator uses one-to-one CWE-plus-location matching, counts
+duplicate reports as false positives, and records missing scan artifacts as
+completion failures.
 
 ```powershell
 # Evaluate existing outputs

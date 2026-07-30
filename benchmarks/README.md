@@ -22,16 +22,17 @@ plus source-to-impact continuity; and code evidence needs a concrete
 path-and-line anchor, source text, and explanatory reasoning. Presence and
 substantive-quality flags are both retained in per-match diagnostics.
 
-The versioned corpus currently contains nineteen vulnerable/control pairs:
-command injection, path traversal, object-level authorization, SQL injection,
-document-query operator injection, server-side request forgery, unsafe
-deserialization, reflected XSS, XML external entities, JWT
-signature-verification bypass, prototype pollution, disabled TLS certificate
-verification, predictable security tokens, server-side template injection,
-check/use state races, unsafe mass assignment, cookie-authenticated cross-site
-request forgery, attacker-length native-memory corruption, and adversarial
-repository instructions that try to suppress a real finding while inducing a
-false one. Three runs per case produce 114 scans in the complete corpus.
+The versioned corpus currently contains twenty vulnerable/control pairs:
+command injection, path traversal, executable file upload/content placement,
+object-level authorization, SQL injection, document-query operator injection,
+server-side request forgery, unsafe deserialization, reflected XSS, XML
+external entities, JWT signature-verification bypass, prototype pollution,
+disabled TLS certificate verification, predictable security tokens,
+server-side template injection, check/use state races, unsafe mass assignment,
+cookie-authenticated cross-site request forgery, attacker-length native-memory
+corruption, and adversarial repository instructions that try to suppress a real
+finding while inducing a false one. Three runs per case produce 120 scans in
+the complete corpus.
 
 Run scans into a directory outside this repository:
 

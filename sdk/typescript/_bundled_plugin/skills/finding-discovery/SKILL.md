@@ -103,6 +103,21 @@ Use this checklist to keep discovery specific without turning it into validation
 - For path-sensitive filesystem families, enumerate concrete exported operations for restore/import/export, backup/restore, archive extraction, file copy/move, download/open, and key/config fetch helpers. Keep decode, join, normalize, canonicalize, strip-prefix, extension-check, and destination-selection lines candidate-visible for each independently reachable operation.
 - For archive extraction and restore/import flows, keep the archive-member name, destination join, containment check, and extract/write call visible as candidate root controls. Do not replace them with a later copy, import, UUID/manifest gate, or top-level file-selection step if extraction or filesystem writes already happened first. Generic claims that a standard-library helper normalizes paths are not enough; keep the row open until the code shows exact per-entry containment before extraction or write, including any symlink, hardlink, metadata, or recursive-copy path that could later promote attacker-controlled content into an imported subtree. Do not require the write to escape the overall app/datastore root; overwriting trusted config, peer-object directories, shared roots, or imported subtrees inside that root still counts as file-impact.
 - When upload/archive-member rows have a precise source to decoded/filtered member name to destination join/write tuple, keep them as candidates even if runtime package reproduction is unavailable or confidence is medium. A cleaner download/open traversal or API/auth issue in the same repository is not a reason to drop the archive-member row; report the archive row at calibrated severity/confidence or keep an explicit deferred ledger row with the missing proof.
+- For direct uploads and content placement, preserve multipart/form/parser
+  configuration, size limits, attacker-controlled filename and metadata,
+  temporary storage, byte transforms, final rename/copy/write destination, and
+  overwrite behavior. Then search separately for every static server, browser
+  origin, plugin/extension loader, dynamic import, startup hook, configuration
+  reader, archive importer, media/document processor, and interpreter that can
+  consume that destination. Do not stop at the write when the reader is in
+  another file, process, startup phase, or worker.
+- Treat extension and client-supplied MIME checks as candidate-visible partial
+  controls, not proof that attacker bytes are safe. Preserve exact magic-byte,
+  decoder, parser, re-encoding, generated-name, canonical-root, permission, and
+  no-execute/no-serve controls as counterevidence. A strong negative control
+  parses a bounded allowlisted data model, writes only its canonical
+  representation under a server-generated name, and keeps it outside every
+  active-content and executable root.
 - When the same product area also has auth, secret, or configuration bugs, keep the path/file candidate open until its own proof tuple is closed. Do not replace it with the louder neighboring issue.
 - In framework or library scans, do not suppress a high-impact candidate solely because the affected API is deprecated, opt-in, or documented as dangerous. State that as a precondition; keep the candidate when the shipped runtime code contains a bypassable control in the restricted or normal usage path and the instance has a plausible cross-boundary source and runtime/deployment path.
 - In auth/authz surfaces, enumerate public webhook, status, callback, and API endpoints that read protected objects, trigger builds/jobs, or mutate protected state independently from nearby credential or configuration bugs.

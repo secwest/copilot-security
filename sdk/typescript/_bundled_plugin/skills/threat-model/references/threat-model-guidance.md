@@ -17,7 +17,7 @@ Do not restate this checklist in the final threat model output.
 - Call out mitigations, robustness measures, and security controls already present in the repository when they materially affect severity or scope.
 - Explain when attacker stories are realistic, when they are out of scope, and when the repository's real-world usage makes a vulnerability class less important.
 - Note unique security considerations for the codebase, for example:
-  - authn/authz, session management, CSRF, XSS, SSRF, SQL/document-query operator injection, bulk object binding and mass assignment, tenant boundaries, rate limits, and secret handling for web applications
+  - authn/authz, session management, CSRF, XSS, SSRF, SQL/document-query operator injection, untrusted upload/content placement and its serving or execution roots, bulk object binding and mass assignment, tenant boundaries, rate limits, and secret handling for web applications
   - untrusted byte streams, parser and protocol lengths, allocation arithmetic, object bounds, ownership/lifetime, concurrency, privilege, and exploit mitigations for native or unsafe-language components
   - key management, privacy assumptions, ACLs/RBAC, PII handling, and auditability for cryptography or privacy-sensitive systems
   - public interfaces, embedding assumptions, safe-by-default behavior, footguns, and secure usage patterns for libraries or frameworks

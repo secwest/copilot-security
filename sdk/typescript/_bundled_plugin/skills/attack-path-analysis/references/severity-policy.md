@@ -29,6 +29,12 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
 - Sandbox, container, VM, browser, or interpreter escape that breaks an intended isolation boundary
 - Server-side template injection when it leads to RCE or leaking of secrets, with actual proof that the templating library can be exploited to do this (RCE escape or secrets/credentials in scope) and that this can be reached from an in-scope attack surface
 - Arbitrary file write in executable, startup, config, or firmware paths with a realistic path to persistence or code execution. Requires proof that an attacker can actually trigger this from in-scope attack surface.
+- Untrusted upload or content placement that writes attacker-controlled bytes
+  into an automatically loaded plugin/extension, startup, interpreter,
+  executable, or equivalent privileged content root and demonstrably produces
+  code execution or compromise. A writable directory, upload API, filename
+  extension, or MIME value without the downstream consumer and effect is not
+  sufficient.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
