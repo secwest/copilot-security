@@ -139,6 +139,57 @@
       "expected": []
     },
     {
+      "id": "javascript-http-request-smuggling",
+      "description": "A gateway authorizes one Content-Length-framed request while a backend gives conflicting chunked framing precedence and executes a hidden administrative request from the same bytes.",
+      "fixture": "fixtures/javascript-http-request-smuggling",
+      "findingsPaths": [
+        "javascript-http-request-smuggling/run-1/findings.json",
+        "javascript-http-request-smuggling/run-2/findings.json",
+        "javascript-http-request-smuggling/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "gateway-backend-http-framing-desync",
+          "cwe": ["CWE-444", "CWE-288"],
+          "locations": [
+            {
+              "path": "src/gateway.js",
+              "startLine": 2,
+              "endLine": 30,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/backend.js",
+              "startLine": 13,
+              "endLine": 38,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/backend.js",
+              "startLine": 67,
+              "endLine": 73,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-http-framing",
+      "description": "A strict gateway rejects conflicting, duplicate, non-canonical, and unsupported framing, consumes exactly one request, authorizes that object, and forwards only structured data.",
+      "fixture": "fixtures/javascript-safe-http-framing",
+      "findingsPaths": [
+        "javascript-safe-http-framing/run-1/findings.json",
+        "javascript-safe-http-framing/run-2/findings.json",
+        "javascript-safe-http-framing/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-idor",
       "description": "An authenticated customer can fetch another customer's invoice by identifier.",
       "fixture": "fixtures/javascript-idor",

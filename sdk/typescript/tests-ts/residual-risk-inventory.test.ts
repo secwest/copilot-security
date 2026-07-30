@@ -95,6 +95,32 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs inconsistent HTTP framing with strict one-message canonicalization", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-http-request-smuggling"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-http-framing"),
+    );
+
+    expect(vulnerable).toContain('"http-message-framing-or-request-smuggling"');
+    expect(vulnerable).toContain(
+      '"proxy-gateway-or-multi-hop-request-boundary"',
+    );
+    expect(vulnerable).toContain("content-length:");
+    expect(vulnerable).toContain('transferEncoding === "chunked"');
+    expect(vulnerable).toContain("processBackendPipeline(rawRequest, state)");
+    expect(safe).toContain('"http-message-framing-or-request-smuggling"');
+    expect(safe).toContain(
+      "conflicting Content-Length and Transfer-Encoding rejected",
+    );
+    expect(safe).toContain("duplicate Content-Length rejected");
+    expect(safe).toContain("request must contain exactly one complete message");
+    expect(scanQualityGatePrompt("")).toContain(
+      "HTTP message-framing disagreement and request smuggling",
+    );
+  });
+
   test("surfaces object lookup and ownership boundaries together", async () => {
     const inventory = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-safe-authorization"),

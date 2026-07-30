@@ -106,6 +106,15 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   active-content origin, configuration change, overwrite, parser exploit, or
   other protected effect. MIME or extension checks alone are not suppression;
   parse-and-re-encode plus storage outside every active consumer can be.
+- For HTTP request-smuggling and desynchronization findings, preserve the exact
+  raw bytes, ingress protocol, proxy/gateway/server/backend versions and
+  configuration, duplicate-header normalization, effective framing decision,
+  consumed and residual bytes, connection pooling/reuse, route and principal at
+  each hop, and the downstream protected request or response. Prove the same
+  bytes are accepted across the deployment chain and that the parser
+  disagreement bypasses a control or affects another request. A conflicting
+  header pair without per-hop boundaries and impact is not reportable; exact
+  first-hop rejection or canonical one-message forwarding is counterevidence.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 

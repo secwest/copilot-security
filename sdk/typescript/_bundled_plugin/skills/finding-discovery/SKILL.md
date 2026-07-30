@@ -118,6 +118,20 @@ Use this checklist to keep discovery specific without turning it into validation
   parses a bounded allowlisted data model, writes only its canonical
   representation under a server-generated name, and keeps it outside every
   active-content and executable root.
+- For HTTP request-smuggling and desynchronization, inventory each component
+  that parses, normalizes, rewrites, authorizes, routes, pools, or forwards the
+  same HTTP message. Keep duplicate/conflicting `Content-Length` and
+  `Transfer-Encoding`, comma-joined values, whitespace and obsolete folding,
+  casing, chunk extensions/trailers, invalid/overflowed lengths, absolute-form
+  targets, HTTP/2-to-HTTP/1 conversion, connection reuse, and leftover-byte
+  handling visible as separate control rows. Trace one candidate across every
+  parser; a safe framework handler does not suppress a vulnerable custom proxy,
+  gateway, downgrade adapter, or backend parser.
+- Do not promote header names alone. Preserve exact raw bytes and show the
+  message boundary, route, principal, and residual bytes selected by each hop.
+  A strong negative control rejects all ambiguity at the first trust boundary,
+  consumes exactly one complete message, and forwards a canonical structured
+  request through the same authorization and backend path.
 - When the same product area also has auth, secret, or configuration bugs, keep the path/file candidate open until its own proof tuple is closed. Do not replace it with the louder neighboring issue.
 - In framework or library scans, do not suppress a high-impact candidate solely because the affected API is deprecated, opt-in, or documented as dangerous. State that as a precondition; keep the candidate when the shipped runtime code contains a bypassable control in the restricted or normal usage path and the instance has a plausible cross-boundary source and runtime/deployment path.
 - In auth/authz surfaces, enumerate public webhook, status, callback, and API endpoints that read protected objects, trigger builds/jobs, or mutate protected state independently from nearby credential or configuration bugs.

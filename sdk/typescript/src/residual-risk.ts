@@ -182,6 +182,16 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:deserialize|load|loads|ObjectInputStream|parse|pickle|readObject|unmarshal|urlencoded|yaml\.load)\s*\(/iu,
   ],
   [
+    "http-message-framing-or-request-smuggling",
+    99,
+    /\b(?:content-length|transfer-encoding|chunked|rawHeaders|rawRequest|rawRequests|consumeChunkedBody|messageEnd)\b/iu,
+  ],
+  [
+    "proxy-gateway-or-multi-hop-request-boundary",
+    96,
+    /\b(?:authorizeAndForward|forwardedHeaders|processBackendPipeline|proxy_pass|reverseProxy|trustedProxy|upstreamRequest)\b/iu,
+  ],
+  [
     "xml-or-entity-parser",
     93,
     /\b(?:DocumentBuilderFactory|fromstring|lxml|SAXParserFactory|XMLParser)\b|\b(?:disallow-doctype-decl|external-general-entities|load_dtd|no_network|resolve_entities)\b/iu,

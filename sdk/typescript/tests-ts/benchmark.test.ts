@@ -48,6 +48,7 @@ describe("effectiveness benchmark", () => {
       ["javascript-command-injection", "javascript-safe-command"],
       ["python-path-traversal", "python-safe-path"],
       ["javascript-executable-file-upload", "javascript-safe-profile-upload"],
+      ["javascript-http-request-smuggling", "javascript-safe-http-framing"],
       ["javascript-idor", "javascript-safe-authorization"],
       ["javascript-sql-injection", "javascript-safe-sql"],
       ["javascript-nosql-auth-bypass", "javascript-safe-nosql-login"],
@@ -107,6 +108,11 @@ describe("effectiveness benchmark", () => {
         .get("javascript-executable-file-upload")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-434", "CWE-94"]]);
+    expect(
+      cases
+        .get("javascript-http-request-smuggling")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-444", "CWE-288"]]);
     const adversarialVulnerable = join(
       benchmarkRoot,
       "fixtures",
@@ -166,6 +172,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "javascript-safe-profile-upload",
+    );
+    const httpRequestSmuggling = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-http-request-smuggling",
+    );
+    const safeHttpFraming = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-http-framing",
     );
     expect(
       await readFile(join(adversarialVulnerable, "README.md"), "utf8"),
@@ -251,6 +267,18 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(safeProfileUpload, "src", "uploads.js"), "utf8"),
     ).toContain("randomUUID()");
+    expect(
+      await readFile(join(httpRequestSmuggling, "src", "gateway.js"), "utf8"),
+    ).toContain("content-length:");
+    expect(
+      await readFile(join(httpRequestSmuggling, "src", "backend.js"), "utf8"),
+    ).toContain('transferEncoding === "chunked"');
+    expect(
+      await readFile(join(safeHttpFraming, "src", "gateway.js"), "utf8"),
+    ).toContain("conflicting Content-Length and Transfer-Encoding rejected");
+    expect(
+      await readFile(join(safeHttpFraming, "src", "gateway.js"), "utf8"),
+    ).toContain("request must contain exactly one complete message");
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -334,6 +362,7 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("destination object extents");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
     expect(deepScan).toContain("untrusted upload and content placement:");
+    expect(deepScan).toContain("HTTP request framing and smuggling:");
     expect(standardScan).toContain("bulk object binding");
     expect(standardScan).toContain("mass assignment");
     expect(standardScan).toContain("browser-ambient credential CSRF");
@@ -344,12 +373,14 @@ describe("effectiveness benchmark", () => {
       "SQL and document-database query selectors/operators",
     );
     expect(standardScan).toContain("untrusted uploads and");
+    expect(standardScan).toContain("HTTP message framing and parser agreement");
     expect(diffScan).toContain("mass-assignment field controls");
     expect(diffScan).toContain("writable-field sets");
     expect(diffScan).toContain("anti-CSRF token");
     expect(diffScan).toContain("terminator space");
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("new multipart/file inputs");
+    expect(diffScan).toContain("duplicate or conflicting `Content-Length` and");
     expect(discovery).toContain(
       "distinguish attacker-controlled template source from attacker-controlled data",
     );
@@ -367,6 +398,10 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain(
       "another file, process, startup phase, or worker",
     );
+    expect(discovery).toContain(
+      "For HTTP request-smuggling and desynchronization",
+    );
+    expect(discovery).toContain("Do not promote header names alone");
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
@@ -374,12 +409,16 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("untrusted upload/content placement:");
+    expect(validation).toContain("HTTP request smuggling/desynchronization:");
     expect(attackPath).toContain("For mass-assignment findings");
     expect(attackPath).toContain("For CSRF findings");
     expect(attackPath).toContain("For native-memory findings");
     expect(attackPath).toContain("For document-query and NoSQL findings");
     expect(attackPath).toContain(
       "For untrusted upload and content-placement findings",
+    );
+    expect(attackPath).toContain(
+      "For HTTP request-smuggling and desynchronization findings",
     );
     expect(severityPolicy).toContain(
       "CSRF when it enables important state-changing actions",
@@ -393,6 +432,15 @@ describe("effectiveness benchmark", () => {
     );
     expect(severityPolicy).toContain(
       "Untrusted upload or content placement that writes attacker-controlled bytes",
+    );
+    expect(severityPolicy).toContain(
+      "HTTP request smuggling that demonstrably crosses",
+    );
+    expect(severityPolicy).toContain(
+      "Request-smuggling claims based only on `Content-Length`",
+    );
+    expect(threatModelGuidance).toContain(
+      "HTTP framing/parser agreement across proxies",
     );
     expect(threatModelGuidance).toContain(
       "allocation arithmetic, object bounds, ownership/lifetime",

@@ -105,6 +105,17 @@ Use class-specific proof tuples:
   a MIME/extension check alone; parsing into a bounded allowlisted data model,
   canonical re-encoding, a server-generated name, and a non-served,
   non-executable destination together form strong counterevidence.
+- HTTP request smuggling/desynchronization: one exact attacker-controlled byte
+  sequence + every reachable proxy/gateway/server/backend parser and protocol
+  translation + each hop's duplicate-header normalization, effective
+  `Content-Length`/`Transfer-Encoding`, message boundary, consumed and leftover
+  bytes, route, principal, connection reuse, and forwarding behavior + a second
+  or differently interpreted request that bypasses authorization/routing,
+  poisons another request/response, reaches a protected action, or crosses a
+  trust boundary. Suppression requires equivalent parsing at every reachable
+  hop or first-hop rejection and canonical single-message forwarding; a
+  standards citation, one parser's behavior, or closing the connection after
+  forwarding ambiguous bytes is not enough.
 - XSS/template/SSTI: attacker-controlled value + escaping/template context + browser/server-side template execution sink
 - server-side template source: attacker-controlled request, stored, tenant, configuration, or error text + compilation or parsing as template/expression source + exact sandbox/global/object-capability/recursion controls + reachable read, expression, code-execution, or secret-exposure effect. A fixed template receiving untrusted variables is a negative control unless those variables are reparsed or evaluated as source; autoescaping controls output encoding, not server-side expression execution.
 - recursive placeholder/template injection: request, tenant/client metadata, stored configuration, or error value + placeholder/template helper that recursively expands, re-parses, or evaluates resolved values + missing escape/non-recursive guard + XSS, expression execution, credential exfiltration, or code execution impact
@@ -151,6 +162,11 @@ Use this checklist to keep validation close to the prompt contract:
   - realistic interface reproduction
   - code understanding
 - If the code exposes a realistic interface, attempt validation through that interface before concluding when feasible.
+- For HTTP request-smuggling candidates, save the literal request bytes and a
+  per-hop framing table with normalized headers, message boundaries, residual
+  bytes, routing/authorization decisions, connection reuse, and the protected
+  effect. Reproduce the same bytes against the closest reachable parser pair
+  and an ambiguity-rejecting negative control when feasible.
 - Keep commands short, non-interactive, and scoped to the touched files or the minimum referenced paths.
 - If validation fails, record what was attempted, why it was inconclusive, and what proof gap remains.
 - Save any PoCs, logs, or crafted inputs under that finding's validation artifacts path from `../../../references/scan-artifacts.md`.

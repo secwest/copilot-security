@@ -173,6 +173,18 @@ inventory and closure requirements.
      path that parses and re-encodes a bounded allowlisted data model under a
      server-generated name outside all served and executable roots as the
      negative control.
+   - HTTP request framing and smuggling: every ingress proxy, load balancer,
+     gateway, framework server, middleware, backend, connection pool, and
+     protocol downgrade/upgrade boundary that parses or rewrites the same
+     request bytes. Preserve duplicate and conflicting `Content-Length` and
+     `Transfer-Encoding` fields, header-name/value normalization, comma joining,
+     whitespace and obsolete folding, chunk extensions and trailers, invalid or
+     overflowed lengths, HTTP version conversion, connection reuse, leftover
+     bytes, authorization/routing decisions, and the final protected action.
+     One parser accepting the request is not evidence that the next parser
+     agrees. Use a sibling path that rejects ambiguity before forwarding,
+     consumes exactly one message, and passes a canonical structured request to
+     the same authorization decision and backend as the negative control.
 
    Return uncovered work to discovery. Record the sweep under
    `artifacts/02_discovery/residual_sweep.md`.
@@ -217,6 +229,14 @@ inventory and closure requirements.
    only canonical re-encoded data is stored under a server-generated name, and
    the destination cannot be reached by any executable or active-content
    consumer.
+   For HTTP request-smuggling candidates, construct one exact byte sequence and
+   calculate each hop's message boundary, normalized headers, consumed length,
+   leftover bytes, route, principal, and connection-reuse behavior. Prove that
+   a downstream hop interprets attacker bytes as a second or differently routed
+   request that bypasses a security decision or corrupts another user's
+   request/response. Reject the candidate when all reachable hops use one
+   equivalent parser/canonical request object or the first hop rejects every
+   ambiguous framing form before forwarding and cannot reuse leftover bytes.
    Reject API-name-only, unreachable, already-contained, or equivalently safe
    behavior. Only reachable, exploitable defects with
    concrete adverse impact survive. Keep mitigated flows, rejected candidates,

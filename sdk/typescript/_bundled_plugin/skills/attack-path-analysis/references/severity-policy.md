@@ -35,6 +35,11 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   code execution or compromise. A writable directory, upload API, filename
   extension, or MIME value without the downstream consumer and effect is not
   sufficient.
+- HTTP request smuggling that demonstrably crosses a broadly exposed gateway or
+  proxy boundary and yields unauthenticated privileged execution, cross-tenant
+  compromise, credential/session capture, or reliable poisoning of many users.
+  Critical requires the exact multi-hop parser disagreement and severe effect,
+  not merely conflicting framing headers or a theoretical desynchronization.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
@@ -55,6 +60,10 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   state transitions. Severity follows the proven privilege and blast-radius
   delta; a bulk-binding API name without an effective writable privileged field
   is not sufficient.
+- HTTP request smuggling that reliably bypasses gateway authorization, routing,
+  or header normalization to reach meaningful protected functionality, or that
+  poisons another user's request/response, when the exact bytes, parser
+  boundaries, and deployed connection-reuse path are proved.
 - XXE with clear proof that an attacker can control the XML document through in-scope attack-surface and that the XML engine is vulnerable to XXE
 - etc, other bugs not listed which follow this level of high severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 - Dangerous upload / file handling issues that enable stored active content, trusted-origin script execution, or meaningful content-type confusion with real security impact; with actual proof that both the upload and access are reachable through in-scope attack-surface.
@@ -81,6 +90,10 @@ Examples that usually should not remain `high`/`critical` without very strong pr
 - CSRF on low-impact actions, cosmetic actions, logout, preferences, or actions requiring unrealistic victim behavior.
 - Open redirect, clickjacking, user enumeration, rate-limit weakness, banner leakage, version disclosure, directory listing, stack traces, internal hostnames, or basic error-message leakage, unless they are shown as part of a serious exploit chain.
 - Memory corruption that is theoretical, non-triggerable from in-scope input, or not plausibly exploitable in the target environment.
+- Request-smuggling claims based only on `Content-Length` and
+  `Transfer-Encoding` appearing together, without proving divergent reachable
+  parsers, accepted bytes, connection reuse or residual-byte handling, and a
+  concrete protected effect.
 - Missing headers, cookie flags, CSP weaknesses, TLS observations, or crypto hygiene issues without a concrete exploit path and meaningful demonstrated impact.
 - Reports that effectively say "this could be dangerous if combined with something else" but do not show the something else.
 - Denial of service that is transient, single-user, self-targeting, easy to mitigate, requires disproportionate attacker resources, or does not create severe and realistic business / safety impact.
