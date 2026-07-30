@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-javascript-adversarial-command-injection",
+  "private": true,
+  "type": "module"
+}

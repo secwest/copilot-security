@@ -275,13 +275,12 @@ export async function buildResidualRiskInventory(
   }
 
   return selectResidualRiskRecords(records, MAX_SIGNALS)
-    .map(
-      ({
-        priority: _priority,
-        startLine: _startLine,
-        endLine: _endLine,
-        ...record
-      }) => JSON.stringify(record),
+    .map(({ priority: _priority, excerpt, ...record }) =>
+      JSON.stringify({
+        ...record,
+        excerptEncoding: "base64",
+        excerptBase64: Buffer.from(excerpt, "utf8").toString("base64"),
+      }),
     )
     .join("\n");
 }

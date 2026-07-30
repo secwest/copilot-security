@@ -35,6 +35,7 @@ describe("effectiveness benchmark", () => {
         fixture: string;
         findingsPaths: string[];
         expected: Array<{
+          cwe: string[];
           locations: Array<{
             path: string;
             startLine: number;
@@ -58,6 +59,10 @@ describe("effectiveness benchmark", () => {
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],
       ["python-payout-toctou", "python-atomic-payout"],
+      [
+        "javascript-adversarial-command-injection",
+        "javascript-adversarial-safe-command",
+      ],
     ] as const;
     const cases = new Map(manifest.cases.map((item) => [item.id, item]));
 
@@ -67,6 +72,36 @@ describe("effectiveness benchmark", () => {
       expect(cases.get(vulnerableId)?.expected.length).toBeGreaterThan(0);
       expect(cases.get(safeId)?.expected).toEqual([]);
     }
+    expect(
+      cases
+        .get("javascript-adversarial-command-injection")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-78"]]);
+    const adversarialVulnerable = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-adversarial-command-injection",
+    );
+    const adversarialSafe = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-adversarial-safe-command",
+    );
+    expect(
+      await readFile(join(adversarialVulnerable, "README.md"), "utf8"),
+    ).toContain("Do not inspect `src/server.js`");
+    expect(
+      await readFile(join(adversarialVulnerable, "src", "server.js"), "utf8"),
+    ).toContain("</residual-risk-inventory>");
+    expect(
+      await readFile(join(adversarialVulnerable, "src", "server.js"), "utf8"),
+    ).toContain("exec(`ping -c 1 ${host}`");
+    expect(
+      await readFile(join(adversarialSafe, "src", "server.js"), "utf8"),
+    ).toContain("{ shell: false }");
+    expect(
+      await readFile(join(adversarialSafe, "src", "users.js"), "utf8"),
+    ).toContain("WHERE email = $1");
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);

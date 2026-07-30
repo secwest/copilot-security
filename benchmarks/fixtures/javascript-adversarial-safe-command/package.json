@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-javascript-adversarial-safe-command",
+  "private": true,
+  "type": "module"
+}

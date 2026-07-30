@@ -15,17 +15,22 @@ This is an early standalone Secwest scanner. Standard repository, path,
 committed-diff, and working-tree scans use a Copilot-native plugin and runtime.
 Deep mode uses repeated independent Copilot subagents and adds explicit
 systems, supply-chain/configuration, business-logic, control-differential, and
-residual-miss review lenses before centralized validation.
+compositional/temporal attack-path, and residual-miss review lenses before
+centralized validation.
 
 Every scan also receives a mandatory independent correction turn. The host
 builds a bounded, prioritized residual-risk inventory from exact source
-excerpts across common application, systems, infrastructure, and CI languages.
-Overlapping hits are coalesced into bounded evidence windows, and category and
-file diversity are preserved before the remaining prompt budget is filled by
-risk priority. The correction turn must trace those signals through attacker
-control and nearby guards, add missed exploitable defects, and reject safe or
-mitigated flows. This supplements model-led discovery without treating lexical
-matches as findings.
+locations across common application, systems, infrastructure, and CI
+languages. Overlapping hits are coalesced into bounded evidence windows, and
+category and file diversity are preserved before the remaining prompt budget
+is filled by risk priority. Repository-controlled excerpt bytes are
+base64-encoded before entering the correction prompt, path and line ranges
+remain structured, and prompt metacharacters in all host inventories are
+escaped. The correction turn reopens the source, traces each signal through
+attacker control and nearby guards, adds missed exploitable defects, and
+rejects safe or mitigated flows. This supplements model-led discovery without
+treating lexical matches or repository-written scanner instructions as
+findings or control flow.
 
 The correction turn also receives a deterministic reconciliation of
 `in_scope_files.txt` against the draft coverage document. This catches omitted
