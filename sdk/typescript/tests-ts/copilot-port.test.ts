@@ -4,10 +4,12 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
+  closureGapCounts,
   copilotModelErrorRecovery,
   COPILOT_SCANNER_SESSION_HOOKS,
   prepareCopilotRuntime,
   resolveCopilotCli,
+  runScanQualityCorrection,
   startManagedCopilotSession,
   stopManagedCopilotClient,
   type CopilotScannerOptions,
@@ -159,6 +161,164 @@ describe("Copilot port", () => {
     ]) {
       expect(copilotModelErrorRecovery(input)).toBeUndefined();
     }
+  });
+
+  test("completes after the correction turn only when the host re-audit closes", async () => {
+    const prompts: string[] = [];
+    let reads = 0;
+
+    await runScanQualityCorrection({
+      residualRiskInventory: "",
+      coverageGapInventory: "",
+      findingQualityGapInventory: "",
+      sendPrompt: async (prompt) => {
+        prompts.push(prompt);
+      },
+      readClosureInventories: async () => {
+        reads += 1;
+        return {
+          coverageGapInventory: '{"type":"coverage-gap-summary","gapCount":0}',
+          findingQualityGapInventory: "",
+        };
+      },
+    });
+
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("Mandatory Copilot Security quality gate");
+    expect(reads).toBe(1);
+  });
+
+  test("uses one bounded repair turn when corrected artifacts retain gaps", async () => {
+    const prompts: string[] = [];
+    const closureStates = [
+      {
+        coverageGapInventory:
+          '{"type":"coverage-gap-summary","gapCount":2}\n{"path":"src/a.ts"}',
+        findingQualityGapInventory:
+          '{"type":"finding-quality-gap-summary","gapCount":1}\n{"findingId":"occ_1"}',
+      },
+      {
+        coverageGapInventory: '{"type":"coverage-gap-summary","gapCount":0}',
+        findingQualityGapInventory: "",
+      },
+    ];
+
+    await runScanQualityCorrection({
+      residualRiskInventory: "",
+      coverageGapInventory: "",
+      findingQualityGapInventory: "",
+      sendPrompt: async (prompt) => {
+        prompts.push(prompt);
+      },
+      readClosureInventories: async () => closureStates.shift()!,
+    });
+
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain(
+      "Final bounded Copilot Security closure repair",
+    );
+    expect(prompts[1]).toContain("<coverage-gap-inventory>");
+    expect(prompts[1]).toContain("<finding-quality-gap-inventory>");
+    expect(closureStates).toHaveLength(0);
+  });
+
+  test("preserves first-turn transport recovery without re-auditing stale drafts", async () => {
+    const expected = new Error("correction transport stopped");
+    let reads = 0;
+
+    const correction = runScanQualityCorrection({
+      residualRiskInventory: "",
+      coverageGapInventory: "",
+      findingQualityGapInventory: "",
+      sendPrompt: async () => {
+        throw expected;
+      },
+      readClosureInventories: async () => {
+        reads += 1;
+        return {
+          coverageGapInventory: "",
+          findingQualityGapInventory: "",
+        };
+      },
+    });
+
+    await expect(correction).rejects.toBe(expected);
+    expect(reads).toBe(0);
+  });
+
+  test("fails closed after the bounded repair when deterministic gaps persist", async () => {
+    const prompts: string[] = [];
+    let reads = 0;
+    const coverageGapInventory = '{"type":"coverage-gap-summary","gapCount":0}';
+    const findingQualityGapInventory =
+      '{"type":"finding-quality-gap-summary","gapCount":3}';
+
+    const correction = runScanQualityCorrection({
+      residualRiskInventory: "",
+      coverageGapInventory: "",
+      findingQualityGapInventory: "",
+      sendPrompt: async (prompt) => {
+        prompts.push(prompt);
+      },
+      readClosureInventories: async () => {
+        reads += 1;
+        return { coverageGapInventory, findingQualityGapInventory };
+      },
+    });
+
+    await expect(correction).rejects.toMatchObject({
+      name: "ScanClosureIncompleteError",
+      findingQualityGapCount: 3,
+      coverageGapCount: 0,
+    });
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).not.toContain("<coverage-gap-inventory>");
+    expect(prompts[1]).toContain("<finding-quality-gap-inventory>");
+    expect(reads).toBe(2);
+  });
+
+  test("fails closed when the targeted repair transport stops", async () => {
+    let sends = 0;
+    const expected = new Error("repair transport stopped");
+    const correction = runScanQualityCorrection({
+      residualRiskInventory: "",
+      coverageGapInventory: "",
+      findingQualityGapInventory: "",
+      sendPrompt: async () => {
+        sends += 1;
+        if (sends === 2) throw expected;
+      },
+      readClosureInventories: async () => ({
+        coverageGapInventory: '{"type":"coverage-gap-summary","gapCount":1}',
+        findingQualityGapInventory: "",
+      }),
+    });
+
+    await expect(correction).rejects.toMatchObject({
+      name: "ScanClosureIncompleteError",
+      coverageGapCount: 1,
+      findingQualityGapCount: 0,
+      cause: expected,
+    });
+    expect(sends).toBe(2);
+  });
+
+  test("treats malformed nonempty closure inventories as unresolved", () => {
+    expect(
+      closureGapCounts("not-json", '{"type":"wrong-summary","gapCount":0}'),
+    ).toEqual({
+      coverage: 1,
+      findingQuality: 1,
+    });
+    expect(
+      closureGapCounts(
+        '{"type":"coverage-gap-summary","gapCount":-1}',
+        '{"type":"finding-quality-gap-summary","gapCount":0}',
+      ),
+    ).toEqual({
+      coverage: 1,
+      findingQuality: 0,
+    });
   });
 
   test("cleans up a partially started runtime without retrying session creation", async () => {

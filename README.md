@@ -47,6 +47,15 @@ evidence or remove it from `findings.json` and close coverage accurately. This
 prevents a structurally valid but evidentially empty finding from silently
 surviving the model-to-contract boundary.
 
+After the correction turn, the host rebuilds both the coverage-gap and
+finding-quality inventories from the files Copilot actually wrote. If any gap
+remains, Copilot receives one bounded repair turn containing only the
+outstanding host inventories. The host then audits the files again and fails
+closed instead of reporting completion when a gap persists or the closure
+state cannot be read. The first correction turn's existing artifact-recovery
+path remains available for a transport failure after all drafts were written;
+an unsuccessful deterministic closure audit does not use that escape hatch.
+
 Recoverable Copilot model-call failures are retried by the CLI inside the
 existing turn, with a fixed two-retry ceiling. The host does not resubmit the
 scan or correction prompt, so a transient retry cannot duplicate completed

@@ -28,6 +28,18 @@ export class OutputInsideProtectedRootError extends OutputDirectoryError {
   }
 }
 export class IncompleteScanError extends CopilotSecurityError {}
+export class ScanClosureIncompleteError extends IncompleteScanError {
+  public constructor(
+    public readonly findingQualityGapCount: number,
+    public readonly coverageGapCount: number,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `Copilot correction left ${findingQualityGapCount} finding-quality gap(s) and ${coverageGapCount} coverage gap(s) after the bounded repair turn.`,
+      options,
+    );
+  }
+}
 export class ContractValidationError extends CopilotSecurityError {}
 export class ScanInterruptedError extends CopilotSecurityError {
   public readonly scanDir: string;
