@@ -27,9 +27,7 @@
       },
       "taxonomy": {
         "category": "path-traversal",
-        "cwe": [
-          "CWE-22"
-        ]
+        "cwe": ["CWE-22"]
       },
       "locations": [
         {

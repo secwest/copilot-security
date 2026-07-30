@@ -250,6 +250,11 @@ describe("malformed scan artifact recovery", () => {
             start_line: 1,
             end_line: 1,
           },
+          attack_path: {
+            actor: "Remote archive supplier",
+            steps: ["Controls archive metadata", "Reaches a command shell"],
+            impact: ["Arbitrary command execution"],
+          },
           remediation: "Use a fixed executable and argument vector.",
         },
         {
@@ -297,6 +302,11 @@ describe("malformed scan artifact recovery", () => {
           outcome: "reviewed-no-findings",
           rationale: "Reviewed; no exploitable issues found.",
         },
+        {
+          path: "package.json",
+          outcome: "reviewed_no_candidate",
+          rationale: "Repository metadata reviewed; no candidate.",
+        },
       ],
     });
 
@@ -305,6 +315,7 @@ describe("malformed scan artifact recovery", () => {
       findings: Array<{
         taxonomy: { cwe: string[] };
         codeEvidence: unknown[];
+        attackPath: { actor: string; steps: string[]; impact: string[] };
       }>;
     }>(join(fixture.scanDir, "findings.json"));
     const coverage = await readJson<{
@@ -319,6 +330,10 @@ describe("malformed scan artifact recovery", () => {
     );
     expect(findings.findings[0]?.taxonomy.cwe).toEqual(["CWE-78"]);
     expect(findings.findings[0]?.codeEvidence).toHaveLength(1);
+    expect(findings.findings[0]?.attackPath).toMatchObject({
+      actor: "Remote archive supplier",
+      impact: ["Arbitrary command execution"],
+    });
     expect(coverage.completeness).toBe("complete");
     expect(coverage.surfaces[0]).toMatchObject({
       label: "src/extract.py",
@@ -328,6 +343,77 @@ describe("malformed scan artifact recovery", () => {
       label: "README.md",
       disposition: "no_issue_found",
     });
+    expect(coverage.surfaces[2]).toMatchObject({
+      label: "package.json",
+      disposition: "no_issue_found",
+    });
+  });
+
+  test("closes reviewed documentation and metadata instead of deferring coverage", async () => {
+    const fixture = await startDraftScan();
+    const coveragePath = join(fixture.scanDir, "coverage.json");
+    const coverage = await readJson<{
+      completeness: string;
+      deferred: unknown[];
+      surfaces: CoverageSurface[];
+    }>(coveragePath);
+    coverage.completeness = "partial";
+    coverage.surfaces = [
+      {
+        id: "source",
+        label: "src/extract.py",
+        disposition: "reported",
+        receiptRefs: [],
+      },
+      {
+        id: "readme",
+        label: "README.md",
+        disposition: "needs_follow_up",
+        notes: "Used README to confirm the authentication model.",
+        receiptRefs: [],
+      },
+      {
+        id: "package",
+        label: "package.json",
+        disposition: "needs_follow_up",
+        notes: "Repository metadata.",
+        receiptRefs: [],
+      },
+    ];
+    coverage.deferred = [
+      {
+        id: "readme",
+        reason: "Used README to confirm the authentication model.",
+        surfaceIds: ["readme"],
+      },
+      {
+        id: "package",
+        reason: "Repository metadata.",
+        surfaceIds: ["package"],
+      },
+    ];
+    await writeJson(coveragePath, coverage);
+
+    const scan = await completeScan(fixture);
+    const recovered = await readJson<{
+      completeness: string;
+      deferred: unknown[];
+      surfaces: CoverageSurface[];
+    }>(coveragePath);
+
+    expect(scan.progress.status).toBe("complete");
+    expect(recovered.completeness).toBe("complete");
+    expect(recovered.deferred).toEqual([]);
+    expect(recovered.surfaces.slice(1)).toEqual([
+      expect.objectContaining({
+        label: "README.md",
+        disposition: "no_issue_found",
+      }),
+      expect.objectContaining({
+        label: "package.json",
+        disposition: "no_issue_found",
+      }),
+    ]);
   });
 
   test("returns the authoritative directory snapshot contract at registration", async () => {

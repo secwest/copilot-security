@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -19,6 +19,17 @@ import {
 } from "../src/runtime.js";
 
 const temporaryPaths: string[] = [];
+
+async function createCopilotStub(root: string): Promise<string> {
+  await mkdir(root, { recursive: true });
+  const executable = join(
+    root,
+    process.platform === "win32" ? "copilot.exe" : "copilot",
+  );
+  await writeFile(executable, "", { mode: 0o700 });
+  await chmod(executable, 0o700);
+  return executable;
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -61,9 +72,7 @@ describe("Copilot port", () => {
   test("resolves a configured system Copilot executable", async () => {
     const root = join(tmpdir(), `copilot-port-${randomUUID()}`);
     temporaryPaths.push(root);
-    await mkdir(root, { recursive: true });
-    const executable = join(root, "copilot.exe");
-    await writeFile(executable, "");
+    const executable = await createCopilotStub(root);
     const resolved = await resolveCopilotCli(
       executable,
       { PATH: process.env["PATH"] },
@@ -129,6 +138,7 @@ describe("Copilot port", () => {
     const root = join(tmpdir(), `copilot-security-runtime-${randomUUID()}`);
     const scannerHome = join(root, "scanner");
     const ambientHome = join(root, "ambient");
+    const executable = await createCopilotStub(join(root, "bin"));
     temporaryPaths.push(root);
     await mkdir(ambientHome, { recursive: true });
 
@@ -138,6 +148,7 @@ describe("Copilot port", () => {
         ...process.env,
         COPILOT_SECURITY_HOME: scannerHome,
         COPILOT_HOME: ambientHome,
+        COPILOT_CLI_PATH: executable,
       },
     );
     temporaryPaths.push(runtime.bootstrapWorkspace);

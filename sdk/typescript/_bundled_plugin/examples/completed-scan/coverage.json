@@ -5,9 +5,7 @@
   "mode": "repository",
   "completeness": "complete",
   "inventoryStrategy": "repository",
-  "includePaths": [
-    "src/"
-  ],
+  "includePaths": ["src/"],
   "excludePaths": [],
   "surfaces": [
     {

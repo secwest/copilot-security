@@ -20,9 +20,7 @@
       "snapshotDigest": "copilot-security-snapshot/v1:sha256:ed88f96a4c1a06603a41b3f261f59c3de2555c367ef6ad3bb8b9e483495d34eb"
     },
     "scope": {
-      "includePaths": [
-        "src/"
-      ],
+      "includePaths": ["src/"],
       "excludePaths": []
     },
     "coverageRef": "coverage.json",
@@ -30,12 +28,12 @@
     "artifacts": [
       {
         "path": "findings.json",
-        "sha256": "9abe95339c1e949e529f88e1b680d477b1b3ba9d76b8813fe3130ee8e846e568",
+        "sha256": "76d7228ce78a59d9a1ba80716786f37550ef57080be4c74775697f860990f62c",
         "mediaType": "application/json"
       },
       {
         "path": "coverage.json",
-        "sha256": "112944bc47d6538da33fa3a95c78a2a7739436558b5f54d6a76bb3447e9f2494",
+        "sha256": "3f8834a8e935ce2ea5954f940c8435b5a95d88a4c1c634d669e5c69abe7a58b1",
         "mediaType": "application/json"
       }
     ]

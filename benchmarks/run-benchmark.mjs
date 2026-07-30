@@ -142,7 +142,7 @@ for (const benchmarkCase of manifest.cases) {
       ]);
 
       process.stderr.write(
-        `[benchmark] scanning ${benchmarkCase.id} run ${index + 1}/${configuredFindingsPaths.length}\n`,
+        `[benchmark] scanning ${benchmarkCase.id} run ${index + 1}/${findingsPaths.length}\n`,
       );
       const startedAt = new Date().toISOString();
       const scan = spawnSync(

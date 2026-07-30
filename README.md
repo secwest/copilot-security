@@ -17,6 +17,14 @@ Deep mode uses repeated independent Copilot subagents and adds explicit
 systems, supply-chain/configuration, business-logic, control-differential, and
 residual-miss review lenses before centralized validation.
 
+Every scan also receives a mandatory independent correction turn. The host
+builds a bounded, prioritized residual-risk inventory from exact source
+excerpts across common application, systems, infrastructure, and CI languages.
+The correction turn must trace those signals through attacker control and
+nearby guards, add missed exploitable defects, and reject safe or mitigated
+flows. This supplements model-led discovery without treating lexical matches as
+findings.
+
 ## Requirements
 
 - GitHub Copilot CLI, installed and signed in (`copilot login`)

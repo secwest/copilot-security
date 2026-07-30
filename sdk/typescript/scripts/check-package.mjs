@@ -151,6 +151,7 @@ const distFiles = new Set(
     "knowledge-base",
     "models",
     "multiscan",
+    "residual-risk",
     "result",
     "runtime",
     "scan-comparison",
