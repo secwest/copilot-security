@@ -40,6 +40,11 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   compromise, credential/session capture, or reliable poisoning of many users.
   Critical requires the exact multi-hop parser disagreement and severe effect,
   not merely conflicting framing headers or a theoretical desynchronization.
+- SAML/SSO signature wrapping or signed-object confusion that allows an
+  unauthenticated attacker to install an arbitrary administrative, cross-tenant,
+  or control-plane identity despite a valid signature being checked elsewhere
+  in the response. Critical requires proof of the exact verified-versus-consumed
+  object mismatch and resulting principal, not merely incomplete SAML hygiene.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
@@ -64,6 +69,10 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   or header normalization to reach meaningful protected functionality, or that
   poisons another user's request/response, when the exact bytes, parser
   boundaries, and deployed connection-reuse path are proved.
+- SAML/federated assertion binding failures that reliably authenticate the wrong
+  subject, role, tenant, issuer, audience, or recipient and produce meaningful
+  unauthorized access, with the signature reference, consumed claims, and
+  installed session identity demonstrated.
 - XXE with clear proof that an attacker can control the XML document through in-scope attack-surface and that the XML engine is vulnerable to XXE
 - etc, other bugs not listed which follow this level of high severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 - Dangerous upload / file handling issues that enable stored active content, trusted-origin script execution, or meaningful content-type confusion with real security impact; with actual proof that both the upload and access are reachable through in-scope attack-surface.
@@ -94,6 +103,10 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   `Transfer-Encoding` appearing together, without proving divergent reachable
   parsers, accepted bytes, connection reuse or residual-byte handling, and a
   concrete protected effect.
+- SAML/SSO reports based only on multiple assertions, index access, or a missing
+  optional check without proving which exact bytes were signed, which object was
+  consumed, which semantic binding failed, and what unauthorized principal or
+  action resulted.
 - Missing headers, cookie flags, CSP weaknesses, TLS observations, or crypto hygiene issues without a concrete exploit path and meaningful demonstrated impact.
 - Reports that effectively say "this could be dangerous if combined with something else" but do not show the something else.
 - Denial of service that is transient, single-user, self-targeting, easy to mitigate, requires disproportionate attacker resources, or does not create severe and realistic business / safety impact.

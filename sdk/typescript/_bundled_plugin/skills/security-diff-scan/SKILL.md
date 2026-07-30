@@ -54,9 +54,10 @@ publish findings, open issues, or contact third parties. Write only beneath
    SQL/document database query syntax and selector/operator types, template,
    parser, deserializer, file-upload parsing/storage and downstream content
    consumers, HTTP message framing and normalization across proxies/gateways/
-   backends, bulk object binding and mass-assignment field controls, browser-
-   ambient credential and CSRF controls, native memory allocation/copy/index/
-   lifetime boundaries, cryptographic, state, concurrency, and resource-control
+   backends, SAML/federated signature references and consumed identity objects,
+   bulk object binding and mass-assignment field controls, browser-ambient
+   credential and CSRF controls, native memory allocation/copy/index/lifetime
+   boundaries, cryptographic, state, concurrency, and resource-control
    boundaries.
 4. Compare the patch with the exact pre-change behavior. Look specifically for:
 
@@ -84,6 +85,10 @@ publish findings, open issues, or contact third parties. Write only beneath
      lengths, protocol translation, request reserialization, connection reuse,
      or authorization/routing before a differently configured downstream HTTP
      parser;
+   - changed SAML/SSO assertion ID lookup, signature-reference resolution,
+     canonicalization, list indexing, cloning/return selection, claims parsing,
+     issuer/audience/recipient/destination binding, assertion lifetime, replay
+     handling, or session/principal installation;
    - unsafe default, configuration, dependency, build, plugin, or update changes;
    - race, replay, idempotency, lifecycle, error-handling, and rollback changes;
    - newly affected sibling instances behind a changed shared dependency.

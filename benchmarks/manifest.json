@@ -463,6 +463,51 @@
       "expected": []
     },
     {
+      "id": "javascript-saml-signature-wrapping",
+      "description": "A SAML validator verifies the assertion selected by the signature reference but creates the session from an attacker-controlled unsigned assertion at the first list position.",
+      "fixture": "fixtures/javascript-saml-signature-wrapping",
+      "findingsPaths": [
+        "javascript-saml-signature-wrapping/run-1/findings.json",
+        "javascript-saml-signature-wrapping/run-2/findings.json",
+        "javascript-saml-signature-wrapping/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "signed-versus-consumed-saml-assertion-confusion",
+          "cwe": ["CWE-347", "CWE-345", "CWE-287"],
+          "locations": [
+            {
+              "path": "src/saml.js",
+              "startLine": 2,
+              "endLine": 14,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/session.js",
+              "startLine": 1,
+              "endLine": 7,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-saml-assertion-binding",
+      "description": "The SAML validator verifies one reference-selected payload, derives claims only from those signed bytes, and binds identifier, issuer, audience, recipient, lifetime, and replay state before session creation.",
+      "fixture": "fixtures/javascript-safe-saml-assertion-binding",
+      "findingsPaths": [
+        "javascript-safe-saml-assertion-binding/run-1/findings.json",
+        "javascript-safe-saml-assertion-binding/run-2/findings.json",
+        "javascript-safe-saml-assertion-binding/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-xxe",
       "description": "An XML parser enables DTD loading, external entity expansion, and network access for a request body.",
       "fixture": "fixtures/python-xxe",

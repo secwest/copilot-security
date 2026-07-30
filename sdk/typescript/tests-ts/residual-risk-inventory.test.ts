@@ -237,6 +237,30 @@ describe("residual risk inventory", () => {
     expect(safe).toContain('issuer: "https://identity.example"');
   });
 
+  test("pairs SAML signed-object confusion with exact assertion and trust binding", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-saml-signature-wrapping"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-saml-assertion-binding"),
+    );
+
+    expect(vulnerable).toContain('"saml-federation-or-assertion-boundary"');
+    expect(vulnerable).toContain('"signed-versus-consumed-object-binding"');
+    expect(vulnerable).toContain('"cryptographic-verification"');
+    expect(vulnerable).toContain("signedAssertion.signedPayload");
+    expect(vulnerable).toContain("response.assertions[0].claims");
+    expect(safe).toContain('"saml-federation-or-assertion-boundary"');
+    expect(safe).toContain('"signed-versus-consumed-object-binding"');
+    expect(safe).toContain("matchingAssertions.length !== 1");
+    expect(safe).toContain("JSON.parse(signedAssertion.signedPayload)");
+    expect(safe).toContain("claims.audience !== policy.expectedAudience");
+    expect(safe).toContain("policy.replayCache.has(claims.id)");
+    expect(scanQualityGatePrompt("")).toContain(
+      "SAML/federated signed-versus-consumed assertion binding",
+    );
+  });
+
   test("pairs external-entity parser switches with bounded defused XML", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "python-xxe"),

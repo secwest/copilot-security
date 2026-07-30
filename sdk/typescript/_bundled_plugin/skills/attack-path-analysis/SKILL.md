@@ -115,6 +115,15 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   disagreement bypasses a control or affects another request. A conflicting
   header pair without per-hop boundaries and impact is not reportable; exact
   first-hop rejection or canonical one-message forwarding is counterevidence.
+- For SAML/federated signed-object findings, preserve the exact response and
+  signature bytes, reference URI/ID, ID uniqueness, canonicalized byte range,
+  verified assertion object, returned/cloned object, claims source, issuer,
+  audience, recipient, destination/ACS, subject confirmation, lifetime, replay
+  state, and the final session subject and privileges. Prove an unsigned or
+  differently bound object becomes trusted despite a valid signature over
+  another object. A signature success without that object-continuity proof is
+  not enough; claims derived only from the unique verified payload with complete
+  semantic and replay binding are counterevidence.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 

@@ -144,6 +144,17 @@ inventory and closure requirements.
      framework middleware name is not proof of protection. Use a sibling route
      with an exact origin or session-bound unpredictable-token check as the
      negative control.
+   - SAML and federated assertion binding: every response/assertion parser,
+     signature reference and ID lookup, canonicalized signed byte range,
+     assertion list/index/clone/return path, issuer, audience, recipient,
+     destination/ACS binding, subject confirmation, time window, one-time ID or
+     replay cache, claims conversion, and session/principal installation.
+     Preserve object identity from the exact bytes verified through the claims
+     actually trusted. A valid signature somewhere in the response is not proof
+     that the consumed assertion is signed. Use a sibling path that uniquely
+     resolves the signature reference, verifies those exact bytes, derives
+     claims only from that payload, applies every semantic binding, and rejects
+     replay as the negative control.
    - native memory safety: every attacker-influenced allocation, copy, move,
      receive, format, index, pointer offset, cast, and free; preserve source and
      destination object extents, integer type and units, overflow/underflow
@@ -221,6 +232,13 @@ inventory and closure requirements.
    tenant-selection outcome. Reject the candidate when an exact schema or
    primitive-type guard runs before construction and excludes every operator,
    key, type, and coercion needed by the claimed query.
+   For SAML/federation candidates, demonstrate one exact signed response and map
+   the signature reference, canonical signed bytes, ID lookup, validated
+   assertion, returned/cloned assertion, derived claims, semantic trust checks,
+   replay decision, and installed session identity. Reject the candidate only
+   when the same uniquely selected object remains bound through signature,
+   issuer, audience, recipient/destination, lifetime, replay, and principal
+   creation.
    For upload/content-placement candidates, demonstrate the exact attacker
    bytes and retained metadata, the destination after every rename and
    canonicalization, and the downstream serving, parsing, loading, startup,

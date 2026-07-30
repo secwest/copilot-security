@@ -131,6 +131,15 @@ Use class-specific proof tuples:
 - SAML/XML assertion binding: attacker-controlled response or assertion set + protocol/signature validation of one object + later use, clone, serialization, or storage of a different assertion/document node + authentication/session/token impact. Multi-object preconditions should be stated, but suppression needs exact evidence that the same object is cryptographically and semantically bound to the consumed object.
 - SSO/SAML response validator: attacker-controlled SSO response containing one or more assertions + response/assertion validator code that selects, indexes, clones, serializes, or returns an assertion + mismatch between the signed/validated assertion and the assertion later consumed by the session/token path, or missing recipient/audience/destination/ACS binding + authentication or authorization bypass impact. A generic claims-authorizer or service-method authorization finding does not validate or suppress this row.
 - found-valid selection mismatch: attacker-controlled list or set of tokens/assertions/identities + validator loop or `foundValid*` flag proves one element while later fixed-index, first/last, clone, serialization, or lookup consumes another element + authentication, authorization, or protocol-state impact. Suppression needs evidence that the consumed object is the same object already validated.
+- SAML signed-byte-to-session binding: attacker-controlled federated response +
+  unique signature reference/ID resolution + exact canonical bytes covered by
+  the verified signature + claims parsed from those same bytes + issuer,
+  audience, recipient, destination/ACS, subject-confirmation, lifetime, and
+  replay checks + the exact subject/role installed in the session. A valid
+  signature over one assertion does not validate sibling objects or fields
+  copied before/after verification. Suppression requires object identity and
+  semantic binding through principal creation, not merely a successful
+  cryptographic API call.
 - XML parser/converter hardening: attacker-controlled XML/SVG/XSLT/SAX/DOM/StAX input + parser factory, converter, transformer, or resolver setup + fail-open feature configuration, missing entity/DTD controls, caller-supplied parser path, or secure-processing-only hardening + XXE, SSRF, file read, parser injection, or denial-of-service impact
 - query/parser injection: attacker-controlled bytes + query/selector/parser API that receives syntax or operators rather than bound values + semantic change, parser error, row-set change, write amplification, or bypassable post-query guard + read, write, authz, integrity, or availability impact. A later business check limits confidence or impact only after proving it checks the same trusted object and defeats syntax control for that exact instance.
 - resource handler path control: attacker-controlled URL/path/resource name + allowlist/path-matcher/decoder/canonicalizer/resource-selection control + mismatch, pre-decode/post-decode gap, legacy handler behavior, or unsafe resolver fallback + arbitrary file read/write, path traversal, or unauthorized resource access impact
@@ -162,6 +171,12 @@ Use this checklist to keep validation close to the prompt contract:
   - realistic interface reproduction
   - code understanding
 - If the code exposes a realistic interface, attempt validation through that interface before concluding when feasible.
+- For SAML/federated assertion candidates, retain the signed fixture bytes or
+  payload and signature, record reference and object identities at each step,
+  and test an unsigned privileged sibling before or after a valid low-privilege
+  assertion. Use a reference-selected, verified-payload-derived session plus
+  wrong-audience, wrong-recipient, expired, duplicate-ID, and replay cases as
+  negative controls when feasible.
 - For HTTP request-smuggling candidates, save the literal request bytes and a
   per-hop framing table with normalized headers, message boundaries, residual
   bytes, routing/authorization decisions, connection reuse, and the protected

@@ -56,6 +56,10 @@ describe("effectiveness benchmark", () => {
       ["python-unsafe-deserialization", "python-safe-json"],
       ["javascript-reflected-xss", "javascript-safe-html"],
       ["javascript-jwt-bypass", "javascript-safe-jwt"],
+      [
+        "javascript-saml-signature-wrapping",
+        "javascript-safe-saml-assertion-binding",
+      ],
       ["python-xxe", "python-safe-xml"],
       ["javascript-prototype-pollution", "javascript-safe-preferences"],
       ["python-disabled-tls-verification", "python-safe-tls"],
@@ -113,6 +117,11 @@ describe("effectiveness benchmark", () => {
         .get("javascript-http-request-smuggling")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-444", "CWE-288"]]);
+    expect(
+      cases
+        .get("javascript-saml-signature-wrapping")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-347", "CWE-345", "CWE-287"]]);
     const adversarialVulnerable = join(
       benchmarkRoot,
       "fixtures",
@@ -182,6 +191,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "javascript-safe-http-framing",
+    );
+    const samlSignatureWrapping = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-saml-signature-wrapping",
+    );
+    const safeSamlAssertionBinding = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-saml-assertion-binding",
     );
     expect(
       await readFile(join(adversarialVulnerable, "README.md"), "utf8"),
@@ -279,6 +298,15 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(safeHttpFraming, "src", "gateway.js"), "utf8"),
     ).toContain("request must contain exactly one complete message");
+    expect(
+      await readFile(join(samlSignatureWrapping, "src", "saml.js"), "utf8"),
+    ).toContain("response.assertions[0].claims");
+    expect(
+      await readFile(join(safeSamlAssertionBinding, "src", "saml.js"), "utf8"),
+    ).toContain("JSON.parse(signedAssertion.signedPayload)");
+    expect(
+      await readFile(join(safeSamlAssertionBinding, "src", "saml.js"), "utf8"),
+    ).toContain("policy.replayCache.has(claims.id)");
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -363,6 +391,7 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
     expect(deepScan).toContain("untrusted upload and content placement:");
     expect(deepScan).toContain("HTTP request framing and smuggling:");
+    expect(deepScan).toContain("SAML and federated assertion binding:");
     expect(standardScan).toContain("bulk object binding");
     expect(standardScan).toContain("mass assignment");
     expect(standardScan).toContain("browser-ambient credential CSRF");
@@ -374,6 +403,7 @@ describe("effectiveness benchmark", () => {
     );
     expect(standardScan).toContain("untrusted uploads and");
     expect(standardScan).toContain("HTTP message framing and parser agreement");
+    expect(standardScan).toContain("SAML/federated signed-assertion selection");
     expect(diffScan).toContain("mass-assignment field controls");
     expect(diffScan).toContain("writable-field sets");
     expect(diffScan).toContain("anti-CSRF token");
@@ -381,6 +411,9 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("new multipart/file inputs");
     expect(diffScan).toContain("duplicate or conflicting `Content-Length` and");
+    expect(diffScan).toContain(
+      "SAML/SSO assertion ID lookup, signature-reference resolution",
+    );
     expect(discovery).toContain(
       "distinguish attacker-controlled template source from attacker-controlled data",
     );
@@ -402,6 +435,9 @@ describe("effectiveness benchmark", () => {
       "For HTTP request-smuggling and desynchronization",
     );
     expect(discovery).toContain("Do not promote header names alone");
+    expect(discovery).toContain(
+      "For SAML and other signed federated identity objects",
+    );
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
@@ -410,6 +446,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("untrusted upload/content placement:");
     expect(validation).toContain("HTTP request smuggling/desynchronization:");
+    expect(validation).toContain("SAML signed-byte-to-session binding:");
     expect(attackPath).toContain("For mass-assignment findings");
     expect(attackPath).toContain("For CSRF findings");
     expect(attackPath).toContain("For native-memory findings");
@@ -420,6 +457,7 @@ describe("effectiveness benchmark", () => {
     expect(attackPath).toContain(
       "For HTTP request-smuggling and desynchronization findings",
     );
+    expect(attackPath).toContain("For SAML/federated signed-object findings");
     expect(severityPolicy).toContain(
       "CSRF when it enables important state-changing actions",
     );
@@ -439,9 +477,16 @@ describe("effectiveness benchmark", () => {
     expect(severityPolicy).toContain(
       "Request-smuggling claims based only on `Content-Length`",
     );
+    expect(severityPolicy).toContain(
+      "SAML/SSO signature wrapping or signed-object confusion",
+    );
+    expect(severityPolicy).toContain(
+      "SAML/SSO reports based only on multiple assertions",
+    );
     expect(threatModelGuidance).toContain(
       "HTTP framing/parser agreement across proxies",
     );
+    expect(threatModelGuidance).toContain("SAML/OIDC/federated signed-object");
     expect(threatModelGuidance).toContain(
       "allocation arithmetic, object bounds, ownership/lifetime",
     );

@@ -138,6 +138,18 @@ Use this checklist to keep discovery specific without turning it into validation
 - For stateful authentication protocols, include the line that installs or reuses principals, credentials, tokens, issuers, or protocol state after a pre-authentication, TLS-upgrade, redirect, assertion, or identity-provider transition. Missing rebind/reauthentication or validated-vs-consumed mismatches are candidate controls when they can authenticate the wrong identity.
 - In SSO/SAML/federation packages, keep response/assertion validators distinct from generic claims authorizers and service-method authorization. Include assertion selection, list indexing, `getDOM`, `cloneNode`, signed-object lookup, subject confirmation, recipient, audience, destination, ACS URL, and issuer-binding lines when they decide which assertion is trusted or returned.
 - In auth/token/assertion validators, watch for a validation loop or `foundValid*` flag followed by a separate fixed-index, first/last-element, clone, serialization, or return path. Treat the later object-selection line as the broken control until exact counterevidence proves the validated object and consumed object are identical and equally bound.
+- For SAML and other signed federated identity objects, preserve the literal
+  signature reference, ID uniqueness and lookup behavior, canonicalized signed
+  byte range, selected DOM/object, parsed claims source, issuer, audience,
+  recipient, destination/ACS, subject confirmation, validity window, replay ID,
+  and final session/principal installation. Search across parser, signature,
+  callback, claims-mapping, and session files; do not close the row because a
+  signature API returned true in a different layer.
+- Treat parsing claims only from the uniquely reference-selected and verified
+  payload, followed by complete semantic bindings and atomic replay rejection,
+  as strong counterevidence. Comparing fields copied from an unsigned sibling
+  object, validating one assertion while returning another, or checking issuer
+  without audience/recipient does not prove object identity.
 - For realm/authenticator packages, enumerate concrete implementations such as LDAP, Kerberos, PAM, SAML, OAuth/OIDC, or custom `Realm` classes before promoting a nearby generic HTTP auth finding. In TLS-upgraded or multi-step binds, keep the bind/rebind and principal/credential installation line candidate-visible.
 - In protocol-heavy repositories, inspect low-level version, capability, feature, and negotiation utility classes even if the most obvious candidates are REST/upload/admin hotspots. Search for helper names such as `Version`, `VersionUtil`, `versionCompare`, `versionMatch`, `Capability`, `Feature`, `Negotiation`, `parseInt`, `split`, `matches`, and comparator methods, then close paired validator/parser rows explicitly.
 - For self-service update routes, include guard or predicate methods that compare requested objects against persisted objects. Treat missing checks on security-sensitive scalar fields and collection aliases as candidate locations when they can change identity, trust state, tenant membership, roles, groups, or account recovery properties.

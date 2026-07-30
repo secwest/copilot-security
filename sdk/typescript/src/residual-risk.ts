@@ -202,6 +202,16 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:crypto|decrypt|encrypt|hash|hmac|jwt|signature|verify)\b/iu,
   ],
   [
+    "saml-federation-or-assertion-boundary",
+    98,
+    /\b(?:acsUrl|assertion|assertions|audience|identityProvider|recipient|SAML|SubjectConfirmation)\b/iu,
+  ],
+  [
+    "signed-versus-consumed-object-binding",
+    100,
+    /\b(?:foundValid|referenceId|signatureValue|signedAssertion|validatedAssertion)\b|\bassertions\s*\[\s*(?:0|assertionIndex)\s*\]/iu,
+  ],
+  [
     "unsafe-memory-operation",
     98,
     /\b(?:copy_from_user|gets|memcpy|memmove|readv|recv|recvfrom|scanf|snprintf|sprintf|strcat|strcpy|strncat|strncpy|vsnprintf|vsprintf)\s*\(/iu,
