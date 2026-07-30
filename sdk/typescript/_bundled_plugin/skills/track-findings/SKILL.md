@@ -1,13 +1,13 @@
 ---
 name: track-findings
-description: Track validated Codex Security findings in Linear, Jira, GitHub issues, or draft GitHub security advisories. Use it for one finding or an explicitly selected batch of up to 25 findings tracked as Linear, Jira, or GitHub issues. Includes duplicate checks, exact previews, approval-gated writes, and readback. Do not use it for scans or fixes.
+description: Track validated Copilot Security findings in Linear, Jira, GitHub issues, or draft GitHub security advisories. Use it for one finding or an explicitly selected batch of up to 25 findings tracked as Linear, Jira, or GitHub issues. Includes duplicate checks, exact previews, approval-gated writes, and readback. Do not use it for scans or fixes.
 ---
 
 # Track Findings
 
 ## Objective
 
-Track findings from one sealed Codex Security scan as Linear issues, Jira issues, GitHub issues, or one draft GitHub security advisory. Do not change the scan bundle. Use one provider and one destination per run. Show the exact payload and get approval before writing.
+Track findings from one sealed Copilot Security scan as Linear issues, Jira issues, GitHub issues, or one draft GitHub security advisory. Do not change the scan bundle. Use one provider and one destination per run. Show the exact payload and get approval before writing.
 
 GitHub advisory mode creates one private draft in the verified public canonical source repository through authenticated `gh api --hostname github.com`. Read `references/github-security-advisories.md` in full before advisory work.
 

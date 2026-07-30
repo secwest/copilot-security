@@ -20,7 +20,9 @@ void launch().then(
     process.exitCode = exitCode;
   },
   () => {
-    process.stderr.write("codex-security: Failed to start Codex Security.\n");
+    process.stderr.write(
+      "copilot-security: Failed to start Copilot Security.\n",
+    );
     process.exitCode = 2;
   },
 );

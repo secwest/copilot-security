@@ -1,8 +1,13 @@
-export { CodexSecurity } from "./api.js";
+export {
+  CodexSecurity,
+  CodexSecurity as CopilotSecurity,
+  scanAuthentication,
+} from "./api.js";
 export { estimateScanCost } from "./cost.js";
 export type { ScanCost } from "./cost.js";
 export type {
   CodexSecurityMetadata,
+  CopilotSecurityMetadata,
   ScanAuthMode,
   ScanAuthentication,
   ScanOptions,
@@ -30,10 +35,17 @@ export {
 export type { ProtectedScanPathKind } from "./errors.js";
 export {
   DEFAULT_CODEX_CONFIG,
+  DEFAULT_COPILOT_CONFIG,
   mergedCodexConfig,
+  mergedCopilotConfig,
   writeCodexConfig,
 } from "./config.js";
-export type { CodexSecurityConfig, JsonObject, JsonValue } from "./config.js";
+export type {
+  CodexSecurityConfig,
+  CopilotSecurityConfig,
+  JsonObject,
+  JsonValue,
+} from "./config.js";
 export { loadContract, requireScanFile } from "./contract.js";
 export type { LoadedContract, ScanExpectation } from "./contract.js";
 export type * from "./models.js";
@@ -42,6 +54,7 @@ export type { ScanResultOptions, TurnResultMetadata } from "./result.js";
 export {
   bootstrapPlugin,
   bundledPluginRoot,
+  copilotSecurityStateDirectory,
   cleanupSdkDirectory,
   createIsolatedHome,
   createMarketplace,

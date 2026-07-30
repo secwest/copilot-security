@@ -64,7 +64,7 @@ export async function prepareKnowledgeBase(
     sources.add(source);
   }
 
-  const path = await mkdtemp(join(tmpdir(), "codex-security-knowledge-"));
+  const path = await mkdtemp(join(tmpdir(), "copilot-security-knowledge-"));
   try {
     let index = 0;
     for (const document of documents) {

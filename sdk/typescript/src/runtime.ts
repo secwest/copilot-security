@@ -108,11 +108,21 @@ export function codexSecurityStateDirectory(
       )?.[1]
       ?.trim();
   };
-  const configured = environmentValue("CODEX_SECURITY_STATE_DIR");
+  const configured =
+    environmentValue("COPILOT_SECURITY_STATE_DIR") ??
+    environmentValue("CODEX_SECURITY_STATE_DIR");
   if (configured !== undefined) return resolve(expandHome(configured));
-  const codexHome = environmentValue("CODEX_HOME") ?? join(homedir(), ".codex");
-  return resolve(expandHome(codexHome), "state", "plugins", "codex-security");
+  const copilotHome =
+    environmentValue("COPILOT_HOME") ?? join(homedir(), ".copilot");
+  return resolve(
+    expandHome(copilotHome),
+    "state",
+    "plugins",
+    "copilot-security",
+  );
 }
+
+export const copilotSecurityStateDirectory = codexSecurityStateDirectory;
 
 export function codexSecurityCredentialHome(
   environment: ProcessEnvironment = process.env,

@@ -1,6 +1,6 @@
 # Rich Finding Detail Fields
 
-For every reportable finding in `findings.json`, preserve the validated reasoning and the exact source snippets that prove it. The Codex Security workspace renders these fields directly; it does not recover missing analysis from `report.md` or read source files after the scan.
+For every reportable finding in `findings.json`, preserve the validated reasoning and the exact source snippets that prove it. The Copilot Security workspace renders these fields directly; it does not recover missing analysis from `report.md` or read source files after the scan.
 
 ## Writing Rules
 

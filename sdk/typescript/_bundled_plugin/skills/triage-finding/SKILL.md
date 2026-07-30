@@ -10,7 +10,7 @@ description: "Use when the user supplies or imports existing security findings, 
 Triage existing security findings against the current repository using static code evidence. Return one evidence-backed verdict per supplied finding:
 `confirmed`, `not_actionable`, or `needs_review`. For `confirmed` and `needs_review` findings, also assign a discrete exploitability stack rank inside that verdict's own queue.
 
-This skill is for backlog burn-down. It starts from findings the user already has, such as SARIF results, CVEs, advisories, scanner tickets, bug bounty reports, Jira/Linear issues, or Codex Security finding artifacts. It is not a repository-wide scan, dynamic validation run, fix implementation, dashboard, or queue manager.
+This skill is for backlog burn-down. It starts from findings the user already has, such as SARIF results, CVEs, advisories, scanner tickets, bug bounty reports, Jira/Linear issues, or Copilot Security finding artifacts. It is not a repository-wide scan, dynamic validation run, fix implementation, dashboard, or queue manager.
 
 ## Backlog Burn-Down Scope
 
@@ -18,7 +18,7 @@ Treat multiple supplied findings as one backlog-reduction problem, not as a set 
 
 For now, run the workflow inline in the current thread, but structure the work like a backlog pipeline:
 
-- Build the normalized triage item list for the whole supplied or imported collection before assigning verdicts. Here, normalize means: assign `triage_item_id`, preserve source ids and references, extract the fields in the Inputs section below, and record missing fields as proof gaps without inventing scanner, severity, remediation, or generated Codex Security fields.
+- Build the normalized triage item list for the whole supplied or imported collection before assigning verdicts. Here, normalize means: assign `triage_item_id`, preserve source ids and references, extract the fields in the Inputs section below, and record missing fields as proof gaps without inventing scanner, severity, remediation, or generated Copilot Security fields.
 - Triage each normalized item using static evidence and keep one output result per supplied finding.
 - Rank the `confirmed` and `needs_review` results as an action queue for backlog burn-down.
 - Do not perform deduplication in this skill. If duplicate-looking inputs are present, keep one result per supplied finding; deduplication belongs in a separate workflow.
@@ -28,7 +28,7 @@ For now, run the workflow inline in the current thread, but structure the work l
 
 Do not use `../../schemas/findings.schema.json` as the canonical data shape for input normalization.
 
-That schema describes completed Codex Security scan output. It requires generated fields such as `scanId`, `findingId`, `occurrenceId`, fingerprints,
+That schema describes completed Copilot Security scan output. It requires generated fields such as `scanId`, `findingId`, `occurrenceId`, fingerprints,
 severity, remediation, provenance, and at least one location. Most triage inputs are incomplete external claims, and forcing them into that schema before investigation would require inventing stable IDs, severity, remediation, or locations.
 
 Use the schema only as an optional compatibility source when the user supplies an existing `codex-security.findings` JSON artifact. In that case, extract the available fields into the triage normalization record and preserve the original IDs as source identifiers. The triage result contract is defined in `references/triage-result-contract.md`.
@@ -85,7 +85,7 @@ Fetch a GitHub Issue only when the user explicitly supplies a specific issue URL
 If no finding is supplied, do not inspect the repository, do not classify a verdict, and do not emit the `triage-finding/v0` JSON contract.
 
 Ask the user to provide a finding to triage. Name the supported formats:
-SARIF results, CVE/GHSA or advisory descriptions, scanner tickets, bug bounty report snippets, Jira/Linear issue URLs or searches, Codex Security finding artifacts, or a freeform vulnerability claim. If useful, ask for the repository path or affected file/component at the same time.
+SARIF results, CVE/GHSA or advisory descriptions, scanner tickets, bug bounty report snippets, Jira/Linear issue URLs or searches, Copilot Security finding artifacts, or a freeform vulnerability claim. If useful, ask for the repository path or affected file/component at the same time.
 
 ## Inputs
 
@@ -95,7 +95,7 @@ Start by extracting:
 - GitHub repository owner/name and selected GitHub REST source, when the input is a GitHub repository intake request
 - Jira/Linear source query, issue key or identifier, URL, project, status,
   labels, components, priority, assignee, reporter, timestamps, and issue type when the input is imported from a ticketing system
-- input id, scanner id, SARIF rule/result id, CVE/GHSA id, ticket id, or Codex Security `findingId`/`occurrenceId` when present
+- input id, scanner id, SARIF rule/result id, CVE/GHSA id, ticket id, or Copilot Security `findingId`/`occurrenceId` when present
 - title or short claim
 - source type: `sarif`, `cve`, `advisory`, `scanner_ticket`,
   `bug_bounty`, `codex_security_finding`, `freeform`, or `unknown`
@@ -135,7 +135,7 @@ If no policy applies, record that absence as a proof gap and continue with the n
 3. Normalize each supplied or imported finding into a triage item.
    - Assign `triage_item_id` values such as `triage-001`.
    - Preserve external source ids in `input_id`.
-   - Do not invent scanner fields, generated Codex Security ids, severity, or remediation just to satisfy another schema.
+   - Do not invent scanner fields, generated Copilot Security ids, severity, or remediation just to satisfy another schema.
 4. Resolve the repository path and git revision when available.
 5. Apply the SECURITY.md Guidance Gate before source/control/sink tracing.
    - Read available repository security policy before treating an input as
@@ -191,7 +191,7 @@ If no policy applies, record that absence as a proof gap and continue with the n
 10. Assign exploitability stack ranks for `confirmed` and `needs_review` findings.
 11. For `confirmed` findings, add owner hints after verdicting when local ownership evidence is easy to derive.
 12. Build one valid `triage-finding/v0` result using the contract in `references/triage-result-contract.md`.
-13. If the Codex Security app tool `open_codex_security_triage_results` is available, call it with the complete result before the final response so the app renders the findings table. After a successful tool call, return a concise Markdown summary; do not paste the full JSON block unless the user asks for the raw contract.
+13. If the Copilot Security app tool `open_codex_security_triage_results` is available, call it with the complete result before the final response so the app renders the findings table. After a successful tool call, return a concise Markdown summary; do not paste the full JSON block unless the user asks for the raw contract.
 14. If the app tool is unavailable or rejects the result, fall back to the fenced JSON block alongside the concise Markdown summary.
 
 ## Surface and Boundary Gate

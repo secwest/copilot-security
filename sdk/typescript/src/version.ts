@@ -8,10 +8,10 @@ const PACKAGE_VERSIONS = packageVersions(
 /** npm-compatible successor to the Python package version 0.1.0b3. */
 export const VERSION = PACKAGE_VERSIONS.package;
 export const CODEX_SDK_VERSION = PACKAGE_VERSIONS.sdk;
-export const CODEX_EXECUTABLE_VERSION = PACKAGE_VERSIONS.executable;
+export const CODEX_EXECUTABLE_VERSION = "system";
 export const BUNDLED_PLUGIN_VERSION = "0.1.14" as const;
 
-const PACKAGE_NAME = "@openai/codex-security";
+const PACKAGE_NAME = "@secwest/copilot-security";
 const VERSION_PATTERN =
   /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u;
 
@@ -44,7 +44,7 @@ export function updateCommand(
     return `npx ${PACKAGE_NAME}@latest`;
   }
   if (path.includes("/.install/node_modules/")) {
-    return "download and extract the latest Codex Security release";
+    return "download and extract the latest Copilot Security release";
   }
 
   const global =
@@ -128,7 +128,7 @@ export async function checkForUpdate({
 
 export function formatUpdateNotice(notice: UpdateNotice): string {
   const lines = [
-    `Codex Security update available: ${notice.currentVersion} → ${notice.latestVersion}`,
+    `Copilot Security update available: ${notice.currentVersion} → ${notice.latestVersion}`,
     `Run: ${notice.command}`,
   ];
   const width = Math.max(...lines.map((line) => line.length));
@@ -184,24 +184,15 @@ function packageVersions(url: URL): {
       throw new Error("dependencies must be an object");
     }
     const sdk =
-      "@openai/codex-sdk" in dependencies
-        ? dependencies["@openai/codex-sdk"]
+      "@github/copilot-sdk" in dependencies
+        ? dependencies["@github/copilot-sdk"]
         : undefined;
-    const executable =
-      "@openai/codex" in dependencies
-        ? dependencies["@openai/codex"]
-        : undefined;
-    if (
-      typeof sdk !== "string" ||
-      sdk.length === 0 ||
-      typeof executable !== "string" ||
-      executable.length === 0
-    ) {
-      throw new Error("Codex dependencies must have non-empty versions");
+    if (typeof sdk !== "string" || sdk.length === 0) {
+      throw new Error("Copilot SDK dependency must have a non-empty version");
     }
-    return { package: manifest.version, sdk, executable };
+    return { package: manifest.version, sdk, executable: "system" };
   } catch (error) {
-    throw new Error("Unable to read Codex Security package versions.", {
+    throw new Error("Unable to read Copilot Security package versions.", {
       cause: error,
     });
   }

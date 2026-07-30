@@ -6,7 +6,7 @@ Use this contract for `$triage-finding` first-pass output. The skill performs st
 
 `../../../schemas/findings.schema.json` is not the normalization shape for triage inputs.
 
-That schema is for completed Codex Security scan artifacts. It requires scan metadata, generated finding ids, occurrence ids, fingerprints, severity,
+That schema is for completed Copilot Security scan artifacts. It requires scan metadata, generated finding ids, occurrence ids, fingerprints, severity,
 remediation, provenance, and locations. Triage inputs often arrive as incomplete claims from SARIF snippets, CVEs, advisories, scanner tickets, bug bounty reports, or pasted text. The normalization step should preserve those claims without inventing completed-scan fields.
 
 If the user supplies a valid `codex-security.findings` artifact, use it as an input source and map its fields into this triage contract. Preserve `findingId`, `occurrenceId`, and `ruleId` as source identifiers; do not require new triage inputs to conform to the completed-scan schema.

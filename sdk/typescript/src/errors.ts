@@ -1,6 +1,6 @@
 import { formatUsd, type ScanCost } from "./cost.js";
 
-/** Base error for Codex Security SDK failures. */
+/** Base error for Copilot Security SDK failures. */
 export class CodexSecurityError extends Error {
   public constructor(message: string, options?: ErrorOptions) {
     super(message, options);

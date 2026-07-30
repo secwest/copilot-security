@@ -80,11 +80,12 @@ const required = [
   "package/package.json",
   "package/README.md",
   "package/LICENSE",
-  "package/bin/codex-security.mjs",
+  "package/bin/copilot-security.mjs",
   "package/dist/index.js",
   "package/dist/index.d.ts",
   "package/dist/cli.js",
   "package/_bundled_plugin/.codex-plugin/plugin.json",
+  "package/_bundled_plugin/plugin.json",
 ];
 
 for (const file of required) {
@@ -136,7 +137,7 @@ const allowedRoot = new Set([
   "package/package.json",
   "package/README.md",
   "package/LICENSE",
-  "package/bin/codex-security.mjs",
+  "package/bin/copilot-security.mjs",
 ]);
 const distFiles = new Set(
   [
@@ -146,6 +147,7 @@ const distFiles = new Set(
     "cli",
     "config",
     "contract",
+    "copilot-client",
     "cost",
     "errors",
     "index",
@@ -186,12 +188,12 @@ for (const file of files) {
 }
 
 const listing = tar(["-tvzf", archive], "utf8");
-if (/^[^d-]/mu.test(listing)) {
+const listingLines = listing.split(/\r?\n/u).filter(Boolean);
+if (listingLines.some((line) => !/^[d-]/u.test(line))) {
   throw new Error(
     "npm tarball contains a non-regular entry (symbolic or hard link, device, or pipe).",
   );
 }
-const listingLines = listing.split(/\r?\n/u).filter(Boolean);
 if (
   listingLines.length !== entries.length ||
   listingLines.some(
@@ -201,18 +203,21 @@ if (
   throw new Error("npm tarball contains an invalid tar entry.");
 }
 const launcherPermissions =
-  listingLines[entries.indexOf("package/bin/codex-security.mjs")]?.split(
+  listingLines[entries.indexOf("package/bin/copilot-security.mjs")]?.split(
     /\s/u,
     1,
   )[0] ?? "";
-if ([3, 6, 9].some((index) => launcherPermissions[index] !== "x")) {
+if (
+  process.platform !== "win32" &&
+  [3, 6, 9].some((index) => launcherPermissions[index] !== "x")
+) {
   throw new Error("npm package CLI launcher is not executable.");
 }
 const packageJson = JSON.parse(
   tar(["-xOf", archive, "package/package.json"]).toString("utf8"),
 );
 if (
-  packageJson.name !== "@openai/codex-security" ||
+  packageJson.name !== "@secwest/copilot-security" ||
   packageJson.license !== "Apache-2.0"
 ) {
   throw new Error("npm package does not contain the expected public metadata.");

@@ -1,6 +1,6 @@
 # Final Report and Codex Review Directives
 
-Use this guidance when authoring canonical report semantics and returning the generated Codex Security report and review directives.
+Use this guidance when authoring canonical report semantics and returning the generated Copilot Security report and review directives.
 
 ## Final Outputs
 
@@ -18,7 +18,7 @@ In the final response, link the generated markdown report path as the primary re
 
 Every scan mode uses the same final report pipeline. The model authors canonical JSON only; it must not author, repair, or treat an existing `report.md` as input. For an app-backed running scan, author `scan-manifest.json` as an unsealed draft and omit `scan.sealedAt` and `scan.artifacts`; finalization owns the exact workbench timestamps, seal, artifact digests, and derived finding identities. `complete-scan` invokes finalization, which validates and enriches the canonical JSON, seals the canonical JSON and evidence artifacts, then deterministically generates and validates `report.md` as an unsealed downstream projection. Missing report prose must be added to the structured canonical fields rather than recovered from a separately authored report.
 
-When `complete_codex_security_scan` is available, use it to complete the scan. In Codex CLI or another terminal/chat host without that tool, run `python <plugin_dir>/scripts/finalize_scan_contract.py --scan-dir <scan_dir> --source-root <repo_root>` after writing the completed canonical JSON. Do not mark the scan goal complete until this command succeeds and the generated markdown report exists.
+When `complete_codex_security_scan` is available, use it to complete the scan. In Copilot CLI or another terminal/chat host without that tool, run `python <plugin_dir>/scripts/finalize_scan_contract.py --scan-dir <scan_dir> --source-root <repo_root>` after writing the completed canonical JSON. Do not mark the scan goal complete until this command succeeds and the generated markdown report exists.
 
 Before completion, verify on disk that the workflow-owned `scan-manifest.json`, `findings.json`, and `coverage.json` exist and contain the completed canonical JSON. Completion is finalization only: it validates and seals already-authored canonical artifacts and generates `report.md`; it does not create missing artifacts or run skipped scan phases.
 

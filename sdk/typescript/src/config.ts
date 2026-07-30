@@ -12,9 +12,16 @@ export interface JsonObject {
 
 export interface CodexSecurityConfig {
   pluginPath?: string;
+  /** Path to the installed GitHub Copilot CLI executable. */
+  copilotPath?: string;
+  /** Copilot-native model and reasoning overrides. */
+  copilotOverrides?: JsonObject;
+  /** @deprecated Use copilotOverrides. Retained for recipe compatibility. */
   codexOverrides?: JsonObject;
   pythonPath?: string;
 }
+
+export type CopilotSecurityConfig = CodexSecurityConfig;
 
 export interface ScanModelConfiguration {
   model: string;
@@ -38,6 +45,8 @@ export const DEFAULT_CODEX_CONFIG: Readonly<JsonObject> = {
     sandbox: "unelevated",
   },
 };
+
+export const DEFAULT_COPILOT_CONFIG = DEFAULT_CODEX_CONFIG;
 
 deepFreezeJson(DEFAULT_CODEX_CONFIG);
 
@@ -83,6 +92,8 @@ export async function mergedCodexConfig(
   }
   return deepMerge(cloneJson(DEFAULT_CODEX_CONFIG), overrides);
 }
+
+export const mergedCopilotConfig = mergedCodexConfig;
 
 function normalizeLegacyWindowsSandboxOverride(overrides: JsonObject): void {
   const features = overrides["features"];

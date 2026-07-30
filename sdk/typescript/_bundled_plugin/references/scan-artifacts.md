@@ -1,6 +1,6 @@
 # Scan Artifact Paths
 
-Use these shared path conventions for Codex Security scan workflows unless the user explicitly provides different input or output paths.
+Use these shared path conventions for Copilot Security scan workflows unless the user explicitly provides different input or output paths.
 
 ## Base Paths
 

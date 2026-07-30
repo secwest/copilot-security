@@ -1,0 +1,22 @@
+{
+  "name": "copilot-security",
+  "version": "0.1.14",
+  "description": "Copilot CLI workflows for security scans, analysis, validation, and investigation.",
+  "author": {
+    "name": "Secwest",
+    "email": "dr@secwest.net",
+    "url": "https://secwest.net/"
+  },
+  "homepage": "https://github.com/secwest/copilot-security",
+  "repository": "https://github.com/secwest/copilot-security",
+  "license": "Apache-2.0",
+  "keywords": [
+    "security",
+    "code-review",
+    "diff-review",
+    "appsec",
+    "threat-modeling"
+  ],
+  "category": "security",
+  "skills": "skills/"
+}

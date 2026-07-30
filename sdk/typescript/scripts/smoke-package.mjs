@@ -224,19 +224,19 @@ try {
     [
       "--input-type=module",
       "--eval",
-      `const sdk = await import(${JSON.stringify(packageManifest.name)}); if (typeof sdk.CodexSecurity !== "function") throw new Error("The installed package does not export CodexSecurity.");`,
+      `const sdk = await import(${JSON.stringify(packageManifest.name)}); if (typeof sdk.CopilotSecurity !== "function") throw new Error("The installed package does not export CopilotSecurity.");`,
     ],
     { cwd: consumer },
   );
 
   assert.equal(
-    typeof installedManifest.bin?.["codex-security"],
+    typeof installedManifest.bin?.["copilot-security"],
     "string",
-    "Installed package must declare the codex-security launcher.",
+    "Installed package must declare the copilot-security launcher.",
   );
   const launcher = resolve(
     installedRoot,
-    installedManifest.bin["codex-security"],
+    installedManifest.bin["copilot-security"],
   );
   assert.ok(
     launcher.startsWith(`${installedRoot}${sep}`),
@@ -252,12 +252,12 @@ try {
     consumer,
     "node_modules",
     ".bin",
-    process.platform === "win32" ? "codex-security.cmd" : "codex-security",
+    process.platform === "win32" ? "copilot-security.cmd" : "copilot-security",
   );
   assert.equal(
     (await stat(shim)).isFile(),
     true,
-    "npm must create the published codex-security executable shim.",
+    "npm must create the published copilot-security executable shim.",
   );
 
   function runInstalledCli(argument) {
@@ -277,7 +277,7 @@ try {
   assert.equal(version.trim(), packageManifest.version);
 
   const help = runInstalledCli("--help");
-  assert.match(help, /Usage: codex-security\b/u);
+  assert.match(help, /Usage: copilot-security\b/u);
 
   console.log(
     `Validated installed ${packageManifest.name}@${packageManifest.version}: public import, CLI, and ${expectedPluginFiles.length} bundled plugin files.`,

@@ -1,6 +1,6 @@
 # SARIF Adapter
 
-SARIF is a deterministic export, not the Codex Security source of truth.
+SARIF is a deterministic export, not the Copilot Security source of truth.
 
 The adapter:
 

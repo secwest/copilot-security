@@ -4,7 +4,11 @@ import { chmod, lstat, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
-import { Codex, type CodexOptions } from "@openai/codex-sdk";
+import {
+  CopilotScannerClient,
+  prepareCopilotRuntime,
+  type CopilotScannerOptions,
+} from "./copilot-client.js";
 import {
   accountStatus,
   CodexLoginHandle,
@@ -129,6 +133,8 @@ export interface ScanOptions {
   expectedPluginVersion?: string;
   failureSeverity?: SeverityLevel;
   maxCostUsd?: number;
+  /** Native Copilot AI-credit limit for the root session and subagents. */
+  maxAiCredits?: number;
   onCost?: (cost: Readonly<ScanCost>) => void;
   onOutputArchived?: (archiveDir: string) => void;
   onOutputDirReady?: (scanDir: string) => void;
@@ -145,16 +151,29 @@ export interface ScanOptions {
   signal?: AbortSignal;
 }
 
-export type ScanAuthMode = "auto" | "chatgpt" | "api-key";
+export type ScanAuthMode =
+  | "auto"
+  | "github"
+  | "token"
+  /** @deprecated Copilot Security treats this as "github". */
+  | "chatgpt"
+  /** @deprecated Copilot Security treats this as "token". */
+  | "api-key";
 
 export type ScanAuthentication =
   | {
-      method: "api_key";
-      source: "OPENAI_API_KEY" | "CODEX_API_KEY";
+      method: "github_token";
+      source: "COPILOT_GITHUB_TOKEN" | "GH_TOKEN" | "GITHUB_TOKEN";
       verified: false;
     }
   | {
       method: "stored_credentials";
+      verified: false;
+    }
+  /** @deprecated Legacy Codex test/recipe compatibility. */
+  | {
+      method: "api_key";
+      source: "OPENAI_API_KEY" | "CODEX_API_KEY";
       verified: false;
     };
 
@@ -184,6 +203,7 @@ export interface ScanPreflight {
   model: string;
   reasoningEffort: string;
   maxCostUsd?: number;
+  maxAiCredits?: number;
 }
 
 interface LocalScanInputs
@@ -191,15 +211,18 @@ interface LocalScanInputs
   protectedRoot: string;
 }
 
-export interface CodexSecurityMetadata {
-  sdk: "@openai/codex-sdk";
+export interface CopilotSecurityMetadata {
+  sdk: "@github/copilot-sdk" | "@openai/codex-sdk";
   sdkVersion: string;
-  executable: "@openai/codex";
+  executable: "github/copilot-cli" | "@openai/codex";
   executableVersion: string;
 }
 
+/** @deprecated Use CopilotSecurityMetadata. */
+export type CodexSecurityMetadata = CopilotSecurityMetadata;
+
 interface ClientDependencies {
-  createCodex(options: CodexOptions): CodexClientLike;
+  createCodex(options: CopilotScannerOptions): CodexClientLike;
   environment: ProcessEnvironment;
   prepareRuntime?: (
     config: Readonly<CodexSecurityConfig>,
@@ -213,18 +236,20 @@ interface ClientDependencies {
 }
 
 const DEFAULT_DEPENDENCIES: ClientDependencies = {
-  createCodex: (options) => new Codex(options),
+  createCodex: (options) => new CopilotScannerClient(options),
   environment: process.env,
+  prepareRuntime: async (config, signal) =>
+    await prepareCopilotRuntime(config, process.env, signal),
 };
 
 const SCAN_PERMISSION_PROFILE = "codex_security_scan";
 
 export class CodexSecurity {
   public readonly config: Readonly<CodexSecurityConfig>;
-  public readonly metadata: CodexSecurityMetadata = {
-    sdk: "@openai/codex-sdk",
+  public readonly metadata: CopilotSecurityMetadata = {
+    sdk: "@github/copilot-sdk",
     sdkVersion: CODEX_SDK_VERSION,
-    executable: "@openai/codex",
+    executable: "github/copilot-cli",
     executableVersion: CODEX_EXECUTABLE_VERSION,
   };
 
@@ -234,7 +259,7 @@ export class CodexSecurity {
   #activeOperation: Promise<unknown> | null = null;
   #runtimePromise: Promise<PreparedRuntime> | null = null;
   #runtime: PreparedRuntime | null = null;
-  #runtimeCredentialSource: "api_key" | "stored_credentials" | null = null;
+  #runtimeCredentialSource: "github_token" | "stored_credentials" | null = null;
   #closed = false;
   #closePromise: Promise<void> | null = null;
 
@@ -294,6 +319,9 @@ export class CodexSecurity {
       ...(options.maxCostUsd === undefined
         ? {}
         : { maxCostUsd: options.maxCostUsd }),
+      ...(options.maxAiCredits === undefined
+        ? {}
+        : { maxAiCredits: options.maxAiCredits }),
     };
   }
 
@@ -410,7 +438,7 @@ export class CodexSecurity {
       checkOpen();
       if (
         authentication.method === "stored_credentials" &&
-        this.#runtimeCredentialSource === "api_key"
+        this.#runtimeCredentialSource === "github_token"
       ) {
         const ambientHome =
           environmentValue(this.#dependencies.environment, "CODEX_HOME") ??
@@ -424,11 +452,11 @@ export class CodexSecurity {
           : null;
       }
       const apiKey =
-        authentication.method === "api_key"
+        authentication.method === "github_token"
           ? environmentApiKey(this.#dependencies.environment)
           : null;
       if (apiKey !== null) {
-        this.#runtimeCredentialSource = "api_key";
+        this.#runtimeCredentialSource = "github_token";
       }
       if (
         !runtime.credentialsAvailable &&
@@ -446,9 +474,8 @@ export class CodexSecurity {
       }
       if (!runtime.credentialsAvailable && apiKey === null) {
         throw new AuthenticationRequiredError(
-          "No credentials were found. Run 'codex-security login', use " +
-            "'codex-security login --device-auth' on a remote or headless machine, or set " +
-            "OPENAI_API_KEY or CODEX_API_KEY for CI.",
+          "No Copilot credentials were found. Run 'copilot-security login' " +
+            "or set COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN for CI.",
         );
       }
       notifyObserver(
@@ -570,16 +597,18 @@ export class CodexSecurity {
         options.failureSeverity,
         knowledgeBase?.sources,
         options.maxCostUsd,
+        options.maxAiCredits,
       );
       const workbenchOptions: WorkbenchCommandOptions = {
         python,
         pluginRoot: runtime.plugin.pluginRoot,
         environment: {
           ...selectedScanEnvironment(runtime.environment, options.auth),
+          COPILOT_SECURITY_STATE_DIR: stateDirectory,
           CODEX_SECURITY_STATE_DIR: stateDirectory,
         },
         signal,
-        failureMessage: "Could not save the Codex Security scan",
+        failureMessage: "Could not save the Copilot Security scan",
       };
       const registration = await workbench(workbenchOptions, [
         "register-cli-scan",
@@ -638,7 +667,7 @@ export class CodexSecurity {
         typeof registeredRevision !== "string"
       ) {
         throw new CodexSecurityError(
-          "The Codex Security workbench returned an invalid scan registration.",
+          "The Copilot Security workbench returned an invalid scan registration.",
         );
       }
       const targetRevision =
@@ -649,7 +678,7 @@ export class CodexSecurity {
         {
           ...workbenchOptions,
           failureMessage:
-            "Could not load Codex Security false-positive feedback",
+            "Could not load Copilot Security false-positive feedback",
         },
         ["get-scan-feedback", "--scan-id", scanId],
       );
@@ -667,7 +696,7 @@ export class CodexSecurity {
         )
       ) {
         throw new CodexSecurityError(
-          "The Codex Security workbench returned invalid false-positive feedback for this scan.",
+          "The Copilot Security workbench returned invalid false-positive feedback for this scan.",
         );
       }
       checkOpen();
@@ -696,7 +725,7 @@ export class CodexSecurity {
         normalized.kind === "paths"
           ? join(
               dirname(runtime.codexHome),
-              `codex-security-target-paths-${randomUUID()}.json`,
+              `copilot-security-target-paths-${randomUUID()}.json`,
             )
           : null;
       const runtimePaths = {
@@ -726,6 +755,14 @@ export class CodexSecurity {
           ? {}
           : { CODEX_SECURITY_TARGET_PATHS_FILE: targetPathsFile }),
       };
+      const copilotRuntimePaths = Object.fromEntries(
+        Object.entries(runtimePaths)
+          .filter(([name]) => name.startsWith("CODEX_SECURITY_"))
+          .map(([name, value]) => [
+            name.replace(/^CODEX_SECURITY_/u, "COPILOT_SECURITY_"),
+            value,
+          ]),
+      );
       const environment = {
         ...pluginExecutionEnvironment(
           python,
@@ -733,18 +770,25 @@ export class CodexSecurity {
             selectedScanEnvironment(runtime.environment, options.auth),
           ),
         ),
+        COPILOT_HOME: runtime.codexHome,
         CODEX_HOME: runtime.codexHome,
         ...runtimePaths,
+        ...copilotRuntimePaths,
       };
       const codex = this.#dependencies.createCodex({
-        ...(apiKey === null ? {} : { apiKey }),
-        env: definedEnvironment(
-          selectedScanEnvironment(environment, "chatgpt"),
+        cliPath:
+          environmentValue(runtime.environment, "COPILOT_CLI_PATH") ??
+          "copilot",
+        environment: definedEnvironment(
+          selectedScanEnvironment(environment, options.auth),
         ),
-        config: {
-          default_permissions: SCAN_PERMISSION_PROFILE,
-          allow_login_shell: false,
-        },
+        model,
+        reasoningEffort:
+          scanModelConfiguration(effectiveConfig).reasoningEffort,
+        pluginRoot: runtime.plugin.pluginRoot,
+        ...(options.maxAiCredits === undefined
+          ? {}
+          : { maxAiCredits: options.maxAiCredits }),
       });
       const thread = codex.startThread({
         workingDirectory: scanDir,
@@ -893,7 +937,7 @@ export class CodexSecurity {
       await setCodexSecurityCredentialLogout(runtime.codexHome, false);
     }
     runtime.credentialsAvailable = true;
-    this.#runtimeCredentialSource = "api_key";
+    this.#runtimeCredentialSource = "github_token";
   }
 
   public async loginChatGPT(): Promise<CodexLoginHandle> {
@@ -1053,7 +1097,7 @@ export class CodexSecurity {
     this.#requireOpen();
     if (this.#activeOperation !== null) {
       throw new CodexSecurityError(
-        "A Codex Security operation is already in progress.",
+        "A Copilot Security operation is already in progress.",
       );
     }
     const activeOperation = operation();
@@ -1171,6 +1215,14 @@ export class CodexSecurity {
     ) {
       throw new CodexSecurityError(
         "The scan cost limit must be a positive USD amount.",
+      );
+    }
+    if (
+      options.maxAiCredits !== undefined &&
+      (!Number.isFinite(options.maxAiCredits) || options.maxAiCredits <= 0)
+    ) {
+      throw new CodexSecurityError(
+        "The Copilot AI-credit limit must be a positive number.",
       );
     }
     const repositoryPath = resolveRepositoryPath(repository);
@@ -1292,7 +1344,7 @@ export class CodexSecurity {
       if (cleanupFailures.length > 0) {
         throw new AggregateError(
           [error, ...cleanupFailures],
-          "Codex Security runtime preparation failed and its isolated runtime could not be cleaned up.",
+          "Copilot Security runtime preparation failed and its isolated runtime could not be cleaned up.",
           { cause: error },
         );
       }
@@ -1427,19 +1479,19 @@ export async function runScanEvents(
     }
     if (options.signal.aborted) {
       throw new ScanInterruptedError(
-        `Codex Security scan was interrupted; partial output remains at ${options.scanDir}.`,
+        `Copilot Security scan was interrupted; partial output remains at ${options.scanDir}.`,
         options.scanDir,
       );
     }
     if (status !== "completed") {
       throw new IncompleteScanError(
         lastStreamError ??
-          "Codex Security event stream ended before the turn completed.",
+          "Copilot Security event stream ended before the turn completed.",
       );
     }
     if (threadId === null) {
       throw new IncompleteScanError(
-        "Codex Security did not report a thread ID.",
+        "Copilot Security did not report a thread ID.",
       );
     }
     if (options.onFinalize !== undefined) {
@@ -1461,7 +1513,7 @@ export async function runScanEvents(
     );
     if (options.signal.aborted) {
       throw new ScanInterruptedError(
-        `Codex Security scan was interrupted; partial output remains at ${options.scanDir}.`,
+        `Copilot Security scan was interrupted; partial output remains at ${options.scanDir}.`,
         options.scanDir,
       );
     }
@@ -1472,7 +1524,7 @@ export async function runScanEvents(
     }
     if (options.signal.aborted && !(error instanceof ScanInterruptedError)) {
       throw new ScanInterruptedError(
-        `Codex Security scan was interrupted; partial output remains at ${options.scanDir}.`,
+        `Copilot Security scan was interrupted; partial output remains at ${options.scanDir}.`,
         options.scanDir,
         { cause: error },
       );
@@ -1497,8 +1549,8 @@ async function scanPrompt(
     );
   }
   return [
-    `Use the installed $codex-security:${skillName} skill at "$CODEX_SECURITY_PLUGIN_ROOT/skills/${skillName}/SKILL.md".`,
-    "Run this Codex Security scan non-interactively.",
+    `Use the installed $copilot-security:${skillName} skill at "$COPILOT_SECURITY_PLUGIN_ROOT/skills/${skillName}/SKILL.md".`,
+    "Run this Copilot Security scan non-interactively.",
     ...(skillName === "deep-security-scan"
       ? []
       : [
@@ -1514,7 +1566,7 @@ async function scanPrompt(
     'Use exactly "$CODEX_SECURITY_TARGET_KIND" as scan.target.kind; do not infer the target kind from the checkout.',
     'When "$CODEX_SECURITY_TARGET_REVISION" is set, use its exact value as scan.target.revision.',
     'When "$CODEX_SECURITY_TARGET_SNAPSHOT_DIGEST" is set, use its exact value as scan.target.snapshotDigest. For git_revision, omit scan.target.snapshotDigest.',
-    'Use exactly "codex-security-plugin" as scan.producer.name.',
+    'Use exactly "copilot-security-plugin" as scan.producer.name.',
     ...(hasConfigPath
       ? [
           'For normal config-preflight helper calls, append --config "$CODEX_SECURITY_CONFIG_PATH" so preflight reads the sanitized active runtime config. Preserve the documented runtime and --effective-config arguments for session-only values.',
@@ -1564,6 +1616,7 @@ function scanRecipe(
   failOnSeverity?: SeverityLevel,
   knowledgeBasePaths?: string[],
   maxCostUsd?: number,
+  maxAiCredits?: number,
 ): JsonObject {
   return {
     repository,
@@ -1582,6 +1635,7 @@ function scanRecipe(
     ...(failOnSeverity === undefined ? {} : { failOnSeverity }),
     ...(knowledgeBasePaths === undefined ? {} : { knowledgeBasePaths }),
     ...(maxCostUsd === undefined ? {} : { maxCostUsd }),
+    ...(maxAiCredits === undefined ? {} : { maxAiCredits }),
   };
 }
 
@@ -1623,7 +1677,7 @@ async function collectResult(
   }
   if (missing.length > 0) {
     throw new IncompleteScanError(
-      `Codex Security scan completed without required artifacts: ${missing.join(", ")}`,
+      `Copilot Security scan completed without required artifacts: ${missing.join(", ")}`,
     );
   }
   const { manifest, findings, coverage } = await loadContract(scanDir, {
@@ -1658,31 +1712,32 @@ export function scanAuthentication(
   environment: ProcessEnvironment,
   auth: ScanAuthMode = "auto",
 ): ScanAuthentication {
-  if (auth === "chatgpt") {
+  if (auth === "github" || auth === "chatgpt") {
     return { method: "stored_credentials", verified: false };
   }
   const key = environmentApiKeyEntry(environment);
-  if (auth === "api-key" && key === null) {
+  if ((auth === "token" || auth === "api-key") && key === null) {
     throw new AuthenticationRequiredError(
-      "API-key authentication requires OPENAI_API_KEY or CODEX_API_KEY. " +
-        "Set a valid API key or use '--auth chatgpt'.",
+      "Token authentication requires COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN. " +
+        "Set a valid GitHub token or use '--auth github'.",
     );
   }
   return key === null
     ? { method: "stored_credentials", verified: false }
-    : { method: "api_key", source: key.source, verified: false };
+    : { method: "github_token", source: key.source, verified: false };
 }
 
 function selectedScanEnvironment(
   environment: ProcessEnvironment,
   auth: ScanAuthMode = "auto",
 ): ProcessEnvironment {
-  if (auth !== "chatgpt") return environment;
+  if (auth !== "github" && auth !== "chatgpt") return environment;
   return Object.fromEntries(
     Object.entries(environment).filter(
       ([name]) =>
-        name.toUpperCase() !== "OPENAI_API_KEY" &&
-        name.toUpperCase() !== "CODEX_API_KEY",
+        name.toUpperCase() !== "COPILOT_GITHUB_TOKEN" &&
+        name.toUpperCase() !== "GH_TOKEN" &&
+        name.toUpperCase() !== "GITHUB_TOKEN",
     ),
   );
 }
@@ -1706,10 +1761,14 @@ function environmentApiKey(environment: ProcessEnvironment): string | null {
 }
 
 function environmentApiKeyEntry(environment: ProcessEnvironment): {
-  source: "OPENAI_API_KEY" | "CODEX_API_KEY";
+  source: "COPILOT_GITHUB_TOKEN" | "GH_TOKEN" | "GITHUB_TOKEN";
   value: string;
 } | null {
-  for (const requested of ["OPENAI_API_KEY", "CODEX_API_KEY"] as const) {
+  for (const requested of [
+    "COPILOT_GITHUB_TOKEN",
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+  ] as const) {
     const canonical = environment[requested]?.trim();
     if (canonical) return { source: requested, value: canonical };
     for (const [name, value] of Object.entries(environment)) {
@@ -1939,7 +1998,7 @@ export function scanPreflightCodexConfig(config: JsonObject): JsonObject {
   }
   if (Buffer.byteLength(JSON.stringify(result), "utf8") > 256 * 1024) {
     throw new CodexSecurityError(
-      "The sanitized Codex Security preflight config exceeds the size limit.",
+      "The sanitized Copilot Security preflight config exceeds the size limit.",
     );
   }
   return result;
@@ -1969,8 +2028,8 @@ function throwIfAborted(signal?: AbortSignal, scanDir = ""): void {
   if (!signal?.aborted) return;
   if (signal.reason instanceof ScanCostLimitExceededError) throw signal.reason;
   const message = scanDir
-    ? `Codex Security scan was interrupted; partial output remains at ${scanDir}.`
-    : "Codex Security scan was interrupted during preparation.";
+    ? `Copilot Security scan was interrupted; partial output remains at ${scanDir}.`
+    : "Copilot Security scan was interrupted during preparation.";
   throw new ScanInterruptedError(message, scanDir, { cause: signal.reason });
 }
 

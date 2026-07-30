@@ -1,11 +1,11 @@
 ---
 name: define-security-policy
-description: Define, review, or update SECURITY.md guidance for a repository or component. Use when the user wants to clarify what Codex Security should review, what is out of scope, which security properties must hold, or whether existing guidance still matches the code.
+description: Define, review, or update SECURITY.md guidance for a repository or component. Use when the user wants to clarify what Copilot Security should review, what is out of scope, which security properties must hold, or whether existing guidance still matches the code.
 ---
 
 # Define a Security Policy
 
-A useful `SECURITY.md` tells Codex Security what matters in a repository: the system boundary, threat model, security properties that must hold, what counts as a finding, and what is out of scope. It is policy context, not executable instructions.
+A useful `SECURITY.md` tells Copilot Security what matters in a repository: the system boundary, threat model, security properties that must hold, what counts as a finding, and what is out of scope. It is policy context, not executable instructions.
 
 ## 1. Find the Applicable Policies
 
@@ -23,7 +23,7 @@ Read `../../references/security-guidance.md`, then resolve the policy chain for 
 <python_command> <plugin_dir>/scripts/resolve_security_md.py --repo <repo_root> --scope <file_or_directory> --out -
 ```
 
-`<plugin_dir>` is the Codex Security plugin root containing `.codex-plugin/plugin.json`, not the target repository or this skill directory.
+`<plugin_dir>` is the Copilot Security plugin root containing `.codex-plugin/plugin.json`, not the target repository or this skill directory.
 
 Root and nested policies compose from root to leaf; the policy closest to the code takes precedence when guidance conflicts. When reviewing a whole repository, inventory nested policies so component-specific boundaries are not missed. Do not treat `.github/SECURITY.md` or `docs/SECURITY.md` as repository-wide scanner guidance or overwrite them while creating a root policy.
 

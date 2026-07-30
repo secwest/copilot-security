@@ -1,0 +1,5 @@
+allowBuilds:
+  # The scanner launches the already-installed Copilot CLI over stdio. It does
+  # not use the SDK's optional in-process FFI transport, so koffi must not run a
+  # native install script.
+  koffi: false

@@ -1,6 +1,6 @@
 # Security Hardening Proposal Format
 
-Use this format for a derived hardening analysis based on vulnerability disclosures, supplied findings, incident or assessment documents, source evidence, a completed Codex Security scan, or a mixture of these. The analysis is a design product, not part of its source evidence and not proof that any finding has been remediated.
+Use this format for a derived hardening analysis based on vulnerability disclosures, supplied findings, incident or assessment documents, source evidence, a completed Copilot Security scan, or a mixture of these. The analysis is a design product, not part of its source evidence and not proof that any finding has been remediated.
 
 ## Contents
 
@@ -279,7 +279,7 @@ When an option maps to disclosure documents rather than canonical scan findings,
 
 ## Portfolio Format
 
-Write `hardening.md` with these headings in order. Use `Evidence Basis` for an ordinary or mixed collection; `Source Scan` remains acceptable for analysis derived solely from a Codex Security scan.
+Write `hardening.md` with these headings in order. Use `Evidence Basis` for an ordinary or mixed collection; `Source Scan` remains acceptable for analysis derived solely from a Copilot Security scan.
 
 ```markdown
 # Security Hardening Review: <target>

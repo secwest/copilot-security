@@ -1,20 +1,9 @@
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import {
-  Codex,
-  type ModelReasoningEffort,
-  type ThreadOptions,
-  type TurnOptions,
-} from "@openai/codex-sdk";
+import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
 import { z } from "incur";
-import { accountStatus } from "./auth.js";
+import { resolveCopilotCli } from "./copilot-client.js";
 import { CodexSecurityError } from "./errors.js";
-import {
-  codexSecurityCredentialHome,
-  prepareCodexSecurityCredentialHome,
-  resolveCodexCommand,
-} from "./runtime.js";
+
+type ModelReasoningEffort = "low" | "medium" | "high" | "xhigh";
 
 type Finding = { occurrenceId: string } & Record<string, unknown>;
 
@@ -23,18 +12,25 @@ export interface ScanComparisonInput {
   after: readonly Finding[];
 }
 
-interface ComparisonCodex {
-  startThread(options: ThreadOptions): {
+interface ComparisonCopilot {
+  startThread(options: {
+    model?: string;
+    modelReasoningEffort: ModelReasoningEffort;
+    workingDirectory: string;
+    signal?: AbortSignal;
+  }): {
     run(
       input: string,
-      options: TurnOptions,
+      options: { outputSchema?: unknown; signal?: AbortSignal },
     ): Promise<{ finalResponse: string }>;
   };
 }
 
 export interface ScanComparisonOptions {
   allowHistoricalUncertainty?: boolean;
-  codex?: ComparisonCodex;
+  copilot?: ComparisonCopilot;
+  /** @deprecated Use copilot. */
+  codex?: ComparisonCopilot;
   environment?: NodeJS.ProcessEnv;
   model?: string;
   reasoningEffort?: ModelReasoningEffort;
@@ -76,41 +72,15 @@ export async function matchScanFindings(
   input: ScanComparisonInput,
   options: ScanComparisonOptions = {},
 ): Promise<ScanComparisonResult> {
-  const codex =
+  const copilot =
+    options.copilot ??
     options.codex ??
-    new Codex({
-      env: await comparisonEnvironment(
-        options.environment,
-        accountStatus,
-        options.signal,
-      ),
-      config: {
-        allow_login_shell: false,
-        "features.apps": false,
-        "features.code_mode": false,
-        "features.code_mode_only": false,
-        "features.js_repl": false,
-        "features.multi_agent": false,
-        "features.multi_agent_v2": false,
-        "features.plugins": false,
-        "features.shell_tool": false,
-        "features.unified_exec": false,
-        shell_environment_policy: {
-          inherit: "core",
-          ignore_default_excludes: false,
-          exclude: ["CODEX_HOME", "*KEY*", "*SECRET*", "*TOKEN*"],
-        },
-      },
-    });
-  const thread = codex.startThread({
+    (await createComparisonCopilot(options.environment, options.signal));
+  const thread = copilot.startThread({
     ...(options.model === undefined ? {} : { model: options.model }),
     modelReasoningEffort: options.reasoningEffort ?? "medium",
-    sandboxMode: "read-only",
-    approvalPolicy: "never",
-    networkAccessEnabled: false,
-    webSearchMode: "disabled",
     workingDirectory: options.workingDirectory ?? process.cwd(),
-    skipGitRepoCheck: true,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
   const turn = await thread.run(comparisonPrompt(input), {
     outputSchema: z.toJSONSchema(comparisonSchema, { target: "openapi-3.0" }),
@@ -146,61 +116,98 @@ function comparisonPrompt(input: ScanComparisonInput): string {
 
 export async function comparisonEnvironment(
   source: NodeJS.ProcessEnv = process.env,
-  nativeAccountStatus: typeof accountStatus = accountStatus,
+  _legacyAccountStatus?: (
+    command: unknown,
+    environment: Record<string, string>,
+    signal?: AbortSignal,
+  ) => Promise<{ authenticated: boolean }>,
   signal?: AbortSignal,
 ): Promise<Record<string, string>> {
   signal?.throwIfAborted();
-  const environment = Object.fromEntries(
+  return Object.fromEntries(
     Object.entries(source).filter(
       (entry): entry is [string, string] => entry[1] !== undefined,
     ),
   );
-  if (
-    Object.entries(environment).some(
-      ([name, value]) =>
-        ["OPENAI_API_KEY", "CODEX_API_KEY"].includes(name.toUpperCase()) &&
-        value.trim().length > 0,
-    )
-  ) {
-    return environment;
-  }
-  const credentialHome = codexSecurityCredentialHome(source);
-  if (existsSync(credentialHome)) {
-    const canonicalCredentialHome =
-      await prepareCodexSecurityCredentialHome(source);
-    signal?.throwIfAborted();
-    const storedEnvironment: Record<string, string> = {
-      ...environment,
-      CODEX_HOME: canonicalCredentialHome,
-    };
-    for (const key of Object.keys(storedEnvironment)) {
-      if (["OPENAI_API_KEY", "CODEX_API_KEY"].includes(key.toUpperCase())) {
-        delete storedEnvironment[key];
-      }
-    }
-    const status = await nativeAccountStatus(
-      resolveCodexCommand(),
-      storedEnvironment,
-      signal,
-    );
-    if (status.authenticated) return storedEnvironment;
-  }
-  const configuredHome = environment["CODEX_HOME"]?.trim();
-  const codexHome = configuredHome
-    ? configuredHome === "~"
-      ? homedir()
-      : configuredHome.startsWith("~/")
-        ? join(homedir(), configuredHome.slice(2))
-        : configuredHome
-    : join(homedir(), ".codex");
-  if (existsSync(join(codexHome, "auth.json"))) {
-    for (const key of Object.keys(environment)) {
-      if (["OPENAI_API_KEY", "CODEX_API_KEY"].includes(key.toUpperCase())) {
-        delete environment[key];
-      }
-    }
-  }
-  return environment;
+}
+
+async function createComparisonCopilot(
+  source: NodeJS.ProcessEnv = process.env,
+  signal?: AbortSignal,
+): Promise<ComparisonCopilot> {
+  const environment = await comparisonEnvironment(source, undefined, signal);
+  const resolved = await resolveCopilotCli(
+    environment["COPILOT_CLI_PATH"] ?? "copilot",
+    environment,
+    process.cwd(),
+  );
+  return {
+    startThread: (threadOptions) => ({
+      run: async (prompt, turnOptions) => {
+        const combinedSignal =
+          threadOptions.signal === undefined
+            ? turnOptions.signal
+            : turnOptions.signal === undefined
+              ? threadOptions.signal
+              : AbortSignal.any([threadOptions.signal, turnOptions.signal]);
+        combinedSignal?.throwIfAborted();
+        const client = new CopilotClient({
+          connection: RuntimeConnection.forStdio({
+            path: resolved.executable,
+            args: ["--no-auto-update", "--no-remote", "--no-remote-export"],
+            env: Object.fromEntries(
+              Object.entries(resolved.environment).filter(
+                (entry): entry is [string, string] => entry[1] !== undefined,
+              ),
+            ),
+          }),
+          mode: "copilot-cli",
+          workingDirectory: threadOptions.workingDirectory,
+          useLoggedInUser: true,
+          logLevel: "error",
+        });
+        const session = await client.createSession({
+          clientName: "copilot-security-comparison",
+          model: threadOptions.model ?? "gpt-5.6-sol",
+          reasoningEffort: threadOptions.modelReasoningEffort,
+          workingDirectory: threadOptions.workingDirectory,
+          availableTools: [],
+          enableSkills: false,
+          enableConfigDiscovery: false,
+          skipCustomInstructions: true,
+          customAgentsLocalOnly: true,
+          coauthorEnabled: false,
+          remoteSession: "off",
+          enableSessionStore: false,
+          skipEmbeddingRetrieval: true,
+          embeddingCacheStorage: "in-memory",
+        });
+        const abort = (): void => {
+          void session.abort().catch(() => undefined);
+        };
+        combinedSignal?.addEventListener("abort", abort, { once: true });
+        try {
+          const response = await session.sendAndWait(
+            {
+              prompt: [
+                prompt,
+                "",
+                "Return one JSON object only. Do not wrap it in Markdown.",
+              ].join("\n"),
+            },
+            10 * 60 * 1_000,
+          );
+          return { finalResponse: response?.data.content ?? "" };
+        } finally {
+          combinedSignal?.removeEventListener("abort", abort);
+          await session.disconnect().catch(() => undefined);
+          const errors = await client.stop().catch(() => []);
+          if (errors.length > 0)
+            await client.forceStop().catch(() => undefined);
+        }
+      },
+    }),
+  };
 }
 
 function validateComparison(

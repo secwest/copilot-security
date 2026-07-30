@@ -114,10 +114,10 @@ describe("TypeScript package skeleton", () => {
     const client = new CodexSecurity({ pluginPath: "/tmp/plugin" });
     expect(client.config.pluginPath).toBe("/tmp/plugin");
     expect(client.metadata).toEqual({
-      sdk: "@openai/codex-sdk",
-      sdkVersion: packageJson.dependencies["@openai/codex-sdk"],
-      executable: "@openai/codex",
-      executableVersion: packageJson.dependencies["@openai/codex"],
+      sdk: "@github/copilot-sdk",
+      sdkVersion: packageJson.dependencies["@github/copilot-sdk"],
+      executable: "github/copilot-cli",
+      executableVersion: "system",
     });
     expect(new CodexSecurityError("failure").name).toBe("CodexSecurityError");
     await client.close();
@@ -127,7 +127,7 @@ describe("TypeScript package skeleton", () => {
     const stdout = capture();
     const stderr = capture();
     expect(await main([], stdout.stream, stderr.stream)).toBe(0);
-    expect(stdout.text()).toContain("Usage: codex-security <command>");
+    expect(stdout.text()).toContain("Usage: copilot-security <command>");
     expect(stdout.text()).toContain("Integrations:");
     expect(stderr.text()).toBe("");
 
@@ -142,7 +142,7 @@ describe("TypeScript package skeleton", () => {
       await main(["scan", "--help"], scanHelpOutput.stream, stderr.stream),
     ).toBe(0);
     expect(scanHelpOutput.text()).toContain(
-      "Usage: codex-security scan [repository]",
+      "Usage: copilot-security scan [repository]",
     );
   });
 });

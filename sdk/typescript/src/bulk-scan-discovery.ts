@@ -134,7 +134,7 @@ export async function runBulkScanWizard(
   const { prompt } = dependencies;
   if (!prompt.isInteractive()) {
     throw new Error(
-      "Interactive repository selection requires a terminal. Provide a CSV with 'codex-security bulk-scan repositories.csv --output-dir ./security-scans'.",
+      "Interactive repository selection requires a terminal. Provide a CSV with 'copilot-security bulk-scan repositories.csv --output-dir ./security-scans'.",
     );
   }
   signal?.throwIfAborted();

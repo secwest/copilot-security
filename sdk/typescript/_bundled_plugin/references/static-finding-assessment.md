@@ -1,6 +1,6 @@
 # Static Finding Assessment
 
-Use this reference when a Codex Security workflow needs static repository evidence to support or defeat a supplied security claim.
+Use this reference when a Copilot Security workflow needs static repository evidence to support or defeat a supplied security claim.
 
 This is not a top-level workflow. It does not define input normalization,
 user-facing verdicts, scan ledgers, dynamic validation, or fix behavior. The calling skill owns those contracts.
