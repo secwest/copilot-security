@@ -1,6 +1,6 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 import { evaluateBenchmark } from "../src/benchmark.js";
 
@@ -13,6 +13,59 @@ afterEach(async () => {
 });
 
 describe("effectiveness benchmark", () => {
+  test("keeps the versioned corpus paired and its ground truth anchored to source", async () => {
+    const benchmarkRoot = resolve(process.cwd(), "..", "..", "benchmarks");
+    const manifest = JSON.parse(
+      await readFile(join(benchmarkRoot, "manifest.json"), "utf8"),
+    ) as {
+      cases: Array<{
+        id: string;
+        fixture: string;
+        findingsPaths: string[];
+        expected: Array<{
+          locations: Array<{
+            path: string;
+            startLine: number;
+            endLine?: number;
+          }>;
+        }>;
+      }>;
+    };
+    const pairs = [
+      ["javascript-command-injection", "javascript-safe-command"],
+      ["python-path-traversal", "python-safe-path"],
+      ["javascript-idor", "javascript-safe-authorization"],
+      ["javascript-sql-injection", "javascript-safe-sql"],
+      ["javascript-ssrf", "javascript-safe-fetch"],
+      ["python-unsafe-deserialization", "python-safe-json"],
+      ["javascript-reflected-xss", "javascript-safe-html"],
+    ] as const;
+    const cases = new Map(manifest.cases.map((item) => [item.id, item]));
+
+    expect(manifest.cases).toHaveLength(pairs.length * 2);
+    for (const [vulnerableId, safeId] of pairs) {
+      expect(cases.get(vulnerableId)?.expected.length).toBeGreaterThan(0);
+      expect(cases.get(safeId)?.expected).toEqual([]);
+    }
+    for (const benchmarkCase of manifest.cases) {
+      expect(benchmarkCase.findingsPaths).toHaveLength(3);
+      for (const expectation of benchmarkCase.expected) {
+        for (const location of expectation.locations) {
+          const source = await readFile(
+            join(benchmarkRoot, benchmarkCase.fixture, location.path),
+            "utf8",
+          );
+          const lineCount = source.split(/\r?\n/u).length;
+          expect(location.startLine).toBeGreaterThan(0);
+          expect(location.startLine).toBeLessThanOrEqual(lineCount);
+          expect(location.endLine ?? location.startLine).toBeLessThanOrEqual(
+            lineCount,
+          );
+        }
+      }
+    }
+  });
+
   test("measures repeated positive and negative cases with evidence quality", async () => {
     const root = await fixtureRoot();
     await writeJson(join(root, "manifest.json"), {

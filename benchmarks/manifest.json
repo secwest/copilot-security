@@ -131,6 +131,162 @@
         "javascript-safe-authorization/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "javascript-sql-injection",
+      "description": "Attacker-controlled email input is interpolated into a SQL query.",
+      "fixture": "fixtures/javascript-sql-injection",
+      "findingsPaths": [
+        "javascript-sql-injection/run-1/findings.json",
+        "javascript-sql-injection/run-2/findings.json",
+        "javascript-sql-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "email-query-sql-injection",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "src/users.js",
+              "startLine": 3,
+              "endLine": 4,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-sql",
+      "description": "The SQL query uses a positional parameter for attacker-controlled email input.",
+      "fixture": "fixtures/javascript-safe-sql",
+      "findingsPaths": [
+        "javascript-safe-sql/run-1/findings.json",
+        "javascript-safe-sql/run-2/findings.json",
+        "javascript-safe-sql/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "javascript-ssrf",
+      "description": "An unauthenticated caller controls the complete URL fetched by the server.",
+      "fixture": "fixtures/javascript-ssrf",
+      "findingsPaths": [
+        "javascript-ssrf/run-1/findings.json",
+        "javascript-ssrf/run-2/findings.json",
+        "javascript-ssrf/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "preview-url-ssrf",
+          "cwe": ["CWE-918"],
+          "locations": [
+            {
+              "path": "src/preview.js",
+              "startLine": 2,
+              "endLine": 3,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-fetch",
+      "description": "The server constructs a fixed-origin URL from a strictly validated asset name and rejects redirects.",
+      "fixture": "fixtures/javascript-safe-fetch",
+      "findingsPaths": [
+        "javascript-safe-fetch/run-1/findings.json",
+        "javascript-safe-fetch/run-2/findings.json",
+        "javascript-safe-fetch/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "python-unsafe-deserialization",
+      "description": "A request body is deserialized with Python pickle.",
+      "fixture": "fixtures/python-unsafe-deserialization",
+      "findingsPaths": [
+        "python-unsafe-deserialization/run-1/findings.json",
+        "python-unsafe-deserialization/run-2/findings.json",
+        "python-unsafe-deserialization/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "request-body-pickle-rce",
+          "cwe": ["CWE-502"],
+          "locations": [
+            {
+              "path": "src/preferences.py",
+              "startLine": 4,
+              "endLine": 5,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-safe-json",
+      "description": "The request body is parsed as JSON and constrained to a small preference schema.",
+      "fixture": "fixtures/python-safe-json",
+      "findingsPaths": [
+        "python-safe-json/run-1/findings.json",
+        "python-safe-json/run-2/findings.json",
+        "python-safe-json/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "javascript-reflected-xss",
+      "description": "Attacker-controlled query input is interpolated into an HTML response.",
+      "fixture": "fixtures/javascript-reflected-xss",
+      "findingsPaths": [
+        "javascript-reflected-xss/run-1/findings.json",
+        "javascript-reflected-xss/run-2/findings.json",
+        "javascript-reflected-xss/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "welcome-name-reflected-xss",
+          "cwe": ["CWE-79"],
+          "locations": [
+            {
+              "path": "src/welcome.js",
+              "startLine": 2,
+              "endLine": 3,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-html",
+      "description": "Attacker-controlled query input is HTML-escaped before interpolation.",
+      "fixture": "fixtures/javascript-safe-html",
+      "findingsPaths": [
+        "javascript-safe-html/run-1/findings.json",
+        "javascript-safe-html/run-2/findings.json",
+        "javascript-safe-html/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

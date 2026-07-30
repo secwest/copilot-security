@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-javascript-safe-fetch",
+  "private": true,
+  "type": "module"
+}

@@ -233,6 +233,38 @@ async function completeScan(fixture: ScanFixture): Promise<ScanSummary> {
 }
 
 describe("malformed scan artifact recovery", () => {
+  test("normalizes a draft manifest with noncanonical artifact metadata", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "scan-manifest.json");
+    const manifest = await readJson<{
+      scan: Record<string, unknown>;
+    }>(path);
+    manifest.scan["artifacts"] = { path: fixture.scanDir };
+    delete manifest.scan["coverageRef"];
+    delete manifest.scan["findingsRef"];
+    await writeJson(path, manifest);
+
+    const completed = await completeScan(fixture);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.findingCount).toBe(1);
+    const recovered = await readJson<{
+      scan: {
+        artifacts: Array<{ path: string }>;
+        coverageRef: string;
+        findingsRef: string;
+        sealedAt: string;
+      };
+    }>(path);
+    expect(recovered.scan.coverageRef).toBe("coverage.json");
+    expect(recovered.scan.findingsRef).toBe("findings.json");
+    expect(recovered.scan.sealedAt).toBeString();
+    expect(recovered.scan.artifacts).toBeArray();
+    expect(recovered.scan.artifacts.map((artifact) => artifact.path)).toEqual(
+      expect.arrayContaining(["coverage.json", "findings.json"]),
+    );
+  });
+
   test("normalizes compact Copilot draft artifacts before sealing", async () => {
     const fixture = await startDraftScan();
     await writeJson(join(fixture.scanDir, "scan-manifest.json"), {
@@ -355,6 +387,105 @@ describe("malformed scan artifact recovery", () => {
     expect(coverage.surfaces[2]).toMatchObject({
       label: "package.json",
       disposition: "no_issue_found",
+    });
+  });
+
+  test("accepts an empty top-level finding array as an explicit no-finding draft", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    await writeJson(path, []);
+
+    const completed = await completeScan(fixture);
+    const recovered = await readJson<FindingsDocument>(path);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.findingCount).toBe(0);
+    expect(completed.warnings).toContain(
+      "Recovered compact Copilot draft artifacts into the canonical scan contract.",
+    );
+    expect(recovered.findings).toEqual([]);
+  });
+
+  test("repairs bounded unescaped quotes only in unsealed draft JSON", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const validSummary = document.findings[0]!.summary;
+    const malformedSummary = validSummary.replace(
+      "attacker-controlled path",
+      'attacker-controlled "path"',
+    );
+    const malformed = JSON.stringify(document).replace(
+      JSON.stringify(validSummary),
+      `"${malformedSummary}"`,
+    );
+    expect(() => JSON.parse(malformed)).toThrow();
+    await writeFile(path, malformed);
+
+    const completed = await completeScan(fixture);
+    const recovered = await readJson<FindingsDocument>(path);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.findingCount).toBe(1);
+    expect(completed.warnings).toContain(
+      "Recovered unescaped quotation marks in unsealed findings.json.",
+    );
+    expect(recovered.findings[0]!.summary).toBe(malformedSummary);
+
+    const sealedFixture = await startDraftScan();
+    await workbench(sealedFixture, [
+      "prepare-scan-completion",
+      "--scan-id",
+      sealedFixture.scanId,
+    ]);
+    const sealedPath = join(sealedFixture.scanDir, "findings.json");
+    const sealedDocument = await readJson<FindingsDocument>(sealedPath);
+    const sealedSummary = sealedDocument.findings[0]!.summary;
+    await writeFile(
+      sealedPath,
+      JSON.stringify(sealedDocument).replace(
+        JSON.stringify(sealedSummary),
+        `"${sealedSummary.replace("path", '"path"')}"`,
+      ),
+    );
+
+    await expect(completeScan(sealedFixture)).rejects.toThrow("invalid JSON");
+
+    const oversizedFixture = await startDraftScan();
+    const oversizedPath = join(oversizedFixture.scanDir, "findings.json");
+    const oversizedDocument = await readJson<FindingsDocument>(oversizedPath);
+    const oversizedSummary = oversizedDocument.findings[0]!.summary;
+    await writeFile(
+      oversizedPath,
+      JSON.stringify(oversizedDocument).replace(
+        JSON.stringify(oversizedSummary),
+        `"${oversizedSummary.replace("path", '"'.repeat(65))}"`,
+      ),
+    );
+
+    await expect(completeScan(oversizedFixture)).rejects.toThrow(
+      "invalid JSON",
+    );
+  });
+
+  test("infers a known CWE when a canonical Copilot finding leaves taxonomy empty", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] = "SQL injection in user search route";
+    finding.summary =
+      "Attacker-controlled email input is concatenated into a SQL query.";
+    finding["taxonomy"] = { category: "security-defect", cwe: [] };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "sql-injection",
+      cwe: ["CWE-89"],
     });
   });
 

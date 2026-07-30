@@ -93,10 +93,11 @@ state.
 ## Effectiveness benchmark
 
 `benchmarks/manifest.json` defines paired vulnerable and fixed fixtures for
-command injection, path traversal, and object-level authorization. Each case is
-scanned three times to measure both accuracy and model variance. The evaluator
-uses one-to-one CWE-plus-location matching, counts duplicate reports as false
-positives, and records missing scan artifacts as completion failures.
+command injection, path traversal, object-level authorization, SQL injection,
+server-side request forgery, unsafe deserialization, and reflected XSS. Each
+case is scanned three times to measure both accuracy and model variance. The
+evaluator uses one-to-one CWE-plus-location matching, counts duplicate reports
+as false positives, and records missing scan artifacts as completion failures.
 
 ```powershell
 # Evaluate existing outputs

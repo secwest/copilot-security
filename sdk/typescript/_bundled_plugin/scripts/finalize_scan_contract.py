@@ -70,6 +70,7 @@ SCHEMA_DOCUMENT_MAX_BYTES = 4 * 1024 * 1024
 JSON_DOCUMENT_READ_CHUNK_SIZE = 64 * 1024
 MAX_JSON_DEPTH = 256
 MAX_JSON_INTEGER = (1 << 53) - 1
+MAX_DRAFT_JSON_QUOTE_REPAIRS = 64
 MAX_SCHEMA_NODES = 8192
 MAX_SCHEMA_COLLECTION_ENTRIES = 4096
 MAX_SCHEMA_APPLICATOR_EDGES = 128
@@ -102,6 +103,49 @@ def _reject_non_finite_json(value: str) -> None:
 
 def _loads_json(value: str | bytes) -> Any:
     return json.loads(value, parse_constant=_reject_non_finite_json)
+
+
+def _repair_unescaped_json_string_quotes(value: str) -> str | None:
+    """Escape bounded interior quotes while leaving JSON structure untouched."""
+
+    output: list[str] = []
+    in_string = False
+    escaped = False
+    repairs = 0
+    for index, character in enumerate(value):
+        if not in_string:
+            output.append(character)
+            if character == '"':
+                in_string = True
+            continue
+        if escaped:
+            output.append(character)
+            escaped = False
+            continue
+        if character == "\\":
+            output.append(character)
+            escaped = True
+            continue
+        if character != '"':
+            output.append(character)
+            continue
+
+        lookahead = index + 1
+        while lookahead < len(value) and value[lookahead].isspace():
+            lookahead += 1
+        if lookahead == len(value) or value[lookahead] in ",:]}":
+            output.append(character)
+            in_string = False
+            continue
+
+        repairs += 1
+        if repairs > MAX_DRAFT_JSON_QUOTE_REPAIRS:
+            return None
+        output.append('\\"')
+
+    if in_string or repairs == 0:
+        return None
+    return "".join(output)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -504,6 +548,7 @@ def _read_scan_local_json_bytes(
     context: str,
     *,
     require_object: bool = True,
+    draft_recovery_warnings: list[str] | None = None,
 ) -> tuple[Any, bytes]:
     descriptor = open_scan_local_file_descriptor(scan_dir, relative_path, context)
     try:
@@ -516,9 +561,29 @@ def _read_scan_local_json_bytes(
                 else _read_bounded_json_document(handle, context, maximum)
             )
         try:
-            payload = _loads_json(raw.decode("utf-8"))
-        except (UnicodeDecodeError, ValueError) as exc:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
             raise ContractError(f"{context}: invalid JSON: {exc}") from exc
+        try:
+            payload = _loads_json(text)
+        except ValueError as exc:
+            repaired = (
+                _repair_unescaped_json_string_quotes(text)
+                if draft_recovery_warnings is not None
+                else None
+            )
+            if repaired is None:
+                raise ContractError(f"{context}: invalid JSON: {exc}") from exc
+            try:
+                payload = _loads_json(repaired)
+            except ValueError:
+                raise ContractError(f"{context}: invalid JSON: {exc}") from exc
+            raw = repaired.encode("utf-8")
+            warning = (
+                f"Recovered unescaped quotation marks in unsealed {context}."
+            )
+            if warning not in draft_recovery_warnings:
+                draft_recovery_warnings.append(warning)
         if require_object and not isinstance(payload, dict):
             raise ContractError(f"{context}: expected a JSON object")
         _require_safe_json_value(payload, context, validate_strings=False)
@@ -2348,10 +2413,15 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
     if isinstance(taxonomy, dict):
         category = taxonomy.get("category")
         cwe = taxonomy.get("cwe")
-        if isinstance(category, str) and category.strip() and isinstance(cwe, list):
-            return category.strip(), [
+        normalized_cwe = (
+            [
                 item for item in cwe if isinstance(item, str) and item.strip()
             ]
+            if isinstance(cwe, list)
+            else []
+        )
+        if isinstance(category, str) and category.strip() and normalized_cwe:
+            return category.strip(), normalized_cwe
 
     text = " ".join(
         str(finding.get(field, ""))
@@ -2370,6 +2440,22 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         or "internal host" in text
     ):
         return "server-side-request-forgery", ["CWE-918"]
+    if "sql injection" in text or "sqli" in text:
+        return "sql-injection", ["CWE-89"]
+    if (
+        "unsafe deserialization" in text
+        or "insecure deserialization" in text
+        or "pickle.loads" in text
+        or "objectinputstream" in text
+    ):
+        return "unsafe-deserialization", ["CWE-502"]
+    if (
+        "cross-site scripting" in text
+        or "cross site scripting" in text
+        or re.search(r"\b(?:reflected|stored|dom)[ -]?xss\b", text)
+        or re.search(r"\bxss\b", text)
+    ):
+        return "cross-site-scripting", ["CWE-79"]
     if (
         "path traversal" in text
         or "archive" in text
@@ -2590,6 +2676,17 @@ def _normalize_standalone_finding(
         and evidence_is_canonical
         and has_canonical_envelope
     ):
+        category, cwe = _standalone_taxonomy(finding)
+        existing_taxonomy = finding.get("taxonomy")
+        existing_cwe = (
+            existing_taxonomy.get("cwe")
+            if isinstance(existing_taxonomy, dict)
+            else None
+        )
+        if cwe and (not isinstance(existing_cwe, list) or not existing_cwe):
+            recovered = copy.deepcopy(finding)
+            recovered["taxonomy"] = {"category": category, "cwe": cwe}
+            return recovered
         return finding
 
     title = finding.get("title")
@@ -2767,7 +2864,10 @@ def _normalize_standalone_finding(
 
 
 def _normalize_standalone_findings_draft(findings: Any) -> tuple[dict[str, Any], bool]:
-    if not isinstance(findings, dict):
+    simplified_container = isinstance(findings, list)
+    if simplified_container:
+        findings = {"findings": findings}
+    elif not isinstance(findings, dict):
         raise ContractError("findings.json: expected an object")
     rows = findings.get("findings")
     if not isinstance(rows, list):
@@ -2787,7 +2887,7 @@ def _normalize_standalone_findings_draft(findings: Any) -> tuple[dict[str, Any],
         if after is not None
     )
     if not changed:
-        return findings, False
+        return findings, simplified_container
     return {"findings": converted}, True
 
 
@@ -3028,18 +3128,26 @@ def _prepare_scan_finalization(
         manifest, completion_binding
     )
     scan = _require_dict(manifest, "scan", "manifest")
-    was_sealed = scan.get("sealedAt") is not None or scan.get("artifacts") is not None
+    was_sealed = scan.get("sealedAt") is not None or isinstance(
+        scan.get("artifacts"), list
+    )
     if not was_sealed:
+        scan.pop("artifacts", None)
         _populate_unsealed_manifest_envelope(manifest, scan, completion_binding)
     _validate_contract_refs(scan)
     findings, findings_input_bytes = _read_scan_local_json_bytes(
-        scan_dir, scan["findingsRef"], scan["findingsRef"]
+        scan_dir,
+        scan["findingsRef"],
+        scan["findingsRef"],
+        require_object=was_sealed,
+        draft_recovery_warnings=completion_warnings if not was_sealed else None,
     )
     coverage, coverage_input_bytes = _read_scan_local_json_bytes(
         scan_dir,
         scan["coverageRef"],
         scan["coverageRef"],
         require_object=False,
+        draft_recovery_warnings=completion_warnings if not was_sealed else None,
     )
     if not was_sealed:
         findings, simplified_findings = _normalize_standalone_findings_draft(findings)

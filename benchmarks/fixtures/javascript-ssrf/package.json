@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-javascript-ssrf",
+  "private": true,
+  "type": "module"
+}

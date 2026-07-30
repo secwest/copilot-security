@@ -15,6 +15,11 @@ negative-control pass rate, stable detection across repeated runs, validation
 coverage, attack-path coverage, code-evidence coverage, severity accuracy, and
 false positives per run.
 
+The versioned corpus currently contains seven vulnerable/control pairs:
+command injection, path traversal, object-level authorization, SQL injection,
+server-side request forgery, unsafe deserialization, and reflected XSS. Three
+runs per case produce 42 scans in the complete corpus.
+
 Run scans into a directory outside this repository:
 
 ```powershell

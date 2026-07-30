@@ -51,6 +51,70 @@ describe("residual risk inventory", () => {
     expect(inventory).toContain("customerId");
   });
 
+  test("pairs request input with SQL execution and parameterization evidence", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-sql-injection"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-sql"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"query-or-object-lookup"');
+    expect(vulnerable).toContain("request.query.email");
+    expect(vulnerable).toContain("SELECT id, email");
+    expect(safe).toContain("WHERE email = $1");
+    expect(safe).toContain("[email]");
+  });
+
+  test("surfaces SSRF input and fixed-destination controls", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-ssrf"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-fetch"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"network-request"');
+    expect(vulnerable).toContain("fetch(target");
+    expect(safe).toContain("assets.example.internal");
+    expect(safe).toContain("ASSET.test(asset)");
+    expect(safe).toContain('redirect: \\"error\\"');
+  });
+
+  test("surfaces unsafe deserialization and bounded JSON controls", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "python-unsafe-deserialization"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "python-safe-json"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"parser-or-deserializer"');
+    expect(vulnerable).toContain("pickle.loads(request.body)");
+    expect(safe).toContain("len(request.body) > 4096");
+    expect(safe).toContain('{\\"theme\\", \\"locale\\"}');
+    expect(safe).toContain("Unexpected preference fields");
+    expect(safe).not.toContain('"process-or-shell"');
+  });
+
+  test("surfaces reflected HTML and nearby escaping controls", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-reflected-xss"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-html"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"browser-or-response-injection"');
+    expect(vulnerable).toContain("response.type");
+    expect(vulnerable).toContain("${name}");
+    expect(safe).toContain("escapeHtml");
+  });
+
   test("prioritizes critical sinks instead of letting noisy files exhaust the prompt", async () => {
     const repository = await mkdtemp(
       join(tmpdir(), "copilot-security-residual-risk-"),

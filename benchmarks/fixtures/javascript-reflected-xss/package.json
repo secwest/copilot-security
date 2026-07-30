@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-javascript-reflected-xss",
+  "private": true,
+  "type": "module"
+}

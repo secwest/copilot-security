@@ -70,6 +70,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:arcname|entry|filename|member|tarinfo|zipentry)\b|\.(?:filename|getName|name)\b/iu,
   ],
   [
+    "untrusted-input",
+    92,
+    /\b(?:req|request)\.(?:body|cookies|data|files|form|headers|params|query|values)\b|\b(?:process|sys)\.argv\b|\b(?:environ|getenv|stdin)\b|\bgetParameter\s*\(/iu,
+  ],
+  [
     "filesystem-write",
     80,
     /\b(?:copyfile|createWriteStream|extract|extractall|makedirs|mkdir|move|open|rename|sendFile|write_bytes|write_text|writeFile|writeFileSync)\b/iu,
@@ -77,7 +82,7 @@ const RISK_SIGNALS: ReadonlyArray<
   [
     "process-or-shell",
     100,
-    /\b(?:child_process|exec|execFile|execSync|popen|ProcessBuilder|Runtime\.getRuntime|shell\s*[:=]\s*true|spawn|spawnSync|subprocess|system)\b/iu,
+    /\b(?:child_process|execFile|execSync|popen|ProcessBuilder|Runtime\.getRuntime|spawn|spawnSync|subprocess)\b|\b(?:exec|system)\s*\(|\bshell\s*[:=]\s*true\b/iu,
   ],
   [
     "dynamic-code-or-template",
@@ -117,7 +122,7 @@ const RISK_SIGNALS: ReadonlyArray<
   [
     "browser-or-response-injection",
     85,
-    /\b(?:dangerouslySetInnerHTML|document\.write|innerHTML|mark_safe|redirect|Response\.Write)\b/iu,
+    /\b(?:dangerouslySetInnerHTML|document\.write|innerHTML|mark_safe|redirect|Response\.Write)\b|\.(?:send|write)\s*\(/iu,
   ],
   [
     "disabled-security-control",

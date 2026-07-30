@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-javascript-safe-html",
+  "private": true,
+  "type": "module"
+}

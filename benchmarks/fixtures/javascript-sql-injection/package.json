@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-javascript-sql-injection",
+  "private": true,
+  "type": "module"
+}
