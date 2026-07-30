@@ -39,6 +39,14 @@ same reconciliation while sealing: an unreviewed inventory path is added as
 explicit deferred work and coverage is downgraded to `partial`, so a
 model-written `complete` claim cannot conceal a coverage gap.
 
+The host separately audits every draft finding before that correction turn.
+It lists missing CWE assignments, absent or unanchored code evidence, weak
+validation, weak attack paths, and validation or attack-path dispositions that
+contradict reportability. Copilot must either repair each row from repository
+evidence or remove it from `findings.json` and close coverage accurately. This
+prevents a structurally valid but evidentially empty finding from silently
+surviving the model-to-contract boundary.
+
 Recoverable Copilot model-call failures are retried by the CLI inside the
 existing turn, with a fixed two-retry ceiling. The host does not resubmit the
 scan or correction prompt, so a transient retry cannot duplicate completed
@@ -117,11 +125,13 @@ state.
 `benchmarks/manifest.json` defines paired vulnerable and fixed fixtures for
 command injection, path traversal, object-level authorization, SQL injection,
 server-side request forgery, unsafe deserialization, reflected XSS, XML
-external entities, JWT signature-verification bypass, prototype pollution, and
-disabled TLS certificate verification. Each case is scanned three times to
-measure both accuracy and model variance. The evaluator uses one-to-one
-CWE-plus-location matching, counts duplicate reports as false positives, and
-records missing scan artifacts as completion failures.
+external entities, JWT signature-verification bypass, prototype pollution,
+disabled TLS certificate verification, predictable security tokens,
+server-side template injection, check/use state races, and adversarial
+repository instructions. Each of the 30 cases is scanned three times, producing
+90 scans that measure both accuracy and model variance. The evaluator uses
+one-to-one CWE-plus-location matching, counts duplicate reports as false
+positives, and records missing scan artifacts as completion failures.
 
 ```powershell
 # Evaluate existing outputs

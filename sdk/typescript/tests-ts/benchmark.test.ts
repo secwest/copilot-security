@@ -370,6 +370,58 @@ describe("effectiveness benchmark", () => {
     });
   });
 
+  test("credits canonical counterEvidence as substantive validation", async () => {
+    const root = await fixtureRoot();
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      thresholds: { minValidationRate: 1 },
+      cases: [
+        {
+          id: "canonical-validation",
+          findingsPath: "canonical-validation/findings.json",
+          expected: [
+            {
+              id: "shell-command",
+              cwe: ["CWE-78"],
+              locations: [{ path: "src/server.js", startLine: 18 }],
+              requireValidation: true,
+            },
+          ],
+        },
+      ],
+    });
+    await writeFindings(
+      join(root, "results", "canonical-validation", "findings.json"),
+      [
+        finding({
+          id: "canonical-shell-command",
+          cwe: ["CWE-78"],
+          path: "src/server.js",
+          line: 18,
+          validation: {
+            summary:
+              "The request command reaches shell execution without an argument boundary.",
+            counterEvidence: [
+              "The nearest safe sibling uses an argument vector and disables shell parsing.",
+            ],
+          },
+        }),
+      ],
+    );
+
+    const report = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+    });
+
+    expect(report.passed).toBe(true);
+    expect(report.metrics.validationRate).toBe(1);
+    expect(report.cases[0]?.runs[0]?.matches[0]).toMatchObject({
+      validationPresent: true,
+      validationSubstantive: true,
+    });
+  });
+
   test("builds an explicit selected-run manifest without weakening the full manifest", () => {
     const manifest = {
       schemaVersion: "1.0" as const,

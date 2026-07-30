@@ -45,10 +45,14 @@ Every finding must include:
 - `taxonomy` object with `category` and explicit CWE array
 - nonempty `locations` with `path`, `startLine`, optional `endLine`, and role
 - `remediation`
-- nonempty `validation` object recording the exploit witness, strongest
-  counterevidence, and negative-control result
-- nonempty `attackPath` object recording attacker capability, reachability,
-  control break, and impact
+- nonempty `validation` object with a source-backed `summary`, `method`,
+  `exploitWitness`, `negativeControl`, `evidence`, `counterEvidence`, and
+  `remainingUncertainty`; when a meaningful paired control does not exist,
+  explain why in `negativeControl` instead of omitting it
+- nonempty `attackPath` object with a source-backed `summary`,
+  `dataflow.source`, `dataflow.sink`, `dataflow.outcome`,
+  `reachability.attacker`, `reachability.entrypoint`,
+  `reachability.outcome`, broken controls, and concise `evidenceRefs`
 - `codeEvidence` entries with stable ID, label, path, line, code, and explanation
 - `provenance: {"source": "local_plugin"}`
 

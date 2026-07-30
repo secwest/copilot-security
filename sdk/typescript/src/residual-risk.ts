@@ -1,5 +1,11 @@
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { extname, isAbsolute, join, relative, resolve } from "node:path";
+import {
+  isSubstantiveAttackPath,
+  isSubstantiveCodeEvidence,
+  isSubstantiveValidation,
+  type EvidenceLocation,
+} from "./evidence-quality.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -8,8 +14,10 @@ const MAX_CANDIDATES = 4_096;
 const MAX_SIGNALS = 96;
 const MAX_SIGNALS_PER_FILE = MAX_SIGNALS;
 const MAX_COVERAGE_GAPS = 256;
+const MAX_FINDING_QUALITY_GAPS = 256;
 const MAX_INVENTORY_BYTES = 8 * 1024 * 1024;
 const MAX_COVERAGE_BYTES = 32 * 1024 * 1024;
+const MAX_FINDINGS_BYTES = 128 * 1024 * 1024;
 const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
 const MAX_EXCERPT_LINES = 16;
@@ -213,6 +221,30 @@ interface CoverageGapRecord {
   dispositions?: string[];
 }
 
+type FindingQualityGapReason =
+  | "missing_explicit_cwe"
+  | "missing_or_unanchored_code_evidence"
+  | "missing_or_weak_validation"
+  | "missing_validation_method"
+  | "missing_exploit_witness"
+  | "missing_negative_control"
+  | "missing_validation_evidence"
+  | "missing_counterevidence"
+  | "missing_remaining_uncertainty"
+  | "missing_or_weak_attack_path"
+  | "incomplete_attack_path_dataflow"
+  | "incomplete_attack_path_reachability"
+  | "missing_broken_controls"
+  | "missing_attack_path_evidence_refs"
+  | "non_reportable_validation_disposition"
+  | "non_reportable_attack_path_decision";
+
+interface FindingQualityGapRecord {
+  findingIndex: number;
+  findingId: string;
+  reasons: FindingQualityGapReason[];
+}
+
 export async function buildResidualRiskInventory(
   repository: string,
   scanDirectory?: string,
@@ -376,6 +408,307 @@ export async function buildCoverageGapInventory(
     }),
     ...selected.map((gap) => JSON.stringify(gap)),
   ].join("\n");
+}
+
+export async function buildFindingQualityGapInventory(
+  scanDirectory: string | undefined,
+): Promise<string> {
+  if (scanDirectory === undefined) return "";
+  const canonicalScanDirectory = await realpath(scanDirectory).catch(
+    () => null,
+  );
+  if (canonicalScanDirectory === null) return "";
+  const findingsBytes = await readBoundedScanFile(
+    canonicalScanDirectory,
+    "findings.json",
+    MAX_FINDINGS_BYTES,
+  );
+  if (findingsBytes === null) {
+    return findingQualityInventoryFailure("missing_findings_document");
+  }
+
+  let document: unknown;
+  try {
+    document = JSON.parse(findingsBytes.toString("utf8")) as unknown;
+  } catch {
+    return findingQualityInventoryFailure("invalid_findings_json");
+  }
+  if (!isRecord(document) || !Array.isArray(document["findings"])) {
+    return findingQualityInventoryFailure("invalid_findings_document");
+  }
+
+  const findings = document["findings"];
+  const gaps: FindingQualityGapRecord[] = [];
+  for (let index = 0; index < findings.length; index += 1) {
+    const finding = findings[index];
+    const reasons: FindingQualityGapReason[] = [];
+    if (!isRecord(finding)) {
+      gaps.push({
+        findingIndex: index,
+        findingId: `finding-${index + 1}`,
+        reasons: [
+          "missing_explicit_cwe",
+          "missing_or_unanchored_code_evidence",
+          "missing_or_weak_validation",
+          "missing_or_weak_attack_path",
+        ],
+      });
+      continue;
+    }
+
+    const taxonomy = finding["taxonomy"];
+    if (
+      !isRecord(taxonomy) ||
+      !Array.isArray(taxonomy["cwe"]) ||
+      !taxonomy["cwe"].some(
+        (cwe) => typeof cwe === "string" && /^CWE-[1-9]\d*$/iu.test(cwe),
+      )
+    ) {
+      reasons.push("missing_explicit_cwe");
+    }
+    const locations = parseFindingLocations(finding["locations"]);
+    if (!isSubstantiveCodeEvidence(finding["codeEvidence"], locations)) {
+      reasons.push("missing_or_unanchored_code_evidence");
+    }
+    if (!isSubstantiveValidation(finding["validation"])) {
+      reasons.push("missing_or_weak_validation");
+    }
+    reasons.push(...validationClosureGaps(finding["validation"]));
+    if (!isSubstantiveAttackPath(finding["attackPath"])) {
+      reasons.push("missing_or_weak_attack_path");
+    }
+    reasons.push(...attackPathClosureGaps(finding["attackPath"]));
+    if (hasNonreportableValidationDisposition(finding["validation"])) {
+      reasons.push("non_reportable_validation_disposition");
+    }
+    if (hasNonreportableAttackPathDecision(finding["attackPath"])) {
+      reasons.push("non_reportable_attack_path_decision");
+    }
+    if (reasons.length > 0) {
+      gaps.push({
+        findingIndex: index,
+        findingId: findingIdentifier(finding, index),
+        reasons,
+      });
+    }
+  }
+  if (gaps.length === 0) return "";
+
+  const selected = gaps.slice(0, MAX_FINDING_QUALITY_GAPS);
+  return [
+    JSON.stringify({
+      type: "finding-quality-gap-summary",
+      findingsReadable: true,
+      findingCount: findings.length,
+      gapCount: gaps.length,
+      emittedGapCount: selected.length,
+      omittedGapCount: gaps.length - selected.length,
+    }),
+    ...selected.map((gap) => JSON.stringify(gap)),
+  ].join("\n");
+}
+
+function validationClosureGaps(value: unknown): FindingQualityGapReason[] {
+  if (!isRecord(value)) {
+    return [
+      "missing_validation_method",
+      "missing_exploit_witness",
+      "missing_negative_control",
+      "missing_validation_evidence",
+      "missing_counterevidence",
+      "missing_remaining_uncertainty",
+    ];
+  }
+  const gaps: FindingQualityGapReason[] = [];
+  if (!hasNamedSubstantiveValue(value, ["method"], 3)) {
+    gaps.push("missing_validation_method");
+  }
+  if (!hasNamedSubstantiveValue(value, ["exploitWitness", "exploit_witness"])) {
+    gaps.push("missing_exploit_witness");
+  }
+  if (
+    !hasNamedSubstantiveValue(value, ["negativeControl", "negative_control"])
+  ) {
+    gaps.push("missing_negative_control");
+  }
+  if (!hasNamedSubstantiveValue(value, ["evidence"])) {
+    gaps.push("missing_validation_evidence");
+  }
+  if (
+    !hasNamedSubstantiveValue(value, [
+      "counterEvidence",
+      "counterevidence",
+      "counter_evidence",
+    ])
+  ) {
+    gaps.push("missing_counterevidence");
+  }
+  if (
+    !hasNamedSubstantiveValue(value, [
+      "remainingUncertainty",
+      "remaining_uncertainty",
+    ])
+  ) {
+    gaps.push("missing_remaining_uncertainty");
+  }
+  return gaps;
+}
+
+function attackPathClosureGaps(value: unknown): FindingQualityGapReason[] {
+  if (!isRecord(value)) {
+    return [
+      "incomplete_attack_path_dataflow",
+      "incomplete_attack_path_reachability",
+      "missing_broken_controls",
+      "missing_attack_path_evidence_refs",
+    ];
+  }
+  const gaps: FindingQualityGapReason[] = [];
+  const dataflow = value["dataflow"];
+  if (
+    !isRecord(dataflow) ||
+    !["source", "sink", "outcome"].every((field) =>
+      hasNamedSubstantiveValue(dataflow, [field], 3),
+    )
+  ) {
+    gaps.push("incomplete_attack_path_dataflow");
+  }
+  const reachability = value["reachability"];
+  if (
+    !isRecord(reachability) ||
+    !["attacker", "entrypoint", "outcome"].every((field) =>
+      hasNamedSubstantiveValue(reachability, [field], 3),
+    )
+  ) {
+    gaps.push("incomplete_attack_path_reachability");
+  }
+  if (!hasNamedSubstantiveValue(value, ["controlsBroken", "controls_broken"])) {
+    gaps.push("missing_broken_controls");
+  }
+  if (!hasNamedSubstantiveValue(value, ["evidenceRefs", "evidence_refs"], 3)) {
+    gaps.push("missing_attack_path_evidence_refs");
+  }
+  return gaps;
+}
+
+function hasNamedSubstantiveValue(
+  value: Record<string, unknown>,
+  names: readonly string[],
+  minimumLength = 20,
+): boolean {
+  return names.some((name) => hasSubstantiveValue(value[name], minimumLength));
+}
+
+function hasSubstantiveValue(value: unknown, minimumLength: number): boolean {
+  if (typeof value === "string") {
+    const text = value.trim();
+    return (
+      text.length >= minimumLength &&
+      !/^(?:n\/?a|none|not tested|placeholder|tbd|todo|unknown)$/iu.test(text)
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasSubstantiveValue(entry, minimumLength));
+  }
+  if (isRecord(value)) {
+    return Object.values(value).some((entry) =>
+      hasSubstantiveValue(entry, minimumLength),
+    );
+  }
+  return false;
+}
+
+function findingQualityInventoryFailure(reason: string): string {
+  return [
+    JSON.stringify({
+      type: "finding-quality-gap-summary",
+      findingsReadable: false,
+      findingCount: 0,
+      gapCount: 1,
+      emittedGapCount: 1,
+      omittedGapCount: 0,
+    }),
+    JSON.stringify({
+      findingIndex: 0,
+      findingId: "findings-document",
+      reasons: [reason],
+    }),
+  ].join("\n");
+}
+
+function parseFindingLocations(value: unknown): EvidenceLocation[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((location) => {
+    if (!isRecord(location)) return [];
+    const path = location["path"];
+    const startLine = location["startLine"];
+    const endLine = location["endLine"];
+    if (
+      typeof path !== "string" ||
+      path.trim() === "" ||
+      !Number.isSafeInteger(startLine) ||
+      Number(startLine) < 1 ||
+      (endLine !== undefined &&
+        (!Number.isSafeInteger(endLine) || Number(endLine) < Number(startLine)))
+    ) {
+      return [];
+    }
+    return [
+      {
+        path,
+        startLine: Number(startLine),
+        ...(endLine === undefined ? {} : { endLine: Number(endLine) }),
+      },
+    ];
+  });
+}
+
+function findingIdentifier(
+  finding: Record<string, unknown>,
+  index: number,
+): string {
+  for (const key of ["occurrenceId", "findingId", "ruleId"]) {
+    const value = finding[key];
+    if (typeof value === "string" && value.trim() !== "") {
+      return value.slice(0, 256);
+    }
+  }
+  return `finding-${index + 1}`;
+}
+
+function hasNonreportableValidationDisposition(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value["exploitable"] === false || value["vulnerable"] === false) {
+    return true;
+  }
+  const nonreportable = new Set([
+    "false positive",
+    "mitigated",
+    "no issue",
+    "no issue found",
+    "not applicable",
+    "rejected",
+    "safe",
+    "suppressed",
+  ]);
+  return ["status", "verdict", "disposition", "result"].some((field) => {
+    const candidate = value[field];
+    return (
+      typeof candidate === "string" &&
+      nonreportable.has(candidate.trim().toLowerCase().replaceAll("_", " "))
+    );
+  });
+}
+
+function hasNonreportableAttackPathDecision(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const decision = value["decision"];
+  return (
+    typeof decision === "string" &&
+    ["deferred", "ignore", "not reportable", "suppressed"].includes(
+      decision.trim().toLowerCase().replaceAll("_", " "),
+    )
+  );
 }
 
 function mergeResidualRiskRecord(
@@ -685,4 +1018,8 @@ function isContainedRelativePath(path: string): boolean {
     !path.startsWith("../") &&
     !isAbsolute(path)
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -47,7 +47,10 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    findings is correct when no exploitable defect survives validation.
 6. For survivors, prove the attack path from attacker capability to impact,
    identify broken controls, calibrate severity, and retain exact code
-   locations and supporting evidence.
+   locations and supporting evidence. Give each final finding a substantive
+   validation record with an exploit witness, the nearest negative-control
+   result, and strongest counterevidence, plus an attack path that separately
+   records source, sink, outcome, attacker, entrypoint, and reachability.
 7. Write complete draft `scan-manifest.json`, `findings.json`, and
    `coverage.json` directly in `COPILOT_SECURITY_SCAN_DIR`, following
    `../../references/draft-contract.md`, `../../references/final-report.md`,

@@ -148,6 +148,7 @@ const distFiles = new Set(
     "copilot-client",
     "cost",
     "errors",
+    "evidence-quality",
     "index",
     "knowledge-base",
     "models",
