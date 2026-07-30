@@ -34,6 +34,12 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   radius. Interpolation, an LDAP API, a wildcard, or missing escaping without a
   proven attacker-controlled filter-semantic change and protected outcome is
   not sufficient.
+- XPath or XQuery injection that demonstrably selects a privileged account,
+  crosses a tenant or authorization boundary, exposes high-value secrets, or
+  installs an unauthorized role/session can be `high` or `critical` according
+  to the resulting privilege and blast radius. Expression interpolation,
+  quotes, boolean keywords, or an XML-query API without a proven AST change,
+  selected node, and protected outcome is not sufficient.
 - Sandbox, container, VM, browser, or interpreter escape that breaks an intended isolation boundary
 - Server-side template injection when it leads to RCE or leaking of secrets, with actual proof that the templating library can be exploited to do this (RCE escape or secrets/credentials in scope) and that this can be reached from an in-scope attack surface
 - Arbitrary file write in executable, startup, config, or firmware paths with a realistic path to persistence or code execution. Requires proof that an attacker can actually trigger this from in-scope attack surface.

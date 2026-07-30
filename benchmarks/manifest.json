@@ -718,8 +718,8 @@
           "locations": [
             {
               "path": "src/preview.py",
-              "startLine": 9,
-              "endLine": 10,
+              "startLine": 14,
+              "endLine": 15,
               "lineTolerance": 3
             }
           ],
@@ -933,6 +933,45 @@
         "javascript-safe-ldap-authorization/run-1/findings.json",
         "javascript-safe-ldap-authorization/run-2/findings.json",
         "javascript-safe-ldap-authorization/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "javascript-xpath-authentication-injection",
+      "description": "A request-controlled password verifier is interpolated into an XPath account predicate while the username is grammar-constrained, allowing boolean-expression injection to select the administrator XML node and install its role without a valid verifier.",
+      "fixture": "fixtures/javascript-xpath-authentication-injection",
+      "findingsPaths": [
+        "javascript-xpath-authentication-injection/run-1/findings.json",
+        "javascript-xpath-authentication-injection/run-2/findings.json",
+        "javascript-xpath-authentication-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "xpath-account-predicate-authentication-bypass",
+          "cwe": ["CWE-643", "CWE-287"],
+          "locations": [
+            {
+              "path": "src/authentication.js",
+              "startLine": 9,
+              "endLine": 10,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-xpath-authentication",
+      "description": "The application binds bounded credential strings as variables in a fixed XPath expression, so quotes, operators, paths, and function syntax remain scalar data while legitimate accounts still authenticate.",
+      "fixture": "fixtures/javascript-safe-xpath-authentication",
+      "findingsPaths": [
+        "javascript-safe-xpath-authentication/run-1/findings.json",
+        "javascript-safe-xpath-authentication/run-2/findings.json",
+        "javascript-safe-xpath-authentication/run-3/findings.json"
       ],
       "expected": []
     },

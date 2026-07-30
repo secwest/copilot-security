@@ -195,6 +195,15 @@ inventory and closure requirements.
      that resolves a server-owned canonical principal and applies context-correct
      RFC 4515 assertion escaping while retaining legitimate literal special
      characters as the negative control.
+   - XPath/XQuery expression and selected-node security binding: every request,
+     form, RPC, federated/session claim, stored value, expression template or
+     builder, variable binding, predicate, union, axis, function, namespace,
+     XML query, selected node set, account/tenant/role mapping, and installed
+     principal/session or protected action. Preserve the effective expression
+     AST and dialect-specific boolean precedence and coercion. XML/HTML escaping
+     does not secure XPath syntax. Use a sibling path with one fixed expression
+     and native variable binding that preserves the same legitimate
+     authentication or authorization behavior as the negative control.
    - untrusted upload and content placement: every multipart part, uploaded
      filename, byte stream, temporary file, archive member, decoded body, move,
      copy, and write; preserve parser limits, effective bytes after transforms,

@@ -191,6 +191,28 @@ describe("residual risk inventory", () => {
     expect(scanQualityGatePrompt("")).toContain("LDAP filter construction");
   });
 
+  test("pairs XPath predicate construction with selected-account session binding", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-xpath-authentication-injection"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-xpath-authentication"),
+    );
+
+    expect(vulnerable).toContain('"xpath-or-xquery-construction"');
+    expect(vulnerable).toContain('"xml-query-authentication-binding"');
+    expect(vulnerable).toContain("credentials.passwordVerifier");
+    expect(vulnerable).toContain("ACCOUNT_NAME.test(credentials.username)");
+    expect(vulnerable).toContain("directory.selectOne(expression)");
+    expect(vulnerable).toContain("role: user.role");
+    expect(safe).toContain('"xpath-or-xquery-construction"');
+    expect(safe).toContain("ACCOUNT_EXPRESSION");
+    expect(safe).toContain("passwordVerifier: credentials.passwordVerifier");
+    expect(scanQualityGatePrompt("")).toContain(
+      "XPath/XQuery predicate construction",
+    );
+  });
+
   test("surfaces SSRF input and fixed-destination controls", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-ssrf"),

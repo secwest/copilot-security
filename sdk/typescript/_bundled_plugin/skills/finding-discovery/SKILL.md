@@ -102,6 +102,18 @@ Use this checklist to keep discovery specific without turning it into validation
   passed as an RFC 4515-escaped assertion value or a correctly typed filter
   builder is strong counterevidence unless the attacker can still change the
   filter structure or security decision.
+- For XPath and XQuery used to select accounts, tenants, permissions, secrets,
+  or protected records, trace every request, form, RPC, federated/session, and
+  stored value into the effective expression AST and onward to the selected
+  node set and installed principal/session or protected action. Preserve quote
+  termination, boolean `and`/`or` precedence, union operators, predicates,
+  axes, functions, variables, namespaces, and dialect-specific type coercion.
+  XML/HTML escaping is not XPath literal or expression safety, and manual quote
+  replacement is not equivalent to variable binding across XPath versions and
+  libraries. Conversely, do not report a static XPath/XQuery expression or API
+  name alone: native variable/parameter binding that keeps attacker values out
+  of expression syntax, plus fixed node-to-privilege mapping, is strong
+  counterevidence.
 - For authentication, authorization, tenant, ownership, and secret-verification
   queries, trace the selected record through session/principal installation or
   the protected operation. Do not stop at “the query changes”: prove which

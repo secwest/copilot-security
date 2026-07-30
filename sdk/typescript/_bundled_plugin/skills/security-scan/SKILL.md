@@ -37,7 +37,8 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    and trust binding, browser-ambient credential CSRF, authorization, state
    changes, interpreters, filesystem, network, deserialization, and templates;
    SQL and document-database query selectors/operators, LDAP filter construction
-   and directory group/role binding, and bulk object binding;
+   and directory group/role binding, XPath/XQuery predicate construction and
+   selected-node security binding, and bulk object binding;
    mass assignment into persisted or privileged fields, untrusted uploads and
    content placement into served, executable, plugin, startup, or configuration
    roots, HTTP message framing and parser agreement across proxies, gateways,

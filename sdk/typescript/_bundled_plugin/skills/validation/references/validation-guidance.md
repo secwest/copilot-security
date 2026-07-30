@@ -107,6 +107,19 @@ Use class-specific proof tuples:
   encoding, rejecting all special characters, or an API name alone is not
   proof; include a legitimate literal-special-character control to distinguish
   escaped data from an LDAP wildcard/operator.
+- XPath/XQuery injection: attacker-controlled request, form, RPC,
+  federated/session claim, or stored value + the exact rendered expression and
+  effective parser AST under the deployed XPath/XQuery version and library +
+  boolean precedence, predicates, unions, axes, functions, namespaces,
+  variables, and type coercion + the selected node set + later authentication,
+  tenant, role, session, confidentiality, integrity, or protected-action
+  effect. Execute the exploit and negative controls through the same expression
+  parser, XML query, node selection, and security decision, recording the input,
+  rendered expression, selected node, and resulting privilege. Suppression
+  requires native variable/parameter binding or a context-correct expression
+  builder that proves attacker values remain scalar data. XML/HTML encoding,
+  ad hoc quote replacement, a static-expression sibling, or an API name alone
+  is not proof.
 - injection/path traversal/header/open redirect: attacker-controlled bytes + sanitizer/canonicalization/allowlist result + dangerous sink/context
 - untrusted upload/content placement: attacker-controlled filename, metadata,
   and bytes + multipart/parser and size limits + effective byte transforms +

@@ -52,7 +52,8 @@ publish findings, open issues, or contact third parties. Write only beneath
 3. Review every changed file and trace changed behavior through its callers,
    callees, guards, sanitizers, selectors, interpreters, filesystem, network,
    SQL/document database query syntax and selector/operator types, LDAP filter
-   assertion construction and directory group/role mapping, template,
+   assertion construction and directory group/role mapping, XPath/XQuery
+   expression construction and selected-node security mapping, template,
    parser, deserializer, file-upload parsing/storage and downstream content
    consumers, HTTP message framing and normalization across proxies/gateways/
    backends, JWT/OIDC protected headers, remote key sources, JWKS/issuer mapping,
@@ -74,6 +75,9 @@ publish findings, open issues, or contact third parties. Write only beneath
    - new LDAP filter interpolation, changed RFC 4515 assertion escaping,
      confusion between filter and DN escaping, attacker-influenced principal
      DNs/group names, or changed directory-match-to-application-role binding;
+   - new XPath/XQuery interpolation, weakened variable binding, changed
+     predicate/union/axis/function construction, boolean precedence or
+     namespace/type coercion, or changed selected-node-to-session/role binding;
    - widened DTO, schema, serializer, model, or ORM writable-field sets that
      expose role, tenant, owner, identity, recovery, billing, or trust state;
    - weakened SameSite, Origin/Referer, Fetch Metadata, or anti-CSRF token

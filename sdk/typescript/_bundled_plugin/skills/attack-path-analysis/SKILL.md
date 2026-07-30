@@ -107,6 +107,15 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   and do not suppress when the attacker can reshape the filter despite a later
   group-name check. Prove the witness and a legitimate literal-special-character
   negative control through the same directory and authorization path.
+- For XPath/XQuery findings, preserve the attacker-controlled input; its exact
+  placement or variable binding in the expression; the effective parser AST,
+  boolean precedence, predicates, union/axis/function behavior, namespace and
+  type coercion; the selected XML node set; and the resulting account, tenant,
+  role, session, secret, mutation, or protected action. Do not infer a security
+  bypass from string interpolation or an XML query API alone, and do not treat
+  XML/HTML escaping as XPath expression safety. Prove the same payload changes
+  the vulnerable AST and selected node while remaining scalar data under the
+  nearest variable-bound negative control.
 - For untrusted upload and content-placement findings, preserve the exact
   attacker-controlled filename, metadata, and bytes; multipart/parser limits;
   temporary and final paths after decoding, renaming, and canonicalization;

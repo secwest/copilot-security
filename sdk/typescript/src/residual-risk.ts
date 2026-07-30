@@ -172,6 +172,16 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:administrators|memberOf|principalDnForUser|requireDirectoryAdministrator)\b/iu,
   ],
   [
+    "xpath-or-xquery-construction",
+    99,
+    /\b(?:XPath|XQuery|evaluateXPath|selectNodes?|selectSingleNode)\b|\b(?:document|xpath)\.evaluate\s*\(|\/[A-Za-z_][\w.-]*(?:\/[A-Za-z_][\w.-]*)*\s*\[/iu,
+  ],
+  [
+    "xml-query-authentication-binding",
+    98,
+    /\b(?:authenticateDirectoryUser|passwordVerifier|ACCOUNT_EXPRESSION)\b|\b(?:role|session|username)\s*[:.=]/iu,
+  ],
+  [
     "authorization-boundary",
     85,
     /\b(?:account_?id|customer_?id|object_?id|owner_?id|req\.params|request\.params|tenant_?id|user_?id)\b/iu,

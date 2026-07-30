@@ -78,6 +78,10 @@ describe("effectiveness benchmark", () => {
         "javascript-safe-ldap-authorization",
       ],
       [
+        "javascript-xpath-authentication-injection",
+        "javascript-safe-xpath-authentication",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],
@@ -140,6 +144,11 @@ describe("effectiveness benchmark", () => {
         .get("javascript-ldap-filter-authorization")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-90", "CWE-863"]]);
+    expect(
+      cases
+        .get("javascript-xpath-authentication-injection")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-643", "CWE-287"]]);
     const adversarialVulnerable = join(
       benchmarkRoot,
       "fixtures",
@@ -432,6 +441,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain(
       "LDAP filter and directory authorization injection:",
     );
+    expect(deepScan).toContain(
+      "XPath/XQuery expression and selected-node security binding:",
+    );
     expect(deepScan).toContain("untrusted upload and content placement:");
     expect(deepScan).toContain("HTTP request framing and smuggling:");
     expect(deepScan).toContain("JWT/JWS/OIDC key origin and claim binding:");
@@ -446,6 +458,7 @@ describe("effectiveness benchmark", () => {
       "SQL and document-database query selectors/operators",
     );
     expect(standardScan).toContain("LDAP filter construction");
+    expect(standardScan).toContain("XPath/XQuery predicate construction");
     expect(standardScan).toContain("untrusted uploads and");
     expect(standardScan).toContain("HTTP message framing and parser agreement");
     expect(standardScan).toContain("JWT/OIDC algorithm, remote-key URL");
@@ -456,6 +469,7 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain("terminator space");
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("changed RFC 4515 assertion escaping");
+    expect(diffScan).toContain("new XPath/XQuery interpolation");
     expect(diffScan).toContain("new multipart/file inputs");
     expect(diffScan).toContain("duplicate or conflicting `Content-Length` and");
     expect(diffScan).toContain(
@@ -476,6 +490,12 @@ describe("effectiveness benchmark", () => {
       "For LDAP searches used in authentication, group membership",
     );
     expect(discovery).toContain("DN escaping are different contexts");
+    expect(discovery).toContain(
+      "For XPath and XQuery used to select accounts, tenants, permissions",
+    );
+    expect(discovery).toContain(
+      "XML/HTML escaping is not XPath literal or expression safety",
+    );
     expect(discovery).toContain(
       "parameterization when request-controlled values",
     );
@@ -501,6 +521,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("LDAP filter injection:");
+    expect(validation).toContain("XPath/XQuery injection:");
     expect(validation).toContain("untrusted upload/content placement:");
     expect(validation).toContain("HTTP request smuggling/desynchronization:");
     expect(validation).toContain("JWT/JWS/OIDC remote key origin:");
@@ -510,6 +531,7 @@ describe("effectiveness benchmark", () => {
     expect(attackPath).toContain("For native-memory findings");
     expect(attackPath).toContain("For document-query and NoSQL findings");
     expect(attackPath).toContain("For LDAP filter findings");
+    expect(attackPath).toContain("For XPath/XQuery findings");
     expect(attackPath).toContain(
       "For untrusted upload and content-placement findings",
     );
@@ -530,6 +552,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(severityPolicy).toContain(
       "LDAP filter injection that demonstrably bypasses authentication",
+    );
+    expect(severityPolicy).toContain(
+      "XPath or XQuery injection that demonstrably selects a privileged account",
     );
     expect(severityPolicy).toContain(
       "Untrusted upload or content placement that writes attacker-controlled bytes",
@@ -558,6 +583,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(threatModelGuidance).toContain(
       "LDAP filter and directory group/role authorization binding",
+    );
+    expect(threatModelGuidance).toContain(
+      "XPath/XQuery expression and selected-node authentication/authorization binding",
     );
     expect(threatModelGuidance).toContain("SAML/federated signed-object");
     expect(threatModelGuidance).toContain(
