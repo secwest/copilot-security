@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a sealed Codex Security scan contract without mutating it."""
+"""Validate a sealed Copilot Security scan contract without mutating it."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Any
 
 def _load_finalizer() -> ModuleType:
     script = Path(__file__).resolve().with_name("finalize_scan_contract.py")
-    spec = importlib.util.spec_from_file_location("codex_security_scan_contract", script)
+    spec = importlib.util.spec_from_file_location("copilot_security_scan_contract", script)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"could not load scan contract validator: {script}")
     module = importlib.util.module_from_spec(spec)

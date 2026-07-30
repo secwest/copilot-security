@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { Writable } from "node:stream";
 import { describe, expect, test } from "bun:test";
 import { exportEnvironment, main } from "../src/cli.js";
-import { CodexSecurityError } from "../src/index.js";
+import { CopilotSecurityError } from "../src/index.js";
 import {
   REDACTED_CREDENTIALS,
   SYNTHETIC_CREDENTIALS,
@@ -29,8 +29,8 @@ describe("CLI", () => {
         Path: "C:\\Python;C:\\Windows\\System32",
         PYTHON: "/managed/python",
         TMPDIR: "/tmp",
-        OPENAI_API_KEY: "openai-secret",
-        CODEX_API_KEY: "codex-secret",
+        THIRD_PARTY_API_KEY: "provider-secret",
+        COPILOT_API_KEY: "copilot-secret",
         GITHUB_TOKEN: "github-secret",
         PYTHONPATH: ".",
       }),
@@ -41,17 +41,17 @@ describe("CLI", () => {
     });
   });
 
-  test("exports findings to stdout without initializing Codex", async () => {
+  test("exports findings to stdout without initializing Copilot", async () => {
     for (const [format, expected] of [
       ["csv", "occurrence_id,finding_id\n"],
-      ["json", '{"documentType":"codex-security.findings"}\n'],
+      ["json", '{"documentType":"copilot-security.findings"}\n'],
       ["sarif", '{"version":"2.1.0"}\n'],
     ] as const) {
       const stdout = capture();
       const stderr = capture();
       const deps = dependencies();
       deps.createSecurity = () => {
-        throw new Error("must not initialize Codex");
+        throw new Error("must not initialize Copilot");
       };
       expect(
         await main(
@@ -86,7 +86,7 @@ describe("CLI", () => {
           dependencies(),
         ),
       ).toBe(0);
-      expect(contents).toBe('{"documentType":"codex-security.findings"}\n');
+      expect(contents).toBe('{"documentType":"copilot-security.findings"}\n');
       expect(stdout.writableEnded).toBe(false);
     } finally {
       stdout.destroy();
@@ -97,7 +97,7 @@ describe("CLI", () => {
     "streams a large stdout export through a slow destination without buffering or status noise",
     async () => {
       const root = await mkdtemp(
-        join(tmpdir(), "codex-security-export-stream-"),
+        join(tmpdir(), "copilot-security-export-stream-"),
       );
       const fakePython = join(root, "fake-python");
       const expectedBytes = 2 * 1024 * 1024;
@@ -105,7 +105,7 @@ describe("CLI", () => {
         fakePython,
         [
           "#!/bin/sh",
-          'if test "$1" = "-I" && test "$2" = "-c"; then printf "codex-security-python-ok\\n"; exit 0; fi',
+          'if test "$1" = "-I" && test "$2" = "-c"; then printf "copilot-security-python-ok\\n"; exit 0; fi',
           `exec ${JSON.stringify(process.execPath)} -e 'const chunk=Buffer.alloc(64*1024,97);let left=${expectedBytes};const write=()=>{while(left>0){const size=Math.min(left,chunk.length);left-=size;if(!process.stdout.write(chunk.subarray(0,size))){process.stdout.once("drain",write);return;}}};write();'`,
           "",
         ].join("\n"),
@@ -189,14 +189,14 @@ describe("CLI", () => {
       `terminates a stdout exporter promptly when ${failure}`,
       async () => {
         const root = await mkdtemp(
-          join(tmpdir(), "codex-security-export-fail-"),
+          join(tmpdir(), "copilot-security-export-fail-"),
         );
         const fakePython = join(root, "fake-python");
         await writeFile(
           fakePython,
           [
             "#!/bin/sh",
-            'if test "$1" = "-I" && test "$2" = "-c"; then printf "codex-security-python-ok\\n"; exit 0; fi',
+            'if test "$1" = "-I" && test "$2" = "-c"; then printf "copilot-security-python-ok\\n"; exit 0; fi',
             'printf "small export\\n"; sleep 8',
             "",
           ].join("\n"),
@@ -251,13 +251,15 @@ describe("CLI", () => {
   test.skipIf(process.platform === "win32")(
     "terminates a stdout exporter promptly when the destination fails under backpressure",
     async () => {
-      const root = await mkdtemp(join(tmpdir(), "codex-security-export-fail-"));
+      const root = await mkdtemp(
+        join(tmpdir(), "copilot-security-export-fail-"),
+      );
       const fakePython = join(root, "fake-python");
       await writeFile(
         fakePython,
         [
           "#!/bin/sh",
-          'if test "$1" = "-I" && test "$2" = "-c"; then printf "codex-security-python-ok\\n"; exit 0; fi',
+          'if test "$1" = "-I" && test "$2" = "-c"; then printf "copilot-security-python-ok\\n"; exit 0; fi',
           `exec ${JSON.stringify(process.execPath)} -e 'const chunk=Buffer.alloc(64*1024,97);let left=4*1024*1024;const write=()=>{while(left>0){left-=chunk.length;if(!process.stdout.write(chunk)){process.stdout.once("drain",write);return;}}};write();'`,
           "",
         ].join("\n"),
@@ -306,14 +308,14 @@ describe("CLI", () => {
   );
 
   test("writes exported findings to the requested file", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "codex-security-export-"));
+    const directory = await mkdtemp(join(tmpdir(), "copilot-security-export-"));
     try {
       for (const [format, filename, expected] of [
         ["csv", "findings.csv", "occurrence_id,finding_id\n"],
         [
           "json",
           "findings.json",
-          '{"documentType":"codex-security.findings"}\n',
+          '{"documentType":"copilot-security.findings"}\n',
         ],
         ["sarif", "results.sarif", '{"version":"2.1.0"}\n'],
       ] as const) {
@@ -341,7 +343,7 @@ describe("CLI", () => {
 
   test("explains a missing export-output directory", async () => {
     const root = await mkdtemp(
-      join(tmpdir(), "codex-security-export-missing-"),
+      join(tmpdir(), "copilot-security-export-missing-"),
     );
     try {
       const output = join(root, "reports", "results.sarif");
@@ -364,64 +366,74 @@ describe("CLI", () => {
     }
   });
 
-  test("rejects a repository-controlled output symlink without following it", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "codex-security-export-"));
-    try {
-      const outside = join(directory, "outside.txt");
-      const output = join(directory, "results.sarif");
-      await writeFile(outside, "unchanged\n");
-      await symlink(outside, output);
-      const stderr = capture();
-      expect(
-        await main(
-          ["export", "scan", "--output", output],
-          capture().stream,
-          stderr.stream,
-          dependencies(),
-        ),
-      ).toBe(2);
-      expect(await readFile(outside, "utf8")).toBe("unchanged\n");
-      expect((await lstat(output)).isSymbolicLink()).toBe(true);
-      expect(stderr.text()).toBe(
-        "codex-security: results.sarif: expected a regular non-symlink file\n",
+  test.skipIf(process.platform === "win32")(
+    "rejects a repository-controlled output symlink without following it",
+    async () => {
+      const directory = await mkdtemp(
+        join(tmpdir(), "copilot-security-export-"),
       );
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-
-  test("passes the canonical scan directory to the exporter", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "codex-security-export-"));
-    try {
-      const actual = join(directory, "actual");
-      const linked = join(directory, "linked");
-      const scan = join(actual, "scan");
-      await mkdir(scan, { recursive: true });
-      await symlink(actual, linked, "dir");
-      for (const output of ["-", join(directory, "results.sarif")] as const) {
-        const deps = dependencies();
-        let received = "";
-        deps.exportFindings = async (arguments_) => {
-          received = arguments_.scanDir;
-          return new TextEncoder().encode('{"version":"2.1.0"}\n');
-        };
+      try {
+        const outside = join(directory, "outside.txt");
+        const output = join(directory, "results.sarif");
+        await writeFile(outside, "unchanged\n");
+        await symlink(outside, output);
+        const stderr = capture();
         expect(
           await main(
-            ["export", join(linked, "scan"), "--output", output],
+            ["export", "scan", "--output", output],
             capture().stream,
-            capture().stream,
-            deps,
+            stderr.stream,
+            dependencies(),
           ),
-        ).toBe(0);
-        expect(received).toBe(await realpath(scan));
+        ).toBe(2);
+        expect(await readFile(outside, "utf8")).toBe("unchanged\n");
+        expect((await lstat(output)).isSymbolicLink()).toBe(true);
+        expect(stderr.text()).toBe(
+          "copilot-security: results.sarif: expected a regular non-symlink file\n",
+        );
+      } finally {
+        await rm(directory, { recursive: true, force: true });
       }
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
+    },
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "passes the canonical scan directory to the exporter",
+    async () => {
+      const directory = await mkdtemp(
+        join(tmpdir(), "copilot-security-export-"),
+      );
+      try {
+        const actual = join(directory, "actual");
+        const linked = join(directory, "linked");
+        const scan = join(actual, "scan");
+        await mkdir(scan, { recursive: true });
+        await symlink(actual, linked, "dir");
+        for (const output of ["-", join(directory, "results.sarif")] as const) {
+          const deps = dependencies();
+          let received = "";
+          deps.exportFindings = async (arguments_) => {
+            received = arguments_.scanDir;
+            return new TextEncoder().encode('{"version":"2.1.0"}\n');
+          };
+          expect(
+            await main(
+              ["export", join(linked, "scan"), "--output", output],
+              capture().stream,
+              capture().stream,
+              deps,
+            ),
+          ).toBe(0);
+          expect(received).toBe(await realpath(scan));
+        }
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   test("creates the optional scan-local exports directory", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "codex-security-export-"));
+    const directory = await mkdtemp(join(tmpdir(), "copilot-security-export-"));
     try {
       const scan = join(directory, "scan");
       const output = join(scan, "exports", "results.sarif");
@@ -441,7 +453,7 @@ describe("CLI", () => {
   });
 
   test("exports through a symlinked output parent", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "codex-security-export-"));
+    const directory = await mkdtemp(join(tmpdir(), "copilot-security-export-"));
     try {
       const scan = join(directory, "scan");
       const actualOutput = join(directory, "actual-output");
@@ -468,7 +480,7 @@ describe("CLI", () => {
       ).toBe(0);
       expect(
         JSON.parse(await readFile(join(actualOutput, "results.json"), "utf8")),
-      ).toMatchObject({ documentType: "codex-security.findings" });
+      ).toMatchObject({ documentType: "copilot-security.findings" });
       expect(stdout.text()).toBe("");
       expect(stderr.text()).toBe(`JSON: ${output}\n`);
     } finally {
@@ -477,7 +489,7 @@ describe("CLI", () => {
   });
 
   test("rejects a symlinked output parent inside the scan directory", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "codex-security-export-"));
+    const directory = await mkdtemp(join(tmpdir(), "copilot-security-export-"));
     try {
       const scan = join(directory, "scan");
       const outside = join(directory, "outside");
@@ -519,7 +531,7 @@ describe("CLI", () => {
   });
 
   test("rejects a repository-controlled output-directory symlink", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "codex-security-export-"));
+    const directory = await mkdtemp(join(tmpdir(), "copilot-security-export-"));
     try {
       const scan = join(directory, "scan");
       const repository = join(directory, "repo");
@@ -553,7 +565,7 @@ describe("CLI", () => {
         ),
       ).toBe(2);
       expect(stderr.text()).toBe(
-        "codex-security: The export output path cannot traverse a repository symlink.\n",
+        "copilot-security: The export output path cannot traverse a repository symlink.\n",
       );
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -565,7 +577,7 @@ describe("CLI", () => {
     const stderr = capture();
     const deps = dependencies();
     deps.exportFindings = async () => {
-      throw new CodexSecurityError(
+      throw new CopilotSecurityError(
         "manifest.scan: SARIF projection requires a sealed scan",
       );
     };
@@ -579,7 +591,7 @@ describe("CLI", () => {
     ).toBe(2);
     expect(stdout.text()).toBe("");
     expect(stderr.text()).toBe(
-      "codex-security: manifest.scan: SARIF projection requires a sealed scan\n",
+      "copilot-security: manifest.scan: SARIF projection requires a sealed scan\n",
     );
   });
 
@@ -588,7 +600,7 @@ describe("CLI", () => {
     const stderr = capture();
     const deps = dependencies();
     deps.exportFindings = async () => {
-      throw new CodexSecurityError(`export failed ${SYNTHETIC_CREDENTIALS}`);
+      throw new CopilotSecurityError(`export failed ${SYNTHETIC_CREDENTIALS}`);
     };
 
     expect(
@@ -601,7 +613,7 @@ describe("CLI", () => {
     ).toBe(2);
     expect(stdout.text()).toBe("");
     expect(stderr.text()).toBe(
-      `codex-security: export failed ${REDACTED_CREDENTIALS}\n`,
+      `copilot-security: export failed ${REDACTED_CREDENTIALS}\n`,
     );
   });
 });

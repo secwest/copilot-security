@@ -1,6 +1,6 @@
 const MAX_WORKER_STATUS_BYTES = 64 * 1024;
 const MAX_WORKER_COUNT = 1024;
-const WORKER_STATUS_PREFIX = "CODEX_SECURITY_WORKER_STATUS ";
+const WORKER_STATUS_PREFIX = "COPILOT_SECURITY_WORKER_STATUS ";
 const PREFLIGHT_COMMAND = /(?:^|[\\/])config_preflight\.py(?=$|["'\s])/u;
 const WORKER_PHASES = new Set([
   "ranking",

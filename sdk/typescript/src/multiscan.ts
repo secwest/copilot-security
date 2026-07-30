@@ -14,8 +14,8 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import Papa from "papaparse";
-import type { CodexSecurity } from "./api.js";
-import type { CodexSecurityConfig } from "./config.js";
+import type { CopilotSecurity } from "./api.js";
+import type { CopilotSecurityConfig } from "./config.js";
 import type { ScanCost } from "./cost.js";
 import type { ScanMode } from "./targets.js";
 import { resolveTrustedExecutable } from "./trusted-executable.js";
@@ -51,10 +51,10 @@ export interface MultiscanOptions {
   workers: number;
   mode: ScanMode;
   maxAttempts: number;
-  config: CodexSecurityConfig;
+  config: CopilotSecurityConfig;
   createSecurity(
-    config: CodexSecurityConfig,
-  ): Pick<CodexSecurity, "run" | "close">;
+    config: CopilotSecurityConfig,
+  ): Pick<CopilotSecurity, "run" | "close">;
   signal?: AbortSignal;
   onProgress?(event: {
     repository: string;
@@ -136,7 +136,7 @@ async function runCampaign(
   let next = 0;
   let failed = 0;
   const worker = async (
-    security: Pick<CodexSecurity, "run" | "close">,
+    security: Pick<CopilotSecurity, "run" | "close">,
   ): Promise<void> => {
     for (;;) {
       options.signal?.throwIfAborted();

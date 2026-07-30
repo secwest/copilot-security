@@ -3,13 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 import { parse } from "smol-toml";
-import { scanRuntimeCodexConfig } from "../src/api.js";
+import { scanRuntimeCopilotConfig } from "../src/api.js";
 import {
   ConfigurationError,
-  DEFAULT_CODEX_CONFIG,
+  DEFAULT_COPILOT_CONFIG,
   type JsonObject,
-  mergedCodexConfig,
-  writeCodexConfig,
+  mergedCopilotConfig,
+  writeCopilotConfig,
 } from "../src/index.js";
 
 const temporaryDirectories: string[] = [];
@@ -23,55 +23,22 @@ afterEach(async () => {
 });
 
 async function temporaryDirectory(): Promise<string> {
-  const path = await mkdtemp(join(tmpdir(), "codex-security-config-"));
+  const path = await mkdtemp(join(tmpdir(), "copilot-security-config-"));
   temporaryDirectories.push(path);
   return path;
 }
 
-function runPinnedCodex(codexHome: string, arguments_: readonly string[]) {
-  const node = Bun.which("node");
-  if (node === null) {
-    throw new Error("The pinned Codex CLI requires Node.js.");
-  }
-  const environment: NodeJS.ProcessEnv = {
-    ...process.env,
-    CODEX_HOME: codexHome,
-  };
-  delete environment["OPENAI_API_KEY"];
-  delete environment["CODEX_API_KEY"];
-  return Bun.spawnSync(
-    [
-      node,
-      join(
-        import.meta.dir,
-        "..",
-        "node_modules",
-        "@openai",
-        "codex",
-        "bin",
-        "codex.js",
-      ),
-      ...arguments_,
-    ],
-    {
-      env: environment,
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-}
-
-describe("Codex configuration", () => {
-  test("lets Codex honor native and managed credential storage", async () => {
-    expect(DEFAULT_CODEX_CONFIG["cli_auth_credentials_store"]).toBe("auto");
-    expect((await mergedCodexConfig({}))["cli_auth_credentials_store"]).toBe(
+describe("Copilot configuration", () => {
+  test("lets Copilot honor native and managed credential storage", async () => {
+    expect(DEFAULT_COPILOT_CONFIG["cli_auth_credentials_store"]).toBe("auto");
+    expect((await mergedCopilotConfig({}))["cli_auth_credentials_store"]).toBe(
       "auto",
     );
   });
 
   test("deep-merges native multi-agent v2 defaults", async () => {
-    const merged = await mergedCodexConfig({
-      codexOverrides: {
+    const merged = await mergedCopilotConfig({
+      copilotOverrides: {
         features: { multi_agent_v2: { max_concurrent_threads_per_session: 4 } },
         model_reasoning_effort: "high",
         windows: { sandbox: "elevated" },
@@ -92,8 +59,8 @@ describe("Codex configuration", () => {
   });
 
   test("preserves legacy elevated Windows sandbox overrides", async () => {
-    const merged = await mergedCodexConfig({
-      codexOverrides: {
+    const merged = await mergedCopilotConfig({
+      copilotOverrides: {
         features: { elevated_windows_sandbox: true },
       },
     });
@@ -105,8 +72,8 @@ describe("Codex configuration", () => {
   });
 
   test("projects legacy elevated Windows overrides into selected profiles", async () => {
-    const merged = await mergedCodexConfig({
-      codexOverrides: {
+    const merged = await mergedCopilotConfig({
+      copilotOverrides: {
         profile: "elevated",
         profiles: {
           elevated: {
@@ -128,8 +95,8 @@ describe("Codex configuration", () => {
   });
 
   test("allows selected profiles to override root elevated sandbox defaults", async () => {
-    const merged = await mergedCodexConfig({
-      codexOverrides: {
+    const merged = await mergedCopilotConfig({
+      copilotOverrides: {
         features: { elevated_windows_sandbox: true },
         profile: "restricted",
         profiles: {
@@ -152,8 +119,8 @@ describe("Codex configuration", () => {
   });
 
   test("gives profile-local Windows sandbox overrides precedence", async () => {
-    const merged = await mergedCodexConfig({
-      codexOverrides: {
+    const merged = await mergedCopilotConfig({
+      copilotOverrides: {
         profile: "restricted",
         profiles: {
           restricted: {
@@ -175,8 +142,8 @@ describe("Codex configuration", () => {
   });
 
   test("gives explicit Windows sandbox overrides precedence", async () => {
-    const merged = await mergedCodexConfig({
-      codexOverrides: {
+    const merged = await mergedCopilotConfig({
+      copilotOverrides: {
         features: { elevated_windows_sandbox: true },
         windows: { sandbox: "unelevated" },
       },
@@ -189,14 +156,14 @@ describe("Codex configuration", () => {
   });
 
   test("retains the Windows sandbox in the hardened scan profile", async () => {
-    const stateDirectory = join(tmpdir(), "codex-security-windows-state");
-    const merged = await mergedCodexConfig({});
+    const stateDirectory = join(tmpdir(), "copilot-security-windows-state");
+    const merged = await mergedCopilotConfig({});
 
-    expect(scanRuntimeCodexConfig(merged, stateDirectory)).toMatchObject({
+    expect(scanRuntimeCopilotConfig(merged, stateDirectory)).toMatchObject({
       windows: { sandbox: "unelevated" },
-      default_permissions: "codex_security_scan",
+      default_permissions: "copilot_security_scan",
       permissions: {
-        codex_security_scan: {
+        copilot_security_scan: {
           filesystem: {
             ":root": "read",
             ":workspace_roots": "write",
@@ -207,25 +174,21 @@ describe("Codex configuration", () => {
     });
   });
 
-  test("writes Windows sandbox settings accepted by the pinned Codex CLI", async () => {
+  test("writes deterministic scanner sandbox settings", async () => {
     const root = await temporaryDirectory();
     const path = join(root, "config.toml");
-    await writeCodexConfig(path, await mergedCodexConfig({}));
+    await writeCopilotConfig(path, await mergedCopilotConfig({}));
 
     expect(parse(await readFile(path, "utf8"))).toMatchObject({
       windows: { sandbox: "unelevated" },
     });
-
-    const result = runPinnedCodex(root, ["features", "list"]);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.length).toBeGreaterThan(0);
   });
 
-  test("writes selected profile sandbox settings accepted by the pinned Codex CLI", async () => {
+  test("writes selected scanner profile settings", async () => {
     const root = await temporaryDirectory();
     const path = join(root, "config.toml");
-    const config = await mergedCodexConfig({
-      codexOverrides: {
+    const config = await mergedCopilotConfig({
+      copilotOverrides: {
         profile: "elevated",
         profiles: {
           elevated: {
@@ -241,8 +204,8 @@ describe("Codex configuration", () => {
       "elevated"
     ] as JsonObject;
     const profilePath = join(root, "elevated.config.toml");
-    await writeCodexConfig(path, nativeConfig);
-    await writeCodexConfig(profilePath, profileConfig);
+    await writeCopilotConfig(path, nativeConfig);
+    await writeCopilotConfig(profilePath, profileConfig);
 
     expect(parse(await readFile(path, "utf8"))).toMatchObject({
       windows: { sandbox: "unelevated" },
@@ -251,67 +214,52 @@ describe("Codex configuration", () => {
       features: { elevated_windows_sandbox: true },
       windows: { sandbox: "elevated" },
     });
-
-    const result = runPinnedCodex(root, [
-      "--profile",
-      "elevated",
-      "mcp",
-      "list",
-      "--json",
-    ]);
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `The pinned Codex CLI rejected the selected Windows sandbox profile: ${new TextDecoder().decode(result.stderr)}`,
-      );
-    }
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.length).toBeGreaterThan(0);
   });
 
   test("rejects prototype-bearing override keys", async () => {
     for (const key of ["__proto__", "constructor", "prototype"]) {
       await expect(
-        mergedCodexConfig({
-          codexOverrides: JSON.parse(
+        mergedCopilotConfig({
+          copilotOverrides: JSON.parse(
             `{"features":{"custom":[{"${key}":{"polluted":true}}]}}`,
           ),
         }),
-      ).rejects.toThrow(`Invalid Codex override key: ${key}`);
+      ).rejects.toThrow(`Invalid Copilot override key: ${key}`);
     }
     expect(({} as Record<string, unknown>)["polluted"]).toBeUndefined();
   });
 
   test("rejects non-object overrides with a configuration error", async () => {
-    for (const codexOverrides of [null, [], false, 1, "invalid"]) {
+    for (const copilotOverrides of [null, [], false, 1, "invalid"]) {
       await expect(
-        mergedCodexConfig({ codexOverrides } as never),
-      ).rejects.toThrow("codexOverrides must be an object");
+        mergedCopilotConfig({ copilotOverrides } as never),
+      ).rejects.toThrow("copilotOverrides must be an object");
     }
   });
 
   test("keeps exported default configuration deeply immutable", async () => {
-    expect(Object.isFrozen(DEFAULT_CODEX_CONFIG)).toBe(true);
-    expect(Object.isFrozen(DEFAULT_CODEX_CONFIG["features"])).toBe(true);
-    expect(Object.isFrozen(DEFAULT_CODEX_CONFIG["windows"])).toBe(true);
+    expect(Object.isFrozen(DEFAULT_COPILOT_CONFIG)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_COPILOT_CONFIG["features"])).toBe(true);
+    expect(Object.isFrozen(DEFAULT_COPILOT_CONFIG["windows"])).toBe(true);
     expect(
       Object.isFrozen(
-        (DEFAULT_CODEX_CONFIG["features"] as Record<string, unknown>)[
+        (DEFAULT_COPILOT_CONFIG["features"] as Record<string, unknown>)[
           "multi_agent_v2"
         ],
       ),
     ).toBe(true);
     expect(() => {
-      (DEFAULT_CODEX_CONFIG["features"] as Record<string, unknown>)["goals"] =
+      (DEFAULT_COPILOT_CONFIG["features"] as Record<string, unknown>)["goals"] =
         false;
     }).toThrow();
-    expect((await mergedCodexConfig({}))["features"]).toMatchObject({
+    expect((await mergedCopilotConfig({}))["features"]).toMatchObject({
       goals: true,
       multi_agent_v2: {
         enabled: true,
         max_concurrent_threads_per_session: 9,
       },
     });
-    expect(await mergedCodexConfig({})).toMatchObject({
+    expect(await mergedCopilotConfig({})).toMatchObject({
       model: "gpt-5.6-sol",
       model_reasoning_effort: "xhigh",
       windows: {
@@ -322,31 +270,33 @@ describe("Codex configuration", () => {
 
   test("rejects owned plugin keys and incompatible v2 overrides", async () => {
     await expect(
-      mergedCodexConfig({ codexOverrides: { features: false } }),
+      mergedCopilotConfig({ copilotOverrides: { features: false } }),
     ).rejects.toThrow("features must be a TOML table");
     await expect(
-      mergedCodexConfig({ codexOverrides: { features: { plugins: false } } }),
+      mergedCopilotConfig({
+        copilotOverrides: { features: { plugins: false } },
+      }),
     ).rejects.toThrow(ConfigurationError);
     await expect(
-      mergedCodexConfig({ codexOverrides: { agents: { max_threads: 2 } } }),
+      mergedCopilotConfig({ copilotOverrides: { agents: { max_threads: 2 } } }),
     ).rejects.toThrow("legacy v1");
     await expect(
-      mergedCodexConfig({
-        codexOverrides: { features: { multi_agent_v2: { enabled: false } } },
+      mergedCopilotConfig({
+        copilotOverrides: { features: { multi_agent_v2: { enabled: false } } },
       }),
     ).rejects.toThrow("cannot be disabled");
 
     await expect(
-      mergedCodexConfig({
-        codexOverrides: {
+      mergedCopilotConfig({
+        copilotOverrides: {
           profile: "disabled",
           profiles: { disabled: { features: { plugins: false } } },
         },
       }),
     ).rejects.toThrow("owns plugin loading configuration");
     await expect(
-      mergedCodexConfig({
-        codexOverrides: {
+      mergedCopilotConfig({
+        copilotOverrides: {
           profile: "disabled",
           profiles: {
             disabled: {
@@ -357,15 +307,15 @@ describe("Codex configuration", () => {
       }),
     ).rejects.toThrow("cannot be disabled");
     await expect(
-      mergedCodexConfig({
-        codexOverrides: {
+      mergedCopilotConfig({
+        copilotOverrides: {
           profiles: { legacy: { agents: { max_threads: 2 } } },
         },
       }),
     ).rejects.toThrow("legacy v1");
     await expect(
-      mergedCodexConfig({
-        codexOverrides: {
+      mergedCopilotConfig({
+        copilotOverrides: {
           profiles: {
             deep: {
               features: {
@@ -383,7 +333,7 @@ describe("Codex configuration", () => {
   test("writes deterministic TOML atomically with restrictive permissions", async () => {
     const root = await temporaryDirectory();
     const path = join(root, "home", "config.toml");
-    await writeCodexConfig(path, {
+    await writeCopilotConfig(path, {
       features: { plugins: true, goals: true },
       agents: { max_threads: 12 },
       model_reasoning_effort: "high",
@@ -402,7 +352,7 @@ describe("Codex configuration", () => {
   test("serializes numeric TOML overrides", async () => {
     const root = await temporaryDirectory();
     const path = join(root, "config.toml");
-    await writeCodexConfig(path, {
+    await writeCopilotConfig(path, {
       max_safe: Number.MAX_SAFE_INTEGER,
       fractional: 1.5,
       exponent: 1e-7,
@@ -421,7 +371,7 @@ describe("Codex configuration", () => {
       const path = join(root, "config.toml");
       const previous = process.umask(0o777);
       try {
-        await writeCodexConfig(path, { model: "test" });
+        await writeCopilotConfig(path, { model: "test" });
       } finally {
         process.umask(previous);
       }
@@ -441,7 +391,7 @@ describe("Codex configuration", () => {
         },
       ],
     };
-    await writeCodexConfig(path, { hooks });
+    await writeCopilotConfig(path, { hooks });
     expect(parse(await readFile(path, "utf8"))).toEqual({ hooks });
   });
 });

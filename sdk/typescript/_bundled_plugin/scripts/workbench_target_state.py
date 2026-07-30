@@ -1,4 +1,4 @@
-"""Persist stable Codex Security target identities."""
+"""Persist stable Copilot Security target identities."""
 
 from __future__ import annotations
 

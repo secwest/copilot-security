@@ -1,18 +1,18 @@
 {
-  "documentType": "codex-security.findings",
+  "documentType": "copilot-security.findings",
   "schemaVersion": "1.0",
   "scanId": "scan_example_001",
   "findings": [
     {
-      "findingId": "csf_852f90d6e1177502ff113d4a",
-      "occurrenceId": "occ_e79cb19591e696572a1c22be",
+      "findingId": "csf_2bb4147ba2309ee706b5c382",
+      "occurrenceId": "occ_04d0783ca6718a6bf8e197d1",
       "ruleId": "path-traversal.archive-extraction",
       "identity": {
         "anchor": "archive-entry-write-without-containment"
       },
       "fingerprints": {
-        "algorithm": "codex-security/v1",
-        "primary": "codex-security/v1:sha256:990a4a6a2ec18440dd47eac4d7256c0ee2c02db1b43104720cab3cbe9db706ca"
+        "algorithm": "copilot-security/v1",
+        "primary": "copilot-security/v1:sha256:85058ffbf738194c4302b2373905c9016f83a445c875eecbb52ebd16750471d7"
       },
       "title": "Unsafe archive extraction can escape the output directory",
       "summary": "An attacker-controlled path reaches a filesystem write without containment validation.",

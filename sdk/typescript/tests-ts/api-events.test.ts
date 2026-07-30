@@ -1,11 +1,11 @@
 import { mkdir, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { ThreadEvent } from "@openai/codex-sdk";
+type ThreadEvent = { type: string; [key: string]: unknown };
 import { afterEach, describe, expect, test } from "bun:test";
 import { runScanEvents } from "../src/api.js";
 import {
-  CodexSecurityError,
+  CopilotSecurityError,
   IncompleteScanError,
   ScanInterruptedError,
   type ScanReconnectDetails,
@@ -271,7 +271,7 @@ describe("one-shot scan events", () => {
     }
   });
 
-  test("keeps the Codex stream alive through reconnect notifications", async () => {
+  test("keeps the Copilot stream alive through reconnect notifications", async () => {
     const scanDir = await copyCompletedScan(await temporaryDirectory());
     const reconnects: Array<[number, number]> = [];
     let release!: () => void;
@@ -350,8 +350,112 @@ describe("one-shot scan events", () => {
     }
 
     await expect(runEvents(scanDir, failedEvents())).rejects.toMatchObject({
-      name: CodexSecurityError.name,
+      name: CopilotSecurityError.name,
       message: "retry budget exhausted",
+    });
+  });
+
+  test("recovers a terminal model-stream failure when deterministic finalization accepts the artifacts", async () => {
+    const root = await temporaryDirectory();
+    const scanDir = join(root, "scan");
+    let recovered: Error | null = null;
+    let finalized = 0;
+    const usage = {
+      input_tokens: 50,
+      cached_input_tokens: 10,
+      output_tokens: 20,
+      reasoning_output_tokens: 5,
+    };
+    async function* failedAfterArtifacts(): AsyncGenerator<ThreadEvent> {
+      yield { type: "thread.started", thread_id: "thread-recovered" };
+      yield {
+        type: "turn.failed",
+        error: {
+          message: "Responses stream ended without a completed response",
+        },
+        usage,
+      } as ThreadEvent;
+    }
+
+    const result = await runScanEvents({
+      thread: {
+        id: null,
+        async runStreamed() {
+          return { events: failedAfterArtifacts() };
+        },
+      },
+      events: failedAfterArtifacts(),
+      signal: new AbortController().signal,
+      scanDir,
+      pluginRoot: PLUGIN_ROOT,
+      expectation: {
+        repository: "/repository",
+        repositoryRevision: "deadbeef",
+        target: { kind: "repository", paths: [] },
+        mode: "standard",
+        pluginVersion: "0.1.0",
+      },
+      recoverIncompleteWithFinalize: true,
+      onFinalize: async (observedUsage) => {
+        finalized += 1;
+        expect(observedUsage).toEqual(usage);
+        await copyCompletedScan(root);
+        return observedUsage;
+      },
+      onRecovered: (failure) => {
+        recovered = failure;
+      },
+    });
+
+    expect(finalized).toBe(1);
+    expect(recovered).toMatchObject({
+      message: "Responses stream ended without a completed response",
+    });
+    expect(result.threadId).toBe("thread-recovered");
+    expect(result.turnResult).toMatchObject({
+      status: "completed",
+      usage,
+    });
+  });
+
+  test("preserves the terminal stream error when deterministic recovery rejects incomplete artifacts", async () => {
+    const scanDir = join(await temporaryDirectory(), "partial-scan");
+    await mkdir(scanDir, { mode: 0o700 });
+    async function* failedEvents(): AsyncGenerator<ThreadEvent> {
+      yield { type: "thread.started", thread_id: "thread-1" };
+      yield {
+        type: "turn.failed",
+        error: { message: "model stream exhausted its retries" },
+      };
+    }
+
+    await expect(
+      runScanEvents({
+        thread: {
+          id: null,
+          async runStreamed() {
+            return { events: failedEvents() };
+          },
+        },
+        events: failedEvents(),
+        signal: new AbortController().signal,
+        scanDir,
+        pluginRoot: PLUGIN_ROOT,
+        expectation: {
+          repository: "/repository",
+          repositoryRevision: "deadbeef",
+          target: { kind: "repository", paths: [] },
+          mode: "standard",
+          pluginVersion: "0.1.0",
+        },
+        recoverIncompleteWithFinalize: true,
+        onFinalize: async () => {
+          throw new Error("artifacts are incomplete");
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: CopilotSecurityError.name,
+      message: "model stream exhausted its retries",
     });
   });
 
@@ -461,13 +565,13 @@ describe("one-shot scan events", () => {
             reconnects.push([attempt, maxAttempts]);
           },
         ),
-      ).rejects.toMatchObject({ name: CodexSecurityError.name, message });
+      ).rejects.toMatchObject({ name: CopilotSecurityError.name, message });
       expect(reconnects).toEqual([]);
       expect(advancedPastFailure).toBe(false);
     }
   });
 
-  test("uses the last reconnect error when Codex ends without a terminal event", async () => {
+  test("uses the last reconnect error when Copilot ends without a terminal event", async () => {
     const scanDir = join(await temporaryDirectory(), "partial-scan");
     await mkdir(scanDir, { mode: 0o700 });
     async function* incompleteEvents(): AsyncGenerator<ThreadEvent> {
@@ -494,7 +598,7 @@ describe("one-shot scan events", () => {
       }
 
       await expect(runEvents(scanDir, failedEvents())).rejects.toMatchObject({
-        name: CodexSecurityError.name,
+        name: CopilotSecurityError.name,
         message,
       });
     }
@@ -507,11 +611,11 @@ describe("one-shot scan events", () => {
       yield { type: "thread.started", thread_id: "thread-1" };
       yield { type: "turn.started" };
       yield { type: "error", message: "Reconnecting... 2/5" };
-      throw new Error("Codex Exec exited with code 1");
+      throw new Error("Copilot Exec exited with code 1");
     }
 
     await expect(runEvents(scanDir, failedEvents())).rejects.toThrow(
-      "Codex Exec exited with code 1",
+      "Copilot Exec exited with code 1",
     );
   });
 
@@ -549,7 +653,7 @@ describe("one-shot scan events", () => {
         item: {
           id: "message-1",
           type: "agent_message",
-          text: 'CODEX_SECURITY_WORKER_STATUS {"phase":"ranking","planned":6,"started":3}',
+          text: 'COPILOT_SECURITY_WORKER_STATUS {"phase":"ranking","planned":6,"started":3}',
         },
       };
       yield {

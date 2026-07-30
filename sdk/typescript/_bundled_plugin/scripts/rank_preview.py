@@ -959,7 +959,7 @@ def preview_for(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build structural or sampled previews for Codex Security rank inputs."
+        description="Build structural or sampled previews for Copilot Security rank inputs."
     )
     parser.parse_args()
 

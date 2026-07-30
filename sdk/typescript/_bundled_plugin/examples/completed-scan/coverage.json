@@ -1,5 +1,5 @@
 {
-  "documentType": "codex-security.coverage",
+  "documentType": "copilot-security.coverage",
   "schemaVersion": "1.0",
   "scanId": "scan_example_001",
   "mode": "repository",

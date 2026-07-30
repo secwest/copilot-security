@@ -27,7 +27,7 @@ The finding detail view is a decision-focused projection of the canonical findin
 
 Keep background exposition, alternate exploit research, full PoC instructions, representative command output, and long source walkthroughs in the detailed write-up. Do not copy them into canonical fields merely to make the workspace report longer. The workspace should stay self-contained enough to support triage while avoiding duplicated or speculative prose.
 
-The workspace **Evidence** section is an artifact navigator, not another source-proof section. When `writeup.reportPath` is present, the workbench lists that verified scan-local report plus regular files below its sibling `poc/` directory. Each row opens the exact file in the editor through a host-mediated Codex navigation request. Do not place artifact paths in root-cause prose or add an unvalidated artifact list to the canonical finding merely for display.
+The workspace **Evidence** section is an artifact navigator, not another source-proof section. When `writeup.reportPath` is present, the workbench lists that verified scan-local report plus regular files below its sibling `poc/` directory. Each row opens the exact file in the editor through a host-mediated Copilot navigation request. Do not place artifact paths in root-cause prose or add an unvalidated artifact list to the canonical finding merely for display.
 
 ## Structured Example
 
@@ -40,7 +40,7 @@ The following shape shows how to encode the `environment/add` reserved-environme
     {
       "id": "rpc-input",
       "label": "Caller-controlled environment fields",
-      "path": "codex-rs/app-server-protocol/src/protocol/v2/environment.rs",
+      "path": "copilot-rs/app-server-protocol/src/protocol/v2/environment.rs",
       "startLine": 6,
       "endLine": 12,
       "language": "rust",
@@ -51,7 +51,7 @@ The following shape shows how to encode the `environment/add` reserved-environme
     {
       "id": "rpc-forward",
       "label": "RPC forwards both fields without validation",
-      "path": "codex-rs/app-server/src/request_processors/environment_processor.rs",
+      "path": "copilot-rs/app-server/src/request_processors/environment_processor.rs",
       "startLine": 15,
       "endLine": 22,
       "language": "rust",
@@ -62,7 +62,7 @@ The following shape shows how to encode the `environment/add` reserved-environme
     {
       "id": "startup-reserved-check",
       "label": "Startup protects the reserved local identifier",
-      "path": "codex-rs/exec-server/src/environment.rs",
+      "path": "copilot-rs/exec-server/src/environment.rs",
       "startLine": 167,
       "endLine": 176,
       "language": "rust",
@@ -73,7 +73,7 @@ The following shape shows how to encode the `environment/add` reserved-environme
     {
       "id": "runtime-upsert",
       "label": "Runtime upsert omits the reserved-ID check",
-      "path": "codex-rs/exec-server/src/environment.rs",
+      "path": "copilot-rs/exec-server/src/environment.rs",
       "startLine": 253,
       "endLine": 281,
       "language": "rust",
@@ -84,7 +84,7 @@ The following shape shows how to encode the `environment/add` reserved-environme
     {
       "id": "default-lookup",
       "label": "Default selection reads the overwritten map entry",
-      "path": "codex-rs/exec-server/src/environment.rs",
+      "path": "copilot-rs/exec-server/src/environment.rs",
       "startLine": 205,
       "endLine": 210,
       "language": "rust",

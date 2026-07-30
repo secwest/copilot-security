@@ -96,7 +96,7 @@ afterEach(async () => {
 
 async function temporaryDirectory(): Promise<string> {
   const directory = await realpath(
-    await mkdtemp(join(tmpdir(), "codex-security-canonical-paths-")),
+    await mkdtemp(join(tmpdir(), "copilot-security-canonical-paths-")),
   );
   temporaryDirectories.push(directory);
   return directory;

@@ -1,7 +1,7 @@
 import { cp, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ThreadEvent } from "@openai/codex-sdk";
+type ThreadEvent = { type: string; [key: string]: unknown };
 import { runScanEvents } from "../../src/api.js";
 import type {
   ScanOptions,
@@ -37,7 +37,7 @@ export function createApiTestFixtures() {
 
     async temporaryDirectory(): Promise<string> {
       const path = await realpath(
-        await mkdtemp(join(tmpdir(), "codex-security-api-")),
+        await mkdtemp(join(tmpdir(), "copilot-security-api-")),
       );
       temporaryDirectories.push(path);
       return path;

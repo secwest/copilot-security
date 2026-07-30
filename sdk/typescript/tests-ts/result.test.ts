@@ -10,11 +10,11 @@ import type {
 } from "../src/index.js";
 
 const manifest = {
-  documentType: "codex-security.scan-manifest",
+  documentType: "copilot-security.scan-manifest",
   schemaVersion: "1.0",
   scan: {
     id: "scan",
-    producer: { name: "codex-security-plugin", version: "0.1.14" },
+    producer: { name: "copilot-security-plugin", version: "0.1.14" },
     status: "completed",
     startedAt: "2026-01-01T00:00:00Z",
     completedAt: "2026-01-01T00:00:01Z",
@@ -28,14 +28,14 @@ const manifest = {
 } satisfies ScanManifest;
 
 const findings = {
-  documentType: "codex-security.findings",
+  documentType: "copilot-security.findings",
   schemaVersion: "1.0",
   scanId: "scan",
   findings: [],
 } satisfies FindingsDocument;
 
 const coverage = {
-  documentType: "codex-security.coverage",
+  documentType: "copilot-security.coverage",
   schemaVersion: "1.0",
   scanId: "scan",
   mode: "repository",
@@ -90,7 +90,7 @@ describe("ScanResult", () => {
   });
 
   test("discovers SARIF at its canonical scan path", async () => {
-    const scanDir = await mkdtemp(join(tmpdir(), "codex-security-result-"));
+    const scanDir = await mkdtemp(join(tmpdir(), "copilot-security-result-"));
     try {
       const sarifPath = join(scanDir, "exports", "results.sarif");
       await mkdir(join(scanDir, "exports"));
@@ -111,7 +111,7 @@ describe("ScanResult", () => {
   });
 
   test("does not discover a directory named results.sarif", async () => {
-    const scanDir = await mkdtemp(join(tmpdir(), "codex-security-result-"));
+    const scanDir = await mkdtemp(join(tmpdir(), "copilot-security-result-"));
     try {
       await mkdir(join(scanDir, "exports", "results.sarif"), {
         recursive: true,
@@ -134,7 +134,7 @@ describe("ScanResult", () => {
   test.skipIf(process.platform === "win32")(
     "does not fail implicit SARIF discovery on a symlink loop",
     async () => {
-      const scanDir = await mkdtemp(join(tmpdir(), "codex-security-result-"));
+      const scanDir = await mkdtemp(join(tmpdir(), "copilot-security-result-"));
       try {
         const exportsDir = join(scanDir, "exports");
         await mkdir(exportsDir);

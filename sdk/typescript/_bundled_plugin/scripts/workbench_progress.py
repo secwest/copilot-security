@@ -1,4 +1,4 @@
-"""Progress transition helpers for the Codex Security workbench."""
+"""Progress transition helpers for the Copilot Security workbench."""
 
 import argparse
 import json

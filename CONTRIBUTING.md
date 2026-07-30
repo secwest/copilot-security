@@ -1,30 +1,18 @@
 # Contributing
 
-Codex Security is developed in OpenAI's canonical repository and published to
-this repository through a one-way mirror. External pull requests cannot be
-imported into the canonical source.
+Copilot Security is maintained by Secwest in
+[`secwest/copilot-security`](https://github.com/secwest/copilot-security).
 
-## Report a bug
+Before opening a change:
 
-Search [existing GitHub issues](https://github.com/openai/codex-security/issues)
-before opening a new one. Include the installed CLI or SDK version, operating
-system, reproduction steps, expected behavior, and the observed result.
+1. Search the repository's existing issues and pull requests.
+2. Keep scanner state, environment variables, artifacts, processes, and
+   package names inside the Copilot Security namespace.
+3. Add or update tests for runtime, contract, and false-positive /
+   false-negative behavior.
+4. Run formatting, type checks, unit tests, package checks, and the relevant
+   benchmark slice.
+5. Do not lower benchmark thresholds to make a regression pass.
 
-Remove API keys, access tokens, repository contents, security findings, and
-other sensitive information from public reports. Report security vulnerabilities
-privately as described in [SECURITY.md](SECURITY.md).
-
-## Request a feature or improve the documentation
-
-Open a GitHub issue describing the problem, the workflow you want to support,
-and any relevant product behavior. Documentation corrections and safe
-reproduction details are welcome in the issue discussion.
-
-Maintainers review issues and carry accepted changes into the canonical source.
-
-## Dependency and release maintenance
-
-Maintainers update package dependencies and the committed lockfile in the
-canonical repository. The public release workflow installs that locked graph,
-tests the package, and publishes a verified artifact with npm provenance.
-GitHub Actions dependencies are maintained separately in this repository.
+Security vulnerabilities should be reported privately as described in
+[SECURITY.md](SECURITY.md), not in a public issue.

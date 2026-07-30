@@ -1,4 +1,4 @@
-"""Scan handoff state transitions for the Codex Security workbench."""
+"""Scan handoff state transitions for the Copilot Security workbench."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def validate_handoff_delivery_thread(
         RECOVERY_HANDOFF_TOKEN_PREFIX
     ):
         raise SystemExit(
-            "A scan handoff can only be marked delivered from its owning Codex thread."
+            "A scan handoff can only be marked delivered from its owning Copilot thread."
         )
 
 
@@ -141,17 +141,17 @@ def attach_scan_continuation_thread(
     claim_token = require_handoff_claim_token(args.claim_token)
     thread_id = optional_text(args.thread_id, maximum=512)
     if thread_id is None:
-        raise SystemExit("Codex Security continuation thread ID is required.")
+        raise SystemExit("Copilot Security continuation thread ID is required.")
     connection.execute("BEGIN IMMEDIATE")
     try:
         timestamp = now()
         scan = require_scan(connection, scan_id)
         if scan["handoff_claim_token"] != claim_token:
-            raise SystemExit("Codex Security continuation thread claim token does not match.")
+            raise SystemExit("Copilot Security continuation thread claim token does not match.")
         if scan["continuation_thread_id"] is not None:
             if scan["continuation_thread_id"] != thread_id:
                 raise SystemExit(
-                    "Codex Security scan continuation is owned by another continuation."
+                    "Copilot Security scan continuation is owned by another continuation."
                 )
             connection.commit()
             return workspace_state(connection, scan["workspace_id"])
@@ -169,7 +169,7 @@ def attach_scan_continuation_thread(
             (thread_id, thread_id, timestamp, scan["id"], claim_token),
         )
         if updated.rowcount != 1:
-            raise SystemExit("Codex Security continuation thread could not be attached.")
+            raise SystemExit("Copilot Security continuation thread could not be attached.")
         connection.commit()
     except BaseException:
         connection.rollback()
@@ -203,7 +203,7 @@ def mark_handoff_delivered(
         if scan["handoff_status"] == "delivered":
             if scan["handoff_claim_token"] != claim_token:
                 raise SystemExit(
-                    "Codex Security handoff delivery is owned by another continuation."
+                    "Copilot Security handoff delivery is owned by another continuation."
                 )
             connection.commit()
             return workspace_state(connection, scan["workspace_id"])
@@ -218,7 +218,7 @@ def mark_handoff_delivered(
             (timestamp, scan["id"], claim_token),
         )
         if updated.rowcount != 1:
-            raise SystemExit("Codex Security handoff delivery could not be recorded.")
+            raise SystemExit("Copilot Security handoff delivery could not be recorded.")
         if scan["mode"] != "deep":
             connection.execute(
                 """

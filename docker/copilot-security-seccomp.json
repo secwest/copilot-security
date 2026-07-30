@@ -458,7 +458,7 @@
         "unshare"
       ],
       "action": "SCMP_ACT_ALLOW",
-      "comment": "Allow Codex's unprivileged Bubblewrap user and mount namespaces; run with --cap-drop ALL and no-new-privileges."
+      "comment": "Allow Copilot CLI's unprivileged Bubblewrap user and mount namespaces; run with --cap-drop ALL and no-new-privileges."
     }
   ]
 }

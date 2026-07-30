@@ -1,4 +1,4 @@
-"""Durable remediation state transitions for the Codex Security workbench."""
+"""Durable remediation state transitions for the Copilot Security workbench."""
 
 from __future__ import annotations
 

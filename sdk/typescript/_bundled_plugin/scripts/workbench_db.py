@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Codex Security workbench persistence."""
+"""Copilot Security workbench persistence."""
 
 from __future__ import annotations
 
@@ -155,11 +155,11 @@ def remediation_claim_is_active(remediation: sqlite3.Row) -> bool:
 
 
 def state_dir() -> Path:
-    state_dir = os.environ.get("CODEX_SECURITY_STATE_DIR")
+    state_dir = os.environ.get("COPILOT_SECURITY_STATE_DIR")
     if state_dir:
         return Path(state_dir).expanduser().resolve()
-    codex_home = Path(os.environ.get("CODEX_HOME", "~/.codex")).expanduser()
-    return (codex_home / "state" / "plugins" / "codex-security").resolve()
+    copilot_home = Path(os.environ.get("COPILOT_HOME", "~/.copilot")).expanduser()
+    return (copilot_home / "state" / "plugins" / "copilot-security").resolve()
 
 
 def database_path() -> Path:
@@ -489,7 +489,7 @@ def require_scannable_target(target: Path) -> None:
     metadata = git_target_metadata(target)
     if metadata["isGit"] and not metadata["isWorktree"]:
         raise SystemExit(
-            "Codex Security requires a checked-out worktree, not a bare Git repository."
+            "Copilot Security requires a checked-out worktree, not a bare Git repository."
         )
 
 
@@ -570,11 +570,11 @@ def workbench_completion_binding(scan: sqlite3.Row, completed_at: str) -> dict[s
     contract = scan_contract(scan)
     target_contract = contract["target"]
     plugin_manifest = read_json_object(
-        Path(__file__).resolve().parent.parent / ".codex-plugin" / "plugin.json"
+        Path(__file__).resolve().parent.parent / "plugin.json"
     )
     plugin_version = plugin_manifest.get("version")
     if not isinstance(plugin_version, str) or not plugin_version:
-        raise SystemExit("plugin.json: expected a nonempty Codex Security plugin version.")
+        raise SystemExit("plugin.json: expected a nonempty Copilot Security plugin version.")
     target: dict[str, Any] = {
         "targetId": target_contract["targetId"],
         "displayName": target_contract["displayName"],
@@ -716,7 +716,7 @@ def require_workspace(connection: sqlite3.Connection, workspace_id: str) -> sqli
     workspace_id = require_uuid(workspace_id, "workspace-id")
     row = connection.execute("SELECT * FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
     if row is None:
-        raise SystemExit("Codex Security workspace not found. Reopen it to continue.")
+        raise SystemExit("Copilot Security workspace not found. Reopen it to continue.")
     return row
 
 
@@ -724,7 +724,7 @@ def require_scan(connection: sqlite3.Connection, scan_id: str) -> sqlite3.Row:
     scan_id = resolve_scan_id(connection, scan_id)
     row = connection.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
     if row is None:
-        raise SystemExit("Codex Security scan not found.")
+        raise SystemExit("Copilot Security scan not found.")
     return row
 
 
@@ -739,7 +739,7 @@ def resolve_scan_id(connection: sqlite3.Connection, scan_id: str) -> str:
             (len(scan_id), scan_id.lower()),
         ).fetchall()
         if not matches:
-            raise SystemExit("Codex Security scan not found.") from None
+            raise SystemExit("Copilot Security scan not found.") from None
         if len(matches) > 1:
             raise SystemExit(
                 f'Scan ID prefix "{scan_id}" matches multiple scans; use a longer prefix.'
@@ -1080,7 +1080,7 @@ def start_scan(connection: sqlite3.Connection, args: argparse.Namespace) -> dict
     try:
         workspace = require_workspace(connection, workspace_id)
         if not workspace["submitted"] or not workspace["target_path"]:
-            raise SystemExit("Save the Codex Security setup before starting the scan.")
+            raise SystemExit("Save the Copilot Security setup before starting the scan.")
         active = connection.execute(
             """
             SELECT *
@@ -1138,7 +1138,7 @@ def start_scan(connection: sqlite3.Connection, args: argparse.Namespace) -> dict
                 connection.commit()
             return workspace_state(connection, workspace["id"])
         if workspace["updated_at"] != workspace_version:
-            raise SystemExit("Codex Security setup changed while the scan was starting. Try again.")
+            raise SystemExit("Copilot Security setup changed while the scan was starting. Try again.")
         current_target = require_remediation_target(str(target))
         current_target_metadata = current_target.stat()
         if (current_target_metadata.st_dev, current_target_metadata.st_ino) != (
@@ -1157,7 +1157,7 @@ def start_scan(connection: sqlite3.Connection, args: argparse.Namespace) -> dict
             )
             if owned_active_scan is not None:
                 raise SystemExit(
-                    "This Codex thread already has an active Deep Scan for the selected "
+                    "This Copilot thread already has an active Deep Scan for the selected "
                     "target and scope. Rejoin that scan instead of starting another one."
                 )
         insert_running_scan(
@@ -1748,7 +1748,7 @@ def fail_scan(connection: sqlite3.Connection, args: argparse.Namespace) -> dict[
             (timestamp, scan["id"]),
         )
         if progress_updated.rowcount != 1:
-            raise SystemExit("Codex Security scan progress not found.")
+            raise SystemExit("Copilot Security scan progress not found.")
         connection.commit()
     except BaseException:
         connection.rollback()
@@ -1766,7 +1766,7 @@ def cancel_scan(connection: sqlite3.Connection, args: argparse.Namespace) -> dic
         workspace = require_workspace(connection, scan["workspace_id"])
         owning_thread_id = scan["continuation_thread_id"] or workspace["thread_id"]
         if thread_id is not None and owning_thread_id != thread_id:
-            raise SystemExit("A scan can only be canceled from its owning Codex thread.")
+            raise SystemExit("A scan can only be canceled from its owning Copilot thread.")
         if scan["canceled_at"] is not None:
             connection.commit()
             return workspace_state(connection, scan["workspace_id"])
@@ -1788,7 +1788,7 @@ def cancel_scan(connection: sqlite3.Connection, args: argparse.Namespace) -> dic
             (timestamp, scan["id"]),
         )
         if progress_updated.rowcount != 1:
-            raise SystemExit("Codex Security scan progress not found.")
+            raise SystemExit("Copilot Security scan progress not found.")
         connection.commit()
     except BaseException:
         connection.rollback()
@@ -2001,7 +2001,7 @@ def request_finding_remediation_action(
             (request_id,),
         ).fetchone()
         if current is None or current["occurrence_id"] != occurrence["id"]:
-            raise SystemExit("Codex Security finding remediation request not found.")
+            raise SystemExit("Copilot Security finding remediation request not found.")
         if current["pending_action"] is not None:
             if (
                 current["pending_action"] == args.action
@@ -2078,7 +2078,7 @@ def claim_finding_remediation_resend(
             (request_id,),
         ).fetchone()
         if current is None or current["occurrence_id"] != occurrence["id"]:
-            raise SystemExit("Codex Security finding remediation request not found.")
+            raise SystemExit("Copilot Security finding remediation request not found.")
         if current["pending_action"] is None:
             raise SystemExit("This remediation attempt does not have a pending host request.")
         if current["pending_action_claim_token"] == action_token:
@@ -2206,7 +2206,7 @@ def set_finding_remediation(
             (request_id,),
         ).fetchone()
         if current is None or current["occurrence_id"] != occurrence["id"]:
-            raise SystemExit("Codex Security finding remediation request not found.")
+            raise SystemExit("Copilot Security finding remediation request not found.")
         if current["version"] != args.expected_version:
             raise SystemExit(
                 "This remediation request changed. Refresh it before recording an update."
@@ -2347,7 +2347,7 @@ def export_findings(connection: sqlite3.Connection, args: argparse.Namespace) ->
     else:
         path = write_csv_export(connection, scan)
     if path is None:
-        raise SystemExit(f"Could not export Codex Security findings as {args.format.upper()}.")
+        raise SystemExit(f"Could not export Copilot Security findings as {args.format.upper()}.")
     return {
         "export": {"format": args.format, "path": str(path)},
         "scan": scan_result(connection, scan),
@@ -2543,7 +2543,7 @@ def require_reviewed_patch_applied(
         if git_dir is None:
             raise SystemExit("Could not inspect the selected Git working tree.")
         excluded += git_submodule_paths(target)
-    with tempfile.TemporaryDirectory(prefix="codex-security-remediation-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="copilot-security-remediation-") as temporary:
         reviewed_patch = Path(temporary) / "reviewed.patch"
         digest = hashlib.sha256()
         with open_scan_local_file(Path(scan["scan_dir"]), patch_path) as source:
@@ -2768,7 +2768,7 @@ def workspace_state(
 ) -> dict[str, Any]:
     workspace = require_workspace(connection, workspace_id)
     if thread_id is not None and workspace["thread_id"] != optional_text(thread_id, maximum=512):
-        raise SystemExit("Codex Security workspace not found in this thread.")
+        raise SystemExit("Copilot Security workspace not found in this thread.")
     persisted_diff_target = stored_diff_target(workspace)
     result: dict[str, Any] = {
         "id": workspace["id"],

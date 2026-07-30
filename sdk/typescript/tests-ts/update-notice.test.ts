@@ -24,12 +24,12 @@ describe("CLI update notice", () => {
     });
 
     expect(requestedUrl).toBe(
-      "https://registry.npmjs.org/%40openai%2Fcodex-security/latest",
+      "https://registry.npmjs.org/%40secwest%2Fcopilot-security/latest",
     );
     expect(notice).toEqual({
       currentVersion: "0.1.0",
       latestVersion: "0.2.0",
-      command: "npx @openai/codex-security@latest",
+      command: "npx @secwest/copilot-security@latest",
     });
   });
 
@@ -45,13 +45,13 @@ describe("CLI update notice", () => {
     });
 
     expect(requestedUrl).toBe(
-      "https://registry.example.test/npm/%40openai%2Fcodex-security/latest",
+      "https://registry.example.test/npm/%40secwest%2Fcopilot-security/latest",
     );
   });
 
   test("recognizes npx and local or global npm, pnpm, Yarn, and Bun", () => {
     const installed = "/workspace/node_modules/pkg/dist/version.js";
-    const packageName = "@openai/codex-security@latest";
+    const packageName = "@secwest/copilot-security@latest";
 
     for (const [environment, entrypoint, command] of [
       [{ npm_command: "exec" }, installed, `npx ${packageName}`],
@@ -89,7 +89,7 @@ describe("CLI update notice", () => {
       [
         {},
         "/release/.install/node_modules/pkg",
-        "download and extract the latest Codex Security release",
+        "download and extract the latest Copilot Security release",
       ],
       [{}, "/workspace/src/version.ts", `npx ${packageName}`],
     ] as const) {
@@ -133,7 +133,7 @@ describe("CLI update notice", () => {
     };
 
     for (const environment of [
-      { CODEX_SECURITY_NO_UPDATE_NOTICE: "1" },
+      { COPILOT_SECURITY_NO_UPDATE_NOTICE: "1" },
       { NO_UPDATE_NOTIFIER: "1" },
       { CI: "true" },
     ]) {
@@ -173,7 +173,7 @@ describe("CLI update notice", () => {
     const notice = {
       currentVersion: "0.1.0",
       latestVersion: "0.2.0",
-      command: "npm install -g @openai/codex-security@latest",
+      command: "npm install -g @secwest/copilot-security@latest",
     };
 
     expect(
@@ -188,7 +188,7 @@ describe("CLI update notice", () => {
       cliVersion: expect.any(String),
     });
     expect(stderr.text()).toBe(formatUpdateNotice(notice));
-    expect(stderr.text()).not.toContain("CODEX_SECURITY_NO_UPDATE_NOTICE");
+    expect(stderr.text()).not.toContain("COPILOT_SECURITY_NO_UPDATE_NOTICE");
   });
 
   test("skips checks for noninteractive output, help, dry runs, and disabled notices", async () => {
@@ -217,7 +217,7 @@ describe("CLI update notice", () => {
       capture().stream,
       capture(true).stream,
       dependencies({
-        environment: { CODEX_SECURITY_NO_UPDATE_NOTICE: "1" },
+        environment: { COPILOT_SECURITY_NO_UPDATE_NOTICE: "1" },
         onUpdateCheck,
       }),
     );

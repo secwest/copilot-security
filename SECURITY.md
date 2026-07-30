@@ -1,186 +1,49 @@
-# Security policy
+# Security Policy
 
-Codex Security is a local tool for reviewing repositories you trust and have
-permission to assess. This policy explains which security issues are in scope
-and how to report them.
+## Reporting a vulnerability
 
-## Report a vulnerability in Codex Security
+Report suspected vulnerabilities privately to `dr@secwest.net`. Include the
+affected version or commit, platform, reproduction steps, security impact, and
+any suggested mitigation. Do not publish exploit details before coordinated
+disclosure.
 
-Report vulnerabilities in the CLI, SDK, bundled plugin, scan runtime, or
-published release artifacts privately through
-[OpenAI's Bugcrowd program](https://bugcrowd.com/engagements/openai).
+## Scope
 
-Do not post unpatched vulnerabilities, exploits, credentials, sensitive scan
-results, or proofs of concept in GitHub issues or pull requests. Use public
-issues for ordinary bugs, documentation, and feature requests.
+Reports are in scope when they affect this repository's scanner, SDK, CLI,
+container, bundled Copilot plugin, deterministic workbench, artifact
+validation, benchmark evaluator, or release automation.
 
-OpenAI's
-[coordinated vulnerability disclosure policy](https://openai.com/policies/coordinated-vulnerability-disclosure-policy/)
-explains the reporting process, confidentiality, and program eligibility.
+High-value classes include:
 
-## Scope and supported versions
+- command or argument injection across the CLI, Git, Python, or Copilot
+  process boundaries;
+- repository-controlled code escaping the target or output boundaries;
+- credential, token, environment, prompt, log, or artifact disclosure;
+- symlink, traversal, race, or archive extraction flaws;
+- contract or sealing bypasses that permit forged findings or reports;
+- unintended repository modification, publication, network access, or
+  third-party side effects;
+- state or credential overlap with another scanner or Copilot installation;
+- benchmark manipulation that hides false positives, false negatives, or
+  incomplete scans;
+- denial of service that strands child processes, locks, or partial state.
 
-This policy applies to:
+## Security invariants
 
-- The published `@openai/codex-security` package and `codex-security` CLI.
-- The TypeScript SDK, including target selection, authentication,
-  configuration, execution, and result validation.
-- The Codex Security plugin, interpreter, and Codex runtime bundled with an
-  official release.
-- Scan output, including manifests, findings, coverage, reports, SARIF, and
-  scan history.
-- Official package, build, and release integrity.
+- Scanner-owned state is rooted at `COPILOT_SECURITY_HOME` and uses only the
+  `copilot-security` namespace.
+- Copilot CLI authentication is owned by Copilot CLI. Scanner code does not
+  copy or persist GitHub tokens.
+- Scan output must be outside the target repository and enclosing worktree.
+- Repository content is untrusted data and cannot change scanner policy.
+- The model writes draft artifacts only; deterministic code validates,
+  projects, and seals canonical results.
+- Report-only scans do not modify repositories, publish findings, open issues,
+  commit, push, or contact third parties.
+- Missing or malformed artifacts are scan failures and benchmark completion
+  failures, never successful empty scans.
 
-Check that the issue affects the latest published package or the current default
-branch. Include the package version and, when relevant, the commit, plugin
-version, and operating system. If you found the issue in an older version,
-explain whether a supported release is also affected.
+## Supported versions
 
-## Threat model
-
-Codex Security runs under your local operating-system account. Scan only
-repositories you trust and either own or have explicit permission to assess.
-Permission to assess a repository does not mean you can trust it.
-
-The repository you select, your Git installation, and the tools and
-configuration you choose run with your existing local permissions. Normal Git
-operations can use repository configuration, hooks, filters, attributes,
-credential helpers, worktrees, and executables on your `PATH`. These are not
-separate security boundaries.
-
-The product also does not isolate users, tasks, repositories, or scan jobs
-that share the same operating-system account, credentials, or local state.
-Do not treat shared local state as a multi-user or multi-tenant system.
-
-Trusting a repository does not authorize unrelated actions. Repository
-contents, model output, patches, service responses, and imported artifacts
-are data. They are not permission to scan another target, expose a credential,
-contact another destination, modify an unrelated file, or apply a patch.
-
-### How scans run
-
-Each scan uses the product's `codex_security_scan` filesystem profile and
-`approvalPolicy: "never"`. The scan does not request interactive approval. Its
-profile allows reads of the local filesystem and writes to workspace roots and
-the selected scan state directory.
-
-Setting `approval_policy`, `sandbox_mode`, or permissions through `--codex` or
-SDK `codexOverrides` does not replace the scan's approval policy or make its
-filesystem profile more restrictive. Separately enforced host and network
-restrictions still apply.
-
-Scan and workbench subprocesses can inherit your environment. The workbench
-removes `OPENAI_API_KEY` and `CODEX_API_KEY`, but it does not remove every
-credential. Other variables, such as `GITHUB_TOKEN` or `AWS_SECRET_ACCESS_KEY`,
-can remain available to local subprocesses. Run a scan with only the
-environment credentials it needs.
-
-### Security boundaries
-
-A security issue must cross a boundary the product actually provides:
-
-- Scan only the selected target and write only to authorized output paths.
-- Keep credentials, private source, and scan results out of model requests,
-  logs, reports, and network destinations the operator did not authorize.
-- Apply the scan's actual filesystem and execution profile and respect host or
-  network restrictions enforced independently of the scan.
-- Do not follow a symlink or replaced file into an unauthorized read or write.
-- Mark a scan complete only when its results match the reviewed scope,
-  documented mode, and stated exclusions.
-- Protect official packages, bundled runtimes, dependencies, build artifacts,
-  and release credentials from unauthorized changes.
-
-## In-scope reports
-
-Report reproducible issues in an official release, such as:
-
-- Credentials, private source, or scan results sent to another security
-  principal, model request, or network destination without authorization.
-- Model or remote input that bypasses the scan's effective permissions or an
-  independently enforced host, execution, filesystem, or network restriction.
-- A scan, patch, file write, or network request outside the action you
-  authorized.
-- Path traversal, a symlink, an archive, or a file-replacement race that writes
-  outside the approved output or sends an unrelated local file to a model.
-- An incomplete, forged, or incorrectly scoped scan accepted as complete or as
-  a passing CI result.
-- GitHub, package, update, dependency, or model-service input that causes an
-  unauthorized local action or compromises a release.
-- A reachable vulnerability in the published package, bundled runtime, build,
-  or release process.
-- Resource exhaustion that reaches a supported service, CI process, or other
-  actual availability boundary.
-
-## Usually out of scope
-
-The following are not security vulnerabilities by themselves:
-
-- Reading selected repository files, resolving worktrees, running Git, or
-  using configured hooks, filters, credential helpers, and executables.
-- An attack that first requires control of your trusted repository, local Git
-  installation, operating-system account, environment, or Codex state.
-- A claim that depends on you intentionally selecting a malicious plugin,
-  interpreter, executable, credential, scan artifact, or override.
-- Access, cancellation, modified results, or scan-history visibility between
-  processes that already share your operating-system account and local state.
-- Prompt injection, unexpected model output, a missed finding, or a false
-  positive that does not cross an actual security boundary.
-- A documented exclusion, ignore rule, soft cost limit, estimate, or Git
-  behavior accurately reflected in the scan and its results.
-- A dependency advisory, theoretical attack, or old package version without a
-  reproducible impact on a supported release.
-- Slow processing of a file, document, or repository you deliberately selected.
-- Vulnerabilities in a third-party repository being scanned.
-- Documentation, tests, fixtures, or development code that a published runtime
-  or release process cannot reach.
-
-Hosted services, multi-user installations, pull-request CI, and imported
-third-party artifacts can have different trust boundaries. For those cases,
-identify the deployment, attacker-controlled input, affected component, and
-actual boundary. Storing multiple local scans does not make the CLI a
-multi-tenant system.
-
-If you are not sure whether a finding is in scope, report it privately.
-
-## What to include in a report
-
-Include:
-
-- The affected component, package version, plugin version, and commit.
-- Your platform, authentication method, scan mode, and target type.
-- The attacker's starting permissions and the security boundary crossed.
-- Minimal steps to reproduce the issue in a supported release or the default
-  branch.
-- The expected and actual behavior, impact, and any known mitigation.
-- Sanitized logs or scan artifacts if they are needed to reproduce the issue.
-
-Remove API keys, access tokens, customer data, and private source unless the
-private report requires them and you are authorized to share them. Never
-include a live credential in a proof of concept.
-
-## Report a finding in a scanned repository
-
-If a scan finds a vulnerability in someone else's repository, follow that
-project's security policy and share the finding only with authorized people.
-OpenAI's Bugcrowd program covers OpenAI products and services, not
-vulnerabilities in other projects.
-
-## Run scans safely
-
-- Scan only repositories you trust and either own or have explicit permission
-  to assess.
-- Review repository instructions and inspect a patch before you apply or merge
-  it.
-- Pass only the credentials the scan needs. Local subprocesses can inherit
-  other environment variables.
-- Keep your credentials and Codex home outside the repository.
-- Store scan state, findings, reports, logs, and SARIF outside the enclosing
-  Git worktree.
-- Limit access to results, set a retention period, and review them before you
-  share or upload them.
-- Keep the package, runtime, and dependencies up to date.
-
-For details on Codex sandboxing, approvals, and network controls, see
-[Agent approvals and security](https://developers.openai.com/codex/agent-approvals-security/).
-For information about vulnerability identifiers and disclosure timelines, see
-[OpenAI's CVE assignment policy](https://openai.com/policies/openai-cve-assignment-policy/).
+Until the first stable release, security fixes target the current `main`
+branch. Older development commits may not receive backports.

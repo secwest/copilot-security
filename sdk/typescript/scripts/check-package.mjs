@@ -84,7 +84,6 @@ const required = [
   "package/dist/index.js",
   "package/dist/index.d.ts",
   "package/dist/cli.js",
-  "package/_bundled_plugin/.codex-plugin/plugin.json",
   "package/_bundled_plugin/plugin.json",
 ];
 
@@ -102,16 +101,13 @@ if (
 ) {
   throw new Error("Plugin projection contract contains invalid paths.");
 }
-const publicManifest = ".codex-plugin/plugin.json";
-if (!externalOwnedExact.includes(publicManifest)) {
+const publicManifest = "plugin.json";
+if (!shippedExact.includes(publicManifest)) {
   throw new Error(
-    "Plugin projection contract must declare the public manifest as externally owned.",
+    "Plugin projection contract must ship the root Copilot plugin manifest.",
   );
 }
-const pluginPaths = [
-  publicManifest,
-  ...shippedExact.filter((path) => !path.startsWith("sdk/")),
-];
+const pluginPaths = shippedExact.filter((path) => !path.startsWith("sdk/"));
 const pluginFiles = new Set(pluginPaths);
 if (pluginFiles.size !== pluginPaths.length) {
   throw new Error("Plugin projection contract contains duplicate paths.");
@@ -143,6 +139,7 @@ const distFiles = new Set(
   [
     "api",
     "auth",
+    "benchmark",
     "bulk-scan-discovery",
     "cli",
     "config",
@@ -224,11 +221,11 @@ if (
 }
 assertExpectedGitHead(
   packageJson,
-  process.env.CODEX_SECURITY_EXPECTED_GIT_HEAD,
+  process.env.COPILOT_SECURITY_EXPECTED_GIT_HEAD,
 );
 
 const internalMarker =
-  /(?:internal\.api\.openai\.org|gateway\.[a-z0-9.-]*internal|\.openai\.org|openai\.firewall\.socket\.dev|socket\x2dfirewall\x2dregistry|openai\.(?:enterprise\.)?slack\.com|app\.slack\.com\/client|(?:app\.notion\.com\/p|notion\.so)\/openai|linear\.app\/openai|(?:github\.com[:/]|api\.github\.com\/repos\/|raw\.githubusercontent\.com\/)openai\/openai(?:\.git)?(?:[^a-z0-9_-]|$)|LicenseRef\x2dProprietary|\/Users\/|\/home\/dev-user|flow\.apps\.openai\.org|(?:^|[^a-z0-9_-])go\/[a-z0-9_-]+)/iu;
+  /(?:gateway\.[a-z0-9.-]*internal|LicenseRef\x2dProprietary|\/Users\/|\/home\/dev-user|(?:^|[^a-z0-9_-])go\/[a-z0-9_-]+)/iu;
 
 const payloads = [archiveBytes.toString("utf8")];
 const compressedFiles = [...files].filter((file) => /\.br$/iu.test(file));

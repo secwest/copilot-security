@@ -7,6 +7,7 @@ dist/
 /results/
 /security-scans/
 /state/
-/codex-security.json
+/copilot-security.json
 /findings.json
 /*.sarif
+/.pnpm-store/

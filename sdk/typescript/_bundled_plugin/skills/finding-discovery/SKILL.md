@@ -1,6 +1,6 @@
 ---
 name: finding-discovery
-description: Use when Codex is already in the finding-discovery phase of a security scan or the user explicitly asks to discover candidate security findings in a repository or code change. Do not use as the primary trigger for full PR, commit, branch, patch, or repository scans.
+description: Use when Copilot is already in the finding-discovery phase of a security scan or the user explicitly asks to discover candidate security findings in a repository or code change. Do not use as the primary trigger for full PR, commit, branch, patch, or repository scans.
 ---
 
 # Security Finding Discovery
@@ -134,6 +134,10 @@ Otherwise, for each candidate include:
 - impact
 - why the issue is plausible from the current code
 - closest apparent control and why it is absent, bypassed, mis-scoped, or incomplete
+- strongest counterevidence found, including the closest safe sibling or
+  negative-control path, and why it does or does not defeat this exact instance
+- proof obligations for validation: the minimum source, control, sink,
+  reachability, and impact facts that must hold for the candidate to survive
 - whether validation is recommended
 - `relevant_lines` for diff-scoped scans when the bug overlaps the diff and those lines are relevant to the bug
 - taxonomy with CWE IDs when known
@@ -148,6 +152,13 @@ For diff-scoped discovery, when candidates are emitted, create the per-finding d
 - Focus on the actual changes, not the commit message.
 - Stay anchored to the diff and the files it relies on for diff-scoped scans.
 - Candidate discovery is about plausibility, not final severity.
+- Do not promote a candidate from a dangerous API name alone. Identify the
+  exact attacker influence and closest effective control. Conversely, do not
+  suppress an unsafe instance merely because a safe sibling uses the same API;
+  compare the actual predicates, arguments, ordering, and boundary.
+- After the initial pass, perform a residual review of high-risk files and
+  source/control/sink families that produced no candidates. Close them with an
+  exact safe-control receipt or return them to discovery.
 - For diff-scoped discovery, do not emit an untracked candidate. Every candidate finding needs a stable candidate id and a discovery receipt in its candidate-ledger path from `../../references/scan-artifacts.md` so later validation and attack-path analysis can prove coverage for that exact finding.
 - Do not add `relevant_lines` when no bug exists. For diff-scoped scans, add `relevant_lines` only when the bug overlaps the diff and those lines are relevant to the bug.
 - Do not turn discovery into full validation or full severity calibration.

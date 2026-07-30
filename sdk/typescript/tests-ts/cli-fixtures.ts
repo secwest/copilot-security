@@ -2,8 +2,8 @@ import { lstat, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { main } from "../src/cli.js";
 import type {
-  CodexSecurity,
-  CodexSecurityConfig,
+  CopilotSecurity,
+  CopilotSecurityConfig,
   CoverageDocument,
   FindingsDocument,
   JsonObject,
@@ -12,7 +12,7 @@ import type {
   ScanPreflight,
   SeverityLevel,
 } from "../src/index.js";
-import { CodexSecurityError, ScanResult } from "../src/index.js";
+import { CopilotSecurityError, ScanResult } from "../src/index.js";
 import type { UpdateNotice } from "../src/version.js";
 
 type MainDependencies = NonNullable<Parameters<typeof main>[3]>;
@@ -29,13 +29,13 @@ export const SYNTHETIC_CREDENTIALS = [
   "git+ssh://SYNTHETIC_USER:SYNTHETIC_GIT_PASSWORD@example.test/private",
   "github_pat_SYNTHETIC_GITHUB_PAT_123",
   "ghs_SYNTHETIC_GITHUB_TOKEN_123",
-  "OPENAI_API_KEY=SYNTHETIC_OPENAI_VALUE_123",
-  "CODEX_API_KEY=SYNTHETIC_CODEX_VALUE_123",
-  "CODEX_ACCESS_TOKEN=SYNTHETIC_CODEX_ACCESS_TOKEN_123",
+  "THIRD_PARTY_API_KEY=SYNTHETIC_PROVIDER_VALUE_123",
+  "COPILOT_API_KEY=SYNTHETIC_COPILOT_VALUE_123",
+  "COPILOT_ACCESS_TOKEN=SYNTHETIC_COPILOT_ACCESS_TOKEN_123",
   "GITHUB_TOKEN=SYNTHETIC_GITHUB_VALUE_123",
   "GH_TOKEN=SYNTHETIC_GH_VALUE_123",
-  '{"OPENAI_API_KEY":"SYNTHETIC_JSON_OPENAI_123","CODEX_API_KEY":"SYNTHETIC_JSON_CODEX_123"}',
-  '{\\"OPENAI_API_KEY\\":\\"SYNTHETIC_ESCAPED_OPENAI_123\\",\\"CODEX_API_KEY\\":\\"SYNTHETIC_ESCAPED_CODEX_123\\"}',
+  '{"THIRD_PARTY_API_KEY":"SYNTHETIC_JSON_PROVIDER_123","COPILOT_API_KEY":"SYNTHETIC_JSON_COPILOT_123"}',
+  '{\\"THIRD_PARTY_API_KEY\\":\\"SYNTHETIC_ESCAPED_PROVIDER_123\\",\\"COPILOT_API_KEY\\":\\"SYNTHETIC_ESCAPED_COPILOT_123\\"}',
   '{"refresh_token":"SYNTHETIC_REFRESH_TOKEN_123","id_token":"SYNTHETIC_ID_TOKEN_123","clientSecret":"SYNTHETIC_CLIENT_SECRET_123","dbPassword":"SYNTHETIC_PASSWORD_123","passwd":"SYNTHETIC_PASSWD_123"}',
   '{\\"refreshToken\\":\\"SYNTHETIC_ESCAPED_REFRESH_123\\",\\"idToken\\":\\"SYNTHETIC_ESCAPED_ID_123\\",\\"clientSecret\\":\\"SYNTHETIC_ESCAPED_SECRET_123\\",\\"password\\":\\"SYNTHETIC_ESCAPED_PASSWORD_123\\"}',
   "AWS_SECRET_ACCESS_KEY=SYNTHETIC_AWS_SECRET_123",
@@ -43,7 +43,7 @@ export const SYNTHETIC_CREDENTIALS = [
   "AWS_SESSION_TOKEN=SYNTHETIC_AWS_SESSION_123",
   "NODE_AUTH_TOKEN=SYNTHETIC_NODE_AUTH_123",
   "NPM_TOKEN=SYNTHETIC_NPM_TOKEN_123",
-  "OPENAI_API_KEY=sk-proj-SYNTHETIC_NAMED_OPENAI_123",
+  "THIRD_PARTY_API_KEY=sk-proj-SYNTHETIC_NAMED_PROVIDER_123",
   "GITHUB_TOKEN=ghs_SYNTHETIC_NAMED_GITHUB_123",
   "NPM_TOKEN=npm_SYNTHETIC_NAMED_NPM_123",
   "ACTIONS_ID_TOKEN_REQUEST_TOKEN=SYNTHETIC_ACTIONS_TOKEN_123",
@@ -81,13 +81,13 @@ export const REDACTED_CREDENTIALS = [
   "git+ssh://[redacted]@example.test/private",
   "[redacted]",
   "[redacted]",
-  "OPENAI_API_KEY=[redacted]",
-  "CODEX_API_KEY=[redacted]",
-  "CODEX_ACCESS_TOKEN=[redacted]",
+  "THIRD_PARTY_API_KEY=[redacted]",
+  "COPILOT_API_KEY=[redacted]",
+  "COPILOT_ACCESS_TOKEN=[redacted]",
   "GITHUB_TOKEN=[redacted]",
   "GH_TOKEN=[redacted]",
-  '{"OPENAI_API_KEY":"[redacted]","CODEX_API_KEY":"[redacted]"}',
-  '{\\"OPENAI_API_KEY\\":\\"[redacted]\\",\\"CODEX_API_KEY\\":\\"[redacted]\\"}',
+  '{"THIRD_PARTY_API_KEY":"[redacted]","COPILOT_API_KEY":"[redacted]"}',
+  '{\\"THIRD_PARTY_API_KEY\\":\\"[redacted]\\",\\"COPILOT_API_KEY\\":\\"[redacted]\\"}',
   '{"refresh_token":"[redacted]","id_token":"[redacted]","clientSecret":"[redacted]","dbPassword":"[redacted]","passwd":"[redacted]"}',
   '{\\"refreshToken\\":\\"[redacted]\\",\\"idToken\\":\\"[redacted]\\",\\"clientSecret\\":\\"[redacted]\\",\\"password\\":\\"[redacted]\\"}',
   "AWS_SECRET_ACCESS_KEY=[redacted]",
@@ -95,7 +95,7 @@ export const REDACTED_CREDENTIALS = [
   "AWS_SESSION_TOKEN=[redacted]",
   "NODE_AUTH_TOKEN=[redacted]",
   "NPM_TOKEN=[redacted]",
-  "OPENAI_API_KEY=[redacted]",
+  "THIRD_PARTY_API_KEY=[redacted]",
   "GITHUB_TOKEN=[redacted]",
   "NPM_TOKEN=[redacted]",
   "ACTIONS_ID_TOKEN_REQUEST_TOKEN=[redacted]",
@@ -159,11 +159,11 @@ export function fakeResult(
   usage: unknown = null,
 ): ScanResult {
   const manifest = {
-    documentType: "codex-security.scan-manifest",
+    documentType: "copilot-security.scan-manifest",
     schemaVersion: "1.0",
     scan: {
       id: "scan",
-      producer: { name: "codex-security-plugin", version: "1.2.3" },
+      producer: { name: "copilot-security-plugin", version: "1.2.3" },
       status: "completed",
       startedAt: "2026-01-01T00:00:00Z",
       completedAt: "2026-01-01T00:00:01Z",
@@ -180,7 +180,7 @@ export function fakeResult(
     },
   } satisfies ScanManifest;
   const findings = {
-    documentType: "codex-security.findings",
+    documentType: "copilot-security.findings",
     schemaVersion: "1.0",
     scanId: "scan",
     findings: severityLevels.map((level) => ({
@@ -188,7 +188,7 @@ export function fakeResult(
     })) as FindingsDocument["findings"],
   } satisfies FindingsDocument;
   const coverage = {
-    documentType: "codex-security.coverage",
+    documentType: "copilot-security.coverage",
     schemaVersion: "1.0",
     scanId: "scan",
     mode: "repository",
@@ -235,12 +235,12 @@ export class FakeSignals {
 
 export function dependencies(
   options: {
-    onConfig?: (config: CodexSecurityConfig) => void;
+    onConfig?: (config: CopilotSecurityConfig) => void;
     onTurn?: (repository: string, options: unknown) => void;
     onRun?: () => void;
     onInterrupt?: () => void;
     onClose?: () => void | Promise<void>;
-    onCodex?: (args: readonly string[]) => number;
+    onCopilot?: (args: readonly string[]) => number;
     bulkScan?: MainDependencies["bulkScan"];
     onWorkbench?: (args: readonly string[]) => JsonObject | Promise<JsonObject>;
     onMatch?: MainDependencies["matchFindings"];
@@ -286,7 +286,7 @@ export function dependencies(
     preflight: async (repository: string) =>
       options.preflight ?? fakePreflight(repository),
     close: async () => await options.onClose?.(),
-  } as Pick<CodexSecurity, "run" | "preflight" | "close">;
+  } as Pick<CopilotSecurity, "run" | "preflight" | "close">;
   return {
     createSecurity: (config) => {
       options.onConfig?.(config);
@@ -303,7 +303,7 @@ export function dependencies(
       signals.remove(signal, listener),
     writeSynchronously: (stream, value) => stream.write(value),
     forceExit: () => {},
-    runCodex: async (args) => options.onCodex?.(args) ?? 0,
+    runCopilot: async (args) => options.onCopilot?.(args) ?? 0,
     ...(options.bulkScan === undefined ? {} : { bulkScan: options.bulkScan }),
     runWorkbench: async (args) =>
       (await options.onWorkbench?.(args)) ?? { scans: [] },
@@ -314,13 +314,13 @@ export function dependencies(
         arguments_.format === "csv"
           ? "occurrence_id,finding_id\n"
           : arguments_.format === "json"
-            ? '{"documentType":"codex-security.findings"}\n'
+            ? '{"documentType":"copilot-security.findings"}\n'
             : '{"version":"2.1.0"}\n',
       );
       if (arguments_.output !== "-") {
         const metadata = await lstat(arguments_.output).catch(() => undefined);
         if (metadata?.isSymbolicLink()) {
-          throw new CodexSecurityError(
+          throw new CopilotSecurityError(
             "results.sarif: expected a regular non-symlink file",
           );
         }

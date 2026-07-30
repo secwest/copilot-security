@@ -1,12 +1,21 @@
-export {
-  CodexSecurity,
-  CodexSecurity as CopilotSecurity,
-  scanAuthentication,
-} from "./api.js";
+export { CopilotSecurity, scanAuthentication } from "./api.js";
 export { estimateScanCost } from "./cost.js";
 export type { ScanCost } from "./cost.js";
+export { evaluateBenchmark } from "./benchmark.js";
 export type {
-  CodexSecurityMetadata,
+  BenchmarkCase,
+  BenchmarkCaseResult,
+  BenchmarkFindingExpectation,
+  BenchmarkLocationExpectation,
+  BenchmarkManifest,
+  BenchmarkMatch,
+  BenchmarkMetrics,
+  BenchmarkReport,
+  BenchmarkRunResult,
+  BenchmarkThresholdResult,
+  BenchmarkThresholds,
+} from "./benchmark.js";
+export type {
   CopilotSecurityMetadata,
   ScanAuthMode,
   ScanAuthentication,
@@ -15,12 +24,12 @@ export type {
   ScanReconnectDetails,
 } from "./api.js";
 export type { ScanWorkerPhase, ScanWorkerStatus } from "./worker-progress.js";
-export { CodexLoginHandle } from "./auth.js";
+export { CopilotLoginHandle } from "./auth.js";
 export type { AccountStatus, LoginResult } from "./auth.js";
 
 export {
   AuthenticationRequiredError,
-  CodexSecurityError,
+  CopilotSecurityError,
   ConfigurationError,
   ContractValidationError,
   IncompleteScanError,
@@ -34,18 +43,11 @@ export {
 } from "./errors.js";
 export type { ProtectedScanPathKind } from "./errors.js";
 export {
-  DEFAULT_CODEX_CONFIG,
   DEFAULT_COPILOT_CONFIG,
-  mergedCodexConfig,
   mergedCopilotConfig,
-  writeCodexConfig,
+  writeCopilotConfig,
 } from "./config.js";
-export type {
-  CodexSecurityConfig,
-  CopilotSecurityConfig,
-  JsonObject,
-  JsonValue,
-} from "./config.js";
+export type { CopilotSecurityConfig, JsonObject, JsonValue } from "./config.js";
 export { loadContract, requireScanFile } from "./contract.js";
 export type { LoadedContract, ScanExpectation } from "./contract.js";
 export type * from "./models.js";
@@ -54,6 +56,7 @@ export type { ScanResultOptions, TurnResultMetadata } from "./result.js";
 export {
   bootstrapPlugin,
   bundledPluginRoot,
+  copilotSecurityCredentialHome,
   copilotSecurityStateDirectory,
   cleanupSdkDirectory,
   createIsolatedHome,
@@ -64,14 +67,15 @@ export {
   pluginExecutionEnvironment,
   pluginMetadata,
   PLUGIN_NAME,
+  prepareCopilotSecurityCredentialHome,
   prepareOutputDir,
-  resolveCodexCommand,
+  resolveCopilotCommand,
   resolvePluginPath,
   resolvePluginPython,
   validateOutputDir,
 } from "./runtime.js";
 export type {
-  CodexCommand,
+  CopilotCommand,
   PluginInstall,
   PluginPythonOptions,
   ProcessEnvironment,

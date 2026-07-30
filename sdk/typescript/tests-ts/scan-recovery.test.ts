@@ -61,7 +61,7 @@ type ScanSummary = {
 
 type SarifDocument = {
   runs: Array<{
-    properties: { codexSecurityCoverageCompleteness?: string };
+    properties: { copilotSecurityCoverageCompleteness?: string };
     results: Array<{ properties: { severity: string } }>;
     invocations?: Array<{
       executionSuccessful: boolean;
@@ -107,7 +107,8 @@ async function workbench(fixture: ScanFixture, args: readonly string[]) {
       pluginRoot: PLUGIN_ROOT,
       environment: {
         PATH: process.env["PATH"],
-        CODEX_SECURITY_STATE_DIR: fixture.stateDir,
+        COPILOT_SECURITY_REPOSITORY: fixture.repository,
+        COPILOT_SECURITY_STATE_DIR: fixture.stateDir,
       },
     },
     args,
@@ -118,7 +119,7 @@ async function startDraftScan(
   repositoryKind: "directory" | "clean" | "dirty" = "directory",
 ): Promise<ScanFixture> {
   const root = await realpath(
-    await mkdtemp(join(tmpdir(), "codex-security-scan-recovery-")),
+    await mkdtemp(join(tmpdir(), "copilot-security-scan-recovery-")),
   );
   temporaryDirectories.push(root);
   const python = Bun.which("python3") ?? Bun.which("python");
@@ -138,9 +139,9 @@ async function startDraftScan(
         "-C",
         target,
         "-c",
-        "user.name=Codex Security",
+        "user.name=Copilot Security",
         "-c",
-        "user.email=codex-security@example.invalid",
+        "user.email=copilot-security@example.invalid",
         "commit",
         "--quiet",
         "-m",
@@ -223,6 +224,112 @@ async function completeScan(fixture: ScanFixture): Promise<ScanSummary> {
 }
 
 describe("malformed scan artifact recovery", () => {
+  test("normalizes compact Copilot draft artifacts before sealing", async () => {
+    const fixture = await startDraftScan();
+    await writeJson(join(fixture.scanDir, "scan-manifest.json"), {
+      scanId: fixture.scanId,
+      producer: { name: "copilot-security-plugin" },
+      target: {
+        kind: "$COPILOT_SECURITY_TARGET_KIND",
+        targetId: "draft-target",
+        displayName: "repository",
+      },
+    });
+    await writeJson(join(fixture.scanDir, "findings.json"), {
+      scanId: fixture.scanId,
+      findings: [
+        {
+          id: "archive-command-injection",
+          title: "Command injection reaches a shell",
+          description:
+            "Attacker-controlled archive metadata reaches a shell command.",
+          severity: "HIGH",
+          confidence: "HIGH",
+          location: {
+            file: "src/extract.py",
+            start_line: 1,
+            end_line: 1,
+          },
+          remediation: "Use a fixed executable and argument vector.",
+        },
+        {
+          id: "safe-argument-vector",
+          title: "Argument-vector execution is not command injection",
+          description:
+            "The input is constrained and passed without shell interpolation.",
+          severity: "LOW",
+          confidence: "HIGH",
+          location: {
+            file: "src//extract.py",
+            start_line: 1,
+            end_line: 1,
+          },
+          validation: {
+            status: "mitigated",
+            counterevidence: "No shell is involved.",
+          },
+        },
+        {
+          id: "documentation-note",
+          title: "Documentation note",
+          description: "This is documentation rather than executable code.",
+          severity: "INFORMATIONAL",
+          confidence: "HIGH",
+          location: {
+            file: "README.md",
+            start_line: 1,
+            end_line: 1,
+          },
+          validation: { status: "informational" },
+        },
+      ],
+    });
+    await writeJson(join(fixture.scanDir, "coverage.json"), {
+      generatedAt: new Date().toISOString(),
+      surfaces: [
+        {
+          path: "src/extract.py",
+          outcome: "confirmed",
+          rationale: "Validated attacker-controlled shell input.",
+        },
+        {
+          path: "README.md",
+          outcome: "reviewed-no-findings",
+          rationale: "Reviewed; no exploitable issues found.",
+        },
+      ],
+    });
+
+    const scan = await completeScan(fixture);
+    const findings = await readJson<{
+      findings: Array<{
+        taxonomy: { cwe: string[] };
+        codeEvidence: unknown[];
+      }>;
+    }>(join(fixture.scanDir, "findings.json"));
+    const coverage = await readJson<{
+      completeness: string;
+      surfaces: CoverageSurface[];
+    }>(join(fixture.scanDir, "coverage.json"));
+
+    expect(scan.progress.status).toBe("complete");
+    expect(scan.findingCount).toBe(1);
+    expect(scan.warnings).toContain(
+      "Recovered compact Copilot draft artifacts into the canonical scan contract.",
+    );
+    expect(findings.findings[0]?.taxonomy.cwe).toEqual(["CWE-78"]);
+    expect(findings.findings[0]?.codeEvidence).toHaveLength(1);
+    expect(coverage.completeness).toBe("complete");
+    expect(coverage.surfaces[0]).toMatchObject({
+      label: "src/extract.py",
+      disposition: "reported",
+    });
+    expect(coverage.surfaces[1]).toMatchObject({
+      label: "README.md",
+      disposition: "no_issue_found",
+    });
+  });
+
   test("returns the authoritative directory snapshot contract at registration", async () => {
     const fixture = await startDraftScan();
     const registration = fixture.registration;
@@ -241,7 +348,7 @@ describe("malformed scan artifact recovery", () => {
       displayName: "repository",
       targetId: registration["targetId"],
       requiredSnapshotDigest: expect.stringMatching(
-        /^codex-security-snapshot\/v1:sha256:[a-f0-9]{64}$/,
+        /^copilot-security-snapshot\/v1:sha256:[a-f0-9]{64}$/,
       ),
     });
   });
@@ -273,7 +380,7 @@ describe("malformed scan artifact recovery", () => {
         expect(contract.target).not.toHaveProperty("requiredSnapshotDigest");
       } else {
         expect(contract.target.requiredSnapshotDigest).toMatch(
-          /^codex-security-snapshot\/v1:sha256:[a-f0-9]{64}$/,
+          /^copilot-security-snapshot\/v1:sha256:[a-f0-9]{64}$/,
         );
       }
     }
@@ -579,7 +686,7 @@ describe("malformed scan artifact recovery", () => {
     const sarif = await readJson<SarifDocument>(
       join(fixture.scanDir, "exports", "results.sarif"),
     );
-    expect(sarif.runs[0]?.properties.codexSecurityCoverageCompleteness).toBe(
+    expect(sarif.runs[0]?.properties.copilotSecurityCoverageCompleteness).toBe(
       "partial",
     );
     expect(sarif.runs[0]?.invocations).toEqual([

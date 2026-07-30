@@ -1,6 +1,6 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { constants, existsSync, type Stats } from "node:fs";
+import { constants, type Stats } from "node:fs";
 import {
   chmod,
   copyFile,
@@ -18,7 +18,6 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { createRequire } from "node:module";
 import {
   basename,
   dirname,
@@ -36,7 +35,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import extractZip from "extract-zip";
 import { parse } from "smol-toml";
 import {
-  CodexSecurityError,
+  CopilotSecurityError,
   OutputDirectoryError,
   PluginBootstrapError,
   PluginPythonUnavailableError,
@@ -46,8 +45,8 @@ import { resolveTrustedExecutable } from "./trusted-executable.js";
 
 const execFile = promisify(execFileCallback);
 
-export const MARKETPLACE_NAME = "codex-security-sdk";
-export const PLUGIN_NAME = "codex-security";
+export const MARKETPLACE_NAME = "copilot-security-sdk";
+export const PLUGIN_NAME = "copilot-security";
 
 const MAX_ZIP_ENTRIES = 4_096;
 const MAX_ZIP_CENTRAL_DIRECTORY = 16 * 1024 * 1024;
@@ -58,8 +57,8 @@ const MAX_PLUGIN_COPY_ENTRIES = 4_096;
 const MAX_PLUGIN_COPY_FILE_SIZE = 128 * 1024 * 1024;
 const MAX_PLUGIN_COPY_SIZE = 512 * 1024 * 1024;
 const MODEL_UNSAFE_PATH = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u;
-const CREDENTIAL_LOCK_NAME = ".codex-security-scan.lock";
-const CREDENTIAL_LOGOUT_MARKER = ".codex-security-logged-out";
+const CREDENTIAL_LOCK_NAME = ".copilot-security-scan.lock";
+const CREDENTIAL_LOGOUT_MARKER = ".copilot-security-logged-out";
 const CREDENTIAL_LOCK_POLL_MILLISECONDS = 25;
 const INCOMPLETE_CREDENTIAL_LOCK_MILLISECONDS = 30_000;
 
@@ -72,7 +71,7 @@ export interface PluginInstall {
   version: string;
 }
 
-export interface CodexCommand {
+export interface CopilotCommand {
   command: string;
   prefixArgs: readonly string[];
 }
@@ -96,7 +95,7 @@ export interface WorkbenchCommandOptions {
   failureMessage?: string;
 }
 
-export function codexSecurityStateDirectory(
+export function copilotSecurityStateDirectory(
   environment: ProcessEnvironment = process.env,
 ): string {
   const environmentValue = (requested: string): string | undefined => {
@@ -109,32 +108,26 @@ export function codexSecurityStateDirectory(
       ?.trim();
   };
   const configured =
-    environmentValue("COPILOT_SECURITY_STATE_DIR") ??
-    environmentValue("CODEX_SECURITY_STATE_DIR");
+    environmentValue("COPILOT_SECURITY_HOME") ??
+    environmentValue("COPILOT_SECURITY_STATE_DIR");
   if (configured !== undefined) return resolve(expandHome(configured));
-  const copilotHome =
-    environmentValue("COPILOT_HOME") ?? join(homedir(), ".copilot");
-  return resolve(
-    expandHome(copilotHome),
-    "state",
-    "plugins",
-    "copilot-security",
+  return resolve(homedir(), ".copilot-security");
+}
+
+export function copilotSecurityCredentialHome(
+  environment: ProcessEnvironment = process.env,
+): string {
+  return join(
+    copilotSecurityStateDirectory(environment),
+    "copilot-security-home",
   );
 }
 
-export const copilotSecurityStateDirectory = codexSecurityStateDirectory;
-
-export function codexSecurityCredentialHome(
-  environment: ProcessEnvironment = process.env,
-): string {
-  return join(codexSecurityStateDirectory(environment), "codex-home");
-}
-
-export async function prepareCodexSecurityCredentialHome(
+export async function prepareCopilotSecurityCredentialHome(
   environment: ProcessEnvironment = process.env,
   validateLocation?: (path: string) => void,
 ): Promise<string> {
-  const path = codexSecurityCredentialHome(environment);
+  const path = copilotSecurityCredentialHome(environment);
   try {
     try {
       await mkdir(path, { recursive: true, mode: 0o700 });
@@ -146,7 +139,7 @@ export async function prepareCodexSecurityCredentialHome(
           (!existing.isDirectory() || existing.isSymbolicLink())
         ) {
           throw new OutputDirectoryError(
-            `Codex Security credential home is not a directory: ${path}`,
+            `Copilot Security home is not a directory: ${path}`,
             { cause: error },
           );
         }
@@ -157,7 +150,7 @@ export async function prepareCodexSecurityCredentialHome(
     const metadata = await lstat(path);
     if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
       throw new OutputDirectoryError(
-        `Codex Security credential home is not a directory: ${path}`,
+        `Copilot Security home is not a directory: ${path}`,
       );
     }
     const canonical = await realpath(path);
@@ -168,7 +161,7 @@ export async function prepareCodexSecurityCredentialHome(
   } catch (error) {
     if (error instanceof OutputDirectoryError) throw error;
     throw new OutputDirectoryError(
-      `Unable to prepare the Codex Security credential home: ${path}`,
+      `Unable to prepare the Copilot Security home: ${path}`,
       { cause: error },
     );
   }
@@ -208,7 +201,7 @@ async function secureWindowsCredentialHome(path: string): Promise<void> {
   );
   const script = [
     "$ErrorActionPreference = 'Stop'",
-    "$path = [Environment]::GetEnvironmentVariable('CODEX_SECURITY_CREDENTIAL_ACL_PATH', 'Process')",
+    "$path = [Environment]::GetEnvironmentVariable('COPILOT_SECURITY_HOME_ACL_PATH', 'Process')",
     "$identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()",
     "if ($null -eq $identity.User) { throw 'Unable to identify the current Windows user' }",
     "$acl = New-Object System.Security.AccessControl.DirectorySecurity",
@@ -229,7 +222,7 @@ async function secureWindowsCredentialHome(path: string): Promise<void> {
     {
       env: {
         ...process.env,
-        CODEX_SECURITY_CREDENTIAL_ACL_PATH: path,
+        COPILOT_SECURITY_HOME_ACL_PATH: path,
       },
       encoding: "utf8",
       windowsHide: true,
@@ -238,11 +231,11 @@ async function secureWindowsCredentialHome(path: string): Promise<void> {
   );
 }
 
-export async function acquireCodexSecurityCredentialHomeLock(
-  codexHome: string,
+export async function acquireCopilotSecurityCredentialHomeLock(
+  copilotHome: string,
   signal?: AbortSignal,
 ): Promise<() => Promise<void>> {
-  const lock = join(codexHome, CREDENTIAL_LOCK_NAME);
+  const lock = join(copilotHome, CREDENTIAL_LOCK_NAME);
   const ownerPath = join(lock, "owner.json");
   const token = randomUUID();
 
@@ -276,7 +269,7 @@ export async function acquireCodexSecurityCredentialHomeLock(
       };
       if (owner.token !== token) {
         throw new PluginBootstrapError(
-          "The Codex Security credential-home lock is no longer owned by this scan.",
+          "The Copilot Security home lock is no longer owned by this scan.",
         );
       }
       await rm(lock, { recursive: true, force: true });
@@ -293,7 +286,7 @@ async function recoverStaleCredentialHomeLock(lock: string): Promise<boolean> {
   if (metadata === null) return true;
   if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
     throw new OutputDirectoryError(
-      `Codex Security credential-home lock is not a directory: ${lock}`,
+      `Copilot Security home lock is not a directory: ${lock}`,
     );
   }
 
@@ -340,19 +333,19 @@ async function recoverStaleCredentialHomeLock(lock: string): Promise<boolean> {
   return true;
 }
 
-export async function setCodexSecurityCredentialLogout(
-  codexHome: string,
+export async function setCopilotSecurityCredentialLogout(
+  copilotHome: string,
   loggedOut: boolean,
 ): Promise<void> {
-  const marker = join(codexHome, CREDENTIAL_LOGOUT_MARKER);
+  const marker = join(copilotHome, CREDENTIAL_LOGOUT_MARKER);
   if (!loggedOut) {
     await rm(marker, { force: true });
     return;
   }
 
   const temporary = join(
-    codexHome,
-    `.codex-security-logout-${randomUUID()}.tmp`,
+    copilotHome,
+    `.copilot-security-logout-${randomUUID()}.tmp`,
   );
   try {
     const handle = await open(temporary, "wx", 0o600);
@@ -369,14 +362,14 @@ export async function setCodexSecurityCredentialLogout(
   }
 }
 
-export async function codexSecurityCredentialAllowsAmbientImport(
-  codexHome: string,
+export async function copilotSecurityCredentialAllowsAmbientImport(
+  copilotHome: string,
 ): Promise<boolean> {
   try {
-    const marker = await lstat(join(codexHome, CREDENTIAL_LOGOUT_MARKER));
+    const marker = await lstat(join(copilotHome, CREDENTIAL_LOGOUT_MARKER));
     if (!marker.isFile() || marker.isSymbolicLink()) {
       throw new OutputDirectoryError(
-        `Codex Security logout marker is not a regular file: ${codexHome}`,
+        `Copilot Security logout marker is not a regular file: ${copilotHome}`,
       );
     }
     return false;
@@ -386,10 +379,10 @@ export async function codexSecurityCredentialAllowsAmbientImport(
   }
 }
 
-export async function codexSecurityHasStoredFileCredentials(
-  codexHome: string,
+export async function copilotSecurityHasStoredFileCredentials(
+  copilotHome: string,
 ): Promise<boolean> {
-  const path = join(codexHome, "auth.json");
+  const path = join(copilotHome, "auth.json");
   let metadata: Stats;
   try {
     metadata = await lstat(path);
@@ -399,23 +392,23 @@ export async function codexSecurityHasStoredFileCredentials(
   }
   if (!metadata.isFile() || metadata.isSymbolicLink()) {
     throw new OutputDirectoryError(
-      `Codex Security stored authentication is not a regular file: ${path}`,
+      `Copilot Security stored authentication is not a regular file: ${path}`,
     );
   }
   return true;
 }
 
-export async function preserveCodexSecurityPluginRegistration(
-  codexHome: string,
+export async function preserveCopilotSecurityPluginRegistration(
+  copilotHome: string,
   config: JsonObject,
 ): Promise<JsonObject> {
   let existing: unknown;
   try {
-    existing = parse(await readFile(join(codexHome, "config.toml"), "utf8"));
+    existing = parse(await readFile(join(copilotHome, "config.toml"), "utf8"));
   } catch (error) {
     if (nodeErrorCode(error) === "ENOENT") return config;
     throw new PluginBootstrapError(
-      "Unable to read the existing Codex Security plugin registration.",
+      "Unable to read the existing Copilot Security plugin registration.",
       { cause: error },
     );
   }
@@ -435,7 +428,7 @@ export async function preserveCodexSecurityPluginRegistration(
     !isRecord(marketplace) ||
     marketplace["source_type"] !== "local" ||
     typeof source !== "string" ||
-    !(await sameFile(source, join(codexHome, "sdk-marketplace"))) ||
+    !(await sameFile(source, join(copilotHome, "sdk-marketplace"))) ||
     !isRecord(plugin) ||
     plugin["enabled"] !== true
   ) {
@@ -477,13 +470,7 @@ export async function runWorkbench(
         ...args,
       ],
       {
-        env: Object.fromEntries(
-          Object.entries(options.environment).filter(
-            ([name]) =>
-              name.toUpperCase() !== "OPENAI_API_KEY" &&
-              name.toUpperCase() !== "CODEX_API_KEY",
-          ),
-        ),
+        env: options.environment,
         encoding: "utf8",
         maxBuffer: 4 * 1024 * 1024,
         windowsHide: true,
@@ -498,13 +485,13 @@ export async function runWorkbench(
         detail,
       );
     const failure =
-      options.failureMessage ?? "Could not run the Codex Security workbench";
-    throw new CodexSecurityError(
+      options.failureMessage ?? "Could not run the Copilot Security workbench";
+    throw new CopilotSecurityError(
       databaseFailure
         ? `${failure}: cannot open the workbench database at ${join(
-            codexSecurityStateDirectory(options.environment),
+            copilotSecurityStateDirectory(options.environment),
             "workbench.sqlite3",
-          )}. Ensure the state directory and SQLite journal files are writable, or set CODEX_SECURITY_STATE_DIR to a writable directory outside the scanned repository.`
+          )}. Ensure the state directory and SQLite journal files are writable, or set COPILOT_SECURITY_HOME to a writable directory outside the scanned repository.`
         : `${failure}: ${detail}`,
       { cause: error },
     );
@@ -513,14 +500,14 @@ export async function runWorkbench(
   try {
     result = JSON.parse(stdout);
   } catch (error) {
-    throw new CodexSecurityError(
-      "The Codex Security workbench returned invalid JSON.",
+    throw new CopilotSecurityError(
+      "The Copilot Security workbench returned invalid JSON.",
       { cause: error },
     );
   }
   if (!isRecord(result)) {
-    throw new CodexSecurityError(
-      "The Codex Security workbench returned an invalid response.",
+    throw new CopilotSecurityError(
+      "The Copilot Security workbench returned an invalid response.",
     );
   }
   return result as JsonObject;
@@ -533,7 +520,7 @@ export function bundledPluginCandidates(moduleDirectory: string): string[] {
   ];
   return basename(moduleDirectory) === "src"
     ? [
-        resolve(moduleDirectory, "../../../plugins/codex-security"),
+        resolve(moduleDirectory, "../../../plugins/copilot-security"),
         ...packageCandidates,
       ]
     : packageCandidates;
@@ -547,7 +534,7 @@ export async function bundledPluginRoot(): Promise<string> {
     }
   }
   throw new PluginBootstrapError(
-    "The bundled Codex Security plugin is missing.",
+    "The bundled Copilot Security plugin is missing.",
   );
 }
 
@@ -653,7 +640,7 @@ export async function prepareOutputDir(
   validateLocation?.(path ?? (await realpath(temporaryRoot)));
   if (path === null) {
     const created = await mkdtemp(
-      join(temporaryRoot, `codex-security-${safePrefix(repositoryName)}-`),
+      join(temporaryRoot, `copilot-security-${safePrefix(repositoryName)}-`),
     );
     if ((process.umask() & 0o700) !== 0) await chmod(created, 0o700);
     try {
@@ -756,7 +743,7 @@ export async function createIsolatedHome(
   validateLocation?: (path: string) => void,
 ): Promise<string> {
   const path = await mkdtemp(
-    join(temporaryRoot, "openai-codex-security-home-"),
+    join(temporaryRoot, "secwest-copilot-security-home-"),
   );
   try {
     if ((process.umask() & 0o700) !== 0) await chmod(path, 0o700);
@@ -778,7 +765,7 @@ export async function importAmbientAuth(
   } catch (error) {
     if (nodeErrorCode(error) === "ENOENT") return false;
     throw new PluginBootstrapError(
-      `Unable to inspect ambient Codex authentication: ${source}`,
+      `Unable to inspect ambient Copilot authentication: ${source}`,
       {
         cause: error,
       },
@@ -788,7 +775,7 @@ export async function importAmbientAuth(
     return false;
   }
   await mkdir(isolatedHome, { recursive: true, mode: 0o700 });
-  if (await codexSecurityHasStoredFileCredentials(isolatedHome)) return true;
+  if (await copilotSecurityHasStoredFileCredentials(isolatedHome)) return true;
   const destination = join(isolatedHome, "auth.json");
   const temporary = join(isolatedHome, `.auth-${randomUUID()}.tmp`);
   try {
@@ -799,7 +786,7 @@ export async function importAmbientAuth(
     } catch (error) {
       if (
         nodeErrorCode(error) === "EEXIST" &&
-        (await codexSecurityHasStoredFileCredentials(isolatedHome))
+        (await copilotSecurityHasStoredFileCredentials(isolatedHome))
       ) {
         return true;
       }
@@ -809,7 +796,7 @@ export async function importAmbientAuth(
     return true;
   } catch (error) {
     throw new PluginBootstrapError(
-      "Unable to copy ambient Codex authentication.",
+      "Unable to copy ambient Copilot authentication.",
       {
         cause: error,
       },
@@ -827,7 +814,7 @@ export async function extractPluginZip(
   const archivePath = resolve(expandHome(archive));
   await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
   const staging = await realpath(
-    await mkdtemp(join(dirname(destination), ".codex-security-plugin-")),
+    await mkdtemp(join(dirname(destination), ".copilot-security-plugin-")),
   );
   try {
     throwIfSignalAborted(signal);
@@ -1020,13 +1007,13 @@ export async function resolvePluginPath(
 }
 
 export async function createMarketplace(
-  codexHome: string,
+  copilotHome: string,
   pluginRoot: string,
   signal?: AbortSignal,
 ): Promise<string> {
   throwIfSignalAborted(signal);
   const root = await realpath(pluginRoot);
-  const marketplace = join(codexHome, "sdk-marketplace");
+  const marketplace = join(copilotHome, "sdk-marketplace");
   const pluginDestination = join(marketplace, "plugins", PLUGIN_NAME);
   const projectionContract = join(
     root,
@@ -1045,7 +1032,7 @@ export async function createMarketplace(
   throwIfSignalAborted(signal);
   const manifest = {
     name: MARKETPLACE_NAME,
-    interface: { displayName: "Codex Security SDK" },
+    interface: { displayName: "Copilot Security SDK" },
     plugins: [
       {
         name: PLUGIN_NAME,
@@ -1110,7 +1097,7 @@ async function pluginProjectionFingerprint(
     }
     paths = [
       ...new Set(
-        [".codex-plugin/plugin.json", ...shipped]
+        ["plugin.json", ...shipped]
           .filter((path) => !path.startsWith("sdk/"))
           .map((path) => safeArchivePath(path)),
       ),
@@ -1202,18 +1189,18 @@ async function pluginProjectionFingerprint(
   return fingerprint.digest("hex");
 }
 
-async function codexSecurityPluginRegistration(
-  codexHome: string,
+async function copilotSecurityPluginRegistration(
+  copilotHome: string,
 ): Promise<{ marketplace: boolean; plugin: boolean }> {
   let config: unknown;
   try {
-    config = parse(await readFile(join(codexHome, "config.toml"), "utf8"));
+    config = parse(await readFile(join(copilotHome, "config.toml"), "utf8"));
   } catch (error) {
     if (nodeErrorCode(error) === "ENOENT") {
       return { marketplace: false, plugin: false };
     }
     throw new PluginBootstrapError(
-      "Unable to inspect the existing Codex Security plugin registration.",
+      "Unable to inspect the existing Copilot Security plugin registration.",
       { cause: error },
     );
   }
@@ -1228,61 +1215,20 @@ async function codexSecurityPluginRegistration(
   };
 }
 
-export function resolveCodexCommand(): CodexCommand {
-  const { packageName, targetTriple } = codexPlatformPackage();
-  const require = createRequire(import.meta.url);
-  const codexPackageJson = require.resolve("@openai/codex/package.json");
-  const packageJson = createRequire(codexPackageJson).resolve(
-    `${packageName}/package.json`,
-  );
-  const command = join(
-    dirname(packageJson),
-    "vendor",
-    targetTriple,
-    "bin",
-    process.platform === "win32" ? "codex.exe" : "codex",
-  );
-  if (!existsSync(command)) {
-    throw new PluginBootstrapError(
-      `The ${packageName} package does not contain the Codex executable for ${targetTriple}.`,
-    );
-  }
-  return { command, prefixArgs: [] };
-}
-
-export function codexPlatformPackage(
-  platform: NodeJS.Platform = process.platform,
-  architecture: string = process.arch,
-): { packageName: string; targetTriple: string } {
-  const key = `${platform}:${architecture}`;
-  const target: readonly [string, string] | undefined = {
-    "android:arm64": [
-      "@openai/codex-linux-arm64",
-      "aarch64-unknown-linux-musl",
-    ],
-    "android:x64": ["@openai/codex-linux-x64", "x86_64-unknown-linux-musl"],
-    "darwin:arm64": ["@openai/codex-darwin-arm64", "aarch64-apple-darwin"],
-    "darwin:x64": ["@openai/codex-darwin-x64", "x86_64-apple-darwin"],
-    "linux:arm64": ["@openai/codex-linux-arm64", "aarch64-unknown-linux-musl"],
-    "linux:x64": ["@openai/codex-linux-x64", "x86_64-unknown-linux-musl"],
-    "win32:arm64": ["@openai/codex-win32-arm64", "aarch64-pc-windows-msvc"],
-    "win32:x64": ["@openai/codex-win32-x64", "x86_64-pc-windows-msvc"],
-  }[key] as readonly [string, string] | undefined;
-  if (target === undefined) {
-    throw new PluginBootstrapError(
-      `Codex does not support this platform: ${platform} (${architecture}).`,
-    );
-  }
-  return { packageName: target[0], targetTriple: target[1] };
+export function resolveCopilotCommand(): CopilotCommand {
+  return {
+    command: process.env["COPILOT_CLI_PATH"]?.trim() || "copilot",
+    prefixArgs: [],
+  };
 }
 
 export async function bootstrapPlugin(
-  codexHome: string,
+  copilotHome: string,
   pluginRoot: string,
   options: {
-    codexCommand?: CodexCommand;
-    runCodex?: (
-      command: CodexCommand,
+    copilotCommand?: CopilotCommand;
+    runCopilot?: (
+      command: CopilotCommand,
       args: readonly string[],
       environment: ProcessEnvironment,
       signal?: AbortSignal,
@@ -1293,13 +1239,13 @@ export async function bootstrapPlugin(
 ): Promise<PluginInstall> {
   const root = await realpath(pluginRoot);
   const { name, version } = await pluginMetadata(root);
-  const existingMarketplace = join(codexHome, "sdk-marketplace");
+  const existingMarketplace = join(copilotHome, "sdk-marketplace");
   let upgradeExistingPlugin = false;
   let repairIncompletePlugin = false;
   let installedRoot: string | null = null;
   try {
-    await verifyPluginRegistration(codexHome, existingMarketplace);
-    installedRoot = await findInstalledPlugin(codexHome);
+    await verifyPluginRegistration(copilotHome, existingMarketplace);
+    installedRoot = await findInstalledPlugin(copilotHome);
   } catch (error) {
     throwIfSignalAborted(options.signal);
     if (
@@ -1319,10 +1265,10 @@ export async function bootstrapPlugin(
       (!marketplace.isDirectory() || marketplace.isSymbolicLink())
     ) {
       throw new PluginBootstrapError(
-        `Codex Security marketplace is not a safe directory: ${existingMarketplace}`,
+        `Copilot Security marketplace is not a safe directory: ${existingMarketplace}`,
       );
     }
-    const registration = await codexSecurityPluginRegistration(codexHome);
+    const registration = await copilotSecurityPluginRegistration(copilotHome);
     repairIncompletePlugin =
       marketplace !== null || registration.marketplace || registration.plugin;
   }
@@ -1352,14 +1298,14 @@ export async function bootstrapPlugin(
   }
 
   throwIfSignalAborted(options.signal);
-  const command = options.codexCommand ?? resolveCodexCommand();
+  const command = options.copilotCommand ?? resolveCopilotCommand();
   const environment = {
     ...(options.environment ?? process.env),
-    CODEX_HOME: codexHome,
+    COPILOT_HOME: copilotHome,
   };
-  const run = options.runCodex ?? runCodex;
+  const run = options.runCopilot ?? runCopilot;
   if (upgradeExistingPlugin || repairIncompletePlugin) {
-    const registration = await codexSecurityPluginRegistration(codexHome);
+    const registration = await copilotSecurityPluginRegistration(copilotHome);
     if (registration.plugin) {
       await run(
         command,
@@ -1383,7 +1329,11 @@ export async function bootstrapPlugin(
     throwIfSignalAborted(options.signal);
   }
 
-  const marketplace = await createMarketplace(codexHome, root, options.signal);
+  const marketplace = await createMarketplace(
+    copilotHome,
+    root,
+    options.signal,
+  );
   await run(
     command,
     ["plugin", "marketplace", "add", marketplace],
@@ -1396,12 +1346,12 @@ export async function bootstrapPlugin(
     environment,
     options.signal,
   );
-  await verifyPluginRegistration(codexHome, marketplace);
-  const verifiedInstalledRoot = await findInstalledPlugin(codexHome);
+  await verifyPluginRegistration(copilotHome, marketplace);
+  const verifiedInstalledRoot = await findInstalledPlugin(copilotHome);
   const installed = await pluginMetadata(verifiedInstalledRoot);
   if (installed.name !== name || installed.version !== version) {
     throw new PluginBootstrapError(
-      "Installed Codex Security plugin metadata does not match the selected plugin.",
+      "Installed Copilot Security plugin metadata does not match the selected plugin.",
     );
   }
   return {
@@ -1417,7 +1367,7 @@ export async function bootstrapPlugin(
 export async function pluginMetadata(
   root: string,
 ): Promise<{ name: typeof PLUGIN_NAME; version: string }> {
-  const manifestPath = join(root, ".codex-plugin", "plugin.json");
+  const manifestPath = join(root, "plugin.json");
   let manifest: unknown;
   try {
     const expected = await lstat(manifestPath);
@@ -1451,13 +1401,16 @@ export async function pluginMetadata(
       await input.close();
     }
   } catch (error) {
-    throw new PluginBootstrapError(`Invalid Codex plugin directory: ${root}`, {
-      cause: error,
-    });
+    throw new PluginBootstrapError(
+      `Invalid Copilot plugin directory: ${root}`,
+      {
+        cause: error,
+      },
+    );
   }
   if (!isRecord(manifest) || manifest["name"] !== PLUGIN_NAME) {
     throw new PluginBootstrapError(
-      "Plugin manifest must have name 'codex-security'.",
+      "Plugin manifest must have name 'copilot-security'.",
     );
   }
   const version = manifest["version"];
@@ -1496,7 +1449,7 @@ export async function resolvePluginPython(
 
   const home = options.homeDirectory ?? homedir();
   const managedRoots = options.managedRuntimeRoots ?? [
-    join(home, ".cache", "codex-runtimes", "codex-primary-runtime"),
+    join(home, ".cache", "copilot-runtimes", "copilot-primary-runtime"),
   ];
   const relativeCandidates =
     process.platform === "win32"
@@ -1534,8 +1487,8 @@ export async function resolvePluginPython(
     if (resolved !== null) return resolved;
   }
   throw new PluginPythonUnavailableError(
-    "The bundled Codex Security plugin requires Python 3.10 or later (Python 3.10 also requires tomli), but no usable interpreter was found. " +
-      "Set pythonPath, --python, or PYTHON, install the Codex managed runtime, or add python3/python to PATH.",
+    "The bundled Copilot Security plugin requires Python 3.10 or later (Python 3.10 also requires tomli), but no usable interpreter was found. " +
+      "Set pythonPath, --python, or PYTHON, install the Copilot managed runtime, or add python3/python to PATH.",
   );
 }
 
@@ -1550,8 +1503,8 @@ export async function cleanupSdkDirectory(path: string): Promise<void> {
   await rm(path, { recursive: true, force: true });
 }
 
-async function runCodex(
-  command: CodexCommand,
+async function runCopilot(
+  command: CopilotCommand,
   args: readonly string[],
   environment: ProcessEnvironment,
   signal?: AbortSignal,
@@ -1569,15 +1522,18 @@ async function runCodex(
     return stdout;
   } catch (error) {
     const detail = processErrorDetail(error);
-    throw new PluginBootstrapError(`Codex plugin bootstrap failed: ${detail}`, {
-      cause: error,
-    });
+    throw new PluginBootstrapError(
+      `Copilot plugin bootstrap failed: ${detail}`,
+      {
+        cause: error,
+      },
+    );
   }
 }
 
-async function findInstalledPlugin(codexHome: string): Promise<string> {
+async function findInstalledPlugin(copilotHome: string): Promise<string> {
   const root = join(
-    codexHome,
+    copilotHome,
     "plugins",
     "cache",
     MARKETPLACE_NAME,
@@ -1594,7 +1550,7 @@ async function findInstalledPlugin(codexHome: string): Promise<string> {
   }
   if (candidates.length !== 1) {
     throw new PluginBootstrapError(
-      "Codex plugin install did not produce one installed Codex Security plugin.",
+      "Copilot plugin install did not produce one installed Copilot Security plugin.",
     );
   }
   return await realpath(candidates[0]!);
@@ -1611,7 +1567,7 @@ async function discoverPluginRoot(root: string): Promise<string> {
       return await validatePluginRoot(candidate);
   }
   throw new PluginBootstrapError(
-    "Plugin ZIP must contain Codex Security at its root or in one top-level directory.",
+    "Plugin ZIP must contain Copilot Security at its root or in one top-level directory.",
   );
 }
 
@@ -1621,16 +1577,16 @@ async function validatePluginRoot(root: string): Promise<string> {
 }
 
 async function verifyPluginRegistration(
-  codexHome: string,
+  copilotHome: string,
   marketplace: string,
 ): Promise<void> {
-  const configPath = join(codexHome, "config.toml");
+  const configPath = join(copilotHome, "config.toml");
   let config: unknown;
   try {
     config = parse(await readFile(configPath, "utf8"));
   } catch (error) {
     throw new PluginBootstrapError(
-      "Codex plugin bootstrap produced an unreadable config.toml.",
+      "Copilot plugin bootstrap produced an unreadable config.toml.",
       {
         cause: error,
       },
@@ -1646,18 +1602,18 @@ async function verifyPluginRegistration(
     : undefined;
   if (!isRecord(marketplaceConfig) || !isRecord(pluginConfig)) {
     throw new PluginBootstrapError(
-      "Codex plugin bootstrap did not preserve plugin registration.",
+      "Copilot plugin bootstrap did not preserve plugin registration.",
     );
   }
   const registeredSource = String(marketplaceConfig["source"] ?? "");
   if (!(await sameFile(registeredSource, marketplace))) {
     throw new PluginBootstrapError(
-      "Codex plugin marketplace registration has the wrong source.",
+      "Copilot plugin marketplace registration has the wrong source.",
     );
   }
   if (pluginConfig["enabled"] !== true) {
     throw new PluginBootstrapError(
-      "Codex Security plugin is not enabled after bootstrap.",
+      "Copilot Security plugin is not enabled after bootstrap.",
     );
   }
 }
@@ -1881,7 +1837,7 @@ async function copyExternalPayload(
       "Plugin projection contract must contain shippedExact paths.",
     );
   }
-  const paths = [".codex-plugin/plugin.json", ...shippedExact].filter(
+  const paths = ["plugin.json", ...shippedExact].filter(
     (value) => !value.startsWith("sdk/"),
   );
   for (const path of paths) {
@@ -1938,7 +1894,7 @@ async function requirePython(
   if (resolved !== null) return resolved;
   throw new PluginPythonUnavailableError(
     `The ${source} interpreter is unavailable or unusable: ${candidate}. ` +
-      "The bundled Codex Security plugin requires Python 3.10 or later for scan execution; Python 3.10 also requires tomli.",
+      "The bundled Copilot Security plugin requires Python 3.10 or later for scan execution; Python 3.10 also requires tomli.",
   );
 }
 
@@ -1960,7 +1916,7 @@ async function usablePython(
       [
         "-I",
         "-c",
-        "import importlib.util,sys\nif sys.version_info < (3, 10): raise SystemExit(1)\nif sys.version_info < (3, 11) and importlib.util.find_spec('tomli') is None: raise SystemExit(1)\nprint('codex-security-python-ok')",
+        "import importlib.util,sys\nif sys.version_info < (3, 10): raise SystemExit(1)\nif sys.version_info < (3, 11) and importlib.util.find_spec('tomli') is None: raise SystemExit(1)\nprint('copilot-security-python-ok')",
       ],
       {
         env: command.environment,
@@ -1970,7 +1926,7 @@ async function usablePython(
         signal,
       },
     );
-    return stdout.trim() === "codex-security-python-ok"
+    return stdout.trim() === "copilot-security-python-ok"
       ? command.executable
       : null;
   } catch (error) {
@@ -1988,7 +1944,7 @@ export function isPythonPathCandidate(candidate: string): boolean {
 }
 
 async function hasPluginManifest(root: string): Promise<boolean> {
-  return await isRegularFile(join(root, ".codex-plugin", "plugin.json"));
+  return await isRegularFile(join(root, "plugin.json"));
 }
 
 async function isRegularFile(path: string): Promise<boolean> {

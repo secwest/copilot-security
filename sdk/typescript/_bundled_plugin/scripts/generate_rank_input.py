@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate and post-process Codex Security scan worklists.
+"""Generate and post-process Copilot Security scan worklists.
 
 This script stays deliberately model-free:
 
@@ -127,7 +127,7 @@ RankWorkerAssignment = tuple[int, list[str], list[str]]
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Codex Security scan worklist helper.")
+    parser = argparse.ArgumentParser(description="Copilot Security scan worklist helper.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     make = subparsers.add_parser(

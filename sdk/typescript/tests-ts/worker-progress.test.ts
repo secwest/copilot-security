@@ -39,7 +39,7 @@ describe("worker progress events", () => {
     expect(
       workerStatusFromEvent(
         commandEvent(
-          '"/managed/python" "$CODEX_SECURITY_PLUGIN_ROOT/scripts/config_preflight.py" --profile security_scan',
+          '"/managed/python" "$COPILOT_SECURITY_PLUGIN_ROOT/scripts/config_preflight.py" --profile security_scan',
           output,
         ),
       ),
@@ -100,7 +100,7 @@ describe("worker progress events", () => {
     expect(
       workerStatusFromEvent(
         messageEvent(
-          'Reviewing the ranked worklist.\nCODEX_SECURITY_WORKER_STATUS {"phase":"file_review","planned":6,"started":3}',
+          'Reviewing the ranked worklist.\nCOPILOT_SECURITY_WORKER_STATUS {"phase":"file_review","planned":6,"started":3}',
         ),
       ),
     ).toEqual({
@@ -112,7 +112,7 @@ describe("worker progress events", () => {
     expect(
       workerStatusFromEvent(
         messageEvent(
-          'CODEX_SECURITY_WORKER_STATUS {"phase":"ranking","planned":6,"started":0}',
+          'COPILOT_SECURITY_WORKER_STATUS {"phase":"ranking","planned":6,"started":0}',
         ),
       ),
     ).toEqual({ kind: "dispatch", phase: "ranking", planned: 6, started: 0 });
@@ -155,19 +155,19 @@ describe("worker progress events", () => {
         `${preflight}${" ".repeat(65 * 1024)}`,
       ),
       messageEvent(
-        'CODEX_SECURITY_WORKER_STATUS {"phase":"ranking","planned":2,"started":3}',
+        'COPILOT_SECURITY_WORKER_STATUS {"phase":"ranking","planned":2,"started":3}',
       ),
       messageEvent(
-        'CODEX_SECURITY_WORKER_STATUS {"phase":"ranking","planned":-1,"started":0}',
+        'COPILOT_SECURITY_WORKER_STATUS {"phase":"ranking","planned":-1,"started":0}',
       ),
       messageEvent(
-        'CODEX_SECURITY_WORKER_STATUS {"phase":"discovery","planned":2,"started":1}',
+        'COPILOT_SECURITY_WORKER_STATUS {"phase":"discovery","planned":2,"started":1}',
       ),
       messageEvent(
-        'CODEX_SECURITY_WORKER_STATUS {"phase":"ranking","planned":2,"started":1,"path":"/repository"}',
+        'COPILOT_SECURITY_WORKER_STATUS {"phase":"ranking","planned":2,"started":1,"path":"/repository"}',
       ),
       messageEvent(
-        'CODEX_SECURITY_WORKER_STATUS {"phase":"ranking","planned":2,"started":1}\nCODEX_SECURITY_WORKER_STATUS {"phase":"ranking","planned":2,"started":0}',
+        'COPILOT_SECURITY_WORKER_STATUS {"phase":"ranking","planned":2,"started":1}\nCOPILOT_SECURITY_WORKER_STATUS {"phase":"ranking","planned":2,"started":0}',
       ),
     ]) {
       expect(workerStatusFromEvent(event)).toBeNull();

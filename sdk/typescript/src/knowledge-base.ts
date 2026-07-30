@@ -190,7 +190,7 @@ function extractDocx(path: string, bytes: Uint8Array): string {
     ) {
       throw new Error("Malformed word/document.xml.");
     }
-    return decodeXml(
+    return unescapeXmlEntities(
       xml
         .replace(/<\/(?:\w+:)?p\s*>/gu, "\n")
         .replace(/<(?:\w+:)?tab\b[^>]*\/>/gu, "\t")
@@ -203,7 +203,7 @@ function extractDocx(path: string, bytes: Uint8Array): string {
   }
 }
 
-function decodeXml(value: string): string {
+function unescapeXmlEntities(value: string): string {
   const entities: Record<string, string> = {
     amp: "&",
     lt: "<",

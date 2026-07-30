@@ -1,1 +1,1 @@
-"""Focused Codex Security workbench operation modules."""
+"""Focused Copilot Security workbench operation modules."""

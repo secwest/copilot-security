@@ -29,7 +29,9 @@ afterEach(async () => {
 });
 
 async function temporaryDirectory(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "codex-security-bulk-discovery-"));
+  const root = await mkdtemp(
+    join(tmpdir(), "copilot-security-bulk-discovery-"),
+  );
   temporaryDirectories.push(root);
   return root;
 }
@@ -260,25 +262,25 @@ describe("bulk scan repository discovery", () => {
     const { dependencies, prompt } = discoveryDependencies(root, {
       repositories: [
         { fullName: "acme/owl" },
-        { fullName: "acme/openai" },
+        { fullName: "acme/orbit" },
         { fullName: "acme/unrelated" },
       ],
     });
     prompt.confirms = [true];
     prompt.inputs = ["./custom-results"];
-    prompt.choices = ["acme/owl", "acme/openai", ""];
+    prompt.choices = ["acme/owl", "acme/orbit", ""];
 
     const result = await runBulkScanWizard(dependencies);
 
     expect(result?.outputDir).toBe(join(root, "custom-results"));
     expect(prompt.searchOptions).toEqual([
-      ["All 3 repositories", "acme/owl", "acme/openai", "acme/unrelated"],
-      ["Done (1 selected)", "acme/openai", "acme/unrelated"],
+      ["All 3 repositories", "acme/owl", "acme/orbit", "acme/unrelated"],
+      ["Done (1 selected)", "acme/orbit", "acme/unrelated"],
       ["Done (2 selected)", "acme/unrelated"],
     ]);
     const csv = await readFile(result!.inputPath, "utf8");
     expect(csv).toContain("acme--owl");
-    expect(csv).toContain("acme--openai");
+    expect(csv).toContain("acme--orbit");
     expect(csv).not.toContain("unrelated");
   });
 

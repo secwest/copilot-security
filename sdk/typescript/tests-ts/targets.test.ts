@@ -42,7 +42,7 @@ afterEach(async () => {
 
 async function repository(): Promise<string> {
   const root = await realpath(
-    await mkdtemp(join(tmpdir(), "codex-security-targets-")),
+    await mkdtemp(join(tmpdir(), "copilot-security-targets-")),
   );
   temporaryDirectories.push(root);
   const repo = join(root, "repo");
@@ -376,7 +376,7 @@ describe("scan target normalization", () => {
   });
 
   test("keeps repeated home separators anchored under the home directory", async () => {
-    const root = await mkdtemp(join(tmpdir(), "codex-security-home-"));
+    const root = await mkdtemp(join(tmpdir(), "copilot-security-home-"));
     temporaryDirectories.push(root);
     const project = join(await realpath(root), "project");
     await mkdir(project);

@@ -29,7 +29,7 @@ afterEach(async () => {
 
 async function temporaryDirectory(): Promise<string> {
   const path = await realpath(
-    await mkdtemp(join(tmpdir(), "codex-security-knowledge-test-")),
+    await mkdtemp(join(tmpdir(), "copilot-security-knowledge-test-")),
   );
   temporaryDirectories.push(path);
   return path;

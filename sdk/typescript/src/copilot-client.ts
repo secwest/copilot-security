@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readFile, realpath } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, realpath } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, isAbsolute, join, resolve } from "node:path";
 import {
@@ -9,10 +9,12 @@ import {
   type SessionEvent,
 } from "@github/copilot-sdk";
 import type { JsonObject } from "./config.js";
-import { ConfigurationError, CodexSecurityError } from "./errors.js";
+import { ConfigurationError, CopilotSecurityError } from "./errors.js";
 import {
+  importAmbientAuth,
   MARKETPLACE_NAME,
   pluginMetadata,
+  prepareCopilotSecurityCredentialHome,
   resolvePluginPath,
   type PluginInstall,
   type ProcessEnvironment,
@@ -46,13 +48,54 @@ export interface CopilotScannerThread {
 }
 
 export interface PreparedCopilotRuntime {
-  codexHome: string;
+  copilotHome: string;
   persistentCredentialHome: true;
   bootstrapWorkspace: string;
   plugin: PluginInstall;
   environment: Record<string, string>;
-  credentialsAvailable: true;
+  credentialsAvailable: boolean;
   effectiveConfig: JsonObject;
+}
+
+export async function copilotAuthStatus(
+  cliPath: string,
+  environment: Record<string, string>,
+): Promise<{
+  authenticated: boolean;
+  details: string;
+}> {
+  const client = new CopilotClient({
+    connection: RuntimeConnection.forStdio({
+      path: cliPath,
+      args: ["--no-auto-update", "--no-remote", "--no-remote-export"],
+      env: environment,
+    }),
+    mode: "copilot-cli",
+    workingDirectory: process.cwd(),
+    useLoggedInUser: true,
+    logLevel: "error",
+  });
+  try {
+    await client.start();
+    const status = await client.getAuthStatus();
+    return {
+      authenticated: status.isAuthenticated,
+      details:
+        status.statusMessage ??
+        [status.authType, status.login, status.host]
+          .filter((value): value is string => typeof value === "string")
+          .join(" "),
+    };
+  } finally {
+    const stopErrors = await client
+      .stop()
+      .catch((error: unknown) => [
+        error instanceof Error ? error : new Error(errorMessage(error)),
+      ]);
+    if (stopErrors.length > 0) {
+      await client.forceStop().catch(() => undefined);
+    }
+  }
 }
 
 /**
@@ -144,6 +187,23 @@ class CopilotThread implements CopilotScannerThread {
       try {
         await session.sendAndWait({ prompt: input }, MAX_SCAN_MILLISECONDS);
         if (!options.signal.aborted) {
+          try {
+            await session.sendAndWait(
+              { prompt: scanQualityGatePrompt() },
+              MAX_SCAN_MILLISECONDS,
+            );
+          } catch (error) {
+            if (!(await hasDraftArtifacts(this.#options.environment))) {
+              throw error;
+            }
+            queue.push({
+              type: "copilot.quality_gate_incomplete",
+              message:
+                "The correction turn ended after the first turn wrote all draft artifacts.",
+            });
+          }
+        }
+        if (!options.signal.aborted) {
           queue.push({ type: "turn.completed", usage });
         }
       } catch (error) {
@@ -151,6 +211,7 @@ class CopilotThread implements CopilotScannerThread {
           queue.push({
             type: "turn.failed",
             error: { message: errorMessage(error) },
+            usage,
           });
         }
       } finally {
@@ -171,6 +232,32 @@ class CopilotThread implements CopilotScannerThread {
 
     return { events: queue.events() };
   }
+}
+
+function scanQualityGatePrompt(): string {
+  return [
+    "Mandatory Copilot Security quality gate. Continue the same scan; do not summarize or stop early.",
+    "Reopen the repository source and all three draft artifacts.",
+    "Run an independent residual search for dangerous APIs and missing controls, including process/shell execution, query construction, path/archive/file writes, URL fetches, parsers/deserializers, templates, authentication, object/tenant authorization, cryptographic verification, state transitions, races, replay, and resource bounds.",
+    "Trace every high-risk hit from attacker-controlled source through controls to impact. Challenge every reviewed-safe conclusion against the actual code and compare it with the nearest safe sibling or negative control.",
+    "Validate each candidate, record the exploit witness and strongest counterevidence, and complete attack-path analysis. Do not suppress a candidate merely because the first pass missed it. Findings are only reachable, exploitable security defects with concrete adverse impact: remove mitigated flows, rejected candidates, safe controls, documentation notes, hardening suggestions, and defense-in-depth observations from findings.json. Zero findings is valid.",
+    "Then repair scan-manifest.json, findings.json, and coverage.json using COPILOT_SECURITY_PLUGIN_ROOT/references/draft-contract.md and the schemas. Each top level must be an object; manifest.scan and manifest.scan.scope must be objects; every finding needs explicit CWE, codeEvidence, nonempty validation, and nonempty attackPath; coverage needs canonical surfaces and complete per-file closure.",
+    "Write the corrected files beneath COPILOT_SECURITY_SCAN_DIR. Do not seal them. Return only after reopening and checking the corrected JSON.",
+  ].join("\n");
+}
+
+async function hasDraftArtifacts(
+  environment: Record<string, string>,
+): Promise<boolean> {
+  const scanDirectory = environment["COPILOT_SECURITY_SCAN_DIR"];
+  if (scanDirectory === undefined) return false;
+  for (const name of ["scan-manifest.json", "findings.json", "coverage.json"]) {
+    const metadata = await lstat(join(scanDirectory, name)).catch(() => null);
+    if (metadata === null || !metadata.isFile() || metadata.isSymbolicLink()) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function translateEvent(
@@ -291,17 +378,19 @@ export async function prepareCopilotRuntime(
     pluginPath?: string;
     copilotPath?: string;
     copilotOverrides?: JsonObject;
-    codexOverrides?: JsonObject;
   },
   environment: ProcessEnvironment = process.env,
   signal?: AbortSignal,
 ): Promise<PreparedCopilotRuntime> {
   signal?.throwIfAborted();
-  const configuredHome =
+  const ambientHome =
     environmentValue(environment, "COPILOT_HOME") ??
     join(homedir(), ".copilot");
-  await mkdir(configuredHome, { recursive: true, mode: 0o700 });
-  const copilotHome = await realpath(configuredHome);
+  const copilotHome = await prepareCopilotSecurityCredentialHome(environment);
+  const importedFileCredentials = await importAmbientAuth(
+    ambientHome,
+    copilotHome,
+  );
   const bootstrapWorkspace = await mkdtemp(
     join(tmpdir(), "copilot-security-runtime-"),
   );
@@ -321,7 +410,7 @@ export async function prepareCopilotRuntime(
   const effectiveConfig = copilotConfiguration(config);
   const cleanEnvironment = definedEnvironment(cli.environment);
   return {
-    codexHome: copilotHome,
+    copilotHome: copilotHome,
     persistentCredentialHome: true,
     bootstrapWorkspace,
     plugin: {
@@ -337,17 +426,19 @@ export async function prepareCopilotRuntime(
       COPILOT_HOME: copilotHome,
       COPILOT_CLI_PATH: cli.executable,
     },
-    credentialsAvailable: true,
+    credentialsAvailable:
+      importedFileCredentials ||
+      ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"].some(
+        (name) => environmentValue(environment, name) !== undefined,
+      ),
     effectiveConfig,
   };
 }
 
 function copilotConfiguration(config: {
   copilotOverrides?: JsonObject;
-  codexOverrides?: JsonObject;
 }): JsonObject {
-  const legacy = config.codexOverrides ?? {};
-  const overrides = config.copilotOverrides ?? legacy;
+  const overrides = config.copilotOverrides ?? {};
   const model = overrides["model"];
   const effort =
     overrides["reasoning_effort"] ?? overrides["model_reasoning_effort"];
@@ -381,7 +472,7 @@ export async function resolveCopilotCli(
     );
     if (wrapper !== null) return wrapper;
   }
-  throw new CodexSecurityError(
+  throw new CopilotSecurityError(
     `GitHub Copilot CLI was not found: ${candidate}. Install it or set COPILOT_CLI_PATH.`,
   );
 }

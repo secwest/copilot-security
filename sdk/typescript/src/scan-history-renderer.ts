@@ -70,7 +70,7 @@ export function renderScanHistory(
   };
   const lines = [
     "",
-    `  ${accent("◆")} ${strong("CODEX SECURITY")}  ${accent("/")}  ${strong(labels[command])}`,
+    `  ${accent("◆")} ${strong("COPILOT SECURITY")}  ${accent("/")}  ${strong(labels[command])}`,
     `  ${accent("━".repeat(width - 4))}`,
   ];
 

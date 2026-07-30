@@ -1,0 +1,310 @@
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, test } from "bun:test";
+import { evaluateBenchmark } from "../src/benchmark.js";
+
+const roots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+  );
+});
+
+describe("effectiveness benchmark", () => {
+  test("measures repeated positive and negative cases with evidence quality", async () => {
+    const root = await fixtureRoot();
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      thresholds: {
+        minPrecision: 1,
+        minRecall: 1,
+        minF1: 1,
+        minNegativeCasePassRate: 1,
+        minStableDetectionRate: 1,
+        minValidationRate: 1,
+        minAttackPathRate: 1,
+        minCodeEvidenceRate: 1,
+        minSeverityAccuracy: 1,
+        maxFalsePositivesPerRun: 0,
+      },
+      cases: [
+        {
+          id: "command-injection",
+          findingsPaths: [
+            "command-injection/run-1/findings.json",
+            "command-injection/run-2/findings.json",
+          ],
+          expected: [
+            {
+              id: "shell-command",
+              cwe: ["CWE-78"],
+              locations: [{ path: "src/server.js", startLine: 17 }],
+              acceptableSeverities: ["critical", "high"],
+              requireValidation: true,
+              requireAttackPath: true,
+              requireCodeEvidence: true,
+            },
+          ],
+        },
+        {
+          id: "safe-command",
+          findingsPaths: [
+            "safe-command/run-1/findings.json",
+            "safe-command/run-2/findings.json",
+          ],
+          expected: [],
+        },
+      ],
+    });
+    for (const run of [1, 2]) {
+      await writeFindings(
+        join(
+          root,
+          "results",
+          "command-injection",
+          `run-${run}`,
+          "findings.json",
+        ),
+        [
+          finding({
+            id: `occ-command-${run}`,
+            cwe: ["CWE-78"],
+            path: "src/server.js",
+            line: 18,
+            validation: { disposition: "reportable" },
+            attackPath: { decision: "report" },
+            codeEvidence: [
+              {
+                code: "exec(input)",
+                explanation: "Untrusted input reaches the shell.",
+              },
+            ],
+          }),
+        ],
+      );
+      await writeFindings(
+        join(root, "results", "safe-command", `run-${run}`, "findings.json"),
+        [],
+      );
+    }
+
+    const report = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+      now: () => new Date("2026-01-02T03:04:05.000Z"),
+    });
+
+    expect(report.passed).toBe(true);
+    expect(report.generatedAt).toBe("2026-01-02T03:04:05.000Z");
+    expect(report.metrics).toMatchObject({
+      caseCount: 2,
+      runCount: 4,
+      expectedInstances: 2,
+      reportedFindings: 2,
+      truePositives: 2,
+      falsePositives: 0,
+      falseNegatives: 0,
+      precision: 1,
+      recall: 1,
+      f1: 1,
+      casePassRate: 1,
+      negativeCasePassRate: 1,
+      stableDetectionRate: 1,
+      validationRate: 1,
+      attackPathRate: 1,
+      codeEvidenceRate: 1,
+      severityAccuracy: 1,
+      falsePositivesPerRun: 0,
+    });
+    expect(report.thresholds.every((threshold) => threshold.passed)).toBe(true);
+    expect(report.cases[0]?.stableExpectations).toEqual(["shell-command"]);
+  });
+
+  test("counts duplicate reports and misses without matching CWE alone", async () => {
+    const root = await fixtureRoot();
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      thresholds: {
+        minPrecision: 0.75,
+        minRecall: 0.75,
+        minSeverityAccuracy: 1,
+        maxFalsePositivesPerRun: 0,
+      },
+      cases: [
+        {
+          id: "mixed",
+          expected: [
+            {
+              id: "command-injection",
+              cwe: ["CWE-78"],
+              locations: [{ path: "src/server.js", startLine: 10 }],
+              acceptableSeverities: ["high"],
+            },
+            {
+              id: "path-traversal",
+              cwe: ["CWE-22"],
+              locations: [{ path: "src/archive.js", startLine: 40 }],
+            },
+          ],
+        },
+      ],
+    });
+    await writeFindings(join(root, "results", "mixed", "findings.json"), [
+      finding({
+        id: "occ-command-primary",
+        cwe: ["CWE-78"],
+        path: "src/server.js",
+        line: 10,
+        severity: "medium",
+      }),
+      finding({
+        id: "occ-command-duplicate",
+        cwe: ["CWE-78"],
+        path: "src/server.js",
+        line: 11,
+      }),
+      finding({
+        id: "occ-generic-wrong-location",
+        cwe: ["CWE-22"],
+        path: "src/unrelated.js",
+        line: 40,
+      }),
+    ]);
+
+    const report = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+    });
+
+    expect(report.passed).toBe(false);
+    expect(report.metrics).toMatchObject({
+      truePositives: 1,
+      falsePositives: 2,
+      falseNegatives: 1,
+      precision: 1 / 3,
+      recall: 0.5,
+      severityAccuracy: 0,
+    });
+    expect(report.cases[0]?.runs[0]).toMatchObject({
+      missedExpectations: ["path-traversal"],
+      unexpectedFindings: [
+        "occ-command-duplicate",
+        "occ-generic-wrong-location",
+      ],
+      passed: false,
+    });
+    expect(report.thresholds.every((threshold) => !threshold.passed)).toBe(
+      true,
+    );
+  });
+
+  test("rejects duplicate case identities before reading result files", async () => {
+    const root = await fixtureRoot();
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      cases: [
+        { id: "duplicate", expected: [] },
+        { id: "duplicate", expected: [] },
+      ],
+    });
+
+    await expect(
+      evaluateBenchmark({
+        manifestPath: join(root, "manifest.json"),
+        resultsDirectory: join(root, "missing-results"),
+      }),
+    ).rejects.toThrow("Duplicate benchmark case id: duplicate");
+  });
+
+  test("records missing scan artifacts as reliability failures", async () => {
+    const root = await fixtureRoot();
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      thresholds: { minCompletionRate: 1 },
+      cases: [
+        {
+          id: "missing-positive",
+          expected: [
+            {
+              id: "expected-command",
+              cwe: ["CWE-78"],
+              locations: [{ path: "src/server.js", startLine: 10 }],
+            },
+          ],
+        },
+        { id: "missing-negative", expected: [] },
+      ],
+    });
+
+    const report = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "missing-results"),
+    });
+
+    expect(report.passed).toBe(false);
+    expect(report.metrics).toMatchObject({
+      runCount: 2,
+      completedRuns: 0,
+      completionRate: 0,
+      truePositives: 0,
+      falseNegatives: 1,
+      negativeCasePassRate: 0,
+    });
+    expect(report.cases[0]?.runs[0]).toMatchObject({
+      completed: false,
+      falseNegatives: 1,
+      missedExpectations: ["expected-command"],
+      passed: false,
+    });
+    expect(report.cases[0]?.runs[0]?.error).toContain(
+      "Could not read findings for benchmark case missing-positive",
+    );
+  });
+});
+
+async function fixtureRoot(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "copilot-security-benchmark-"));
+  roots.push(root);
+  return root;
+}
+
+async function writeFindings(
+  path: string,
+  findings: Record<string, unknown>[],
+): Promise<void> {
+  await writeJson(path, {
+    documentType: "copilot-security.findings",
+    schemaVersion: "1.0",
+    scanId: "benchmark",
+    findings,
+  });
+}
+
+async function writeJson(path: string, value: unknown): Promise<void> {
+  await mkdir(join(path, ".."), { recursive: true });
+  await writeFile(path, `${JSON.stringify(value)}\n`);
+}
+
+function finding(options: {
+  id: string;
+  cwe: string[];
+  path: string;
+  line: number;
+  severity?: string;
+  validation?: Record<string, unknown> | null;
+  attackPath?: Record<string, unknown> | null;
+  codeEvidence?: Record<string, unknown>[];
+}): Record<string, unknown> {
+  return {
+    findingId: `csf-${options.id}`,
+    occurrenceId: options.id,
+    taxonomy: { cwe: options.cwe },
+    locations: [{ path: options.path, startLine: options.line }],
+    severity: { level: options.severity ?? "high" },
+    validation: options.validation ?? null,
+    attackPath: options.attackPath ?? null,
+    codeEvidence: options.codeEvidence ?? [],
+  };
+}

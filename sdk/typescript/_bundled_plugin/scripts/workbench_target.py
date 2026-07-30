@@ -121,7 +121,7 @@ def worktree_content_digest_for_context(
     if tracked is None or untracked is None:
         raise SystemExit("Could not snapshot the selected working-tree changes.")
     digest = hashlib.sha256()
-    update_digest_field(digest, b"format", b"codex-security-snapshot/v1")
+    update_digest_field(digest, b"format", b"copilot-security-snapshot/v1")
     update_digest_field(digest, b"tracked-diff", tracked)
     for raw_path in sorted(path for path in untracked.split(b"\0") if path):
         relative_path = os.fsdecode(raw_path)
@@ -166,7 +166,7 @@ def worktree_content_digest_for_context(
             )
         else:
             raise SystemExit(f"Unsupported untracked file type: {relative_path}")
-    return f"codex-security-snapshot/v1:sha256:{digest.hexdigest()}"
+    return f"copilot-security-snapshot/v1:sha256:{digest.hexdigest()}"
 
 
 def git_worktree_context(target: Path) -> tuple[Path, str]:
@@ -247,9 +247,9 @@ def require_clean_submodule_worktrees(target: Path) -> None:
 
 def clean_worktree_content_digest() -> str:
     digest = hashlib.sha256()
-    update_digest_field(digest, b"format", b"codex-security-snapshot/v1")
+    update_digest_field(digest, b"format", b"copilot-security-snapshot/v1")
     update_digest_field(digest, b"tracked-diff", b"")
-    return f"codex-security-snapshot/v1:sha256:{digest.hexdigest()}"
+    return f"copilot-security-snapshot/v1:sha256:{digest.hexdigest()}"
 
 
 def git_directory_snapshot_paths(target: Path) -> list[Path] | None:
@@ -308,7 +308,7 @@ def directory_content_digest(target: Path, *, excluded: tuple[Path, ...] = ()) -
     if paths is None:
         paths = sorted(target.rglob("*"))
     digest = hashlib.sha256()
-    update_digest_field(digest, b"format", b"codex-security-directory/v1")
+    update_digest_field(digest, b"format", b"copilot-security-directory/v1")
     for path in paths:
         relative_path = path.relative_to(target)
         if any(
@@ -343,7 +343,7 @@ def directory_content_digest(target: Path, *, excluded: tuple[Path, ...] = ()) -
             update_digest_field(digest, b"content-sha256", content_digest.digest())
         else:
             raise SystemExit(f"Unsupported local file type: {relative_path}")
-    return f"codex-security-snapshot/v1:sha256:{digest.hexdigest()}"
+    return f"copilot-security-snapshot/v1:sha256:{digest.hexdigest()}"
 
 
 def directory_snapshot_regular_file_count(target: Path) -> int:

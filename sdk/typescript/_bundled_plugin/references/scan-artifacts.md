@@ -4,14 +4,14 @@ Use these shared path conventions for Copilot Security scan workflows unless the
 
 ## Base Paths
 
-- `plugin_dir=<codex-security plugin root>`
+- `plugin_dir=<copilot-security plugin root>`
 - `repo_name=<basename of repo_root>`
 - `target_id=<stable scan target identity from references/scan-contract.md>`
 - `system_temp_dir=<platform temporary directory>`
-- `security_scans_dir=<system_temp_dir>/codex-security-scans/<repo_name>`
+- `security_scans_dir=<system_temp_dir>/copilot-security-scans/<repo_name>`
 - `scan_id=<commit>_<scan timestamp>`
 - `scan_dir=<security_scans_dir>/<scan_id>`
-- `target_paths_file=$CODEX_SECURITY_TARGET_PATHS_FILE` for SDK scoped-path scans; this read-only scope input lives in the isolated Codex home outside the model-writable scan directory. Pass it directly to `make-repo-rank-input --scopes-file` and `bind-repo-scopes --scopes-file` before finalization, and do not print, evaluate, modify, or treat its contents as shell syntax.
+- `target_paths_file=$COPILOT_SECURITY_TARGET_PATHS_FILE` for SDK scoped-path scans; this read-only scope input lives in the isolated Copilot home outside the model-writable scan directory. Pass it directly to `make-repo-rank-input --scopes-file` and `bind-repo-scopes --scopes-file` before finalization, and do not print, evaluate, modify, or treat its contents as shell syntax.
 - `artifacts_dir=<scan_dir>/artifacts`
 - `context_dir=<artifacts_dir>/01_context`
 - `discovery_dir=<artifacts_dir>/02_discovery`

@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { describe, expect, test } from "bun:test";
-import type { CodexSecurityConfig, JsonObject } from "../src/index.js";
+import type { CopilotSecurityConfig, JsonObject } from "../src/index.js";
 import { DiffTarget } from "../src/index.js";
 import { main } from "../src/cli.js";
 import {
@@ -11,7 +11,7 @@ import {
 } from "./support/cli.js";
 
 describe("CLI workbench", () => {
-  test("lists repository and scan-root history without starting Codex", async () => {
+  test("lists repository and scan-root history without starting Copilot", async () => {
     const repository = resolve("/current/repository");
     const cases: Array<[string[], string[]]> = [
       [["scans"], ["list-scans", "--repository", repository]],
@@ -37,7 +37,7 @@ describe("CLI workbench", () => {
         },
       });
       deps.createSecurity = () => {
-        throw new Error("history must not initialize Codex");
+        throw new Error("history must not initialize Copilot");
       };
       expect(await main(argv, capture().stream, capture().stream, deps)).toBe(
         0,
@@ -158,10 +158,10 @@ describe("CLI workbench", () => {
         },
       });
       deps.createSecurity = () => {
-        throw new Error("history must not initialize Codex");
+        throw new Error("history must not initialize Copilot");
       };
       deps.matchFindings = async () => {
-        throw new Error("saved matches must not initialize Codex");
+        throw new Error("saved matches must not initialize Copilot");
       };
       expect(await main(argv, stdout.stream, capture().stream, deps)).toBe(0);
       expect(calls).toEqual([expected]);
@@ -338,7 +338,7 @@ describe("CLI workbench", () => {
     });
   });
 
-  test("saves empty comparisons without starting Codex", async () => {
+  test("saves empty comparisons without starting Copilot", async () => {
     const calls: Array<readonly string[]> = [];
     const deps = dependencies({
       onWorkbench: (args): JsonObject => {
@@ -366,7 +366,7 @@ describe("CLI workbench", () => {
       },
     });
     deps.matchFindings = async () => {
-      throw new Error("empty comparisons must not start Codex");
+      throw new Error("empty comparisons must not start Copilot");
     };
 
     expect(
@@ -486,7 +486,7 @@ describe("CLI workbench", () => {
   });
 
   test("reruns canonical recipes with exact config, policy, plugin, and lineage", async () => {
-    let config: CodexSecurityConfig | undefined;
+    let config: CopilotSecurityConfig | undefined;
     let repository: string | undefined;
     let options: Record<string, unknown> | undefined;
     const savedConfig = {
@@ -522,7 +522,7 @@ describe("CLI workbench", () => {
         }),
       ),
     ).toBe(0);
-    expect(config?.codexOverrides).toEqual(savedConfig);
+    expect(config?.copilotOverrides).toEqual(savedConfig);
     expect(repository).toBe("/original/repository");
     expect(options).toMatchObject({
       target: ["src", "packages/core"],
@@ -577,7 +577,7 @@ describe("CLI workbench", () => {
     }
   });
 
-  test("redacts workbench failures and does not initialize Codex", async () => {
+  test("redacts workbench failures and does not initialize Copilot", async () => {
     const stderr = capture();
     let started = false;
     expect(

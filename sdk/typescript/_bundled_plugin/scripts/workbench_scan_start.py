@@ -1,4 +1,4 @@
-"""Shared scan-start helpers for the Codex Security workbench."""
+"""Shared scan-start helpers for the Copilot Security workbench."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project canonical Codex Security scan JSON into the standard reports."""
+"""Project canonical Copilot Security scan JSON into the standard reports."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ class ReportProjectionError(ValueError):
 
 def _load_script(name: str) -> ModuleType:
     path = Path(__file__).resolve().parent / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(f"codex_security_{name}", path)
+    spec = importlib.util.spec_from_file_location(f"copilot_security_{name}", path)
     if spec is None or spec.loader is None:
         raise ReportProjectionError(f"could not load report helper: {path}")
     module = importlib.util.module_from_spec(spec)

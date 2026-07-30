@@ -1,4 +1,4 @@
-"""SQLite schema history for the Codex Security workbench."""
+"""SQLite schema history for the Copilot Security workbench."""
 
 import argparse
 import sqlite3
@@ -626,7 +626,7 @@ def normalize_pre_release_migrations(connection: sqlite3.Connection, timestamp: 
         ).fetchone()
         if target_migration is not None:
             raise SystemExit(
-                "The Codex Security database has an unsupported pre-release migration history."
+                "The Copilot Security database has an unsupported pre-release migration history."
             )
         connection.execute(
             "UPDATE schema_migrations SET version = 20 WHERE version = 12 AND name = ?",
@@ -645,7 +645,7 @@ def normalize_pre_release_migrations(connection: sqlite3.Connection, timestamp: 
         ).fetchone()
         if target_migration is not None:
             raise SystemExit(
-                "The Codex Security database has an unsupported pre-release migration history."
+                "The Copilot Security database has an unsupported pre-release migration history."
             )
         connection.execute(
             "UPDATE schema_migrations SET version = 21 WHERE version = 13 AND name = ?",
@@ -673,7 +673,7 @@ def normalize_pre_release_migrations(connection: sqlite3.Connection, timestamp: 
     for version, name in legacy_versions.items():
         if expected.get(version) != name:
             raise SystemExit(
-                "The Codex Security database has an unsupported pre-release migration history."
+                "The Copilot Security database has an unsupported pre-release migration history."
             )
 
     connection.execute(

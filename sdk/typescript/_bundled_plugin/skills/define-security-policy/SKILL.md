@@ -23,7 +23,7 @@ Read `../../references/security-guidance.md`, then resolve the policy chain for 
 <python_command> <plugin_dir>/scripts/resolve_security_md.py --repo <repo_root> --scope <file_or_directory> --out -
 ```
 
-`<plugin_dir>` is the Copilot Security plugin root containing `.codex-plugin/plugin.json`, not the target repository or this skill directory.
+`<plugin_dir>` is the Copilot Security plugin root containing `plugin.json`, not the target repository or this skill directory.
 
 Root and nested policies compose from root to leaf; the policy closest to the code takes precedence when guidance conflicts. When reviewing a whole repository, inventory nested policies so component-specific boundaries are not missed. Do not treat `.github/SECURITY.md` or `docs/SECURITY.md` as repository-wide scanner guidance or overwrite them while creating a root policy.
 

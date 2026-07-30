@@ -1,19 +1,19 @@
 import { formatUsd, type ScanCost } from "./cost.js";
 
 /** Base error for Copilot Security SDK failures. */
-export class CodexSecurityError extends Error {
+export class CopilotSecurityError extends Error {
   public constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = new.target.name;
   }
 }
 
-export class ConfigurationError extends CodexSecurityError {}
-export class AuthenticationRequiredError extends CodexSecurityError {}
-export class PluginBootstrapError extends CodexSecurityError {}
+export class ConfigurationError extends CopilotSecurityError {}
+export class AuthenticationRequiredError extends CopilotSecurityError {}
+export class PluginBootstrapError extends CopilotSecurityError {}
 export class PluginPythonUnavailableError extends PluginBootstrapError {}
-export class InvalidTargetError extends CodexSecurityError {}
-export class OutputDirectoryError extends CodexSecurityError {}
+export class InvalidTargetError extends CopilotSecurityError {}
+export class OutputDirectoryError extends CopilotSecurityError {}
 export type ProtectedScanPathKind = "output" | "temporary" | "runtime";
 
 export class OutputInsideProtectedRootError extends OutputDirectoryError {
@@ -27,9 +27,9 @@ export class OutputInsideProtectedRootError extends OutputDirectoryError {
     );
   }
 }
-export class IncompleteScanError extends CodexSecurityError {}
-export class ContractValidationError extends CodexSecurityError {}
-export class ScanInterruptedError extends CodexSecurityError {
+export class IncompleteScanError extends CopilotSecurityError {}
+export class ContractValidationError extends CopilotSecurityError {}
+export class ScanInterruptedError extends CopilotSecurityError {
   public readonly scanDir: string;
 
   public constructor(message: string, scanDir: string, options?: ErrorOptions) {

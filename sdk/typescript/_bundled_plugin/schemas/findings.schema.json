@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://openai.com/codex-security/schemas/findings.schema.json",
-  "title": "Codex Security findings",
+  "$id": "https://secwest.net/copilot-security/schemas/findings.schema.json",
+  "title": "Copilot Security findings",
   "type": "object",
   "required": [
     "documentType",
@@ -11,7 +11,7 @@
   ],
   "properties": {
     "documentType": {
-      "const": "codex-security.findings"
+      "const": "copilot-security.findings"
     },
     "schemaVersion": {
       "const": "1.0"
@@ -76,11 +76,11 @@
             ],
             "properties": {
               "algorithm": {
-                "const": "codex-security/v1"
+                "const": "copilot-security/v1"
               },
               "primary": {
                 "type": "string",
-                "pattern": "^codex-security/v1:sha256:[a-f0-9]{64}$"
+                "pattern": "^copilot-security/v1:sha256:[a-f0-9]{64}$"
               }
             }
           },

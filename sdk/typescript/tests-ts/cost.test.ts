@@ -21,9 +21,9 @@ afterEach(async () => {
   );
 });
 
-async function codexHome(): Promise<string> {
+async function copilotHome(): Promise<string> {
   const directory = await realpath(
-    await mkdtemp(join(tmpdir(), "codex-security-cost-")),
+    await mkdtemp(join(tmpdir(), "copilot-security-cost-")),
   );
   temporaryDirectories.push(directory);
   return directory;
@@ -143,7 +143,7 @@ describe("scan cost", () => {
 
 describe("live scan cost tracking", () => {
   test("counts the scan and delegated workers without including other scans", async () => {
-    const home = await codexHome();
+    const home = await copilotHome();
     await writeSession(home, "scan-thread", {
       input_tokens: 1_000,
       cached_input_tokens: 100,
@@ -167,7 +167,7 @@ describe("live scan cost tracking", () => {
       output_tokens: 1_000_000,
     });
     const tracker = new ScanCostTracker({
-      codexHome: home,
+      copilotHome: home,
       model: "gpt-5.6-sol",
     });
     tracker.start("scan-thread");
@@ -193,13 +193,13 @@ describe("live scan cost tracking", () => {
   });
 
   test("uses each session's final cumulative usage without double counting", async () => {
-    const home = await codexHome();
+    const home = await copilotHome();
     const path = await writeSession(home, "scan-thread", {
       input_tokens: 100,
       output_tokens: 10,
     });
     const tracker = new ScanCostTracker({
-      codexHome: home,
+      copilotHome: home,
       model: "gpt-5.6-terra",
     });
     tracker.start("scan-thread");
@@ -227,7 +227,7 @@ describe("live scan cost tracking", () => {
   });
 
   test("reports a changed running cost only once", async () => {
-    const home = await codexHome();
+    const home = await copilotHome();
     await writeSession(home, "scan-thread", {
       input_tokens: 1_250,
       cached_input_tokens: 200,
@@ -235,7 +235,7 @@ describe("live scan cost tracking", () => {
     });
     const updates: number[] = [];
     const tracker = new ScanCostTracker({
-      codexHome: home,
+      copilotHome: home,
       model: "gpt-5.6-sol",
       maxCostUsd: 0.005,
       onCost: (cost) => updates.push(cost.estimatedUsd),
@@ -249,7 +249,7 @@ describe("live scan cost tracking", () => {
 
   test("falls back to the completed turn when session logs are unavailable", async () => {
     const tracker = new ScanCostTracker({
-      codexHome: await codexHome(),
+      copilotHome: await copilotHome(),
       model: "gpt-5.6-luna",
     });
     const usage = { input_tokens: 1_000, output_tokens: 20 };

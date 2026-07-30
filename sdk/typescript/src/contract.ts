@@ -49,14 +49,14 @@ const SAFE_SCHEMA_ERROR_PROPERTIES = new Set([
 ]);
 const SAFE_SCHEMA_PATTERNS = new Set([
   "^(?![^:/?#]+://[^/?#]*@)[^?#]+$",
-  "^codex-security-snapshot/v1:sha256:[a-f0-9]{64}$",
+  "^copilot-security-snapshot/v1:sha256:[a-f0-9]{64}$",
   "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$",
   "^[a-f0-9]{64}$",
   "^(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)artifacts/.+$",
   "^csf_[a-f0-9]{24}$",
   "^occ_[a-f0-9]{24}$",
   "^[a-z0-9][a-z0-9._/-]*$",
-  "^codex-security/v1:sha256:[a-f0-9]{64}$",
+  "^copilot-security/v1:sha256:[a-f0-9]{64}$",
   "^findings/([a-z0-9][a-z0-9._-]*)/\\1\\.md$",
 ]);
 
@@ -268,9 +268,9 @@ function validateCanonicalContract(
       }
     }
 
-    const fingerprint = `codex-security/v1:sha256:${sha256Text(
+    const fingerprint = `copilot-security/v1:sha256:${sha256Text(
       [
-        "codex-security/v1",
+        "copilot-security/v1",
         manifest.scan.target.targetId,
         finding.ruleId,
         finding.identity.anchor,

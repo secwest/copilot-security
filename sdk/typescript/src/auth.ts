@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { isIP } from "node:net";
 import { PluginBootstrapError } from "./errors.js";
-import type { CodexCommand, ProcessEnvironment } from "./runtime.js";
+import type { CopilotCommand, ProcessEnvironment } from "./runtime.js";
 
 export interface LoginResult {
   success: boolean;
@@ -15,7 +15,7 @@ export interface AccountStatus {
   details: string;
 }
 
-export class CodexLoginHandle {
+export class CopilotLoginHandle {
   readonly #child: ChildProcessWithoutNullStreams;
   readonly #completion: Promise<LoginResult>;
   readonly #urlReady: Promise<void>;
@@ -31,7 +31,7 @@ export class CodexLoginHandle {
   #stderr = "";
 
   public constructor(
-    command: CodexCommand,
+    command: CopilotCommand,
     args: readonly string[],
     environment: ProcessEnvironment,
     onSuccess: () => void,
@@ -168,8 +168,8 @@ export class CodexLoginHandle {
     }
     const error = new PluginBootstrapError(
       this.#canceled
-        ? "Codex login was canceled."
-        : `Codex login exited before authentication instructions were available: ${result.stderr.trim() || result.stdout.trim() || result.exitCode || "unknown error"}`,
+        ? "Copilot login was canceled."
+        : `Copilot login exited before authentication instructions were available: ${result.stderr.trim() || result.stdout.trim() || result.exitCode || "unknown error"}`,
     );
     if (!this.#urlReadySettled) {
       this.#urlReadySettled = true;
@@ -183,7 +183,7 @@ export class CodexLoginHandle {
 }
 
 export async function loginApiKey(
-  command: CodexCommand,
+  command: CopilotCommand,
   environment: ProcessEnvironment,
   apiKey: string,
   signal?: AbortSignal,
@@ -191,7 +191,7 @@ export async function loginApiKey(
   if (apiKey.trim().length === 0) {
     throw new PluginBootstrapError("The API key must be non-empty.");
   }
-  return await runCodex(
+  return await runCopilot(
     command,
     ["login", "--with-api-key"],
     environment,
@@ -201,11 +201,11 @@ export async function loginApiKey(
 }
 
 export async function accountStatus(
-  command: CodexCommand,
+  command: CopilotCommand,
   environment: ProcessEnvironment,
   signal?: AbortSignal,
 ): Promise<AccountStatus> {
-  const result = await runCodex(
+  const result = await runCopilot(
     command,
     ["login", "status"],
     environment,
@@ -223,11 +223,11 @@ export async function accountStatus(
 }
 
 export async function logout(
-  command: CodexCommand,
+  command: CopilotCommand,
   environment: ProcessEnvironment,
   signal?: AbortSignal,
 ): Promise<void> {
-  const result = await runCodex(
+  const result = await runCopilot(
     command,
     ["logout"],
     environment,
@@ -236,13 +236,13 @@ export async function logout(
   );
   if (!result.success) {
     throw new PluginBootstrapError(
-      `Codex logout failed: ${result.stderr.trim() || result.stdout.trim() || "unknown error"}`,
+      `Copilot logout failed: ${result.stderr.trim() || result.stdout.trim() || "unknown error"}`,
     );
   }
 }
 
-export async function runCodex(
-  command: CodexCommand,
+export async function runCopilot(
+  command: CopilotCommand,
   args: readonly string[],
   environment: ProcessEnvironment,
   input?: string,

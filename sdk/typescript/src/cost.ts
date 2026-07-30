@@ -35,7 +35,7 @@ interface SessionUsage {
 }
 
 interface ScanCostTrackerOptions {
-  codexHome: string;
+  copilotHome: string;
   model: string;
   maxCostUsd?: number;
   onCost?: (cost: Readonly<ScanCost>) => void;
@@ -109,7 +109,7 @@ export class ScanCostTracker {
   async #readSessions(): Promise<void> {
     if (this.#threadId === null) return;
     for await (const path of sessionFiles(
-      join(this.#options.codexHome, "sessions"),
+      join(this.#options.copilotHome, "sessions"),
     )) {
       let session = this.#sessions.get(path);
       if (session === undefined) {

@@ -86,14 +86,14 @@ The first example is scan-backed. For ordinary documents, use the `sourceEvidenc
 
 ```json
 {
-  "documentType": "codex-security.hardening-analysis",
+  "documentType": "copilot-security.hardening-analysis",
   "schemaVersion": "1.0",
   "analysisId": "hardening_20260619_example",
   "sourceScan": {
     "scanId": "scan_example_001",
     "manifestSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     "targetRevision": "deadbeef",
-    "snapshotDigest": "codex-security-snapshot/v1:sha256:...",
+    "snapshotDigest": "copilot-security-snapshot/v1:sha256:...",
     "sourceDrift": "none"
   },
   "assessment": {

@@ -6,7 +6,7 @@ const { format } = require("prettier");
 const packageRoot = resolve(__dirname, "..");
 const schemas = [
   join(packageRoot, "_bundled_plugin", "schemas"),
-  resolve(packageRoot, "../../plugins/codex-security/schemas"),
+  resolve(packageRoot, "../../plugins/copilot-security/schemas"),
 ].find(existsSync);
 
 if (schemas === undefined)

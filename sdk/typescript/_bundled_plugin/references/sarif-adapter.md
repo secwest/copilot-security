@@ -11,7 +11,7 @@ The adapter:
 - keeps rule descriptors stable across scans
 - emits repository-relative POSIX paths
 - keeps the root-control location first for GitHub annotation when available and emits every distinct affected or code-evidence location in `locations`, so vulnerable sinks remain matchable
-- preserves the semantic fingerprint under `codexSecurity/v1`
+- preserves the semantic fingerprint under `copilotSecurity/v1`
 - emits GitHub's source-line `primaryLocationLineHash` when it can safely hash a bounded regular non-symlink source file inside the available source root
 - maps categorical severity to SARIF `level`
 - preserves a deep scan's canonical `candidateId` under each child result's properties so consumers can group results without changing the original SARIF result presentation

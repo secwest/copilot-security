@@ -1,4 +1,4 @@
-"""Resolve per-user Codex Security Deep Scan orchestration settings."""
+"""Resolve per-user Copilot Security Deep Scan orchestration settings."""
 
 from __future__ import annotations
 
@@ -24,12 +24,12 @@ CONFIG_KEYS = {
 }
 
 
-def codex_home() -> Path:
-    return Path(os.environ.get("CODEX_HOME", "~/.codex")).expanduser()
+def copilot_home() -> Path:
+    return Path(os.environ.get("COPILOT_HOME", "~/.copilot")).expanduser()
 
 
 def config_path() -> Path:
-    return codex_home() / "codex-security" / "config.toml"
+    return copilot_home() / "copilot-security" / "config.toml"
 
 
 def resolve_deep_scan_config(available_parallelism: int) -> dict[str, int]:
@@ -42,18 +42,18 @@ def resolve_deep_scan_config(available_parallelism: int) -> dict[str, int]:
             with path.open("rb") as source:
                 document: object = tomllib.load(source)
         except (OSError, tomllib.TOMLDecodeError) as exc:
-            raise SystemExit(f"Cannot read Codex Security configuration at {path}: {exc}") from exc
+            raise SystemExit(f"Cannot read Copilot Security configuration at {path}: {exc}") from exc
         if not isinstance(document, dict):
-            raise SystemExit(f"Codex Security configuration at {path} must be a TOML table.")
+            raise SystemExit(f"Copilot Security configuration at {path} must be a TOML table.")
         deep_scan: object = document.get("deep_scan", {})
         if not isinstance(deep_scan, dict):
             raise SystemExit(
-                f"Codex Security configuration [deep_scan] at {path} must be a TOML table."
+                f"Copilot Security configuration [deep_scan] at {path} must be a TOML table."
             )
         unknown = sorted(set(deep_scan) - CONFIG_KEYS)
         if unknown:
             raise SystemExit(
-                f"Unknown Codex Security Deep Scan configuration {', '.join(unknown)} in {path}."
+                f"Unknown Copilot Security Deep Scan configuration {', '.join(unknown)} in {path}."
             )
         configured = deep_scan
 

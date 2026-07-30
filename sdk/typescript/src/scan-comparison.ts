@@ -1,7 +1,7 @@
 import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
 import { z } from "incur";
 import { resolveCopilotCli } from "./copilot-client.js";
-import { CodexSecurityError } from "./errors.js";
+import { CopilotSecurityError } from "./errors.js";
 
 type ModelReasoningEffort = "low" | "medium" | "high" | "xhigh";
 
@@ -29,8 +29,6 @@ interface ComparisonCopilot {
 export interface ScanComparisonOptions {
   allowHistoricalUncertainty?: boolean;
   copilot?: ComparisonCopilot;
-  /** @deprecated Use copilot. */
-  codex?: ComparisonCopilot;
   environment?: NodeJS.ProcessEnv;
   model?: string;
   reasoningEffort?: ModelReasoningEffort;
@@ -74,7 +72,6 @@ export async function matchScanFindings(
 ): Promise<ScanComparisonResult> {
   const copilot =
     options.copilot ??
-    options.codex ??
     (await createComparisonCopilot(options.environment, options.signal));
   const thread = copilot.startThread({
     ...(options.model === undefined ? {} : { model: options.model }),
@@ -90,7 +87,7 @@ export async function matchScanFindings(
   try {
     response = JSON.parse(turn.finalResponse);
   } catch (error) {
-    throw new CodexSecurityError("Scan comparison returned invalid JSON.", {
+    throw new CopilotSecurityError("Scan comparison returned invalid JSON.", {
       cause: error,
     });
   }
@@ -217,7 +214,7 @@ function validateComparison(
 ): ScanComparisonResult {
   const parsed = comparisonSchema.safeParse(response);
   if (!parsed.success) {
-    throw new CodexSecurityError(
+    throw new CopilotSecurityError(
       "Scan comparison returned an invalid match result.",
     );
   }
@@ -236,12 +233,12 @@ function validateComparison(
     ] as const) {
       for (const occurrenceId of values) {
         if (!expected.has(occurrenceId)) {
-          throw new CodexSecurityError(
+          throw new CopilotSecurityError(
             `Scan comparison referenced an unknown ${side} occurrence.`,
           );
         }
         if (used.has(occurrenceId)) {
-          throw new CodexSecurityError(
+          throw new CopilotSecurityError(
             `Scan comparison matched a ${side} occurrence more than once.`,
           );
         }
@@ -258,7 +255,7 @@ function validateComparison(
       (!allowHistoricalUncertainty &&
         matchedAfter.has(candidate.afterOccurrenceId))
     ) {
-      throw new CodexSecurityError(
+      throw new CopilotSecurityError(
         "Scan comparison returned an invalid uncertain pair.",
       );
     }
@@ -267,7 +264,7 @@ function validateComparison(
       candidate.afterOccurrenceId,
     ]);
     if (uncertainPairs.has(pair)) {
-      throw new CodexSecurityError(
+      throw new CopilotSecurityError(
         "Scan comparison returned a duplicate uncertain pair.",
       );
     }

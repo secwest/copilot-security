@@ -1,4 +1,4 @@
-"""Scan history projection for the native Codex Security workbench."""
+"""Scan history projection for the native Copilot Security workbench."""
 
 import argparse
 import fnmatch
@@ -375,10 +375,10 @@ def compare_scans(
         if reversed_comparison is not None:
             raise SystemExit(
                 "These scans are in the wrong order. Run "
-                f"'codex-security scans compare {after['id']} {before['id']}'."
+                f"'copilot-security scans compare {after['id']} {before['id']}'."
             )
         raise SystemExit(
-            "No saved matches for these scans. Run 'codex-security scans match BEFORE AFTER' first."
+            "No saved matches for these scans. Run 'copilot-security scans match BEFORE AFTER' first."
         )
     if include_matching_inputs and backfill_finding_details is not None:
         backfill_finding_details(connection, before)

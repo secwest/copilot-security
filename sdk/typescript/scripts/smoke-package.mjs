@@ -153,34 +153,33 @@ assert.equal(
   `Packed npm tarball is not a regular file: ${archive}.`,
 );
 
-const publicPluginManifest = ".codex-plugin/plugin.json";
+const publicPluginManifest = "plugin.json";
 assert.ok(
-  Array.isArray(pluginContract.externalOwnedExact) &&
-    pluginContract.externalOwnedExact.includes(publicPluginManifest),
-  "Plugin contract must include its public manifest.",
+  Array.isArray(pluginContract.externalOwnedExact),
+  "Plugin contract must declare its externally owned files.",
 );
 assert.ok(
   Array.isArray(pluginContract.shippedExact) &&
-    pluginContract.shippedExact.every((path) => typeof path === "string"),
-  "Plugin contract must declare its shipped files.",
+    pluginContract.shippedExact.every((path) => typeof path === "string") &&
+    pluginContract.shippedExact.includes(publicPluginManifest),
+  "Plugin contract must ship its root Copilot plugin manifest.",
 );
 
-const expectedPluginFiles = [
-  publicPluginManifest,
-  ...pluginContract.shippedExact.filter((path) => !path.startsWith("sdk/")),
-].sort();
+const expectedPluginFiles = pluginContract.shippedExact
+  .filter((path) => !path.startsWith("sdk/"))
+  .sort();
 assert.equal(
   new Set(expectedPluginFiles).size,
   expectedPluginFiles.length,
   "Plugin contract must not contain duplicate installed paths.",
 );
 
-const consumer = await mkdtemp(join(tmpdir(), "codex-security-package-"));
+const consumer = await mkdtemp(join(tmpdir(), "copilot-security-package-"));
 try {
   await writeFile(
     join(consumer, "package.json"),
     `${JSON.stringify({
-      name: "codex-security-package-smoke",
+      name: "copilot-security-package-smoke",
       private: true,
       type: "module",
     })}\n`,

@@ -28,7 +28,7 @@ afterEach(async () => {
 });
 
 async function copyExample(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "codex-security-contract-"));
+  const root = await mkdtemp(join(tmpdir(), "copilot-security-contract-"));
   temporaryDirectories.push(root);
   const scanDir = join(root, "scan");
   await cp(EXAMPLE, scanDir, { recursive: true });
@@ -61,10 +61,10 @@ function setFindingIdentity(
   manifest: Record<string, any>,
   finding: Record<string, any>,
 ): void {
-  const fingerprint = `codex-security/v1:sha256:${createHash("sha256")
+  const fingerprint = `copilot-security/v1:sha256:${createHash("sha256")
     .update(
       [
-        "codex-security/v1",
+        "copilot-security/v1",
         manifest["scan"]["target"]["targetId"],
         finding["ruleId"],
         finding["identity"]["anchor"],
@@ -73,7 +73,7 @@ function setFindingIdentity(
     )
     .digest("hex")}`;
   finding["fingerprints"] = {
-    algorithm: "codex-security/v1",
+    algorithm: "copilot-security/v1",
     primary: fingerprint,
   };
   finding["findingId"] = `csf_${createHash("sha256")
@@ -103,7 +103,9 @@ describe("canonical scan contract", () => {
   test("loads the unchanged plugin example with typed canonical names", async () => {
     const scanDir = await copyExample();
     const contract = await loadContract(scanDir, { pluginRoot: PLUGIN_ROOT });
-    expect(contract.manifest.documentType).toBe("codex-security.scan-manifest");
+    expect(contract.manifest.documentType).toBe(
+      "copilot-security.scan-manifest",
+    );
     expect(contract.manifest.scan.target.targetId).toBe(
       "target_sha256_example",
     );
@@ -128,7 +130,7 @@ describe("canonical scan contract", () => {
     "accepts a scan directory beneath a symlinked parent",
     async () => {
       const root = await mkdtemp(
-        join(tmpdir(), "codex-security-contract-link-"),
+        join(tmpdir(), "copilot-security-contract-link-"),
       );
       temporaryDirectories.push(root);
       const parent = join(root, "actual-parent");
@@ -162,7 +164,7 @@ describe("canonical scan contract", () => {
 
   test("rejects oversized contract schemas before parsing them", async () => {
     const pluginRoot = await mkdtemp(
-      join(tmpdir(), "codex-security-schema-large-"),
+      join(tmpdir(), "copilot-security-schema-large-"),
     );
     temporaryDirectories.push(pluginRoot);
     await cp(join(PLUGIN_ROOT, "schemas"), join(pluginRoot, "schemas"), {
@@ -229,7 +231,7 @@ describe("canonical scan contract", () => {
       ],
     ] as const) {
       const pluginRoot = await mkdtemp(
-        join(tmpdir(), "codex-security-schema-invalid-"),
+        join(tmpdir(), "copilot-security-schema-invalid-"),
       );
       temporaryDirectories.push(pluginRoot);
       await mkdir(join(pluginRoot, "schemas"));
@@ -246,7 +248,7 @@ describe("canonical scan contract", () => {
 
   test("does not expose attacker-controlled schema compilation errors", async () => {
     const pluginRoot = await mkdtemp(
-      join(tmpdir(), "codex-security-schema-compile-"),
+      join(tmpdir(), "copilot-security-schema-compile-"),
     );
     temporaryDirectories.push(pluginRoot);
     await mkdir(join(pluginRoot, "schemas"));
@@ -451,8 +453,8 @@ describe("canonical scan contract", () => {
           findings["findings"][0]["findingId"] = `csf_${"0".repeat(24)}`;
           findings["findings"][0]["occurrenceId"] = `occ_${"1".repeat(24)}`;
           findings["findings"][0]["fingerprints"] = {
-            algorithm: "codex-security/v1",
-            primary: `codex-security/v1:sha256:${"2".repeat(64)}`,
+            algorithm: "copilot-security/v1",
+            primary: `copilot-security/v1:sha256:${"2".repeat(64)}`,
           };
         },
         "derived fingerprint identity",

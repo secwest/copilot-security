@@ -1,4 +1,4 @@
-"""Persist deterministic Codex Security Deep Scan orchestration state."""
+"""Persist deterministic Copilot Security Deep Scan orchestration state."""
 
 from __future__ import annotations
 
@@ -189,7 +189,7 @@ def require_deep_scan_run(connection: sqlite3.Connection, scan_id: str) -> sqlit
         "SELECT * FROM deep_scan_runs WHERE scan_id = ?", (scan_id,)
     ).fetchone()
     if row is None:
-        raise SystemExit("Codex Security Deep Scan orchestration state not found.")
+        raise SystemExit("Copilot Security Deep Scan orchestration state not found.")
     return row
 
 
@@ -219,7 +219,7 @@ def require_owned_scan(
         raise SystemExit("thread-id is required.")
     persisted_owner = scan["deep_scan_owner_thread_id"] or workspace["thread_id"]
     if persisted_owner != owner:
-        raise SystemExit("A scan can only be orchestrated from its owning Codex thread.")
+        raise SystemExit("A scan can only be orchestrated from its owning Copilot thread.")
     return scan, workspace
 
 
@@ -610,7 +610,7 @@ def begin_deep_scan_for_target(
         )
         if pending_workspace is not None and not setup_ui_opt_out_enabled(connection):
             raise SystemExit(
-                "A matching Codex Security setup workspace is waiting for Start scan. "
+                "A matching Copilot Security setup workspace is waiting for Start scan. "
                 "Finish that setup and retry with its scanId."
             )
         current_target = require_remediation_target(target_path)
@@ -754,7 +754,7 @@ def require_deep_scan_worker(connection: sqlite3.Connection, worker_id: str) -> 
         "SELECT * FROM deep_scan_workers WHERE id = ?", (worker_id,)
     ).fetchone()
     if row is None:
-        raise SystemExit("Codex Security Deep Scan worker not found.")
+        raise SystemExit("Copilot Security Deep Scan worker not found.")
     return row
 
 

@@ -13,7 +13,7 @@ from typing import Any
 
 def _load_scan_contract_validator() -> ModuleType:
     script = Path(__file__).resolve().with_name("validate_scan_contract.py")
-    spec = importlib.util.spec_from_file_location("codex_security_scan_validator", script)
+    spec = importlib.util.spec_from_file_location("copilot_security_scan_validator", script)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"could not load scan contract validator: {script}")
     module = importlib.util.module_from_spec(spec)

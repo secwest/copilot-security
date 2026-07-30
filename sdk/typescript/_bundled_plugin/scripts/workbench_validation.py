@@ -1,4 +1,4 @@
-"""Shared validation helpers for Codex Security workbench commands."""
+"""Shared validation helpers for Copilot Security workbench commands."""
 
 from __future__ import annotations
 
@@ -289,7 +289,7 @@ def require_occurrence(connection: sqlite3.Connection, occurrence_id: str) -> sq
         "SELECT * FROM finding_occurrences WHERE id = ?", (occurrence_id,)
     ).fetchone()
     if row is None:
-        raise SystemExit("Codex Security finding occurrence not found.")
+        raise SystemExit("Copilot Security finding occurrence not found.")
     return row
 
 

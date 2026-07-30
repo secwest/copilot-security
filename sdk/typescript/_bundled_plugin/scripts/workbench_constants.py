@@ -1,4 +1,4 @@
-"""Shared constants for the Codex Security workbench."""
+"""Shared constants for the Copilot Security workbench."""
 
 import argparse
 

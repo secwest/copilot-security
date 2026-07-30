@@ -1,16 +1,16 @@
 import { rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "bun:test";
-import { CodexSecurity } from "../src/index.js";
+import { CopilotSecurity } from "../src/index.js";
 import { INTEGRATION_TARGET } from "./plugin-root.js";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
-if (process.env["CODEX_SECURITY_INTEGRATION"] === "1") {
+if (process.env["COPILOT_SECURITY_INTEGRATION"] === "1") {
   test(
-    "real Codex and unchanged-plugin integration smoke",
+    "real Copilot and unchanged-plugin integration smoke",
     async () => {
-      const client = new CodexSecurity();
+      const client = new CopilotSecurity();
       let scanDir: string | null = null;
       try {
         const result = await client.run(REPOSITORY_ROOT, {
@@ -29,5 +29,5 @@ if (process.env["CODEX_SECURITY_INTEGRATION"] === "1") {
     { timeout: 10 * 60_000 },
   );
 } else {
-  test.skip("real Codex and unchanged-plugin integration smoke", () => {});
+  test.skip("real Copilot and unchanged-plugin integration smoke", () => {});
 }

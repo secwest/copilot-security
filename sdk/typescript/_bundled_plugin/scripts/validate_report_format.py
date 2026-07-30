@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the shared Codex Security final report shape."""
+"""Validate the shared Copilot Security final report shape."""
 
 from __future__ import annotations
 
@@ -117,7 +117,7 @@ def validate_report(text: str) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate the Codex Security report format.")
+    parser = argparse.ArgumentParser(description="Validate the Copilot Security report format.")
     parser.add_argument("--report-md", required=True, help="Path to report.md")
     args = parser.parse_args()
 

@@ -1,0 +1,136 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 0.95,
+    "minPrecision": 0.9,
+    "minRecall": 0.85,
+    "minF1": 0.87,
+    "minCasePassRate": 0.75,
+    "minNegativeCasePassRate": 0.9,
+    "minStableDetectionRate": 0.75,
+    "minValidationRate": 0.9,
+    "minAttackPathRate": 0.9,
+    "minCodeEvidenceRate": 0.8,
+    "minSeverityAccuracy": 0.8,
+    "maxFalsePositivesPerRun": 0.25
+  },
+  "cases": [
+    {
+      "id": "javascript-command-injection",
+      "description": "Attacker-controlled HTTP input reaches a command shell.",
+      "fixture": "fixtures/javascript-command-injection",
+      "findingsPaths": [
+        "javascript-command-injection/run-1/findings.json",
+        "javascript-command-injection/run-2/findings.json",
+        "javascript-command-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "http-host-shell-injection",
+          "cwe": ["CWE-78"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 5,
+              "endLine": 7,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-command",
+      "description": "A fixed executable receives a strictly validated argument without a shell.",
+      "fixture": "fixtures/javascript-safe-command",
+      "findingsPaths": [
+        "javascript-safe-command/run-1/findings.json",
+        "javascript-safe-command/run-2/findings.json",
+        "javascript-safe-command/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "python-path-traversal",
+      "description": "An archive entry name is joined to the extraction directory without containment.",
+      "fixture": "fixtures/python-path-traversal",
+      "findingsPaths": [
+        "python-path-traversal/run-1/findings.json",
+        "python-path-traversal/run-2/findings.json",
+        "python-path-traversal/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "archive-entry-escape",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/extractor.py",
+              "startLine": 4,
+              "endLine": 6,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-safe-path",
+      "description": "Archive extraction resolves the destination and enforces root containment.",
+      "fixture": "fixtures/python-safe-path",
+      "findingsPaths": [
+        "python-safe-path/run-1/findings.json",
+        "python-safe-path/run-2/findings.json",
+        "python-safe-path/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "javascript-idor",
+      "description": "An authenticated customer can fetch another customer's invoice by identifier.",
+      "fixture": "fixtures/javascript-idor",
+      "findingsPaths": [
+        "javascript-idor/run-1/findings.json",
+        "javascript-idor/run-2/findings.json",
+        "javascript-idor/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "invoice-owner-check-missing",
+          "cwe": ["CWE-639", "CWE-862"],
+          "locations": [
+            {
+              "path": "src/invoices.js",
+              "startLine": 2,
+              "endLine": 4,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-authorization",
+      "description": "Invoice lookup is constrained by the authenticated customer's ownership boundary.",
+      "fixture": "fixtures/javascript-safe-authorization",
+      "findingsPaths": [
+        "javascript-safe-authorization/run-1/findings.json",
+        "javascript-safe-authorization/run-2/findings.json",
+        "javascript-safe-authorization/run-3/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

@@ -2,7 +2,7 @@ version = 1
 
 [capabilities.deep_scan_phase_skills]
 kind = "plugin_skills"
-plugin = "codex-security"
+plugin = "copilot-security"
 required = [
   "attack-path-analysis",
   "finding-discovery",
@@ -55,7 +55,7 @@ kind = "config_absent"
 path = "agents.max_threads"
 
 [profiles.security_diff_scan]
-description = "Capabilities for Git-backed Codex Security diff scans."
+description = "Capabilities for Git-backed Copilot Security diff scans."
 
 [[profiles.security_diff_scan.requirements]]
 capability = "delegated_workers"
@@ -73,7 +73,7 @@ severity = "suggest"
 reason = "Enabling goals makes long diff scans easier to resume and audit."
 
 [profiles.security_scan]
-description = "Capabilities for repository-wide or scoped-path Codex Security scans."
+description = "Capabilities for repository-wide or scoped-path Copilot Security scans."
 
 [[profiles.security_scan.requirements]]
 capability = "delegated_workers"
@@ -96,12 +96,12 @@ severity = "suggest"
 reason = "Enabling goals makes long scans easier to resume and audit."
 
 [profiles.deep_security_scan]
-description = "Capabilities for deep repository-wide Codex Security scans."
+description = "Capabilities for deep repository-wide Copilot Security scans."
 
 [[profiles.deep_security_scan.requirements]]
 capability = "deep_scan_phase_skills"
 severity = "block"
-reason = "Deep scan depends on Codex Security phase skills loaded in the current runtime."
+reason = "Deep scan depends on Copilot Security phase skills loaded in the current runtime."
 
 [[profiles.deep_security_scan.requirements]]
 capability = "native_multi_agent_v2"
@@ -111,7 +111,7 @@ reason = "Deep scan launches SDK discovery workers with native Subagents v2; leg
 [[profiles.deep_security_scan.requirements]]
 capability = "sdk_v2_child_config_compatible"
 severity = "block"
-reason = "Deep scan child sessions inherit Codex configuration while enabling Subagents v2, so the legacy agents.max_threads setting must be removed before those sessions can start."
+reason = "Deep scan child sessions inherit Copilot configuration while enabling Subagents v2, so the legacy agents.max_threads setting must be removed before those sessions can start."
 
 [[profiles.deep_security_scan.requirements]]
 capability = "goal_tools"
@@ -124,21 +124,21 @@ severity = "suggest"
 reason = "Enabling goals makes long deep scans easier to resume and audit."
 
 [profiles.security_diff_scan.remediation]
-summary = "Recommended Codex config for longer diff scans."
+summary = "Recommended Copilot config for longer diff scans."
 
 [[profiles.security_diff_scan.remediation.patches]]
 path = "features.goals"
 value = true
 
 [profiles.security_scan.remediation]
-summary = "Recommended Codex config for repository-wide or scoped-path scans."
+summary = "Recommended Copilot config for repository-wide or scoped-path scans."
 
 [[profiles.security_scan.remediation.patches]]
 path = "features.goals"
 value = true
 
 [profiles.deep_security_scan.remediation]
-summary = "Recommended Codex setup for deep repository-wide scans."
+summary = "Recommended Copilot setup for deep repository-wide scans."
 
 [[profiles.deep_security_scan.remediation.patches]]
 path = "features.goals"

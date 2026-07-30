@@ -5,14 +5,14 @@ import { describe, expect, test } from "bun:test";
 import {
   main,
   readSkillCommandOutput,
-  runCodexSkillCommand,
+  runCopilotSkillCommand,
   skillCommandFailure,
 } from "../src/cli.js";
 import { capture, dependencies } from "./support/cli.js";
 
 describe("CLI skill commands", () => {
   test("runs validation and patch skills with file and literal inputs", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "codex-security-skills-"));
+    const directory = await mkdtemp(join(tmpdir(), "copilot-security-skills-"));
     try {
       for (const [command, skill, argument, status] of [
         ["validate", "validation", "findings...", 0],
@@ -36,35 +36,34 @@ describe("CLI skill commands", () => {
             stderr.stream,
             dependencies({
               currentDirectory: directory,
-              onCodex: (args) => {
+              onCopilot: (args) => {
                 invocation = args;
                 return status;
               },
             }),
           ),
         ).toBe(status);
-        expect(invocation.slice(0, -1)).toEqual([
-          "exec",
-          "--ignore-user-config",
-          "--disable",
-          "plugins",
-          "--ephemeral",
-          "--color",
-          "never",
-          "--json",
-          "--config",
-          'model="gpt-5.6-sol"',
-          "--config",
-          'model_reasoning_effort="xhigh"',
-          "--config",
-          'approval_policy="never"',
-          "--sandbox",
-          "workspace-write",
-          "--skip-git-repo-check",
-          "--cd",
+        expect(invocation).toEqual([
+          "--prompt",
+          expect.any(String),
+          "--model",
+          "gpt-5.6-sol",
+          "--effort",
+          "xhigh",
+          "--plugin-dir",
+          expect.stringContaining("_bundled_plugin"),
+          "--add-dir",
           directory,
+          "--allow-all",
+          "--no-ask-user",
+          "--no-custom-instructions",
+          "--no-auto-update",
+          "--no-remote",
+          "--no-remote-export",
+          "--output-format",
+          "json",
         ]);
-        const prompt = invocation.at(-1)!;
+        const prompt = invocation[invocation.indexOf("--prompt") + 1]!;
         expect(prompt).toContain(
           JSON.stringify(join("skills", skill, "SKILL.md")).slice(1, -1),
         );
@@ -88,12 +87,10 @@ describe("CLI skill commands", () => {
           ),
         ).toBe(0);
         expect(help.text()).toContain(
-          `Usage: codex-security ${command} <${argument}>`,
+          `Usage: copilot-security ${command} <${argument}>`,
         );
-        expect(help.text()).toContain(
-          "--effort <minimal|low|medium|high|xhigh>",
-        );
-        expect(help.text()).toContain("--codex <array>");
+        expect(help.text()).toContain("--effort <low|medium|high|xhigh>");
+        expect(help.text()).toContain("--copilot <array>");
         expect(help.text()).toContain('model="gpt-5.6-terra"');
         expect(help.text()).toContain('model_reasoning_effort="high"');
         expect(help.text()).not.toContain("--provider");
@@ -105,7 +102,7 @@ describe("CLI skill commands", () => {
 
   test("preserves Windows network paths without probing them as finding files", async () => {
     const directory = await mkdtemp(
-      join(tmpdir(), "codex-security-network-input-"),
+      join(tmpdir(), "copilot-security-network-input-"),
     );
     try {
       const localFile = join(directory, "local finding.txt");
@@ -185,14 +182,15 @@ describe("CLI skill commands", () => {
           stderr.stream,
           dependencies({
             currentDirectory: directory,
-            onCodex: (args) => {
+            onCopilot: (args) => {
               invocation = args;
               return 0;
             },
           }),
         ),
       ).toBe(0);
-      expect(JSON.parse(invocation.at(-1)!.split("\n").at(-1)!)).toEqual([
+      const prompt = invocation[invocation.indexOf("--prompt") + 1]!;
+      expect(JSON.parse(prompt.split("\n").at(-1)!)).toEqual([
         "local finding contents\n",
         ...localDrivePaths.map(
           (_, index) => `local drive ${index + 1} contents\n`,
@@ -216,23 +214,27 @@ describe("CLI skill commands", () => {
           [
             command,
             "a candidate finding",
-            "--codex",
+            "--copilot",
             'model="gpt-5.6-custom"',
-            "--codex",
+            "--copilot",
             'model_reasoning_effort="high"',
           ],
           capture().stream,
           stderr.stream,
           dependencies({
-            onCodex: (args) => {
+            onCopilot: (args) => {
               invocation = args;
               return 0;
             },
           }),
         ),
       ).toBe(0);
-      expect(invocation).toContain('model="gpt-5.6-custom"');
-      expect(invocation).toContain('model_reasoning_effort="high"');
+      expect(invocation).toContain("--model");
+      expect(invocation[invocation.indexOf("--model") + 1]).toBe(
+        "gpt-5.6-custom",
+      );
+      expect(invocation).toContain("--effort");
+      expect(invocation[invocation.indexOf("--effort") + 1]).toBe("high");
       expect(stderr.text()).toBe("");
     }
 
@@ -248,16 +250,16 @@ describe("CLI skill commands", () => {
         capture().stream,
         dependencies({
           currentDirectory: process.cwd(),
-          onCodex: (args) => {
+          onCopilot: (args) => {
             literalInvocation = args;
             return 0;
           },
         }),
       ),
     ).toBe(0);
-    expect(JSON.parse(literalInvocation.at(-1)!.split("\n").at(-1)!)).toEqual([
-      longLiteral,
-    ]);
+    const prompt =
+      literalInvocation[literalInvocation.indexOf("--prompt") + 1]!;
+    expect(JSON.parse(prompt.split("\n").at(-1)!)).toEqual([longLiteral]);
 
     for (const override of [
       "features.goals=false",
@@ -268,18 +270,18 @@ describe("CLI skill commands", () => {
       const stderr = capture();
       expect(
         await main(
-          ["validate", "finding", "--codex", override],
+          ["validate", "finding", "--copilot", override],
           capture().stream,
           stderr.stream,
           dependencies({
-            onCodex: () => {
+            onCopilot: () => {
               started = true;
               return 0;
             },
           }),
         ),
       ).toBe(2);
-      expect(stderr.text()).toContain("codex-security:");
+      expect(stderr.text()).toContain("copilot-security:");
       expect(started).toBe(false);
     }
   });
@@ -296,21 +298,23 @@ describe("CLI skill commands", () => {
             "a candidate finding",
             "--effort",
             "high",
-            "--codex",
+            "--copilot",
             'model="gpt-5.6-terra"',
           ],
           capture().stream,
           stderr.stream,
           dependencies({
-            onCodex: (args) => {
+            onCopilot: (args) => {
               invocation = args;
               return 0;
             },
           }),
         ),
       ).toBe(0);
-      expect(invocation).toContain('model="gpt-5.6-terra"');
-      expect(invocation).toContain('model_reasoning_effort="high"');
+      expect(invocation[invocation.indexOf("--model") + 1]).toBe(
+        "gpt-5.6-terra",
+      );
+      expect(invocation[invocation.indexOf("--effort") + 1]).toBe("high");
       expect(stderr.text()).toBe("");
 
       for (const [options, message] of [
@@ -319,8 +323,8 @@ describe("CLI skill commands", () => {
           "--effort must be minimal, low, medium, high, or xhigh",
         ],
         [
-          ["--effort", "high", "--codex", 'model_reasoning_effort="medium"'],
-          "--effort conflicts with --codex model_reasoning_effort",
+          ["--effort", "high", "--copilot", 'model_reasoning_effort="medium"'],
+          "--effort conflicts with --copilot model_reasoning_effort",
         ],
       ] as const) {
         let started = false;
@@ -332,7 +336,7 @@ describe("CLI skill commands", () => {
             capture().stream,
             invalidStderr.stream,
             dependencies({
-              onCodex: () => {
+              onCopilot: () => {
                 started = true;
                 return 0;
               },
@@ -345,9 +349,9 @@ describe("CLI skill commands", () => {
     }
   });
 
-  test("rejects empty, non-file, and oversized skill inputs before launching Codex", async () => {
+  test("rejects empty, non-file, and oversized skill inputs before launching Copilot", async () => {
     const directory = await mkdtemp(
-      join(tmpdir(), "codex-security-skill-inputs-"),
+      join(tmpdir(), "copilot-security-skill-inputs-"),
     );
     try {
       await mkdir(join(directory, "nested"));
@@ -373,7 +377,7 @@ describe("CLI skill commands", () => {
             stderr.stream,
             dependencies({
               currentDirectory: directory,
-              onCodex: () => {
+              onCopilot: () => {
                 started = true;
                 return 0;
               },
@@ -393,7 +397,7 @@ describe("CLI skill commands", () => {
           tooMany.stream,
           dependencies({
             currentDirectory: directory,
-            onCodex: () => {
+            onCopilot: () => {
               started = true;
               return 0;
             },
@@ -511,7 +515,7 @@ describe("CLI skill commands", () => {
       const stdout = capture();
       const stderr = capture();
       expect(
-        await runCodexSkillCommand(
+        await runCopilotSkillCommand(
           [],
           { command: "validate", stdout: stdout.stream, stderr: stderr.stream },
           { command: process.execPath, prefixArgs: ["-e", scenario.source] },

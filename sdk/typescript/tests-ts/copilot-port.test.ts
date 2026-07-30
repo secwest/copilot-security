@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
+  prepareCopilotRuntime,
   resolveCopilotCli,
   type CopilotScannerOptions,
 } from "../src/copilot-client.js";
@@ -12,6 +13,10 @@ import {
   scanAuthentication,
   type ScanAuthentication,
 } from "../src/index.js";
+import {
+  copilotSecurityCredentialHome,
+  copilotSecurityStateDirectory,
+} from "../src/runtime.js";
 
 const temporaryPaths: string[] = [];
 
@@ -101,5 +106,46 @@ describe("Copilot port", () => {
       pluginRoot: "plugin",
     };
     expect(options.model).toBe("gpt-5.6-sol");
+  });
+
+  test("keeps scanner state inside its dedicated Copilot namespace", () => {
+    const copilotHome = join(tmpdir(), "copilot-owned");
+    const dedicatedHome = join(tmpdir(), "copilot-security-owned");
+
+    expect(
+      copilotSecurityStateDirectory({
+        COPILOT_HOME: copilotHome,
+      }),
+    ).toEndWith(".copilot-security");
+    expect(
+      copilotSecurityCredentialHome({
+        COPILOT_SECURITY_HOME: dedicatedHome,
+        COPILOT_HOME: copilotHome,
+      }),
+    ).toBe(join(dedicatedHome, "copilot-security-home"));
+  });
+
+  test("runs the SDK transport from copilot-security-home", async () => {
+    const root = join(tmpdir(), `copilot-security-runtime-${randomUUID()}`);
+    const scannerHome = join(root, "scanner");
+    const ambientHome = join(root, "ambient");
+    temporaryPaths.push(root);
+    await mkdir(ambientHome, { recursive: true });
+
+    const runtime = await prepareCopilotRuntime(
+      {},
+      {
+        ...process.env,
+        COPILOT_SECURITY_HOME: scannerHome,
+        COPILOT_HOME: ambientHome,
+      },
+    );
+    temporaryPaths.push(runtime.bootstrapWorkspace);
+
+    expect(runtime.copilotHome).toBe(
+      join(scannerHome, "copilot-security-home"),
+    );
+    expect(runtime.environment["COPILOT_HOME"]).toBe(runtime.copilotHome);
+    expect(runtime.copilotHome).not.toContain(ambientHome);
   });
 });

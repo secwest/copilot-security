@@ -19,11 +19,13 @@ const packageRoot = join(import.meta.dir, "..");
 
 describe("CLI launcher", () => {
   test("runs through an installed npm-style bin symlink", async () => {
-    const root = await mkdtemp(join(tmpdir(), "codex-security-cli-bin-"));
+    const root = await mkdtemp(join(tmpdir(), "copilot-security-cli-bin-"));
     try {
       const launcher = join(packageRoot, "src", "cli.ts");
       const bin =
-        process.platform === "win32" ? launcher : join(root, "codex-security");
+        process.platform === "win32"
+          ? launcher
+          : join(root, "copilot-security");
       if (process.platform !== "win32") {
         await symlink(launcher, bin);
       }
@@ -41,7 +43,7 @@ describe("CLI launcher", () => {
   });
 
   test("maps unexpected source-entrypoint failures to exit 2 and redacts credentials", async () => {
-    const root = await mkdtemp(join(tmpdir(), "codex-security-cli-failure-"));
+    const root = await mkdtemp(join(tmpdir(), "copilot-security-cli-failure-"));
     try {
       const preload = join(root, "unavailable-cwd.mjs");
       await writeFile(
@@ -57,7 +59,7 @@ describe("CLI launcher", () => {
       expect(child.status).toBe(2);
       expect(child.stdout).toBe("");
       expect(child.stderr).toBe(
-        `codex-security: working directory is unavailable: ${REDACTED_CREDENTIALS}\n`,
+        `copilot-security: working directory is unavailable: ${REDACTED_CREDENTIALS}\n`,
       );
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -66,13 +68,16 @@ describe("CLI launcher", () => {
 
   test("maps installed-launcher failures to a fixed startup error", async () => {
     const root = await mkdtemp(
-      join(tmpdir(), "codex-security-cli-bin-failure-"),
+      join(tmpdir(), "copilot-security-cli-bin-failure-"),
     );
     try {
-      const launcher = join(root, "bin", "codex-security.mjs");
+      const launcher = join(root, "bin", "copilot-security.mjs");
       await mkdir(join(root, "bin"), { recursive: true });
       await mkdir(join(root, "dist"), { recursive: true });
-      await copyFile(join(packageRoot, "bin", "codex-security.mjs"), launcher);
+      await copyFile(
+        join(packageRoot, "bin", "copilot-security.mjs"),
+        launcher,
+      );
       await writeFile(
         join(root, "dist", "cli.js"),
         `throw new Error(${JSON.stringify(`failed ${SYNTHETIC_CREDENTIALS}`)});\n`,
@@ -86,7 +91,7 @@ describe("CLI launcher", () => {
       expect(child.status).toBe(2);
       expect(child.stdout).toBe("");
       expect(child.stderr).toBe(
-        "codex-security: Failed to start Codex Security.\n",
+        "copilot-security: Failed to start Copilot Security.\n",
       );
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -94,9 +99,16 @@ describe("CLI launcher", () => {
   });
 
   test("builds and runs emitted split TypeScript output from a clean installed npm-style bin when Node preserves main symlinks", async () => {
-    const root = await mkdtemp(join(tmpdir(), "codex-security-cli-node-bin-"));
+    const root = await mkdtemp(
+      join(tmpdir(), "copilot-security-cli-node-bin-"),
+    );
     try {
-      const installed = join(root, "node_modules", "@openai", "codex-security");
+      const installed = join(
+        root,
+        "node_modules",
+        "@secwest",
+        "copilot-security",
+      );
       const dist = join(installed, "dist");
       const build = spawnSync(
         "node",
@@ -116,9 +128,12 @@ describe("CLI launcher", () => {
         'from "./api.js"',
       );
 
-      const launcher = join(installed, "bin", "codex-security.mjs");
+      const launcher = join(installed, "bin", "copilot-security.mjs");
       await mkdir(join(installed, "bin"), { recursive: true });
-      await copyFile(join(packageRoot, "bin", "codex-security.mjs"), launcher);
+      await copyFile(
+        join(packageRoot, "bin", "copilot-security.mjs"),
+        launcher,
+      );
       await copyFile(
         join(packageRoot, "package.json"),
         join(installed, "package.json"),
@@ -134,7 +149,7 @@ describe("CLI launcher", () => {
       const bin =
         process.platform === "win32"
           ? launcher
-          : join(binDirectory, "codex-security");
+          : join(binDirectory, "copilot-security");
       if (process.platform !== "win32") {
         await symlink(launcher, bin);
       }
@@ -183,7 +198,7 @@ describe("CLI launcher", () => {
       expect([failed.status, failed.stdout, failed.stderr]).toEqual([
         2,
         "",
-        "codex-security: working directory is unavailable\n",
+        "copilot-security: working directory is unavailable\n",
       ]);
     } finally {
       await rm(root, { recursive: true, force: true });

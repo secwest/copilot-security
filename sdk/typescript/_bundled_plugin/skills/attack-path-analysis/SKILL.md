@@ -1,6 +1,6 @@
 ---
 name: attack-path-analysis
-description: Use when Codex is already in the attack-path-analysis phase of a security scan or the user explicitly asks to trace a security finding from source to sink and calibrate severity. Do not use as the primary trigger for full PR, commit, branch, patch, or repository scans.
+description: Use when Copilot is already in the attack-path-analysis phase of a security scan or the user explicitly asks to trace a security finding from source to sink and calibrate severity. Do not use as the primary trigger for full PR, commit, branch, patch, or repository scans.
 ---
 
 # Security Attack Path Analysis
@@ -18,7 +18,7 @@ Use the shared scan artifact path conventions in `../../references/scan-artifact
 
 ### Compact Standard-Scan Mode
 
-When `$security-scan` explicitly invokes this skill in compact standard-scan mode, load the per-scan threat model and the enriched `<discovery_dir>/candidate_ledger.jsonl`. Analyze, in one invocation, every row whose validation disposition is `reportable` or `deferred`. Add one nested `attack_path` record to each row that enters the phase, using the compact record shape in `../../references/scan-artifacts.md`, while preserving every discovery and validation field and the original row order.
+When `/security-scan` explicitly invokes this skill in compact standard-scan mode, load the per-scan threat model and the enriched `<discovery_dir>/candidate_ledger.jsonl`. Analyze, in one invocation, every row whose validation disposition is `reportable` or `deferred`. Add one nested `attack_path` record to each row that enters the phase, using the compact record shape in `../../references/scan-artifacts.md`, while preserving every discovery and validation field and the original row order.
 
 In this mode, the nested record replaces the per-finding attack-path report and receipt. Rewrite the ledger atomically. Keep attack-path facts, counterevidence, severity calibration, and policy adjustment as separate reasoning steps even though their output is compact. All reachability, instance-preservation, and evidence requirements still apply; only the artifact packaging changes.
 

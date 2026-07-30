@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
-import { CodexSecurity, CodexSecurityError, VERSION } from "../src/index.js";
+import {
+  CopilotSecurity,
+  CopilotSecurityError,
+  VERSION,
+} from "../src/index.js";
 import type {
   Finding,
   FindingCodeEvidence,
@@ -76,9 +80,9 @@ describe("TypeScript package skeleton", () => {
     );
 
     expect(packageJson.scripts.build).toBe(
-      "node --run clean && tsc -p tsconfig.build.json",
+      "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     );
-    expect(packageJson.scripts.prepack).toBe("node --run build");
+    expect(packageJson.scripts.prepack).toBe("npm run build");
     expect(packageJson.scripts["audit:prod"]).toBe(
       "pnpm audit --prod --audit-level high",
     );
@@ -111,7 +115,7 @@ describe("TypeScript package skeleton", () => {
     const packageJson = JSON.parse(
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     );
-    const client = new CodexSecurity({ pluginPath: "/tmp/plugin" });
+    const client = new CopilotSecurity({ pluginPath: "/tmp/plugin" });
     expect(client.config.pluginPath).toBe("/tmp/plugin");
     expect(client.metadata).toEqual({
       sdk: "@github/copilot-sdk",
@@ -119,7 +123,9 @@ describe("TypeScript package skeleton", () => {
       executable: "github/copilot-cli",
       executableVersion: "system",
     });
-    expect(new CodexSecurityError("failure").name).toBe("CodexSecurityError");
+    expect(new CopilotSecurityError("failure").name).toBe(
+      "CopilotSecurityError",
+    );
     await client.close();
   });
 

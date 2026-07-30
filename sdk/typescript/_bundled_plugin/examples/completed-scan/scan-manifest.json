@@ -1,5 +1,5 @@
 {
-  "documentType": "codex-security.scan-manifest",
+  "documentType": "copilot-security.scan-manifest",
   "schemaVersion": "1.0",
   "scan": {
     "id": "scan_example_001",
@@ -17,7 +17,7 @@
       "displayName": "example/repo",
       "remote": "https://github.com/example/repo",
       "revision": "deadbeef",
-      "snapshotDigest": "codex-security-snapshot/v1:sha256:ed88f96a4c1a06603a41b3f261f59c3de2555c367ef6ad3bb8b9e483495d34eb"
+      "snapshotDigest": "copilot-security-snapshot/v1:sha256:ed88f96a4c1a06603a41b3f261f59c3de2555c367ef6ad3bb8b9e483495d34eb"
     },
     "scope": {
       "includePaths": [
@@ -30,12 +30,12 @@
     "artifacts": [
       {
         "path": "findings.json",
-        "sha256": "db5ce8533c1b6cd9131f9e12e8bb705f63474caa2a3f7dd21207666b3a8da777",
+        "sha256": "9abe95339c1e949e529f88e1b680d477b1b3ba9d76b8813fe3130ee8e846e568",
         "mediaType": "application/json"
       },
       {
         "path": "coverage.json",
-        "sha256": "ca91e7a3a89a477796b912232bb3473dead1d342f8b6b37b073bda168819aaa6",
+        "sha256": "112944bc47d6538da33fa3a95c78a2a7739436558b5f54d6a76bb3447e9f2494",
         "mediaType": "application/json"
       }
     ]

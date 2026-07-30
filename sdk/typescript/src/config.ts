@@ -10,25 +10,21 @@ export interface JsonObject {
   [key: string]: JsonValue;
 }
 
-export interface CodexSecurityConfig {
+export interface CopilotSecurityConfig {
   pluginPath?: string;
   /** Path to the installed GitHub Copilot CLI executable. */
   copilotPath?: string;
   /** Copilot-native model and reasoning overrides. */
   copilotOverrides?: JsonObject;
-  /** @deprecated Use copilotOverrides. Retained for recipe compatibility. */
-  codexOverrides?: JsonObject;
   pythonPath?: string;
 }
-
-export type CopilotSecurityConfig = CodexSecurityConfig;
 
 export interface ScanModelConfiguration {
   model: string;
   reasoningEffort: string;
 }
 
-export const DEFAULT_CODEX_CONFIG: Readonly<JsonObject> = {
+export const DEFAULT_COPILOT_CONFIG: Readonly<JsonObject> = {
   cli_auth_credentials_store: "auto",
   model: "gpt-5.6-sol",
   model_reasoning_effort: "xhigh",
@@ -46,9 +42,7 @@ export const DEFAULT_CODEX_CONFIG: Readonly<JsonObject> = {
   },
 };
 
-export const DEFAULT_COPILOT_CONFIG = DEFAULT_CODEX_CONFIG;
-
-deepFreezeJson(DEFAULT_CODEX_CONFIG);
+deepFreezeJson(DEFAULT_COPILOT_CONFIG);
 
 export function scanModelConfiguration(
   config: Readonly<JsonObject>,
@@ -56,7 +50,7 @@ export function scanModelConfiguration(
   const model = config["model"];
   if (typeof model !== "string" || model.trim().length === 0) {
     throw new ConfigurationError(
-      "The configured Codex model must be a nonempty string.",
+      "The configured Copilot model must be a nonempty string.",
     );
   }
   const reasoningEffort = config["model_reasoning_effort"];
@@ -65,20 +59,23 @@ export function scanModelConfiguration(
     reasoningEffort.trim().length === 0
   ) {
     throw new ConfigurationError(
-      "The configured Codex reasoning effort must be a nonempty string.",
+      "The configured Copilot reasoning effort must be a nonempty string.",
     );
   }
   return { model, reasoningEffort };
 }
 
-export async function mergedCodexConfig(
-  config: CodexSecurityConfig,
+export async function mergedCopilotConfig(
+  config: CopilotSecurityConfig,
 ): Promise<JsonObject> {
-  if (config.codexOverrides !== undefined && !isObject(config.codexOverrides)) {
-    throw new ConfigurationError("codexOverrides must be an object.");
+  if (
+    config.copilotOverrides !== undefined &&
+    !isObject(config.copilotOverrides)
+  ) {
+    throw new ConfigurationError("copilotOverrides must be an object.");
   }
-  validateOverrideKeys(config.codexOverrides ?? {});
-  const overrides = cloneJson(config.codexOverrides ?? {});
+  validateOverrideKeys(config.copilotOverrides ?? {});
+  const overrides = cloneJson(config.copilotOverrides ?? {});
   validateOverrides(overrides);
   validateNativeMultiAgentV2Overrides(overrides);
   normalizeLegacyWindowsSandboxOverride(overrides);
@@ -90,10 +87,8 @@ export async function mergedCodexConfig(
       }
     }
   }
-  return deepMerge(cloneJson(DEFAULT_CODEX_CONFIG), overrides);
+  return deepMerge(cloneJson(DEFAULT_COPILOT_CONFIG), overrides);
 }
-
-export const mergedCopilotConfig = mergedCodexConfig;
 
 function normalizeLegacyWindowsSandboxOverride(overrides: JsonObject): void {
   const features = overrides["features"];
@@ -117,7 +112,7 @@ function normalizeLegacyWindowsSandboxOverride(overrides: JsonObject): void {
   };
 }
 
-export async function writeCodexConfig(
+export async function writeCopilotConfig(
   path: string,
   config: JsonObject,
 ): Promise<void> {
@@ -127,7 +122,7 @@ export async function writeCodexConfig(
   try {
     contents = stringify(config);
   } catch (error) {
-    throw new ConfigurationError("Invalid Codex configuration.", {
+    throw new ConfigurationError("Invalid Copilot configuration.", {
       cause: error,
     });
   }
@@ -160,7 +155,7 @@ function validateOverrideKeys(value: JsonValue): void {
   if (!isObject(value)) return;
   for (const [key, item] of Object.entries(value)) {
     if (["__proto__", "constructor", "prototype"].includes(key)) {
-      throw new ConfigurationError(`Invalid Codex override key: ${key}.`);
+      throw new ConfigurationError(`Invalid Copilot override key: ${key}.`);
     }
     validateOverrideKeys(item);
   }
@@ -169,18 +164,18 @@ function validateOverrideKeys(value: JsonValue): void {
 function validateOverrides(overrides: JsonObject): void {
   if ("plugins" in overrides || "marketplaces" in overrides) {
     throw new ConfigurationError(
-      "Codex Security owns plugin loading configuration.",
+      "Copilot Security owns plugin loading configuration.",
     );
   }
   const features = overrides["features"];
   if ("features" in overrides && !isObject(features)) {
     throw new ConfigurationError(
-      "Codex override features must be a TOML table.",
+      "Copilot override features must be a TOML table.",
     );
   }
   if (isObject(features) && "plugins" in features) {
     throw new ConfigurationError(
-      "Codex Security owns plugin loading configuration.",
+      "Copilot Security owns plugin loading configuration.",
     );
   }
   const profiles = overrides["profiles"];
@@ -189,24 +184,24 @@ function validateOverrides(overrides: JsonObject): void {
   }
   if (!isObject(profiles)) {
     throw new ConfigurationError(
-      "Codex override profiles must be TOML tables.",
+      "Copilot override profiles must be TOML tables.",
     );
   }
   for (const [name, profile] of Object.entries(profiles)) {
     if (!isObject(profile)) {
       throw new ConfigurationError(
-        `Codex override profile ${name} must be a TOML table.`,
+        `Copilot override profile ${name} must be a TOML table.`,
       );
     }
     const profileFeatures = profile["features"];
     if (profileFeatures !== undefined && !isObject(profileFeatures)) {
       throw new ConfigurationError(
-        `Codex override profile ${name} features must be a TOML table.`,
+        `Copilot override profile ${name} features must be a TOML table.`,
       );
     }
     if (isObject(profileFeatures) && "plugins" in profileFeatures) {
       throw new ConfigurationError(
-        `Codex Security owns plugin loading configuration in profile ${name}.`,
+        `Copilot Security owns plugin loading configuration in profile ${name}.`,
       );
     }
   }
@@ -216,7 +211,7 @@ function validateNativeMultiAgentV2Overrides(overrides: JsonObject): void {
   const agents = overrides["agents"];
   if (isObject(agents) && "max_threads" in agents) {
     throw new ConfigurationError(
-      "The selected Codex Security plugin requires native multi-agent v2; " +
+      "The selected Copilot Security plugin requires native multi-agent v2; " +
         "agents.max_threads is a legacy v1 setting. Use " +
         "features.multi_agent_v2.max_concurrent_threads_per_session instead.",
     );
@@ -225,7 +220,7 @@ function validateNativeMultiAgentV2Overrides(overrides: JsonObject): void {
     const features = overrides["features"];
     if (!isObject(features)) {
       throw new ConfigurationError(
-        "The selected Codex Security plugin requires native multi-agent v2; " +
+        "The selected Copilot Security plugin requires native multi-agent v2; " +
           "features must remain a table containing features.multi_agent_v2.",
       );
     }
@@ -233,13 +228,13 @@ function validateNativeMultiAgentV2Overrides(overrides: JsonObject): void {
       const multiAgentV2 = features["multi_agent_v2"];
       if (!isObject(multiAgentV2)) {
         throw new ConfigurationError(
-          "The selected Codex Security plugin requires native multi-agent v2; " +
+          "The selected Copilot Security plugin requires native multi-agent v2; " +
             "features.multi_agent_v2 must remain a table with enabled = true.",
         );
       }
       if ("enabled" in multiAgentV2 && multiAgentV2["enabled"] !== true) {
         throw new ConfigurationError(
-          "The selected Codex Security plugin requires native multi-agent v2; " +
+          "The selected Copilot Security plugin requires native multi-agent v2; " +
             "features.multi_agent_v2.enabled cannot be disabled.",
         );
       }
@@ -257,7 +252,7 @@ function validateNativeMultiAgentV2Overrides(overrides: JsonObject): void {
     const profileAgents = profile["agents"];
     if (isObject(profileAgents) && "max_threads" in profileAgents) {
       throw new ConfigurationError(
-        `The selected Codex Security plugin requires native multi-agent v2; profile ${name} agents.max_threads is a legacy v1 setting.`,
+        `The selected Copilot Security plugin requires native multi-agent v2; profile ${name} agents.max_threads is a legacy v1 setting.`,
       );
     }
     const profileFeatures = profile["features"];
@@ -270,7 +265,7 @@ function validateNativeMultiAgentV2Overrides(overrides: JsonObject): void {
       ("enabled" in profileV2 && profileV2["enabled"] !== true)
     ) {
       throw new ConfigurationError(
-        `The selected Codex Security plugin requires native multi-agent v2; profile ${name} features.multi_agent_v2 cannot be disabled.`,
+        `The selected Copilot Security plugin requires native multi-agent v2; profile ${name} features.multi_agent_v2 cannot be disabled.`,
       );
     }
   }

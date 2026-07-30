@@ -1,6 +1,6 @@
 # Triage Result Contract
 
-Use this contract for `$triage-finding` first-pass output. The skill performs static, inline triage of supplied findings. It does not use a queue or deep triage mode.
+Use this contract for `/triage-finding` first-pass output. The skill performs static, inline triage of supplied findings. It does not use a queue or deep triage mode.
 
 ## Schema Fit
 
@@ -9,7 +9,7 @@ Use this contract for `$triage-finding` first-pass output. The skill performs st
 That schema is for completed Copilot Security scan artifacts. It requires scan metadata, generated finding ids, occurrence ids, fingerprints, severity,
 remediation, provenance, and locations. Triage inputs often arrive as incomplete claims from SARIF snippets, CVEs, advisories, scanner tickets, bug bounty reports, or pasted text. The normalization step should preserve those claims without inventing completed-scan fields.
 
-If the user supplies a valid `codex-security.findings` artifact, use it as an input source and map its fields into this triage contract. Preserve `findingId`, `occurrenceId`, and `ruleId` as source identifiers; do not require new triage inputs to conform to the completed-scan schema.
+If the user supplies a valid `copilot-security.findings` artifact, use it as an input source and map its fields into this triage contract. Preserve `findingId`, `occurrenceId`, and `ruleId` as source identifiers; do not require new triage inputs to conform to the completed-scan schema.
 
 ## Top-Level JSON
 
@@ -82,7 +82,7 @@ Required source type values:
 - `advisory`
 - `scanner_ticket`
 - `bug_bounty`
-- `codex_security_finding`
+- `copilot_security_finding`
 - `freeform`
 - `unknown`
 

@@ -31,7 +31,7 @@ Do not use `../../schemas/findings.schema.json` as the canonical data shape for 
 That schema describes completed Copilot Security scan output. It requires generated fields such as `scanId`, `findingId`, `occurrenceId`, fingerprints,
 severity, remediation, provenance, and at least one location. Most triage inputs are incomplete external claims, and forcing them into that schema before investigation would require inventing stable IDs, severity, remediation, or locations.
 
-Use the schema only as an optional compatibility source when the user supplies an existing `codex-security.findings` JSON artifact. In that case, extract the available fields into the triage normalization record and preserve the original IDs as source identifiers. The triage result contract is defined in `references/triage-result-contract.md`.
+Use the schema only as an optional compatibility source when the user supplies an existing `copilot-security.findings` JSON artifact. In that case, extract the available fields into the triage normalization record and preserve the original IDs as source identifiers. The triage result contract is defined in `references/triage-result-contract.md`.
 
 ## Static Assessment Guidance
 
@@ -60,9 +60,9 @@ When the user supplies a GitHub repository instead of pasted finding content,
 use `references/github-rest-intake.md` before normalizing findings.
 
 Detect GitHub repositories from `owner/repo`, GitHub URLs, GitHub SSH remotes,
-the current Codex project's attached GitHub repository, or the current local repository's GitHub remote.
+the current Copilot project's attached GitHub repository, or the current local repository's GitHub remote.
 
-If the user asks to pull from GitHub without typing an `owner/repo` or URL, first infer the GitHub repository from the current Codex project attachment when that metadata is available. Prefer that attached repository over a local path or local git remote. If no Codex project attachment is visible, fall back to the current repository's GitHub remote. Only ask for a repository URL or `owner/repo`
+If the user asks to pull from GitHub without typing an `owner/repo` or URL, first infer the GitHub repository from the current Copilot project attachment when that metadata is available. Prefer that attached repository over a local path or local git remote. If no Copilot project attachment is visible, fall back to the current repository's GitHub remote. Only ask for a repository URL or `owner/repo`
 when neither source resolves to a GitHub repository.
 
 If no GitHub finding source is specified, do not query GitHub, inspect code,
@@ -98,7 +98,7 @@ Start by extracting:
 - input id, scanner id, SARIF rule/result id, CVE/GHSA id, ticket id, or Copilot Security `findingId`/`occurrenceId` when present
 - title or short claim
 - source type: `sarif`, `cve`, `advisory`, `scanner_ticket`,
-  `bug_bounty`, `codex_security_finding`, `freeform`, or `unknown`
+  `bug_bounty`, `copilot_security_finding`, `freeform`, or `unknown`
 - vulnerable component, package, API, file, route, class, function, or service
 - claimed attacker-controlled source
 - claimed sink or broken security control
@@ -191,7 +191,7 @@ If no policy applies, record that absence as a proof gap and continue with the n
 10. Assign exploitability stack ranks for `confirmed` and `needs_review` findings.
 11. For `confirmed` findings, add owner hints after verdicting when local ownership evidence is easy to derive.
 12. Build one valid `triage-finding/v0` result using the contract in `references/triage-result-contract.md`.
-13. If the Copilot Security app tool `open_codex_security_triage_results` is available, call it with the complete result before the final response so the app renders the findings table. After a successful tool call, return a concise Markdown summary; do not paste the full JSON block unless the user asks for the raw contract.
+13. If the Copilot Security app tool `open_copilot_security_triage_results` is available, call it with the complete result before the final response so the app renders the findings table. After a successful tool call, return a concise Markdown summary; do not paste the full JSON block unless the user asks for the raw contract.
 14. If the app tool is unavailable or rejects the result, fall back to the fenced JSON block alongside the concise Markdown summary.
 
 ## Surface and Boundary Gate
@@ -293,7 +293,7 @@ The Markdown result should include:
 - proof gaps
 - owner hint for `confirmed` findings, when available
 - recommended next step
-- `$fix-finding` handoff when verdict is `confirmed`
+- `/fix-finding` handoff when verdict is `confirmed`
 
 The app-tool payload or fallback JSON block must include:
 
@@ -307,7 +307,7 @@ The app-tool payload or fallback JSON block must include:
 Prefer the app tool over showing raw JSON. The intended default UX is:
 
 1. generate the valid `triage-finding/v0` result internally
-2. call `open_codex_security_triage_results` with that result
+2. call `open_copilot_security_triage_results` with that result
 3. respond with the concise Markdown summary
 
 Use the fenced JSON block only as a fallback when the app tool cannot be used,
@@ -315,16 +315,16 @@ or when the user explicitly asks to see or copy the raw result contract.
 
 ## Fix-Finding Handoff
 
-For `confirmed` findings, include a concise prompt-ready handoff for `$fix-finding` with:
+For `confirmed` findings, include a concise prompt-ready handoff for `/fix-finding` with:
 
 - vulnerable source, sink, or broken control
 - attacker-controlled input and preconditions
 - exact code references
 - required security invariant
 - recommended fix boundary
-- proof gaps that `$fix-finding` should preserve or validate
+- proof gaps that `/fix-finding` should preserve or validate
 
-Do not invoke `$fix-finding` unless the user explicitly asks to continue into fixing.
+Do not invoke `/fix-finding` unless the user explicitly asks to continue into fixing.
 
 ## Hard Rules
 

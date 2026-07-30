@@ -35,7 +35,7 @@ async function fixture(): Promise<{
   input: string;
   output: string;
 }> {
-  const root = await mkdtemp(join(tmpdir(), "codex-security-multiscan-"));
+  const root = await mkdtemp(join(tmpdir(), "copilot-security-multiscan-"));
   temporaryDirectories.push(root);
   return {
     root,
@@ -574,40 +574,43 @@ describe("multiscan", () => {
     }
   });
 
-  test("rejects output-directory symlinks before deleting external checkouts", async () => {
-    for (const directory of ["", "checkouts", "artifacts"]) {
-      const paths = await fixture();
-      const source = await repository(paths.root, "victim");
-      await writeFile(
-        paths.input,
-        `id,repository,revision\nvictim,${source.path},${source.revision}\n`,
-      );
-      const external = join(paths.root, "external");
-      const preserved = join(external, "victim", "keep.txt");
-      await mkdir(join(external, "victim"), { recursive: true });
-      await writeFile(preserved, "preserved\n");
-      if (directory) await mkdir(paths.output);
-      await symlink(
-        external,
-        directory ? join(paths.output, directory) : paths.output,
-      );
+  test.skipIf(process.platform === "win32")(
+    "rejects output-directory symlinks before deleting external checkouts",
+    async () => {
+      for (const directory of ["", "checkouts", "artifacts"]) {
+        const paths = await fixture();
+        const source = await repository(paths.root, "victim");
+        await writeFile(
+          paths.input,
+          `id,repository,revision\nvictim,${source.path},${source.revision}\n`,
+        );
+        const external = join(paths.root, "external");
+        const preserved = join(external, "victim", "keep.txt");
+        await mkdir(join(external, "victim"), { recursive: true });
+        await writeFile(preserved, "preserved\n");
+        if (directory) await mkdir(paths.output);
+        await symlink(
+          external,
+          directory ? join(paths.output, directory) : paths.output,
+        );
 
-      let scans = 0;
-      await expect(
-        runMultiscan(
-          options(
-            paths,
-            client(async (_repository, scanOptions = {}) => {
-              scans += 1;
-              return await completedScan(scanOptions.outputDir!);
-            }),
+        let scans = 0;
+        await expect(
+          runMultiscan(
+            options(
+              paths,
+              client(async (_repository, scanOptions = {}) => {
+                scans += 1;
+                return await completedScan(scanOptions.outputDir!);
+              }),
+            ),
           ),
-        ),
-      ).rejects.toThrow("symbolic links");
-      expect(scans).toBe(0);
-      expect(await readFile(preserved, "utf8")).toBe("preserved\n");
-    }
-  });
+        ).rejects.toThrow("symbolic links");
+        expect(scans).toBe(0);
+        expect(await readFile(preserved, "utf8")).toBe("preserved\n");
+      }
+    },
+  );
 
   test("rejects unsafe input without starting scans or exposing URL credentials", async () => {
     const paths = await fixture();

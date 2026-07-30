@@ -17,21 +17,24 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { stripVTControlCharacters } from "node:util";
 import { describe, expect, test } from "bun:test";
 import type {
-  CodexSecurityConfig,
+  CopilotSecurityConfig,
   JsonObject,
   ScanPreflight,
 } from "../src/index.js";
 import {
   BUNDLED_PLUGIN_VERSION,
-  CodexSecurityError,
+  CopilotSecurityError,
   DiffTarget,
   OutputInsideProtectedRootError,
   ScanCostLimitExceededError,
   ScanInterruptedError,
   VERSION,
 } from "../src/index.js";
-import { main, parseCodexOverrides, Progress } from "../src/cli.js";
-import { DEFAULT_CODEX_CONFIG, scanModelConfiguration } from "../src/config.js";
+import { main, parseCopilotOverrides, Progress } from "../src/cli.js";
+import {
+  DEFAULT_COPILOT_CONFIG,
+  scanModelConfiguration,
+} from "../src/config.js";
 import {
   FakeSignals,
   REDACTED_CREDENTIALS,
@@ -42,8 +45,9 @@ import {
   fakeResult,
 } from "./cli-fixtures.js";
 
-const DEFAULT_SCAN_MODEL_CONFIGURATION =
-  scanModelConfiguration(DEFAULT_CODEX_CONFIG);
+const DEFAULT_SCAN_MODEL_CONFIGURATION = scanModelConfiguration(
+  DEFAULT_COPILOT_CONFIG,
+);
 
 async function multiscanInventory(root: string): Promise<void> {
   const repository = join(root, "repository");
@@ -80,7 +84,7 @@ describe("CLI", () => {
     const root = capture();
     const stderr = capture();
     expect(await main([], root.stream, stderr.stream, dependencies())).toBe(0);
-    expect(root.text()).toContain("Usage: codex-security <command>");
+    expect(root.text()).toContain("Usage: copilot-security <command>");
     expect(root.text()).toContain("bulk-scan");
     expect(root.text()).toContain("install-hook");
     expect(root.text()).not.toContain("multiscan");
@@ -105,7 +109,7 @@ describe("CLI", () => {
           path: { type: "array" },
           mode: { enum: ["standard", "deep"] },
           model: { type: "string" },
-          effort: { enum: ["minimal", "low", "medium", "high", "xhigh"] },
+          effort: { enum: ["low", "medium", "high", "xhigh"] },
           failOnSeverity: { enum: ["critical", "high", "medium", "low"] },
         },
       },
@@ -152,27 +156,31 @@ describe("CLI", () => {
     expect(
       await main(["--llms"], manifest.stream, capture().stream, dependencies()),
     ).toBe(0);
-    expect(manifest.text()).toContain("codex-security scan [repository]");
+    expect(manifest.text()).toContain("copilot-security scan [repository]");
     expect(manifest.text()).toContain(
-      "codex-security install-hook [repository]",
+      "copilot-security install-hook [repository]",
     );
-    expect(manifest.text()).toContain("codex-security bulk-scan [input]");
-    expect(manifest.text()).toContain("codex-security export <scanDir>");
-    expect(manifest.text()).toContain("codex-security validate <findings...>");
-    expect(manifest.text()).toContain("codex-security patch <issues...>");
+    expect(manifest.text()).toContain("copilot-security bulk-scan [input]");
+    expect(manifest.text()).toContain("copilot-security export <scanDir>");
     expect(manifest.text()).toContain(
-      "codex-security findings false-positive <occurrenceId>",
+      "copilot-security validate <findings...>",
     );
-    expect(manifest.text()).toContain("codex-security scans list [repository]");
-    expect(manifest.text()).toContain("codex-security scans show <scanId>");
-    expect(manifest.text()).toContain("codex-security scans rerun <scanId>");
+    expect(manifest.text()).toContain("copilot-security patch <issues...>");
     expect(manifest.text()).toContain(
-      "codex-security scans match [beforeId] [afterId]",
+      "copilot-security findings false-positive <occurrenceId>",
     );
     expect(manifest.text()).toContain(
-      "codex-security scans compare <beforeId> <afterId>",
+      "copilot-security scans list [repository]",
     );
-    expect(manifest.text()).toContain("codex-security info");
+    expect(manifest.text()).toContain("copilot-security scans show <scanId>");
+    expect(manifest.text()).toContain("copilot-security scans rerun <scanId>");
+    expect(manifest.text()).toContain(
+      "copilot-security scans match [beforeId] [afterId]",
+    );
+    expect(manifest.text()).toContain(
+      "copilot-security scans compare <beforeId> <afterId>",
+    );
+    expect(manifest.text()).toContain("copilot-security info");
 
     const completions = capture();
     expect(
@@ -259,33 +267,19 @@ describe("CLI", () => {
     });
 
     for (const setting of [
-      "OPENAI_API_KEY",
-      "CODEX_API_KEY",
-      "CODEX_SECURITY_STATE_DIR",
-      "CODEX_HOME",
+      "COPILOT_SECURITY_HOME",
+      "COPILOT_CLI_PATH",
+      "COPILOT_GITHUB_TOKEN",
+      "COPILOT_SECURITY_STATE_DIR",
+      "COPILOT_HOME",
       "PYTHON",
       "GH_HOST",
       "GH_TOKEN",
       "GITHUB_TOKEN",
-      "CODEX_SECURITY_GIT_HOST",
-      "CODEX_SECURITY_IMAGE",
-      "CODEX_SECURITY_USER",
-      "CODEX_SECURITY_SECCOMP",
-      "CODEX_SECURITY_CSV",
-      "CODEX_SECURITY_RESULTS",
-      "CODEX_SECURITY_STATE",
-      "CODEX_SECURITY_NO_UPDATE_NOTICE",
-      "NO_UPDATE_NOTIFIER",
-      "CODEX_SECURITY_NPM_REGISTRY",
-      "npm_config_registry",
-      "NPM_CONFIG_REGISTRY",
+      "COPILOT_SECURITY_NO_UPDATE_NOTICE",
       "NO_COLOR",
-      "TERM",
       "CI",
-      "features.multi_agent_v2.max_concurrent_threads_per_session",
-      "agents.max_threads",
-      "$CODEX_HOME/codex-security/config.toml",
-      "[deep_scan]",
+      "max_concurrent_threads_per_session",
       "stop_after_no_new",
       "max_discovery_runs",
     ]) {
@@ -304,7 +298,7 @@ describe("CLI", () => {
       `model_reasoning_effort = "${DEFAULT_SCAN_MODEL_CONFIGURATION.reasoningEffort}"`,
     );
 
-    const features = DEFAULT_CODEX_CONFIG["features"] as JsonObject;
+    const features = DEFAULT_COPILOT_CONFIG["features"] as JsonObject;
     const multiAgent = features["multi_agent_v2"] as JsonObject;
     expect(readme).toContain(
       `max_concurrent_threads_per_session = ${String(multiAgent["max_concurrent_threads_per_session"])}`,
@@ -312,7 +306,9 @@ describe("CLI", () => {
 
     const python = Bun.which("python3") ?? Bun.which("python");
     expect(python).not.toBeNull();
-    const root = await mkdtemp(join(tmpdir(), "codex-security-deep-defaults-"));
+    const root = await mkdtemp(
+      join(tmpdir(), "copilot-security-deep-defaults-"),
+    );
 
     try {
       const result = spawnSync(
@@ -331,7 +327,7 @@ describe("CLI", () => {
           encoding: "utf8",
           env: {
             ...process.env,
-            CODEX_HOME: join(root, "codex-home"),
+            COPILOT_HOME: join(root, "copilot-home"),
             PYTHONDONTWRITEBYTECODE: "1",
           },
           timeout: 30_000,
@@ -349,7 +345,7 @@ describe("CLI", () => {
         maxDiscoveryRuns: number;
       };
       expect(defaults.workers).toBe(6);
-      expect(readme).toContain('workers = "auto"');
+      expect(readme).toContain(`workers = ${defaults.workers}`);
       expect(readme).toContain(`subagents = ${defaults.subagents}`);
       expect(readme).toContain(
         `stop_after_no_new = ${defaults.stopAfterNoNew}`,
@@ -362,7 +358,7 @@ describe("CLI", () => {
     }
   });
 
-  test("marks findings as false positives without starting Codex", async () => {
+  test("marks findings as false positives without starting Copilot", async () => {
     const reason = "  Not reachable from untrusted input.  ";
     const expectedReason = reason.trim();
     const response: JsonObject = {
@@ -390,7 +386,7 @@ describe("CLI", () => {
       },
     });
     deps.createSecurity = () => {
-      throw new Error("finding feedback must not initialize Codex");
+      throw new Error("finding feedback must not initialize Copilot");
     };
 
     expect(
@@ -484,7 +480,7 @@ describe("CLI", () => {
 
   test("installs a pre-commit hook that blocks failed diff scans", async () => {
     const root = await realpath(
-      await mkdtemp(join(tmpdir(), "codex-security-cli-pre-commit-")),
+      await mkdtemp(join(tmpdir(), "copilot-security-cli-pre-commit-")),
     );
     try {
       execFileSync("git", ["init", "-q", root], { timeout: 10_000 });
@@ -524,7 +520,7 @@ describe("CLI", () => {
       const trustedHook = await readFile(hook, "utf8");
       await writeFile(
         hook,
-        "#!/bin/sh\nset -eu\nexec npx --no-install codex-security scan . --working-tree --fail-on-severity medium\n",
+        "#!/bin/sh\nset -eu\nexec npx --no-install copilot-security scan . --working-tree --fail-on-severity medium\n",
       );
       const migratedHook = capture();
       expect(
@@ -581,22 +577,22 @@ describe("CLI", () => {
       const maliciousMarker = join(root, "hook-hijacked");
       await writeFile(
         join(binaries, "npx"),
-        '#!/bin/sh\nexec "$PWD/node_modules/.bin/codex-security" "$@"\n',
+        '#!/bin/sh\nexec "$PWD/node_modules/.bin/copilot-security" "$@"\n',
         { mode: 0o755 },
       );
       await writeFile(
         join(binaries, "node"),
-        '#!/bin/sh\nprintf "node\\n" > "$CODEX_SECURITY_HOOK_MARKER"\nexit 0\n',
+        '#!/bin/sh\nprintf "node\\n" > "$COPILOT_SECURITY_HOOK_MARKER"\nexit 0\n',
         { mode: 0o755 },
       );
       await writeFile(
-        join(repositoryBinaries, "codex-security"),
-        '#!/bin/sh\nprintf "codex-security\\n" > "$CODEX_SECURITY_HOOK_MARKER"\nexit 0\n',
+        join(repositoryBinaries, "copilot-security"),
+        '#!/bin/sh\nprintf "copilot-security\\n" > "$COPILOT_SECURITY_HOOK_MARKER"\nexit 0\n',
         { mode: 0o755 },
       );
       execFileSync(
         "git",
-        ["-C", root, "add", "-f", "node_modules/.bin/codex-security"],
+        ["-C", root, "add", "-f", "node_modules/.bin/copilot-security"],
         { timeout: 10_000 },
       );
       const commit = spawnSync(
@@ -619,10 +615,10 @@ describe("CLI", () => {
           encoding: "utf8",
           env: {
             ...process.env,
-            CODEX_HOME: join(root, "codex-home"),
-            CODEX_API_KEY: "",
-            CODEX_SECURITY_HOOK_MARKER: maliciousMarker,
-            OPENAI_API_KEY: "",
+            COPILOT_HOME: join(root, "copilot-home"),
+            COPILOT_API_KEY: "",
+            COPILOT_SECURITY_HOOK_MARKER: maliciousMarker,
+            THIRD_PARTY_API_KEY: "",
             PATH: [binaries, process.env["PATH"] ?? ""].join(delimiter),
           },
           timeout: 10_000,
@@ -646,12 +642,14 @@ describe("CLI", () => {
   });
 
   test("runs a bulk scan and keeps structured output on stdout", async () => {
-    const root = await mkdtemp(join(tmpdir(), "codex-security-cli-multiscan-"));
+    const root = await mkdtemp(
+      join(tmpdir(), "copilot-security-cli-multiscan-"),
+    );
     try {
       await multiscanInventory(root);
       const stdout = capture();
       const stderr = capture();
-      let config: CodexSecurityConfig | undefined;
+      let config: CopilotSecurityConfig | undefined;
       let scanOptions: unknown;
       expect(
         await main(
@@ -666,7 +664,7 @@ describe("CLI", () => {
             "gpt-5.6-terra",
             "--effort",
             "high",
-            "--codex",
+            "--copilot",
             "features.goals=true",
             "--json",
           ],
@@ -687,7 +685,7 @@ describe("CLI", () => {
         resultsPath: join(root, "results", "results.jsonl"),
       });
       expect(config).toMatchObject({
-        codexOverrides: {
+        copilotOverrides: {
           features: { goals: true },
           model: "gpt-5.6-terra",
           model_reasoning_effort: "high",
@@ -702,7 +700,9 @@ describe("CLI", () => {
   });
 
   test("preserves the bulk-scan failure summary and redacts progress errors", async () => {
-    const root = await mkdtemp(join(tmpdir(), "codex-security-cli-multiscan-"));
+    const root = await mkdtemp(
+      join(tmpdir(), "copilot-security-cli-multiscan-"),
+    );
     try {
       await multiscanInventory(root);
       const stdout = capture();
@@ -721,7 +721,7 @@ describe("CLI", () => {
           dependencies({
             currentDirectory: root,
             onRun: () => {
-              throw new CodexSecurityError(
+              throw new CopilotSecurityError(
                 "scan failed sk-proj-SYNTHETIC_KEY_123",
               );
             },
@@ -749,8 +749,8 @@ describe("CLI", () => {
       ["bulk-scan", "--model=gpt-5.6-terra"],
       ["bulk-scan", "--effort", "high"],
       ["bulk-scan", "--effort=high"],
-      ["bulk-scan", "--codex", 'model_reasoning_effort="high"'],
-      ["bulk-scan", '--codex=model_reasoning_effort="high"'],
+      ["bulk-scan", "--copilot", 'model_reasoning_effort="high"'],
+      ["bulk-scan", '--copilot=model_reasoning_effort="high"'],
       ["bulk-scan", "--model", "gpt-5.6-terra", "--effort", "high"],
     ] as const) {
       const stdout = capture();
@@ -794,7 +794,7 @@ describe("CLI", () => {
       {
         encoding: "utf8",
         input: [
-          '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"codex-security-test","version":"1.0.0"}}}',
+          '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"copilot-security-test","version":"1.0.0"}}}',
           '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}',
           '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}',
           '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"info","arguments":{}}}',
@@ -833,11 +833,11 @@ describe("CLI", () => {
       bundledPluginVersion: BUNDLED_PLUGIN_VERSION,
       scanMcp: false,
       cliVersion: VERSION,
-      codexVersion: "0.144.6",
-      codexSdkVersion: "0.144.6",
+      copilotVersion: "system",
+      copilotSdkVersion: "1.0.7",
       model: "gpt-5.6-sol",
       reasoningEffort: "xhigh",
-      nextStep: "codex-security scan . --dry-run",
+      nextStep: "copilot-security scan . --dry-run",
     });
   }, 30_000);
 
@@ -900,7 +900,7 @@ describe("CLI", () => {
       ),
     ).toBe(0);
     const text = stdout.text();
-    expect(text).toContain("CODEX SECURITY");
+    expect(text).toContain("COPILOT SECURITY");
     expect(text).toContain("SCAN HISTORY");
     expect(text).toContain("juice-shop");
     for (const heading of ["DATE", "STATUS", "FINDINGS", "MODE", "SCAN"]) {
@@ -980,7 +980,7 @@ describe("CLI", () => {
         ),
       ).toBe(0);
       const text = stripVTControlCharacters(stdout.text());
-      expect(text).toContain("CODEX SECURITY");
+      expect(text).toContain("COPILOT SECURITY");
       expect(text).toContain("SCAN DETAILS");
       expect(text).toContain("juice-shop");
       expect(text).toContain("scan-1");
@@ -1098,7 +1098,7 @@ describe("CLI", () => {
     ).toBe(0);
     expect(redirected.text()).toContain("internal-finding-id");
     expect(redirected.text()).toContain("status: unknown");
-    expect(redirected.text()).not.toContain("CODEX SECURITY");
+    expect(redirected.text()).not.toContain("COPILOT SECURITY");
 
     const filtered = capture(true);
     expect(
@@ -1111,7 +1111,7 @@ describe("CLI", () => {
     ).toBe(0);
     expect(filtered.text()).toContain("persisting: 1");
     expect(filtered.text()).not.toContain("internal-finding-id");
-    expect(filtered.text()).not.toContain("CODEX SECURITY");
+    expect(filtered.text()).not.toContain("COPILOT SECURITY");
   });
 
   test("prints SDK metadata without starting a scan", async () => {
@@ -1136,7 +1136,7 @@ describe("CLI", () => {
     expect(started).toBe(false);
   });
 
-  test("filters useful first-run metadata without starting Codex", async () => {
+  test("filters useful first-run metadata without starting Copilot", async () => {
     const stdout = capture();
     const stderr = capture();
     const deps = dependencies();
@@ -1155,7 +1155,7 @@ describe("CLI", () => {
     expect(JSON.parse(stdout.text())).toEqual({
       model: "gpt-5.6-sol",
       reasoningEffort: "xhigh",
-      nextStep: "codex-security scan . --dry-run",
+      nextStep: "copilot-security scan . --dry-run",
     });
     expect(stderr.text()).toBe("");
   });
@@ -1177,7 +1177,7 @@ describe("CLI", () => {
   });
 
   test("registers the scoped package as the MCP command", async () => {
-    const home = await mkdtemp(join(tmpdir(), "codex-security-mcp-home-"));
+    const home = await mkdtemp(join(tmpdir(), "copilot-security-mcp-home-"));
     try {
       const child = spawnSync(
         process.execPath,
@@ -1197,14 +1197,14 @@ describe("CLI", () => {
       );
       expect(child.status).toBe(0);
       expect(child.stdout).toContain(
-        "command: npx --yes @openai/codex-security --mcp",
+        "command: npx --yes @secwest/copilot-security --mcp",
       );
       const config = JSON.parse(
         await readFile(join(home, ".config", "amp", "settings.json"), "utf8"),
       );
-      expect(config["amp.mcpServers"]["codex-security"]).toEqual({
+      expect(config["amp.mcpServers"]["copilot-security"]).toEqual({
         command: "npx",
-        args: ["--yes", "@openai/codex-security", "--mcp"],
+        args: ["--yes", "@secwest/copilot-security", "--mcp"],
       });
     } finally {
       await rm(home, { recursive: true, force: true });
@@ -1262,7 +1262,7 @@ describe("CLI", () => {
     }
   });
 
-  test("rejects structured modes before starting interactive Codex commands", async () => {
+  test("rejects structured modes before starting interactive Copilot commands", async () => {
     for (const [command, arguments_] of [
       ["validate", ["finding"]],
       ["patch", ["issue"]],
@@ -1287,7 +1287,7 @@ describe("CLI", () => {
             stdout.stream,
             stderr.stream,
             dependencies({
-              onCodex: () => {
+              onCopilot: () => {
                 invoked = true;
                 return 0;
               },
@@ -1328,95 +1328,73 @@ describe("CLI", () => {
     );
   });
 
-  test("prints export help without initializing Codex", async () => {
+  test("prints export help without initializing Copilot", async () => {
     const stdout = capture();
     const stderr = capture();
     const deps = dependencies();
     deps.createSecurity = () => {
-      throw new Error("must not initialize Codex");
+      throw new Error("must not initialize Copilot");
     };
     expect(
       await main(["export", "--help"], stdout.stream, stderr.stream, deps),
     ).toBe(0);
-    expect(stdout.text()).toContain("Usage: codex-security export <scanDir>");
+    expect(stdout.text()).toContain("Usage: copilot-security export <scanDir>");
     expect(stdout.text()).toContain("--export-format <csv|json|sarif>");
     expect(stdout.text()).toContain("--source-root <string>");
     expect(stdout.text()).not.toContain("--format {sarif}");
     expect(stderr.text()).toBe("");
   });
 
-  test("runs split TypeScript output from an npm-style bin when Node preserves main symlinks", async () => {
-    const root = await mkdtemp(join(tmpdir(), "codex-security-cli-node-bin-"));
-    try {
-      const source = join(import.meta.dir, "..");
-      const installed = join(root, "node_modules", "@openai", "codex-security");
-      const dist = join(installed, "dist");
-      const build = spawnSync(
-        "node",
-        [
-          join(source, "node_modules", "typescript", "bin", "tsc"),
-          "-p",
-          join(source, "tsconfig.build.json"),
-          "--outDir",
-          dist,
-          "--pretty",
-          "false",
-        ],
-        { encoding: "utf8", cwd: source },
+  test.skipIf(process.platform === "win32")(
+    "runs split TypeScript output from an npm-style bin when Node preserves main symlinks",
+    async () => {
+      const root = await mkdtemp(
+        join(tmpdir(), "copilot-security-cli-node-bin-"),
       );
-      expect(build.status).toBe(0);
-      expect(build.stderr).toBe("");
-      expect(await readFile(join(dist, "cli.js"), "utf8")).toContain(
-        'from "./api.js"',
-      );
-      const launcher = join(installed, "bin", "codex-security.mjs");
-      await mkdir(join(installed, "bin"), { recursive: true });
-      await copyFile(join(source, "bin", "codex-security.mjs"), launcher);
-      await copyFile(
-        join(source, "package.json"),
-        join(installed, "package.json"),
-      );
-      await symlink(
-        join(source, "node_modules"),
-        join(installed, "node_modules"),
-        "dir",
-      );
-      const binDirectory = join(root, "node_modules", ".bin");
-      await mkdir(binDirectory, { recursive: true });
-      const bin = join(binDirectory, "codex-security");
-      await symlink(launcher, bin);
-      const child = spawnSync("node", [bin, "--version"], {
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          NODE_OPTIONS:
-            "--preserve-symlinks-main --no-experimental-detect-module",
-          NODE_USE_ENV_PROXY: undefined,
-        },
-      });
-      expect(child.status).toBe(0);
-      expect(child.stderr).toBe("");
-      expect(child.stdout).toBe(`${VERSION}\n`);
-
-      const preload = join(root, "unavailable-cwd.mjs");
-      await writeFile(
-        preload,
-        [
-          "const originalCwd = process.cwd;",
-          'Object.defineProperty(process, "cwd", {',
-          "  value() {",
-          '    if (/[\\\\/]dist[\\\\/]cli\\.js:/u.test(new Error().stack ?? "")) {',
-          '      throw new Error("working directory is unavailable");',
-          "    }",
-          "    return originalCwd.call(process);",
-          "  },",
-          "});\n",
-        ].join("\n"),
-      );
-      const failed = spawnSync(
-        "node",
-        ["--import", pathToFileURL(preload).href, bin, "scan"],
-        {
+      try {
+        const source = join(import.meta.dir, "..");
+        const installed = join(
+          root,
+          "node_modules",
+          "@secwest",
+          "copilot-security",
+        );
+        const dist = join(installed, "dist");
+        const build = spawnSync(
+          "node",
+          [
+            join(source, "node_modules", "typescript", "bin", "tsc"),
+            "-p",
+            join(source, "tsconfig.build.json"),
+            "--outDir",
+            dist,
+            "--pretty",
+            "false",
+          ],
+          { encoding: "utf8", cwd: source },
+        );
+        expect(build.status).toBe(0);
+        expect(build.stderr).toBe("");
+        expect(await readFile(join(dist, "cli.js"), "utf8")).toContain(
+          'from "./api.js"',
+        );
+        const launcher = join(installed, "bin", "copilot-security.mjs");
+        await mkdir(join(installed, "bin"), { recursive: true });
+        await copyFile(join(source, "bin", "copilot-security.mjs"), launcher);
+        await copyFile(
+          join(source, "package.json"),
+          join(installed, "package.json"),
+        );
+        await symlink(
+          join(source, "node_modules"),
+          join(installed, "node_modules"),
+          "dir",
+        );
+        const binDirectory = join(root, "node_modules", ".bin");
+        await mkdir(binDirectory, { recursive: true });
+        const bin = join(binDirectory, "copilot-security");
+        await symlink(launcher, bin);
+        const child = spawnSync("node", [bin, "--version"], {
           encoding: "utf8",
           env: {
             ...process.env,
@@ -1424,18 +1402,51 @@ describe("CLI", () => {
               "--preserve-symlinks-main --no-experimental-detect-module",
             NODE_USE_ENV_PROXY: undefined,
           },
-          timeout: 30_000,
-        },
-      );
-      expect([failed.status, failed.stdout, failed.stderr]).toEqual([
-        2,
-        "",
-        "codex-security: working directory is unavailable\n",
-      ]);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  }, 30_000);
+        });
+        expect(child.status).toBe(0);
+        expect(child.stderr).toBe("");
+        expect(child.stdout).toBe(`${VERSION}\n`);
+
+        const preload = join(root, "unavailable-cwd.mjs");
+        await writeFile(
+          preload,
+          [
+            "const originalCwd = process.cwd;",
+            'Object.defineProperty(process, "cwd", {',
+            "  value() {",
+            '    if (/[\\\\/]dist[\\\\/]cli\\.js:/u.test(new Error().stack ?? "")) {',
+            '      throw new Error("working directory is unavailable");',
+            "    }",
+            "    return originalCwd.call(process);",
+            "  },",
+            "});\n",
+          ].join("\n"),
+        );
+        const failed = spawnSync(
+          "node",
+          ["--import", pathToFileURL(preload).href, bin, "scan"],
+          {
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              NODE_OPTIONS:
+                "--preserve-symlinks-main --no-experimental-detect-module",
+              NODE_USE_ENV_PROXY: undefined,
+            },
+            timeout: 30_000,
+          },
+        );
+        expect([failed.status, failed.stdout, failed.stderr]).toEqual([
+          2,
+          "",
+          "copilot-security: working directory is unavailable\n",
+        ]);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
 
   test("uses Incur version and command help", async () => {
     const version = capture();
@@ -1455,14 +1466,14 @@ describe("CLI", () => {
         dependencies(),
       ),
     ).toBe(0);
-    expect(help.text()).toContain("Usage: codex-security scan [repository]");
+    expect(help.text()).toContain("Usage: copilot-security scan [repository]");
     expect(help.text()).toContain("--path <array>");
     expect(help.text()).toContain("--max-cost <number>");
     expect(help.text()).toContain("--model <string>");
     expect(help.text()).toContain(
-      `OpenAI model to use (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
+      `Copilot model to use (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
     );
-    expect(help.text()).toContain("--effort <minimal|low|medium|high|xhigh>");
+    expect(help.text()).toContain("--effort <low|medium|high|xhigh>");
     expect(help.text()).toContain(
       `Model reasoning effort (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.reasoningEffort}).`,
     );
@@ -1470,16 +1481,18 @@ describe("CLI", () => {
     expect(help.text()).toContain(
       "features.multi_agent_v2.max_concurrent_threads_per_session=4",
     );
-    expect(help.text()).toContain("default: Codex Security state");
+    expect(help.text()).toContain("default: COPILOT_SECURITY_HOME");
     expect(help.text()).toContain(
-      "codex-security scan . --model gpt-5.6-terra",
+      "copilot-security scan . --model gpt-5.6-terra",
     );
     expect(help.text()).toContain(
-      "codex-security scan . --model gpt-5.6-terra --effort high",
+      "copilot-security scan . --model gpt-5.6-terra --effort high",
     );
     expect(help.text()).not.toContain("--provider");
-    expect(help.text()).not.toContain("openai:gpt");
-    expect(help.text()).not.toContain("codex-security scan . --path src,tests");
+    expect(help.text()).not.toContain("provider:gpt");
+    expect(help.text()).not.toContain(
+      "copilot-security scan . --path src,tests",
+    );
     expect(help.text()).toContain("--format <toon|json|yaml|md|jsonl>");
   });
 
@@ -1497,13 +1510,13 @@ describe("CLI", () => {
     ).toBe(0);
     expect(help.text()).toContain("--model <string>");
     expect(help.text()).toContain(
-      `OpenAI model for each repository (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
+      `Copilot model for each repository (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
     );
-    expect(help.text()).toContain("--effort <minimal|low|medium|high|xhigh>");
+    expect(help.text()).toContain("--effort <low|medium|high|xhigh>");
     expect(help.text()).toContain(
       `Model reasoning effort (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.reasoningEffort}).`,
     );
-    expect(help.text()).toContain("--codex <array>");
+    expect(help.text()).toContain("--copilot <array>");
     expect(help.text()).toContain('model_reasoning_effort="high"');
     expect(help.text()).toContain(
       "features.multi_agent_v2.max_concurrent_threads_per_session=4",
@@ -1513,13 +1526,13 @@ describe("CLI", () => {
       "Default scan mode for repositories without a CSV mode.",
     );
     expect(help.text()).toContain(
-      "Codex Security plugin directory or ZIP (default: bundled plugin).",
+      "Copilot Security plugin directory or ZIP (default: bundled plugin).",
     );
     expect(help.text()).toContain(
       "Python interpreter (default: PYTHON or automatic discovery).",
     );
     expect(help.text()).toContain(
-      "codex-security bulk-scan repositories.csv " +
+      "copilot-security bulk-scan repositories.csv " +
         "--output-dir /path/outside/repositories/results " +
         "--workers 4 --max-attempts 3",
     );
@@ -1533,32 +1546,32 @@ describe("CLI", () => {
     for (const [options, expected] of [
       [["--model", "gpt-5.6-terra"], { model: "gpt-5.6-terra" }],
       [["--model=gpt-5.6-sol"], { model: "gpt-5.6-sol" }],
-      [["--effort", "minimal"], { model_reasoning_effort: "minimal" }],
+      [["--effort", "low"], { model_reasoning_effort: "low" }],
       [["--effort=xhigh"], { model_reasoning_effort: "xhigh" }],
       [
         ["--model", "gpt-5.6-terra", "--effort", "high"],
         { model: "gpt-5.6-terra", model_reasoning_effort: "high" },
       ],
-      [["--codex", 'model="gpt-5.6-terra"'], { model: "gpt-5.6-terra" }],
+      [["--copilot", 'model="gpt-5.6-terra"'], { model: "gpt-5.6-terra" }],
       [
-        ["--codex", 'model_reasoning_effort="high"'],
+        ["--copilot", 'model_reasoning_effort="high"'],
         { model_reasoning_effort: "high" },
       ],
       [
         [
           "--model",
           "gpt-5.6-terra",
-          "--codex",
+          "--copilot",
           'model_reasoning_effort="high"',
         ],
         { model: "gpt-5.6-terra", model_reasoning_effort: "high" },
       ],
       [
-        ["--model", "gpt-5.6-terra", "--codex", "features.goals=true"],
+        ["--model", "gpt-5.6-terra", "--copilot", "features.goals=true"],
         { model: "gpt-5.6-terra", features: { goals: true } },
       ],
     ] as const) {
-      let config: CodexSecurityConfig | undefined;
+      let config: CopilotSecurityConfig | undefined;
       expect(
         await main(
           ["scan", ".", ...options],
@@ -1567,14 +1580,14 @@ describe("CLI", () => {
           dependencies({ onConfig: (value) => (config = value) }),
         ),
       ).toBe(0);
-      expect(config?.codexOverrides).toEqual(expected);
+      expect(config?.copilotOverrides).toEqual(expected);
     }
   });
 
   test("parses repeatable options and every scan target through Incur", async () => {
     const pathOutput = capture();
     let pathOptions: unknown;
-    let pathConfig: CodexSecurityConfig | undefined;
+    let pathConfig: CopilotSecurityConfig | undefined;
     expect(
       await main(
         [
@@ -1591,7 +1604,7 @@ describe("CLI", () => {
           "--plugin-path",
           "plugin.zip",
           "--python=/managed/python",
-          "--codex",
+          "--copilot",
           "features.goals=true",
           "--output-dir",
           "/tmp/results",
@@ -1612,7 +1625,7 @@ describe("CLI", () => {
     expect(pathConfig).toMatchObject({
       pluginPath: "plugin.zip",
       pythonPath: "/managed/python",
-      codexOverrides: { features: { goals: true } },
+      copilotOverrides: { features: { goals: true } },
     });
 
     for (const [argv, expected] of [
@@ -1644,7 +1657,7 @@ describe("CLI", () => {
 
   test("parses TOML override literals and rejects conflicts", () => {
     expect(
-      parseCodexOverrides([
+      parseCopilotOverrides([
         "agents.max_threads=4",
         'model_reasoning_effort="high"',
         "features.goals=true",
@@ -1655,60 +1668,60 @@ describe("CLI", () => {
       features: { goals: true },
     });
     expect(() =>
-      parseCodexOverrides(["agents.max_threads=4", "agents.max_threads=8"]),
-    ).toThrow("Duplicate --codex key");
+      parseCopilotOverrides(["agents.max_threads=4", "agents.max_threads=8"]),
+    ).toThrow("Duplicate --copilot key");
     expect(() =>
-      parseCodexOverrides(["agents=4", "agents.max_threads=8"]),
-    ).toThrow("Conflicting --codex key");
+      parseCopilotOverrides(["agents=4", "agents.max_threads=8"]),
+    ).toThrow("Conflicting --copilot key");
     expect(() =>
-      parseCodexOverrides(['model="gpt-5.6-sol"'], "gpt-5.6-terra"),
-    ).toThrow("--model conflicts with --codex model");
-    expect(parseCodexOverrides([], "gpt-5.6-terra", "high")).toEqual({
+      parseCopilotOverrides(['model="gpt-5.6-sol"'], "gpt-5.6-terra"),
+    ).toThrow("--model conflicts with --copilot model");
+    expect(parseCopilotOverrides([], "gpt-5.6-terra", "high")).toEqual({
       model: "gpt-5.6-terra",
       model_reasoning_effort: "high",
     });
     expect(() =>
-      parseCodexOverrides(
+      parseCopilotOverrides(
         ['model_reasoning_effort="medium"'],
         undefined,
         "high",
       ),
-    ).toThrow("--effort conflicts with --codex model_reasoning_effort");
+    ).toThrow("--effort conflicts with --copilot model_reasoning_effort");
   });
 
-  test("redacts malformed and bounded --codex overrides", () => {
+  test("redacts malformed and bounded --copilot overrides", () => {
     const secret = "SYNTHETIC_TOML_SECRET_MUST_NOT_ECHO";
     let malformed: unknown;
     try {
-      parseCodexOverrides([`model=\"${secret}`]);
+      parseCopilotOverrides([`model=\"${secret}`]);
     } catch (error) {
       malformed = error;
     }
     expect(malformed).toBeInstanceOf(Error);
-    expect(String(malformed)).toContain("Invalid --codex TOML value");
+    expect(String(malformed)).toContain("Invalid --copilot TOML value");
     expect(String(malformed)).not.toContain(secret);
     expect((malformed as Error).cause).toBeUndefined();
 
     const deep = `${Array.from({ length: 3_072 }, () => "a").join(".")}=1`;
-    expect(() => parseCodexOverrides([deep])).toThrow("--codex key");
-    expect(() => parseCodexOverrides([`${"a".repeat(1_025)}=1`])).toThrow(
-      "--codex key",
+    expect(() => parseCopilotOverrides([deep])).toThrow("--copilot key");
+    expect(() => parseCopilotOverrides([`${"a".repeat(1_025)}=1`])).toThrow(
+      "--copilot key",
     );
     expect(() =>
-      parseCodexOverrides([`model=\"${"x".repeat(64 * 1_024)}\"`]),
-    ).toThrow("--codex key or value exceeds the limit");
-    expect(() => parseCodexOverrides([`${"ࠀ".repeat(342)}=1`])).toThrow(
-      "--codex key or value exceeds the limit",
+      parseCopilotOverrides([`model=\"${"x".repeat(64 * 1_024)}\"`]),
+    ).toThrow("--copilot key or value exceeds the limit");
+    expect(() => parseCopilotOverrides([`${"ࠀ".repeat(342)}=1`])).toThrow(
+      "--copilot key or value exceeds the limit",
     );
     expect(() =>
-      parseCodexOverrides([`model=\"${"ࠀ".repeat(65_534)}\"`]),
-    ).toThrow("--codex key or value exceeds the limit");
+      parseCopilotOverrides([`model=\"${"ࠀ".repeat(65_534)}\"`]),
+    ).toThrow("--copilot key or value exceeds the limit");
   });
 
   test("rejects prototype-bearing override paths", () => {
     for (const key of ["__proto__", "constructor", "prototype"]) {
-      expect(() => parseCodexOverrides([`${key}.polluted=true`])).toThrow(
-        "Invalid --codex key",
+      expect(() => parseCopilotOverrides([`${key}.polluted=true`])).toThrow(
+        "Invalid --copilot key",
       );
     }
     expect(({} as Record<string, unknown>)["polluted"]).toBeUndefined();
@@ -1771,8 +1784,8 @@ describe("CLI", () => {
         "--filter-output is not supported",
       ],
       [
-        ["scan", ".", "--codex", "not-an-override"],
-        "--codex expects KEY=VALUE",
+        ["scan", ".", "--copilot", "not-an-override"],
+        "--copilot expects KEY=VALUE",
       ],
       [
         [
@@ -1780,10 +1793,10 @@ describe("CLI", () => {
           ".",
           "--model",
           "gpt-5.6-terra",
-          "--codex",
+          "--copilot",
           'model="gpt-5.6-sol"',
         ],
-        "--model conflicts with --codex model",
+        "--model conflicts with --copilot model",
       ],
       [
         [
@@ -1791,10 +1804,10 @@ describe("CLI", () => {
           ".",
           "--effort",
           "high",
-          "--codex",
+          "--copilot",
           'model_reasoning_effort="medium"',
         ],
-        "--effort conflicts with --codex model_reasoning_effort",
+        "--effort conflicts with --copilot model_reasoning_effort",
       ],
       [["export"], "scanDir"],
       [["export", "scan", "--unknown"], "Unknown flag: --unknown"],
@@ -1859,14 +1872,16 @@ describe("CLI", () => {
         dependencies(),
       ),
     ).toBe(0);
-    expect(stdout.text()).toContain("Usage: codex-security scan [repository]");
+    expect(stdout.text()).toContain(
+      "Usage: copilot-security scan [repository]",
+    );
     expect(stderr.text()).toBe("");
   });
 
   test("maps configuration and emits JSON only on stdout", async () => {
     const stdout = capture();
     const stderr = capture();
-    const captured: { config?: CodexSecurityConfig } = {};
+    const captured: { config?: CopilotSecurityConfig } = {};
     let repository = "";
     const exit = await main(
       [
@@ -1876,7 +1891,7 @@ describe("CLI", () => {
         "plugin.zip",
         "--python",
         "/managed/python",
-        "--codex",
+        "--copilot",
         "features.goals=true",
         "--json",
       ],
@@ -1899,7 +1914,7 @@ describe("CLI", () => {
     expect(captured.config).toEqual({
       pluginPath: "plugin.zip",
       pythonPath: "/managed/python",
-      codexOverrides: { features: { goals: true } },
+      copilotOverrides: { features: { goals: true } },
     });
     expect(repository).toBe("repo");
   });
@@ -1927,7 +1942,7 @@ describe("CLI", () => {
     ).toBe(0);
     expect(JSON.parse(stdout.text())).toEqual(fakeResult().toJSON());
     expect(stderr.text()).toContain(
-      "Codex connection interrupted; retrying (2/5)",
+      "Copilot connection interrupted; retrying (2/5)",
     );
     expect(stderr.text()).toContain("Running scan");
   });
@@ -1986,7 +2001,7 @@ describe("CLI", () => {
 
   test("turns authentication and rate-limit failures into actionable safe messages", async () => {
     for (const [message, expected] of [
-      ["401 invalid API key for org-private", "provide a valid API key"],
+      ["401 invalid GitHub token for org-private", "valid GitHub token"],
       ["403 model access denied for org-private", "model access"],
       ["429 rate limit reached for org-private", "rate limit"],
     ] as const) {
@@ -1995,7 +2010,7 @@ describe("CLI", () => {
       const deps = dependencies();
       deps.createSecurity = () => ({
         run: async () => {
-          throw new CodexSecurityError(message);
+          throw new CopilotSecurityError(message);
         },
         preflight: async () => fakePreflight(),
         close: async () => {},
@@ -2009,7 +2024,7 @@ describe("CLI", () => {
 
   test("surfaces underlying scanner errors instead of inventing a model outage", async () => {
     for (const message of [
-      "Could not save the Codex Security scan: UNIQUE constraint failed: scans.scan_dir",
+      "Could not save the Copilot Security scan: UNIQUE constraint failed: scans.scan_dir",
       "sandbox-exec: sandbox_apply: Operation not permitted during network setup.",
       "network failure ECONNRESET while connecting to the model.",
       "request timed out while reading the scanner response.",
@@ -2019,7 +2034,7 @@ describe("CLI", () => {
       const deps = dependencies();
       deps.createSecurity = () => ({
         run: async () => {
-          throw new CodexSecurityError(message);
+          throw new CopilotSecurityError(message);
         },
         preflight: async () => fakePreflight(),
         close: async () => {},
@@ -2029,7 +2044,7 @@ describe("CLI", () => {
         await main(["scan", ".", "--json"], stdout.stream, stderr.stream, deps),
       ).toBe(2);
       expect(stdout.text()).toBe("");
-      expect(stderr.text()).toContain(`codex-security: ${message}\n`);
+      expect(stderr.text()).toContain(`copilot-security: ${message}\n`);
       expect(stderr.text()).not.toContain("model service could not be reached");
     }
   });
@@ -2040,7 +2055,7 @@ describe("CLI", () => {
     const deps = dependencies();
     deps.createSecurity = () => ({
       run: async () => {
-        throw new CodexSecurityError(
+        throw new CopilotSecurityError(
           `network failure ECONNRESET ${SYNTHETIC_CREDENTIALS}`,
         );
       },
@@ -2065,9 +2080,9 @@ describe("CLI", () => {
     const deps = dependencies();
     deps.createSecurity = () => ({
       run: async () => {
-        throw new CodexSecurityError(
+        throw new CopilotSecurityError(
           [
-            "Could not save the Codex Security scan: Traceback (most recent call last):",
+            "Could not save the Copilot Security scan: Traceback (most recent call last):",
             "    with closing(connect()) as connection:",
             "sqlite3.OperationalError: unable to open database file",
             "token=sk-proj-SYNTHETIC_DATABASE_SECRET_123",
@@ -2079,7 +2094,7 @@ describe("CLI", () => {
     });
 
     expect(await main(["scan"], stdout.stream, stderr.stream, deps)).toBe(2);
-    expect(stderr.text()).toContain("Could not save the Codex Security scan");
+    expect(stderr.text()).toContain("Could not save the Copilot Security scan");
     expect(stderr.text()).toContain("unable to open database file");
     expect(stderr.text()).not.toContain("model service could not be reached");
     expect(stderr.text()).not.toContain("Check your network connection");
@@ -2189,7 +2204,7 @@ describe("CLI", () => {
     ).toBe(0);
     expect(JSON.parse(stdout.text())).toEqual(fakeResult().toJSON());
     expect(stderr.text()).toContain(
-      "codex-security: warning: Repository HEAD changed while the scan was running; results were saved for the original revision.",
+      "copilot-security: warning: Repository HEAD changed while the scan was running; results were saved for the original revision.",
     );
   });
 
@@ -2214,9 +2229,9 @@ describe("CLI", () => {
     ).toBe(0);
     expect(JSON.parse(stdout.text())).toEqual(fakeResult().toJSON());
     expect(stderr.text()).toContain(
-      `codex-security: warning: onWorkerStatus observer failed: status observer failed ${REDACTED_CREDENTIALS}`,
+      `copilot-security: warning: onWorkerStatus observer failed: status observer failed ${REDACTED_CREDENTIALS}`,
     );
-    expect(stderr.text()).not.toContain("SYNTHETIC_OPENAI_VALUE_123");
+    expect(stderr.text()).not.toContain("SYNTHETIC_PROVIDER_VALUE_123");
   });
 
   test("maps failed scan stdout writes to the runtime-error exit code", async () => {
@@ -2723,7 +2738,7 @@ describe("CLI", () => {
     const failing = dependencies();
     failing.createSecurity = () => ({
       run: async () => {
-        throw new CodexSecurityError("invalid scan request");
+        throw new CopilotSecurityError("invalid scan request");
       },
       close: async () => {},
       preflight: async () => fakePreflight(),
@@ -2732,9 +2747,9 @@ describe("CLI", () => {
       await main(["scan", "."], stdout.stream, stderr.stream, failing),
     ).toBe(2);
     expect(stdout.text()).toBe("");
-    expect(stderr.text()).toContain("codex-security: invalid scan request\n");
+    expect(stderr.text()).toContain("copilot-security: invalid scan request\n");
     expect(stderr.text()).not.toContain("Running scan");
-    expect(stderr.text()).not.toContain("CodexSecurityError");
+    expect(stderr.text()).not.toContain("CopilotSecurityError");
   });
 
   test("does not emit a successful full-output envelope for a failed scan", async () => {
@@ -2743,7 +2758,7 @@ describe("CLI", () => {
     const failing = dependencies();
     failing.createSecurity = () => ({
       run: async () => {
-        throw new CodexSecurityError("invalid scan request");
+        throw new CopilotSecurityError("invalid scan request");
       },
       close: async () => {},
       preflight: async () => fakePreflight(),
@@ -2757,7 +2772,7 @@ describe("CLI", () => {
       ),
     ).toBe(2);
     expect(stdout.text()).toBe("");
-    expect(stderr.text()).toContain("codex-security: invalid scan request\n");
+    expect(stderr.text()).toContain("copilot-security: invalid scan request\n");
 
     const unavailableCwd = dependencies();
     unavailableCwd.currentDirectory = () => {
@@ -2778,11 +2793,11 @@ describe("CLI", () => {
   });
 
   test("explains protected-root output failures without contaminating JSON stdout", async () => {
-    const root = await mkdtemp(join(tmpdir(), "codex security's output & "));
+    const root = await mkdtemp(join(tmpdir(), "copilot security's output & "));
     const worktree = join(root, "worktree");
     const repository = join(worktree, "packages", "service");
     const output = join(worktree, "scan");
-    const suggestion = join(root, "worktree-codex-security-scan");
+    const suggestion = join(root, "worktree-copilot-security-scan");
     await mkdir(repository, { recursive: true });
     const stdout = capture();
     const stderr = capture();
@@ -2824,7 +2839,7 @@ describe("CLI", () => {
   });
 
   test("explains when the temporary root is inside the protected scan root", async () => {
-    const root = await mkdtemp(join(tmpdir(), "codex-security-cli-tmp-"));
+    const root = await mkdtemp(join(tmpdir(), "copilot-security-cli-tmp-"));
     const worktree = join(root, "worktree");
     const temporary = join(worktree, "tmp");
     await mkdir(temporary, { recursive: true });
@@ -2862,7 +2877,7 @@ describe("CLI", () => {
   test("preserves partial-output guidance for a late protected-root failure", async () => {
     const stdout = capture();
     const stderr = capture();
-    const partial = "/tmp/codex-security-partial";
+    const partial = "/tmp/copilot-security-partial";
     const failing = dependencies();
     failing.createSecurity = () => ({
       run: async (_repository, options) => {
@@ -2882,7 +2897,7 @@ describe("CLI", () => {
     ).toBe(2);
     expect(stdout.text()).toBe("");
     expect(stderr.text()).toContain(
-      "Isolated Codex runtime directory must be outside the scanned directory and any enclosing Git worktree.",
+      "Isolated Copilot runtime directory must be outside the scanned directory and any enclosing Git worktree.",
     );
     expect(stderr.text()).toContain(`Partial output was kept at ${partial}.`);
   });
@@ -2923,7 +2938,7 @@ describe("CLI", () => {
 
   test("redacts credentials from caught scan and interruption failures", async () => {
     for (const failure of [
-      new CodexSecurityError(`scan failed ${SYNTHETIC_CREDENTIALS}`),
+      new CopilotSecurityError(`scan failed ${SYNTHETIC_CREDENTIALS}`),
       new ScanInterruptedError(
         `scan failed ${SYNTHETIC_CREDENTIALS}`,
         "/tmp/scan",
@@ -2946,7 +2961,7 @@ describe("CLI", () => {
       expect(stdout.text()).toBe("");
       expect(stderr.text()).toBe(
         "[00:00] Preparing scan\n" +
-          `codex-security: scan failed ${REDACTED_CREDENTIALS}\n`,
+          `copilot-security: scan failed ${REDACTED_CREDENTIALS}\n`,
       );
     }
   });

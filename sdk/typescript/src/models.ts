@@ -1,7 +1,7 @@
 /* Generated from the plugin JSON Schemas. Run `pnpm generate:models`. */
 
 export interface ScanManifest {
-  documentType: "codex-security.scan-manifest";
+  documentType: "copilot-security.scan-manifest";
   schemaVersion: "1.0";
   scan: {
     id: string;
@@ -66,7 +66,7 @@ export interface ScanManifest {
 }
 
 export interface FindingsDocument {
-  documentType: "codex-security.findings";
+  documentType: "copilot-security.findings";
   schemaVersion: "1.0";
   scanId: string;
   findings: {
@@ -79,7 +79,7 @@ export interface FindingsDocument {
       [k: string]: unknown;
     };
     fingerprints: {
-      algorithm: "codex-security/v1";
+      algorithm: "copilot-security/v1";
       primary: string;
       [k: string]: unknown;
     };
@@ -164,7 +164,7 @@ export interface FindingsDocument {
 }
 
 export interface CoverageDocument {
-  documentType: "codex-security.coverage";
+  documentType: "copilot-security.coverage";
   schemaVersion: "1.0";
   scanId: string;
   mode:

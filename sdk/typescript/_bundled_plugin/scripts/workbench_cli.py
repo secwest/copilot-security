@@ -1,4 +1,4 @@
-"""Command-line argument parsing for the Codex Security workbench."""
+"""Command-line argument parsing for the Copilot Security workbench."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 # GitHub REST Intake
 
-Use this reference when `$triage-finding` is invoked with a GitHub repository instead of pasted finding data.
+Use this reference when `/triage-finding` is invoked with a GitHub repository instead of pasted finding data.
 
 GitHub repository intake is a data import step. It discovers existing GitHub security findings, normalizes them into the existing triage input types, and then hands those normalized findings to the normal static triage workflow.
 
@@ -19,16 +19,16 @@ Treat the input as a GitHub repository when the user supplies:
 - `owner/repo`
 - `https://github.com/owner/repo`
 - `git@github.com:owner/repo.git`
-- the current Codex project's attached GitHub repository
+- the current Copilot project's attached GitHub repository
 - a local repository whose `origin` or selected remote points at GitHub
 
 When the user asks to pull findings `from GitHub` but does not type a repository URL or `owner/repo`, infer the repository in this order:
 
-1. Current Codex project attached GitHub repository, when visible in the project context.
+1. Current Copilot project attached GitHub repository, when visible in the project context.
 2. Current local repository's GitHub remote.
 3. Explicit follow-up asking for `owner/repo` or a GitHub repository URL.
 
-Prefer the Codex project attachment over a local path or local git remote. In the source-selection prompt, name the inferred `owner/repo` so the user can see which repository will be queried.
+Prefer the Copilot project attachment over a local path or local git remote. In the source-selection prompt, name the inferred `owner/repo` so the user can see which repository will be queried.
 
 If the repository cannot be resolved to `owner` and `repo`, ask for the GitHub repository URL or `owner/repo`.
 

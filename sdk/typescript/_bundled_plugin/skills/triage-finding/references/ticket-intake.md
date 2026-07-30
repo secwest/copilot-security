@@ -1,6 +1,6 @@
 # Jira and Linear Ticket Intake
 
-Use this reference whenever `$triage-finding` imports Jira or Linear issues. Retrieve the requested ticket content before normalization. Never infer inaccessible ticket content from an identifier, title fragment, or repository code.
+Use this reference whenever `/triage-finding` imports Jira or Linear issues. Retrieve the requested ticket content before normalization. Never infer inaccessible ticket content from an identifier, title fragment, or repository code.
 
 ## Source Retrieval
 
@@ -49,7 +49,7 @@ After any unresolved retrieval failure, stop the intake workflow. Do not inspect
 
 ## Normalization and Provenance
 
-Normalize Jira and Linear vulnerability tickets as `source_type: "scanner_ticket"` unless the ticket body clearly represents `bug_bounty`, `advisory`, `cve`, or `codex_security_finding` input.
+Normalize Jira and Linear vulnerability tickets as `source_type: "scanner_ticket"` unless the ticket body clearly represents `bug_bounty`, `advisory`, `cve`, or `copilot_security_finding` input.
 
 Preserve the issue key or identifier, URL, project, status, labels, components, priority, assignee, reporter, timestamps, issue type, and import query in `input_id`, `normalized_input.references`, and evidence or proof-gap text.
 

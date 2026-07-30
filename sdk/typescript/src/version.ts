@@ -7,8 +7,8 @@ const PACKAGE_VERSIONS = packageVersions(
 
 /** npm-compatible successor to the Python package version 0.1.0b3. */
 export const VERSION = PACKAGE_VERSIONS.package;
-export const CODEX_SDK_VERSION = PACKAGE_VERSIONS.sdk;
-export const CODEX_EXECUTABLE_VERSION = "system";
+export const COPILOT_SDK_VERSION = PACKAGE_VERSIONS.sdk;
+export const COPILOT_EXECUTABLE_VERSION = "system";
 export const BUNDLED_PLUGIN_VERSION = "0.1.14" as const;
 
 const PACKAGE_NAME = "@secwest/copilot-security";
@@ -23,7 +23,7 @@ export interface UpdateNotice {
 
 export function updateNoticeEnabled(environment: NodeJS.ProcessEnv): boolean {
   return (
-    environment["CODEX_SECURITY_NO_UPDATE_NOTICE"] === undefined &&
+    environment["COPILOT_SECURITY_NO_UPDATE_NOTICE"] === undefined &&
     environment["NO_UPDATE_NOTIFIER"] === undefined &&
     environment["CI"] === undefined
   );
@@ -92,7 +92,7 @@ export async function checkForUpdate({
 
   try {
     const registry =
-      environment["CODEX_SECURITY_NPM_REGISTRY"] ??
+      environment["COPILOT_SECURITY_NPM_REGISTRY"] ??
       environment["npm_config_registry"] ??
       environment["NPM_CONFIG_REGISTRY"] ??
       "https://registry.npmjs.org/";

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate Codex Security capability profiles against the current Codex setup."""
+"""Evaluate Copilot Security capability profiles against the current Copilot setup."""
 
 from __future__ import annotations
 
@@ -19,11 +19,11 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 only
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REGISTRY = PLUGIN_ROOT / "preflight" / "capability-profiles.toml"
-DEFAULT_CODEX_HOME = Path(os.environ.get("CODEX_HOME", "~/.codex")).expanduser()
-SYSTEM_CONFIG = Path("/etc/codex/config.toml")
-DEFAULT_CONFIG = DEFAULT_CODEX_HOME / "config.toml"
+DEFAULT_COPILOT_HOME = Path(os.environ.get("COPILOT_HOME", "~/.copilot")).expanduser()
+SYSTEM_CONFIG = Path("/etc/copilot/config.toml")
+DEFAULT_CONFIG = DEFAULT_COPILOT_HOME / "config.toml"
 VALID_SEVERITIES = {"block", "warn", "suggest"}
-VALID_MULTI_AGENT_OWNERS = {"native", "codex-bridge"}
+VALID_MULTI_AGENT_OWNERS = {"native", "copilot-bridge"}
 VALID_MULTI_AGENT_VERSIONS = {"v1", "v2"}
 VALID_MULTI_AGENT_PROVENANCE = {
     "app-server",
@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         action="append",
         help=(
-            "Codex config.toml layer, from lower to higher precedence. "
+            "Copilot config.toml layer, from lower to higher precedence. "
             "Repeat to override automatic cwd-based discovery."
         ),
     )
@@ -67,8 +67,8 @@ def parse_args() -> argparse.Namespace:
         help="Working directory used to discover trusted project config layers.",
     )
     parser.add_argument(
-        "--codex-config-profile",
-        help="Selected Codex config profile name, when the session uses one.",
+        "--copilot-config-profile",
+        help="Selected Copilot config profile name, when the session uses one.",
     )
     parser.add_argument(
         "--multi-agent-runtime-owner",
@@ -259,7 +259,7 @@ def project_config_paths(project_root: Path, cwd: Path) -> list[Path]:
     for part in relative.parts:
         current /= part
         directories.append(current)
-    return [directory / ".codex" / "config.toml" for directory in directories]
+    return [directory / ".copilot" / "config.toml" for directory in directories]
 
 
 def discover_config_paths(
@@ -354,7 +354,7 @@ def config_profile_layer_path(profile: str | None) -> Path | None:
         raise ValueError(
             f"invalid config profile name {profile!r}; pass a plain name such as 'work'"
         )
-    path = DEFAULT_CODEX_HOME / f"{profile}.config.toml"
+    path = DEFAULT_COPILOT_HOME / f"{profile}.config.toml"
     return path if path.is_file() else None
 
 
@@ -448,9 +448,9 @@ def resolve_multi_agent_context(
         raise ValueError(
             "--multi-agent-runtime-provenance requires an explicit runtime owner, version, or cap"
         )
-    if runtime_owner == "codex-bridge" and runtime_provenance != "verified-bridge":
+    if runtime_owner == "copilot-bridge" and runtime_provenance != "verified-bridge":
         raise ValueError(
-            "codex-bridge ownership requires --multi-agent-runtime-provenance verified-bridge"
+            "copilot-bridge ownership requires --multi-agent-runtime-provenance verified-bridge"
         )
     if runtime_owner == "native" and runtime_provenance == "verified-bridge":
         raise ValueError("native ownership cannot use verified-bridge provenance")
@@ -467,7 +467,7 @@ def resolve_multi_agent_context(
     elif feature_found:
         version = "v2" if enabled else "v1"
         version_source = feature_source
-    elif runtime_owner == "codex-bridge":
+    elif runtime_owner == "copilot-bridge":
         version = "v2"
         version_source = "runtime-owner"
     else:
@@ -484,8 +484,8 @@ def resolve_multi_agent_context(
         owner = "unknown"
         owner_source = None
 
-    if owner == "codex-bridge" and version != "v2":
-        raise ValueError("codex-bridge ownership requires multi-agent runtime version v2")
+    if owner == "copilot-bridge" and version != "v2":
+        raise ValueError("copilot-bridge ownership requires multi-agent runtime version v2")
     if runtime_session_cap is not None and version != "v2":
         raise ValueError("--multi-agent-session-cap is valid only for a V2 runtime")
 
@@ -495,10 +495,10 @@ def resolve_multi_agent_context(
         effective_config=effective_config,
         config_profile=config_profile,
     )
-    if bridge_cap_found and owner != "codex-bridge":
+    if bridge_cap_found and owner != "copilot-bridge":
         raise ValueError(
             "multiagent_config.max_concurrency does not prove bridge ownership; "
-            "pass --multi-agent-runtime-owner codex-bridge only when the active runtime "
+            "pass --multi-agent-runtime-owner copilot-bridge only when the active runtime "
             "is verified as bridge-managed"
         )
     if bridge_cap_found and runtime_session_cap is not None and bridge_cap != runtime_session_cap:
@@ -514,12 +514,12 @@ def resolve_multi_agent_context(
         effective_config=effective_config,
         config_profile=config_profile,
     )
-    if owner != "codex-bridge" and feature_found and enabled and agent_threads_found:
+    if owner != "copilot-bridge" and feature_found and enabled and agent_threads_found:
         raise ValueError("agents.max_threads cannot be set when multi_agent_v2 is enabled")
 
     if version == "v1":
         mode = "v1"
-    elif version == "v2" and owner == "codex-bridge":
+    elif version == "v2" and owner == "copilot-bridge":
         mode = "bridge-v2"
     elif version == "v2" and owner == "native":
         mode = "v2"
@@ -568,7 +568,7 @@ def evaluate_multi_agent_capacity(
         if runtime_session_cap is not None:
             path = "runtime.multi_agent.session_cap"
             found, actual, source = True, runtime_session_cap, "runtime-fact"
-        elif multi_agent_context["owner"] == "codex-bridge":
+        elif multi_agent_context["owner"] == "copilot-bridge":
             path = "multiagent_config.max_concurrency"
             found, actual, source = lookup_config_value(
                 path,
@@ -797,7 +797,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     except KeyError as error:
         raise ValueError(f"unknown capability profile: {profile_id!r}") from error
 
-    cli_profile_selected = args.codex_config_profile is not None
+    cli_profile_selected = args.copilot_config_profile is not None
     if args.config:
         config_paths = args.config
         config_discovery = None
@@ -805,7 +805,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         project_config_paths_set: set[Path] = set()
         profile_layer_path = None
     else:
-        profile_layer_path = config_profile_layer_path(args.codex_config_profile)
+        profile_layer_path = config_profile_layer_path(args.copilot_config_profile)
         config_paths, config_discovery = discover_config_paths(
             cwd=args.cwd,
             profile_layer_path=profile_layer_path,
@@ -816,7 +816,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     for path in config_paths:
         config = read_toml(path, required=False)
         if path in project_config_paths_set:
-            # Codex strips project-local profile selection and definitions before
+            # Copilot strips project-local profile selection and definitions before
             # resolving the merged config. Mirror that denylist here.
             config = dict(config)
             config.pop("profile", None)
@@ -824,7 +824,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         config_layers.append((path, config))
     config_profile, embedded_config_profile = resolve_active_config_profile(
         config_layers=config_layers,
-        override=args.codex_config_profile,
+        override=args.copilot_config_profile,
         cli_profile_selected=cli_profile_selected,
     )
     runtime_checks = parse_runtime_checks(args.runtime_check)

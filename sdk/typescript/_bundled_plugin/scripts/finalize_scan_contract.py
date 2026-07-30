@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and seal additive Codex Security scan-contract artifacts."""
+"""Validate and seal additive Copilot Security scan-contract artifacts."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from urllib.parse import quote, urlsplit
 
 SCHEMA_VERSION = "1.0"
 PRODUCER_NAME = "copilot-security-plugin"
-FINGERPRINT_ALGORITHM = "codex-security/v1"
+FINGERPRINT_ALGORITHM = "copilot-security/v1"
 SARIF_SCHEMA = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json"
 SEVERITIES = {"critical", "high", "medium", "low", "informational"}
 CONFIDENCES = {"high", "medium", "low"}
@@ -75,14 +75,14 @@ MAX_SCHEMA_COLLECTION_ENTRIES = 4096
 MAX_SCHEMA_APPLICATOR_EDGES = 128
 SAFE_SCHEMA_PATTERNS = {
     r"^(?![^:/?#]+://[^/?#]*@)[^?#]+$",
-    r"^codex-security-snapshot/v1:sha256:[a-f0-9]{64}$",
+    r"^copilot-security-snapshot/v1:sha256:[a-f0-9]{64}$",
     r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))(?!.*\\).+$",
     r"^[a-f0-9]{64}$",
     r"^(?!.*(?:^|/)\.\.(?:/|$))(?!.*\\)artifacts/.+$",
     r"^csf_[a-f0-9]{24}$",
     r"^occ_[a-f0-9]{24}$",
     r"^[a-z0-9][a-z0-9._/-]*$",
-    r"^codex-security/v1:sha256:[a-f0-9]{64}$",
+    r"^copilot-security/v1:sha256:[a-f0-9]{64}$",
     r"^findings/([a-z0-9][a-z0-9._-]*)/\1\.md$",
 }
 EXPORT_PATHS = {
@@ -132,7 +132,7 @@ def _generate_report_projection(
     coverage: dict[str, Any],
 ) -> bytes:
     script = Path(__file__).resolve().parent / "report_projection.py"
-    spec = importlib.util.spec_from_file_location("codex_security_report_projection", script)
+    spec = importlib.util.spec_from_file_location("copilot_security_report_projection", script)
     if spec is None or spec.loader is None:
         raise ContractError(f"could not load report projection helper: {script}")
     module = importlib.util.module_from_spec(spec)
@@ -364,7 +364,7 @@ def _windows_scan_local_files() -> Any:
     global _WINDOWS_SCAN_LOCAL_FILES
     if _WINDOWS_SCAN_LOCAL_FILES is None:
         script = Path(__file__).resolve().with_name("windows_scan_local_files.py")
-        spec = importlib.util.spec_from_file_location("codex_security_windows_scan_files", script)
+        spec = importlib.util.spec_from_file_location("copilot_security_windows_scan_files", script)
         if spec is None or spec.loader is None:
             raise ContractError(f"could not load Windows scan-local file helper: {script}")
         module = importlib.util.module_from_spec(spec)
@@ -499,8 +499,12 @@ def _require_hardening_portfolio_file(scan_dir: Path, scan: dict[str, Any]) -> N
 
 
 def _read_scan_local_json_bytes(
-    scan_dir: Path, relative_path: str, context: str
-) -> tuple[dict[str, Any], bytes]:
+    scan_dir: Path,
+    relative_path: str,
+    context: str,
+    *,
+    require_object: bool = True,
+) -> tuple[Any, bytes]:
     descriptor = open_scan_local_file_descriptor(scan_dir, relative_path, context)
     try:
         with os.fdopen(descriptor, "rb") as handle:
@@ -515,7 +519,7 @@ def _read_scan_local_json_bytes(
             payload = _loads_json(raw.decode("utf-8"))
         except (UnicodeDecodeError, ValueError) as exc:
             raise ContractError(f"{context}: invalid JSON: {exc}") from exc
-        if not isinstance(payload, dict):
+        if require_object and not isinstance(payload, dict):
             raise ContractError(f"{context}: expected a JSON object")
         _require_safe_json_value(payload, context, validate_strings=False)
     finally:
@@ -1056,15 +1060,15 @@ def _populate_unsealed_manifest_envelope(
 ) -> None:
     """Populate non-semantic draft fields owned by finalization or the workbench."""
 
-    manifest["documentType"] = "codex-security.scan-manifest"
+    manifest["documentType"] = "copilot-security.scan-manifest"
     manifest["schemaVersion"] = SCHEMA_VERSION
     scan["status"] = "completed"
     scan["coverageRef"] = "coverage.json"
     scan["findingsRef"] = "findings.json"
     if completion_binding is None:
-        started_at = os.environ.get("CODEX_SECURITY_STARTED_AT")
+        started_at = os.environ.get("COPILOT_SECURITY_STARTED_AT")
         if started_at is not None:
-            _validate_date_time(started_at, "CODEX_SECURITY_STARTED_AT")
+            _validate_date_time(started_at, "COPILOT_SECURITY_STARTED_AT")
             scan["startedAt"] = started_at
             scan["completedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         return
@@ -1109,9 +1113,9 @@ def _populate_unsealed_artifact_envelope(
 ) -> None:
     """Populate deterministic top-level draft fields after refs have been resolved."""
 
-    findings["documentType"] = "codex-security.findings"
+    findings["documentType"] = "copilot-security.findings"
     findings["schemaVersion"] = SCHEMA_VERSION
-    coverage["documentType"] = "codex-security.coverage"
+    coverage["documentType"] = "copilot-security.coverage"
     coverage["schemaVersion"] = SCHEMA_VERSION
     if completion_binding is None:
         return
@@ -1343,8 +1347,8 @@ def _validate_coverage(manifest: dict[str, Any], coverage: dict[str, Any], scan_
 
 
 def _validate_manifest(manifest: dict[str, Any]) -> None:
-    if manifest.get("documentType") != "codex-security.scan-manifest":
-        raise ContractError("manifest.documentType: expected codex-security.scan-manifest")
+    if manifest.get("documentType") != "copilot-security.scan-manifest":
+        raise ContractError("manifest.documentType: expected copilot-security.scan-manifest")
     if manifest.get("schemaVersion") != SCHEMA_VERSION:
         raise ContractError(f"manifest.schemaVersion: expected {SCHEMA_VERSION}")
     scan = _require_dict(manifest, "scan", "manifest")
@@ -1391,8 +1395,8 @@ def _validate_manifest(manifest: dict[str, Any]) -> None:
 
 
 def _validate_findings(manifest: dict[str, Any], findings: dict[str, Any]) -> None:
-    if findings.get("documentType") != "codex-security.findings":
-        raise ContractError("findings.documentType: expected codex-security.findings")
+    if findings.get("documentType") != "copilot-security.findings":
+        raise ContractError("findings.documentType: expected copilot-security.findings")
     if findings.get("schemaVersion") != SCHEMA_VERSION:
         raise ContractError(f"findings.schemaVersion: expected {SCHEMA_VERSION}")
     scan_id = _require_str(_require_dict(manifest, "scan", "manifest"), "id", "manifest.scan")
@@ -1864,7 +1868,7 @@ def _sarif_result(
     if isinstance(candidate_id, str) and candidate_id:
         properties["candidateId"] = candidate_id
     partial_fingerprints = {
-        "codexSecurity/v1": finding["fingerprints"]["primary"],
+        "copilotSecurity/v1": finding["fingerprints"]["primary"],
     }
     line_hash = _github_primary_location_line_hash(finding, source_root, line_hash_cache)
     if line_hash is not None:
@@ -1896,7 +1900,7 @@ def build_sarif(
     run: dict[str, Any] = {
         "tool": {
             "driver": {
-                "name": "Codex Security",
+                "name": "Copilot Security",
                 "version": scan["producer"]["version"],
                 "rules": [_sarif_rule(rule_id) for rule_id in ordered_rule_ids],
             }
@@ -1907,8 +1911,8 @@ def build_sarif(
             for finding in ordered_findings
         ],
         "properties": {
-            "codexSecuritySchemaVersion": manifest["schemaVersion"],
-            "codexSecurityTargetKind": target["kind"],
+            "copilotSecuritySchemaVersion": manifest["schemaVersion"],
+            "copilotSecurityTargetKind": target["kind"],
         },
     }
     if target["kind"] == "git_revision" and target.get("remote") and target.get("revision"):
@@ -2060,7 +2064,7 @@ def build_sarif_projection(
     sarif = build_sarif(manifest, findings, source_root)
     if coverage["completeness"] != "complete":
         run = sarif["runs"][0]
-        run["properties"]["codexSecurityCoverageCompleteness"] = coverage["completeness"]
+        run["properties"]["copilotSecurityCoverageCompleteness"] = coverage["completeness"]
         if coverage["deferred"]:
             run["invocations"] = [
                 {
@@ -2263,8 +2267,8 @@ def _write_sarif_projection_if_possible(
         write_sarif_projection(scan_dir, source_root, schema_dir)
     except (ContractError, OSError) as error:
         print(
-            f"codex-security: warning: automatic SARIF export failed: {error}. "
-            "Run `codex-security export <scan-dir> --export-format sarif` to retry.",
+            f"copilot-security: warning: automatic SARIF export failed: {error}. "
+            "Run `copilot-security export <scan-dir> --export-format sarif` to retry.",
             file=sys.stderr,
         )
 
@@ -2280,6 +2284,703 @@ PreparedScanFinalization = tuple[
 ]
 
 
+def _standalone_slug(value: Any, fallback: str) -> str:
+    source = value if isinstance(value, str) else ""
+    normalized = re.sub(r"[^a-z0-9._/-]+", "-", source.lower()).strip("._/-")
+    normalized = normalized[:160].rstrip("._/-")
+    return normalized if SLUG_RE.fullmatch(normalized) else fallback
+
+
+def _normalize_standalone_manifest_draft(
+    manifest: Any,
+    completion_binding: dict[str, Any] | None,
+) -> tuple[dict[str, Any], bool]:
+    """Accept the compact draft a Copilot turn may emit and add the canonical envelope."""
+
+    if not isinstance(manifest, dict):
+        raise ContractError("scan-manifest.json: expected an object")
+    existing_scan = manifest.get("scan")
+    if isinstance(existing_scan, dict):
+        changed = False
+        if not isinstance(existing_scan.get("target"), dict):
+            top_level_target = manifest.get("target")
+            existing_scan["target"] = (
+                copy.deepcopy(top_level_target)
+                if isinstance(top_level_target, dict)
+                else {}
+            )
+            changed = True
+        if not isinstance(existing_scan.get("scope"), dict):
+            existing_scan["scope"] = {}
+            changed = True
+        if completion_binding is not None:
+            allowed_kinds = completion_binding.get("allowedTargetKinds")
+            allowed_kinds = allowed_kinds if isinstance(allowed_kinds, list) else []
+            target = existing_scan["target"]
+            if isinstance(target, dict) and target.get("kind") not in allowed_kinds:
+                target["kind"] = (
+                    allowed_kinds[0] if allowed_kinds else "directory_snapshot"
+                )
+                changed = True
+        return manifest, changed
+    if completion_binding is None:
+        return manifest, False
+
+    target = manifest.get("target")
+    target = copy.deepcopy(target) if isinstance(target, dict) else {}
+    allowed_kinds = completion_binding.get("allowedTargetKinds")
+    allowed_kinds = allowed_kinds if isinstance(allowed_kinds, list) else []
+    if target.get("kind") not in allowed_kinds:
+        target["kind"] = allowed_kinds[0] if allowed_kinds else "directory_snapshot"
+
+    scan: dict[str, Any] = {
+        "target": target,
+        "scope": {},
+    }
+    threat_model = manifest.get("threatModel")
+    if isinstance(threat_model, dict):
+        scan["threatModel"] = copy.deepcopy(threat_model)
+    return {"scan": scan}, True
+
+
+def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
+    taxonomy = finding.get("taxonomy")
+    if isinstance(taxonomy, dict):
+        category = taxonomy.get("category")
+        cwe = taxonomy.get("cwe")
+        if isinstance(category, str) and category.strip() and isinstance(cwe, list):
+            return category.strip(), [
+                item for item in cwe if isinstance(item, str) and item.strip()
+            ]
+
+    text = " ".join(
+        str(finding.get(field, ""))
+        for field in ("title", "description", "summary", "evidence")
+    ).lower()
+    if (
+        "command injection" in text
+        or re.search(r"\bchild_process\.exec(?!file)\b", text)
+        or "shell command" in text
+    ):
+        return "command-injection", ["CWE-78"]
+    if (
+        "ssrf" in text
+        or "server-side request forgery" in text
+        or "network probing" in text
+        or "internal host" in text
+    ):
+        return "server-side-request-forgery", ["CWE-918"]
+    if (
+        "path traversal" in text
+        or "archive" in text
+        and ("escape" in text or "containment" in text)
+    ):
+        return "path-traversal", ["CWE-22"]
+    if (
+        "idor" in text
+        or "object authorization" in text
+        or "ownership" in text
+        or "owner check" in text
+    ):
+        return "broken-object-authorization", ["CWE-639", "CWE-862"]
+    return "security-defect", []
+
+
+def _standalone_location_path(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    source = value.strip()
+    repository = os.environ.get("COPILOT_SECURITY_REPOSITORY")
+    if repository:
+        try:
+            relative = os.path.relpath(source, repository)
+            if (
+                relative != os.pardir
+                and not relative.startswith(os.pardir + os.sep)
+                and not os.path.isabs(relative)
+            ):
+                return PurePosixPath(Path(relative)).as_posix()
+        except (OSError, ValueError):
+            pass
+    normalized = source.replace("\\", "/")
+    marker = "/repository/"
+    if marker in normalized.lower():
+        position = normalized.lower().rfind(marker)
+        normalized = normalized[position + len(marker) :]
+    if re.match(r"^[A-Za-z]:/", normalized) or normalized.startswith("/"):
+        return None
+    normalized = PurePosixPath(normalized).as_posix()
+    if normalized in {"", "."} or normalized == ".." or normalized.startswith("../"):
+        return None
+    return normalized
+
+
+def _standalone_finding_is_non_vulnerability(finding: dict[str, Any]) -> bool:
+    """Recognize explicit Copilot conclusions that must not become findings."""
+
+    validation = finding.get("validation")
+    if isinstance(validation, dict):
+        if validation.get("exploitable") is False or validation.get("vulnerable") is False:
+            return True
+        negative_values = {
+            "accepted risk",
+            "defense in depth",
+            "defense-in-depth",
+            "false positive",
+            "false-positive",
+            "informational",
+            "mitigated",
+            "no issue",
+            "no issue found",
+            "no-issue",
+            "not exploitable",
+            "not vulnerable",
+            "not-exploitable",
+            "not-vulnerable",
+            "not applicable",
+            "rejected",
+            "safe",
+        }
+        for field in ("status", "verdict", "disposition", "result"):
+            value = validation.get(field)
+            if (
+                isinstance(value, str)
+                and value.strip().lower().replace("_", " ") in negative_values
+            ):
+                return True
+    return False
+
+
+def _standalone_location(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    path = _standalone_location_path(
+        raw.get(
+            "path",
+            raw.get("file", raw.get("filePath", raw.get("filename"))),
+        )
+    )
+    start = raw.get(
+        "startLine",
+        raw.get(
+            "start_line",
+            raw.get("line", raw.get("lineNumber", raw.get("line_number"))),
+        ),
+    )
+    end = raw.get(
+        "endLine",
+        raw.get("end_line", raw.get("endLineNumber", raw.get("end_line_number", start))),
+    )
+    if path is None:
+        return None
+    if not isinstance(start, int) or isinstance(start, bool) or start < 1:
+        return None
+    if not isinstance(end, int) or isinstance(end, bool) or end < start:
+        end = start
+    return {
+        "path": path,
+        "startLine": start,
+        "endLine": end,
+        "role": raw.get("role", "sink"),
+    }
+
+
+def _standalone_source_evidence(
+    location: dict[str, Any],
+    summary: str,
+) -> dict[str, Any] | None:
+    repository_value = os.environ.get("COPILOT_SECURITY_REPOSITORY")
+    if not repository_value:
+        return None
+    repository = Path(repository_value).resolve()
+    candidate = (repository / location["path"]).resolve()
+    try:
+        candidate.relative_to(repository)
+        metadata = candidate.lstat()
+    except (OSError, ValueError):
+        return None
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or candidate.is_symlink()
+        or metadata.st_size > 1024 * 1024
+    ):
+        return None
+    try:
+        lines = candidate.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    start = location["startLine"]
+    end = min(location["endLine"], start + 40)
+    if start > len(lines):
+        return None
+    code = "\n".join(lines[start - 1 : min(end, len(lines))]).strip()
+    if not code:
+        return None
+    return {
+        "id": "primary-code-evidence",
+        "label": "Primary security-relevant operation",
+        "path": location["path"],
+        "startLine": start,
+        "endLine": min(end, len(lines)),
+        "role": location.get("role", "sink"),
+        "code": code,
+        "explanation": summary,
+    }
+
+
+def _normalize_standalone_finding(
+    finding: Any,
+    index: int,
+) -> dict[str, Any] | None:
+    if not isinstance(finding, dict):
+        return finding
+    if _standalone_finding_is_non_vulnerability(finding):
+        return None
+    raw_locations = finding.get("locations")
+    locations_are_canonical = (
+        isinstance(raw_locations, list)
+        and bool(raw_locations)
+        and all(
+            isinstance(location, dict)
+            and isinstance(location.get("path"), str)
+            and _standalone_location_path(location.get("path")) == location.get("path")
+            and isinstance(location.get("startLine"), int)
+            and not isinstance(location.get("startLine"), bool)
+            and location.get("startLine") >= 1
+            for location in raw_locations
+        )
+    )
+    raw_code_evidence = finding.get("codeEvidence")
+    evidence_is_canonical = raw_code_evidence is None or (
+        isinstance(raw_code_evidence, list)
+        and all(
+            isinstance(evidence, dict)
+            and all(
+                isinstance(evidence.get(field), str) and bool(evidence.get(field).strip())
+                for field in ("id", "label", "path", "code", "explanation")
+            )
+            and isinstance(evidence.get("startLine"), int)
+            and not isinstance(evidence.get("startLine"), bool)
+            for evidence in raw_code_evidence
+        )
+    )
+    has_canonical_envelope = any(
+        field in finding for field in ("findingId", "occurrenceId", "fingerprints")
+    )
+    if (
+        has_canonical_envelope
+        and isinstance(raw_locations, list)
+        and any(
+            not isinstance(location, dict)
+            or _standalone_location_path(location.get("path")) is None
+            for location in raw_locations
+        )
+    ):
+        # Do not turn an unsafe or malformed canonical path into a compact
+        # recovery. The established validator will skip it with a precise
+        # warning. Absolute paths inside the authoritative repository remain
+        # recoverable because they normalize to a safe relative path.
+        return finding
+    if (
+        locations_are_canonical
+        and isinstance(finding.get("severity"), dict)
+        and isinstance(finding.get("confidence"), dict)
+        and isinstance(finding.get("taxonomy"), dict)
+        and isinstance(finding.get("provenance"), dict)
+        and evidence_is_canonical
+        and has_canonical_envelope
+    ):
+        return finding
+
+    title = finding.get("title")
+    title = title.strip() if isinstance(title, str) and title.strip() else f"Security finding {index + 1}"
+    summary = finding.get("summary", finding.get("description"))
+    summary = (
+        summary.strip()
+        if isinstance(summary, str) and summary.strip()
+        else "The scan identified a security-relevant data flow requiring remediation."
+    )
+    category, cwe = _standalone_taxonomy(finding)
+    candidate_id = finding.get("id")
+    anchor = _standalone_slug(candidate_id or title, f"finding-{index + 1}")
+    rule_id = _standalone_slug(finding.get("ruleId") or category, "security-defect")
+
+    raw_location = finding.get("location")
+    if isinstance(raw_locations, list) and raw_locations:
+        location_rows = raw_locations
+    elif isinstance(raw_locations, dict):
+        location_rows = [raw_locations]
+    else:
+        location_rows = [
+            raw_location,
+            finding,
+            *(finding.get("codeEvidence") if isinstance(finding.get("codeEvidence"), list) else []),
+        ]
+    locations: list[dict[str, Any]] = []
+    location_keys: set[tuple[str, int, int]] = set()
+    for raw in location_rows:
+        location = _standalone_location(raw)
+        if location is None:
+            continue
+        key = (
+            location["path"],
+            location["startLine"],
+            location["endLine"],
+        )
+        if key not in location_keys:
+            location_keys.add(key)
+            locations.append(location)
+
+    severity = finding.get("severity")
+    severity_value = severity.get("level") if isinstance(severity, dict) else severity
+    severity_level = (
+        severity_value.lower() if isinstance(severity_value, str) else "medium"
+    )
+    if severity_level not in SEVERITIES:
+        severity_level = "medium"
+    confidence = finding.get("confidence")
+    confidence_value = (
+        confidence.get("level") if isinstance(confidence, dict) else confidence
+    )
+    confidence_level = (
+        confidence_value.lower() if isinstance(confidence_value, str) else "medium"
+    )
+    if confidence_level not in CONFIDENCES:
+        confidence_level = "medium"
+
+    code_evidence = []
+    raw_code_evidence = finding.get("codeEvidence")
+    if isinstance(raw_code_evidence, list):
+        for evidence_index, raw in enumerate(raw_code_evidence):
+            if not isinstance(raw, dict):
+                continue
+            path = _standalone_location_path(
+                raw.get(
+                    "path",
+                    raw.get("file", raw.get("filePath", raw.get("filename"))),
+                )
+            )
+            start = raw.get("startLine", raw.get("start_line"))
+            end = raw.get("endLine", raw.get("end_line", start))
+            code = raw.get("code", raw.get("snippet"))
+            if (
+                path is None
+                or not isinstance(start, int)
+                or isinstance(start, bool)
+                or start < 1
+                or not isinstance(code, str)
+                or not code.strip()
+            ):
+                continue
+            if not isinstance(end, int) or isinstance(end, bool) or end < start:
+                end = start
+            code_evidence.append(
+                {
+                    "id": _standalone_slug(
+                        raw.get("id"), f"code-evidence-{evidence_index + 1}"
+                    ),
+                    "label": (
+                        raw["label"].strip()
+                        if isinstance(raw.get("label"), str)
+                        and raw["label"].strip()
+                        else "Security-relevant operation"
+                    ),
+                    "path": path,
+                    "startLine": start,
+                    "endLine": end,
+                    "role": raw.get("role", "sink"),
+                    "code": code.strip(),
+                    "explanation": (
+                        raw["explanation"].strip()
+                        if isinstance(raw.get("explanation"), str)
+                        and raw["explanation"].strip()
+                        else summary
+                    ),
+                }
+            )
+    evidence = finding.get("evidence")
+    if not code_evidence and isinstance(evidence, str) and evidence.strip() and locations:
+        code_evidence.append(
+            {
+                "id": "primary-code-evidence",
+                "label": "Primary vulnerable operation",
+                "path": locations[0]["path"],
+                "startLine": locations[0]["startLine"],
+                "endLine": locations[0]["endLine"],
+                "role": locations[0]["role"],
+                "code": evidence.strip(),
+                "explanation": summary,
+            }
+        )
+    if not code_evidence and locations:
+        recovered_evidence = _standalone_source_evidence(locations[0], summary)
+        if recovered_evidence is not None:
+            code_evidence.append(recovered_evidence)
+
+    remediation = finding.get("remediation")
+    remediation = (
+        remediation.strip()
+        if isinstance(remediation, str) and remediation.strip()
+        else "Remove the vulnerable data flow and add a regression test for the affected control."
+    )
+    normalized: dict[str, Any] = {
+        "findingId": "draft",
+        "occurrenceId": "draft",
+        "ruleId": rule_id,
+        "identity": {"anchor": anchor},
+        "fingerprints": {
+            "algorithm": FINGERPRINT_ALGORITHM,
+            "primary": f"{FINGERPRINT_ALGORITHM}:sha256:" + "0" * 64,
+        },
+        "title": title,
+        "summary": summary,
+        "severity": {
+            "level": severity_level,
+            "rationale": summary,
+        },
+        "confidence": {
+            "level": confidence_level,
+            "rationale": summary,
+        },
+        "taxonomy": {"category": category, "cwe": cwe},
+        "locations": locations,
+        "remediation": remediation,
+        "validation": (
+            copy.deepcopy(finding["validation"])
+            if isinstance(finding.get("validation"), dict)
+            else None
+        ),
+        "attackPath": (
+            copy.deepcopy(finding["attackPath"])
+            if isinstance(finding.get("attackPath"), dict)
+            else None
+        ),
+        "provenance": {"source": "local_plugin"},
+        "extensions": {},
+    }
+    if code_evidence:
+        normalized["codeEvidence"] = code_evidence
+    if isinstance(candidate_id, str) and candidate_id.strip():
+        normalized["extensions"]["candidateId"] = candidate_id.strip()
+    return normalized
+
+
+def _normalize_standalone_findings_draft(findings: Any) -> tuple[dict[str, Any], bool]:
+    if not isinstance(findings, dict):
+        raise ContractError("findings.json: expected an object")
+    rows = findings.get("findings")
+    if not isinstance(rows, list):
+        return findings, False
+    normalized = [
+        _normalize_standalone_finding(finding, index)
+        for index, finding in enumerate(rows)
+    ]
+    converted = [
+        after
+        for before, after in zip(rows, normalized)
+        if not (isinstance(before, dict) and after is None)
+    ]
+    changed = len(converted) != len(rows) or any(
+        before is not after
+        for before, after in zip(rows, normalized)
+        if after is not None
+    )
+    if not changed:
+        return findings, False
+    return {"findings": converted}, True
+
+
+def _normalize_standalone_coverage_draft(
+    coverage: Any,
+    completion_binding: dict[str, Any] | None,
+) -> tuple[dict[str, Any], bool]:
+    if isinstance(coverage, dict):
+        if coverage.get("documentType") == "copilot-security.coverage":
+            # A malformed canonical document belongs to the established
+            # recovery path below, which preserves its per-field warnings.
+            return coverage, False
+        existing_surfaces = coverage.get("surfaces")
+        if (
+            isinstance(existing_surfaces, list)
+            and all(
+                isinstance(surface, dict)
+                and isinstance(surface.get("id"), str)
+                and isinstance(surface.get("label"), str)
+                and isinstance(surface.get("disposition"), str)
+                and isinstance(surface.get("receiptRefs"), list)
+                for surface in existing_surfaces
+            )
+            and isinstance(coverage.get("completeness"), str)
+            and isinstance(coverage.get("inventoryStrategy"), str)
+        ):
+            return coverage, False
+        rows = existing_surfaces
+    else:
+        rows = coverage
+    if not isinstance(rows, list) or completion_binding is None:
+        raise ContractError("coverage.json: expected an object")
+
+    surfaces = []
+    deferred = []
+    used_ids: set[str] = set()
+    disposition_map = {
+        "candidate_found": "reported",
+        "candidate": "reported",
+        "confirmed": "reported",
+        "finding": "reported",
+        "reported": "reported",
+        "vulnerable": "reported",
+        "no_finding": "no_issue_found",
+        "no_findings": "no_issue_found",
+        "no_exploitable_finding": "no_issue_found",
+        "no_exploitable_findings": "no_issue_found",
+        "reviewed": "no_issue_found",
+        "reviewed_clean": "no_issue_found",
+        "reviewed_safe": "no_issue_found",
+        "reviewed_no_issue": "no_issue_found",
+        "reviewed_no_issues": "no_issue_found",
+        "reviewed_no_finding": "no_issue_found",
+        "reviewed_no_findings": "no_issue_found",
+        "reviewed_no_exploitable_finding": "no_issue_found",
+        "reviewed_no_exploitable_findings": "no_issue_found",
+        "safe": "no_issue_found",
+        "clean": "no_issue_found",
+        "no_issue_found": "no_issue_found",
+        "rejected": "rejected",
+        "not_applicable": "not_applicable",
+        "deferred": "needs_follow_up",
+        "needs_follow_up": "needs_follow_up",
+    }
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        raw_path = row.get("path")
+        path = _standalone_location_path(raw_path)
+        label = path if path is not None else f"Surface {index + 1}"
+        surface_id = _standalone_slug(label, f"surface-{index + 1}")
+        while surface_id in used_ids:
+            surface_id = f"{surface_id}-{index + 1}"
+        used_ids.add(surface_id)
+        disposition = "needs_follow_up"
+        for outcome in (
+            row.get("outcome"),
+            row.get("disposition"),
+            row.get("status"),
+        ):
+            token = (
+                re.sub(r"[\s-]+", "_", outcome.strip().lower())
+                if isinstance(outcome, str)
+                else None
+            )
+            if token in disposition_map:
+                disposition = disposition_map[token]
+                break
+        notes = row.get("notes", row.get("rationale", row.get("reason")))
+        if disposition == "needs_follow_up" and isinstance(notes, str):
+            notes_token = notes.strip().lower()
+            if any(
+                phrase in notes_token
+                for phrase in (
+                    "no direct findings",
+                    "no exploitable finding",
+                    "no exploitable issue",
+                    "no finding",
+                    "no issue found",
+                )
+            ):
+                disposition = "no_issue_found"
+        surface = {
+            "id": surface_id,
+            "label": label,
+            "disposition": disposition,
+            "receiptRefs": [],
+        }
+        if isinstance(notes, str) and notes.strip():
+            surface["notes"] = notes.strip()
+        surfaces.append(surface)
+        if disposition == "needs_follow_up":
+            deferred.append(
+                {
+                    "id": surface_id,
+                    "reason": (
+                        notes.strip()
+                        if isinstance(notes, str) and notes.strip()
+                        else "The scan did not close this review surface."
+                    ),
+                    **({"paths": [path]} if path is not None else {}),
+                    "surfaceIds": [surface_id],
+                }
+            )
+
+    mode = completion_binding.get("coverageMode")
+    inventory_strategy = (
+        "repository"
+        if mode in {"repository", "deep_repository"}
+        else "scoped_path"
+        if mode == "scoped_path"
+        else "diff"
+    )
+    return {
+        "completeness": "partial" if deferred else "complete",
+        "inventoryStrategy": inventory_strategy,
+        "surfaces": surfaces,
+        "explicitExclusions": [],
+        "deferred": deferred,
+    }, True
+
+
+def _reconcile_standalone_coverage_with_findings(
+    coverage: dict[str, Any],
+    findings: dict[str, Any],
+) -> None:
+    finding_paths = {
+        location.get("path")
+        for finding in findings.get("findings", [])
+        if isinstance(finding, dict)
+        for location in finding.get("locations", [])
+        if isinstance(location, dict) and isinstance(location.get("path"), str)
+    }
+    reported_surface_ids: set[str] = set()
+    for surface in coverage.get("surfaces", []):
+        if not isinstance(surface, dict):
+            continue
+        label = surface.get("label")
+        if label in finding_paths:
+            surface["disposition"] = "reported"
+            surface_id = surface.get("id")
+            if isinstance(surface_id, str):
+                reported_surface_ids.add(surface_id)
+        elif not finding_paths and surface.get("disposition") == "reported":
+            # Compact drafts sometimes promote rejected observations into
+            # findings and mirror them into coverage. Once filtered, those
+            # reviewed surfaces carry no reportable issue.
+            surface["disposition"] = "no_issue_found"
+    deferred = coverage.get("deferred")
+    if isinstance(deferred, list) and reported_surface_ids:
+        retained = []
+        for row in deferred:
+            if not isinstance(row, dict):
+                retained.append(row)
+                continue
+            surface_ids = row.get("surfaceIds")
+            surface_ids = surface_ids if isinstance(surface_ids, list) else []
+            if (
+                row.get("id") not in reported_surface_ids
+                and not reported_surface_ids.intersection(surface_ids)
+            ):
+                retained.append(row)
+        coverage["deferred"] = retained
+    if (
+        not coverage.get("deferred")
+        and all(
+            not isinstance(surface, dict)
+            or surface.get("disposition") != "needs_follow_up"
+            for surface in coverage.get("surfaces", [])
+        )
+    ):
+        coverage["completeness"] = "complete"
+
+
 def _prepare_scan_finalization(
     scan_dir: Path,
     schema_dir: Path | None = None,
@@ -2293,6 +2994,9 @@ def _prepare_scan_finalization(
     scan_dir = _require_scan_directory(scan_dir)
     schema_dir = schema_dir or Path(__file__).resolve().parent.parent / "schemas"
     manifest = _read_scan_local_json(scan_dir, "scan-manifest.json", "scan-manifest.json")
+    manifest, simplified_manifest = _normalize_standalone_manifest_draft(
+        manifest, completion_binding
+    )
     scan = _require_dict(manifest, "scan", "manifest")
     was_sealed = scan.get("sealedAt") is not None or scan.get("artifacts") is not None
     if not was_sealed:
@@ -2302,9 +3006,25 @@ def _prepare_scan_finalization(
         scan_dir, scan["findingsRef"], scan["findingsRef"]
     )
     coverage, coverage_input_bytes = _read_scan_local_json_bytes(
-        scan_dir, scan["coverageRef"], scan["coverageRef"]
+        scan_dir,
+        scan["coverageRef"],
+        scan["coverageRef"],
+        require_object=False,
     )
     if not was_sealed:
+        findings, simplified_findings = _normalize_standalone_findings_draft(findings)
+        coverage, simplified_coverage = _normalize_standalone_coverage_draft(
+            coverage, completion_binding
+        )
+        if simplified_findings or simplified_coverage:
+            _reconcile_standalone_coverage_with_findings(coverage, findings)
+        if (
+            completion_warnings is not None
+            and (simplified_manifest or simplified_findings or simplified_coverage)
+        ):
+            completion_warnings.append(
+                "Recovered compact Copilot draft artifacts into the canonical scan contract."
+            )
         _populate_unsealed_artifact_envelope(manifest, findings, coverage, completion_binding)
         _normalize_unsealed_deep_repository_inventory_strategy(
             coverage,
