@@ -62,6 +62,28 @@ The default is `gpt-5.6-sol` with `xhigh` effort.
 Use `--max-ai-credits N` to have Copilot enforce a native credit limit across
 the root session and its subagents.
 
+## Container
+
+The customer container includes both `copilot-security` and the official
+`@github/copilot` CLI. It keeps the inherited noninteractive CSV bulk-scan
+contract. The Compose service runs as an unprivileged user with dropped Linux
+capabilities, `no-new-privileges`, and the inherited seccomp profile.
+
+```bash
+docker build -t copilot-security:local .
+docker run --rm copilot-security:local --version
+
+mkdir -p results state
+printf 'id,repository,revision\n' > repositories.csv
+GH_TOKEN=... docker compose run --rm copilot-security
+```
+
+The Compose interface uses `COPILOT_SECURITY_IMAGE`,
+`COPILOT_SECURITY_USER`, `COPILOT_SECURITY_CSV`,
+`COPILOT_SECURITY_RESULTS`, `COPILOT_SECURITY_STATE`, and
+`COPILOT_SECURITY_GIT_HOST`. `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, and
+`GITHUB_TOKEN` are accepted for noninteractive Copilot and GitHub access.
+
 ## Authentication
 
 `--auth github` uses the login stored by the Copilot CLI and ignores ambient

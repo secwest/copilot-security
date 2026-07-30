@@ -96,11 +96,11 @@ jobs:
         run: |
           set -euo pipefail
           node --input-type=module --eval '
-            import { CodexSecurity } from "@openai/codex-security";
+            import { CopilotSecurity } from "@secwest/copilot-security";
 
-            if (typeof CodexSecurity !== "function") {
-              throw new Error("The SDK does not export CodexSecurity.");
+            if (typeof CopilotSecurity !== "function") {
+              throw new Error("The SDK does not export CopilotSecurity.");
             }
           '
-          node bin/codex-security.mjs --version
-          node bin/codex-security.mjs --help
+          node bin/copilot-security.mjs --version
+          node bin/copilot-security.mjs --help

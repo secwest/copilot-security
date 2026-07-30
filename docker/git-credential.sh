@@ -18,11 +18,11 @@ while IFS= read -r line; do
 done
 
 if [ "$protocol" != https ] \
-    || [ "$host" != "${CODEX_SECURITY_GIT_HOST:-github.com}" ]; then
+    || [ "$host" != "${COPILOT_SECURITY_GIT_HOST:-github.com}" ]; then
     exit 0
 fi
 
-token=${GH_TOKEN:-${GITHUB_TOKEN:-}}
+token=${COPILOT_GITHUB_TOKEN:-${GH_TOKEN:-${GITHUB_TOKEN:-}}}
 
 if [ -z "$token" ]; then
     exit 0
