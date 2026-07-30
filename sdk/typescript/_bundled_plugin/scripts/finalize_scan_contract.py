@@ -71,6 +71,7 @@ GITHUB_HASH_EOF = 65535
 GITHUB_HASH_MAX_LINES = 100_000
 SOURCE_READ_CHUNK_SIZE = 64 * 1024
 SOURCE_READ_MAX_BYTES = 10 * 1024 * 1024
+IN_SCOPE_INVENTORY_MAX_BYTES = 8 * 1024 * 1024
 CONTRACT_DOCUMENT_MAX_BYTES = {
     "scan-manifest.json": 16 * 1024 * 1024,
     "findings.json": 128 * 1024 * 1024,
@@ -3174,6 +3175,119 @@ def _reconcile_standalone_coverage_with_findings(
         coverage["completeness"] = "complete"
 
 
+def _read_in_scope_inventory(scan_dir: Path) -> list[str]:
+    relative_path = "artifacts/02_discovery/in_scope_files.txt"
+    inventory_path = scan_dir / PurePosixPath(relative_path)
+    if not inventory_path.exists() and not inventory_path.is_symlink():
+        return []
+    descriptor = open_scan_local_file_descriptor(
+        scan_dir, relative_path, "in-scope file inventory"
+    )
+    try:
+        metadata = os.fstat(descriptor)
+        if metadata.st_size > IN_SCOPE_INVENTORY_MAX_BYTES:
+            raise ContractError(
+                "in-scope file inventory: exceeds the deterministic size limit"
+            )
+        with os.fdopen(descriptor, "rb") as handle:
+            descriptor = -1
+            raw = handle.read(IN_SCOPE_INVENTORY_MAX_BYTES + 1)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if len(raw) > IN_SCOPE_INVENTORY_MAX_BYTES:
+        raise ContractError(
+            "in-scope file inventory: exceeds the deterministic size limit"
+        )
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ContractError("in-scope file inventory: expected UTF-8 paths") from exc
+    paths: list[str] = []
+    seen: set[str] = set()
+    for index, line in enumerate(text.splitlines()):
+        candidate = line.strip()
+        if not candidate:
+            continue
+        normalized = _require_safe_relative_path(
+            candidate, f"in-scope file inventory line {index + 1}"
+        )
+        if normalized not in seen:
+            paths.append(normalized)
+            seen.add(normalized)
+    return paths
+
+
+def _reconcile_coverage_with_inventory(
+    coverage: dict[str, Any],
+    scan_dir: Path,
+    completion_warnings: list[str] | None,
+) -> None:
+    inventory_paths = _read_in_scope_inventory(scan_dir)
+    if not inventory_paths:
+        return
+    surfaces = coverage.get("surfaces")
+    deferred = coverage.get("deferred")
+    if not isinstance(surfaces, list) or not isinstance(deferred, list):
+        return
+    covered_paths = {
+        surface.get("label")
+        for surface in surfaces
+        if isinstance(surface, dict)
+        and isinstance(surface.get("label"), str)
+    }
+    missing_paths = [path for path in inventory_paths if path not in covered_paths]
+    if not missing_paths:
+        return
+
+    used_ids = {
+        surface.get("id")
+        for surface in surfaces
+        if isinstance(surface, dict) and isinstance(surface.get("id"), str)
+    }
+    for index, path in enumerate(missing_paths, start=1):
+        base_id = _standalone_slug(path, f"coverage-gap-{index}")
+        surface_id = base_id
+        suffix = 2
+        while surface_id in used_ids:
+            surface_id = f"{base_id}-{suffix}"
+            suffix += 1
+        used_ids.add(surface_id)
+        surfaces.append(
+            {
+                "id": surface_id,
+                "label": path,
+                "disposition": "needs_follow_up",
+                "receiptRefs": [],
+                "notes": (
+                    "The immutable in-scope inventory contained this path, but "
+                    "the scan did not provide a file-review closure."
+                ),
+            }
+        )
+        deferred.append(
+            {
+                "id": f"inventory-gap-{surface_id}",
+                "reason": (
+                    "Missing file-review closure for a path in the immutable "
+                    "in-scope inventory."
+                ),
+                "paths": [path],
+                "surfaceIds": [surface_id],
+            }
+        )
+    coverage["completeness"] = "partial"
+    if completion_warnings is not None:
+        warning = (
+            "Downgraded coverage to partial because "
+            f"{len(missing_paths)} in-scope inventory "
+            f"{'path lacks' if len(missing_paths) == 1 else 'paths lack'} "
+            "a file-review closure."
+        )
+        if warning not in completion_warnings:
+            completion_warnings.append(warning)
+
+
 def _prepare_scan_finalization(
     scan_dir: Path,
     schema_dir: Path | None = None,
@@ -3218,6 +3332,9 @@ def _prepare_scan_finalization(
             coverage, completion_binding
         )
         _reconcile_standalone_coverage_with_findings(coverage, findings)
+        _reconcile_coverage_with_inventory(
+            coverage, scan_dir, completion_warnings
+        )
         if (
             completion_warnings is not None
             and (simplified_manifest or simplified_findings or simplified_coverage)

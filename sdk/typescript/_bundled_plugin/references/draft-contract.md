@@ -84,5 +84,10 @@ The top level must contain:
 Each reviewed file or security surface belongs in `surfaces` with a stable
 `id`, human-readable `label`, one of `reported`, `no_issue_found`, `rejected`,
 `not_applicable`, or `needs_follow_up`, and `receiptRefs` (which may be empty).
+For every path in `artifacts/02_discovery/in_scope_files.txt`, include a
+surface whose `label` is that exact repository-relative path. The host
+reconciles this immutable inventory before sealing: omitted paths become
+`needs_follow_up` with partial completeness rather than being silently treated
+as reviewed.
 Use `partial` completeness and a matching `deferred` record for any unclosed
 work. Never write coverage as a bare per-file array.

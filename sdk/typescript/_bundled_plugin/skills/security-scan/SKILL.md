@@ -53,8 +53,11 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    `../../references/draft-contract.md`, `../../references/final-report.md`,
    and the schemas under
    `COPILOT_SECURITY_PLUGIN_ROOT/schemas`. Use the exact host-supplied IDs and
-   `copilot-security-plugin` as producer name. Do not seal or finalize them;
-   the host validates, projects report/SARIF, and seals the artifacts.
+   `copilot-security-plugin` as producer name. Give every immutable inventory
+   path a coverage surface whose label is that exact repository-relative
+   path. Do not seal or finalize the drafts; the host reconciles inventory
+   closure, validates, projects report/SARIF, and seals the artifacts. An
+   omitted path becomes deferred work with partial coverage.
 
 The scan is not complete until the three draft JSON files exist and every
 inventory item and candidate has a coverage outcome. Before returning, reopen

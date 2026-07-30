@@ -589,6 +589,63 @@ describe("malformed scan artifact recovery", () => {
     ]);
   });
 
+  test("downgrades a complete claim when immutable inventory paths lack closure", async () => {
+    const fixture = await startDraftScan();
+    await writeFile(
+      join(fixture.repository, "src", "silent.py"),
+      "# no lexical risk signal\n",
+    );
+    const discoveryDirectory = join(
+      fixture.scanDir,
+      "artifacts",
+      "02_discovery",
+    );
+    await mkdir(discoveryDirectory, { recursive: true });
+    await writeFile(
+      join(discoveryDirectory, "in_scope_files.txt"),
+      "src/extract.py\nsrc/silent.py\n",
+    );
+    const coveragePath = join(fixture.scanDir, "coverage.json");
+    const coverage = await readJson<CoverageDocument>(coveragePath);
+    coverage.completeness = "complete";
+    coverage.surfaces = [
+      {
+        id: "src-extract",
+        label: "src/extract.py",
+        disposition: "reported",
+        receiptRefs: [],
+      },
+    ];
+    coverage.deferred = [];
+    await writeJson(coveragePath, coverage);
+
+    const scan = await completeScan(fixture);
+    const recovered = await readJson<{
+      completeness: string;
+      deferred: Array<{
+        paths: string[];
+        surfaceIds: string[];
+      }>;
+      surfaces: CoverageSurface[];
+    }>(coveragePath);
+
+    expect(scan.warnings).toContain(
+      "Downgraded coverage to partial because 1 in-scope inventory path lacks a file-review closure.",
+    );
+    expect(recovered.completeness).toBe("partial");
+    expect(recovered.surfaces).toContainEqual(
+      expect.objectContaining({
+        label: "src/silent.py",
+        disposition: "needs_follow_up",
+      }),
+    );
+    expect(recovered.deferred).toContainEqual(
+      expect.objectContaining({
+        paths: ["src/silent.py"],
+      }),
+    );
+  });
+
   test("returns the authoritative directory snapshot contract at registration", async () => {
     const fixture = await startDraftScan();
     const registration = fixture.registration;

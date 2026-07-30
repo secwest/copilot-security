@@ -27,6 +27,13 @@ control and nearby guards, add missed exploitable defects, and reject safe or
 mitigated flows. This supplements model-led discovery without treating lexical
 matches as findings.
 
+The correction turn also receives a deterministic reconciliation of
+`in_scope_files.txt` against the draft coverage document. This catches omitted
+files even when they contain no known lexical risk signal. The host repeats the
+same reconciliation while sealing: an unreviewed inventory path is added as
+explicit deferred work and coverage is downgraded to `partial`, so a
+model-written `complete` claim cannot conceal a coverage gap.
+
 ## Requirements
 
 - GitHub Copilot CLI, installed and signed in (`copilot login`)

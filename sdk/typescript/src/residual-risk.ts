@@ -7,10 +7,19 @@ const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_CANDIDATES = 4_096;
 const MAX_SIGNALS = 96;
 const MAX_SIGNALS_PER_FILE = MAX_SIGNALS;
+const MAX_COVERAGE_GAPS = 256;
+const MAX_INVENTORY_BYTES = 8 * 1024 * 1024;
+const MAX_COVERAGE_BYTES = 32 * 1024 * 1024;
 const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
 const MAX_EXCERPT_LINES = 16;
 const SOFT_SIGNALS_PER_FILE = 4;
+const CLOSED_COVERAGE_DISPOSITIONS = new Set([
+  "reported",
+  "no_issue_found",
+  "rejected",
+  "not_applicable",
+]);
 
 const SOURCE_EXTENSIONS = new Set([
   ".c",
@@ -174,6 +183,21 @@ interface ResidualRiskRecord {
   excerpt: string;
 }
 
+interface CoverageSurfaceDraft {
+  label?: unknown;
+  disposition?: unknown;
+}
+
+interface CoverageGapRecord {
+  path: string;
+  reason:
+    | "missing_coverage_surface"
+    | "needs_follow_up"
+    | "invalid_coverage_disposition"
+    | "conflicting_coverage_surfaces";
+  dispositions?: string[];
+}
+
 export async function buildResidualRiskInventory(
   repository: string,
   scanDirectory?: string,
@@ -245,6 +269,99 @@ export async function buildResidualRiskInventory(
       }) => JSON.stringify(record),
     )
     .join("\n");
+}
+
+export async function buildCoverageGapInventory(
+  scanDirectory: string | undefined,
+): Promise<string> {
+  if (scanDirectory === undefined) return "";
+  const canonicalScanDirectory = await realpath(scanDirectory).catch(
+    () => null,
+  );
+  if (canonicalScanDirectory === null) return "";
+  const inventory = await readBoundedScanFile(
+    canonicalScanDirectory,
+    join("artifacts", "02_discovery", "in_scope_files.txt"),
+    MAX_INVENTORY_BYTES,
+  );
+  if (inventory === null) return "";
+  const inventoryPaths = parseInventoryPaths(inventory.toString("utf8"));
+  if (inventoryPaths.length === 0) return "";
+
+  const coverageBytes = await readBoundedScanFile(
+    canonicalScanDirectory,
+    "coverage.json",
+    MAX_COVERAGE_BYTES,
+  );
+  const coverage = parseCoverageSurfaces(coverageBytes);
+  const surfacesByPath = new Map<string, CoverageSurfaceDraft[]>();
+  for (const surface of coverage.surfaces) {
+    if (
+      typeof surface.label !== "string" ||
+      !isSafeInventoryPath(surface.label)
+    ) {
+      continue;
+    }
+    const surfaces = surfacesByPath.get(surface.label) ?? [];
+    surfaces.push(surface);
+    surfacesByPath.set(surface.label, surfaces);
+  }
+
+  let coveredPathCount = 0;
+  const gaps: CoverageGapRecord[] = [];
+  for (const path of inventoryPaths) {
+    const surfaces = surfacesByPath.get(path) ?? [];
+    const dispositions = [
+      ...new Set(
+        surfaces
+          .map((surface) => surface.disposition)
+          .filter(
+            (disposition): disposition is string =>
+              typeof disposition === "string",
+          ),
+      ),
+    ].sort((left, right) => left.localeCompare(right));
+    const closed = surfaces.filter(
+      (surface) =>
+        typeof surface.disposition === "string" &&
+        CLOSED_COVERAGE_DISPOSITIONS.has(surface.disposition),
+    );
+    if (surfaces.length === 0) {
+      gaps.push({ path, reason: "missing_coverage_surface" });
+    } else if (closed.length === 0) {
+      gaps.push({
+        path,
+        reason:
+          dispositions.length > 0 &&
+          dispositions.every((disposition) => disposition === "needs_follow_up")
+            ? "needs_follow_up"
+            : "invalid_coverage_disposition",
+        dispositions,
+      });
+    } else if (surfaces.length > 1) {
+      gaps.push({
+        path,
+        reason: "conflicting_coverage_surfaces",
+        dispositions,
+      });
+    } else {
+      coveredPathCount += 1;
+    }
+  }
+
+  const selected = gaps.sort(compareCoverageGaps).slice(0, MAX_COVERAGE_GAPS);
+  return [
+    JSON.stringify({
+      type: "coverage-gap-summary",
+      inventoryPathCount: inventoryPaths.length,
+      coveredPathCount,
+      gapCount: gaps.length,
+      emittedGapCount: selected.length,
+      omittedGapCount: gaps.length - selected.length,
+      coverageReadable: coverage.readable,
+    }),
+    ...selected.map((gap) => JSON.stringify(gap)),
+  ].join("\n");
 }
 
 function mergeResidualRiskRecord(
@@ -369,14 +486,19 @@ async function readModelInventoryPaths(
   scanDirectory: string,
   repository: string,
 ): Promise<string[]> {
-  const inventory = await readFile(
-    join(scanDirectory, "artifacts", "02_discovery", "in_scope_files.txt"),
-    "utf8",
-  ).catch(() => "");
+  const canonicalScanDirectory = await realpath(scanDirectory).catch(
+    () => null,
+  );
+  if (canonicalScanDirectory === null) return [];
+  const inventoryBytes = await readBoundedScanFile(
+    canonicalScanDirectory,
+    join("artifacts", "02_discovery", "in_scope_files.txt"),
+    MAX_INVENTORY_BYTES,
+  );
+  const inventory = inventoryBytes?.toString("utf8") ?? "";
   const seen = new Set<string>();
-  for (const line of inventory.split(/\r?\n/u)) {
-    const candidate = line.trim();
-    if (candidate === "" || isAbsolute(candidate) || !isSourcePath(candidate)) {
+  for (const candidate of parseInventoryPaths(inventory)) {
+    if (!isSourcePath(candidate)) {
       continue;
     }
     const relativePath = relative(repository, resolve(repository, candidate));
@@ -384,6 +506,71 @@ async function readModelInventoryPaths(
     seen.add(relativePath);
   }
   return [...seen].sort((left, right) => left.localeCompare(right));
+}
+
+function parseInventoryPaths(inventory: string): string[] {
+  const seen = new Set<string>();
+  for (const line of inventory.split(/\r?\n/u)) {
+    const candidate = line.trim();
+    if (!isSafeInventoryPath(candidate)) continue;
+    seen.add(candidate);
+  }
+  return [...seen].sort((left, right) => left.localeCompare(right));
+}
+
+function isSafeInventoryPath(path: string): boolean {
+  if (
+    path === "" ||
+    path.includes("\\") ||
+    path.includes("\0") ||
+    isAbsolute(path)
+  ) {
+    return false;
+  }
+  const parts = path.split("/");
+  return parts.every((part) => part !== "" && part !== "." && part !== "..");
+}
+
+function parseCoverageSurfaces(coverageBytes: Buffer | null): {
+  readable: boolean;
+  surfaces: CoverageSurfaceDraft[];
+} {
+  if (coverageBytes === null) return { readable: false, surfaces: [] };
+  try {
+    const coverage = JSON.parse(coverageBytes.toString("utf8")) as unknown;
+    if (
+      typeof coverage !== "object" ||
+      coverage === null ||
+      !Array.isArray((coverage as { surfaces?: unknown }).surfaces)
+    ) {
+      return { readable: false, surfaces: [] };
+    }
+    return {
+      readable: true,
+      surfaces: (coverage as { surfaces: unknown[] }).surfaces.filter(
+        (surface): surface is CoverageSurfaceDraft =>
+          typeof surface === "object" && surface !== null,
+      ),
+    };
+  } catch {
+    return { readable: false, surfaces: [] };
+  }
+}
+
+function compareCoverageGaps(
+  left: CoverageGapRecord,
+  right: CoverageGapRecord,
+): number {
+  const priority = {
+    missing_coverage_surface: 0,
+    needs_follow_up: 1,
+    invalid_coverage_disposition: 2,
+    conflicting_coverage_surfaces: 3,
+  } as const;
+  return (
+    priority[left.reason] - priority[right.reason] ||
+    left.path.localeCompare(right.path)
+  );
 }
 
 async function discoverSourcePaths(repository: string): Promise<string[]> {
@@ -444,6 +631,32 @@ async function readBoundedRepositoryFile(
   if (
     canonicalCandidate === null ||
     !isContainedRelativePath(relative(repository, canonicalCandidate))
+  ) {
+    return null;
+  }
+  return await readFile(canonicalCandidate);
+}
+
+async function readBoundedScanFile(
+  scanDirectory: string,
+  relativePath: string,
+  maximumBytes: number,
+): Promise<Buffer | null> {
+  const candidate = resolve(scanDirectory, relativePath);
+  if (!isContainedRelativePath(relative(scanDirectory, candidate))) return null;
+  const metadata = await lstat(candidate).catch(() => null);
+  if (
+    metadata === null ||
+    !metadata.isFile() ||
+    metadata.isSymbolicLink() ||
+    metadata.size > maximumBytes
+  ) {
+    return null;
+  }
+  const canonicalCandidate = await realpath(candidate).catch(() => null);
+  if (
+    canonicalCandidate === null ||
+    !isContainedRelativePath(relative(scanDirectory, canonicalCandidate))
   ) {
     return null;
   }

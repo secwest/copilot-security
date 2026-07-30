@@ -120,8 +120,11 @@ command and outcome are recorded.
    dispositions, residual-sweep outcomes, negative controls, unrun checks, and
    material limitations.
 10. Do not seal or finalize the draft files. The host validates the contract,
-    derives stable identities, generates report and SARIF projections, and
-    seals the artifacts.
+    reconciles every immutable inventory path against exact-path coverage
+    surfaces, derives stable identities, generates report and SARIF
+    projections, and seals the artifacts. Any omitted inventory path is
+    preserved as deferred work with partial completeness; a draft
+    `completeness: "complete"` claim cannot override it.
 
 Before returning, reopen the three draft files and apply every check in
 `../../references/draft-contract.md`. Return only a terse completion summary

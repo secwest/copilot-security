@@ -12,6 +12,8 @@ The package is ESM-only and provides:
 - standard and deep multi-pass modes
 - deterministic scan artifacts, Markdown report, SARIF, exports, history,
   reruns, comparison, bulk scans, and finding feedback
+- host-reconciled per-file coverage that preserves omitted inventory paths as
+  deferred work instead of accepting a false complete claim
 - cancellation and streamed Copilot usage/subagent events
 
 ```ts
