@@ -53,8 +53,8 @@ publish findings, open issues, or contact third parties. Write only beneath
    callees, guards, sanitizers, selectors, interpreters, filesystem, network,
    database, template, parser, deserializer, bulk object binding and
    mass-assignment field controls, browser-ambient credential and CSRF
-   controls, cryptographic, state, concurrency, and resource-control
-   boundaries.
+   controls, native memory allocation/copy/index/lifetime boundaries,
+   cryptographic, state, concurrency, and resource-control boundaries.
 4. Compare the patch with the exact pre-change behavior. Look specifically for:
 
    - removed, reordered, weakened, or bypassable validation and authorization;
@@ -65,6 +65,9 @@ publish findings, open issues, or contact third parties. Write only beneath
      expose role, tenant, owner, identity, recovery, billing, or trust state;
    - weakened SameSite, Origin/Referer, Fetch Metadata, or anti-CSRF token
      controls on browser-credentialed state-changing routes;
+   - changed integer units, signedness, allocation arithmetic, object extents,
+     copy/read/write lengths, indexes, terminator space, ownership, or lifetime
+     around attacker-influenced native-memory operations;
    - unsafe default, configuration, dependency, build, plugin, or update changes;
    - race, replay, idempotency, lifecycle, error-handling, and rollback changes;
    - newly affected sibling instances behind a changed shared dependency.

@@ -35,7 +35,8 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    validation, authentication, browser-ambient credential CSRF, authorization,
    state changes, interpreters, filesystem, network, deserialization, templates,
    database queries, bulk object binding and mass assignment into persisted or
-   privileged fields, secrets, and resource consumption. Record candidates in
+   privileged fields, native memory allocation/copy/index/lifetime boundaries,
+   secrets, and resource consumption. Record candidates in
    `artifacts/02_discovery/candidate_ledger.jsonl`.
 4. Perform an independent residual sweep over high-risk files and source /
    control / sink families that produced no candidate. Record why each is safe

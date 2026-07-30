@@ -626,6 +626,37 @@ describe("residual risk inventory", () => {
     expect(inventory).not.toContain('"browser-ambient-credential-or-csrf"');
   });
 
+  test("pairs an attacker-length native overwrite with exact destination bounds", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "c-packet-length-overflow"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "c-bounded-packet-copy"),
+    );
+
+    expect(vulnerable).toContain('"unsafe-memory-operation"');
+    expect(vulnerable).toContain(
+      "memcpy(session->username, packet + 2, username_length)",
+    );
+    expect(vulnerable).toContain("username_length > packet_size - 2");
+    expect(vulnerable).toContain("session->username[username_length]");
+    expect(vulnerable).toContain("session.is_admin != 0");
+    expect(vulnerable).not.toContain(
+      "username_length >= sizeof(session->username)",
+    );
+    expect(safe).toContain('"unsafe-memory-operation"');
+    expect(safe).toContain("username_length > packet_size - 2");
+    expect(safe).toContain("username_length >= sizeof(session->username)");
+    expect(
+      safe.indexOf("username_length >= sizeof(session->username)"),
+    ).toBeLessThan(
+      safe.indexOf("memcpy(session->username, packet + 2, username_length)"),
+    );
+    expect(scanQualityGatePrompt("")).toContain(
+      "native memory allocation/copy/index/lifetime boundaries",
+    );
+  });
+
   test("reconciles exact immutable inventory paths against draft coverage", async () => {
     const scanDirectory = await mkdtemp(
       join(tmpdir(), "copilot-security-coverage-gap-"),

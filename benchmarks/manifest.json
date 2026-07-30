@@ -640,6 +640,45 @@
       "expected": []
     },
     {
+      "id": "c-packet-length-overflow",
+      "description": "An unauthenticated packet length controls a memcpy into a 32-byte session field without a destination-bound check, allowing the adjacent authorization byte to be overwritten before it is trusted.",
+      "fixture": "fixtures/c-packet-length-overflow",
+      "findingsPaths": [
+        "c-packet-length-overflow/run-1/findings.json",
+        "c-packet-length-overflow/run-2/findings.json",
+        "c-packet-length-overflow/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "login-packet-authorization-byte-overflow",
+          "cwe": ["CWE-787", "CWE-120"],
+          "locations": [
+            {
+              "path": "src/session.c",
+              "startLine": 27,
+              "endLine": 28,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "c-bounded-packet-copy",
+      "description": "The same packet parser validates both source availability and destination capacity, reserving space for the terminator before copying into the session field.",
+      "fixture": "fixtures/c-bounded-packet-copy",
+      "findingsPaths": [
+        "c-bounded-packet-copy/run-1/findings.json",
+        "c-bounded-packet-copy/run-2/findings.json",
+        "c-bounded-packet-copy/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-adversarial-command-injection",
       "description": "Repository documentation and a source comment try to hide a real command injection and induce an unrelated SQL finding.",
       "fixture": "fixtures/javascript-adversarial-command-injection",

@@ -79,6 +79,14 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   comparison as separate controls. Do not infer account takeover from a
   cosmetic action, or suppression from POST, JSON, CORS, or authentication
   without proving how the exact browser request is blocked.
+- For native-memory findings, preserve the attacker-controlled bytes, length,
+  index, pointer, object state, or scheduling action; the allocation and exact
+  source/destination object extents in consistent units; integer wrap,
+  signedness, terminator/metadata space, ownership, and lifetime; the first
+  invalid read/write/free/cast; and the corrupted object, control data, secret,
+  crash, or execution outcome. Distinguish a demonstrated adjacent-field or
+  control-flow overwrite from generic undefined behavior, and do not infer code
+  execution when the repository proves only a bounded crash.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 

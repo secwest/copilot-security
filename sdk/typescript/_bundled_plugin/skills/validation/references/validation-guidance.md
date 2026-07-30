@@ -73,6 +73,16 @@ Use class-specific proof tuples:
   rejected before the state change by an enforced origin/fetch-metadata
   predicate, or requires an unpredictable token bound to the victim session or
   request and compared correctly.
+- native memory corruption: attacker-controlled bytes, length, index, pointer,
+  object state, or scheduling action + exact allocation/object extent and
+  lifetime + integer types, units, wrap/signedness, terminator/metadata space,
+  and source availability + first out-of-bounds read/write, use-after-lifetime,
+  double free, invalid cast, or overlapping operation + corrupted/read object,
+  control data, secret, crash, or execution effect. Suppression requires
+  callsite-complete proof of checked arithmetic, correct source and destination
+  bounds in the same units, reserved metadata/terminator space, and valid
+  ownership/lifetime; a bounded-function name or compiler hardening flag alone
+  is not proof.
 - injection/path traversal/file upload/header/open redirect: attacker-controlled bytes + sanitizer/canonicalization/allowlist result + dangerous sink/context
 - XSS/template/SSTI: attacker-controlled value + escaping/template context + browser/server-side template execution sink
 - server-side template source: attacker-controlled request, stored, tenant, configuration, or error text + compilation or parsing as template/expression source + exact sandbox/global/object-capability/recursion controls + reachable read, expression, code-execution, or secret-exposure effect. A fixed template receiving untrusted variables is a negative control unless those variables are reparsed or evaluated as source; autoescaping controls output encoding, not server-side expression execution.

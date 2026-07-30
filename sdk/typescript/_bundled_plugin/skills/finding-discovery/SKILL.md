@@ -118,6 +118,23 @@ Use this checklist to keep discovery specific without turning it into validation
   route with an exact allowed-origin check or unpredictable session-bound token
   as a negative control, and do not report bearer-only APIs whose credentials
   an attacking site cannot cause the browser to attach.
+- For native memory safety, enumerate attacker-influenced allocation, copy,
+  move, receive, format, indexing, pointer-arithmetic, cast, ownership, and free
+  operations across every concrete caller. Preserve the input bytes and
+  length/index source, integer type and units, allocation expression, source
+  availability, destination object and capacity, terminator or metadata space,
+  overlap, signedness and wrap behavior, object lifetime, and the first
+  security-relevant read/write/free after corruption. `memcpy`, `memmove`,
+  `strncpy`, `snprintf`, or another nominally bounded API is neither vulnerable
+  nor safe by name: compare the supplied bound with the exact destination and
+  source extents, and retain nearby checked-arithmetic or capacity guards as
+  negative controls.
+- Split independently exploitable native-memory rows by root operation and
+  object lifetime. Do not merge a length-driven overwrite, out-of-bounds read,
+  integer-overflowed allocation, use-after-free, double free, or type confusion
+  merely because they share a parser or packet handler. Conversely, do not
+  report a theoretical undefined behavior without attacker reachability and a
+  concrete violated extent or lifetime invariant.
 - When a template or config pattern appears repeatedly, enumerate each affected file/line and note any nearby safe control that should not be reported.
 - For diff-scoped scans, include `relevant_lines` only when the bug overlaps the diff and those lines are genuinely relevant to the issue.
 - For recursive placeholder or template findings, include the helper/parser setup line that enables recursive expansion or expression evaluation along with the resolver/evaluation/render line.

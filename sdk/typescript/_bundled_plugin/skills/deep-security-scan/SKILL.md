@@ -65,7 +65,8 @@ inventory and closure requirements.
    - **source/control/sink**: authentication, browser-ambient credential CSRF,
      authorization, tenant selection, injection, traversal, SSRF, XSS, unsafe
      parsing or deserialization, filesystem, process, database, template, bulk
-     object binding and mass assignment, and network operations;
+     object binding and mass assignment, native memory allocation/copy/index/
+     lifetime boundaries, and network operations;
    - **systems**: concurrency, check/use races, distributed state, replay and
      idempotency, security-sensitive randomness and token entropy,
      cryptography, secret lifecycle, failure modes, denial of service, integer
@@ -142,6 +143,14 @@ inventory and closure requirements.
      framework middleware name is not proof of protection. Use a sibling route
      with an exact origin or session-bound unpredictable-token check as the
      negative control.
+   - native memory safety: every attacker-influenced allocation, copy, move,
+     receive, format, index, pointer offset, cast, and free; preserve source and
+     destination object extents, integer type and units, overflow/underflow
+     behavior, terminator or metadata space, overlap, ownership, lifetime,
+     compiler/runtime hardening, and the later security-sensitive object or
+     control flow. A bounded API name is not proof that its bound matches the
+     destination. Use a sibling path whose source availability, destination
+     capacity, arithmetic, and lifetime are all checked as the negative control.
 
    Return uncovered work to discovery. Record the sweep under
    `artifacts/02_discovery/residual_sweep.md`.
@@ -164,7 +173,14 @@ inventory and closure requirements.
    ambient credentials, that the server parser accepts it, and that no
    effective SameSite, Origin/Referer, Fetch Metadata, or session-bound token
    control blocks the protected action; reject low-impact or unrealistic
-   interactions at policy calibration rather than inventing account impact.
+   interactions at policy calibration rather than inventing account impact. For
+   native-memory candidates, prove attacker control over the exact bytes,
+   length, index, pointer, object state, or scheduling action; calculate the
+   allocation and accessed extent in consistent units; identify the first
+   out-of-bounds, use-after-lifetime, double-free, or type-confused operation;
+   and trace the corrupted/read object or control data to a realistic impact.
+   Reject dangerous-API-name-only claims when exact bounds, checked arithmetic,
+   object lifetime, and all relevant callsites prove the operation safe.
    Reject API-name-only, unreachable, already-contained, or equivalently safe
    behavior. Only reachable, exploitable defects with
    concrete adverse impact survive. Keep mitigated flows, rejected candidates,

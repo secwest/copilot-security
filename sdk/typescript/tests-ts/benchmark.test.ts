@@ -61,6 +61,7 @@ describe("effectiveness benchmark", () => {
       ["python-payout-toctou", "python-atomic-payout"],
       ["javascript-mass-assignment", "javascript-safe-account-update"],
       ["javascript-csrf-recovery-email", "javascript-safe-csrf-recovery-email"],
+      ["c-packet-length-overflow", "c-bounded-packet-copy"],
       [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
@@ -89,6 +90,11 @@ describe("effectiveness benchmark", () => {
         .get("javascript-csrf-recovery-email")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-352"]]);
+    expect(
+      cases
+        .get("c-packet-length-overflow")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-787", "CWE-120"]]);
     const adversarialVulnerable = join(
       benchmarkRoot,
       "fixtures",
@@ -118,6 +124,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "javascript-safe-csrf-recovery-email",
+    );
+    const packetLengthOverflow = join(
+      benchmarkRoot,
+      "fixtures",
+      "c-packet-length-overflow",
+    );
+    const boundedPacketCopy = join(
+      benchmarkRoot,
+      "fixtures",
+      "c-bounded-packet-copy",
     );
     expect(
       await readFile(join(adversarialVulnerable, "README.md"), "utf8"),
@@ -161,6 +177,21 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(safeCsrfRecoveryEmail, "src", "accounts.js"), "utf8"),
     ).toContain("timingSafeEqual");
+    expect(
+      await readFile(join(packetLengthOverflow, "src", "session.c"), "utf8"),
+    ).toContain("memcpy(session->username, packet + 2, username_length)");
+    expect(
+      await readFile(join(packetLengthOverflow, "src", "session.c"), "utf8"),
+    ).not.toContain("username_length >= sizeof(session->username)");
+    expect(
+      await readFile(join(packetLengthOverflow, "src", "session.c"), "utf8"),
+    ).toContain("if (session.is_admin != 0)");
+    expect(
+      await readFile(join(boundedPacketCopy, "src", "session.c"), "utf8"),
+    ).toContain("username_length >= sizeof(session->username)");
+    expect(
+      await readFile(join(boundedPacketCopy, "src", "session.c"), "utf8"),
+    ).toContain("username_length > packet_size - 2");
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -224,6 +255,15 @@ describe("effectiveness benchmark", () => {
       ),
       "utf8",
     );
+    const threatModelGuidance = await readFile(
+      join(
+        pluginRoot,
+        "threat-model",
+        "references",
+        "threat-model-guidance.md",
+      ),
+      "utf8",
+    );
 
     expect(deepScan).toContain("at least five independent discovery passes");
     expect(deepScan).toContain("compositional and temporal attack paths");
@@ -231,12 +271,18 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("check/use and state races");
     expect(deepScan).toContain("bulk object binding and mass assignment");
     expect(deepScan).toContain("browser-ambient credential CSRF");
+    expect(deepScan).toContain("native memory safety:");
+    expect(deepScan).toContain("destination object extents");
     expect(standardScan).toContain("bulk object binding");
     expect(standardScan).toContain("mass assignment");
     expect(standardScan).toContain("browser-ambient credential CSRF");
+    expect(standardScan).toContain(
+      "native memory allocation/copy/index/lifetime",
+    );
     expect(diffScan).toContain("mass-assignment field controls");
     expect(diffScan).toContain("writable-field sets");
     expect(diffScan).toContain("anti-CSRF token");
+    expect(diffScan).toContain("terminator space");
     expect(discovery).toContain(
       "distinguish attacker-controlled template source from attacker-controlled data",
     );
@@ -244,16 +290,26 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain("attacker-reachable mutation path");
     expect(discovery).toContain("route-level ownership check does not");
     expect(discovery).toContain("bearer-only APIs");
+    expect(discovery).toContain("For native memory safety");
+    expect(discovery).toContain("bounded API is neither vulnerable");
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
     expect(validation).toContain("browser CSRF:");
+    expect(validation).toContain("native memory corruption:");
     expect(attackPath).toContain("For mass-assignment findings");
     expect(attackPath).toContain("For CSRF findings");
+    expect(attackPath).toContain("For native-memory findings");
     expect(severityPolicy).toContain(
       "CSRF when it enables important state-changing actions",
     );
     expect(severityPolicy).toContain("CSRF on low-impact actions");
+    expect(severityPolicy).toContain(
+      "Memory corruption that is theoretical, non-triggerable",
+    );
+    expect(threatModelGuidance).toContain(
+      "allocation arithmetic, object bounds, ownership/lifetime",
+    );
     expect(attackPath).toContain(
       "Do not compress a multi-component chain into a generic source-to-sink claim",
     );

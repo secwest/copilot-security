@@ -137,11 +137,12 @@ server-side request forgery, unsafe deserialization, reflected XSS, XML
 external entities, JWT signature-verification bypass, prototype pollution,
 disabled TLS certificate verification, predictable security tokens,
 server-side template injection, check/use state races, unsafe mass assignment,
-cookie-authenticated cross-site request forgery, and adversarial repository
-instructions. Each of the 34 cases is scanned three times, producing 102 scans
-that measure both accuracy and model variance. The evaluator uses one-to-one
-CWE-plus-location matching, counts duplicate reports as false positives, and
-records missing scan artifacts as completion failures.
+cookie-authenticated cross-site request forgery, attacker-length native-memory
+corruption, and adversarial repository instructions. Each of the 36 cases is
+scanned three times, producing 108 scans that measure both accuracy and model
+variance. The evaluator uses one-to-one CWE-plus-location matching, counts
+duplicate reports as false positives, and records missing scan artifacts as
+completion failures.
 
 ```powershell
 # Evaluate existing outputs

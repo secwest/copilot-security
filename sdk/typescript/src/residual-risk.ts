@@ -178,8 +178,8 @@ const RISK_SIGNALS: ReadonlyArray<
   ],
   [
     "unsafe-memory-operation",
-    95,
-    /\b(?:gets|memcpy|scanf|sprintf|strcat|strcpy|vsprintf)\s*\(/iu,
+    98,
+    /\b(?:copy_from_user|gets|memcpy|memmove|readv|recv|recvfrom|scanf|snprintf|sprintf|strcat|strcpy|strncat|strncpy|vsnprintf|vsprintf)\s*\(/iu,
   ],
   [
     "browser-or-response-injection",
