@@ -35,6 +35,14 @@ findings.
 The scanner uses the installed CLI found on `PATH`. Set `COPILOT_CLI_PATH` or
 the SDK `copilotPath` option to select another executable.
 
+## Scan history
+
+`copilot-security scans compare BEFORE_SCAN_ID AFTER_SCAN_ID` automatically
+matches findings by root cause, reuses saved matches, and identifies new,
+persisting, reopened, resolved, or unknown findings. Missing findings remain
+unknown when the later scan is incomplete or their original location was not
+reviewed.
+
 ## Build and run
 
 ```powershell

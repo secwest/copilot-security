@@ -89,6 +89,14 @@ capacity. With 12 available processors its deterministic defaults are
 `max_discovery_runs = 60`. These are execution bounds, not substitutes for the
 per-file and per-candidate closure requirements.
 
+## Scan history and comparisons
+
+`copilot-security scans compare BEFORE_SCAN_ID AFTER_SCAN_ID` automatically
+matches findings by root cause, reuses saved matches, and reports findings as
+new, persisting, reopened, resolved, or unknown. Missing findings are not
+treated as resolved when the later scan is incomplete or does not cover their
+original scope.
+
 ## Benchmarking scanner effectiveness
 
 Use the read-only `benchmark` command to compare completed scan directories
