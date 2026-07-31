@@ -145,12 +145,25 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   Critical requires the exact expanded execution plan, actual resolver/service
   invocation count, bypassed effective budget, issued security capability or
   installed principal, and compromise-equivalent downstream action.
+- Forwarded client-identity spoofing that defeats enough authentication,
+  recovery, MFA, fraud, or abuse attempts to compromise an administrator,
+  control-plane, cloud, cross-tenant, or otherwise crown-jewel account. Critical
+  requires one fixed actual client, the deployed proxy append/overwrite chain,
+  attacker-controlled hop rotation, distinct effective security keys, the
+  bypassed budget, issued capability or installed principal, and
+  compromise-equivalent downstream action.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
 Non-exhaustive examples of vulnerabilities that often support `high` when evidenced in code and context:
 
 - Server Side Request Forgery where there is actual proof that (1) an attacker can control the URL or final connected address from in-scope attack-surface and (2) local/LAN/cloud services can be reached with meaningful impact. DNS rebinding supports `high` when a public validation answer and later private/link-local connection are proved and expose credentials, protected internal data, or a security-sensitive operation. Be careful with reporting webhooks unless there is clear proof that they are dangerous, but do not treat a product-intended webhook/download/callback feature, direct-private-address rejection, a public preflight lookup, or an optional operator allow/deny list as suppression evidence when attacker-controlled destinations can still reach internal, metadata, file-backed, redirect, or side-effecting targets.
+- Forwarded client-identity spoofing that lets one remote source evade a
+  meaningful recovery, login/MFA, fraud, abuse, or protected-operation budget
+  and obtain a session, reset capability, privileged action, or material
+  resource advantage. High requires the exact proxy topology, fixed real
+  client, rotated attacker-controlled hops, changed security keys, intended and
+  effective attempt counts, and resulting protected effect.
 - Exploitable memory corruption with clear, major impact or ease of exploitation
 - Arbitrary file read that exposes less-sensitive user data or source code (if you have actual proof it reveals env secrets, then it is critical)
 - Arbitrary file write in executable, startup, config, or firmware paths with a realistic path to persistence or code execution
@@ -368,6 +381,14 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   operations limited to one where appropriate, atomic account/principal/tenant
   quotas enforced at the resolver or service boundary, and benign public
   batching that cannot reach the claimed effect.
+- Forwarded-client or proxy-trust reports based only on `X-Forwarded-For`, a
+  first/last-hop expression, `trust proxy`, a reverse proxy, or spoofable logs
+  without proving the actual append/overwrite topology, attacker control of the
+  selected hop, a changed security key, and a concrete bypass effect. Suppress
+  when forwarding metadata is ignored from untrusted peers, exact trusted hops
+  are peeled from the right with canonical bounded parsing, spoof variants bind
+  to the same client, and account/principal controls independently stop the
+  claimed path while legitimate proxied clients still work.
 - Archive-link reports based only on symlink/hardlink support, a link target,
   lexical member-name checks, or a generic extraction API without proving an
   ordered or pre-existing-link pivot to the final opened object and a meaningful

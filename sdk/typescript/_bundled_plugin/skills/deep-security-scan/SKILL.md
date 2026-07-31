@@ -173,6 +173,18 @@ inventory and closure requirements.
      or protected service boundary as the negative control. Preserve benign
      public batching so disabling GraphQL features is not mistaken for the only
      fix.
+   - Forwarded client identity and proxy-chain trust: every direct transport
+     peer, `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, CDN/client-IP header,
+     framework trust-proxy setting, proxy allowlist/CIDR, hop parser, address
+     canonicalizer, and downstream client/account/principal rate-limit key.
+     Start at the socket peer and peel only exact verified proxy hops from the
+     right; the leftmost or first header value is attacker-controlled whenever
+     an ingress appends rather than overwrites the incoming chain. Prove bypass
+     with one actual client rotating prepended hops past a protected-operation
+     budget. Exact ingress trust, bounded canonical syntax, right-to-left
+     peeling, ignoring forwarded metadata from untrusted peers, and atomic
+     account/principal budgets are the negative control. Header presence or a
+     generic trust-proxy option alone is not a finding.
    - check/use and state races: the mutation path, checked snapshot or object,
      intervening yield/transaction/process boundary, consumed snapshot or
      object, lock/atomic predicate/version binding, and resulting security

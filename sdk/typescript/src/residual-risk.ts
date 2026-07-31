@@ -167,6 +167,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:GraphQL|gql|document\.selections|selectionSet|resolverCost|chargedCost|verifyRecoveryCode|recoveryOperations|failedAttempts|MAX_(?:FAILED_ATTEMPTS|SELECTIONS))\b/iu,
   ],
   [
+    "forwarded-client-identity-or-proxy-trust-budget",
+    106,
+    /\b(?:Forwarded|X-Forwarded-For|X-Real-IP|CF-Connecting-IP|True-Client-IP)\b|\b(?:clientAddress|clientIp|peerAddress|remoteAddress|trustedProx(?:y|ies)|trust proxy|forwardedHops|attemptsByClient|attemptsByAccount|maxAttemptsPerClient|maxAttemptsPerAccount)\b|\.split\s*\(\s*["'],["']\s*\)\s*\[\s*0\s*\]/iu,
+  ],
+  [
     "oauth-authorization-code-transaction-binding",
     100,
     /\b(?:authorizationUrl|authorizeUrl|codeChallenge|codeChallengeMethod|codeVerifier|exchangeCode|pkce|redirectUri|responseType)\b|\b(?:oauth|oidc)[\w./-]*(?:callback|link|redirect)\b/iu,

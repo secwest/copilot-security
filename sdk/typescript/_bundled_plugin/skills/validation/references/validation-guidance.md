@@ -207,6 +207,19 @@ Use class-specific proof tuples:
   public batch still works. Do not report aliases, batching, introspection, a
   complexity plugin name, or a request limiter without the request-to-resolver
   mismatch and concrete security effect.
+- forwarded client-identity/proxy-trust bypass: one fixed actual client and
+  transport peer + exact observed forwarding chain after each ingress append or
+  overwrite + trusted proxy set and hop order + canonical parser result + the
+  client/account/principal security key before and after each request + enough
+  rotated attacker-prepended hops to exceed the intended attempt budget and
+  reach a recovery, login/MFA, fraud, abuse, allowlist, or protected-operation
+  effect. The negative control must ignore forwarding metadata from untrusted
+  peers, reject malformed or ambiguous addresses, peel only exact trusted hops
+  from the right, bind all spoof variants from one actual client to one key, and
+  enforce an independent atomic account/principal budget where distribution
+  matters. Header presence, `trust proxy`, or an apparent first/last selection
+  alone is inconclusive without the deployed append/overwrite topology and
+  bypass witness.
 - regular-expression denial of service: attacker-controlled text or pattern +
   the exact regex, flags, engine, and evaluation API + an adversarial
   near-match that demonstrates superlinear or catastrophic work + the shared

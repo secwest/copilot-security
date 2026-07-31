@@ -2530,6 +2530,43 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         # proxy, or application shared caches use the broader CWE-524.
         return "web-cache-deception", ["CWE-524", "CWE-200"]
     if (
+        (
+            "x-forwarded-for" in text
+            or "forwarded client" in text
+            or "forwarded-client" in text
+            or "client ip spoof" in text
+            or "client address spoof" in text
+            or "proxy chain" in text
+        )
+        and (
+            "leftmost" in text
+            or "first hop" in text
+            or "first address" in text
+            or "attacker-controlled hop" in text
+            or "attacker prepended" in text
+            or "attacker-prepended" in text
+            or "untrusted forwarding" in text
+        )
+        and (
+            "rate limit" in text
+            or "attempt budget" in text
+            or "attempt limit" in text
+            or "throttl" in text
+            or "recovery code" in text
+            or "recovery-code" in text
+            or "brute force" in text
+            or "brute-force" in text
+        )
+        and (
+            "bypass" in text
+            or "rotate" in text
+            or "spoof" in text
+            or "evade" in text
+            or "exceed" in text
+        )
+    ):
+        return "proxy-client-identity-rate-limit-bypass", ["CWE-345", "CWE-307"]
+    if (
         "graphql" in text
         and (
             "operation amplification" in text

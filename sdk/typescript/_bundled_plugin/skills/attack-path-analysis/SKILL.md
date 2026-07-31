@@ -160,6 +160,17 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   high-risk mutation where appropriate, and atomic resolver/service-layer
   principal or account quotas are distinct counterevidence; demonstrate benign
   bounded batching through the same safe path.
+- For forwarded client-identity and proxy-trust findings, preserve the direct
+  socket peer, exact raw forwarding header, each proxy/CDN append or overwrite,
+  trusted-hop configuration, right-to-left or vulnerable first-hop selection,
+  canonicalized client address, and the rate-limit/lockout/fraud/allowlist key.
+  Hold the real client constant while rotating only attacker-prepended hops,
+  quantify intended versus effective attempts, and prove the extra attempt
+  yields a recovery capability, authenticated session, authorization bypass,
+  fraud/abuse action, or other protected effect. A spoofable log field or header
+  alone is not a security path. Record untrusted-peer header ignoring, exact
+  ingress trust, canonical bounded parsing, right-to-left peeling, and atomic
+  account/principal budgets as separate counterevidence.
 - For regular-expression denial-of-service findings, preserve the remote,
   protocol, document, stored, or tenant-controlled input; exact pattern and
   flags; engine and evaluation API; adversarial near-match and its length;

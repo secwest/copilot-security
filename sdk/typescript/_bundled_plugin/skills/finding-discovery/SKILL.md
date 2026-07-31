@@ -163,6 +163,19 @@ Use this checklist to keep discovery specific without turning it into validation
   bounded execution plans, one sensitive mutation per request where
   appropriate, cost-based charging, and resolver-scoped quotas are strong
   counterevidence; benign aliases or batching alone are not findings.
+- For proxy-derived client identity, inventory the direct socket peer, every
+  forwarding header, which component appends or overwrites it, the exact trusted
+  proxy set and hop order, canonical address parsing, and every downstream
+  throttle, lockout, abuse, fraud, allowlist, audit, or authorization decision.
+  Begin at the rightmost transport peer and peel only verified proxy hops from
+  the right. Treat a leftmost/first `X-Forwarded-For` value as attacker
+  controlled when a trusted ingress appends the real client to an incoming
+  chain. Promote only when rotating prepended hops changes a security key and
+  bypasses a concrete client/account/principal control; a forwarding header,
+  proxy deployment, or trust-proxy configuration alone is not proof. Exact
+  ingress trust, canonical bounded addresses, untrusted-peer header rejection,
+  right-to-left peeling, and atomic account/principal budgets are strong
+  counterevidence.
 - Do not collapse separate high-impact proof tuples into one candidate only because they share a route or helper. Split command execution, SSRF, path/file impact, XML/parser behavior, XSS/template execution, and authz/state-change impact when the sink, closest control, or impact differs.
 - For outbound request surfaces such as `downloadFrom`, URL importers, webhook/callback clients, preview/render fetchers, and redirect-following HTTP clients, enumerate each attacker-controlled destination source and its closest allow/deny/filter/redirect control. Do not suppress SSRF because the fetch/callback is an intended feature, because filters are optional or empty by default, or because a sibling route found a louder file/path issue; keep the network row when user input can select a destination and the hard boundary is incomplete, operator-configured, or only pre-request.
 - For hostname-based outbound requests, trace every A/AAAA lookup performed by

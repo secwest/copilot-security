@@ -680,6 +680,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes forwarded client-identity rate-limit bypass taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "Attacker-prepended X-Forwarded-For hop bypasses recovery rate limit";
+    finding.summary =
+      "The trusted ingress appends the real client address, but the application trusts the leftmost attacker-controlled hop. Rotating that spoofed first address evades the client attempt budget and permits recovery-code brute force.";
+    finding["taxonomy"] = {
+      category: "improper input validation",
+      cwe: ["CWE-20"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "proxy-client-identity-rate-limit-bypass",
+      cwe: ["CWE-345", "CWE-307"],
+    });
+  });
+
   test("normalizes catastrophic regex backtracking taxonomy", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

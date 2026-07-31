@@ -190,14 +190,16 @@ of cookie-authenticated bidirectional channels and edge/origin web-cache
 deception that exposes authenticated responses across requests. It additionally
 covers GraphQL alias/batch amplification of recovery-code verification across
 the HTTP-request, execution-plan, resolver, and account-state boundaries,
+trusted-proxy client-identity spoofing where attacker-prepended
+`X-Forwarded-For` hops bypass recovery-code attempt budgets,
 fail-open external authorization on policy exceptions and malformed decisions,
 DNS-rebinding SSRF across validation and connection-time resolution, plus
 catastrophic-backtracking regular-expression denial of service with a bounded
 linear validator as the control. It now includes AES-GCM key/nonce reuse that
 recovers victim plaintext from a chosen plaintext and two public ciphertexts,
 paired with fresh per-envelope HKDF data keys and profile-bound authenticated
-data even though the visible nonce repeats. Each of the 88 cases is scanned
-three times, producing 264 scans that measure both accuracy and model variance.
+data even though the visible nonce repeats. Each of the 90 cases is scanned
+three times, producing 270 scans that measure both accuracy and model variance.
 The evaluator uses one-to-one CWE-plus-location
 matching, counts duplicate reports as false positives, and records missing scan
 artifacts as completion failures.

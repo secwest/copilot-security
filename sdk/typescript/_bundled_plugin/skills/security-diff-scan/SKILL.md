@@ -135,6 +135,10 @@ publish findings, open issues, or contact third parties. Write only beneath
      execution-plan expansion; resolver/data-loader fan-out; or atomic
      account/principal/tenant limits around recovery, login/MFA, invitation,
      payment, export, messaging, and other security-sensitive operations;
+   - changed `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, CDN/client-IP, socket
+     peer, trust-proxy, proxy allowlist/CIDR, hop-order, address-canonicalization,
+     or client/account/principal rate-limit logic that could let one real client
+     rotate attacker-prepended hops past a protected-operation budget;
    - changed regex literals, dynamic pattern construction, quantifier or
      alternation structure, validation/search/replace/split callsites, input
      length bounds, runtime regex engines, timeouts, or worker isolation where

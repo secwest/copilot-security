@@ -84,6 +84,10 @@ describe("effectiveness benchmark", () => {
         "javascript-graphql-recovery-amplification",
         "javascript-safe-graphql-recovery-limits",
       ],
+      [
+        "javascript-forwarded-client-rate-limit-bypass",
+        "javascript-safe-forwarded-client-budget",
+      ],
       ["javascript-jwt-bypass", "javascript-safe-jwt"],
       [
         "javascript-jwt-algorithm-confusion",
@@ -384,6 +388,29 @@ describe("effectiveness benchmark", () => {
     ]);
     expect(
       cases
+        .get("javascript-forwarded-client-rate-limit-bypass")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-345", "CWE-307"]]);
+    expect(
+      cases
+        .get("javascript-forwarded-client-rate-limit-bypass")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/recovery.js",
+        startLine: 1,
+        endLine: 6,
+        lineTolerance: 3,
+      },
+      {
+        path: "src/recovery.js",
+        startLine: 18,
+        endLine: 30,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
         .get("javascript-jwt-algorithm-confusion")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-347", "CWE-287"]]);
@@ -599,6 +626,16 @@ describe("effectiveness benchmark", () => {
       "fixtures",
       "javascript-safe-ecdsa-event-idempotency",
     );
+    const forwardedClientBypass = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-forwarded-client-rate-limit-bypass",
+    );
+    const safeForwardedClientBudget = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-forwarded-client-budget",
+    );
     const samlSignatureWrapping = join(
       benchmarkRoot,
       "fixtures",
@@ -765,6 +802,26 @@ describe("effectiveness benchmark", () => {
         "utf8",
       ),
     ).toContain("ledger.applyEventOnce");
+    expect(
+      await readFile(join(forwardedClientBypass, "src", "recovery.js"), "utf8"),
+    ).toContain('forwarded.split(",")[0].trim()');
+    expect(
+      await readFile(join(forwardedClientBypass, "src", "recovery.js"), "utf8"),
+    ).not.toContain("trustedProxies.has(peerAddress)");
+    expect(
+      await readFile(
+        join(safeForwardedClientBudget, "src", "recovery.js"),
+        "utf8",
+      ),
+    ).toContain("while (index > 0 && trustedProxies.has(chain[index]))");
+    expect(
+      await readFile(
+        join(safeForwardedClientBudget, "src", "recovery.js"),
+        "utf8",
+      ),
+    ).toContain(
+      "this.#attemptsByAccount.set(request.accountId, accountAttempts)",
+    );
     expect(
       await readFile(join(samlSignatureWrapping, "src", "saml.js"), "utf8"),
     ).toContain("response.assertions[0].claims");
@@ -1085,6 +1142,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain(
       "GraphQL execution amplification and resolver-scoped enforcement:",
     );
+    expect(deepScan).toContain(
+      "Forwarded client identity and proxy-chain trust:",
+    );
     expect(deepScan).toContain("regular-expression complexity:");
     expect(deepScan).toContain(
       "external authentication and authorization decision failure:",
@@ -1144,6 +1204,9 @@ describe("effectiveness benchmark", () => {
       "GraphQL alias/batch/fragment amplification",
     );
     expect(standardScan).toContain(
+      "forwarded client identity from the direct peer",
+    );
+    expect(standardScan).toContain(
       "regular-expression catastrophic backtracking",
     );
     expect(standardScan).toContain(
@@ -1200,6 +1263,7 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain(
       "changed GraphQL alias, fragment, nesting, batch",
     );
+    expect(diffScan).toContain("changed `Forwarded`, `X-Forwarded-For`");
     expect(diffScan).toContain("changed regex literals");
     expect(diffScan).toContain(
       "changed external authorization or entitlement calls",
@@ -1326,6 +1390,10 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain(
       "Preserve the mapping from one transport envelope",
     );
+    expect(discovery).toContain("For proxy-derived client identity");
+    expect(discovery).toContain(
+      "Begin at the rightmost transport peer and peel only verified proxy hops",
+    );
     expect(discovery).toContain("For regular-expression denial of service");
     expect(discovery).toContain(
       "For external authentication and authorization policy decisions",
@@ -1340,6 +1408,9 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("web cache deception:");
     expect(validation).toContain("application authorization-cache isolation:");
     expect(validation).toContain("GraphQL operation amplification:");
+    expect(validation).toContain(
+      "forwarded client-identity/proxy-trust bypass:",
+    );
     expect(validation).toContain("regular-expression denial of service:");
     expect(validation).toContain("external authorization fail-open:");
     expect(validation).toContain("DNS-rebinding SSRF:");
@@ -1394,6 +1465,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(attackPath).toContain(
       "For GraphQL operation-amplification findings",
+    );
+    expect(attackPath).toContain(
+      "For forwarded client-identity and proxy-trust findings",
     );
     expect(attackPath).toContain(
       "For regular-expression denial-of-service findings",
@@ -1456,6 +1530,9 @@ describe("effectiveness benchmark", () => {
       "GraphQL operation amplification that converts",
     );
     expect(severityPolicy).toContain(
+      "Forwarded client-identity spoofing that defeats enough authentication",
+    );
+    expect(severityPolicy).toContain(
       "Regular-expression denial of service that lets",
     );
     expect(severityPolicy).toContain("Regular-expression reports based only");
@@ -1473,6 +1550,9 @@ describe("effectiveness benchmark", () => {
       "DNS-rebinding or SSRF reports based only",
     );
     expect(severityPolicy).toContain("GraphQL reports based only on aliases");
+    expect(severityPolicy).toContain(
+      "Forwarded-client or proxy-trust reports based only",
+    );
     expect(severityPolicy).toContain(
       "Memory corruption that is theoretical, non-triggerable",
     );
@@ -1614,6 +1694,9 @@ describe("effectiveness benchmark", () => {
       "GraphQL aliases/fragments/nesting/batches/persisted documents",
     );
     expect(threatModelGuidance).toContain(
+      "forwarded client identity across the direct peer",
+    );
+    expect(threatModelGuidance).toContain(
       "regular-expression catastrophic backtracking",
     );
     expect(threatModelGuidance).toContain(
@@ -1653,6 +1736,9 @@ describe("effectiveness benchmark", () => {
       "GraphQL aliases/fragments/nesting/batches/persisted documents",
     );
     expect(repositoryWideScan).toContain(
+      "For proxy-derived client identity, begin at the socket peer",
+    );
+    expect(repositoryWideScan).toContain(
       "regular-expression catastrophic backtracking",
     );
     expect(repositoryWideScan).toContain(
@@ -1681,6 +1767,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(finalReport).toContain(
       "For ECDSA/DSA signature-malleability replay findings",
+    );
+    expect(finalReport).toContain(
+      "For forwarded client-identity or proxy-trust findings",
     );
     expect(finalReport).toContain("For OIDC ID-token client-binding findings");
     expect(finalReport).toContain("For DNS-rebinding SSRF findings");

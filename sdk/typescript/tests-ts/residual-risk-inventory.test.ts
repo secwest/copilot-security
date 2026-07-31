@@ -1257,6 +1257,30 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs spoofable forwarded identity with verified proxy-chain and account budgets", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-forwarded-client-rate-limit-bypass"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-forwarded-client-budget"),
+    );
+
+    expect(vulnerable).toContain(
+      '"forwarded-client-identity-or-proxy-trust-budget"',
+    );
+    expect(vulnerable).toContain('forwarded.split(",")[0].trim()');
+    expect(vulnerable).toContain("this.#attemptsByClient.get(clientAddress)");
+    expect(safe).toContain('"forwarded-client-identity-or-proxy-trust-budget"');
+    expect(safe).toContain("trustedProxies.has(peerAddress)");
+    expect(safe).toContain(
+      "while (index > 0 && trustedProxies.has(chain[index]))",
+    );
+    expect(safe).toContain("this.#attemptsByAccount.get(request.accountId)");
+    expect(scanQualityGatePrompt("")).toContain(
+      "forwarded client identity across the direct peer, exact trusted-proxy set, right-to-left hop peeling, canonical address syntax, and client/account security budgets",
+    );
+  });
+
   test("keeps bearer-only state changes out of the specialized CSRF signal", async () => {
     const repository = await mkdtemp(
       join(tmpdir(), "copilot-security-bearer-api-"),

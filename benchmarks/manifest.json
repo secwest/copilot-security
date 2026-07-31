@@ -854,6 +854,51 @@
       "expected": []
     },
     {
+      "id": "javascript-forwarded-client-rate-limit-bypass",
+      "description": "A recovery endpoint behind a trusted ingress keys its attempt budget to the leftmost attacker-controlled X-Forwarded-For value, so one remote client rotates spoofed first hops and submits the correct recovery code after the intended limit.",
+      "fixture": "fixtures/javascript-forwarded-client-rate-limit-bypass",
+      "findingsPaths": [
+        "javascript-forwarded-client-rate-limit-bypass/run-1/findings.json",
+        "javascript-forwarded-client-rate-limit-bypass/run-2/findings.json",
+        "javascript-forwarded-client-rate-limit-bypass/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "forwarded-client-identity-recovery-limit-bypass",
+          "cwe": ["CWE-345", "CWE-307"],
+          "locations": [
+            {
+              "path": "src/recovery.js",
+              "startLine": 1,
+              "endLine": 6,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/recovery.js",
+              "startLine": 18,
+              "endLine": 30,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-forwarded-client-budget",
+      "description": "The recovery endpoint trusts forwarding metadata only from exact ingress peers, validates canonical hop syntax, peels trusted proxies from the right, ignores headers from untrusted peers, and enforces synchronous client- and account-scoped budgets.",
+      "fixture": "fixtures/javascript-safe-forwarded-client-budget",
+      "findingsPaths": [
+        "javascript-safe-forwarded-client-budget/run-1/findings.json",
+        "javascript-safe-forwarded-client-budget/run-2/findings.json",
+        "javascript-safe-forwarded-client-budget/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-jwt-bypass",
       "description": "An administrative route trusts decoded JWT claims without verifying the token signature.",
       "fixture": "fixtures/javascript-jwt-bypass",

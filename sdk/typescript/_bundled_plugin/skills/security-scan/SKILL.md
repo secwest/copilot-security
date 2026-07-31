@@ -63,6 +63,9 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    server name, and the final socket destination,
    GraphQL alias/batch/fragment amplification from one transport request through
    execution planning and resolver-scoped account/principal/tenant budgets,
+   forwarded client identity from the direct peer through exact trusted-proxy
+   sets, append/overwrite topology, canonical hop parsing, right-to-left
+   peeling, and client/account/principal security budgets,
    regular-expression catastrophic backtracking from attacker-controlled
    near-matches through the actual engine and shared event-loop/worker capacity,
    external authentication/authorization policy decisions through explicit

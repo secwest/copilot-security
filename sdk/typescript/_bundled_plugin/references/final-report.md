@@ -164,6 +164,19 @@ concrete category `signature-malleability-replay` with CWE-294 and CWE-347. Do
 not describe acceptance of both valid representations as a forgery or finding
 when a signed semantic event ID is atomically consumed once.
 
+For forwarded client-identity or proxy-trust findings, affected lines must
+include the direct-peer/forwarding-header trust decision, selected hop and
+canonicalized client identity, security-budget key/update, and protected
+recovery/login/MFA/fraud/abuse effect when those lines are distinct. The
+write-up must hold the real client constant, preserve the deployed proxy append
+or overwrite topology and raw chain, rotate only attacker-controlled prepended
+hops, show the resulting distinct security keys and intended/effective attempt
+counts, and prove the extra attempt reaches the protected effect. Use the
+concrete category `proxy-client-identity-rate-limit-bypass` with CWE-345 and
+CWE-307. Do not report forwarding headers or trust-proxy configuration alone
+when exact trusted-hop right-to-left peeling, canonical bounded parsing,
+untrusted-peer header ignoring, and account/principal budgets defeat the path.
+
 For application authorization-cache findings, affected lines must include the
 trusted authenticated principal or tenant extraction, exact cache-key
 construction, hit return, authoritative scoped lookup, and cache population

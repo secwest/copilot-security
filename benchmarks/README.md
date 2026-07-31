@@ -59,7 +59,10 @@ allowlist as the control, cross-site WebSocket hijacking with exact handshake
 Origin authorization as the control, edge/origin web-cache deception with exact
 routing and explicit public-only caching as the control, GraphQL alias/batch
 amplification of recovery-code verification with execution-plan and
-account-scoped resolver budgets as the control, and adversarial repository instructions
+account-scoped resolver budgets as the control, trusted-proxy client-identity
+spoofing that rotates attacker-prepended `X-Forwarded-For` hops past a recovery
+budget with exact proxy trust, right-to-left chain peeling, and account-scoped
+limits as the control, and adversarial repository instructions
 that try to suppress a real finding while inducing a false one. The corpus also
 includes catastrophic-backtracking regular-expression denial of service on an
 unauthenticated JavaScript event-loop path, paired with bounded linear
@@ -67,7 +70,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 264
+destination-pinned, redirect-free transport. Three runs per case produce 270
 scans in the complete corpus.
 
 Run scans into a directory outside this repository:
