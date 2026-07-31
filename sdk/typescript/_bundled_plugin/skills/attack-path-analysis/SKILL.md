@@ -79,6 +79,19 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   comparison as separate controls. Do not infer account takeover from a
   cosmetic action, or suppression from POST, JSON, CORS, or authentication
   without proving how the exact browser request is blocked.
+- For credentialed CORS response-exposure findings, preserve the exact attacker
+  origin, browser credential mode and cookie/site policy, automatically attached
+  credential, preflight when required, protected route, actual-response
+  allow-origin and allow-credentials values, sensitive body, proof that attacker
+  JavaScript can read it, and any subsequent use of a disclosed key, token, PII,
+  tenant data, or control-plane state. A server-side 200, preflight success, or
+  CORS header/library name is not browser-read proof. Record exact-origin parsing
+  and equality, rejection timing, trusted-origin success, `Vary: Origin`, and
+  sibling, `null`, suffix, scheme, and port variants as separate controls. Do not
+  claim credentialed exposure from wildcard allow-origin plus credentials, which
+  browsers block, or from bearer-only/server-only credentials an attacker site
+  cannot make the browser attach. Analyze an unreadable state change as CSRF
+  instead.
 - For native-memory findings, preserve the attacker-controlled bytes, length,
   index, pointer, object state, or scheduling action; the allocation and exact
   source/destination object extents in consistent units; integer wrap,

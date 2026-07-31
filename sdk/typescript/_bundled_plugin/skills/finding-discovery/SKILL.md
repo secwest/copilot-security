@@ -261,6 +261,27 @@ Use this checklist to keep discovery specific without turning it into validation
   route with an exact allowed-origin check or unpredictable session-bound token
   as a negative control, and do not report bearer-only APIs whose credentials
   an attacking site cannot cause the browser to attach.
+- For credentialed CORS response exposure, enumerate handlers and middleware
+  that set `Access-Control-Allow-Origin`, enable
+  `Access-Control-Allow-Credentials`, configure CORS-library origin callbacks,
+  answer preflight requests, or return secrets, PII, tenant data, or
+  control-plane state. Trace the exact attacking origin—including a same-site
+  sibling/subdomain, `null` or opaque origin, suffix or regex lookalike, and
+  scheme or port variant—through URL parsing and the origin decision. Then
+  preserve whether the browser attaches cookies, HTTP authentication, or client
+  certificates (including `credentials: include`, cookie Domain/SameSite, and
+  third-party-cookie policy), the session-protected route, the actual response's
+  allow-origin and allow-credentials headers, attacker JavaScript's ability to
+  read the body, and subsequent use of disclosed data or a secret. Preflight
+  approval alone is not proof; simple requests and the actual response policy
+  matter. Header or library names alone are not a finding, and wildcard
+  allow-origin plus credentials is blocked by browsers rather than a
+  credentialed-read exploit. Treat state change without response readability as
+  a separate CSRF question. Public or nonsensitive data, no ambient credential,
+  an exact serialized-origin allowlist, or rejection without an allow-origin
+  header is counterevidence. Prefer parsed, exact origin equality over substring,
+  suffix, or loose regex checks, and require `Vary: Origin` when dynamically
+  selecting an allowed origin.
 - For native memory safety, enumerate attacker-influenced allocation, copy,
   move, receive, format, indexing, pointer-arithmetic, cast, ownership, and free
   operations across every concrete caller. Preserve the input bytes and

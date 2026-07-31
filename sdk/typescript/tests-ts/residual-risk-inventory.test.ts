@@ -849,6 +849,33 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs credentialed CORS reflection with an exact origin allowlist", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-credentialed-cors-exfiltration"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-cors-allowlist"),
+    );
+
+    expect(vulnerable).toContain('"credentialed-cors-response-exposure"');
+    expect(vulnerable).toContain(
+      'response.setHeader("Access-Control-Allow-Origin", origin)',
+    );
+    expect(vulnerable).toContain(
+      'response.setHeader("Access-Control-Allow-Credentials", "true")',
+    );
+    expect(vulnerable).toContain("apiKeys.forAccount(session.accountId)");
+    expect(safe).toContain('"credentialed-cors-response-exposure"');
+    expect(safe).toContain("TRUSTED_ORIGINS.has(origin)");
+    expect(safe).toContain("https://portal.example.test");
+    expect(safe).toContain(
+      'response.status(403).json({ error: "origin_not_allowed" })',
+    );
+    expect(scanQualityGatePrompt("")).toContain(
+      "credentialed CORS origin authorization and sensitive-response exposure to attacker JavaScript",
+    );
+  });
+
   test("keeps bearer-only state changes out of the specialized CSRF signal", async () => {
     const repository = await mkdtemp(
       join(tmpdir(), "copilot-security-bearer-api-"),

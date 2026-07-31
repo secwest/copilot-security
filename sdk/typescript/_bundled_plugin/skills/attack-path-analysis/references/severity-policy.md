@@ -83,6 +83,11 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   requires the exact externally controllable authority through the deployed
   proxy/trust path, legitimate message, victim navigation, attacker token
   capture, canonical redemption, and compromise-equivalent account change.
+- Credentialed CORS exposure of crown-jewel administrative, cloud, cross-tenant,
+  or control-plane credentials or state that attacker JavaScript can read and
+  use for broad compromise. Critical requires the exact attacker origin,
+  browser-attached victim credential, actual-response CORS policy, readable
+  sensitive body, and compromise-equivalent downstream use.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
@@ -93,6 +98,12 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
 - Arbitrary file read that exposes less-sensitive user data or source code (if you have actual proof it reveals env secrets, then it is critical)
 - Arbitrary file write in executable, startup, config, or firmware paths with a realistic path to persistence or code execution
 - CSRF when it enables important state-changing actions such as credential changes, permission changes, payment / billing changes, or security-setting changes with realistic victim interaction. Evaluate actual browser request behavior, credential attachment, cookie policy, preflight requirements, server parsing, and effective anti-CSRF controls; an HTTP method or JSON content type alone is not a categorical defense.
+- Credentialed CORS exposure of ordinary but meaningful API keys, session
+  tokens, account data, PII, or tenant data when attacker JavaScript can
+  reliably read the victim's authenticated response. Severity follows the
+  sensitivity, privileges, population, and demonstrated use of the disclosed
+  material; reserve critical for compromise-equivalent administrative,
+  cross-tenant, cloud, or control-plane impact.
 - Hardcoded or default credentials that are valid, reachable, and provide meaningful access warranting `high`, even when that access is not broad or privileged enough for `critical`.
 - Cryptographic failures that allow signature forgery, token forgery, trusted artifact forgery, secure-channel bypass, or decryption of highly sensitive data in a way that directly enables compromise, with actual proof that these attacks are practical and can be carried out from an in-scope attack surface.
 - Supply-chain or update-channel compromise that allows malicious code or malicious trusted artifacts to be delivered to users, servers, agents, or endpoints, including signing bypass or package source substitution with real impact. This should focus on actual supply-chain risk and risk around CI actions, not just "does npm report outdated packages"
@@ -153,6 +164,15 @@ Examples that usually should not remain `high`/`critical` without very strong pr
 - Self-XSS without a victim or meaningful boundary crossing, or XSS whose actual origin, browser reachability, and impact do not justify `high`/`critical`. An `alert` proof demonstrates JavaScript execution and is not evidence against reflected XSS.
 - SQLi or other injection claims with no demonstrated attacker control, no shown sink reachability, or only speculative impact.
 - CSRF on low-impact actions, cosmetic actions, logout, preferences, or actions requiring unrealistic victim behavior.
+- CORS reports based only on middleware/header names, permissive preflight, a
+  server-side 200, or origin reflection without proving browser-attached
+  credentials and attacker-JavaScript readability of a sensitive actual
+  response. Also suppress a claimed credentialed read when the only policy is
+  wildcard allow-origin plus credentials (browser-blocked), the response is
+  public/nonsensitive, credentials are bearer-only or server-only and not
+  browser-attachable, an exact origin allowlist rejects the attacker before
+  sensitive retrieval, or the actual response is not exposed. Evaluate any
+  independent state-changing effect as CSRF.
 - Open redirect, clickjacking, user enumeration, rate-limit weakness, banner leakage, version disclosure, directory listing, stack traces, internal hostnames, or basic error-message leakage, unless they are shown as part of a serious exploit chain.
 - Memory corruption that is theoretical, non-triggerable from in-scope input, or not plausibly exploitable in the target environment.
 - Request-smuggling claims based only on `Content-Length` and

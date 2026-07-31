@@ -424,6 +424,45 @@
       "expected": []
     },
     {
+      "id": "javascript-credentialed-cors-exfiltration",
+      "description": "A session-protected API reflects an attacker-controlled same-site Origin while allowing credentials, so attacker JavaScript can send the victim cookie and read control-plane API keys from the response.",
+      "fixture": "fixtures/javascript-credentialed-cors-exfiltration",
+      "findingsPaths": [
+        "javascript-credentialed-cors-exfiltration/run-1/findings.json",
+        "javascript-credentialed-cors-exfiltration/run-2/findings.json",
+        "javascript-credentialed-cors-exfiltration/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "credentialed-cors-api-key-exfiltration",
+          "cwe": ["CWE-942", "CWE-200"],
+          "locations": [
+            {
+              "path": "src/cors.js",
+              "startLine": 2,
+              "endLine": 5,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-cors-allowlist",
+      "description": "A session-protected API allows credentialed reads only from one exact configured portal origin and rejects sibling, suffix-lookalike, opaque, scheme, and port variants before secret retrieval.",
+      "fixture": "fixtures/javascript-safe-cors-allowlist",
+      "findingsPaths": [
+        "javascript-safe-cors-allowlist/run-1/findings.json",
+        "javascript-safe-cors-allowlist/run-2/findings.json",
+        "javascript-safe-cors-allowlist/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-jwt-bypass",
       "description": "An administrative route trusts decoded JWT claims without verifying the token signature.",
       "fixture": "fixtures/javascript-jwt-bypass",

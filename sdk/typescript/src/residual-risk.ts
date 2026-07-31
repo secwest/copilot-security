@@ -107,6 +107,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:anti[_-]?forgery|antiforgery|csrf|xsrf)\b|\b(?:SameSite|Sec-Fetch-Site)\b|\bsame_?site\s*[:=]\s*["']?none\b|\bValidateAntiForgeryToken\b/iu,
   ],
   [
+    "credentialed-cors-response-exposure",
+    102,
+    /\bAccess-Control-Allow-(?:Credentials|Origin)\b|\b(?:allowCredentials|credentialedCors|TRUSTED_ORIGINS)\b|\bcredentials\s*[:=]\s*(?:["']include["']|true)\b|\bcors\s*\(/iu,
+  ],
+  [
     "oauth-authorization-code-transaction-binding",
     100,
     /\b(?:authorizationUrl|authorizeUrl|codeChallenge|codeChallengeMethod|codeVerifier|exchangeCode|pkce|redirectUri|responseType)\b|\b(?:oauth|oidc)[\w./-]*(?:callback|link|redirect)\b/iu,

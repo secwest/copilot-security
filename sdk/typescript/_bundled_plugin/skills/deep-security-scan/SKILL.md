@@ -145,6 +145,21 @@ inventory and closure requirements.
      framework middleware name is not proof of protection. Use a sibling route
      with an exact origin or session-bound unpredictable-token check as the
      negative control.
+   - Credentialed CORS response authorization: every handler, middleware, and
+     CORS-library origin callback that sets `Access-Control-Allow-Origin`,
+     enables `Access-Control-Allow-Credentials`, handles preflight, or protects
+     responses containing secrets, PII, cross-tenant data, or control-plane
+     state. Trace attacker origins including same-site siblings, `null`/opaque
+     origins, suffix and regex lookalikes, and scheme/port variants through exact
+     URL parsing and serialized-origin comparison. Preserve browser credential
+     attachment (`credentials: include`, cookie Domain/SameSite and third-party
+     policy, HTTP authentication, or client certificates), the protected route,
+     the actual response headers, attacker JavaScript readability, and subsequent
+     use of disclosed data. Preflight alone, header/library names, and CORS as a
+     CSRF defense are not closure. Wildcard allow-origin with credentials is
+     browser-blocked for credentialed reads. Use rejection before sensitive-data
+     retrieval with no allow-origin header, plus successful access from one exact
+     trusted origin and `Vary: Origin`, as the negative control.
    - JWT/JWS/OIDC key origin and claim binding: every protected-header parser,
      algorithm and `kid` selection, `jku`/`x5u`/embedded key input, issuer
      discovery or metadata mapping, JWKS URL source, redirect and cache path,

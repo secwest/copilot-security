@@ -56,6 +56,10 @@ describe("effectiveness benchmark", () => {
       ["javascript-ssrf", "javascript-safe-fetch"],
       ["python-unsafe-deserialization", "python-safe-json"],
       ["javascript-reflected-xss", "javascript-safe-html"],
+      [
+        "javascript-credentialed-cors-exfiltration",
+        "javascript-safe-cors-allowlist",
+      ],
       ["javascript-jwt-bypass", "javascript-safe-jwt"],
       [
         "javascript-jwks-header-key-injection",
@@ -150,6 +154,23 @@ describe("effectiveness benchmark", () => {
         path: "src/login.js",
         startLine: 25,
         endLine: 30,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-credentialed-cors-exfiltration")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-942", "CWE-200"]]);
+    expect(
+      cases
+        .get("javascript-credentialed-cors-exfiltration")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/cors.js",
+        startLine: 2,
+        endLine: 5,
         lineTolerance: 3,
       },
     ]);
@@ -467,6 +488,44 @@ describe("effectiveness benchmark", () => {
     ).toContain(
       'const PUBLIC_ORIGIN = new URL("https://accounts.example.test")',
     );
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-credentialed-cors-exfiltration",
+          "src",
+          "cors.js",
+        ),
+        "utf8",
+      ),
+    ).toContain('setHeader("Access-Control-Allow-Origin", origin)');
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-credentialed-cors-exfiltration",
+          "src",
+          "cors.js",
+        ),
+        "utf8",
+      ),
+    ).toContain('setHeader("Access-Control-Allow-Credentials", "true")');
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-safe-cors-allowlist",
+          "src",
+          "cors.js",
+        ),
+        "utf8",
+      ),
+    ).toContain(
+      'const TRUSTED_ORIGINS = new Set(["https://portal.example.test"])',
+    );
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -555,6 +614,7 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("check/use and state races");
     expect(deepScan).toContain("bulk object binding and mass assignment");
     expect(deepScan).toContain("browser-ambient credential CSRF");
+    expect(deepScan).toContain("Credentialed CORS response authorization:");
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
@@ -580,6 +640,7 @@ describe("effectiveness benchmark", () => {
     expect(standardScan).toContain("bulk object binding");
     expect(standardScan).toContain("mass assignment");
     expect(standardScan).toContain("browser-ambient credential CSRF");
+    expect(standardScan).toContain("credentialed CORS origin authorization");
     expect(standardScan).toContain(
       "native memory allocation/copy/index/lifetime",
     );
@@ -604,6 +665,7 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain("mass-assignment field controls");
     expect(diffScan).toContain("writable-field sets");
     expect(diffScan).toContain("anti-CSRF token");
+    expect(diffScan).toContain("changed CORS origin reflection");
     expect(diffScan).toContain("terminator space");
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("changed RFC 4515 assertion escaping");
@@ -630,6 +692,7 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain("attacker-reachable mutation path");
     expect(discovery).toContain("route-level ownership check does not");
     expect(discovery).toContain("bearer-only APIs");
+    expect(discovery).toContain("For credentialed CORS response exposure");
     expect(discovery).toContain("For native memory safety");
     expect(discovery).toContain("bounded API is neither vulnerable");
     expect(discovery).toContain("For document-query and NoSQL APIs");
@@ -681,6 +744,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
     expect(validation).toContain("browser CSRF:");
+    expect(validation).toContain("credentialed CORS response exposure:");
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("LDAP filter injection:");
@@ -707,6 +771,9 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("SAML signed-byte-to-session binding:");
     expect(attackPath).toContain("For mass-assignment findings");
     expect(attackPath).toContain("For CSRF findings");
+    expect(attackPath).toContain(
+      "For credentialed CORS response-exposure findings",
+    );
     expect(attackPath).toContain("For native-memory findings");
     expect(attackPath).toContain("For document-query and NoSQL findings");
     expect(attackPath).toContain("For LDAP filter findings");
@@ -730,6 +797,8 @@ describe("effectiveness benchmark", () => {
       "CSRF when it enables important state-changing actions",
     );
     expect(severityPolicy).toContain("CSRF on low-impact actions");
+    expect(severityPolicy).toContain("Credentialed CORS exposure");
+    expect(severityPolicy).toContain("CORS reports based only");
     expect(severityPolicy).toContain(
       "Memory corruption that is theoretical, non-triggerable",
     );
@@ -794,8 +863,14 @@ describe("effectiveness benchmark", () => {
     expect(threatModelGuidance).toContain(
       "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
     );
+    expect(threatModelGuidance).toContain(
+      "credentialed CORS response authorization",
+    );
     expect(repositoryWideScan).toContain(
       "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
+    );
+    expect(repositoryWideScan).toContain(
+      "credentialed CORS origin authorization",
     );
     expect(threatModelGuidance).toContain(
       "session management including login fixation and authenticated-session rotation",

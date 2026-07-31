@@ -1,0 +1,5 @@
+{
+  "name": "javascript-safe-cors-allowlist",
+  "private": true,
+  "type": "module"
+}

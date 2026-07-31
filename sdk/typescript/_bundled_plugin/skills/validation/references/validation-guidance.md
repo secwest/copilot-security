@@ -74,6 +74,25 @@ Use class-specific proof tuples:
   rejected before the state change by an enforced origin/fetch-metadata
   predicate, or requires an unpredictable token bound to the victim session or
   request and compared correctly.
+- credentialed CORS response exposure: exact attacker origin + a browser or
+  faithful browser simulator issuing a credentialed fetch + proof that the
+  relevant cookie, HTTP authentication, or client certificate attaches under
+  the real Domain, SameSite, schemeful-site, and third-party-cookie rules +
+  preflight when required and the actual protected request + the actual
+  response's `Access-Control-Allow-Origin` and
+  `Access-Control-Allow-Credentials` values + attacker JavaScript reading a
+  sensitive body and, for secrets, exercising the disclosed capability. Test
+  same-site sibling/subdomain, `null`, suffix lookalike, scheme, and port
+  variants, then prove one exact trusted origin still succeeds. The negative
+  control must reject the attacker before sensitive-data retrieval, omit an
+  attacker-matching allow-origin header, prevent attacker JavaScript from
+  reading the body, and preserve legitimate trusted-origin access. Do not infer
+  exposure from CORS header/library names, preflight alone, or a server-side 200;
+  wildcard allow-origin plus credentials is browser-blocked for credentialed
+  reads. Public data, no browser-attachable credential, an exact serialized
+  origin allowlist, or an unexposed actual response is counterevidence. CORS
+  governs response readability, not whether a request executes, so evaluate a
+  state-changing request without readable output separately as CSRF.
 - login session fixation: attacker-known or attacker-injectable
   pre-authentication session identifier + victim adoption of that identifier +
   successful credential transition that preserves or promotes the same

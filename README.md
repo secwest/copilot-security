@@ -167,8 +167,9 @@ executable file upload/content placement, cross-proxy/backend HTTP request
 smuggling, LDAP filter injection into directory-backed group authorization,
 XPath predicate injection into XML-backed authentication, OAuth account-linking
 CSRF leading to account takeover, login session fixation, password-reset link
-origin poisoning, and adversarial repository instructions. Each of the 56 cases
-is scanned three times, producing 168 scans that measure both accuracy and model
+origin poisoning, credentialed CORS secret exfiltration, and adversarial
+repository instructions. Each of the 58 cases is scanned three times, producing
+174 scans that measure both accuracy and model
 variance. The evaluator uses one-to-one CWE-plus-location matching, counts
 duplicate reports as false positives, and records missing scan artifacts as
 completion failures.

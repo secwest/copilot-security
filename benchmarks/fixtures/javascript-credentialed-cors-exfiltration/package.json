@@ -1,0 +1,5 @@
+{
+  "name": "javascript-credentialed-cors-exfiltration",
+  "private": true,
+  "type": "module"
+}

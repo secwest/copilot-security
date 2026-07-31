@@ -62,8 +62,9 @@ publish findings, open issues, or contact third parties. Write only beneath
    headers, remote key sources, JWKS/issuer mapping, algorithm and claim binding,
    SAML/federated signature references and consumed
    identity objects, bulk object binding and mass-assignment field controls,
-   browser-ambient credential and CSRF controls, native memory allocation/copy/
-   index/lifetime boundaries, cryptographic, state, concurrency, and
+   browser-ambient credential and CSRF controls, credentialed CORS response
+   authorization, native memory allocation/copy/index/lifetime boundaries,
+   cryptographic, state, concurrency, and
    resource-control boundaries.
 4. Compare the patch with the exact pre-change behavior. Look specifically for:
 
@@ -85,6 +86,9 @@ publish findings, open issues, or contact third parties. Write only beneath
      expose role, tenant, owner, identity, recovery, billing, or trust state;
    - weakened SameSite, Origin/Referer, Fetch Metadata, or anti-CSRF token
      controls on browser-credentialed state-changing routes;
+   - changed CORS origin reflection, exact-origin allowlists, credentials mode,
+     preflight handling, actual-response headers, or sensitive response bodies
+     that could let attacker JavaScript read a victim's credentialed response;
    - changed integer units, signedness, allocation arithmetic, object extents,
      copy/read/write lengths, indexes, terminator space, ownership, or lifetime
      around attacker-influenced native-memory operations;
