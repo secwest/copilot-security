@@ -131,6 +131,35 @@ describe("residual risk inventory", () => {
     expect(inventory).toContain("customerId");
   });
 
+  test("pairs fail-open policy errors with exact fail-closed authorization", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-fail-open-policy-authorization"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(
+        benchmarkFixtures,
+        "javascript-safe-fail-closed-policy-authorization",
+      ),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"authentication-or-session"');
+    expect(vulnerable).toContain('"external-authorization-policy-decision"');
+    expect(vulnerable).toContain('"fail-open-security-decision"');
+    expect(vulnerable).toContain('"privileged-role-or-operation"');
+    expect(vulnerable).toContain("let allowed = true");
+    expect(vulnerable).toContain("authorizer.checkAccess");
+    expect(vulnerable).toContain("vault.exportSigningKeys(resourceId)");
+    expect(safe).toContain('"external-authorization-policy-decision"');
+    expect(safe).not.toContain('"fail-open-security-decision"');
+    expect(safe).toContain('error: "authorization_unavailable"');
+    expect(safe).toContain("allowed !== true");
+    expect(safe).toContain("vault.exportSigningKeys(resourceId)");
+    expect(scanQualityGatePrompt("")).toContain(
+      "external authentication or authorization decisions",
+    );
+  });
+
   test("pairs request input with SQL execution and parameterization evidence", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-sql-injection"),

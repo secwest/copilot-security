@@ -127,6 +127,17 @@ inventory and closure requirements.
      linear-time engines, structurally unambiguous patterns, and pre-evaluation
      bounds as negative controls; a timeout around an already blocked shared
      thread is not automatically effective;
+   - external authentication and authorization decision failure: every identity,
+     action, resource, tenant, context, and credential sent to policy engines,
+     entitlement services, sidecars, middleware, plugins, caches, or remote
+     guards; every success, explicit deny, timeout, exception, malformed/empty
+     response, stale cache, circuit-breaker, retry-exhaustion, and fallback path;
+     the default decision before the call; boolean/string/object coercion; and
+     the exact subject/action/resource consumed by the privileged operation.
+     An explicit deny test does not close an exception path. Use no decision
+     until success, exact allow semantics, fail-closed unavailable behavior,
+     decision-to-operation binding, and legitimate allow plus explicit deny,
+     exception, timeout, malformed response, and replay/mismatch controls;
    - security-value generation: password-reset and verification tokens, session
      identifiers, API keys, nonces, invitations, CSRF values, temporary
      credentials, and lottery/selection values that protect assets; record the
@@ -382,6 +393,16 @@ inventory and closure requirements.
    linear or unambiguous control. Do not report regex syntax, a dynamic
    `RegExp`, or an unbounded input by itself without proving the expensive
    pattern/input interaction and realistic availability impact.
+   For external authorization fail-open candidates, exercise the same
+   authenticated low-privilege subject, action, and attacker-selected resource
+   across explicit deny, exception or timeout, malformed/empty response, and
+   legitimate allow outcomes. Preserve the default decision before the policy
+   call, response type and normalization, catch/finally/circuit-breaker/cache
+   behavior, final comparison, selected resource, and protected effect. Prove
+   that the error or malformed decision alone reaches the effect while explicit
+   deny still works, then show the safe sibling returns unavailable or forbidden,
+   requires an exact affirmative result, exports nothing on every failure, and
+   preserves legitimate authorized functionality.
    For JWT/JWS algorithm-confusion candidates, create a real asymmetric key pair,
    publish only the public key, and use those public bytes as the MAC secret for
    a token-selected symmetric algorithm. Preserve both compact tokens, decoded

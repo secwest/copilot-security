@@ -2556,6 +2556,37 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         )
     ):
         return "regular-expression-denial-of-service", ["CWE-1333"]
+    if (
+        (
+            "fail open" in text
+            or "fail-open" in text
+            or "fails open" in text
+            or "default allow" in text
+            or "defaults to allow" in text
+            or (
+                ("policy" in text or "authorizer" in text or "entitlement" in text)
+                and ("exception" in text or "unavailable" in text)
+                and ("bypass" in text or "grants" in text or "allows" in text)
+            )
+        )
+        and (
+            "authorization" in text
+            or "authorizer" in text
+            or "access decision" in text
+            or "permission" in text
+            or "policy" in text
+            or "entitlement" in text
+        )
+        and (
+            "error" in text
+            or "exception" in text
+            or "timeout" in text
+            or "unavailable" in text
+            or "malformed" in text
+            or "fallback" in text
+        )
+    ):
+        return "fail-open-authorization", ["CWE-636", "CWE-863"]
     if isinstance(taxonomy, dict):
         cwe = taxonomy.get("cwe")
         normalized_cwe = (

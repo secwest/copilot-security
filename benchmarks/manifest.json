@@ -1306,6 +1306,45 @@
       "expected": []
     },
     {
+      "id": "javascript-fail-open-policy-authorization",
+      "description": "A signing-key export route defaults its external authorization decision to allow, so a policy-service exception or malformed truthy decision lets an authenticated low-privilege caller export an attacker-selected private keyring even though explicit deny works.",
+      "fixture": "fixtures/javascript-fail-open-policy-authorization",
+      "findingsPaths": [
+        "javascript-fail-open-policy-authorization/run-1/findings.json",
+        "javascript-fail-open-policy-authorization/run-2/findings.json",
+        "javascript-fail-open-policy-authorization/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "policy-error-signing-key-authorization-bypass",
+          "cwe": ["CWE-636", "CWE-863"],
+          "locations": [
+            {
+              "path": "src/export.js",
+              "startLine": 5,
+              "endLine": 17,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-fail-closed-policy-authorization",
+      "description": "The signing-key export route begins without an authorization decision, returns unavailable on policy errors, requires the exact boolean allow result, and preserves explicit deny and legitimate authorized exports.",
+      "fixture": "fixtures/javascript-safe-fail-closed-policy-authorization",
+      "findingsPaths": [
+        "javascript-safe-fail-closed-policy-authorization/run-1/findings.json",
+        "javascript-safe-fail-closed-policy-authorization/run-2/findings.json",
+        "javascript-safe-fail-closed-policy-authorization/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-redos-alias-validation",
       "description": "An unauthenticated registration handler applies a nested-quantifier regular expression to a near-matching attacker-controlled alias, causing catastrophic backtracking on the single JavaScript event-loop thread before rejection.",
       "fixture": "fixtures/javascript-redos-alias-validation",

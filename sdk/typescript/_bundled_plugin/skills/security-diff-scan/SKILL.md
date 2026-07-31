@@ -71,6 +71,8 @@ publish findings, open issues, or contact third parties. Write only beneath
    resolver fan-out, and account/principal/tenant operation budgets,
    fixed or dynamic regular expressions, input bounds, engine selection,
    worker isolation, and catastrophic-backtracking near-matches,
+   external authentication/authorization policy calls, decision defaults and
+   types, error/timeout/fallback paths, and subject/action/resource binding,
    native memory allocation/copy/index/lifetime boundaries, cryptographic,
    state, concurrency, and
    resource-control boundaries.
@@ -115,6 +117,10 @@ publish findings, open issues, or contact third parties. Write only beneath
      alternation structure, validation/search/replace/split callsites, input
      length bounds, runtime regex engines, timeouts, or worker isolation where
      attacker-controlled near-matches can cause catastrophic backtracking;
+   - changed external authorization or entitlement calls, default decisions,
+     explicit-deny handling, catch/finally behavior, timeouts, retries, circuit
+     breakers, caches, malformed/empty response coercion, exact-allow checks, or
+     binding between the authorized and consumed subject/action/resource;
    - changed integer units, signedness, allocation arithmetic, object extents,
      copy/read/write lengths, indexes, terminator space, ownership, or lifetime
      around attacker-influenced native-memory operations;

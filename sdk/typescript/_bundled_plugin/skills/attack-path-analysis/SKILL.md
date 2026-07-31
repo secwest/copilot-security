@@ -150,6 +150,17 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   and concurrency controls as distinct counterevidence. A nested quantifier,
   regex API, or slow local microbenchmark alone does not establish a remotely
   exploitable service-level path.
+- For external authorization fail-open findings, preserve the caller identity,
+  attacker-selected action/resource/tenant/context, complete request to the
+  policy or entitlement boundary, explicit-deny behavior, exact exception/
+  timeout/malformed response, default and final decision values with runtime
+  types, catch/fallback/cache/circuit-breaker path, and the protected operation
+  and returned or mutated asset. Demonstrate that explicit deny works yet the
+  failure outcome alone reaches the sink, and compare a legitimate allow.
+  Separate availability-only failure from authorization bypass. Fail-closed
+  unavailable/forbidden handling, exact affirmative semantics, no sink call,
+  and decision binding to the consumed subject/action/resource are distinct
+  counterevidence.
 - For native-memory findings, preserve the attacker-controlled bytes, length,
   index, pointer, object state, or scheduling action; the allocation and exact
   source/destination object extents in consistent units; integer wrap,

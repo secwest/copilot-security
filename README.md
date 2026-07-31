@@ -174,10 +174,11 @@ repository instructions. The corpus also covers cross-site WebSocket hijacking
 of cookie-authenticated bidirectional channels and edge/origin web-cache
 deception that exposes authenticated responses across requests. It additionally
 covers GraphQL alias/batch amplification of recovery-code verification across
-the HTTP-request, execution-plan, resolver, and account-state boundaries, plus
-catastrophic-backtracking regular-expression denial of service with a bounded
-linear validator as the control. Each of the 68 cases is scanned three times,
-producing 204 scans that measure both accuracy and model variance. The
+the HTTP-request, execution-plan, resolver, and account-state boundaries,
+fail-open external authorization on policy exceptions and malformed decisions,
+plus catastrophic-backtracking regular-expression denial of service with a
+bounded linear validator as the control. Each of the 70 cases is scanned three
+times, producing 210 scans that measure both accuracy and model variance. The
 evaluator uses one-to-one CWE-plus-location
 matching, counts duplicate reports as false positives, and records missing scan
 artifacts as completion failures.

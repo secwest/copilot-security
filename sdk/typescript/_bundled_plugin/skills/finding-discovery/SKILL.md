@@ -134,6 +134,19 @@ Use this checklist to keep discovery specific without turning it into validation
   account or object an operator document can select and what privilege or data
   the caller gains. Conversely, reject string-only values that cannot become
   selectors or operators even when a document-query API appears nearby.
+- For external authentication and authorization policy decisions, preserve the
+  subject, action, resource, tenant, context, and credentials sent to every
+  policy engine, entitlement service, sidecar, plugin, middleware, cache, or
+  remote guard. Enumerate success, explicit deny, exception, timeout,
+  cancellation, malformed/empty response, stale cache, retry exhaustion,
+  circuit-breaker, and fallback paths separately. Record the decision's initial
+  value, type normalization, truthiness/exact comparison, catch/finally
+  mutation, and whether the decision is bound to the same subject/action/
+  resource later consumed. A normal explicit deny does not suppress an
+  exception-only bypass. Conversely, an exception handler is not automatically
+  vulnerable: fail-closed unavailable/forbidden behavior, no permissive default,
+  exact affirmative semantics, and no protected effect on all failure paths are
+  strong counterevidence.
 - For GraphQL and GraphQL-like execution engines, enumerate raw and persisted
   documents, aliases, fragments, directives, nested selections, list fan-out,
   multi-operation documents, HTTP batch arrays, subscription messages, custom

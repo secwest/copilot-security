@@ -48,6 +48,8 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    execution planning and resolver-scoped account/principal/tenant budgets,
    regular-expression catastrophic backtracking from attacker-controlled
    near-matches through the actual engine and shared event-loop/worker capacity,
+   external authentication/authorization policy decisions through explicit
+   deny, exception, timeout, malformed-result, fallback, and exact-allow paths,
    authorization, state changes, interpreters, filesystem, network,
    deserialization, and templates;
    SQL and document-database query selectors/operators, LDAP filter construction

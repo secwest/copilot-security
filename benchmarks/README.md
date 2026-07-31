@@ -22,7 +22,7 @@ plus source-to-impact continuity; and code evidence needs a concrete
 path-and-line anchor, source text, and explanatory reasoning. Presence and
 substantive-quality flags are both retained in per-match diagnostics.
 
-The versioned corpus currently contains thirty-four vulnerable/control pairs:
+The versioned corpus currently contains thirty-five vulnerable/control pairs:
 command injection, path traversal, executable file upload/content placement,
 HTTP request smuggling across inconsistent gateway/backend framing,
 object-level authorization, SQL injection, document-query operator injection,
@@ -47,7 +47,9 @@ account-scoped resolver budgets as the control, and adversarial repository instr
 that try to suppress a real finding while inducing a false one. The corpus also
 includes catastrophic-backtracking regular-expression denial of service on an
 unauthenticated JavaScript event-loop path, paired with bounded linear
-validation. Three runs per case produce 204 scans in the complete corpus.
+validation, and fail-open external policy authorization that exposes signing
+keys on policy errors, paired with exact-boolean fail-closed enforcement. Three
+runs per case produce 210 scans in the complete corpus.
 
 Run scans into a directory outside this repository:
 

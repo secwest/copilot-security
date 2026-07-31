@@ -109,6 +109,10 @@ describe("effectiveness benchmark", () => {
         "javascript-safe-password-reset-origin",
       ],
       [
+        "javascript-fail-open-policy-authorization",
+        "javascript-safe-fail-closed-policy-authorization",
+      ],
+      [
         "javascript-redos-alias-validation",
         "javascript-safe-linear-alias-validation",
       ],
@@ -786,6 +790,15 @@ describe("effectiveness benchmark", () => {
       ),
       "utf8",
     );
+    const finalReport = await readFile(
+      resolve(
+        process.cwd(),
+        "_bundled_plugin",
+        "references",
+        "final-report.md",
+      ),
+      "utf8",
+    );
 
     expect(deepScan).toContain("at least five independent discovery passes");
     expect(deepScan).toContain("compositional and temporal attack paths");
@@ -802,6 +815,9 @@ describe("effectiveness benchmark", () => {
       "GraphQL execution amplification and resolver-scoped enforcement:",
     );
     expect(deepScan).toContain("regular-expression complexity:");
+    expect(deepScan).toContain(
+      "external authentication and authorization decision failure:",
+    );
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
@@ -845,6 +861,9 @@ describe("effectiveness benchmark", () => {
       "regular-expression catastrophic backtracking",
     );
     expect(standardScan).toContain(
+      "external authentication/authorization policy decisions",
+    );
+    expect(standardScan).toContain(
       "native memory allocation/copy/index/lifetime",
     );
     expect(standardScan).toContain(
@@ -876,6 +895,9 @@ describe("effectiveness benchmark", () => {
       "changed GraphQL alias, fragment, nesting, batch",
     );
     expect(diffScan).toContain("changed regex literals");
+    expect(diffScan).toContain(
+      "changed external authorization or entitlement calls",
+    );
     expect(diffScan).toContain("terminator space");
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("changed RFC 4515 assertion escaping");
@@ -966,6 +988,9 @@ describe("effectiveness benchmark", () => {
       "Preserve the mapping from one transport envelope",
     );
     expect(discovery).toContain("For regular-expression denial of service");
+    expect(discovery).toContain(
+      "For external authentication and authorization policy decisions",
+    );
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
@@ -975,6 +1000,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("web cache deception:");
     expect(validation).toContain("GraphQL operation amplification:");
     expect(validation).toContain("regular-expression denial of service:");
+    expect(validation).toContain("external authorization fail-open:");
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("LDAP filter injection:");
@@ -1013,6 +1039,9 @@ describe("effectiveness benchmark", () => {
     expect(attackPath).toContain(
       "For regular-expression denial-of-service findings",
     );
+    expect(attackPath).toContain(
+      "For external authorization fail-open findings",
+    );
     expect(attackPath).toContain("For native-memory findings");
     expect(attackPath).toContain("For document-query and NoSQL findings");
     expect(attackPath).toContain("For LDAP filter findings");
@@ -1050,6 +1079,15 @@ describe("effectiveness benchmark", () => {
       "Regular-expression denial of service that lets",
     );
     expect(severityPolicy).toContain("Regular-expression reports based only");
+    expect(severityPolicy).toContain(
+      "External authentication or authorization failure that defaults to",
+    );
+    expect(severityPolicy).toContain(
+      "External authorization fail-open that reliably converts",
+    );
+    expect(severityPolicy).toContain(
+      "Fail-open reports based only on a `catch`",
+    );
     expect(severityPolicy).toContain("GraphQL reports based only on aliases");
     expect(severityPolicy).toContain(
       "Memory corruption that is theoretical, non-triggerable",
@@ -1136,6 +1174,9 @@ describe("effectiveness benchmark", () => {
     expect(threatModelGuidance).toContain(
       "regular-expression catastrophic backtracking",
     );
+    expect(threatModelGuidance).toContain(
+      "external authentication and authorization policy/entitlement decisions",
+    );
     expect(repositoryWideScan).toContain(
       "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
     );
@@ -1153,6 +1194,12 @@ describe("effectiveness benchmark", () => {
     );
     expect(repositoryWideScan).toContain(
       "regular-expression catastrophic backtracking",
+    );
+    expect(repositoryWideScan).toContain(
+      "For external authorization and entitlement decisions",
+    );
+    expect(finalReport).toContain(
+      "For external authorization fail-open findings",
     );
     expect(repositoryWideScan).toContain(
       "JWT/JWS token-selected algorithm and key-family confusion",

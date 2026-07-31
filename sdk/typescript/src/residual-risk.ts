@@ -104,7 +104,17 @@ const RISK_SIGNALS: ReadonlyArray<
   [
     "privileged-role-or-operation",
     93,
-    /\b(?:admin|administrator|privileged|role)\b|\b(?:exportAudit|exportSigningAudit|requireAdministrator)\b/iu,
+    /\b(?:admin|administrator|privileged|role)\b|\b(?:exportAudit|exportSigningAudit|exportSigningKeys|requireAdministrator)\b/iu,
+  ],
+  [
+    "external-authorization-policy-decision",
+    102,
+    /\b(?:authorizer|authorizationClient|policyClient|policyEngine)\b|\b(?:authorize|checkAccess|isAllowed)\s*\(|\bauthorization_unavailable\b|\b(?:allowed|authorized|decision)\s*!==\s*true\b/iu,
+  ],
+  [
+    "fail-open-security-decision",
+    103,
+    /\b(?:allowed|authorized|permitted|decision)\s*=\s*true\b|\b(?:defaultAllow|failOpen|permitOnError)\b/iu,
   ],
   [
     "browser-ambient-credential-or-csrf",

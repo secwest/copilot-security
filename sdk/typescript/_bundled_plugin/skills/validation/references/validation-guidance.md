@@ -158,6 +158,18 @@ Use class-specific proof tuples:
   guaranteed linear-time engine, or structurally unambiguous expression.
   Reject syntax-only claims and cases whose exact engine, input cap, isolation,
   or upstream validation makes the expensive path unreachable or immaterial.
+- external authorization fail-open: authenticated or otherwise identified
+  low-privilege subject + attacker-selectable action/resource/tenant/context +
+  policy/entitlement/sidecar/plugin/cache call + exception, timeout,
+  cancellation, malformed/empty result, stale fallback, or retry exhaustion +
+  permissive initial state, swallowed failure, truthy coercion, unbound cached
+  decision, or default allow + protected data or action. Exercise explicit deny,
+  the exact failure, malformed response, and legitimate allow through the same
+  handler. Record policy call inputs, return/throw behavior, final decision,
+  protected-operation arguments, response, and whether the sink ran. The
+  negative control must begin without permission, require one exact
+  subject/action/resource-bound affirmative decision, produce no protected
+  effect on every failure, and preserve legitimate authorized behavior.
 - login session fixation: attacker-known or attacker-injectable
   pre-authentication session identifier + victim adoption of that identifier +
   successful credential transition that preserves or promotes the same

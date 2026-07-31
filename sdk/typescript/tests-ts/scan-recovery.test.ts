@@ -609,6 +609,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes fail-open authorization taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "Policy-service exception bypasses signing-key authorization";
+    finding.summary =
+      "The authorizer defaults to allow and preserves that decision when the external policy check throws unavailable, letting a low-privilege user export a private signing key.";
+    finding["taxonomy"] = {
+      category: "improper-error-handling",
+      cwe: ["CWE-755"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "fail-open-authorization",
+      cwe: ["CWE-636", "CWE-863"],
+    });
+  });
+
   test("corrects browser-cache taxonomy for cross-principal web cache deception", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

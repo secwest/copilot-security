@@ -156,6 +156,12 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   absent pre-evaluation bounds/isolation, and material multi-user availability
   impact. Use `medium` when the affected capacity or reachability is narrower
   but the superlinear behavior and service impact remain concrete.
+- External authentication or authorization failure that defaults to or
+  preserves allow and thereby exposes signing keys, administrative or
+  cross-tenant data, identity controls, billing, deployment, or other
+  compromise-equivalent operations. `critical` requires an exact low-privilege
+  subject, policy exception/timeout/malformed response, resulting affirmative
+  decision, protected sink invocation, and demonstrated crown-jewel effect.
 - Hardcoded or default credentials that are valid, reachable, and provide meaningful access warranting `high`, even when that access is not broad or privileged enough for `critical`.
 - Cryptographic failures that allow signature forgery, token forgery, trusted artifact forgery, secure-channel bypass, or decryption of highly sensitive data in a way that directly enables compromise, with actual proof that these attacks are practical and can be carried out from an in-scope attack surface.
 - Supply-chain or update-channel compromise that allows malicious code or malicious trusted artifacts to be delivered to users, servers, agents, or endpoints, including signing bypass or package source substitution with real impact. This should focus on actual supply-chain risk and risk around CI actions, not just "does npm report outdated packages"
@@ -184,6 +190,12 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   meaningful unauthorized access, with the selected algorithm, key
   reinterpretation, verification result, claims, and protected effect
   demonstrated.
+- External authorization fail-open that reliably converts a policy exception,
+  timeout, malformed/empty result, stale fallback, or retry exhaustion into
+  meaningful unauthorized access. High requires the exact policy inputs,
+  failure outcome, default/final decision, protected operation, explicit-deny
+  control, and legitimate-allow control; severity follows the asset,
+  privilege delta, reachability, and blast radius.
 - OAuth/OIDC login or account-linking CSRF that reliably authenticates the
   victim as the wrong subject, links an attacker-controlled external identity to
   a victim account, changes consent or credentials, or otherwise crosses a
@@ -295,6 +307,12 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   alternation, dynamic `RegExp`, unbounded input, or a slow development-machine
   timing without the exact engine, adversarial near-match, effective upstream
   bounds, shared-capacity path, and realistic attacker-to-defender cost ratio.
+- Fail-open reports based only on a `catch`, remote policy call, default value,
+  error log, circuit breaker, or unavailable dependency without proving the
+  exact failure produces permission and reaches a protected operation. Suppress
+  handlers that begin without permission, require an exact affirmative result,
+  bind it to the consumed subject/action/resource, and invoke no protected sink
+  on failures.
 - Authz findings that require already having the same privilege as the victim, or only expose trivial metadata.
 - Bugs that already require admin/root/shell access unless the privilege-escalation delta itself is the issue being reported.
 - Arbitrary file read limited to public files, low-sensitivity files, or source fragments with no realistic security consequence.
