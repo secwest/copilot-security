@@ -93,6 +93,24 @@ Use class-specific proof tuples:
   origin allowlist, or an unexposed actual response is counterevidence. CORS
   governs response readability, not whether a request executes, so evaluate a
   state-changing request without readable output separately as CSRF.
+- cross-site WebSocket hijacking: exact attacker page and browser-generated
+  Origin + real browser/headless reproduction or a faithful WebSocket handshake
+  simulator + proof that the victim cookie or HTTP credential attaches under
+  the deployed Domain, SameSite, Secure, schemeful-site, and third-party-cookie
+  rules + accepted HTTP upgrade and authenticated session + exact attacker
+  message + attacker JavaScript reading the server reply or causing a protected
+  action + demonstrated use of any disclosed key or token. Record the handshake
+  response/close code, registered handlers, and message transcript. Test
+  wholly cross-site and controlled same-site sibling origins as applicable,
+  plus `null`, suffix, scheme, and port variants; then prove the exact trusted
+  origin still connects. The negative control must reject before session lookup
+  and message-handler registration or require an unpredictable session-bound
+  connection token unavailable to the attacker, emit no sensitive message, and
+  preserve the legitimate client flow. CORS/preflight, HttpOnly, TLS,
+  authentication, or a WebSocket framework name is not suppression. Do not
+  report anonymous public channels, bearer-only/server-only credentials the
+  browser cannot attach, or non-browser Origin spoofing without access to a
+  victim credential as cross-site hijacking.
 - login session fixation: attacker-known or attacker-injectable
   pre-authentication session identifier + victim adoption of that identifier +
   successful credential transition that preserves or promotes the same

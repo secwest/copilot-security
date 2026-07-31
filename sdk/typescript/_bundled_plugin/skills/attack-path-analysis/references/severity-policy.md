@@ -88,6 +88,11 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   use for broad compromise. Critical requires the exact attacker origin,
   browser-attached victim credential, actual-response CORS policy, readable
   sensitive body, and compromise-equivalent downstream use.
+- Cross-site WebSocket hijacking that gives attacker JavaScript a victim's
+  administrative, cloud, cross-tenant, or control-plane channel and demonstrates
+  crown-jewel secret disclosure or compromise-equivalent privileged actions.
+  Critical requires the exact browser handshake, ambient victim credential,
+  accepted attacker Origin, message/action transcript, and downstream impact.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
@@ -104,6 +109,11 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   sensitivity, privileges, population, and demonstrated use of the disclosed
   material; reserve critical for compromise-equivalent administrative,
   cross-tenant, cloud, or control-plane impact.
+- Cross-site WebSocket hijacking that exposes meaningful API keys, session
+  material, PII, account or tenant data, or security-relevant authenticated
+  actions to attacker JavaScript. High requires realistic browser credential
+  attachment, accepted attacker Origin, and a readable message or protected
+  effect; severity follows data sensitivity, privilege, and blast radius.
 - Hardcoded or default credentials that are valid, reachable, and provide meaningful access warranting `high`, even when that access is not broad or privileged enough for `critical`.
 - Cryptographic failures that allow signature forgery, token forgery, trusted artifact forgery, secure-channel bypass, or decryption of highly sensitive data in a way that directly enables compromise, with actual proof that these attacks are practical and can be carried out from an in-scope attack surface.
 - Supply-chain or update-channel compromise that allows malicious code or malicious trusted artifacts to be delivered to users, servers, agents, or endpoints, including signing bypass or package source substitution with real impact. This should focus on actual supply-chain risk and risk around CI actions, not just "does npm report outdated packages"
@@ -173,6 +183,15 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   browser-attachable, an exact origin allowlist rejects the attacker before
   sensitive retrieval, or the actual response is not exposed. Evaluate any
   independent state-changing effect as CSRF.
+- WebSocket-hijacking reports based only on a WebSocket library, upgrade route,
+  missing generic middleware, authentication, or absent CORS headers without
+  proving browser attachment of a victim credential, acceptance of the exact
+  attacker Origin, and an attacker-readable sensitive message or meaningful
+  protected action. Suppress anonymous public channels, browser-unattachable
+  bearer/server credentials, exact Origin rejection before session/handler
+  setup, an effective unpredictable session-bound connection token, or cookie
+  policy that blocks every realistic attacker origin. A low-value ping,
+  presence indicator, or cosmetic action does not support high severity.
 - Open redirect, clickjacking, user enumeration, rate-limit weakness, banner leakage, version disclosure, directory listing, stack traces, internal hostnames, or basic error-message leakage, unless they are shown as part of a serious exploit chain.
 - Memory corruption that is theoretical, non-triggerable from in-scope input, or not plausibly exploitable in the target environment.
 - Request-smuggling claims based only on `Content-Length` and

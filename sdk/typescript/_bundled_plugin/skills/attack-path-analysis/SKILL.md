@@ -92,6 +92,19 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   browsers block, or from bearer-only/server-only credentials an attacker site
   cannot make the browser attach. Analyze an unreadable state change as CSRF
   instead.
+- For cross-site WebSocket-hijacking findings, preserve the attacker page,
+  exact browser-generated Origin, `ws:`/`wss:` endpoint, cookie Domain/SameSite/
+  Secure and third-party policy, automatically attached victim credential,
+  upgrade route, Origin or connection-token decision, authenticated session,
+  registered message handler, attacker message, readable server reply or
+  protected action, and any downstream use of disclosed data or credentials.
+  Separate wholly cross-site from same-site sibling reachability. CORS headers,
+  preflight, HttpOnly, TLS, authentication, or server acceptance alone is not
+  proof of either exploitation or suppression. Require an attacker-readable
+  channel transcript or exact state transition. Record rejection before session
+  lookup and handler registration, exact serialized-origin equality,
+  unpredictable session-bound connection tokens, trusted-origin success, and
+  `null`/sibling/suffix/scheme/port variants as distinct controls.
 - For native-memory findings, preserve the attacker-controlled bytes, length,
   index, pointer, object state, or scheduling action; the allocation and exact
   source/destination object extents in consistent units; integer wrap,

@@ -39,8 +39,10 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    JWT/OIDC algorithm, remote-key URL, key-origin, issuer, audience, and nonce
    binding, SAML/federated signed-assertion selection and trust binding,
    browser-ambient credential CSRF, credentialed CORS origin authorization and
-   attacker-JavaScript exposure of sensitive responses, authorization, state
-   changes, interpreters, filesystem, network, deserialization, and templates;
+   attacker-JavaScript exposure of sensitive responses, cookie-authenticated
+   WebSocket handshake Origin authorization and bidirectional channel exposure,
+   authorization, state changes, interpreters, filesystem, network,
+   deserialization, and templates;
    SQL and document-database query selectors/operators, LDAP filter construction
    and directory group/role binding, XPath/XQuery predicate construction and
    selected-node security binding, and bulk object binding;

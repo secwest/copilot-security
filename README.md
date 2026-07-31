@@ -168,8 +168,9 @@ smuggling, LDAP filter injection into directory-backed group authorization,
 XPath predicate injection into XML-backed authentication, OAuth account-linking
 CSRF leading to account takeover, login session fixation, password-reset link
 origin poisoning, credentialed CORS secret exfiltration, and adversarial
-repository instructions. Each of the 58 cases is scanned three times, producing
-174 scans that measure both accuracy and model
+repository instructions. The corpus also covers cross-site WebSocket hijacking
+of cookie-authenticated bidirectional channels. Each of the 60 cases is scanned
+three times, producing 180 scans that measure both accuracy and model
 variance. The evaluator uses one-to-one CWE-plus-location matching, counts
 duplicate reports as false positives, and records missing scan artifacts as
 completion failures.

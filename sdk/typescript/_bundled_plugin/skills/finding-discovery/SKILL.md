@@ -282,6 +282,27 @@ Use this checklist to keep discovery specific without turning it into validation
   header is counterevidence. Prefer parsed, exact origin equality over substring,
   suffix, or loose regex checks, and require `Vary: Origin` when dynamically
   selecting an allowed origin.
+- For cross-site WebSocket hijacking, enumerate HTTP upgrade handlers,
+  WebSocket/socket.io/SockJS servers, GraphQL subscription transports,
+  connection middleware, session-cookie or HTTP-auth lookup, Origin predicates,
+  subprotocol or connection-token checks, message handlers, privileged actions,
+  and server-to-client secrets or data. Trace attacker-page JavaScript through
+  the browser-generated `Origin`, `ws:`/`wss:` handshake, Domain/SameSite/Secure
+  and third-party-cookie rules, automatically attached victim credentials,
+  upgrade acceptance, session binding, the exact attacker message, server
+  action or reply, attacker JavaScript readability, and subsequent secret use
+  or state impact. CORS headers and preflight do not govern WebSocket upgrades;
+  HttpOnly prevents direct cookie reading but not browser attachment, and TLS
+  authenticates the endpoint rather than the page origin. SameSite Strict/Lax
+  can block a wholly cross-site handshake but may not block a controlled
+  same-site sibling, so preserve the exact schemeful-site relationship. A
+  WebSocket library, `Origin` symbol, or authenticated upgrade alone is not a
+  finding. Use an exact parsed serialized-origin allowlist enforced before
+  session lookup and handler registration, or an unpredictable session-bound
+  connection token the attacker page cannot obtain, as the negative control;
+  exercise trusted-origin success and reject `null`, sibling, suffix/regex,
+  scheme, and port variants. Public anonymous channels, browser-unattachable
+  bearer credentials, and server-only clients are counterevidence.
 - For native memory safety, enumerate attacker-influenced allocation, copy,
   move, receive, format, indexing, pointer-arithmetic, cast, ownership, and free
   operations across every concrete caller. Preserve the input bytes and

@@ -463,6 +463,45 @@
       "expected": []
     },
     {
+      "id": "javascript-cross-site-websocket-hijacking",
+      "description": "A WebSocket endpoint authenticates an ambient SameSite=None session cookie without authorizing the browser-supplied Origin, so cross-site attacker JavaScript can open the victim channel and read control-plane API keys.",
+      "fixture": "fixtures/javascript-cross-site-websocket-hijacking",
+      "findingsPaths": [
+        "javascript-cross-site-websocket-hijacking/run-1/findings.json",
+        "javascript-cross-site-websocket-hijacking/run-2/findings.json",
+        "javascript-cross-site-websocket-hijacking/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "cross-site-websocket-api-key-exfiltration",
+          "cwe": ["CWE-346", "CWE-352", "CWE-200"],
+          "locations": [
+            {
+              "path": "src/websocket-route.js",
+              "startLine": 1,
+              "endLine": 3,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-websocket-origin",
+      "description": "A cookie-authenticated WebSocket endpoint accepts only one exact trusted Origin and rejects sibling, suffix-lookalike, opaque, scheme, and port variants before session lookup or message-handler registration.",
+      "fixture": "fixtures/javascript-safe-websocket-origin",
+      "findingsPaths": [
+        "javascript-safe-websocket-origin/run-1/findings.json",
+        "javascript-safe-websocket-origin/run-2/findings.json",
+        "javascript-safe-websocket-origin/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-jwt-bypass",
       "description": "An administrative route trusts decoded JWT claims without verifying the token signature.",
       "fixture": "fixtures/javascript-jwt-bypass",

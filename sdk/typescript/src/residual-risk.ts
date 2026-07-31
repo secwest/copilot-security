@@ -112,6 +112,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\bAccess-Control-Allow-(?:Credentials|Origin)\b|\b(?:allowCredentials|credentialedCors|TRUSTED_ORIGINS)\b|\bcredentials\s*[:=]\s*(?:["']include["']|true)\b|\bcors\s*\(/iu,
   ],
   [
+    "cookie-authenticated-websocket-origin",
+    103,
+    /\b(?:WebSocket|WebSocketServer|Sec-WebSocket-(?:Protocol|Key|Version)|handleUpgrade|upgradeToWebSocket|socket\.io|SockJS|graphql-ws|subscriptions-transport-ws)\b|\b(?:ws|socket)\.on\s*\(\s*["'](?:connection|message|upgrade)["']|\b(?:ws|wss):\/\//iu,
+  ],
+  [
     "oauth-authorization-code-transaction-binding",
     100,
     /\b(?:authorizationUrl|authorizeUrl|codeChallenge|codeChallengeMethod|codeVerifier|exchangeCode|pkce|redirectUri|responseType)\b|\b(?:oauth|oidc)[\w./-]*(?:callback|link|redirect)\b/iu,

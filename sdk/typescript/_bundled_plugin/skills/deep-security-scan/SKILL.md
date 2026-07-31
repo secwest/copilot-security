@@ -160,6 +160,22 @@ inventory and closure requirements.
      browser-blocked for credentialed reads. Use rejection before sensitive-data
      retrieval with no allow-origin header, plus successful access from one exact
      trusted origin and `Vary: Origin`, as the negative control.
+   - Cross-site WebSocket handshake authorization: every HTTP upgrade,
+     WebSocket/socket.io/SockJS connection, GraphQL subscription transport,
+     cookie/HTTP-auth session lookup, Origin or connection-token decision,
+     message handler, privileged action, and server-to-client secret. Preserve
+     the attacker page, browser-generated Origin, `ws:`/`wss:` endpoint,
+     Domain/SameSite/Secure and third-party-cookie behavior, automatically
+     attached victim credential, accepted channel, exact attacker message,
+     readable reply or state change, and subsequent impact. CORS, preflight,
+     HttpOnly, TLS, authentication, or a framework name is not handshake Origin
+     authorization. SameSite restrictions must be evaluated separately for
+     wholly cross-site and controlled same-site sibling origins. Use rejection
+     before session lookup and message-handler registration through an exact
+     serialized-origin allowlist, plus trusted-origin success and hostile
+     `null`/sibling/suffix/scheme/port tests, as the negative control. A strong
+     unpredictable session-bound connection token unavailable to the attacker
+     page can be equivalent.
    - JWT/JWS/OIDC key origin and claim binding: every protected-header parser,
      algorithm and `kid` selection, `jku`/`x5u`/embedded key input, issuer
      discovery or metadata mapping, JWKS URL source, redirect and cache path,

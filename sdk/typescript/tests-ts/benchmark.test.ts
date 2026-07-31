@@ -60,6 +60,10 @@ describe("effectiveness benchmark", () => {
         "javascript-credentialed-cors-exfiltration",
         "javascript-safe-cors-allowlist",
       ],
+      [
+        "javascript-cross-site-websocket-hijacking",
+        "javascript-safe-websocket-origin",
+      ],
       ["javascript-jwt-bypass", "javascript-safe-jwt"],
       [
         "javascript-jwks-header-key-injection",
@@ -171,6 +175,23 @@ describe("effectiveness benchmark", () => {
         path: "src/cors.js",
         startLine: 2,
         endLine: 5,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-cross-site-websocket-hijacking")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-346", "CWE-352", "CWE-200"]]);
+    expect(
+      cases
+        .get("javascript-cross-site-websocket-hijacking")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/websocket-route.js",
+        startLine: 1,
+        endLine: 3,
         lineTolerance: 3,
       },
     ]);
@@ -526,6 +547,34 @@ describe("effectiveness benchmark", () => {
     ).toContain(
       'const TRUSTED_ORIGINS = new Set(["https://portal.example.test"])',
     );
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-cross-site-websocket-hijacking",
+          "src",
+          "websocket-route.js",
+        ),
+        "utf8",
+      ),
+    ).toContain(
+      'const session = sessions.get(String(request.cookies.sid ?? ""))',
+    );
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-safe-websocket-origin",
+          "src",
+          "websocket-route.js",
+        ),
+        "utf8",
+      ),
+    ).toContain(
+      'const TRUSTED_WEBSOCKET_ORIGINS = new Set(["https://portal.example.test"])',
+    );
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -615,6 +664,7 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("bulk object binding and mass assignment");
     expect(deepScan).toContain("browser-ambient credential CSRF");
     expect(deepScan).toContain("Credentialed CORS response authorization:");
+    expect(deepScan).toContain("Cross-site WebSocket handshake authorization:");
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
@@ -642,6 +692,9 @@ describe("effectiveness benchmark", () => {
     expect(standardScan).toContain("browser-ambient credential CSRF");
     expect(standardScan).toContain("credentialed CORS origin authorization");
     expect(standardScan).toContain(
+      "WebSocket handshake Origin authorization and bidirectional channel exposure",
+    );
+    expect(standardScan).toContain(
       "native memory allocation/copy/index/lifetime",
     );
     expect(standardScan).toContain(
@@ -666,6 +719,7 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain("writable-field sets");
     expect(diffScan).toContain("anti-CSRF token");
     expect(diffScan).toContain("changed CORS origin reflection");
+    expect(diffScan).toContain("changed WebSocket/socket.io upgrade handlers");
     expect(diffScan).toContain("terminator space");
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("changed RFC 4515 assertion escaping");
@@ -693,6 +747,7 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain("route-level ownership check does not");
     expect(discovery).toContain("bearer-only APIs");
     expect(discovery).toContain("For credentialed CORS response exposure");
+    expect(discovery).toContain("For cross-site WebSocket hijacking");
     expect(discovery).toContain("For native memory safety");
     expect(discovery).toContain("bounded API is neither vulnerable");
     expect(discovery).toContain("For document-query and NoSQL APIs");
@@ -745,6 +800,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("bulk object binding/mass assignment:");
     expect(validation).toContain("browser CSRF:");
     expect(validation).toContain("credentialed CORS response exposure:");
+    expect(validation).toContain("cross-site WebSocket hijacking:");
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("LDAP filter injection:");
@@ -774,6 +830,7 @@ describe("effectiveness benchmark", () => {
     expect(attackPath).toContain(
       "For credentialed CORS response-exposure findings",
     );
+    expect(attackPath).toContain("For cross-site WebSocket-hijacking findings");
     expect(attackPath).toContain("For native-memory findings");
     expect(attackPath).toContain("For document-query and NoSQL findings");
     expect(attackPath).toContain("For LDAP filter findings");
@@ -799,6 +856,8 @@ describe("effectiveness benchmark", () => {
     expect(severityPolicy).toContain("CSRF on low-impact actions");
     expect(severityPolicy).toContain("Credentialed CORS exposure");
     expect(severityPolicy).toContain("CORS reports based only");
+    expect(severityPolicy).toContain("Cross-site WebSocket hijacking");
+    expect(severityPolicy).toContain("WebSocket-hijacking reports based only");
     expect(severityPolicy).toContain(
       "Memory corruption that is theoretical, non-triggerable",
     );
@@ -866,11 +925,17 @@ describe("effectiveness benchmark", () => {
     expect(threatModelGuidance).toContain(
       "credentialed CORS response authorization",
     );
+    expect(threatModelGuidance).toContain(
+      "cookie-authenticated WebSocket handshake Origin authorization",
+    );
     expect(repositoryWideScan).toContain(
       "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
     );
     expect(repositoryWideScan).toContain(
       "credentialed CORS origin authorization",
+    );
+    expect(repositoryWideScan).toContain(
+      "cookie-authenticated WebSocket upgrade Origin authorization",
     );
     expect(threatModelGuidance).toContain(
       "session management including login fixation and authenticated-session rotation",

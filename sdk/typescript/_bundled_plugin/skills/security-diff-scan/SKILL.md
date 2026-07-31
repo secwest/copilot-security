@@ -63,8 +63,9 @@ publish findings, open issues, or contact third parties. Write only beneath
    SAML/federated signature references and consumed
    identity objects, bulk object binding and mass-assignment field controls,
    browser-ambient credential and CSRF controls, credentialed CORS response
-   authorization, native memory allocation/copy/index/lifetime boundaries,
-   cryptographic, state, concurrency, and
+   authorization, WebSocket upgrade Origin/session/message authorization,
+   native memory allocation/copy/index/lifetime boundaries, cryptographic,
+   state, concurrency, and
    resource-control boundaries.
 4. Compare the patch with the exact pre-change behavior. Look specifically for:
 
@@ -89,6 +90,10 @@ publish findings, open issues, or contact third parties. Write only beneath
    - changed CORS origin reflection, exact-origin allowlists, credentials mode,
      preflight handling, actual-response headers, or sensitive response bodies
      that could let attacker JavaScript read a victim's credentialed response;
+   - changed WebSocket/socket.io upgrade handlers, Origin comparisons, cookie or
+     HTTP-auth session binding, connection tokens, registered message actions,
+     or server replies that could expose a victim's authenticated channel to
+     attacker JavaScript;
    - changed integer units, signedness, allocation arithmetic, object extents,
      copy/read/write lengths, indexes, terminator space, ownership, or lifetime
      around attacker-influenced native-memory operations;

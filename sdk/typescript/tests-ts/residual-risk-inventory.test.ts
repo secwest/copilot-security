@@ -876,6 +876,34 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs cookie-authenticated WebSocket upgrades with exact Origin authorization", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-cross-site-websocket-hijacking"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-websocket-origin"),
+    );
+
+    expect(vulnerable).toContain('"cookie-authenticated-websocket-origin"');
+    expect(vulnerable).toContain(
+      'const session = sessions.get(String(request.cookies.sid ?? ""))',
+    );
+    expect(vulnerable).toContain('socket.on("message"');
+    expect(vulnerable).toContain("apiKeys.forAccount(session.accountId)");
+    expect(safe).toContain('"cookie-authenticated-websocket-origin"');
+    expect(safe).toContain("TRUSTED_WEBSOCKET_ORIGINS.has(origin)");
+    expect(safe).toContain("https://portal.example.test");
+    expect(safe).toContain('socket.close(4403, "origin_not_allowed")');
+    expect(safe.indexOf("TRUSTED_WEBSOCKET_ORIGINS.has(origin)")).toBeLessThan(
+      safe.indexOf(
+        'const session = sessions.get(String(request.cookies.sid ?? ""))',
+      ),
+    );
+    expect(scanQualityGatePrompt("")).toContain(
+      "cookie-authenticated WebSocket handshake Origin authorization and bidirectional message exposure or privileged actions",
+    );
+  });
+
   test("keeps bearer-only state changes out of the specialized CSRF signal", async () => {
     const repository = await mkdtemp(
       join(tmpdir(), "copilot-security-bearer-api-"),
