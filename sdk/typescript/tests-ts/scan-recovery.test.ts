@@ -522,6 +522,31 @@ describe("malformed scan artifact recovery", () => {
     }
   });
 
+  test("normalizes JWT algorithm and key-type confusion taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "JWT algorithm confusion accepts a public-key HMAC forgery";
+    finding.summary =
+      "The verifier accepts token-selected HS256 alongside RS256 and reuses the RSA public key as the HMAC secret, allowing a forged administrator token.";
+    finding["taxonomy"] = {
+      category: "weak-cryptographic-algorithm",
+      cwe: ["CWE-327"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "jwt-algorithm-key-confusion",
+      cwe: ["CWE-347"],
+    });
+  });
+
   test("corrects browser-cache taxonomy for cross-principal web cache deception", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

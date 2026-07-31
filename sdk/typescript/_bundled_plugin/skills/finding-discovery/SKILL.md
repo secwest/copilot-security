@@ -208,6 +208,12 @@ Use this checklist to keep discovery specific without turning it into validation
 - For JWT/JWS/OIDC verification, preserve the protected header and every source
   of `alg`, `kid`, `jku`, `x5u`, embedded JWK/certificate, issuer discovery,
   metadata, JWKS URI, redirects, cache entries, and selected key provenance.
+  Trace `alg` through library options and application branches into the exact
+  signature or MAC primitive and runtime key representation. Treat acceptance of
+  both symmetric and asymmetric algorithms with the same key material,
+  reinterpretation of a published RSA/EC/OKP public key as an HMAC secret,
+  missing algorithm-to-key-type compatibility, or an attacker-selected downgrade
+  as a separate algorithm-confusion candidate even when key origin is trusted.
   Follow the verified claims through issuer, audience, subject, lifetime, nonce,
   replay, and final session or privilege installation. Treat a token-controlled
   remote key URL, an attacker-derived issuer-to-JWKS mapping, multiple ambiguous
@@ -216,11 +222,15 @@ Use this checklist to keep discovery specific without turning it into validation
 - Strong counterevidence requires that header-supplied key locators are rejected
   or ignored, the remote key set is selected only from trusted allowlisted or
   issuer-pinned configuration, redirects and cache scope preserve that origin,
-  exactly one compatible key is selected, the algorithm is fixed, and verified
-  claims plus nonce/replay state remain bound through principal creation.
+  exactly one compatible key is selected, the algorithm is fixed before key
+  lookup, the runtime key family matches the algorithm, only the intended
+  asymmetric or symmetric primitive is reachable, and verified claims plus
+  nonce/replay state remain bound through principal creation.
   Do not report `kid`, `jku`, JWKS fetching, or OIDC discovery by name alone
   without proving attacker influence over key provenance and authentication
-  impact.
+  impact. Likewise, do not report support for multiple algorithms by name alone:
+  prove an attacker can choose an incompatible algorithm/key interpretation and
+  produce a token that reaches a protected identity or action.
 - For OAuth/OIDC authorization-code login, account-linking, consent, and
   reauthentication callbacks, trace the exact initiation transaction through
   the browser redirect, authorization response, code exchange, verified

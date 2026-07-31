@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-javascript-safe-jwt-algorithm-binding",
+  "private": true,
+  "type": "module"
+}

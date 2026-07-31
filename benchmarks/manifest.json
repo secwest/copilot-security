@@ -631,6 +631,51 @@
       "expected": []
     },
     {
+      "id": "javascript-jwt-algorithm-confusion",
+      "description": "A JWT verifier accepts the token-selected HS256 algorithm and reuses a configured RSA public key as an HMAC secret, letting an unauthenticated attacker forge administrative claims and export the signing audit.",
+      "fixture": "fixtures/javascript-jwt-algorithm-confusion",
+      "findingsPaths": [
+        "javascript-jwt-algorithm-confusion/run-1/findings.json",
+        "javascript-jwt-algorithm-confusion/run-2/findings.json",
+        "javascript-jwt-algorithm-confusion/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "rsa-public-key-hmac-jwt-forgery",
+          "cwe": ["CWE-347", "CWE-287"],
+          "locations": [
+            {
+              "path": "src/token.js",
+              "startLine": 22,
+              "endLine": 35,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/admin.js",
+              "startLine": 1,
+              "endLine": 5,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-jwt-algorithm-binding",
+      "description": "The JWT verifier pins RS256 before key selection, requires a configured RSA public key, performs only asymmetric signature verification, and preserves legitimate viewer and administrator tokens.",
+      "fixture": "fixtures/javascript-safe-jwt-algorithm-binding",
+      "findingsPaths": [
+        "javascript-safe-jwt-algorithm-binding/run-1/findings.json",
+        "javascript-safe-jwt-algorithm-binding/run-2/findings.json",
+        "javascript-safe-jwt-algorithm-binding/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-jwks-header-key-injection",
       "description": "An OIDC verifier constrains jku to a shared JWKS-service origin but accepts the token's attacker-tenant path and key, installing forged administrative claims even though issuer, audience, lifetime, and nonce checks pass.",
       "fixture": "fixtures/javascript-jwks-header-key-injection",

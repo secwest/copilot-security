@@ -211,6 +211,16 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   their own key to become the trust root for a token that receives protected
   identity or privileges. Signature success alone is not a control; a trusted
   issuer-pinned key source and end-to-end claim binding are counterevidence.
+- For JWT/JWS algorithm-confusion findings, preserve the legitimate asymmetric
+  token and the forged compact token, decoded `alg` and `kid`, published public
+  key bytes, runtime key representation, signature-versus-MAC branch, exact
+  cryptographic primitive and result, accepted claims, and protected identity or
+  action. Prove the attacker can compute the accepted forgery without the
+  private key by reinterpreting public verification material or otherwise
+  crossing algorithm/key families. A verifier that pins the algorithm before
+  key lookup, requires a compatible key object, invokes only the intended
+  primitive, accepts a legitimate token, and rejects the same forgery is
+  counterevidence.
 - For OAuth/OIDC authorization-code login and account-linking findings, preserve
   both attacker and victim browser sessions; the initiation account and
   operation; authorization request; code, `state`, nonce, redirect URI, PKCE

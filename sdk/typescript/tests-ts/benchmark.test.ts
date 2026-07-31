@@ -71,6 +71,10 @@ describe("effectiveness benchmark", () => {
       ],
       ["javascript-jwt-bypass", "javascript-safe-jwt"],
       [
+        "javascript-jwt-algorithm-confusion",
+        "javascript-safe-jwt-algorithm-binding",
+      ],
+      [
         "javascript-jwks-header-key-injection",
         "javascript-safe-jwks-key-origin",
       ],
@@ -243,6 +247,29 @@ describe("effectiveness benchmark", () => {
         path: "src/recovery.js",
         startLine: 9,
         endLine: 16,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-jwt-algorithm-confusion")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-347", "CWE-287"]]);
+    expect(
+      cases
+        .get("javascript-jwt-algorithm-confusion")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/token.js",
+        startLine: 22,
+        endLine: 35,
+        lineTolerance: 3,
+      },
+      {
+        path: "src/admin.js",
+        startLine: 1,
+        endLine: 5,
         lineTolerance: 3,
       },
     ]);
@@ -790,7 +817,11 @@ describe("effectiveness benchmark", () => {
     );
     expect(deepScan).toContain("untrusted upload and content placement:");
     expect(deepScan).toContain("HTTP request framing and smuggling:");
-    expect(deepScan).toContain("JWT/JWS/OIDC key origin and claim binding:");
+    expect(deepScan).toContain(
+      "JWT/JWS/OIDC algorithm, key-family, key origin, and claim binding:",
+    );
+    expect(deepScan).toContain("asymmetric public-key bytes can");
+    expect(deepScan).toContain("be reinterpreted as an HMAC secret");
     expect(deepScan).toContain("SAML and federated assertion binding:");
     expect(standardScan).toContain("bulk object binding");
     expect(standardScan).toContain("mass assignment");
@@ -824,7 +855,8 @@ describe("effectiveness benchmark", () => {
     );
     expect(standardScan).toContain("untrusted uploads and");
     expect(standardScan).toContain("HTTP message framing and parser agreement");
-    expect(standardScan).toContain("JWT/OIDC algorithm, remote-key URL");
+    expect(standardScan).toContain("JWT/OIDC algorithm-to-key-family binding");
+    expect(standardScan).toContain("public-key-as-HMAC confusion");
     expect(standardScan).toContain("SAML/federated signed-assertion selection");
     expect(diffScan).toContain("mass-assignment field controls");
     expect(diffScan).toContain("writable-field sets");
@@ -853,7 +885,10 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain(
       "SAML/SSO assertion ID lookup, signature-reference resolution",
     );
-    expect(diffScan).toContain("JWT/JWS/OIDC `alg`, `kid`, `jku`, `x5u`");
+    expect(diffScan).toContain(
+      "JWT/JWS/OIDC `alg`, accepted algorithm set, signature-versus-MAC",
+    );
+    expect(diffScan).toContain("public-key/symmetric-secret representation");
     expect(discovery).toContain(
       "distinguish attacker-controlled template source from attacker-controlled data",
     );
@@ -894,6 +929,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(discovery).toContain("For JWT/JWS/OIDC verification");
     expect(discovery).toContain(
+      "reinterpretation of a published RSA/EC/OKP public key as an HMAC secret",
+    );
+    expect(discovery).toContain(
       "Do not report `kid`, `jku`, JWKS fetching, or OIDC discovery",
     );
     expect(discovery).toContain(
@@ -933,6 +971,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("untrusted upload/content placement:");
     expect(validation).toContain("HTTP request smuggling/desynchronization:");
     expect(validation).toContain("JWT/JWS/OIDC remote key origin:");
+    expect(validation).toContain("JWT/JWS algorithm and key-type confusion:");
     expect(validation).toContain(
       "OAuth/OIDC authorization-code transaction or account-linking CSRF:",
     );
@@ -972,6 +1011,7 @@ describe("effectiveness benchmark", () => {
     );
     expect(attackPath).toContain("For SAML/federated signed-object findings");
     expect(attackPath).toContain("For JWT/JWS/OIDC remote-key findings");
+    expect(attackPath).toContain("For JWT/JWS algorithm-confusion findings");
     expect(attackPath).toContain(
       "For OAuth/OIDC authorization-code login and account-linking findings",
     );
@@ -998,6 +1038,12 @@ describe("effectiveness benchmark", () => {
     );
     expect(severityPolicy).toContain(
       "Document-query or NoSQL operator injection",
+    );
+    expect(severityPolicy).toContain(
+      "JWT/JWS algorithm/key-type confusion that lets an unauthenticated attacker",
+    );
+    expect(severityPolicy).toContain(
+      "JWT algorithm-confusion reports based only on support for more than one",
     );
     expect(severityPolicy).toContain(
       "LDAP filter injection that demonstrably bypasses authentication",
@@ -1046,7 +1092,7 @@ describe("effectiveness benchmark", () => {
       "HTTP framing/parser agreement across proxies",
     );
     expect(threatModelGuidance).toContain(
-      "JWT/JWS/OIDC algorithm, remote-key, issuer-to-JWKS",
+      "JWT/JWS/OIDC algorithm-to-key-family and signature-versus-MAC binding",
     );
     expect(threatModelGuidance).toContain(
       "LDAP filter and directory group/role authorization binding",
@@ -1083,6 +1129,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(repositoryWideScan).toContain(
       "GraphQL aliases/fragments/nesting/batches/persisted documents",
+    );
+    expect(repositoryWideScan).toContain(
+      "JWT/JWS token-selected algorithm and key-family confusion",
     );
     expect(threatModelGuidance).toContain(
       "session management including login fixation and authenticated-session rotation",

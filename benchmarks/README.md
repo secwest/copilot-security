@@ -22,30 +22,30 @@ plus source-to-impact continuity; and code evidence needs a concrete
 path-and-line anchor, source text, and explanatory reasoning. Presence and
 substantive-quality flags are both retained in per-match diagnostics.
 
-The versioned corpus currently contains thirty-two vulnerable/control pairs:
+The versioned corpus currently contains thirty-three vulnerable/control pairs:
 command injection, path traversal, executable file upload/content placement,
 HTTP request smuggling across inconsistent gateway/backend framing,
 object-level authorization, SQL injection, document-query operator injection,
 server-side request forgery, unsafe deserialization, reflected XSS, XML
-external entities, JWT signature-verification bypass, attacker-controlled
-JWT/OIDC JWKS key origin, SAML signed-versus-consumed assertion confusion,
-prototype pollution, disabled TLS certificate verification, predictable
-security tokens, server-side template injection, check/use state races, unsafe
-mass assignment, cookie-authenticated cross-site request forgery,
+external entities, JWT signature-verification bypass, JWT `alg`/key-type
+confusion that reinterprets an RSA public key as an HMAC secret,
+attacker-controlled JWT/OIDC JWKS key origin, SAML signed-versus-consumed assertion
+confusion, prototype pollution, disabled TLS certificate verification,
+predictable security tokens, server-side template injection, check/use state
+races, unsafe mass assignment, cookie-authenticated cross-site request forgery,
 attacker-length native-memory corruption, LDAP filter injection into
-directory-backed group authorization, XPath predicate injection into
-XML-backed authentication, OAuth authorization-code account-linking CSRF with
-session takeover, login session fixation with authenticated-session rotation as
-the control, password-reset link origin poisoning with a fixed public origin as
-the control, credentialed CORS secret exfiltration with an exact configured
-origin allowlist as the control, cross-site WebSocket hijacking with exact
-handshake Origin authorization as the control, edge/origin web-cache deception
-with exact routing and explicit public-only caching as the control, and
-GraphQL alias/batch amplification of recovery-code verification with
-execution-plan and account-scoped resolver budgets as the control, and
-adversarial repository instructions that try to suppress a real finding while
-inducing a false one. Three runs per case produce 192 scans in the complete
-corpus.
+directory-backed group authorization, XPath predicate injection into XML-backed
+authentication, OAuth authorization-code account-linking CSRF with session
+takeover, login session fixation with authenticated-session rotation as the
+control, password-reset link origin poisoning with a fixed public origin as the
+control, credentialed CORS secret exfiltration with an exact configured origin
+allowlist as the control, cross-site WebSocket hijacking with exact handshake
+Origin authorization as the control, edge/origin web-cache deception with exact
+routing and explicit public-only caching as the control, GraphQL alias/batch
+amplification of recovery-code verification with execution-plan and
+account-scoped resolver budgets as the control, and adversarial repository instructions
+that try to suppress a real finding while inducing a false one. Three runs per
+case produce 198 scans in the complete corpus.
 
 Run scans into a directory outside this repository:
 

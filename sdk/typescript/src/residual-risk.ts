@@ -102,6 +102,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:authorization|bearer|cookie|jwt|login|oauth|oidc|session|token)\b|\b(?:authenticate|decode|verify)\s*\(/iu,
   ],
   [
+    "privileged-role-or-operation",
+    93,
+    /\b(?:admin|administrator|privileged|role)\b|\b(?:exportAudit|exportSigningAudit|requireAdministrator)\b/iu,
+  ],
+  [
     "browser-ambient-credential-or-csrf",
     96,
     /\b(?:anti[_-]?forgery|antiforgery|csrf|xsrf)\b|\b(?:SameSite|Sec-Fetch-Site)\b|\bsame_?site\s*[:=]\s*["']?none\b|\bValidateAntiForgeryToken\b/iu,
@@ -260,6 +265,11 @@ const RISK_SIGNALS: ReadonlyArray<
     "cryptographic-verification",
     75,
     /\b(?:crypto|decrypt|encrypt|hash|hmac|jwt|signature|verify)\b/iu,
+  ],
+  [
+    "jwt-jws-algorithm-key-confusion",
+    101,
+    /\b(?:HS256|RS256|ES256|EdDSA|EXPECTED_ALGORITHM|allowedAlgorithms|asymmetricKeyType|createHmac)\b|\b(?:header|protectedHeader)\s*(?:\.|\[\s*["'])\s*alg\b|\b(?:publicKey|verificationKey|keyMaterial)\b/iu,
   ],
   [
     "jwt-oidc-remote-key-origin",

@@ -36,8 +36,9 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    rotation, password-reset, verification, invitation, and magic-login absolute URL origins,
    OAuth/OIDC authorization-code state, nonce, PKCE,
    callback-session, redirect-URI, and account-linking transaction binding,
-   JWT/OIDC algorithm, remote-key URL, key-origin, issuer, audience, and nonce
-   binding, SAML/federated signed-assertion selection and trust binding,
+   JWT/OIDC algorithm-to-key-family binding, public-key-as-HMAC confusion,
+   signature-versus-MAC selection, remote-key URL, key-origin, issuer, audience,
+   and nonce binding, SAML/federated signed-assertion selection and trust binding,
    browser-ambient credential CSRF, credentialed CORS origin authorization and
    attacker-JavaScript exposure of sensitive responses, cookie-authenticated
    WebSocket handshake Origin authorization and bidirectional channel exposure,

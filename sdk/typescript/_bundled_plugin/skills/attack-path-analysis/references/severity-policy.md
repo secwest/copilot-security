@@ -64,6 +64,12 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   or cross-tenant identity, and install that principal. Critical requires the
   exact token, attacker-controlled key-origin path, successful verification, and
   compromise-equivalent identity impact.
+- JWT/JWS algorithm/key-type confusion that lets an unauthenticated attacker
+  forge an administrative, cross-tenant, signing, billing, or control-plane
+  identity without the private key and obtain compromise-equivalent access.
+  Critical requires the exact compact token, public or mismatched key material,
+  selected signature/MAC branch, successful cryptographic check, accepted
+  claims, and high-value protected effect.
 - OAuth/OIDC authorization-code or account-linking transaction confusion that
   lets an attacker bind their external identity to an administrator,
   cross-tenant, billing, or otherwise high-value victim account and subsequently
@@ -165,6 +171,11 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   `x5u`, embedded material, untrusted discovery, redirect, cache confusion, or
   ambiguous `kid` selection and thereby produces meaningful unauthorized access,
   with the selected key and installed identity demonstrated.
+- JWT/JWS algorithm/key-type confusion that reliably accepts an
+  attacker-computable token under a trusted key identifier and produces
+  meaningful unauthorized access, with the selected algorithm, key
+  reinterpretation, verification result, claims, and protected effect
+  demonstrated.
 - OAuth/OIDC login or account-linking CSRF that reliably authenticates the
   victim as the wrong subject, links an attacker-controlled external identity to
   a victim account, changes consent or credentials, or otherwise crosses a
@@ -250,6 +261,10 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   fetching, dynamic issuer support, or a missing optional metadata check without
   proving attacker control of the accepted verification-key origin and a forged
   principal or protected action.
+- JWT algorithm-confusion reports based only on support for more than one
+  algorithm, a header-controlled `alg`, HMAC/RSA API names, or missing library
+  options without proving a cross-family key reinterpretation, accepted
+  attacker-computable token, and protected identity or action.
 - OAuth/OIDC callback reports based only on missing `state`, nonce, or PKCE,
   parameter names, or a generic callback route without proving transaction
   substitution, browser-session/account misbinding, and a resulting wrong

@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-javascript-jwt-algorithm-confusion",
+  "private": true,
+  "type": "module"
+}

@@ -59,7 +59,8 @@ publish findings, open issues, or contact third parties. Write only beneath
    backends, login session fixation and authenticated-session rotation,
    OAuth/OIDC authorization-code state, nonce, PKCE, callback-session,
    redirect-URI, and account-linking transaction binding, JWT/OIDC protected
-   headers, remote key sources, JWKS/issuer mapping, algorithm and claim binding,
+   headers, algorithm/key-family binding, signature-versus-MAC primitives,
+   remote key sources, JWKS/issuer mapping, and claim binding,
    SAML/federated signature references and consumed
    identity objects, bulk object binding and mass-assignment field controls,
    browser-ambient credential and CSRF controls, credentialed CORS response
@@ -124,10 +125,11 @@ publish findings, open issues, or contact third parties. Write only beneath
      canonicalization, list indexing, cloning/return selection, claims parsing,
      issuer/audience/recipient/destination binding, assertion lifetime, replay
      handling, or session/principal installation;
-   - changed JWT/JWS/OIDC `alg`, `kid`, `jku`, `x5u`, embedded-key, discovery,
-     issuer-to-JWKS mapping, redirect, key-cache, matching-key cardinality,
-     key-type/use, signature, issuer/audience/lifetime/nonce, or principal
-     installation behavior;
+   - changed JWT/JWS/OIDC `alg`, accepted algorithm set, signature-versus-MAC
+     branch, public-key/symmetric-secret representation, `kid`, `jku`, `x5u`,
+     embedded-key, discovery, issuer-to-JWKS mapping, redirect, key-cache,
+     matching-key cardinality, key-type/use, signature,
+     issuer/audience/lifetime/nonce, or principal installation behavior;
    - changed OAuth/OIDC authorization-code initiation or callback `state`, nonce,
      transaction entropy/storage/expiry/one-time use, browser-session/local-
      account/operation binding, redirect URI, PKCE challenge/verifier, code

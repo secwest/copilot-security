@@ -2515,6 +2515,26 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         # CWE-307 captures the defeated authentication-attempt restriction;
         # CWE-799 captures the transport-to-resolver interaction-frequency gap.
         return "graphql-operation-amplification", ["CWE-307", "CWE-799"]
+    if (
+        "jwt" in text
+        and (
+            "algorithm confusion" in text
+            or "algorithm-confusion" in text
+            or "algorithm/key-type confusion" in text
+            or "algorithm key type confusion" in text
+            or "public-key-as-hmac" in text
+            or "public key as hmac" in text
+            or (
+                ("hs256" in text or "hmac" in text)
+                and (
+                    "rs256" in text
+                    or "rsa public key" in text
+                    or "public key" in text
+                )
+            )
+        )
+    ):
+        return "jwt-algorithm-key-confusion", ["CWE-347"]
     if isinstance(taxonomy, dict):
         cwe = taxonomy.get("cwe")
         normalized_cwe = (

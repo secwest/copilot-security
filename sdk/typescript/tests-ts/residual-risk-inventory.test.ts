@@ -356,6 +356,32 @@ describe("residual risk inventory", () => {
     expect(safe).toContain('issuer: "https://identity.example"');
   });
 
+  test("pairs JWT algorithm confusion with pinned algorithm and key type", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-jwt-algorithm-confusion"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-jwt-algorithm-binding"),
+    );
+
+    expect(vulnerable).toContain('"authentication-or-session"');
+    expect(vulnerable).toContain('"cryptographic-verification"');
+    expect(vulnerable).toContain('"jwt-jws-algorithm-key-confusion"');
+    expect(vulnerable).toContain('"privileged-role-or-operation"');
+    expect(vulnerable).toContain('header.alg === "RS256"');
+    expect(vulnerable).toContain('header.alg === "HS256"');
+    expect(vulnerable).toContain('createHmac("sha256", verificationKey)');
+    expect(vulnerable).toContain("database.exportSigningAudit()");
+    expect(safe).toContain('"jwt-jws-algorithm-key-confusion"');
+    expect(safe).toContain('EXPECTED_ALGORITHM = "RS256"');
+    expect(safe).toContain('verificationKey.asymmetricKeyType !== "rsa"');
+    expect(safe).toContain('"RSA-SHA256"');
+    expect(safe).not.toContain("createHmac");
+    expect(scanQualityGatePrompt("")).toContain(
+      "JWT/JWS algorithm-to-key-family and signature-versus-MAC binding including public-key-as-HMAC confusion",
+    );
+  });
+
   test("pairs token-controlled JWKS key origin with issuer-pinned key selection", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-jwks-header-key-injection"),
@@ -378,7 +404,7 @@ describe("residual risk inventory", () => {
     expect(safe).toContain("matchingKeys.length !== 1");
     expect(safe).toContain("policy.pendingNonces.delete(claims.nonce)");
     expect(scanQualityGatePrompt("")).toContain(
-      "JWT/OIDC algorithm and issuer-pinned JWKS key-origin binding",
+      "issuer-pinned JWKS key-origin binding",
     );
   });
 

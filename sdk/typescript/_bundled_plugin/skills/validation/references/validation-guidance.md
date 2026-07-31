@@ -268,6 +268,16 @@ Use class-specific proof tuples:
 - SSRF optional-filter/redirect control: attacker-controlled download/webhook/callback URL + optional, empty-by-default, regex-only, pre-request-only, or redirect-following destination control + internal/LAN/cloud metadata/file-backed fetch or server-side callback side effect
 - auth/token/assertion/protocol control: attacker-controlled token, assertion, protocol metadata, or version value + exact validator/control semantics + mismatch between validated value and trusted value, incomplete canonicalization/equality, unchecked parsing, or missing binding + authentication, authorization, or protocol-security impact
 - stateful auth protocol transition: attacker-controlled credentials, principal, token, issuer, assertion, server response, or protocol metadata + state transition after TLS upgrade, bind, redirect, callback, assertion validation, or identity-provider response + missing rebind/reauthentication, stale identity reuse, incomplete issuer/callback binding, or validated-vs-consumed mismatch + authentication bypass or identity confusion impact
+- JWT/JWS algorithm and key-type confusion: attacker-controlled compact token and
+  protected `alg` + verifier support for symmetric and asymmetric algorithms or
+  a token-selected verification branch + one configured key representation that
+  crosses algorithm families, especially published RSA/EC/OKP public-key bytes
+  reused as an HMAC secret + a real attacker-computed MAC/signature accepted as
+  trusted claims + installed identity or protected action. The negative control
+  must pin the algorithm before key selection, require a compatible runtime key
+  type, invoke only the intended asymmetric or symmetric primitive, accept a
+  legitimate token, and reject the confused-algorithm forgery, tampering,
+  unknown key, and wrong key type.
 - JWT/JWS/OIDC remote key origin: attacker-controlled compact token and protected
   header + `jku`, `x5u`, embedded key, issuer discovery, or other attacker-derived
   verification-key source + actual JWKS/certificate URL and redirect/cache path +
@@ -333,6 +343,14 @@ Use this checklist to keep validation close to the prompt contract:
   assertion. Use a reference-selected, verified-payload-derived session plus
   wrong-audience, wrong-recipient, expired, duplicate-ID, and replay cases as
   negative controls when feasible.
+- For JWT/JWS algorithm-confusion candidates, create a real asymmetric key pair
+  and compact token when feasible. Publish only the public verification key,
+  sign a legitimate token with the private key, then use the public-key bytes as
+  the MAC secret for a token-selected symmetric algorithm. Record the protected
+  headers, exact key bytes and runtime types, selected branches and primitives,
+  signature/MAC outcomes, accepted claims, and protected effect. Use a
+  pinned-algorithm verifier plus legitimate, tampered, unknown-key, and
+  incompatible-key-type tokens as controls.
 - For JWT/OIDC remote-key candidates, create a real attacker key pair and compact
   signed token when feasible. Record the token header, requested key URL,
   redirects, returned key set, selected key, signature outcome, accepted claims,

@@ -158,10 +158,12 @@ concurrently without sharing mutable state.
 command injection, path traversal, object-level authorization, SQL injection,
 server-side request forgery, unsafe deserialization, reflected XSS, XML
 external entities, JWT signature-verification bypass, attacker-controlled
-JWT/OIDC JWKS key origin, prototype pollution, SAML signed-versus-consumed
-assertion confusion, disabled TLS certificate verification, predictable
-security tokens, server-side template injection, check/use state races, unsafe
-mass assignment, cookie-authenticated cross-site request forgery,
+JWT `alg`/key-type confusion that reuses an RSA public key as an HMAC secret,
+attacker-controlled JWT/OIDC JWKS key origin, prototype pollution, SAML
+signed-versus-consumed assertion confusion, disabled TLS certificate
+verification, predictable security tokens, server-side template injection,
+check/use state races, unsafe mass assignment, cookie-authenticated cross-site
+request forgery,
 attacker-length native-memory corruption, document-query operator injection,
 executable file upload/content placement, cross-proxy/backend HTTP request
 smuggling, LDAP filter injection into directory-backed group authorization,
@@ -173,10 +175,10 @@ of cookie-authenticated bidirectional channels and edge/origin web-cache
 deception that exposes authenticated responses across requests. It additionally
 covers GraphQL alias/batch amplification of recovery-code verification across
 the HTTP-request, execution-plan, resolver, and account-state boundaries. Each
-of the 64 cases is scanned three times, producing 192 scans that measure both accuracy
-and model variance. The evaluator uses one-to-one CWE-plus-location matching, counts
-duplicate reports as false positives, and records missing scan artifacts as
-completion failures.
+of the 66 cases is scanned three times, producing 198 scans that measure both
+accuracy and model variance. The evaluator uses one-to-one CWE-plus-location
+matching, counts duplicate reports as false positives, and records missing scan
+artifacts as completion failures.
 
 ```powershell
 # Evaluate existing outputs

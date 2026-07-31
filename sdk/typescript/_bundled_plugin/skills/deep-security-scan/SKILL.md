@@ -205,15 +205,23 @@ inventory and closure requirements.
      authenticated/Set-Cookie responses as the negative control; verify a real
      public asset still caches. Headers, cache APIs, or broad routes alone are
      not findings.
-   - JWT/JWS/OIDC key origin and claim binding: every protected-header parser,
-     algorithm and `kid` selection, `jku`/`x5u`/embedded key input, issuer
-     discovery or metadata mapping, JWKS URL source, redirect and cache path,
-     matching-key count and key `kty`/curve/use/algorithm constraints, signature
-     verification call, issuer/audience/subject/lifetime/nonce checks, and final
-     session or privilege installation. Preserve the trust path from configured
-     issuer to the exact verification key; a mathematically valid signature
-     under a token-selected key is not authenticity. Use a sibling path that
-     rejects header-supplied key URLs, resolves keys only from an allowlisted or
+   - JWT/JWS/OIDC algorithm, key-family, key origin, and claim binding: every
+     protected-header parser, algorithm allowlist and selection, `kid`,
+     `jku`/`x5u`/embedded key input, issuer discovery or metadata mapping, JWKS
+     URL source, redirect and cache path, matching-key count, key representation
+     and `kty`/curve/use/algorithm constraints, signature or MAC verification
+     primitive, issuer/audience/subject/lifetime/nonce checks, and final session
+     or privilege installation. For algorithm confusion, follow the token's
+     `alg` through every branch and prove whether asymmetric public-key bytes can
+     be reinterpreted as an HMAC secret, whether an RSA/EC/OKP key can reach an
+     incompatible verifier, or whether library defaults admit a downgrade. A
+     public verification key is attacker-known data, not a symmetric secret.
+     Preserve the trust path from configured issuer to the exact verification
+     key; a mathematically valid signature under a token-selected key or key
+     family is not authenticity. Use a sibling path that pins the expected
+     algorithm before key lookup, constructs and checks the matching asymmetric
+     key type, invokes only the intended verification primitive, rejects
+     header-supplied key URLs, resolves keys only from an allowlisted or
      issuer-pinned configuration, requires one compatible key, and binds verified
      claims and one-time state as the negative control.
    - OAuth/OIDC authorization-code and account-linking transaction binding:
@@ -353,6 +361,15 @@ inventory and closure requirements.
    tenant-selection outcome. Reject the candidate when an exact schema or
    primitive-type guard runs before construction and excludes every operator,
    key, type, and coercion needed by the claimed query.
+   For JWT/JWS algorithm-confusion candidates, create a real asymmetric key pair,
+   publish only the public key, and use those public bytes as the MAC secret for
+   a token-selected symmetric algorithm. Preserve both compact tokens, decoded
+   headers, exact key bytes and runtime key objects, selected verification
+   branches and primitives, signature/MAC results, claims, and protected effect.
+   Reject the candidate only when the expected algorithm is pinned before key
+   selection, incompatible key families cannot reach verification, the intended
+   asymmetric primitive alone accepts a legitimate token, and forged, tampered,
+   unknown-key, and wrong-key-type controls fail.
    For JWT/OIDC remote-key candidates, preserve the compact token, decoded
    protected header, `alg`, `kid`, `jku`/`x5u`, issuer configuration, actual
    fetched JWKS URL after redirects, selected key metadata and provenance,
