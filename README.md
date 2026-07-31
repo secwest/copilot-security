@@ -73,7 +73,11 @@ Persistent safety refusal fails with a fixed diagnostic after three total
 prompt attempts rather than being reported as a successful or clean scan.
 Startup and session creation are cancellation-aware, and a partially started
 CLI runtime is gracefully stopped or force-stopped before the original error
-is returned.
+is returned. Each model turn has an independent host-enforced one-hour
+wall-clock deadline; expiry aborts the Copilot session instead of waiting for
+the SDK's maximum process lifetime. Set
+`COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS` to a whole number from `60000` through
+`86400000` when a shorter benchmark bound or a longer deep-scan turn is needed.
 
 ## Requirements
 
@@ -161,9 +165,10 @@ mass assignment, cookie-authenticated cross-site request forgery,
 attacker-length native-memory corruption, document-query operator injection,
 executable file upload/content placement, cross-proxy/backend HTTP request
 smuggling, LDAP filter injection into directory-backed group authorization,
-XPath predicate injection into XML-backed authentication, and adversarial
-repository instructions. Each of the 50 cases is scanned three times, producing
-150 scans that measure both accuracy and model
+XPath predicate injection into XML-backed authentication, OAuth account-linking
+CSRF leading to account takeover, and adversarial repository instructions. Each
+of the 52 cases is scanned three times, producing 156 scans that measure both
+accuracy and model
 variance. The evaluator uses one-to-one CWE-plus-location matching, counts
 duplicate reports as false positives, and records missing scan artifacts as
 completion failures.

@@ -64,6 +64,13 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   or cross-tenant identity, and install that principal. Critical requires the
   exact token, attacker-controlled key-origin path, successful verification, and
   compromise-equivalent identity impact.
+- OAuth/OIDC authorization-code or account-linking transaction confusion that
+  lets an attacker bind their external identity to an administrator,
+  cross-tenant, billing, or otherwise high-value victim account and subsequently
+  authenticate as that victim. Critical requires the exact attacker initiation,
+  victim-session callback, missing or bypassed transaction/PKCE binding,
+  resulting external-identity link, and successful later attacker login—not
+  merely an absent `state` parameter.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
@@ -97,6 +104,10 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   `x5u`, embedded material, untrusted discovery, redirect, cache confusion, or
   ambiguous `kid` selection and thereby produces meaningful unauthorized access,
   with the selected key and installed identity demonstrated.
+- OAuth/OIDC login or account-linking CSRF that reliably authenticates the
+  victim as the wrong subject, links an attacker-controlled external identity to
+  a victim account, changes consent or credentials, or otherwise crosses a
+  meaningful identity boundary with realistic browser interaction.
 - XXE with clear proof that an attacker can control the XML document through in-scope attack-surface and that the XML engine is vulnerable to XXE
 - etc, other bugs not listed which follow this level of high severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 - Dangerous upload / file handling issues that enable stored active content, trusted-origin script execution, or meaningful content-type confusion with real security impact; with actual proof that both the upload and access are reachable through in-scope attack-surface.
@@ -137,6 +148,10 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   fetching, dynamic issuer support, or a missing optional metadata check without
   proving attacker control of the accepted verification-key origin and a forged
   principal or protected action.
+- OAuth/OIDC callback reports based only on missing `state`, nonce, or PKCE,
+  parameter names, or a generic callback route without proving transaction
+  substitution, browser-session/account misbinding, and a resulting wrong
+  identity, account link, or protected action.
 - Missing headers, cookie flags, CSP weaknesses, TLS observations, or crypto hygiene issues without a concrete exploit path and meaningful demonstrated impact.
 - Reports that effectively say "this could be dangerous if combined with something else" but do not show the something else.
 - Denial of service that is transient, single-user, self-targeting, easy to mitigate, requires disproportionate attacker resources, or does not create severe and realistic business / safety impact.

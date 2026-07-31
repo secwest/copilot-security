@@ -178,6 +178,23 @@ Use this checklist to keep discovery specific without turning it into validation
   Do not report `kid`, `jku`, JWKS fetching, or OIDC discovery by name alone
   without proving attacker influence over key provenance and authentication
   impact.
+- For OAuth/OIDC authorization-code login, account-linking, consent, and
+  reauthentication callbacks, trace the exact initiation transaction through
+  the browser redirect, authorization response, code exchange, verified
+  external subject, and resulting session, local-account link, credential
+  change, or privileged action. Preserve `state` and OIDC nonce generation,
+  entropy, storage, expiry, one-time consumption, and binding to the initiating
+  browser session, local account, issuer/client, redirect URI, and operation;
+  also preserve PKCE challenge generation and the transaction-bound verifier
+  used at exchange. PKCE does not by itself prove callback-session or account
+  binding, and a `state` parameter name alone does not prove unpredictable,
+  one-time, session-bound validation. Conversely, do not report a missing or
+  optional parameter without proving an attacker can substitute their own code,
+  response, or transaction and cause the victim to authenticate as, link to, or
+  act for the wrong subject. A one-time unpredictable transaction bound to the
+  initiating session/account and operation, fixed issuer/client/redirect URI,
+  transaction-bound S256 PKCE, and linking the verified identity only to that
+  transaction's account are strong counterevidence.
 - In SSO/SAML/federation packages, keep response/assertion validators distinct from generic claims authorizers and service-method authorization. Include assertion selection, list indexing, `getDOM`, `cloneNode`, signed-object lookup, subject confirmation, recipient, audience, destination, ACS URL, and issuer-binding lines when they decide which assertion is trusted or returned.
 - In auth/token/assertion validators, watch for a validation loop or `foundValid*` flag followed by a separate fixed-index, first/last-element, clone, serialization, or return path. Treat the later object-selection line as the broken control until exact counterevidence proves the validated object and consumed object are identical and equally bound.
 - For SAML and other signed federated identity objects, preserve the literal

@@ -152,6 +152,19 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   their own key to become the trust root for a token that receives protected
   identity or privileges. Signature success alone is not a control; a trusted
   issuer-pinned key source and end-to-end claim binding are counterevidence.
+- For OAuth/OIDC authorization-code login and account-linking findings, preserve
+  both attacker and victim browser sessions; the initiation account and
+  operation; authorization request; code, `state`, nonce, redirect URI, PKCE
+  challenge and verifier; server-side transaction lookup and consumption; code
+  exchange; verified external issuer/subject; local account selected for
+  linking; and later session or external login. For account takeover, prove the
+  attacker can obtain a code for their own external identity, make the victim
+  submit it while authenticated, bind that identity to the victim's local
+  account, and later sign in as the victim. Do not infer takeover from a missing
+  `state` parameter or callback API alone. A one-time unpredictable
+  session/account/operation-bound transaction, fixed issuer/client/redirect URI,
+  transaction-bound S256 PKCE, and transaction-account identity installation
+  are strong counterevidence.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 

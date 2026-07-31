@@ -40,6 +40,7 @@ describe("effectiveness benchmark", () => {
             path: string;
             startLine: number;
             endLine?: number;
+            lineTolerance?: number;
           }>;
         }>;
       }>;
@@ -82,6 +83,10 @@ describe("effectiveness benchmark", () => {
         "javascript-safe-xpath-authentication",
       ],
       [
+        "javascript-oauth-account-linking-csrf",
+        "javascript-safe-oauth-account-linking",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],
@@ -109,6 +114,35 @@ describe("effectiveness benchmark", () => {
         .get("javascript-csrf-recovery-email")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-352"]]);
+    expect(
+      cases
+        .get("javascript-oauth-account-linking-csrf")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-352", "CWE-287"]]);
+    expect(
+      cases
+        .get("javascript-oauth-account-linking-csrf")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/linking.js",
+        startLine: 27,
+        endLine: 31,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-xpath-authentication-injection")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/authentication.js",
+        startLine: 14,
+        endLine: 15,
+        lineTolerance: 3,
+      },
+    ]);
     expect(
       cases
         .get("c-packet-length-overflow")
@@ -428,6 +462,15 @@ describe("effectiveness benchmark", () => {
       ),
       "utf8",
     );
+    const repositoryWideScan = await readFile(
+      join(
+        pluginRoot,
+        "security-scan",
+        "references",
+        "repository-wide-scan.md",
+      ),
+      "utf8",
+    );
 
     expect(deepScan).toContain("at least five independent discovery passes");
     expect(deepScan).toContain("compositional and temporal attack paths");
@@ -444,6 +487,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain(
       "XPath/XQuery expression and selected-node security binding:",
     );
+    expect(deepScan).toContain(
+      "OAuth/OIDC authorization-code and account-linking transaction binding:",
+    );
     expect(deepScan).toContain("untrusted upload and content placement:");
     expect(deepScan).toContain("HTTP request framing and smuggling:");
     expect(deepScan).toContain("JWT/JWS/OIDC key origin and claim binding:");
@@ -459,6 +505,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(standardScan).toContain("LDAP filter construction");
     expect(standardScan).toContain("XPath/XQuery predicate construction");
+    expect(standardScan).toContain(
+      "OAuth/OIDC authorization-code state, nonce, PKCE",
+    );
     expect(standardScan).toContain("untrusted uploads and");
     expect(standardScan).toContain("HTTP message framing and parser agreement");
     expect(standardScan).toContain("JWT/OIDC algorithm, remote-key URL");
@@ -470,6 +519,9 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("changed RFC 4515 assertion escaping");
     expect(diffScan).toContain("new XPath/XQuery interpolation");
+    expect(diffScan).toContain(
+      "changed OAuth/OIDC authorization-code initiation or callback `state`",
+    );
     expect(diffScan).toContain("new multipart/file inputs");
     expect(diffScan).toContain("duplicate or conflicting `Content-Length` and");
     expect(diffScan).toContain(
@@ -514,6 +566,12 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain(
       "Do not report `kid`, `jku`, JWKS fetching, or OIDC discovery",
     );
+    expect(discovery).toContain(
+      "For OAuth/OIDC authorization-code login, account-linking, consent",
+    );
+    expect(discovery).toContain(
+      "PKCE does not by itself prove callback-session",
+    );
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
@@ -525,6 +583,12 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("untrusted upload/content placement:");
     expect(validation).toContain("HTTP request smuggling/desynchronization:");
     expect(validation).toContain("JWT/JWS/OIDC remote key origin:");
+    expect(validation).toContain(
+      "OAuth/OIDC authorization-code transaction or account-linking CSRF:",
+    );
+    expect(validation).toContain(
+      "reject attacker state in the victim session before exchange",
+    );
     expect(validation).toContain("SAML signed-byte-to-session binding:");
     expect(attackPath).toContain("For mass-assignment findings");
     expect(attackPath).toContain("For CSRF findings");
@@ -540,6 +604,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(attackPath).toContain("For SAML/federated signed-object findings");
     expect(attackPath).toContain("For JWT/JWS/OIDC remote-key findings");
+    expect(attackPath).toContain(
+      "For OAuth/OIDC authorization-code login and account-linking findings",
+    );
     expect(severityPolicy).toContain(
       "CSRF when it enables important state-changing actions",
     );
@@ -573,7 +640,13 @@ describe("effectiveness benchmark", () => {
     );
     expect(severityPolicy).toContain("JWT/JWS/OIDC key-origin confusion");
     expect(severityPolicy).toContain(
+      "OAuth/OIDC authorization-code or account-linking transaction confusion",
+    );
+    expect(severityPolicy).toContain(
       "JWT/JWKS reports based only on the presence of `kid`",
+    );
+    expect(severityPolicy).toContain(
+      "OAuth/OIDC callback reports based only on missing `state`, nonce, or PKCE",
     );
     expect(threatModelGuidance).toContain(
       "HTTP framing/parser agreement across proxies",
@@ -586,6 +659,12 @@ describe("effectiveness benchmark", () => {
     );
     expect(threatModelGuidance).toContain(
       "XPath/XQuery expression and selected-node authentication/authorization binding",
+    );
+    expect(threatModelGuidance).toContain(
+      "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
+    );
+    expect(repositoryWideScan).toContain(
+      "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
     );
     expect(threatModelGuidance).toContain("SAML/federated signed-object");
     expect(threatModelGuidance).toContain(

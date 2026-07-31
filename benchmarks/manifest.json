@@ -952,8 +952,8 @@
           "locations": [
             {
               "path": "src/authentication.js",
-              "startLine": 9,
-              "endLine": 10,
+              "startLine": 14,
+              "endLine": 15,
               "lineTolerance": 3
             }
           ],
@@ -972,6 +972,45 @@
         "javascript-safe-xpath-authentication/run-1/findings.json",
         "javascript-safe-xpath-authentication/run-2/findings.json",
         "javascript-safe-xpath-authentication/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "javascript-oauth-account-linking-csrf",
+      "description": "An authenticated OAuth account-linking callback accepts an authorization code without state, browser-session transaction binding, or PKCE, allowing an attacker to link their external identity to a victim local account and subsequently sign in as that victim.",
+      "fixture": "fixtures/javascript-oauth-account-linking-csrf",
+      "findingsPaths": [
+        "javascript-oauth-account-linking-csrf/run-1/findings.json",
+        "javascript-oauth-account-linking-csrf/run-2/findings.json",
+        "javascript-oauth-account-linking-csrf/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "oauth-account-linking-login-csrf-takeover",
+          "cwe": ["CWE-352", "CWE-287"],
+          "locations": [
+            {
+              "path": "src/linking.js",
+              "startLine": 27,
+              "endLine": 31,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-oauth-account-linking",
+      "description": "The OAuth link flow uses unpredictable one-time state bound to the authenticated browser session and local account, S256 PKCE, a fixed redirect URI, and the transaction-bound account when linking the verified external identity.",
+      "fixture": "fixtures/javascript-safe-oauth-account-linking",
+      "findingsPaths": [
+        "javascript-safe-oauth-account-linking/run-1/findings.json",
+        "javascript-safe-oauth-account-linking/run-2/findings.json",
+        "javascript-safe-oauth-account-linking/run-3/findings.json"
       ],
       "expected": []
     },

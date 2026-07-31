@@ -120,6 +120,21 @@ Use class-specific proof tuples:
   builder that proves attacker values remain scalar data. XML/HTML encoding,
   ad hoc quote replacement, a static-expression sibling, or an API name alone
   is not proof.
+- OAuth/OIDC authorization-code transaction or account-linking CSRF: attacker
+  initiation under the attacker's external identity + exact authorization
+  request, code, `state`, OIDC nonce, PKCE challenge/verifier, issuer/client,
+  redirect URI, and callback browser session + server-side transaction lookup,
+  expiry, one-time consumption, and session/account/operation binding + code
+  exchange and verified external subject + resulting local-account link,
+  session, credential change, consent, or protected action. A missing `state`
+  check alone is not a validated security outcome. For account linking, prove
+  that a code or transaction created for the attacker can be submitted by the
+  authenticated victim, linked to the victim's local account, and then used by
+  the attacker to sign in as that victim. Suppression requires an unpredictable
+  one-time transaction bound to the initiating browser session, local account,
+  and operation; fixed issuer/client/redirect URI; transaction-bound S256 PKCE;
+  and use of the transaction-bound account rather than callback-controlled or
+  merely current-session identity.
 - injection/path traversal/header/open redirect: attacker-controlled bytes + sanitizer/canonicalization/allowlist result + dangerous sink/context
 - untrusted upload/content placement: attacker-controlled filename, metadata,
   and bytes + multipart/parser and size limits + effective byte transforms +
@@ -164,6 +179,13 @@ Use class-specific proof tuples:
   Suppression requires a trusted issuer-to-key-source mapping, one compatible
   key, fixed algorithm, complete claim/lifetime/nonce binding, and continuity
   through principal creation.
+- OAuth/OIDC authorization-code callback binding: attacker-controlled code,
+  `state`, issuer response, redirect parameters, or browser session + initiation
+  transaction and PKCE material + exact lookup, consume, exchange, and identity
+  installation/linking semantics + wrong-subject session or account takeover.
+  Suppression requires exact transaction-to-session/account/operation binding,
+  one-time use and expiry, fixed issuer/client/redirect URI, and verifier
+  continuity through exchange and the final security decision.
 - SAML/XML assertion binding: attacker-controlled response or assertion set + protocol/signature validation of one object + later use, clone, serialization, or storage of a different assertion/document node + authentication/session/token impact. Multi-object preconditions should be stated, but suppression needs exact evidence that the same object is cryptographically and semantically bound to the consumed object.
 - SSO/SAML response validator: attacker-controlled SSO response containing one or more assertions + response/assertion validator code that selects, indexes, clones, serializes, or returns an assertion + mismatch between the signed/validated assertion and the assertion later consumed by the session/token path, or missing recipient/audience/destination/ACS binding + authentication or authorization bypass impact. A generic claims-authorizer or service-method authorization finding does not validate or suppress this row.
 - found-valid selection mismatch: attacker-controlled list or set of tokens/assertions/identities + validator loop or `foundValid*` flag proves one element while later fixed-index, first/last, clone, serialization, or lookup consumes another element + authentication, authorization, or protocol-state impact. Suppression needs evidence that the consumed object is the same object already validated.
@@ -220,6 +242,14 @@ Use this checklist to keep validation close to the prompt contract:
   fixed trusted-issuer JWKS plus wrong issuer/audience, expired token, replayed
   nonce, duplicate `kid`, incompatible algorithm/key type, and tampered payload
   as negative controls.
+- For OAuth/OIDC authorization-code or account-linking candidates, execute two
+  browser-session flows when feasible. Obtain a real code for the attacker's
+  external subject, submit its callback from the victim's authenticated session,
+  and record the initiation transaction, state/nonce, PKCE material, exchange,
+  linked local account, and a later external login. The negative control should
+  reject attacker state in the victim session before exchange, accept a
+  legitimate matching session transaction, reject a wrong verifier, and reject
+  replay after one-time consumption.
 - For HTTP request-smuggling candidates, save the literal request bytes and a
   per-hop framing table with normalized headers, message boundaries, residual
   bytes, routing/authorization decisions, connection reuse, and the protected

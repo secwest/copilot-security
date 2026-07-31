@@ -5,14 +5,17 @@ import { delimiter, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   closureGapCounts,
+  copilotModelTurnTimeoutMilliseconds,
   copilotModelErrorRecovery,
   COPILOT_SCANNER_SESSION_HOOKS,
+  DEFAULT_MODEL_TURN_TIMEOUT_MILLISECONDS,
   isSafetyClassifierRefusal,
   prepareCopilotRuntime,
   resolveCopilotCli,
   runScanQualityCorrection,
   safetyClassifierRetryPrompt,
   sendCopilotPromptWithSafetyRecovery,
+  sendCopilotTurnWithDeadline,
   startManagedCopilotSession,
   stopManagedCopilotClient,
   type CopilotScannerOptions,
@@ -124,6 +127,71 @@ describe("Copilot port", () => {
       pluginRoot: "plugin",
     };
     expect(options.model).toBe("gpt-5.6-sol");
+  });
+
+  test("bounds each Copilot model turn with a scanner-owned timeout", () => {
+    expect(copilotModelTurnTimeoutMilliseconds({})).toBe(
+      DEFAULT_MODEL_TURN_TIMEOUT_MILLISECONDS,
+    );
+    expect(
+      copilotModelTurnTimeoutMilliseconds({
+        COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS: "720000",
+      }),
+    ).toBe(720_000);
+    for (const configured of [
+      "",
+      "0",
+      "59999",
+      "1.5",
+      "not-a-timeout",
+      "86400001",
+    ]) {
+      expect(() =>
+        copilotModelTurnTimeoutMilliseconds({
+          COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS: configured,
+        }),
+      ).toThrow("COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS");
+    }
+  });
+
+  test("aborts the Copilot session at the hard model-turn deadline", async () => {
+    let aborts = 0;
+    await expect(
+      sendCopilotTurnWithDeadline(
+        {
+          async abort(): Promise<void> {
+            aborts += 1;
+          },
+          async sendAndWait(): Promise<never> {
+            return await new Promise<never>(() => {});
+          },
+        },
+        "scan",
+        5,
+      ),
+    ).rejects.toThrow("exceeded the 5 millisecond scanner deadline");
+    expect(aborts).toBe(1);
+
+    const completed = await sendCopilotTurnWithDeadline(
+      {
+        async abort(): Promise<void> {
+          aborts += 1;
+        },
+        async sendAndWait(
+          input: { prompt: string },
+          timeoutMilliseconds: number,
+        ): Promise<unknown> {
+          return { ...input, timeoutMilliseconds };
+        },
+      },
+      "scan",
+      100,
+    );
+    expect(completed).toEqual({
+      prompt: "scan",
+      timeoutMilliseconds: 100,
+    });
+    expect(aborts).toBe(1);
   });
 
   test("requests bounded native retries only for recoverable model calls", () => {

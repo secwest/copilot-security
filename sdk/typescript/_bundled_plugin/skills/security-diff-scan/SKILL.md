@@ -56,8 +56,10 @@ publish findings, open issues, or contact third parties. Write only beneath
    expression construction and selected-node security mapping, template,
    parser, deserializer, file-upload parsing/storage and downstream content
    consumers, HTTP message framing and normalization across proxies/gateways/
-   backends, JWT/OIDC protected headers, remote key sources, JWKS/issuer mapping,
-   algorithm and claim binding, SAML/federated signature references and consumed
+   backends, OAuth/OIDC authorization-code state, nonce, PKCE, callback-session,
+   redirect-URI, and account-linking transaction binding, JWT/OIDC protected
+   headers, remote key sources, JWKS/issuer mapping, algorithm and claim binding,
+   SAML/federated signature references and consumed
    identity objects, bulk object binding and mass-assignment field controls,
    browser-ambient credential and CSRF controls, native memory allocation/copy/
    index/lifetime boundaries, cryptographic, state, concurrency, and
@@ -102,6 +104,11 @@ publish findings, open issues, or contact third parties. Write only beneath
      issuer-to-JWKS mapping, redirect, key-cache, matching-key cardinality,
      key-type/use, signature, issuer/audience/lifetime/nonce, or principal
      installation behavior;
+   - changed OAuth/OIDC authorization-code initiation or callback `state`, nonce,
+     transaction entropy/storage/expiry/one-time use, browser-session/local-
+     account/operation binding, redirect URI, PKCE challenge/verifier, code
+     exchange, external-subject selection, identity linking, or later session
+     installation;
    - unsafe default, configuration, dependency, build, plugin, or update changes;
    - race, replay, idempotency, lifecycle, error-handling, and rollback changes;
    - newly affected sibling instances behind a changed shared dependency.

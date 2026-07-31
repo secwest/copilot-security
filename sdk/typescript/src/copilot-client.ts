@@ -31,7 +31,9 @@ import {
 import { resolveTrustedExecutable } from "./trusted-executable.js";
 
 const MAX_WRAPPER_BYTES = 16 * 1024;
-const MAX_SCAN_MILLISECONDS = 24 * 60 * 60 * 1_000;
+export const DEFAULT_MODEL_TURN_TIMEOUT_MILLISECONDS = 60 * 60 * 1_000;
+const MIN_MODEL_TURN_TIMEOUT_MILLISECONDS = 60 * 1_000;
+const MAX_MODEL_TURN_TIMEOUT_MILLISECONDS = 24 * 60 * 60 * 1_000;
 const MODEL_CALL_RETRY_COUNT = 2;
 const SAFETY_CLASSIFIER_RETRY_COUNT = 6;
 const SAFETY_CLASSIFIER_REPLAY_ATTEMPTS = 3;
@@ -53,6 +55,14 @@ interface CopilotModelError {
 interface CopilotModelErrorRecovery {
   errorHandling: "retry";
   retryCount: number;
+}
+
+interface CopilotTurnSession {
+  abort(): Promise<unknown>;
+  sendAndWait(
+    input: { prompt: string },
+    timeoutMilliseconds: number,
+  ): Promise<unknown>;
 }
 
 export interface CopilotScannerOptions {
@@ -156,6 +166,9 @@ class CopilotThread implements CopilotScannerThread {
     input: string,
     options: { signal: AbortSignal },
   ): Promise<{ events: AsyncGenerator<ScannerEvent> }> {
+    const modelTurnTimeoutMilliseconds = copilotModelTurnTimeoutMilliseconds(
+      this.#options.environment,
+    );
     const queue = new AsyncEventQueue<ScannerEvent>();
     const usage = emptyUsage();
     const client = new CopilotClient({
@@ -224,7 +237,11 @@ class CopilotThread implements CopilotScannerThread {
         await sendCopilotPromptWithSafetyRecovery(
           input,
           async (prompt) =>
-            await session.sendAndWait({ prompt }, MAX_SCAN_MILLISECONDS),
+            await sendCopilotTurnWithDeadline(
+              session,
+              prompt,
+              modelTurnTimeoutMilliseconds,
+            ),
           options.signal,
         );
         if (!options.signal.aborted) {
@@ -251,9 +268,10 @@ class CopilotThread implements CopilotScannerThread {
                 await sendCopilotPromptWithSafetyRecovery(
                   prompt,
                   async (retryPrompt) =>
-                    await session.sendAndWait(
-                      { prompt: retryPrompt },
-                      MAX_SCAN_MILLISECONDS,
+                    await sendCopilotTurnWithDeadline(
+                      session,
+                      retryPrompt,
+                      modelTurnTimeoutMilliseconds,
                     ),
                   options.signal,
                 );
@@ -300,6 +318,56 @@ class CopilotThread implements CopilotScannerThread {
     })();
 
     return { events: queue.events() };
+  }
+}
+
+export function copilotModelTurnTimeoutMilliseconds(
+  environment: Readonly<Record<string, string | undefined>>,
+): number {
+  const configured = environment["COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS"];
+  if (configured === undefined) {
+    return DEFAULT_MODEL_TURN_TIMEOUT_MILLISECONDS;
+  }
+  if (!/^[1-9]\d*$/u.test(configured)) {
+    throw new ConfigurationError(
+      "COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS must be a whole number of milliseconds.",
+    );
+  }
+  const milliseconds = Number(configured);
+  if (
+    !Number.isSafeInteger(milliseconds) ||
+    milliseconds < MIN_MODEL_TURN_TIMEOUT_MILLISECONDS ||
+    milliseconds > MAX_MODEL_TURN_TIMEOUT_MILLISECONDS
+  ) {
+    throw new ConfigurationError(
+      "COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS must be between 60000 and 86400000 milliseconds.",
+    );
+  }
+  return milliseconds;
+}
+
+export async function sendCopilotTurnWithDeadline(
+  session: CopilotTurnSession,
+  prompt: string,
+  timeoutMilliseconds: number,
+): Promise<unknown> {
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      session.sendAndWait({ prompt }, timeoutMilliseconds),
+      new Promise<never>((_resolve, reject) => {
+        deadline = setTimeout(() => {
+          void session.abort().catch(() => undefined);
+          reject(
+            new CopilotSecurityError(
+              `Copilot model turn exceeded the ${timeoutMilliseconds} millisecond scanner deadline.`,
+            ),
+          );
+        }, timeoutMilliseconds);
+      }),
+    ]);
+  } finally {
+    if (deadline !== undefined) clearTimeout(deadline);
   }
 }
 
@@ -581,7 +649,7 @@ export function scanQualityGatePrompt(
   return [
     "Mandatory Copilot Security quality gate. Continue the same scan; do not summarize or stop early.",
     "Reopen the repository source and all three draft artifacts.",
-    "Run an independent residual search for dangerous APIs and missing controls, including process/shell execution, SQL/NoSQL/query construction and document selector/operator injection, LDAP filter construction and directory group/role authorization binding, XPath/XQuery predicate construction and selected-node authentication/authorization binding, path/archive/file writes, untrusted file upload or content placement into served/executable/plugin/configuration roots, URL fetches, HTTP message-framing disagreement and request smuggling across proxies/gateways/backends, parsers/deserializers, templates, computed property writes and prototype mutation, bulk object binding and mass assignment, authentication, JWT/OIDC algorithm and issuer-pinned JWKS key-origin binding including token-controlled jku/x5u URLs and kid selection, SAML/federated signed-versus-consumed assertion binding and issuer/audience/recipient/replay controls, browser-ambient credential CSRF on security-relevant state changes, object/tenant authorization, cryptographic verification, TLS certificate and hostname verification, native memory allocation/copy/index/lifetime boundaries, state transitions, races, replay, and resource bounds.",
+    "Run an independent residual search for dangerous APIs and missing controls, including process/shell execution, SQL/NoSQL/query construction and document selector/operator injection, LDAP filter construction and directory group/role authorization binding, XPath/XQuery predicate construction and selected-node authentication/authorization binding, path/archive/file writes, untrusted file upload or content placement into served/executable/plugin/configuration roots, URL fetches, HTTP message-framing disagreement and request smuggling across proxies/gateways/backends, parsers/deserializers, templates, computed property writes and prototype mutation, bulk object binding and mass assignment, authentication, OAuth/OIDC authorization-code state, nonce, PKCE, callback-session, redirect-URI, and account-linking identity binding, JWT/OIDC algorithm and issuer-pinned JWKS key-origin binding including token-controlled jku/x5u URLs and kid selection, SAML/federated signed-versus-consumed assertion binding and issuer/audience/recipient/replay controls, browser-ambient credential CSRF on security-relevant state changes, object/tenant authorization, cryptographic verification, TLS certificate and hostname verification, native memory allocation/copy/index/lifetime boundaries, state transitions, races, replay, and resource bounds.",
     ...(residualRiskInventory === ""
       ? []
       : [

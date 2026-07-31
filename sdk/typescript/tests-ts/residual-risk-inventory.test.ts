@@ -213,6 +213,35 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs OAuth authorization-code callbacks with account-linking transaction binding", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-oauth-account-linking-csrf"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-oauth-account-linking"),
+    );
+
+    expect(vulnerable).toContain(
+      '"oauth-authorization-code-transaction-binding"',
+    );
+    expect(vulnerable).toContain('"oauth-account-linking-identity-binding"');
+    expect(vulnerable).toContain("identityProvider.exchangeCode");
+    expect(vulnerable).toContain(
+      "accounts.linkExternalIdentity(session.accountId, identity)",
+    );
+    expect(safe).toContain('"oauth-authorization-code-transaction-binding"');
+    expect(safe).toContain('"oauth-account-linking-identity-binding"');
+    expect(safe).toContain("state: transaction.state");
+    expect(safe).toContain("codeVerifier: transaction.codeVerifier");
+    expect(safe).toContain("sessionId: session.id");
+    expect(safe).toContain(
+      "accounts.linkExternalIdentity(transaction.accountId, identity)",
+    );
+    expect(scanQualityGatePrompt("")).toContain(
+      "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session, redirect-URI, and account-linking identity binding",
+    );
+  });
+
   test("surfaces SSRF input and fixed-destination controls", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-ssrf"),

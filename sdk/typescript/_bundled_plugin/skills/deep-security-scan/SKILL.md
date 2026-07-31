@@ -156,6 +156,16 @@ inventory and closure requirements.
      rejects header-supplied key URLs, resolves keys only from an allowlisted or
      issuer-pinned configuration, requires one compatible key, and binds verified
      claims and one-time state as the negative control.
+   - OAuth/OIDC authorization-code and account-linking transaction binding:
+     every login, link, consent, and reauthentication initiation and callback;
+     browser session and local account; issuer/client and fixed redirect URI;
+     authorization code, `state`, OIDC nonce, transaction entropy, storage,
+     expiry and one-time consumption; PKCE challenge/verifier; code exchange;
+     verified external subject; and resulting session, account link, credential,
+     consent, or privileged action. Use a sibling flow with unpredictable
+     one-time state bound to the initiating session/account/operation,
+     transaction-bound S256 PKCE, and transaction-account identity installation
+     as the negative control. Parameter presence alone is not closure.
    - SAML and federated assertion binding: every response/assertion parser,
      signature reference and ID lookup, canonicalized signed byte range,
      assertion list/index/clone/return path, issuer, audience, recipient,
@@ -271,6 +281,15 @@ inventory and closure requirements.
    principal. Reject the candidate only when attacker-controlled key locators
    are ignored or rejected and the verified key is uniquely derived from trusted
    issuer configuration with compatible metadata and complete claim binding.
+   For OAuth/OIDC authorization-code and account-linking candidates, reproduce
+   an attacker initiation and victim-session callback through the real
+   transaction store and identity-provider adapter. Record the external subject,
+   code, state/nonce, PKCE challenge/verifier, redirect URI, transaction owner
+   and consumption, exchange, local-account link, and later login/session.
+   Reject the candidate when attacker state is rejected in the victim session
+   before exchange, the legitimate matching flow succeeds, wrong PKCE fails,
+   replay fails, and the final identity is installed only for the
+   transaction-bound account.
    For SAML/federation candidates, demonstrate one exact signed response and map
    the signature reference, canonical signed bytes, ID lookup, validated
    assertion, returned/cloned assertion, derived claims, semantic trust checks,
