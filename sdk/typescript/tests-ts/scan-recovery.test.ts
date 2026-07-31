@@ -804,6 +804,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes archive link-pivot traversal taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "Archive symlink pivot overwrites trusted service configuration";
+    finding.summary =
+      "The importer validates each archive member name but not a symlink target, so a later regular member writes through the archive link outside the extraction root.";
+    finding["taxonomy"] = {
+      category: "path traversal",
+      cwe: ["CWE-22"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "archive-link-traversal",
+      cwe: ["CWE-59", "CWE-22"],
+    });
+  });
+
   test("normalizes GraphQL resolver amplification to authentication-attempt taxonomy", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

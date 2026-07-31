@@ -148,6 +148,13 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
 - Exploitable memory corruption with clear, major impact or ease of exploitation
 - Arbitrary file read that exposes less-sensitive user data or source code (if you have actual proof it reveals env secrets, then it is critical)
 - Arbitrary file write in executable, startup, config, or firmware paths with a realistic path to persistence or code execution
+- Archive symlink or hardlink traversal that reliably converts an
+  attacker-controlled ordered archive into a write to trusted configuration,
+  startup, executable, credential, tenant, or service data outside the intended
+  extraction boundary. High requires the exact link entry and target,
+  subsequent contained member, filesystem resolution, final opened object, and
+  meaningful overwrite or disclosure; severity follows the asset and resulting
+  persistence, privilege, or confidentiality impact.
 - CSRF when it enables important state-changing actions such as credential changes, permission changes, payment / billing changes, or security-setting changes with realistic victim interaction. Evaluate actual browser request behavior, credential attachment, cookie policy, preflight requirements, server parsing, and effective anti-CSRF controls; an HTTP method or JSON content type alone is not a categorical defense.
 - Credentialed CORS exposure of ordinary but meaningful API keys, session
   tokens, account data, PII, or tenant data when attacker JavaScript can
@@ -334,6 +341,13 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   operations limited to one where appropriate, atomic account/principal/tenant
   quotas enforced at the resolver or service boundary, and benign public
   batching that cannot reach the claimed effect.
+- Archive-link reports based only on symlink/hardlink support, a link target,
+  lexical member-name checks, or a generic extraction API without proving an
+  ordered or pre-existing-link pivot to the final opened object and a meaningful
+  protected effect. Suppress when archive links are rejected and all directory
+  components plus the final file are traversed relative to a trusted root
+  handle without following links, with both malicious-link rejection and
+  legitimate nested extraction demonstrated.
 - Open redirect, clickjacking, user enumeration, rate-limit weakness, banner leakage, version disclosure, directory listing, stack traces, internal hostnames, or basic error-message leakage, unless they are shown as part of a serious exploit chain.
 - Memory corruption that is theoretical, non-triggerable from in-scope input, or not plausibly exploitable in the target environment.
 - Request-smuggling claims based only on `Content-Length` and

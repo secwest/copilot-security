@@ -94,6 +94,61 @@
       "expected": []
     },
     {
+      "id": "javascript-archive-link-pivot",
+      "description": "Archive member names are lexically contained, but an attacker-created symlink or hardlink target is not validated, so a later contained regular member writes through the link and replaces trusted configuration outside the extraction root.",
+      "fixture": "fixtures/javascript-archive-link-pivot",
+      "findingsPaths": [
+        "javascript-archive-link-pivot/run-1/findings.json",
+        "javascript-archive-link-pivot/run-2/findings.json",
+        "javascript-archive-link-pivot/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "archive-symlink-link-then-write",
+          "cwe": ["CWE-59", "CWE-22"],
+          "locations": [
+            {
+              "path": "src/extractor.js",
+              "startLine": 12,
+              "endLine": 14,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        },
+        {
+          "id": "archive-hardlink-link-then-write",
+          "cwe": ["CWE-59", "CWE-22"],
+          "locations": [
+            {
+              "path": "src/extractor.js",
+              "startLine": 17,
+              "endLine": 19,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-archive-link-isolation",
+      "description": "The importer rejects symlink and hardlink entries, contains regular member names, and uses root-anchored no-follow directory creation and writes so pre-existing links cannot redirect extraction.",
+      "fixture": "fixtures/javascript-safe-archive-link-isolation",
+      "findingsPaths": [
+        "javascript-safe-archive-link-isolation/run-1/findings.json",
+        "javascript-safe-archive-link-isolation/run-2/findings.json",
+        "javascript-safe-archive-link-isolation/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-executable-file-upload",
       "description": "A public upload retains attacker-controlled JavaScript bytes and filename in the application extension directory, whose separate startup loader imports and activates every module.",
       "fixture": "fixtures/javascript-executable-file-upload",

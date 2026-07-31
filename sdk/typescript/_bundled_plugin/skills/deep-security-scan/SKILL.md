@@ -370,6 +370,15 @@ inventory and closure requirements.
      path that parses and re-encodes a bounded allowlisted data model under a
      server-generated name outside all served and executable roots as the
      negative control.
+   - archive symlink and hardlink traversal: every entry name, entry type, link
+     target, target interpretation base, destination root, extraction order,
+     pre-existing link, directory creation, and later open/write/copy. Trace an
+     ordered link-then-regular-member pivot to the final filesystem object and
+     protected overwrite or disclosure. Member-name containment alone is not a
+     control for link targets. Use rejection of archive links plus
+     root-directory-handle-relative no-follow traversal of every component and
+     final file, with a legitimate nested-file extraction, as the negative
+     control.
    - HTTP request framing and smuggling: every ingress proxy, load balancer,
      gateway, framework server, middleware, backend, connection pool, and
      protocol downgrade/upgrade boundary that parses or rewrites the same

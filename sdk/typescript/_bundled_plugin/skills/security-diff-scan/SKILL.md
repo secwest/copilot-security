@@ -146,6 +146,10 @@ publish findings, open issues, or contact third parties. Write only beneath
      type/content checks, destination-root changes, or new serving, import,
      plugin, startup, configuration, archive, media-processing, or interpreter
      consumers for stored content;
+   - changed archive entry-type handling, symlink or hardlink target parsing,
+     relative-target base, extraction ordering, destination-root containment,
+     pre-existing-link behavior, or root-handle-relative no-follow directory
+     creation and file writes;
    - changed handling of duplicate or conflicting `Content-Length` and
      `Transfer-Encoding`, header normalization, chunking, trailers, invalid
      lengths, protocol translation, request reserialization, connection reuse,

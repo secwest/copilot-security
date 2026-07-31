@@ -71,6 +71,8 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    selected-node security binding, and bulk object binding;
    mass assignment into persisted or privileged fields, untrusted uploads and
    content placement into served, executable, plugin, startup, or configuration
+   roots, archive symlink/hardlink target traversal and ordered
+   write-through-link pivots with root-anchored no-follow controls,
    roots, HTTP message framing and parser agreement across proxies, gateways,
    servers, and backends, native memory allocation/copy/index/lifetime
    boundaries, secrets, and resource consumption. Record candidates in

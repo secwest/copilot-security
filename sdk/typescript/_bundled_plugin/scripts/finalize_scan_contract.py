@@ -2718,6 +2718,20 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         )
     ):
         return "fail-open-authorization", ["CWE-636", "CWE-863"]
+    if (
+        "archive link pivot" in text
+        or "archive-link-pivot" in text
+        or "archive symlink traversal" in text
+        or "archive hardlink traversal" in text
+        or "write-through-link" in text
+        or "write through an archive link" in text
+        or (
+            "archive" in text
+            and ("symlink" in text or "hardlink" in text or "link target" in text)
+            and ("escape" in text or "pivot" in text or "traversal" in text)
+        )
+    ):
+        return "archive-link-traversal", ["CWE-59", "CWE-22"]
     if isinstance(taxonomy, dict):
         cwe = taxonomy.get("cwe")
         normalized_cwe = (

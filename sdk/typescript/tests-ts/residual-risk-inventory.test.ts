@@ -68,6 +68,29 @@ describe("residual risk inventory", () => {
     expect(inventory).toContain("raise ValueError");
   });
 
+  test("pairs archive link pivots with rejection and root-anchored no-follow writes", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-archive-link-pivot"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-archive-link-isolation"),
+    );
+
+    expect(vulnerable).toContain('"archive-link-target-or-no-follow-boundary"');
+    expect(vulnerable).toContain("filesystem.symlink(entry.linkName, target)");
+    expect(vulnerable).toContain(
+      "filesystem.hardlink(path.resolve(root, entry.linkName), target)",
+    );
+    expect(vulnerable).toContain("filesystem.writeFile(target, entry.data)");
+    expect(safe).toContain('"archive-link-target-or-no-follow-boundary"');
+    expect(safe).toContain('entry.type === "symlink"');
+    expect(safe).toContain('entry.type === "hardlink"');
+    expect(safe).toContain("filesystem.writeFileNoFollow(root, target");
+    expect(scanQualityGatePrompt("")).toContain(
+      "archive symlink and hardlink targets, entry ordering, write-through-link pivots, and root-anchored no-follow writes",
+    );
+  });
+
   test("pairs upload placement with its separate loader and canonical data control", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-executable-file-upload"),

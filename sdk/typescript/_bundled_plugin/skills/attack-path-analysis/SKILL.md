@@ -230,6 +230,15 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   active-content origin, configuration change, overwrite, parser exploit, or
   other protected effect. MIME or extension checks alone are not suppression;
   parse-and-re-encode plus storage outside every active consumer can be.
+- For archive symlink and hardlink findings, preserve the ordered archive
+  entries, link name and target, target interpretation base, extraction root,
+  lexical member checks, materialized link, later regular member, filesystem
+  resolution at every path component, final opened object, and protected
+  overwrite or disclosure. Prove the link is followed on the deployed
+  extraction path; link-related symbols or a suspicious target alone are not
+  reportable. Link-entry rejection, root-handle-relative no-follow traversal of
+  every component and final file, a pre-existing-link rejection control, and a
+  legitimate nested extraction are distinct counterevidence.
 - For HTTP request-smuggling and desynchronization findings, preserve the exact
   raw bytes, ingress protocol, proxy/gateway/server/backend versions and
   configuration, duplicate-header normalization, effective framing decision,

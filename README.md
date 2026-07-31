@@ -160,7 +160,8 @@ concurrently without sharing mutable state.
 ## Effectiveness benchmark
 
 `benchmarks/manifest.json` defines paired vulnerable and fixed fixtures for
-command injection, path traversal, object-level authorization, SQL injection,
+command injection, path traversal, archive symlink/hardlink write pivots,
+object-level authorization, SQL injection,
 server-side request forgery, unsafe deserialization, reflected XSS, XML
 external entities, JWT signature-verification bypass, attacker-controlled
 JWT `alg`/key-type confusion that reuses an RSA public key as an HMAC secret,
@@ -189,8 +190,8 @@ the HTTP-request, execution-plan, resolver, and account-state boundaries,
 fail-open external authorization on policy exceptions and malformed decisions,
 DNS-rebinding SSRF across validation and connection-time resolution, plus
 catastrophic-backtracking regular-expression denial of service with a bounded
-linear validator as the control. Each of the 80 cases is scanned three times,
-producing 240 scans that measure both accuracy and model variance. The
+linear validator as the control. Each of the 82 cases is scanned three times,
+producing 246 scans that measure both accuracy and model variance. The
 evaluator uses one-to-one CWE-plus-location
 matching, counts duplicate reports as false positives, and records missing scan
 artifacts as completion failures.
