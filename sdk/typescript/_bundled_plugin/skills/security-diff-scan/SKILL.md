@@ -62,6 +62,9 @@ publish findings, open issues, or contact third parties. Write only beneath
    headers, algorithm/key-family binding, signature-versus-MAC primitives,
    remote key sources, JWKS/issuer mapping, and signed ID-token `aud`/`azp`/
    nonce/client-session claim binding,
+   signed webhook/callback raw bodies, signature headers and timestamps,
+   freshness windows, event/delivery IDs, atomic idempotency, and repeated
+   financial or state-changing effects,
    SAML/federated signature references and consumed
    identity objects, bulk object binding and mass-assignment field controls,
    browser-ambient credential and CSRF controls, credentialed CORS response

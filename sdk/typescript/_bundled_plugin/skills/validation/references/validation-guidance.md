@@ -338,6 +338,17 @@ Use class-specific proof tuples:
   installation. Callback `state`, signature validity, and trusted issuer are
   counterevidence only for their own bindings, not substitutes for `aud`, `azp`,
   or nonce validation.
+- Signed webhook capture-replay: exact raw request bytes + signature header and
+  signed timestamp + provider-authentication result + parsed event/delivery ID,
+  account/object, amount/action, and protected effect + a second delivery of the
+  unchanged valid request. Prove that both deliveries repeat the effect even
+  though tampering or a wrong secret fails. The paired control must accept one
+  fresh legitimate delivery, reject timestamps outside a bounded past/future
+  window, reject body/signature changes, and atomically consume the signed event
+  ID with the mutation so concurrent or sequential duplicates are harmless.
+  A valid HMAC authenticates bytes but does not prove freshness or one-time
+  execution. A non-atomic `has`/effect/`add` sequence is not sufficient replay
+  protection when multiple workers or deliveries can race.
 - OAuth/OIDC authorization-code callback binding: attacker-controlled code,
   `state`, issuer response, redirect parameters, or browser session + initiation
   transaction and PKCE material + exact lookup, consume, exchange, and identity

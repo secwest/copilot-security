@@ -83,6 +83,12 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   the exact sibling-client token acquisition path, target callback transaction,
   accepted `aud`/`azp`/nonce mismatch, installed victim principal, and
   compromise-equivalent access—not merely an omitted claim check.
+- Signed webhook replay that lets a remote attacker repeat a correctly
+  authenticated event to cause unbounded crown-jewel financial transfers,
+  administrative changes, cross-tenant effects, or safety-critical actions.
+  Critical requires one exact captured body/signature/timestamp/event-ID tuple,
+  successful repeated protected effects, realistic replay access, and impact
+  equivalent to broad compromise—not merely missing idempotency terminology.
 - Session fixation that lets a remote attacker preserve an attacker-known
   pre-authentication identifier through an administrator, cross-tenant,
   billing, or otherwise high-value victim login and reuse it for
@@ -202,6 +208,12 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   exact cross-client token path, target transaction, accepted claim mismatch,
   and resulting meaningful account access, plus a legitimate matching-token
   control.
+- Signed webhook or callback replay that reliably repeats a meaningful payment,
+  credit, entitlement, fulfillment, credential, or other protected mutation
+  despite correct provider authentication. High requires the exact signed
+  request, accepted stale or duplicate delivery, repeated effect, tamper/wrong-
+  key rejection, legitimate first-delivery control, and evidence that freshness
+  or atomic event consumption does not prevent the replay.
 - External authorization fail-open that reliably converts a policy exception,
   timeout, malformed/empty result, stale fallback, or retry exhaustion into
   meaningful unauthorized access. High requires the exact policy inputs,
@@ -310,6 +322,13 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   transaction, and receive the wrong target-app principal. Suppress exact
   target-client audience/authorized-party validation, one-time session-bound
   nonce and state, replay rejection, and successful legitimate-token behavior.
+- Signed-webhook reports based only on a signature API, timestamp field, missing
+  named middleware, or generic duplicate-delivery concern without replaying an
+  exact valid request into a repeated protected effect. Suppress when the exact
+  raw body is authenticated, the signed timestamp has a bounded past/future
+  window, the event identity and target are strictly bound, and atomic unique
+  event consumption shares the transaction with the mutation so sequential and
+  concurrent duplicates are harmless while legitimate delivery succeeds.
 - OAuth/OIDC callback reports based only on missing `state`, nonce, or PKCE,
   parameter names, or a generic callback route without proving transaction
   substitution, browser-session/account misbinding, and a resulting wrong

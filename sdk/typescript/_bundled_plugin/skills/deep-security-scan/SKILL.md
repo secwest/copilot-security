@@ -459,6 +459,15 @@ inventory and closure requirements.
    target principal. Reject only when wrong-audience, missing or foreign `azp`,
    missing or cross-session nonce, wrong state/issuer/signature, expiry, and
    replay all fail before installation while a matching target token succeeds.
+   For signed-webhook or callback candidates, capture one exact legitimate raw
+   body, signature header, signed timestamp, and event ID. Submit the unchanged
+   request twice through the real handler and record signature decisions,
+   freshness decisions, event-consumption state, selected account/object, and
+   both protected effects. Also test tampered bytes, wrong secret/key, stale and
+   future timestamps, a legitimate event, and sequential plus feasible
+   concurrent duplicates. Reject only when exact raw-body authentication,
+   bounded timestamp freshness, strict event binding, and atomic event-ID
+   consumption with the mutation make every duplicate harmless.
    For OAuth/OIDC authorization-code and account-linking candidates, reproduce
    an attacker initiation and victim-session callback through the real
    transaction store and identity-provider adapter. Record the external subject,

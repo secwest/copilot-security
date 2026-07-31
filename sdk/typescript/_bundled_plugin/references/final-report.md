@@ -117,6 +117,14 @@ identities, target callback state and nonce, exact signed victim-token claims,
 and resulting attacker-owned target session; a missing claim check alone is not
 an exploit witness.
 
+For signed-webhook replay findings, affected lines must include the raw-body
+signature and signed-timestamp acceptance boundary, the missing or ineffective
+freshness/event-consumption control, and the financial or state-changing sink
+when those lines are distinct. The write-up must preserve one exact legitimate
+body/signature/timestamp/event-ID tuple, its first accepted effect, the repeated
+effect from an unchanged second delivery, and tamper or wrong-key controls. A
+valid HMAC is expected and does not by itself rebut capture-replay.
+
 For external authorization fail-open findings, affected lines must include the
 permissive initial/default decision, policy or entitlement call, exception/
 timeout/malformed-response handling, final allow comparison, and protected sink

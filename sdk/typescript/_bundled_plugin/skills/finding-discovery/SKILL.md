@@ -284,6 +284,19 @@ Use this checklist to keep discovery specific without turning it into validation
   subject through principal installation. Do not infer exploitability from a
   missing claim check alone: prove how the attacker obtains or replays a valid
   cross-client token and receives the resulting authenticated session.
+- For signed webhooks and callbacks, do not stop at successful HMAC or signature
+  verification. Preserve the exact raw body, signature header, signed timestamp,
+  event or delivery ID, authenticated provider identity, parsed event, selected
+  account/object, and protected effect. Replay the same valid captured request
+  at least twice and record whether freshness is enforced and whether event-ID
+  consumption is atomic with the financial or state mutation. A timestamp that
+  is signed but never bounded is not a freshness control; a lookup followed by
+  a separate insert or effect is not atomic idempotency. Report capture-replay
+  when an unchanged valid request repeats a meaningful effect. Suppression
+  requires exact raw-body authentication, a bounded past/future timestamp
+  window, strict event binding, atomic one-time event consumption with the
+  protected mutation, successful legitimate delivery, and harmless duplicate
+  delivery. Signature-forgery rejection alone is insufficient counterevidence.
 - For OAuth/OIDC authorization-code login, account-linking, consent, and
   reauthentication callbacks, trace the exact initiation transaction through
   the browser redirect, authorization response, code exchange, verified

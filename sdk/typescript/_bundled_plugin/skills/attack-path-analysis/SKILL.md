@@ -266,6 +266,16 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   substitution. Exact target-client audience and authorized-party validation,
   one-time session-transaction nonce equality, replay rejection, and continuity
   through principal installation are counterevidence.
+- For signed-webhook replay findings, preserve how the attacker captures or can
+  resend one legitimate request; the exact raw body, signature header, signed
+  timestamp, and event ID; successful provider authentication; missing or
+  ineffective freshness; missing, late, or non-atomic event consumption; the
+  account/object and amount/action selected from authenticated bytes; and each
+  repeated financial or state-changing effect. Distinguish signature forgery
+  from capture-replay: a correct HMAC is expected in the exploit. Strong
+  counterevidence requires a bounded signed-timestamp window and atomic unique
+  event-ID consumption in the same transaction as the protected mutation, with
+  one legitimate delivery succeeding and duplicates remaining harmless.
 - For OAuth/OIDC authorization-code login and account-linking findings, preserve
   both attacker and victim browser sessions; the initiation account and
   operation; authorization request; code, `state`, nonce, redirect URI, PKCE

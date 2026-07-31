@@ -38,6 +38,9 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    callback-session, redirect-URI, and account-linking transaction binding,
    signed OIDC ID-token audience, authorized-party, nonce, callback-session,
    replay, and installed-principal binding even under a trusted signature,
+   signed webhook/callback raw-body verification, timestamp freshness,
+   capture-replay resistance, and atomic event-ID idempotency through the
+   protected financial or state-changing effect even under a valid HMAC,
    JWT/OIDC algorithm-to-key-family binding, public-key-as-HMAC confusion,
    signature-versus-MAC selection, remote-key URL, key-origin, issuer, audience,
    and nonce binding, SAML/federated signed-assertion selection and trust binding,

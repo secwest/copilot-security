@@ -312,6 +312,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:beginLogin|finishLogin|verifySignedIdToken|pendingOidc|OIDC_CLIENT_ID|intendedForClient|idToken)\b|\bclaims\s*\.\s*(?:aud|azp|nonce)\b/iu,
   ],
   [
+    "signed-webhook-freshness-and-idempotency",
+    103,
+    /\b(?:handlePaymentWebhook|signatureHeader|webhookSecret|applyCreditOnce|processedEventIds|processedEvents)\b|\b(?:event|webhook)\s*(?:\.|\[\s*["'])\s*(?:id|timestamp)\b|\bcreateHmac\s*\(/iu,
+  ],
+  [
     "jwt-oidc-claim-binding",
     98,
     /\b(?:expectedAudience|expectedIssuer|maxTokenAgeSeconds|pendingNonces|pendingOidc|OIDC_CLIENT_ID)\b|\bclaims\s*\.\s*(?:aud|azp|exp|iat|iss|nonce|sub)\b/iu,

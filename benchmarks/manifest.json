@@ -805,6 +805,51 @@
       "expected": []
     },
     {
+      "id": "javascript-signed-webhook-replay",
+      "description": "A payment callback verifies an HMAC-SHA-256 signature over the provider timestamp and exact raw body but enforces neither timestamp freshness nor one-time event consumption, so replaying one captured valid settlement credits the merchant account repeatedly.",
+      "fixture": "fixtures/javascript-signed-webhook-replay",
+      "findingsPaths": [
+        "javascript-signed-webhook-replay/run-1/findings.json",
+        "javascript-signed-webhook-replay/run-2/findings.json",
+        "javascript-signed-webhook-replay/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "signed-payment-webhook-replay-double-credit",
+          "cwe": ["CWE-294"],
+          "locations": [
+            {
+              "path": "src/webhook.js",
+              "startLine": 38,
+              "endLine": 49,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/webhook.js",
+              "startLine": 87,
+              "endLine": 93,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-signed-webhook",
+      "description": "The payment callback verifies the exact raw-body HMAC, enforces a five-minute signed-timestamp window, strictly validates the settlement, and atomically consumes the signed event ID with the account credit so duplicate delivery cannot repeat the financial effect.",
+      "fixture": "fixtures/javascript-safe-signed-webhook",
+      "findingsPaths": [
+        "javascript-safe-signed-webhook/run-1/findings.json",
+        "javascript-safe-signed-webhook/run-2/findings.json",
+        "javascript-safe-signed-webhook/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-saml-signature-wrapping",
       "description": "A SAML validator verifies the assertion selected by the signature reference but creates the session from an attacker-controlled unsigned assertion at the first list position.",
       "fixture": "fixtures/javascript-saml-signature-wrapping",

@@ -83,6 +83,7 @@ describe("effectiveness benchmark", () => {
         "javascript-oidc-id-token-misbinding",
         "javascript-safe-oidc-id-token-binding",
       ],
+      ["javascript-signed-webhook-replay", "javascript-safe-signed-webhook"],
       [
         "javascript-saml-signature-wrapping",
         "javascript-safe-saml-assertion-binding",
@@ -352,6 +353,11 @@ describe("effectiveness benchmark", () => {
     ).toEqual([["CWE-287", "CWE-345"]]);
     expect(
       cases
+        .get("javascript-signed-webhook-replay")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-294"]]);
+    expect(
+      cases
         .get("javascript-ldap-filter-authorization")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-90", "CWE-863"]]);
@@ -449,6 +455,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "javascript-safe-oidc-id-token-binding",
+    );
+    const signedWebhookReplay = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-signed-webhook-replay",
+    );
+    const safeSignedWebhook = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-signed-webhook",
     );
     const samlSignatureWrapping = join(
       benchmarkRoot,
@@ -580,6 +596,18 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(safeOidcIdTokenBinding, "src", "login.js"), "utf8"),
     ).toContain("!sameSecret(claims.nonce, pending.nonce)");
+    expect(
+      await readFile(join(signedWebhookReplay, "src", "webhook.js"), "utf8"),
+    ).toContain("ledger.credit(event.data.accountId, event.data.amountCents)");
+    expect(
+      await readFile(join(signedWebhookReplay, "src", "webhook.js"), "utf8"),
+    ).not.toContain("MAX_CLOCK_SKEW_SECONDS");
+    expect(
+      await readFile(join(safeSignedWebhook, "src", "webhook.js"), "utf8"),
+    ).toContain("Math.abs(nowSeconds - timestamp)");
+    expect(
+      await readFile(join(safeSignedWebhook, "src", "webhook.js"), "utf8"),
+    ).toContain("ledger.applyCreditOnce");
     expect(
       await readFile(join(samlSignatureWrapping, "src", "saml.js"), "utf8"),
     ).toContain("response.assertions[0].claims");

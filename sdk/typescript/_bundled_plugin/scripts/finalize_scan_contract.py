@@ -2422,6 +2422,19 @@ def _normalize_standalone_manifest_draft(
     existing_scan = manifest.get("scan")
     if isinstance(existing_scan, dict):
         changed = False
+        if (
+            completion_binding is not None
+            and "threatModel" in existing_scan
+            and not isinstance(existing_scan.get("threatModel"), dict)
+            and existing_scan.get("sealedAt") is None
+            and not isinstance(existing_scan.get("artifacts"), list)
+        ):
+            # The detailed threat model is already a sealed scan-local artifact.
+            # Copilot sometimes writes that artifact path into the optional
+            # structured summary field. Drop only the malformed optional draft
+            # value; never rewrite a previously sealed manifest.
+            existing_scan.pop("threatModel", None)
+            changed = True
         if not isinstance(existing_scan.get("target"), dict):
             top_level_target = manifest.get("target")
             existing_scan["target"] = (
@@ -2515,6 +2528,29 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         # CWE-307 captures the defeated authentication-attempt restriction;
         # CWE-799 captures the transport-to-resolver interaction-frequency gap.
         return "graphql-operation-amplification", ["CWE-307", "CWE-799"]
+    if (
+        ("webhook" in text or "signed callback" in text)
+        and (
+            "capture-replay" in text
+            or "capture replay" in text
+            or "replay" in text
+            or "duplicate delivery" in text
+            or "processed repeatedly" in text
+        )
+        and (
+            "hmac" in text
+            or "signature" in text
+            or "signed" in text
+        )
+        and (
+            "credit" in text
+            or "payment" in text
+            or "financial" in text
+            or "protected effect" in text
+            or "state-changing" in text
+        )
+    ):
+        return "signed-webhook-replay", ["CWE-294"]
     if (
         "jwt" in text
         and (

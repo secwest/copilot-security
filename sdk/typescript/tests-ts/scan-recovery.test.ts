@@ -311,6 +311,27 @@ describe("malformed scan artifact recovery", () => {
     );
   });
 
+  test("drops a malformed optional threat-model summary from an unsealed draft", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "scan-manifest.json");
+    const manifest = await readJson<{
+      scan: Record<string, unknown>;
+    }>(path);
+    manifest.scan["threatModel"] = "artifacts/01_context/threat_model.md";
+    await writeJson(path, manifest);
+
+    const completed = await completeScan(fixture);
+    const recovered = await readJson<{
+      scan: Record<string, unknown>;
+    }>(path);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.warnings).toContain(
+      "Recovered compact Copilot draft artifacts into the canonical scan contract.",
+    );
+    expect(recovered.scan).not.toHaveProperty("threatModel");
+  });
+
   test("normalizes compact Copilot draft artifacts before sealing", async () => {
     const fixture = await startDraftScan();
     await writeJson(join(fixture.scanDir, "scan-manifest.json"), {
@@ -606,6 +627,31 @@ describe("malformed scan artifact recovery", () => {
     expect(recovered["taxonomy"]).toEqual({
       category: "oidc-id-token-binding",
       cwe: ["CWE-287", "CWE-345"],
+    });
+  });
+
+  test("normalizes signed webhook capture-replay taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "Signed payment webhook replay credits the same settlement twice";
+    finding.summary =
+      "The webhook validates the HMAC signature but accepts an unchanged captured request repeatedly because it never bounds the signed timestamp or atomically consumes the event ID before the financial credit.";
+    finding["taxonomy"] = {
+      category: "improper cryptographic verification",
+      cwe: ["CWE-345"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "signed-webhook-replay",
+      cwe: ["CWE-294"],
     });
   });
 

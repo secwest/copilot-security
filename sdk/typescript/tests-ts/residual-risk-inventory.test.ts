@@ -488,6 +488,29 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs signed webhook replay with freshness and atomic idempotency", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-signed-webhook-replay"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-signed-webhook"),
+    );
+
+    expect(vulnerable).toContain('"cryptographic-verification"');
+    expect(vulnerable).toContain('"signed-webhook-freshness-and-idempotency"');
+    expect(vulnerable).toContain('createHmac("sha256", secret)');
+    expect(vulnerable).toContain(
+      "ledger.credit(event.data.accountId, event.data.amountCents)",
+    );
+    expect(safe).toContain('"signed-webhook-freshness-and-idempotency"');
+    expect(safe).toContain("Math.abs(nowSeconds - timestamp)");
+    expect(safe).toContain("this.#processedEventIds.has(eventId)");
+    expect(safe).toContain("ledger.applyCreditOnce");
+    expect(scanQualityGatePrompt("")).toContain(
+      "signed webhook and callback raw-body authentication, timestamp freshness, capture-replay resistance, and atomic event-id idempotency",
+    );
+  });
+
   test("pairs SAML signed-object confusion with exact assertion and trust binding", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-saml-signature-wrapping"),
