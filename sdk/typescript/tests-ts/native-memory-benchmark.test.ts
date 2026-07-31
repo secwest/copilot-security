@@ -7,6 +7,9 @@ import { afterEach, expect, test } from "bun:test";
 const temporaryPaths: string[] = [];
 const compiler = findCompiler();
 const nativeTest = compiler === null ? test.skip : test;
+const COMPILER_TIMEOUT_MS = 45_000;
+const EXECUTABLE_TIMEOUT_MS = 10_000;
+const NATIVE_TEST_TIMEOUT_MS = 120_000;
 
 afterEach(async () => {
   await Promise.all(
@@ -77,6 +80,7 @@ nativeTest(
       0,
     );
   },
+  { timeout: NATIVE_TEST_TIMEOUT_MS },
 );
 
 function findCompiler(): string | null {
@@ -117,7 +121,11 @@ function compileAndRun(
       "-o",
       executable,
     ],
-    { encoding: "utf8", windowsHide: true },
+    {
+      encoding: "utf8",
+      timeout: COMPILER_TIMEOUT_MS,
+      windowsHide: true,
+    },
   );
   expect({
     status: compilation.status,
@@ -127,6 +135,7 @@ function compileAndRun(
 
   const execution = spawnSync(executable, [], {
     encoding: "utf8",
+    timeout: EXECUTABLE_TIMEOUT_MS,
     windowsHide: true,
   });
   expect({
