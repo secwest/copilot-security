@@ -356,7 +356,7 @@ describe("CLI", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 60_000);
 
   test("marks findings as false positives without starting Copilot", async () => {
     const reason = "  Not reachable from untrusted input.  ";

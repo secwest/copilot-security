@@ -13,3 +13,6 @@ __pycache__/
 /findings.json
 /*.sarif
 /.pnpm-store/
+/artifacts/
+/apps/windows/**/bin/
+/apps/windows/**/obj/

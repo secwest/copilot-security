@@ -22,7 +22,7 @@ plus source-to-impact continuity; and code evidence needs a concrete
 path-and-line anchor, source text, and explanatory reasoning. Presence and
 substantive-quality flags are both retained in per-match diagnostics.
 
-The versioned corpus currently contains forty-four vulnerable/control pairs:
+The versioned corpus currently contains forty-six vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -75,6 +75,24 @@ also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
 destination-pinned, redirect-free transport. Three runs per case produce 276
 scans in the complete corpus.
+
+## Comparing scanner versions or implementations
+
+Run both scanners against exactly the same manifest, case selection, and
+repetition count. Preserve each scanner's `benchmark-report.json`; do not
+compare raw finding totals because duplicates, missing runs, unstable
+detections, and negative-control failures would be hidden.
+
+The Windows application's **Benchmark** tab compares two compatible version
+`1.0` benchmark reports. It first requires identical case IDs, case count, and
+run count. It then reports deltas for completion, precision, recall, F1,
+case/negative-control pass rates, stable detection, validation, attack paths,
+code evidence, severity accuracy, and false positives per run. A baseline case
+that stops passing, loses true positives, gains false positives, or gains false
+negatives is a regression even if the aggregate score rises.
+
+Use a full three-run corpus report for release claims. A one-run selected pair
+is useful for development but cannot establish repeatability.
 
 Run scans into a directory outside this repository:
 

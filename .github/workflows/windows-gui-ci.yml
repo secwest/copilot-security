@@ -1,0 +1,59 @@
+name: windows-gui-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-test-publish:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Show installed .NET SDKs
+        run: dotnet --list-sdks
+
+      - name: Build native Windows application
+        run: >-
+          dotnet build
+          apps/windows/CopilotSecurity.Gui/CopilotSecurity.Gui.csproj
+          --configuration Release
+          --nologo
+
+      - name: Test scanner execution core
+        run: >-
+          dotnet run
+          --project apps/windows/CopilotSecurity.Core.Tests/CopilotSecurity.Core.Tests.csproj
+          --configuration Release
+
+      - name: Publish framework-dependent single file
+        run: >-
+          dotnet publish
+          apps/windows/CopilotSecurity.Gui/CopilotSecurity.Gui.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained false
+          -p:PublishSingleFile=true
+          -p:DebugType=None
+          --output artifacts/windows-x64
+
+      - name: Verify published application
+        shell: pwsh
+        run: |
+          $application = Get-Item -LiteralPath artifacts/windows-x64/CopilotSecurity.exe
+          if ($application.Length -lt 100000) {
+            throw "Published application is unexpectedly small."
+          }
+          Get-FileHash -Algorithm SHA256 -LiteralPath $application.FullName

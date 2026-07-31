@@ -11,8 +11,9 @@ system `copilot` executable.
 
 ## Status
 
-This is an early standalone Secwest scanner. Standard repository, path,
-committed-diff, and working-tree scans use a Copilot-native plugin and runtime.
+This is a pre-1.0, production-oriented standalone Secwest scanner. Standard
+repository, path, committed-diff, and working-tree scans use a Copilot-native
+plugin and runtime.
 Deep mode uses repeated independent Copilot subagents and adds explicit
 systems, supply-chain/configuration, business-logic, control-differential, and
 compositional/temporal attack-path, and residual-miss review lenses before
@@ -156,6 +157,35 @@ other ambient state, and it preserves an account explicitly selected in the
 scanner home. The deprecated `COPILOT_SECURITY_STATE_DIR` alias selects this
 scanner's state root only. This separation lets multiple scanners run
 concurrently without sharing mutable state.
+
+## Native Windows application
+
+The repository includes a native WPF `.NET 8` desktop application in
+[`apps/windows`](apps/windows). It exposes whole-repository, scoped path,
+committed-diff, and working-tree scans; standard/deep modes; model and effort
+selection; optional cost and credit bounds; live progress and process-tree
+cancellation; findings, validation, attack paths, reports, private scan
+history, diagnostics, corpus evaluation, and baseline/candidate effectiveness
+comparison.
+
+The desktop application remains a client of this standalone scanner. It does
+not duplicate prompts or model orchestration, invoke a command shell, share
+another scanner's state, or read credentials. Before findings are displayed it
+recomputes the sealed manifest digests for the findings and coverage artifacts.
+
+```powershell
+dotnet run `
+  --project apps/windows/CopilotSecurity.Core.Tests/CopilotSecurity.Core.Tests.csproj `
+  --configuration Release
+
+dotnet run `
+  --project apps/windows/CopilotSecurity.Gui/CopilotSecurity.Gui.csproj `
+  --configuration Release
+```
+
+See [`apps/windows/README.md`](apps/windows/README.md) for the architecture,
+trust boundaries, publication command, benchmark comparison workflow, and
+failure/recovery behavior.
 
 ## Effectiveness benchmark
 
