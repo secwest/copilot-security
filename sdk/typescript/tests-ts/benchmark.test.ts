@@ -99,6 +99,10 @@ describe("effectiveness benchmark", () => {
       ],
       ["javascript-signed-webhook-replay", "javascript-safe-signed-webhook"],
       [
+        "javascript-ecdsa-signature-malleability-replay",
+        "javascript-safe-ecdsa-event-idempotency",
+      ],
+      [
         "javascript-saml-signature-wrapping",
         "javascript-safe-saml-assertion-binding",
       ],
@@ -472,6 +476,11 @@ describe("effectiveness benchmark", () => {
     ).toEqual([["CWE-294"]]);
     expect(
       cases
+        .get("javascript-ecdsa-signature-malleability-replay")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-294", "CWE-347"]]);
+    expect(
+      cases
         .get("javascript-ldap-filter-authorization")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-90", "CWE-863"]]);
@@ -579,6 +588,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "javascript-safe-signed-webhook",
+    );
+    const ecdsaMalleabilityReplay = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-ecdsa-signature-malleability-replay",
+    );
+    const safeEcdsaEventIdempotency = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-ecdsa-event-idempotency",
     );
     const samlSignatureWrapping = join(
       benchmarkRoot,
@@ -722,6 +741,30 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(safeSignedWebhook, "src", "webhook.js"), "utf8"),
     ).toContain("ledger.applyCreditOnce");
+    expect(
+      await readFile(
+        join(ecdsaMalleabilityReplay, "src", "webhook.js"),
+        "utf8",
+      ),
+    ).toContain('createHash("sha256").update(signature)');
+    expect(
+      await readFile(
+        join(ecdsaMalleabilityReplay, "src", "webhook.js"),
+        "utf8",
+      ),
+    ).toContain("ledger.applySignatureOnce");
+    expect(
+      await readFile(
+        join(safeEcdsaEventIdempotency, "src", "webhook.js"),
+        "utf8",
+      ),
+    ).toContain("this.#consumedEventIds.has(eventId)");
+    expect(
+      await readFile(
+        join(safeEcdsaEventIdempotency, "src", "webhook.js"),
+        "utf8",
+      ),
+    ).toContain("ledger.applyEventOnce");
     expect(
       await readFile(join(samlSignatureWrapping, "src", "saml.js"), "utf8"),
     ).toContain("response.assertions[0].claims");
@@ -1028,6 +1071,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("compositional and temporal attack paths");
     expect(deepScan).toContain("security-value generation");
     expect(deepScan).toContain("check/use and state races");
+    expect(deepScan).toContain(
+      "For ECDSA/DSA signature-representation candidates",
+    );
     expect(deepScan).toContain("bulk object binding and mass assignment");
     expect(deepScan).toContain("browser-ambient credential CSRF");
     expect(deepScan).toContain("Credentialed CORS response authorization:");
@@ -1137,6 +1183,9 @@ describe("effectiveness benchmark", () => {
     expect(standardScan).toContain(
       "signed OIDC ID-token audience, authorized-party, nonce, callback-session",
     );
+    expect(standardScan).toContain(
+      "ECDSA/DSA signature representation and malleability",
+    );
     expect(standardScan).toContain("public-key-as-HMAC confusion");
     expect(standardScan).toContain("SAML/federated signed-assertion selection");
     expect(diffScan).toContain("mass-assignment field controls");
@@ -1178,6 +1227,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(diffScan).toContain("changed AEAD algorithm/mode selection");
     expect(diffScan).toContain(
+      "changed ECDSA/DSA signature encoding or canonicalization",
+    );
+    expect(diffScan).toContain(
       "SAML/SSO assertion ID lookup, signature-reference resolution",
     );
     expect(diffScan).toContain(
@@ -1197,6 +1249,7 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain("For credentialed CORS response exposure");
     expect(discovery).toContain("For cross-site WebSocket hijacking");
     expect(discovery).toContain("For web cache deception");
+    expect(discovery).toContain("For ECDSA/DSA-signed operations");
     expect(discovery).toContain("Prefer CWE-524 for cross-principal edge, CDN");
     expect(discovery).toContain("For application-level authorization caches");
     expect(discovery).toContain(
@@ -1306,6 +1359,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain(
       "for authenticated-encryption nonce/IV-reuse candidates",
     );
+    expect(validation).toContain("ECDSA/DSA signature-malleability replay:");
     expect(validation).toContain("JWT/JWS/OIDC remote key origin:");
     expect(validation).toContain(
       "OIDC ID-token client and transaction binding:",
@@ -1367,6 +1421,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(attackPath).toContain(
       "For authenticated-encryption nonce/IV-reuse findings",
+    );
+    expect(attackPath).toContain(
+      "For ECDSA/DSA signature-malleability replay findings",
     );
     expect(attackPath).toContain("For SAML/federated signed-object findings");
     expect(attackPath).toContain("For JWT/JWS/OIDC remote-key findings");
@@ -1456,6 +1513,12 @@ describe("effectiveness benchmark", () => {
       "Authenticated-encryption key/nonce reuse that lets an attacker recover",
     );
     expect(severityPolicy).toContain(
+      "ECDSA/DSA signature malleability that reliably bypasses replay",
+    );
+    expect(severityPolicy).toContain(
+      "Signature-malleability reports based only on ECDSA/DSA accepting both high-S",
+    );
+    expect(severityPolicy).toContain(
       "Request-smuggling claims based only on `Content-Length`",
     );
     expect(severityPolicy).toContain(
@@ -1516,6 +1579,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(threatModelGuidance).toContain(
       "authenticated-encryption trust across algorithm/mode",
+    );
+    expect(threatModelGuidance).toContain(
+      "ECDSA/DSA signature representation and malleability",
     );
     expect(threatModelGuidance).toContain(
       "JWT/JWS/OIDC algorithm-to-key-family and signature-versus-MAC binding",
@@ -1582,6 +1648,7 @@ describe("effectiveness benchmark", () => {
       "For decompression and data-amplification paths",
     );
     expect(repositoryWideScan).toContain("For authenticated encryption");
+    expect(repositoryWideScan).toContain("For ECDSA/DSA-signed operations");
     expect(repositoryWideScan).toContain(
       "GraphQL aliases/fragments/nesting/batches/persisted documents",
     );
@@ -1611,6 +1678,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(finalReport).toContain(
       "For authenticated-encryption nonce/IV-reuse findings",
+    );
+    expect(finalReport).toContain(
+      "For ECDSA/DSA signature-malleability replay findings",
     );
     expect(finalReport).toContain("For OIDC ID-token client-binding findings");
     expect(finalReport).toContain("For DNS-rebinding SSRF findings");

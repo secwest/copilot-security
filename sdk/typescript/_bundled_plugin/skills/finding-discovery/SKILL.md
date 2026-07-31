@@ -340,6 +340,17 @@ Use this checklist to keep discovery specific without turning it into validation
   window, strict event binding, atomic one-time event consumption with the
   protected mutation, successful legitimate delivery, and harmless duplicate
   delivery. Signature-forgery rejection alone is insufficient counterevidence.
+- For ECDSA/DSA-signed operations, inspect whether replay, uniqueness, cache,
+  audit, or idempotency identity is derived from the signature representation.
+  ECDSA permits distinct valid `(r, s)` and `(r, n-s)` signatures for the same
+  signed bytes, and resigning may produce further valid encodings. Generate the
+  valid twin from one captured request, verify both through the real boundary,
+  and compare the replay keys and protected effects. Acceptance of high-S and
+  low-S signatures is not independently a vulnerability. Report only when the
+  malleable representation changes a security decision or repeats an effect.
+  Atomic consumption of a signed semantic event/operation ID, or enforced
+  canonical signatures before every representation-sensitive use, is strong
+  counterevidence; hashing raw signature bytes is not semantic idempotency.
 - For OAuth/OIDC authorization-code login, account-linking, consent, and
   reauthentication callbacks, trace the exact initiation transaction through
   the browser redirect, authorization response, code exchange, verified

@@ -397,6 +397,16 @@ Use class-specific proof tuples:
   A valid HMAC authenticates bytes but does not prove freshness or one-time
   execution. A non-atomic `has`/effect/`add` sequence is not sufficient replay
   protection when multiple workers or deliveries can race.
+- ECDSA/DSA signature-malleability replay: one exact signed event or operation +
+  its valid `(r, s)` signature + a mathematically equivalent valid `(r, n-s)`
+  representation + the verification result for both + each derived replay,
+  deduplication, cache, or idempotency key + repeated protected effect. The
+  paired control must accept legitimate delivery, reject tampering/wrong keys
+  and stale requests, and make both valid representations resolve atomically to
+  one signed semantic event/operation ID. Accepting high-S and low-S signatures
+  is not itself a finding; the exploit requires a representation-sensitive
+  security decision. Conversely, freshness and correct signature verification
+  do not close replay identity derived from malleable signature bytes.
 - OAuth/OIDC authorization-code callback binding: attacker-controlled code,
   `state`, issuer response, redirect parameters, or browser session + initiation
   transaction and PKCE material + exact lookup, consume, exchange, and identity

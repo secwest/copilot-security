@@ -22,7 +22,7 @@ plus source-to-impact continuity; and code evidence needs a concrete
 path-and-line anchor, source text, and explanatory reasoning. Presence and
 substantive-quality flags are both retained in per-match diagnostics.
 
-The versioned corpus currently contains forty-three vulnerable/control pairs:
+The versioned corpus currently contains forty-four vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -40,7 +40,9 @@ confusion that reinterprets an RSA public key as an HMAC secret,
 attacker-controlled JWT/OIDC JWKS key origin, signed OIDC ID-token
 audience/authorized-party/nonce misbinding across sibling clients, signed
 payment-webhook capture/replay with freshness and atomic event-id consumption
-as the control, cross-tenant application-cache key confusion where an
+as the control, ECDSA `(r, s)` to `(r, n-s)` signature malleability that bypasses
+signature-byte replay identity with atomic signed-event-ID consumption as the
+control, cross-tenant application-cache key confusion where an
 identity-omitting hit bypasses a correctly tenant-scoped cold lookup with a
 trusted tenant-derived cache namespace and hit ownership check as the control,
 SAML
@@ -65,7 +67,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 258
+destination-pinned, redirect-free transport. Three runs per case produce 264
 scans in the complete corpus.
 
 Run scans into a directory outside this repository:

@@ -342,6 +342,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:handlePaymentWebhook|signatureHeader|webhookSecret|applyCreditOnce|processedEventIds|processedEvents)\b|\b(?:event|webhook)\s*(?:\.|\[\s*["'])\s*(?:id|timestamp)\b|\bcreateHmac\s*\(/iu,
   ],
   [
+    "signature-representation-and-replay-identity",
+    104,
+    /\b(?:ECDSA|ES256|P256_ORDER|prime256v1|secp256r1|malleat(?:e|ed|ion)|applySignatureOnce|applyEventOnce|consumedSignatureDigests|consumedEventIds|signatureBase64)\b|\bcreateHash\s*\([^)]*\)\s*\.\s*update\s*\(\s*signature\b/iu,
+  ],
+  [
     "jwt-oidc-claim-binding",
     98,
     /\b(?:expectedAudience|expectedIssuer|maxTokenAgeSeconds|pendingNonces|pendingOidc|OIDC_CLIENT_ID)\b|\bclaims\s*\.\s*(?:aud|azp|exp|iat|iss|nonce|sub)\b/iu,

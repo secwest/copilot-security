@@ -66,6 +66,14 @@ Require a bounded past/future freshness window and atomic one-time event-ID
 consumption in the same transaction as the protected mutation; a valid HMAC or
 signature and rejection of tampered bytes do not prevent capture-replay.
 
+For ECDSA/DSA-signed operations, trace signature representation through every
+replay, deduplication, cache, audit, uniqueness, and idempotency decision. Submit
+one legitimate signature and its mathematically equivalent valid twin such as
+P-256 `(r, n-s)` over identical bytes. Require both to resolve to one atomically
+consumed signed semantic event/operation ID, or prove canonicalization precedes
+every representation-sensitive use. Acceptance of both signatures alone is
+safe; distinct signature-byte keys that repeat a protected effect are not.
+
 For external authorization and entitlement decisions, exercise explicit deny,
 the exact exception or timeout, malformed/empty response, and legitimate allow
 through the same handler. Preserve initial and final decision values and types,

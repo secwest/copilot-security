@@ -655,6 +655,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes ECDSA signature-malleability replay taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "ECDSA signature malleability bypasses settlement replay protection";
+    finding.summary =
+      "The webhook verifies a fresh P-256 signature but hashes the DER signature bytes as its idempotency key, so the valid `(r, n-s)` twin receives a different replay key and credits the same signed payment twice.";
+    finding["taxonomy"] = {
+      category: "improper cryptographic verification",
+      cwe: ["CWE-345"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "signature-malleability-replay",
+      cwe: ["CWE-294", "CWE-347"],
+    });
+  });
+
   test("normalizes catastrophic regex backtracking taxonomy", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

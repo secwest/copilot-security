@@ -65,6 +65,9 @@ publish findings, open issues, or contact third parties. Write only beneath
    signed webhook/callback raw bodies, signature headers and timestamps,
    freshness windows, event/delivery IDs, atomic idempotency, and repeated
    financial or state-changing effects,
+   ECDSA/DSA signature representations, canonicalization, valid high-S/low-S
+   twins, and replay/deduplication/cache/idempotency keys derived from signature
+   bytes versus signed semantic event or operation identity,
    SAML/federated signature references and consumed
    identity objects, bulk object binding and mass-assignment field controls,
    browser-ambient credential and CSRF controls, credentialed CORS response
@@ -204,6 +207,9 @@ publish findings, open issues, or contact third parties. Write only beneath
      completion endpoints that could disclose a live capability to an attacker;
    - unsafe default, configuration, dependency, build, plugin, or update changes;
    - race, replay, idempotency, lifecycle, error-handling, and rollback changes;
+   - changed ECDSA/DSA signature encoding or canonicalization and any replay,
+     deduplication, cache, audit, or idempotency decision keyed by signature
+     bytes rather than a signed semantic event/operation identifier;
    - newly affected sibling instances behind a changed shared dependency.
 
    Record candidate and reviewed-safe receipts in

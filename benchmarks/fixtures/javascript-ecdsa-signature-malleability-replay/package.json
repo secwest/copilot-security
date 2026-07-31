@@ -1,0 +1,5 @@
+{
+  "name": "javascript-ecdsa-signature-malleability-replay-fixture",
+  "private": true,
+  "type": "module"
+}

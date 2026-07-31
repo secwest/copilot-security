@@ -2558,6 +2558,35 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         # CWE-799 captures the transport-to-resolver interaction-frequency gap.
         return "graphql-operation-amplification", ["CWE-307", "CWE-799"]
     if (
+        (
+            "signature malleability" in text
+            or "signature-malleability" in text
+            or "malleable signature" in text
+            or "high-s" in text
+            or "high s" in text
+            or "low-s" in text
+            or "low s" in text
+            or "n-s" in text
+            or "signature-byte" in text
+            or "signature bytes" in text
+        )
+        and ("ecdsa" in text or "p-256" in text or "es256" in text)
+        and (
+            "replay" in text
+            or "idempotency" in text
+            or "dedup" in text
+            or "duplicate" in text
+        )
+        and (
+            "credit" in text
+            or "payment" in text
+            or "financial" in text
+            or "protected effect" in text
+            or "state-changing" in text
+        )
+    ):
+        return "signature-malleability-replay", ["CWE-294", "CWE-347"]
+    if (
         ("webhook" in text or "signed callback" in text)
         and (
             "capture-replay" in text

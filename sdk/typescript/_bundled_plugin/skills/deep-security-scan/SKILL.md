@@ -527,6 +527,16 @@ inventory and closure requirements.
    concurrent duplicates. Reject only when exact raw-body authentication,
    bounded timestamp freshness, strict event binding, and atomic event-ID
    consumption with the mutation make every duplicate harmless.
+   For ECDSA/DSA signature-representation candidates, parse one legitimate
+   signature, construct the mathematically equivalent valid twin such as P-256
+   `(r, n-s)`, and submit both with identical signed bytes inside the freshness
+   window. Record both verification results, raw/canonical signature bytes,
+   replay or idempotency keys, atomic-consumption decisions, and protected
+   effects. Reject when both representations resolve to one signed semantic
+   event/operation identity or canonicalization is enforced before every
+   security-sensitive representation use. Do not reject merely because
+   tampering or an invalid signature fails, and do not report acceptance of two
+   valid encodings without a repeated or bypassed security consequence.
    For OAuth/OIDC authorization-code and account-linking candidates, reproduce
    an attacker initiation and victim-session callback through the real
    transaction store and identity-provider adapter. Record the external subject,

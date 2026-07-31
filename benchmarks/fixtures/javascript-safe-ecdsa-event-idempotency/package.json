@@ -1,0 +1,5 @@
+{
+  "name": "javascript-safe-ecdsa-event-idempotency-fixture",
+  "private": true,
+  "type": "module"
+}

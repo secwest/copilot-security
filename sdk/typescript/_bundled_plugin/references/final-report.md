@@ -154,6 +154,16 @@ body/signature/timestamp/event-ID tuple, its first accepted effect, the repeated
 effect from an unchanged second delivery, and tamper or wrong-key controls. A
 valid HMAC is expected and does not by itself rebut capture-replay.
 
+For ECDSA/DSA signature-malleability replay findings, affected lines must
+include successful signature verification, the signature-byte-derived replay,
+deduplication, cache, or idempotency key, and the protected mutation when those
+lines are distinct. The write-up must preserve one exact signed event, its
+original `(r, s)` signature, the valid transformed twin such as `(r, n-s)`, both
+verification results, distinct security keys, and repeated effects. Use the
+concrete category `signature-malleability-replay` with CWE-294 and CWE-347. Do
+not describe acceptance of both valid representations as a forgery or finding
+when a signed semantic event ID is atomically consumed once.
+
 For application authorization-cache findings, affected lines must include the
 trusted authenticated principal or tenant extraction, exact cache-key
 construction, hit return, authoritative scoped lookup, and cache population

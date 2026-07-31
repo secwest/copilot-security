@@ -581,7 +581,31 @@ describe("residual risk inventory", () => {
     expect(safe).toContain("this.#processedEventIds.has(eventId)");
     expect(safe).toContain("ledger.applyCreditOnce");
     expect(scanQualityGatePrompt("")).toContain(
-      "signed webhook and callback raw-body authentication, timestamp freshness, capture-replay resistance, and atomic event-id idempotency",
+      "signed webhook and callback raw-body authentication, timestamp freshness, capture-replay resistance, atomic event-id idempotency",
+    );
+  });
+
+  test("pairs malleable signature replay keys with signed event identity", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-ecdsa-signature-malleability-replay"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-ecdsa-event-idempotency"),
+    );
+
+    expect(vulnerable).toContain('"cryptographic-verification"');
+    expect(vulnerable).toContain(
+      '"signature-representation-and-replay-identity"',
+    );
+    expect(vulnerable).toContain(
+      'createHash("sha256").update(signature).digest("hex")',
+    );
+    expect(vulnerable).toContain("ledger.applySignatureOnce");
+    expect(safe).toContain('"signature-representation-and-replay-identity"');
+    expect(safe).toContain("this.#consumedEventIds.has(eventId)");
+    expect(safe).toContain("ledger.applyEventOnce");
+    expect(scanQualityGatePrompt("")).toContain(
+      "signature representation, ECDSA `(r,s)`/`(r,n-s)` malleability, and whether replay or idempotency keys use malleable signature bytes instead of signed semantic event identity",
     );
   });
 

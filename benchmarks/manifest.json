@@ -1067,6 +1067,51 @@
       "expected": []
     },
     {
+      "id": "javascript-ecdsa-signature-malleability-replay",
+      "description": "A fresh P-256-signed settlement is deduplicated by a digest of its DER signature bytes, so an attacker transforms one valid `(r, s)` signature into the distinct valid `(r, n-s)` twin and repeats the financial credit without the private key or a forgery.",
+      "fixture": "fixtures/javascript-ecdsa-signature-malleability-replay",
+      "findingsPaths": [
+        "javascript-ecdsa-signature-malleability-replay/run-1/findings.json",
+        "javascript-ecdsa-signature-malleability-replay/run-2/findings.json",
+        "javascript-ecdsa-signature-malleability-replay/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "ecdsa-signature-byte-idempotency-bypass",
+          "cwe": ["CWE-294", "CWE-347"],
+          "locations": [
+            {
+              "path": "src/webhook.js",
+              "startLine": 61,
+              "endLine": 69,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/webhook.js",
+              "startLine": 81,
+              "endLine": 90,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-ecdsa-event-idempotency",
+      "description": "The settlement webhook accepts either valid P-256 signature representation but verifies the exact raw event, enforces freshness, and atomically consumes the signed semantic event ID so all signatures for one event resolve to one financial operation.",
+      "fixture": "fixtures/javascript-safe-ecdsa-event-idempotency",
+      "findingsPaths": [
+        "javascript-safe-ecdsa-event-idempotency/run-1/findings.json",
+        "javascript-safe-ecdsa-event-idempotency/run-2/findings.json",
+        "javascript-safe-ecdsa-event-idempotency/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-saml-signature-wrapping",
       "description": "A SAML validator verifies the assertion selected by the signature reference but creates the session from an attacker-controlled unsigned assertion at the first list position.",
       "fixture": "fixtures/javascript-saml-signature-wrapping",

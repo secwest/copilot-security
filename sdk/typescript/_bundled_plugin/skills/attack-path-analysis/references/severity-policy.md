@@ -96,6 +96,12 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   Critical requires one exact captured body/signature/timestamp/event-ID tuple,
   successful repeated protected effects, realistic replay access, and impact
   equivalent to broad compromise—not merely missing idempotency terminology.
+- ECDSA/DSA signature malleability that transforms one valid captured signature
+  into an equivalent representation and bypasses signature-byte replay identity
+  to repeat crown-jewel financial, administrative, cross-tenant, or safety-
+  critical effects. Critical requires the exact signed bytes, both valid
+  signatures and verification results, distinct security keys, repeated
+  effects, realistic capture access, and compromise-equivalent impact.
 - Session fixation that lets a remote attacker preserve an attacker-known
   pre-authentication identifier through an administrator, cross-tenant,
   billing, or otherwise high-value victim login and reuse it for
@@ -265,6 +271,12 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   request, accepted stale or duplicate delivery, repeated effect, tamper/wrong-
   key rejection, legitimate first-delivery control, and evidence that freshness
   or atomic event consumption does not prevent the replay.
+- ECDSA/DSA signature malleability that reliably bypasses replay,
+  deduplication, cache, audit, or idempotency identity derived from raw signature
+  bytes and repeats a meaningful protected effect. High requires one exact
+  signed request, the original and transformed valid signatures, both
+  verification results, distinct security keys, repeated effect, and proof that
+  signed event/operation identity or complete canonicalization does not stop it.
 - External authorization fail-open that reliably converts a policy exception,
   timeout, malformed/empty result, stale fallback, or retry exhaustion into
   meaningful unauthorized access. High requires the exact policy inputs,
@@ -416,6 +428,12 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   window, the event identity and target are strictly bound, and atomic unique
   event consumption shares the transaction with the mutation so sequential and
   concurrent duplicates are harmless while legitimate delivery succeeds.
+- Signature-malleability reports based only on ECDSA/DSA accepting both high-S
+  and low-S or otherwise equivalent valid encodings, without proving that the
+  representation changes a replay, uniqueness, cache, audit, or idempotency
+  decision and repeats or bypasses a protected effect. Suppress when every valid
+  representation resolves atomically to one signed semantic event/operation ID,
+  or canonicalization precedes every representation-sensitive security use.
 - OAuth/OIDC callback reports based only on missing `state`, nonce, or PKCE,
   parameter names, or a generic callback route without proving transaction
   substitution, browser-session/account misbinding, and a resulting wrong

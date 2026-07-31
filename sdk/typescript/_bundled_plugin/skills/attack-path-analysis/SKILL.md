@@ -328,6 +328,15 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   counterevidence requires a bounded signed-timestamp window and atomic unique
   event-ID consumption in the same transaction as the protected mutation, with
   one legitimate delivery succeeding and duplicates remaining harmless.
+- For ECDSA/DSA signature-malleability replay findings, preserve the curve and
+  signature encoding, exact signed bytes, original `(r, s)` signature,
+  attacker-derived valid twin such as `(r, n-s)`, successful verification of
+  both, distinct representation-derived replay/idempotency keys, event identity,
+  and each financial or state-changing effect. Do not call the twin a forgery:
+  the control failure is using a non-unique signature representation as
+  security identity. Strong counterevidence is atomic signed-event identity or
+  complete canonicalization before every representation-sensitive decision,
+  plus legitimate, invalid-signature, tamper, stale, and duplicate controls.
 - For OAuth/OIDC authorization-code login and account-linking findings, preserve
   both attacker and victim browser sessions; the initiation account and
   operation; authorization request; code, `state`, nonce, redirect URI, PKCE

@@ -41,6 +41,9 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    signed webhook/callback raw-body verification, timestamp freshness,
    capture-replay resistance, and atomic event-ID idempotency through the
    protected financial or state-changing effect even under a valid HMAC,
+   ECDSA/DSA signature representation and malleability, especially replay,
+   cache, audit, or idempotency keys derived from non-unique signature bytes
+   instead of an atomically consumed signed semantic event/operation ID,
    JWT/OIDC algorithm-to-key-family binding, public-key-as-HMAC confusion,
    signature-versus-MAC selection, remote-key URL, key-origin, issuer, audience,
    and nonce binding, SAML/federated signed-assertion selection and trust binding,
