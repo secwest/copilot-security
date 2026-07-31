@@ -166,6 +166,14 @@ inventory and closure requirements.
      one-time state bound to the initiating session/account/operation,
      transaction-bound S256 PKCE, and transaction-account identity installation
      as the negative control. Parameter presence alone is not closure.
+   - Login session fixation and authentication lifecycle: anonymous-session
+     creation and exposure; URL, cookie, header, subdomain, or application
+     mechanisms that let an attacker know or inject an identifier; victim
+     adoption; credential verification; session regeneration, rotation,
+     promotion, aliasing, migration, deletion, and Set-Cookie order; principal
+     installation; and later protected lookup. Use atomic old-session
+     invalidation plus a distinct unpredictable authenticated identifier as the
+     negative control. Cookie flags alone are not closure.
    - SAML and federated assertion binding: every response/assertion parser,
      signature reference and ID lookup, canonicalized signed byte range,
      assertion list/index/clone/return path, issuer, audience, recipient,
@@ -290,6 +298,14 @@ inventory and closure requirements.
    before exchange, the legitimate matching flow succeeds, wrong PKCE fails,
    replay fails, and the final identity is installed only for the
    transaction-bound account.
+   For login session-fixation candidates, use two clients to create or inject an
+   attacker-known anonymous identifier, make the victim adopt it and complete
+   valid login, then replay it from the attacker client against a protected
+   endpoint. Record both cookie values and session-store records before and
+   after authentication. Reject when the attacker cannot know or fix the ID, or
+   the old ID is atomically invalidated, a distinct unpredictable authenticated
+   ID is issued, only that new ID succeeds, and attacker plus victim pre-login
+   IDs both fail.
    For SAML/federation candidates, demonstrate one exact signed response and map
    the signature reference, canonical signed bytes, ID lookup, validated
    assertion, returned/cloned assertion, derived claims, semantic trust checks,

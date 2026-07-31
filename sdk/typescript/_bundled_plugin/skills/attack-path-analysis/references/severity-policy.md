@@ -71,6 +71,12 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   victim-session callback, missing or bypassed transaction/PKCE binding,
   resulting external-identity link, and successful later attacker login—not
   merely an absent `state` parameter.
+- Session fixation that lets a remote attacker preserve an attacker-known
+  pre-authentication identifier through an administrator, cross-tenant,
+  billing, or otherwise high-value victim login and reuse it for
+  compromise-equivalent authenticated access. Critical requires the exact
+  fixation mechanism, unchanged identifier or store alias, installed victim
+  principal, and successful attacker replay.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
@@ -108,6 +114,9 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   victim as the wrong subject, links an attacker-controlled external identity to
   a victim account, changes consent or credentials, or otherwise crosses a
   meaningful identity boundary with realistic browser interaction.
+- Session fixation that reliably lets an attacker reuse a fixed
+  pre-authentication identifier after victim login to obtain meaningful
+  authenticated account access.
 - XXE with clear proof that an attacker can control the XML document through in-scope attack-surface and that the XML engine is vulnerable to XXE
 - etc, other bugs not listed which follow this level of high severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 - Dangerous upload / file handling issues that enable stored active content, trusted-origin script execution, or meaningful content-type confusion with real security impact; with actual proof that both the upload and access are reachable through in-scope attack-surface.
@@ -152,6 +161,10 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   parameter names, or a generic callback route without proving transaction
   substitution, browser-session/account misbinding, and a resulting wrong
   identity, account link, or protected action.
+- Session-management reports based only on a pre-authentication session,
+  unchanged non-security state, missing framework API name, or cookie flags
+  without proving attacker knowledge or injection, identifier survival across
+  authentication, and successful replay as the victim.
 - Missing headers, cookie flags, CSP weaknesses, TLS observations, or crypto hygiene issues without a concrete exploit path and meaningful demonstrated impact.
 - Reports that effectively say "this could be dangerous if combined with something else" but do not show the something else.
 - Denial of service that is transient, single-user, self-targeting, easy to mitigate, requires disproportionate attacker resources, or does not create severe and realistic business / safety impact.

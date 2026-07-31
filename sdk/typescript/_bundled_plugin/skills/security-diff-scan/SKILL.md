@@ -56,7 +56,8 @@ publish findings, open issues, or contact third parties. Write only beneath
    expression construction and selected-node security mapping, template,
    parser, deserializer, file-upload parsing/storage and downstream content
    consumers, HTTP message framing and normalization across proxies/gateways/
-   backends, OAuth/OIDC authorization-code state, nonce, PKCE, callback-session,
+   backends, login session fixation and authenticated-session rotation,
+   OAuth/OIDC authorization-code state, nonce, PKCE, callback-session,
    redirect-URI, and account-linking transaction binding, JWT/OIDC protected
    headers, remote key sources, JWKS/issuer mapping, algorithm and claim binding,
    SAML/federated signature references and consumed
@@ -109,6 +110,11 @@ publish findings, open issues, or contact third parties. Write only beneath
      account/operation binding, redirect URI, PKCE challenge/verifier, code
      exchange, external-subject selection, identity linking, or later session
      installation;
+   - changed anonymous-session creation or adoption, URL/cookie/header session-ID
+     input, credential-transition regeneration or rotation, old-session
+     invalidation, store aliasing/migration, post-login Set-Cookie, principal
+     installation, or protected session lookup that could preserve an
+     attacker-known identifier across login;
    - unsafe default, configuration, dependency, build, plugin, or update changes;
    - race, replay, idempotency, lifecycle, error-handling, and rollback changes;
    - newly affected sibling instances behind a changed shared dependency.

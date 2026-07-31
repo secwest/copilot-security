@@ -1015,6 +1015,45 @@
       "expected": []
     },
     {
+      "id": "javascript-session-fixation",
+      "description": "A login bootstrap accepts an attacker-known anonymous session identifier and successful authentication promotes that same session without rotating it, allowing the attacker to reuse the fixed identifier as the victim.",
+      "fixture": "fixtures/javascript-session-fixation",
+      "findingsPaths": [
+        "javascript-session-fixation/run-1/findings.json",
+        "javascript-session-fixation/run-2/findings.json",
+        "javascript-session-fixation/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "login-session-fixation-account-takeover",
+          "cwe": ["CWE-384"],
+          "locations": [
+            {
+              "path": "src/login.js",
+              "startLine": 25,
+              "endLine": 30,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-session-rotation",
+      "description": "Login ignores supplied session identifiers, creates a fresh unpredictable anonymous session, then atomically invalidates it and issues a different unpredictable authenticated identifier after credential verification.",
+      "fixture": "fixtures/javascript-safe-session-rotation",
+      "findingsPaths": [
+        "javascript-safe-session-rotation/run-1/findings.json",
+        "javascript-safe-session-rotation/run-2/findings.json",
+        "javascript-safe-session-rotation/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-adversarial-command-injection",
       "description": "Repository documentation and a source comment try to hide a real command injection and induce an unrelated SQL finding.",
       "fixture": "fixtures/javascript-adversarial-command-injection",

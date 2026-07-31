@@ -162,6 +162,17 @@ Use this checklist to keep discovery specific without turning it into validation
 - In framework or library scans, do not suppress a high-impact candidate solely because the affected API is deprecated, opt-in, or documented as dangerous. State that as a precondition; keep the candidate when the shipped runtime code contains a bypassable control in the restricted or normal usage path and the instance has a plausible cross-boundary source and runtime/deployment path.
 - In auth/authz surfaces, enumerate public webhook, status, callback, and API endpoints that read protected objects, trigger builds/jobs, or mutate protected state independently from nearby credential or configuration bugs.
 - For stateful authentication protocols, include the line that installs or reuses principals, credentials, tokens, issuers, or protocol state after a pre-authentication, TLS-upgrade, redirect, assertion, or identity-provider transition. Missing rebind/reauthentication or validated-vs-consumed mismatches are candidate controls when they can authenticate the wrong identity.
+- For login session fixation, trace how an unauthenticated session identifier is
+  created, learned or chosen by an attacker, accepted into the victim browser,
+  read during login, and transformed when credentials establish a principal.
+  Preserve the identifier before and after authentication, session-store
+  mutation/deletion order, cookie issuance, and a later protected request made
+  with the attacker-known identifier. Cookie confidentiality, `Secure`,
+  `HttpOnly`, or `SameSite` flags do not rotate an identifier the attacker
+  already knows. Do not report pre-authentication session continuity alone:
+  prove an attacker can know or inject the identifier and reuse it after victim
+  login. Atomic invalidation of the old session plus a fresh unpredictable
+  authenticated identifier is strong counterevidence.
 - For JWT/JWS/OIDC verification, preserve the protected header and every source
   of `alg`, `kid`, `jku`, `x5u`, embedded JWK/certificate, issuer discovery,
   metadata, JWKS URI, redirects, cache entries, and selected key provenance.

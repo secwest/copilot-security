@@ -86,6 +86,7 @@ describe("effectiveness benchmark", () => {
         "javascript-oauth-account-linking-csrf",
         "javascript-safe-oauth-account-linking",
       ],
+      ["javascript-session-fixation", "javascript-safe-session-rotation"],
       [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
@@ -128,6 +129,23 @@ describe("effectiveness benchmark", () => {
         path: "src/linking.js",
         startLine: 27,
         endLine: 31,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-session-fixation")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-384"]]);
+    expect(
+      cases
+        .get("javascript-session-fixation")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/login.js",
+        startLine: 25,
+        endLine: 30,
         lineTolerance: 3,
       },
     ]);
@@ -490,6 +508,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain(
       "OAuth/OIDC authorization-code and account-linking transaction binding:",
     );
+    expect(deepScan).toContain(
+      "Login session fixation and authentication lifecycle:",
+    );
     expect(deepScan).toContain("untrusted upload and content placement:");
     expect(deepScan).toContain("HTTP request framing and smuggling:");
     expect(deepScan).toContain("JWT/JWS/OIDC key origin and claim binding:");
@@ -508,6 +529,9 @@ describe("effectiveness benchmark", () => {
     expect(standardScan).toContain(
       "OAuth/OIDC authorization-code state, nonce, PKCE",
     );
+    expect(standardScan).toContain(
+      "login session fixation and authenticated-session",
+    );
     expect(standardScan).toContain("untrusted uploads and");
     expect(standardScan).toContain("HTTP message framing and parser agreement");
     expect(standardScan).toContain("JWT/OIDC algorithm, remote-key URL");
@@ -521,6 +545,9 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain("new XPath/XQuery interpolation");
     expect(diffScan).toContain(
       "changed OAuth/OIDC authorization-code initiation or callback `state`",
+    );
+    expect(diffScan).toContain(
+      "changed anonymous-session creation or adoption",
     );
     expect(diffScan).toContain("new multipart/file inputs");
     expect(diffScan).toContain("duplicate or conflicting `Content-Length` and");
@@ -572,6 +599,10 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain(
       "PKCE does not by itself prove callback-session",
     );
+    expect(discovery).toContain("For login session fixation");
+    expect(discovery).toContain(
+      "Do not report pre-authentication session continuity alone",
+    );
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
@@ -588,6 +619,10 @@ describe("effectiveness benchmark", () => {
     );
     expect(validation).toContain(
       "reject attacker state in the victim session before exchange",
+    );
+    expect(validation).toContain("login session fixation:");
+    expect(validation).toContain(
+      "distinct unpredictable post-authentication identifier",
     );
     expect(validation).toContain("SAML signed-byte-to-session binding:");
     expect(attackPath).toContain("For mass-assignment findings");
@@ -607,6 +642,7 @@ describe("effectiveness benchmark", () => {
     expect(attackPath).toContain(
       "For OAuth/OIDC authorization-code login and account-linking findings",
     );
+    expect(attackPath).toContain("For login session-fixation findings");
     expect(severityPolicy).toContain(
       "CSRF when it enables important state-changing actions",
     );
@@ -643,10 +679,16 @@ describe("effectiveness benchmark", () => {
       "OAuth/OIDC authorization-code or account-linking transaction confusion",
     );
     expect(severityPolicy).toContain(
+      "Session fixation that lets a remote attacker preserve",
+    );
+    expect(severityPolicy).toContain(
       "JWT/JWKS reports based only on the presence of `kid`",
     );
     expect(severityPolicy).toContain(
       "OAuth/OIDC callback reports based only on missing `state`, nonce, or PKCE",
+    );
+    expect(severityPolicy).toContain(
+      "Session-management reports based only on a pre-authentication session",
     );
     expect(threatModelGuidance).toContain(
       "HTTP framing/parser agreement across proxies",
@@ -665,6 +707,12 @@ describe("effectiveness benchmark", () => {
     );
     expect(repositoryWideScan).toContain(
       "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
+    );
+    expect(threatModelGuidance).toContain(
+      "session management including login fixation and authenticated-session rotation",
+    );
+    expect(repositoryWideScan).toContain(
+      "login session fixation and authenticated-session rotation",
     );
     expect(threatModelGuidance).toContain("SAML/federated signed-object");
     expect(threatModelGuidance).toContain(

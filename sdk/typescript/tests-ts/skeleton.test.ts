@@ -78,6 +78,14 @@ describe("TypeScript package skeleton", () => {
     const packageJson = JSON.parse(
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     );
+    const packageIgnore = await readFile(
+      new URL("../.npmignore", import.meta.url),
+      "utf8",
+    );
+    const pluginIgnore = await readFile(
+      new URL("../_bundled_plugin/.npmignore", import.meta.url),
+      "utf8",
+    );
 
     expect(packageJson.scripts.build).toBe(
       "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
@@ -86,6 +94,10 @@ describe("TypeScript package skeleton", () => {
     expect(packageJson.scripts["audit:prod"]).toBe(
       "pnpm audit --prod --audit-level high",
     );
+    for (const ignore of [packageIgnore, pluginIgnore]) {
+      expect(ignore).toContain("**/__pycache__/");
+      expect(ignore).toContain("**/*.py[cod]");
+    }
   });
 
   test("exposes canonical finding and hardening fields with public types", () => {

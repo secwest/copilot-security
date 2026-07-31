@@ -242,6 +242,29 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs login session fixation with authenticated-session rotation", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-session-fixation"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-session-rotation"),
+    );
+
+    expect(vulnerable).toContain('"login-session-fixation-and-rotation"');
+    expect(vulnerable).toContain("sessions.promoteAuthenticatedSession");
+    expect(vulnerable).toContain("request.query.sessionId");
+    expect(vulnerable).toContain(
+      'response.cookie("sid", session.id, sessionCookie)',
+    );
+    expect(safe).toContain('"login-session-fixation-and-rotation"');
+    expect(safe).toContain("sessions.rotateAuthenticatedSession");
+    expect(safe).toContain("sessions.delete(sessionId)");
+    expect(safe).toContain("id: newSessionId()");
+    expect(scanQualityGatePrompt("")).toContain(
+      "login session fixation and authenticated-session rotation",
+    );
+  });
+
   test("surfaces SSRF input and fixed-destination controls", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-ssrf"),

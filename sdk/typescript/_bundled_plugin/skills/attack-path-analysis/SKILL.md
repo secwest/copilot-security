@@ -165,6 +165,14 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   session/account/operation-bound transaction, fixed issuer/client/redirect URI,
   transaction-bound S256 PKCE, and transaction-account identity installation
   are strong counterevidence.
+- For login session-fixation findings, preserve two clients and the exact
+  identifier across attacker anonymous-session creation or injection, victim
+  cookie adoption, credential verification, session-store promotion or
+  replacement, post-login Set-Cookie, and attacker replay to a protected
+  endpoint. Account takeover requires that the replayed attacker-known
+  identifier resolves to the victim principal after login. Distinguish this
+  from harmless pre-authentication state continuity when the authenticated ID is
+  fresh and the old record is atomically invalidated.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 

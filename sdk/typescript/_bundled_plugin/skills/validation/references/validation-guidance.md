@@ -47,6 +47,7 @@ When the input contains multiple candidate instances, preserve that instance inv
 - deprecation, opt-in registration, or documentation warning that an API can be dangerous is a precondition, not counterevidence, for framework/library runtime code when the instance has a plausible cross-boundary source and runtime/deployment path. Suppress only if repository evidence proves the intended restricted/control mode defeats the exact attack; do not suppress a bypass of the restricted mode because an unrestricted mode is documented as dangerous.
 - when suppressing auth/authz candidates, name the exact permission, authentication, tenant/object, or state-transition check on that endpoint. A credential-helper issue elsewhere does not replace a public webhook/status/API endpoint that reads protected data or triggers protected work.
 - for stateful authentication protocols, validate the transition from pre-authentication or pre-upgrade state to credentialed identity: principal/credential/token installation, rebind or reauthentication call, issuer/callback assignment, and validated object versus consumed object. Missing rebinding or incomplete state checks remain reportable when attacker-controlled protocol state can authenticate or bind the wrong identity.
+- for login session-fixation candidates, use separate attacker and victim clients. Have the attacker create or learn one anonymous session identifier, cause the victim to present that exact identifier, complete legitimate victim authentication, then retry a protected request from the attacker with the original identifier. Record the pre-login ID, post-login Set-Cookie value, store record, installed principal, old-record invalidation, and protected response. Suppress when the identifier cannot realistically be known or fixed by the attacker, or successful authentication atomically invalidates the old session and issues a fresh unpredictable identifier before protected use. Cookie flags and credential validity alone are not rotation controls.
 - for self-service update candidates, compare the attacker-controlled request object and persisted object field by field for security-sensitive identity, trust-state, tenant, role/group, MFA, and account-recovery properties. Do not suppress because one alias is checked, such as primary email, when a related scalar or collection alias can still be changed.
 - when the provided candidate set is repository-wide, validate high-impact candidates first and spend validation effort in this order: command/code execution, unsafe deserialization, SSTI/template execution, SQL/NoSQL/query injection, SSRF/callback/file/network impact, path traversal/arbitrary file read or write, unsafe upload, and authz/tenant/object bypass with privilege or protected-object impact
 - do not let low-severity data/config findings consume validation budget before the high-impact queue is exhausted
@@ -73,6 +74,14 @@ Use class-specific proof tuples:
   rejected before the state change by an enforced origin/fetch-metadata
   predicate, or requires an unpredictable token bound to the victim session or
   request and compared correctly.
+- login session fixation: attacker-known or attacker-injectable
+  pre-authentication session identifier + victim adoption of that identifier +
+  successful credential transition that preserves or promotes the same
+  identifier + subsequent attacker reuse that resolves to the victim principal
+  and reaches a protected object or action. The negative control must show a
+  distinct unpredictable post-authentication identifier, atomic invalidation of
+  the old record, successful access with only the new identifier, and failure
+  with both attacker and victim pre-authentication identifiers.
 - native memory corruption: attacker-controlled bytes, length, index, pointer,
   object state, or scheduling action + exact allocation/object extent and
   lifetime + integer types, units, wrap/signedness, terminator/metadata space,
