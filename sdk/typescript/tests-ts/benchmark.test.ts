@@ -105,6 +105,10 @@ describe("effectiveness benchmark", () => {
         "javascript-oidc-id-token-misbinding",
         "javascript-safe-oidc-id-token-binding",
       ],
+      [
+        "javascript-webauthn-account-misbinding",
+        "javascript-safe-webauthn-account-binding",
+      ],
       ["javascript-signed-webhook-replay", "javascript-safe-signed-webhook"],
       [
         "javascript-ecdsa-signature-malleability-replay",
@@ -525,6 +529,11 @@ describe("effectiveness benchmark", () => {
     ).toEqual([["CWE-287", "CWE-345"]]);
     expect(
       cases
+        .get("javascript-webauthn-account-misbinding")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-287", "CWE-304"]]);
+    expect(
+      cases
         .get("javascript-signed-webhook-replay")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-294"]]);
@@ -632,6 +641,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "javascript-safe-oidc-id-token-binding",
+    );
+    const webauthnAccountMisbinding = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-webauthn-account-misbinding",
+    );
+    const safeWebauthnAccountBinding = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-webauthn-account-binding",
     );
     const signedWebhookReplay = join(
       benchmarkRoot,
@@ -793,6 +812,32 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(safeOidcIdTokenBinding, "src", "login.js"), "utf8"),
     ).toContain("!sameSecret(claims.nonce, pending.nonce)");
+    expect(
+      await readFile(
+        join(webauthnAccountMisbinding, "src", "server.js"),
+        "utf8",
+      ),
+    ).toContain("state.sessions.set(sessionId, { userId: requestedUser.id })");
+    expect(
+      await readFile(
+        join(webauthnAccountMisbinding, "src", "server.js"),
+        "utf8",
+      ),
+    ).not.toContain("credential.ownerId !== requestedUser.id");
+    expect(
+      await readFile(
+        join(safeWebauthnAccountBinding, "src", "server.js"),
+        "utf8",
+      ),
+    ).toContain("credential.ownerId !== transaction.userId");
+    expect(
+      await readFile(
+        join(safeWebauthnAccountBinding, "src", "server.js"),
+        "utf8",
+      ),
+    ).toContain(
+      "state.sessions.set(sessionId, { userId: credential.ownerId })",
+    );
     expect(
       await readFile(join(signedWebhookReplay, "src", "webhook.js"), "utf8"),
     ).toContain("ledger.credit(event.data.accountId, event.data.amountCents)");

@@ -630,6 +630,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes WebAuthn credential-to-account misbinding taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "Valid passkey credential creates a session for a different account";
+    finding.summary =
+      "The WebAuthn callback verifies a fresh challenge, exact RP ID and origin, and the attacker's valid signature, but does not bind that credential owner to the requested victim account before creating the victim session.";
+    finding["taxonomy"] = {
+      category: "passkey account misbinding",
+      cwe: ["CWE-345"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "webauthn-credential-account-misbinding",
+      cwe: ["CWE-287", "CWE-304"],
+    });
+  });
+
   test("normalizes signed webhook capture-replay taxonomy", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

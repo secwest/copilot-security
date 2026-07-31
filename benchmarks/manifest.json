@@ -1112,6 +1112,51 @@
       "expected": []
     },
     {
+      "id": "javascript-webauthn-account-misbinding",
+      "description": "A passkey login verifies a fresh challenge, exact origin and RP ID, and a valid P-256 signature but accepts any registered credential and creates the session for an attacker-selected victim username instead of the credential owner.",
+      "fixture": "fixtures/javascript-webauthn-account-misbinding",
+      "findingsPaths": [
+        "javascript-webauthn-account-misbinding/run-1/findings.json",
+        "javascript-webauthn-account-misbinding/run-2/findings.json",
+        "javascript-webauthn-account-misbinding/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "valid-passkey-credential-cross-account-session",
+          "cwe": ["CWE-287", "CWE-304"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 34,
+              "endLine": 50,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/server.js",
+              "startLine": 52,
+              "endLine": 55,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-webauthn-account-binding",
+      "description": "A short-lived one-time login transaction binds the challenge, intended user, and allowed credential IDs; completion requires credential ownership, exact RP context, and a valid signature, then derives the session identity from the bound credential owner.",
+      "fixture": "fixtures/javascript-safe-webauthn-account-binding",
+      "findingsPaths": [
+        "javascript-safe-webauthn-account-binding/run-1/findings.json",
+        "javascript-safe-webauthn-account-binding/run-2/findings.json",
+        "javascript-safe-webauthn-account-binding/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-signed-webhook-replay",
       "description": "A payment callback verifies an HMAC-SHA-256 signature over the provider timestamp and exact raw body but enforces neither timestamp freshness nor one-time event consumption, so replaying one captured valid settlement credits the merchant account repeatedly.",
       "fixture": "fixtures/javascript-signed-webhook-replay",

@@ -1,0 +1,5 @@
+{
+  "name": "safe-webauthn-account-binding-fixture",
+  "private": true,
+  "type": "module"
+}

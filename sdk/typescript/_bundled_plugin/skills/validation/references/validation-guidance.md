@@ -411,6 +411,18 @@ Use class-specific proof tuples:
   installation. Callback `state`, signature validity, and trusted issuer are
   counterevidence only for their own bindings, not substitutes for `aud`, `azp`,
   or nonce validation.
+- WebAuthn/passkey credential-to-account binding: two principals with distinct
+  valid registered credentials + a victim-targeted authentication transaction
+  and its exact fresh challenge + an assertion signed by the attacker's
+  credential over the expected RP ID and origin + credential lookup, ownership,
+  allowed-credential, `userHandle`, authenticator-state and signature decisions
+  - the resulting session principal. The positive witness must show the valid
+    attacker credential creates a victim session; invalid signatures and wrong
+    origins failing do not close that identity gap. The paired control must accept
+    the victim's matching credential, reject cross-account substitution before
+    session creation, reject stale/replayed transactions, and derive the session
+    identity from the verified credential owner under a short-lived one-time
+    account-bound transaction.
 - Signed webhook capture-replay: exact raw request bytes + signature header and
   signed timestamp + provider-authentication result + parsed event/delivery ID,
   account/object, amount/action, and protected effect + a second delivery of the

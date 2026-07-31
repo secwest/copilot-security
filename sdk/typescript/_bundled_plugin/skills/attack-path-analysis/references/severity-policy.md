@@ -97,6 +97,13 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   the exact sibling-client token acquisition path, target callback transaction,
   accepted `aud`/`azp`/nonce mismatch, installed victim principal, and
   compromise-equivalent access—not merely an omitted claim check.
+- WebAuthn/passkey credential-to-account misbinding that lets an unauthenticated
+  attacker use only their own valid registered credential to obtain an
+  administrator, cross-tenant, billing, control-plane, or otherwise crown-jewel
+  victim session. Critical requires the exact victim-targeted transaction,
+  attacker credential and owner, successful complete assertion verification,
+  wrong installed principal, and compromise-equivalent access—not merely a
+  username field or missing API call.
 - Signed webhook replay that lets a remote attacker repeat a correctly
   authenticated event to cause unbounded crown-jewel financial transfers,
   administrative changes, cross-tenant effects, or safety-critical actions.
@@ -291,6 +298,12 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   exact cross-client token path, target transaction, accepted claim mismatch,
   and resulting meaningful account access, plus a legitimate matching-token
   control.
+- WebAuthn/passkey credential-to-account misbinding that reliably accepts an
+  attacker-owned valid credential during a victim-targeted transaction and
+  installs the victim principal. High requires two registered principals, the
+  exact fresh challenge/RP/origin/signature path, credential ownership evidence,
+  the wrong resulting session, a matching-credential control, and replay or
+  invalid-assertion controls. Severity follows victim privilege and blast radius.
 - Signed webhook or callback replay that reliably repeats a meaningful payment,
   credit, entitlement, fulfillment, credential, or other protected mutation
   despite correct provider authentication. High requires the exact signed
@@ -463,6 +476,13 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   transaction, and receive the wrong target-app principal. Suppress exact
   target-client audience/authorized-party validation, one-time session-bound
   nonce and state, replay rejection, and successful legitimate-token behavior.
+- WebAuthn/passkey reports based only on a username parameter, credential lookup,
+  missing `userHandle` comparison, generic WebAuthn library call, or successful
+  attacker signature without proving that one principal's valid credential can
+  create a different principal's session. Suppress a short-lived one-time
+  transaction bound to the intended user and allowed credential IDs, complete
+  RP/origin/assertion verification, credential-owner equality, replay rejection,
+  credential-owner-derived session identity, and matching-credential success.
 - Signed-webhook reports based only on a signature API, timestamp field, missing
   named middleware, or generic duplicate-delivery concern without replaying an
   exact valid request into a repeated protected effect. Suppress when the exact

@@ -597,6 +597,32 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs valid passkey assertions with exact credential-owner session binding", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-webauthn-account-misbinding"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-webauthn-account-binding"),
+    );
+
+    expect(vulnerable).toContain('"authentication-or-session"');
+    expect(vulnerable).toContain('"cryptographic-verification"');
+    expect(vulnerable).toContain(
+      '"webauthn-credential-account-binding-boundary"',
+    );
+    expect(vulnerable).toContain(
+      "state.credentials.get(assertion.credentialId)",
+    );
+    expect(vulnerable).toContain("userId: requestedUser.id");
+    expect(safe).toContain('"webauthn-credential-account-binding-boundary"');
+    expect(safe).toContain("allowedCredentialIds.has(credential.credentialId)");
+    expect(safe).toContain("credential.ownerId !== transaction.userId");
+    expect(safe).toContain("userId: credential.ownerId");
+    expect(scanQualityGatePrompt("")).toContain(
+      "WebAuthn/passkey credential ownership and authentication-transaction binding",
+    );
+  });
+
   test("pairs signed webhook replay with freshness and atomic idempotency", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-signed-webhook-replay"),

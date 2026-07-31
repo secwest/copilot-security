@@ -22,7 +22,7 @@ plus source-to-impact continuity; and code evidence needs a concrete
 path-and-line anchor, source text, and explanatory reasoning. Presence and
 substantive-quality flags are both retained in per-match diagnostics.
 
-The versioned corpus currently contains forty-six vulnerable/control pairs:
+The versioned corpus currently contains forty-seven vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -41,7 +41,10 @@ server-side request forgery, unsafe deserialization, reflected XSS, XML
 external entities, JWT signature-verification bypass, JWT `alg`/key-type
 confusion that reinterprets an RSA public key as an HMAC secret,
 attacker-controlled JWT/OIDC JWKS key origin, signed OIDC ID-token
-audience/authorized-party/nonce misbinding across sibling clients, signed
+audience/authorized-party/nonce misbinding across sibling clients,
+WebAuthn/passkey credential-to-account misbinding despite correct challenge,
+RP ID, origin, and signature verification, with a one-time user-bound
+transaction and credential-owner-derived session as the control, signed
 payment-webhook capture/replay with freshness and atomic event-id consumption
 as the control, ECDSA `(r, s)` to `(r, n-s)` signature malleability that bypasses
 signature-byte replay identity with atomic signed-event-ID consumption as the
@@ -73,7 +76,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 276
+destination-pinned, redirect-free transport. Three runs per case produce 282
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations

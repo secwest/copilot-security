@@ -2700,6 +2700,35 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
     ):
         return "jwt-algorithm-key-confusion", ["CWE-347"]
     if (
+        (
+            "webauthn" in text
+            or "passkey" in text
+            or "publickeycredential" in text
+            or "credential owner" in text
+            or "credential-owner" in text
+        )
+        and (
+            "account misbinding" in text
+            or "account-misbinding" in text
+            or "credential misbinding" in text
+            or "credential-to-account" in text
+            or "cross-account" in text
+            or "wrong account" in text
+            or "wrong principal" in text
+            or "different account" in text
+            or "attacker credential" in text
+            or "not bound" in text
+        )
+        and (
+            "session" in text
+            or "login" in text
+            or "authentication" in text
+            or "account" in text
+            or "principal" in text
+        )
+    ):
+        return "webauthn-credential-account-misbinding", ["CWE-287", "CWE-304"]
+    if (
         ("oidc" in text or "id token" in text or "id-token" in text)
         and (
             "sibling client" in text

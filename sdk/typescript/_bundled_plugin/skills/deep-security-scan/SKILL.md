@@ -294,6 +294,16 @@ inventory and closure requirements.
      closure. Use exact target-client audience/authorized-party checks, a
      one-time nonce bound to the initiating session transaction, replay
      rejection, and a legitimate target-token success as the negative control.
+   - WebAuthn/passkey credential-to-account binding: requested account and
+     initiating browser transaction; fresh challenge, expiry and one-time use;
+     RP ID, origin, authenticator flags and sign counter where applicable;
+     allowed credential IDs; presented credential ID, registered owner and
+     `userHandle`; signature result; and exact session principal installed. Test
+     a victim-account initiation completed with the attacker's own valid
+     credential. Use a short-lived user-bound transaction, owner equality,
+     complete assertion verification, credential-owner-derived session identity,
+     replay rejection, and legitimate matching-credential success as the
+     negative control. Cryptographic validity alone is not account binding.
    - OAuth/OIDC authorization-code and account-linking transaction binding:
      every login, link, consent, and reauthentication initiation and callback;
      browser session and local account; issuer/client and fixed redirect URI;
@@ -543,6 +553,16 @@ inventory and closure requirements.
    target principal. Reject only when wrong-audience, missing or foreign `azp`,
    missing or cross-session nonce, wrong state/issuer/signature, expiry, and
    replay all fail before installation while a matching target token succeeds.
+   For WebAuthn/passkey account-binding candidates, create registrations for two
+   principals, start authentication for the victim, and submit an assertion
+   signed by the attacker's valid registered credential over the exact fresh
+   challenge, origin, and RP ID. Record transaction ownership, allowed
+   credential IDs, credential owner and `userHandle`, verification decisions,
+   transaction consumption, and the installed session identity. Reject only
+   when cross-account substitution fails before session creation while the
+   matching credential succeeds, stale/replayed transactions fail, and session
+   identity is derived from the verified credential owner. Do not reject merely
+   because origin, RP ID, or the attacker's signature was correctly verified.
    For signed-webhook or callback candidates, capture one exact legitimate raw
    body, signature header, signed timestamp, and event ID. Submit the unchanged
    request twice through the real handler and record signature decisions,

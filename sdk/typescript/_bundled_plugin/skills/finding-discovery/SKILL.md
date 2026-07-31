@@ -352,6 +352,20 @@ Use this checklist to keep discovery specific without turning it into validation
   subject through principal installation. Do not infer exploitability from a
   missing claim check alone: prove how the attacker obtains or replays a valid
   cross-client token and receives the resulting authenticated session.
+- For WebAuthn/passkey authentication, treat successful signature verification
+  as only credential possession, not authorization to the username or account
+  named in the request. Preserve the initiating account and browser transaction,
+  challenge generation, expiry and one-time consumption, RP ID and origin,
+  credential ID and registered owner, `userHandle`, allowed-credential list,
+  authenticator flags and sign counter where applicable, signature result, and
+  final session principal. Test whether an attacker can begin a victim login but
+  answer with their own valid registered credential and receive a victim
+  session. Report only that concrete cross-account result; a username parameter,
+  WebAuthn API, or absent user-handle check alone is not a finding. A short-lived
+  one-time transaction bound to the intended user and allowed credential IDs,
+  exact RP/origin and complete assertion verification, owner equality, and a
+  session identity derived from the verified credential owner are strong
+  counterevidence.
 - For signed webhooks and callbacks, do not stop at successful HMAC or signature
   verification. Preserve the exact raw body, signature header, signed timestamp,
   event or delivery ID, authenticated provider identity, parsed event, selected

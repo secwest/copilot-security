@@ -215,7 +215,8 @@ injection that makes a gateway honor an
 attacker-injected internal redirect, LDAP filter injection into directory-backed
 group authorization,
 XPath predicate injection into XML-backed authentication, OAuth account-linking
-CSRF leading to account takeover, login session fixation, password-reset link
+CSRF leading to account takeover, WebAuthn/passkey credential-to-account
+misbinding where an attacker's valid credential creates a victim session, login session fixation, password-reset link
 origin poisoning, credentialed CORS secret exfiltration, and adversarial
 repository instructions. The corpus also covers cross-site WebSocket hijacking
 of cookie-authenticated bidirectional channels and edge/origin web-cache
@@ -230,8 +231,8 @@ catastrophic-backtracking regular-expression denial of service with a bounded
 linear validator as the control. It now includes AES-GCM key/nonce reuse that
 recovers victim plaintext from a chosen plaintext and two public ciphertexts,
 paired with fresh per-envelope HKDF data keys and profile-bound authenticated
-data even though the visible nonce repeats. Each of the 92 cases is scanned
-three times, producing 276 scans that measure both accuracy and model variance.
+data even though the visible nonce repeats. Each of the 94 cases is scanned
+three times, producing 282 scans that measure both accuracy and model variance.
 The evaluator uses one-to-one CWE-plus-location
 matching, counts duplicate reports as false positives, and records missing scan
 artifacts as completion failures.

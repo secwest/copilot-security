@@ -347,6 +347,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:beginLogin|finishLogin|verifySignedIdToken|pendingOidc|OIDC_CLIENT_ID|intendedForClient|idToken)\b|\bclaims\s*\.\s*(?:aud|azp|nonce)\b/iu,
   ],
   [
+    "webauthn-credential-account-binding-boundary",
+    107,
+    /\b(?:navigator\.credentials|PublicKeyCredential|verifyAuthenticationResponse|beginLogin|finishLogin|allowedCredentialIds|credentialId|ownerId|rpId|relyingPartyId|userHandle|signCount|authenticatorData|clientDataJSON)\b/iu,
+  ],
+  [
     "signed-webhook-freshness-and-idempotency",
     103,
     /\b(?:handlePaymentWebhook|signatureHeader|webhookSecret|applyCreditOnce|processedEventIds|processedEvents)\b|\b(?:event|webhook)\s*(?:\.|\[\s*["'])\s*(?:id|timestamp)\b|\bcreateHmac\s*\(/iu,

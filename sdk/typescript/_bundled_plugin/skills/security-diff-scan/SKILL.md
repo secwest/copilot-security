@@ -64,6 +64,9 @@ publish findings, open issues, or contact third parties. Write only beneath
    headers, algorithm/key-family binding, signature-versus-MAC primitives,
    remote key sources, JWKS/issuer mapping, and signed ID-token `aud`/`azp`/
    nonce/client-session claim binding,
+   WebAuthn/passkey authentication transactions, challenges, RP/origin checks,
+   allowed credentials, registered owners, user handles, authenticator state,
+   replay consumption, and resulting session principals,
    signed webhook/callback raw bodies, signature headers and timestamps,
    freshness windows, event/delivery IDs, atomic idempotency, and repeated
    financial or state-changing effects,
@@ -202,6 +205,11 @@ publish findings, open issues, or contact third parties. Write only beneath
    - changed OIDC relying-party client registration, scalar/array `aud`, `azp`,
      requested/token nonce, callback-session transaction, token replay, or
      signed sibling-client ID-token acceptance behavior;
+   - changed WebAuthn/passkey challenge creation or consumption, transaction
+     owner, allowed credential IDs, RP ID/origin/authenticator verification,
+     registered credential owner or user handle, replay state, or final session
+     principal that could let one account's valid credential authenticate as
+     another account;
    - changed OAuth/OIDC authorization-code initiation or callback `state`, nonce,
      transaction entropy/storage/expiry/one-time use, browser-session/local-
      account/operation binding, redirect URI, PKCE challenge/verifier, code

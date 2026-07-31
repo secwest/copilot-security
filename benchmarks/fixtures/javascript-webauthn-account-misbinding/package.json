@@ -1,0 +1,5 @@
+{
+  "name": "webauthn-account-misbinding-fixture",
+  "private": true,
+  "type": "module"
+}

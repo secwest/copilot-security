@@ -341,6 +341,17 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   substitution. Exact target-client audience and authorized-party validation,
   one-time session-transaction nonce equality, replay rejection, and continuity
   through principal installation are counterevidence.
+- For WebAuthn/passkey credential-account-binding findings, preserve two
+  registered principals and credentials; the victim-targeted initiation and
+  fresh challenge; transaction expiry and one-time state; RP ID, origin,
+  authenticator flags and sign counter where applicable; the attacker-owned
+  credential ID, owner and `userHandle`; successful signature verification; and
+  the final session principal. Prove that the attacker can sign with only their
+  own credential yet receive a session for the victim. Exact RP/origin and
+  signature checks authenticate the credential but do not bind it to a
+  separately selected username. A user-bound transaction with an allowed-
+  credential set, owner equality, complete assertion verification, replay
+  rejection, and credential-owner-derived session identity is counterevidence.
 - For signed-webhook replay findings, preserve how the attacker captures or can
   resend one legitimate request; the exact raw body, signature header, signed
   timestamp, and event ID; successful provider authentication; missing or

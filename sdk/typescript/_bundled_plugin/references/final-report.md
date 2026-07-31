@@ -146,6 +146,16 @@ identities, target callback state and nonce, exact signed victim-token claims,
 and resulting attacker-owned target session; a missing claim check alone is not
 an exploit witness.
 
+For WebAuthn/passkey credential-to-account misbinding findings, affected lines
+must include the successful assertion-verification boundary, credential/account
+selection or missing owner binding, and wrong-principal session installation
+when those lines are distinct. Preserve the victim-targeted transaction, exact
+fresh challenge/RP ID/origin, attacker-owned credential and registered owner,
+valid signature result, and victim session. Use category
+`webauthn-credential-account-misbinding` with CWE-287 and CWE-304. A WebAuthn API,
+username parameter, or missing owner check without a cross-account session is
+not an exploit witness.
+
 For signed-webhook replay findings, affected lines must include the raw-body
 signature and signed-timestamp acceptance boundary, the missing or ineffective
 freshness/event-consumption control, and the financial or state-changing sink
