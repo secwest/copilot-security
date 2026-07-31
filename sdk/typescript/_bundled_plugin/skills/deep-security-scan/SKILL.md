@@ -176,6 +176,19 @@ inventory and closure requirements.
      `null`/sibling/suffix/scheme/port tests, as the negative control. A strong
      unpredictable session-bound connection token unavailable to the attacker
      page can be equivalent.
+   - Web cache deception and shared-cache isolation: every edge/CDN/proxy/cache
+     key, cacheability predicate, credential bypass, response directive, and
+     origin rewrite, wildcard, path-info, normalization, or decoding rule that
+     can interpret one URL differently. Trace an attacker-chosen static-looking
+     URL through a cold credential-free miss, a credentialed victim request,
+     origin routing to sensitive data, shared storage, and a later
+     credential-free hit returning the same object without an origin call.
+     Exercise suffix, extra-segment, semicolon, encoded, query, case, trailing,
+     and multi-decode variants. Use exact consistent routing plus explicit
+     public-only caching that honors private/no-store and excludes
+     authenticated/Set-Cookie responses as the negative control; verify a real
+     public asset still caches. Headers, cache APIs, or broad routes alone are
+     not findings.
    - JWT/JWS/OIDC key origin and claim binding: every protected-header parser,
      algorithm and `kid` selection, `jku`/`x5u`/embedded key input, issuer
      discovery or metadata mapping, JWKS URL source, redirect and cache path,

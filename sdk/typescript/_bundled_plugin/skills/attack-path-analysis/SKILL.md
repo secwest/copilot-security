@@ -105,6 +105,22 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   lookup and handler registration, exact serialized-origin equality,
   unpredictable session-bound connection tokens, trusted-origin success, and
   `null`/sibling/suffix/scheme/port variants as distinct controls.
+- For web-cache-deception findings, preserve the attacker-chosen URL and exact
+  bytes as parsed at every edge, proxy, framework, and origin hop; the cache key
+  and cacheability decision; victim credential attachment; origin route and
+  authenticated response; response directives such as `private`, `no-store`,
+  `Vary`, `Set-Cookie`, and surrogate controls; storage in a shared cache; and a
+  later credential-free attacker hit that returns the same sensitive object.
+  Model this as a temporal two-client path: prove the attacker cannot retrieve
+  the object from a cold cache, the victim request populates it, the later hit
+  bypasses the origin, and the disclosed secret or data has meaningful use.
+  Exercise extension suffixes, extra path segments, path parameters, encoded
+  separators/dots, query variants, case, trailing syntax, and multiple decoding
+  where the deployed components differ. A cache header, middleware, CDN rule,
+  route wildcard, or static-looking extension alone is not proof. Record exact
+  routing plus explicit public-only caching, honored private/no-store controls,
+  authenticated-request bypass, Set-Cookie rejection, or correctly
+  identity-partitioned keys as distinct counterevidence.
 - For native-memory findings, preserve the attacker-controlled bytes, length,
   index, pointer, object state, or scheduling action; the allocation and exact
   source/destination object extents in consistent units; integer wrap,

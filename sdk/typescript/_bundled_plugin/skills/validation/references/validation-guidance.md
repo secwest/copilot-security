@@ -111,6 +111,22 @@ Use class-specific proof tuples:
   report anonymous public channels, bearer-only/server-only credentials the
   browser cannot attach, or non-browser Origin spoofing without access to a
   victim credential as cross-site hijacking.
+- web cache deception: start from a cold shared cache and use separate victim
+  and attacker clients. First prove the attacker cannot retrieve the protected
+  object without credentials. Request an attacker-chosen deceptive URL as the
+  victim, recording the edge-visible path and cache key, origin-visible path
+  and selected route, attached credential, response body and cache directives,
+  cache miss, and storage decision. Then repeat the identical URL without
+  credentials and prove a cache hit returns the same victim secret or sensitive
+  object without another origin call; demonstrate meaningful use of a disclosed
+  key or data when relevant. Exercise extension suffix, extra segment,
+  semicolon/path-parameter, encoded separator/dot, query, case, trailing, and
+  double-decoding variants supported by the topology. The negative control must
+  show exact consistent route handling and/or that private, no-store,
+  authenticated, Set-Cookie, or non-explicitly-public responses are never
+  shared, while a legitimate public object still produces a cache hit. Do not
+  report a cache or route pattern without the cold-cache denial, victim
+  population, credential-free hit, and identity-preserving response witness.
 - login session fixation: attacker-known or attacker-injectable
   pre-authentication session identifier + victim adoption of that identifier +
   successful credential transition that preserves or promotes the same

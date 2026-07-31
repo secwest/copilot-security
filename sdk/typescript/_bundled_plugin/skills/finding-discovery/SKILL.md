@@ -303,6 +303,30 @@ Use this checklist to keep discovery specific without turning it into validation
   exercise trusted-origin success and reject `null`, sibling, suffix/regex,
   scheme, and port variants. Public anonymous channels, browser-unattachable
   bearer credentials, and server-only clients are counterevidence.
+- For web cache deception, enumerate CDN, reverse-proxy, gateway, framework,
+  service-worker, and application-cache key construction and cacheability rules;
+  authenticated and sensitive endpoints; cookie, Authorization, `Set-Cookie`,
+  `Cache-Control`, `CDN-Cache-Control`, `Surrogate-Control`, `Vary`, status, and
+  extension handling; and every origin rewrite, wildcard/fallback route,
+  path-info rule, static/dynamic split, normalization, and decoding step. Trace
+  one exact attacker-selected URL through the edge parser and key, a victim
+  request with ambient credentials, the origin's possibly different route
+  interpretation, the sensitive response, shared storage, and a later
+  credential-free attacker request that receives the victim object. Test
+  static-looking suffixes, extra segments, semicolon/path parameters, encoded
+  separators or dots, case, queries, trailing syntax, and double decoding where
+  components disagree. Distinguish cache deception (a private response stored
+  under an attacker-fetchable key) from cache poisoning (attacker-controlled
+  content served to others). Prefer CWE-524 for cross-principal edge, CDN,
+  proxy, or application shared caches; CWE-525 is specific to sensitive
+  information retained in a web browser cache. Names, headers, extension rules,
+  or broad routes alone are not findings: require a reachable cross-request
+  identity failure.
+  Exact consistent routing, explicit public-only caching, honoring private and
+  no-store directives, bypassing authenticated/Set-Cookie responses, or a
+  correctly identity-partitioned key are strong counterevidence. A private
+  browser cache, public nonsensitive object, absent deployed shared cache, or
+  deceptive path rejected before sensitive retrieval is not this vulnerability.
 - For native memory safety, enumerate attacker-influenced allocation, copy,
   move, receive, format, indexing, pointer-arithmetic, cast, ownership, and free
   operations across every concrete caller. Preserve the input bytes and

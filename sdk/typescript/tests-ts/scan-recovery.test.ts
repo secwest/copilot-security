@@ -522,6 +522,30 @@ describe("malformed scan artifact recovery", () => {
     }
   });
 
+  test("corrects browser-cache taxonomy for cross-principal web cache deception", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] = "Shared edge cache discloses authenticated responses";
+    finding.summary =
+      "Web cache deception stores a private response under an attacker-fetchable shared cache key, then returns it to an unauthenticated request.";
+    finding["taxonomy"] = {
+      category: "Web cache deception",
+      cwe: ["CWE-525"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "web-cache-deception",
+      cwe: ["CWE-524", "CWE-200"],
+    });
+  });
+
   test("closes reviewed documentation and metadata instead of deferring coverage", async () => {
     const fixture = await startDraftScan();
     const coveragePath = join(fixture.scanDir, "coverage.json");

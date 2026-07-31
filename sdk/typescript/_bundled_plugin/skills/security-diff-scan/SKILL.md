@@ -64,6 +64,8 @@ publish findings, open issues, or contact third parties. Write only beneath
    identity objects, bulk object binding and mass-assignment field controls,
    browser-ambient credential and CSRF controls, credentialed CORS response
    authorization, WebSocket upgrade Origin/session/message authorization,
+   edge/shared-cache keys and cacheability, response cache directives,
+   authenticated-request handling, and origin route normalization,
    native memory allocation/copy/index/lifetime boundaries, cryptographic,
    state, concurrency, and
    resource-control boundaries.
@@ -94,6 +96,11 @@ publish findings, open issues, or contact third parties. Write only beneath
      HTTP-auth session binding, connection tokens, registered message actions,
      or server replies that could expose a victim's authenticated channel to
      attacker JavaScript;
+   - changed CDN/proxy/application cache keys, extension/status cacheability,
+     credential or Set-Cookie bypass, private/no-store handling, route
+     wildcards, rewrites, path-info, or normalization that could make a
+     credentialed victim response retrievable through the same attacker-chosen
+     URL without credentials;
    - changed integer units, signedness, allocation arithmetic, object extents,
      copy/read/write lengths, indexes, terminator space, ownership, or lifetime
      around attacker-influenced native-memory operations;

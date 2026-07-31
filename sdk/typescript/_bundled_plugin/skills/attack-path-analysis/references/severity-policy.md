@@ -93,6 +93,13 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   crown-jewel secret disclosure or compromise-equivalent privileged actions.
   Critical requires the exact browser handshake, ambient victim credential,
   accepted attacker Origin, message/action transcript, and downstream impact.
+- Web cache deception that stores a victim's administrative, cloud,
+  cross-tenant, or control-plane response under an attacker-fetchable shared
+  key and demonstrates compromise-equivalent use. Critical requires a cold
+  attacker denial, exact deceptive URL, credentialed victim population,
+  edge/origin interpretation and cache decision, later credential-free hit
+  returning the same crown-jewel object without an origin call, and downstream
+  impact.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
@@ -114,6 +121,12 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   actions to attacker JavaScript. High requires realistic browser credential
   attachment, accepted attacker Origin, and a readable message or protected
   effect; severity follows data sensitivity, privilege, and blast radius.
+- Web cache deception that reliably exposes meaningful API keys, session
+  material, PII, account data, or tenant data through a shared cache. High
+  requires the exact cross-request sequence, a credentialed victim response
+  stored under an attacker-reusable key, and a later credential-free hit;
+  severity follows the sensitivity, privileges, affected population, cache
+  lifetime, and demonstrated use of the disclosed material.
 - Hardcoded or default credentials that are valid, reachable, and provide meaningful access warranting `high`, even when that access is not broad or privileged enough for `critical`.
 - Cryptographic failures that allow signature forgery, token forgery, trusted artifact forgery, secure-channel bypass, or decryption of highly sensitive data in a way that directly enables compromise, with actual proof that these attacks are practical and can be carried out from an in-scope attack surface.
 - Supply-chain or update-channel compromise that allows malicious code or malicious trusted artifacts to be delivered to users, servers, agents, or endpoints, including signing bypass or package source substitution with real impact. This should focus on actual supply-chain risk and risk around CI actions, not just "does npm report outdated packages"
@@ -192,6 +205,14 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   setup, an effective unpredictable session-bound connection token, or cookie
   policy that blocks every realistic attacker origin. A low-value ping,
   presence indicator, or cosmetic action does not support high severity.
+- Web-cache-deception reports based only on cache APIs, response headers,
+  static-looking suffixes, broad routes, or theoretical parser differences
+  without proving a deployed shared cache, victim credentials, a sensitive
+  origin response, storage under the exact attacker-fetchable key, and a later
+  credential-free hit. Suppress private browser caches, public/nonsensitive
+  objects, cold-cache misses that remain misses, exact-route rejection,
+  correctly honored private/no-store or authenticated/Set-Cookie bypass, and
+  correctly identity-partitioned cache entries.
 - Open redirect, clickjacking, user enumeration, rate-limit weakness, banner leakage, version disclosure, directory listing, stack traces, internal hostnames, or basic error-message leakage, unless they are shown as part of a serious exploit chain.
 - Memory corruption that is theoretical, non-triggerable from in-scope input, or not plausibly exploitable in the target environment.
 - Request-smuggling claims based only on `Content-Length` and

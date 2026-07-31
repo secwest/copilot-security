@@ -502,6 +502,51 @@
       "expected": []
     },
     {
+      "id": "javascript-web-cache-deception",
+      "description": "An edge caches static-looking paths without honoring private response directives or partitioning on credentials, while the origin routes a deceptive suffix to an authenticated account handler, allowing a later unauthenticated request to receive the victim's control-plane API key.",
+      "fixture": "fixtures/javascript-web-cache-deception",
+      "findingsPaths": [
+        "javascript-web-cache-deception/run-1/findings.json",
+        "javascript-web-cache-deception/run-2/findings.json",
+        "javascript-web-cache-deception/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "shared-cache-authenticated-account-deception",
+          "cwe": ["CWE-524", "CWE-200"],
+          "locations": [
+            {
+              "path": "src/edge-cache.js",
+              "startLine": 10,
+              "endLine": 13,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/origin.js",
+              "startLine": 10,
+              "endLine": 19,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-private-cache",
+      "description": "The origin uses exact authenticated-route matching and private no-store responses, while the edge caches only explicit public responses without credentials and still serves legitimate public assets from cache.",
+      "fixture": "fixtures/javascript-safe-private-cache",
+      "findingsPaths": [
+        "javascript-safe-private-cache/run-1/findings.json",
+        "javascript-safe-private-cache/run-2/findings.json",
+        "javascript-safe-private-cache/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-jwt-bypass",
       "description": "An administrative route trusts decoded JWT claims without verifying the token signature.",
       "fixture": "fixtures/javascript-jwt-bypass",

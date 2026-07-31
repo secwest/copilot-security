@@ -904,6 +904,36 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs edge cache deception with exact routing and public-only caching", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-web-cache-deception"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-private-cache"),
+    );
+
+    expect(vulnerable).toContain(
+      '"shared-cache-sensitive-response-or-route-disagreement"',
+    );
+    expect(vulnerable).toContain("STATIC_LOOKING_PATH");
+    expect(vulnerable).toContain("sharedCache.set(cacheKey");
+    expect(vulnerable).toContain('"cache-control": "private, no-store"');
+    expect(vulnerable).toContain("request.path.replace");
+    expect(safe).toContain(
+      '"shared-cache-sensitive-response-or-route-disagreement"',
+    );
+    expect(safe).toContain("isExplicitlyPublic");
+    expect(safe).toContain('request.path !== "/account"');
+    expect(safe).toContain("request.cookies.sid === undefined");
+    expect(safe).toContain('response.headers["set-cookie"] === undefined');
+    expect(scanQualityGatePrompt("")).toContain(
+      "web-cache deception across edge cache keys, cacheability rules, credential boundaries, response directives, and origin route normalization",
+    );
+    expect(scanQualityGatePrompt("")).toContain(
+      "use CWE-524 for shared edge/CDN/proxy/application caches, not browser-cache CWE-525",
+    );
+  });
+
   test("keeps bearer-only state changes out of the specialized CSRF signal", async () => {
     const repository = await mkdtemp(
       join(tmpdir(), "copilot-security-bearer-api-"),

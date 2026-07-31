@@ -1,0 +1,5 @@
+{
+  "name": "javascript-safe-private-cache",
+  "private": true,
+  "type": "module"
+}

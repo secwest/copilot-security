@@ -2465,8 +2465,29 @@ def _normalize_standalone_manifest_draft(
 
 def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
     taxonomy = finding.get("taxonomy")
+    category = taxonomy.get("category") if isinstance(taxonomy, dict) else None
+    text = " ".join(
+        [
+            *(
+                str(finding.get(field, ""))
+                for field in ("title", "description", "summary", "evidence")
+            ),
+            str(category or ""),
+        ]
+    ).lower()
+    if (
+        "web cache deception" in text
+        or "web-cache-deception" in text
+        or (
+            "shared cache" in text
+            and ("authenticated response" in text or "private response" in text)
+            and ("credential-free" in text or "unauthenticated" in text)
+        )
+    ):
+        # CWE-525 is specific to browser caches. Cross-principal edge, CDN,
+        # proxy, or application shared caches use the broader CWE-524.
+        return "web-cache-deception", ["CWE-524", "CWE-200"]
     if isinstance(taxonomy, dict):
-        category = taxonomy.get("category")
         cwe = taxonomy.get("cwe")
         normalized_cwe = (
             [
@@ -2478,10 +2499,6 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         if isinstance(category, str) and category.strip() and normalized_cwe:
             return category.strip(), normalized_cwe
 
-    text = " ".join(
-        str(finding.get(field, ""))
-        for field in ("title", "description", "summary", "evidence")
-    ).lower()
     if (
         "command injection" in text
         or re.search(r"\bchild_process\.exec(?!file)\b", text)
@@ -2788,7 +2805,16 @@ def _normalize_standalone_finding(
             if isinstance(existing_taxonomy, dict)
             else None
         )
-        if cwe and (not isinstance(existing_cwe, list) or not existing_cwe):
+        normalized_existing_cwe = (
+            [
+                item
+                for item in existing_cwe
+                if isinstance(item, str) and item.strip()
+            ]
+            if isinstance(existing_cwe, list)
+            else []
+        )
+        if cwe and normalized_existing_cwe != cwe:
             recovered = copy.deepcopy(finding)
             recovered["taxonomy"] = {"category": category, "cwe": cwe}
             return recovered

@@ -41,6 +41,8 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    browser-ambient credential CSRF, credentialed CORS origin authorization and
    attacker-JavaScript exposure of sensitive responses, cookie-authenticated
    WebSocket handshake Origin authorization and bidirectional channel exposure,
+   web-cache deception across edge cache keys, cacheability and credential
+   boundaries, response directives, and origin routing/normalization,
    authorization, state changes, interpreters, filesystem, network,
    deserialization, and templates;
    SQL and document-database query selectors/operators, LDAP filter construction

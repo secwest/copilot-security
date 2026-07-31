@@ -169,9 +169,10 @@ XPath predicate injection into XML-backed authentication, OAuth account-linking
 CSRF leading to account takeover, login session fixation, password-reset link
 origin poisoning, credentialed CORS secret exfiltration, and adversarial
 repository instructions. The corpus also covers cross-site WebSocket hijacking
-of cookie-authenticated bidirectional channels. Each of the 60 cases is scanned
-three times, producing 180 scans that measure both accuracy and model
-variance. The evaluator uses one-to-one CWE-plus-location matching, counts
+of cookie-authenticated bidirectional channels and edge/origin web-cache
+deception that exposes authenticated responses across requests. Each of the 62
+cases is scanned three times, producing 186 scans that measure both accuracy
+and model variance. The evaluator uses one-to-one CWE-plus-location matching, counts
 duplicate reports as false positives, and records missing scan artifacts as
 completion failures.
 

@@ -64,6 +64,7 @@ describe("effectiveness benchmark", () => {
         "javascript-cross-site-websocket-hijacking",
         "javascript-safe-websocket-origin",
       ],
+      ["javascript-web-cache-deception", "javascript-safe-private-cache"],
       ["javascript-jwt-bypass", "javascript-safe-jwt"],
       [
         "javascript-jwks-header-key-injection",
@@ -192,6 +193,29 @@ describe("effectiveness benchmark", () => {
         path: "src/websocket-route.js",
         startLine: 1,
         endLine: 3,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-web-cache-deception")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-524", "CWE-200"]]);
+    expect(
+      cases
+        .get("javascript-web-cache-deception")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/edge-cache.js",
+        startLine: 10,
+        endLine: 13,
+        lineTolerance: 3,
+      },
+      {
+        path: "src/origin.js",
+        startLine: 10,
+        endLine: 19,
         lineTolerance: 3,
       },
     ]);
@@ -575,6 +599,54 @@ describe("effectiveness benchmark", () => {
     ).toContain(
       'const TRUSTED_WEBSOCKET_ORIGINS = new Set(["https://portal.example.test"])',
     );
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-web-cache-deception",
+          "src",
+          "edge-cache.js",
+        ),
+        "utf8",
+      ),
+    ).toContain("sharedCache.set(cacheKey");
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-web-cache-deception",
+          "src",
+          "origin.js",
+        ),
+        "utf8",
+      ),
+    ).toContain("request.path.replace");
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-safe-private-cache",
+          "src",
+          "edge-cache.js",
+        ),
+        "utf8",
+      ),
+    ).toContain("isExplicitlyPublic");
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-safe-private-cache",
+          "src",
+          "origin.js",
+        ),
+        "utf8",
+      ),
+    ).toContain('request.path !== "/account"');
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -665,6 +737,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("browser-ambient credential CSRF");
     expect(deepScan).toContain("Credentialed CORS response authorization:");
     expect(deepScan).toContain("Cross-site WebSocket handshake authorization:");
+    expect(deepScan).toContain(
+      "Web cache deception and shared-cache isolation:",
+    );
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
@@ -695,6 +770,9 @@ describe("effectiveness benchmark", () => {
       "WebSocket handshake Origin authorization and bidirectional channel exposure",
     );
     expect(standardScan).toContain(
+      "web-cache deception across edge cache keys",
+    );
+    expect(standardScan).toContain(
       "native memory allocation/copy/index/lifetime",
     );
     expect(standardScan).toContain(
@@ -720,6 +798,7 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain("anti-CSRF token");
     expect(diffScan).toContain("changed CORS origin reflection");
     expect(diffScan).toContain("changed WebSocket/socket.io upgrade handlers");
+    expect(diffScan).toContain("changed CDN/proxy/application cache keys");
     expect(diffScan).toContain("terminator space");
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("changed RFC 4515 assertion escaping");
@@ -748,6 +827,8 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain("bearer-only APIs");
     expect(discovery).toContain("For credentialed CORS response exposure");
     expect(discovery).toContain("For cross-site WebSocket hijacking");
+    expect(discovery).toContain("For web cache deception");
+    expect(discovery).toContain("Prefer CWE-524 for cross-principal edge, CDN");
     expect(discovery).toContain("For native memory safety");
     expect(discovery).toContain("bounded API is neither vulnerable");
     expect(discovery).toContain("For document-query and NoSQL APIs");
@@ -801,6 +882,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("browser CSRF:");
     expect(validation).toContain("credentialed CORS response exposure:");
     expect(validation).toContain("cross-site WebSocket hijacking:");
+    expect(validation).toContain("web cache deception:");
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("LDAP filter injection:");
@@ -831,6 +913,7 @@ describe("effectiveness benchmark", () => {
       "For credentialed CORS response-exposure findings",
     );
     expect(attackPath).toContain("For cross-site WebSocket-hijacking findings");
+    expect(attackPath).toContain("For web-cache-deception findings");
     expect(attackPath).toContain("For native-memory findings");
     expect(attackPath).toContain("For document-query and NoSQL findings");
     expect(attackPath).toContain("For LDAP filter findings");
@@ -858,6 +941,8 @@ describe("effectiveness benchmark", () => {
     expect(severityPolicy).toContain("CORS reports based only");
     expect(severityPolicy).toContain("Cross-site WebSocket hijacking");
     expect(severityPolicy).toContain("WebSocket-hijacking reports based only");
+    expect(severityPolicy).toContain("Web cache deception that stores");
+    expect(severityPolicy).toContain("Web-cache-deception reports based only");
     expect(severityPolicy).toContain(
       "Memory corruption that is theoretical, non-triggerable",
     );
@@ -928,6 +1013,9 @@ describe("effectiveness benchmark", () => {
     expect(threatModelGuidance).toContain(
       "cookie-authenticated WebSocket handshake Origin authorization",
     );
+    expect(threatModelGuidance).toContain(
+      "web-cache deception and shared-cache isolation",
+    );
     expect(repositoryWideScan).toContain(
       "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
     );
@@ -936,6 +1024,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(repositoryWideScan).toContain(
       "cookie-authenticated WebSocket upgrade Origin authorization",
+    );
+    expect(repositoryWideScan).toContain(
+      "web-cache deception across edge/shared-cache keys",
     );
     expect(threatModelGuidance).toContain(
       "session management including login fixation and authenticated-session rotation",
