@@ -65,6 +65,10 @@ describe("effectiveness benchmark", () => {
         "javascript-safe-websocket-origin",
       ],
       ["javascript-web-cache-deception", "javascript-safe-private-cache"],
+      [
+        "javascript-graphql-recovery-amplification",
+        "javascript-safe-graphql-recovery-limits",
+      ],
       ["javascript-jwt-bypass", "javascript-safe-jwt"],
       [
         "javascript-jwks-header-key-injection",
@@ -216,6 +220,29 @@ describe("effectiveness benchmark", () => {
         path: "src/origin.js",
         startLine: 10,
         endLine: 19,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-graphql-recovery-amplification")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-307", "CWE-799"]]);
+    expect(
+      cases
+        .get("javascript-graphql-recovery-amplification")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/graphql.js",
+        startLine: 8,
+        endLine: 23,
+        lineTolerance: 3,
+      },
+      {
+        path: "src/recovery.js",
+        startLine: 9,
+        endLine: 16,
         lineTolerance: 3,
       },
     ]);
@@ -740,6 +767,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain(
       "Web cache deception and shared-cache isolation:",
     );
+    expect(deepScan).toContain(
+      "GraphQL execution amplification and resolver-scoped enforcement:",
+    );
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
@@ -773,6 +803,9 @@ describe("effectiveness benchmark", () => {
       "web-cache deception across edge cache keys",
     );
     expect(standardScan).toContain(
+      "GraphQL alias/batch/fragment amplification",
+    );
+    expect(standardScan).toContain(
       "native memory allocation/copy/index/lifetime",
     );
     expect(standardScan).toContain(
@@ -799,6 +832,9 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain("changed CORS origin reflection");
     expect(diffScan).toContain("changed WebSocket/socket.io upgrade handlers");
     expect(diffScan).toContain("changed CDN/proxy/application cache keys");
+    expect(diffScan).toContain(
+      "changed GraphQL alias, fragment, nesting, batch",
+    );
     expect(diffScan).toContain("terminator space");
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("changed RFC 4515 assertion escaping");
@@ -876,6 +912,12 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain(
       "Strong token entropy, digest-only storage, short expiry",
     );
+    expect(discovery).toContain(
+      "For GraphQL and GraphQL-like execution engines",
+    );
+    expect(discovery).toContain(
+      "Preserve the mapping from one transport envelope",
+    );
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
@@ -883,6 +925,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("credentialed CORS response exposure:");
     expect(validation).toContain("cross-site WebSocket hijacking:");
     expect(validation).toContain("web cache deception:");
+    expect(validation).toContain("GraphQL operation amplification:");
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("LDAP filter injection:");
@@ -914,6 +957,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(attackPath).toContain("For cross-site WebSocket-hijacking findings");
     expect(attackPath).toContain("For web-cache-deception findings");
+    expect(attackPath).toContain(
+      "For GraphQL operation-amplification findings",
+    );
     expect(attackPath).toContain("For native-memory findings");
     expect(attackPath).toContain("For document-query and NoSQL findings");
     expect(attackPath).toContain("For LDAP filter findings");
@@ -943,6 +989,10 @@ describe("effectiveness benchmark", () => {
     expect(severityPolicy).toContain("WebSocket-hijacking reports based only");
     expect(severityPolicy).toContain("Web cache deception that stores");
     expect(severityPolicy).toContain("Web-cache-deception reports based only");
+    expect(severityPolicy).toContain(
+      "GraphQL operation amplification that converts",
+    );
+    expect(severityPolicy).toContain("GraphQL reports based only on aliases");
     expect(severityPolicy).toContain(
       "Memory corruption that is theoretical, non-triggerable",
     );
@@ -1016,6 +1066,9 @@ describe("effectiveness benchmark", () => {
     expect(threatModelGuidance).toContain(
       "web-cache deception and shared-cache isolation",
     );
+    expect(threatModelGuidance).toContain(
+      "GraphQL aliases/fragments/nesting/batches/persisted documents",
+    );
     expect(repositoryWideScan).toContain(
       "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
     );
@@ -1027,6 +1080,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(repositoryWideScan).toContain(
       "web-cache deception across edge/shared-cache keys",
+    );
+    expect(repositoryWideScan).toContain(
+      "GraphQL aliases/fragments/nesting/batches/persisted documents",
     );
     expect(threatModelGuidance).toContain(
       "session management including login fixation and authenticated-session rotation",

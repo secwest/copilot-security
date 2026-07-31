@@ -547,6 +547,51 @@
       "expected": []
     },
     {
+      "id": "javascript-graphql-recovery-amplification",
+      "description": "A request-level limiter counts one GraphQL HTTP request while an unbounded aliased execution plan invokes the recovery-code resolver four times without an account-scoped attempt budget, returning a reset capability that changes the victim password.",
+      "fixture": "fixtures/javascript-graphql-recovery-amplification",
+      "findingsPaths": [
+        "javascript-graphql-recovery-amplification/run-1/findings.json",
+        "javascript-graphql-recovery-amplification/run-2/findings.json",
+        "javascript-graphql-recovery-amplification/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "graphql-aliased-recovery-code-amplification",
+          "cwe": ["CWE-307", "CWE-799"],
+          "locations": [
+            {
+              "path": "src/graphql.js",
+              "startLine": 8,
+              "endLine": 23,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/recovery.js",
+              "startLine": 9,
+              "endLine": 16,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-graphql-recovery-limits",
+      "description": "The GraphQL gateway bounds and validates the execution plan, permits only one recovery mutation per request, and charges resolver cost, while an atomic account-scoped resolver budget blocks distributed attempts and benign public-query batching still works.",
+      "fixture": "fixtures/javascript-safe-graphql-recovery-limits",
+      "findingsPaths": [
+        "javascript-safe-graphql-recovery-limits/run-1/findings.json",
+        "javascript-safe-graphql-recovery-limits/run-2/findings.json",
+        "javascript-safe-graphql-recovery-limits/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-jwt-bypass",
       "description": "An administrative route trusts decoded JWT claims without verifying the token signature.",
       "fixture": "fixtures/javascript-jwt-bypass",

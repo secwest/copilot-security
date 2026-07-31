@@ -100,6 +100,13 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   edge/origin interpretation and cache decision, later credential-free hit
   returning the same crown-jewel object without an origin call, and downstream
   impact.
+- GraphQL operation amplification that converts one accepted transport request
+  into enough authentication, MFA, recovery, invitation, token-issuance, or
+  similarly privileged resolver operations to compromise an administrator,
+  control-plane, cloud, cross-tenant, or otherwise crown-jewel account.
+  Critical requires the exact expanded execution plan, actual resolver/service
+  invocation count, bypassed effective budget, issued security capability or
+  installed principal, and compromise-equivalent downstream action.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
@@ -127,6 +134,14 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   stored under an attacker-reusable key, and a later credential-free hit;
   severity follows the sensitivity, privileges, affected population, cache
   lifetime, and demonstrated use of the disclosed material.
+- GraphQL alias, fragment, nesting, batch, or persisted-document amplification
+  that bypasses an intended authentication, MFA, recovery, invitation,
+  payment, messaging, export, or other security-sensitive operation budget and
+  demonstrably yields account takeover, unauthorized value transfer, meaningful
+  protected data, or a comparably serious state transition. High requires the
+  exact request-to-expanded-resolver multiplier, practical effective attempts
+  or effects, missing/bypassable account or principal quota, and successful
+  protected outcome; a theoretical increase in calls is not enough.
 - Hardcoded or default credentials that are valid, reachable, and provide meaningful access warranting `high`, even when that access is not broad or privileged enough for `critical`.
 - Cryptographic failures that allow signature forgery, token forgery, trusted artifact forgery, secure-channel bypass, or decryption of highly sensitive data in a way that directly enables compromise, with actual proof that these attacks are practical and can be carried out from an in-scope attack surface.
 - Supply-chain or update-channel compromise that allows malicious code or malicious trusted artifacts to be delivered to users, servers, agents, or endpoints, including signing bypass or package source substitution with real impact. This should focus on actual supply-chain risk and risk around CI actions, not just "does npm report outdated packages"
@@ -213,6 +228,14 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   objects, cold-cache misses that remain misses, exact-route rejection,
   correctly honored private/no-store or authenticated/Set-Cookie bypass, and
   correctly identity-partitioned cache entries.
+- GraphQL reports based only on aliases, fragments, batching, introspection,
+  persisted queries, nested fields, a request limiter, or a missing named
+  complexity plugin without proving the fully expanded protected resolver
+  count, effective budget mismatch, and concrete security effect. Suppress
+  bounded plans whose complete cost is charged before execution, high-risk
+  operations limited to one where appropriate, atomic account/principal/tenant
+  quotas enforced at the resolver or service boundary, and benign public
+  batching that cannot reach the claimed effect.
 - Open redirect, clickjacking, user enumeration, rate-limit weakness, banner leakage, version disclosure, directory listing, stack traces, internal hostnames, or basic error-message leakage, unless they are shown as part of a serious exploit chain.
 - Memory corruption that is theoretical, non-triggerable from in-scope input, or not plausibly exploitable in the target environment.
 - Request-smuggling claims based only on `Content-Length` and

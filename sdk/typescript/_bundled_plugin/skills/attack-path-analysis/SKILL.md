@@ -121,6 +121,23 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   routing plus explicit public-only caching, honored private/no-store controls,
   authenticated-request bypass, Set-Cookie rejection, or correctly
   identity-partitioned keys as distinct counterevidence.
+- For GraphQL operation-amplification findings, preserve the raw request or
+  subscription message, parsed document, operation and variables, aliases,
+  fragments, directives, nested selections, list cardinality, HTTP batch or
+  persisted-document resolution, fully expanded execution plan, transport and
+  operation costs, and each security-sensitive resolver and downstream service
+  invocation. Compare request-level, client-level, account/principal/tenant-
+  level, and operation-level budget keys and updates. For authentication, MFA,
+  recovery, invitation, or token issuance, quantify the intended and effective
+  attempts and prove the amplified call yields a session, reset capability,
+  credential, or protected transition which separate requests cannot reach.
+  For other effects, preserve every multiplied payment, message, export, job,
+  or resource allocation and its business impact. A GraphQL endpoint, alias,
+  batch, introspection setting, or missing complexity plugin alone is not
+  proof. Bounded expanded plans, cost charging before execution, at most one
+  high-risk mutation where appropriate, and atomic resolver/service-layer
+  principal or account quotas are distinct counterevidence; demonstrate benign
+  bounded batching through the same safe path.
 - For native-memory findings, preserve the attacker-controlled bytes, length,
   index, pointer, object state, or scheduling action; the allocation and exact
   source/destination object extents in consistent units; integer wrap,

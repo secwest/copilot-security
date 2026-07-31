@@ -66,6 +66,8 @@ publish findings, open issues, or contact third parties. Write only beneath
    authorization, WebSocket upgrade Origin/session/message authorization,
    edge/shared-cache keys and cacheability, response cache directives,
    authenticated-request handling, and origin route normalization,
+   GraphQL documents, aliases, fragments, batches, execution-plan cost,
+   resolver fan-out, and account/principal/tenant operation budgets,
    native memory allocation/copy/index/lifetime boundaries, cryptographic,
    state, concurrency, and
    resource-control boundaries.
@@ -101,6 +103,11 @@ publish findings, open issues, or contact third parties. Write only beneath
      wildcards, rewrites, path-info, or normalization that could make a
      credentialed victim response retrievable through the same attacker-chosen
      URL without credentials;
+   - changed GraphQL alias, fragment, nesting, batch, persisted-document, or
+     subscription handling; depth/complexity and operation-cost accounting;
+     execution-plan expansion; resolver/data-loader fan-out; or atomic
+     account/principal/tenant limits around recovery, login/MFA, invitation,
+     payment, export, messaging, and other security-sensitive operations;
    - changed integer units, signedness, allocation arithmetic, object extents,
      copy/read/write lengths, indexes, terminator space, ownership, or lifetime
      around attacker-influenced native-memory operations;

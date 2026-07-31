@@ -127,6 +127,25 @@ Use class-specific proof tuples:
   shared, while a legitimate public object still produces a cache hit. Do not
   report a cache or route pattern without the cold-cache denial, victim
   population, credential-free hit, and identity-preserving response witness.
+- GraphQL operation amplification: one exact HTTP/WebSocket/RPC envelope +
+  parsed and fully expanded execution plan showing aliases, fragments, nested
+  selections, batch entries, persisted-document substitution, list cardinality,
+  and directives + the actual count of security-sensitive resolver/service
+  invocations + the transport-, client-, account-, principal-, tenant-, and
+  operation-scoped budget state before and after each invocation + a protected
+  result. For authentication, MFA, recovery, invitation, or token issuance,
+  show that attempts which would be rejected as separate requests execute in
+  one accepted document and yield a session, reset capability, credential, or
+  privileged state transition; quantify the resulting effective search space
+  and achievable request/operation rate. For payments, messaging, exports, and
+  resource abuse, show the multiplied downstream effects and attacker cost.
+  The negative control must reject the amplified plan before any protected
+  resolver runs or charge its complete cost, then independently enforce an
+  atomic account/principal/tenant/operation budget at the resolver or service
+  boundary so cross-client distribution also fails. Prove an allowed bounded
+  public batch still works. Do not report aliases, batching, introspection, a
+  complexity plugin name, or a request limiter without the request-to-resolver
+  mismatch and concrete security effect.
 - login session fixation: attacker-known or attacker-injectable
   pre-authentication session identifier + victim adoption of that identifier +
   successful credential transition that preserves or promotes the same

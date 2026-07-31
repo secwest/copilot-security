@@ -170,8 +170,10 @@ CSRF leading to account takeover, login session fixation, password-reset link
 origin poisoning, credentialed CORS secret exfiltration, and adversarial
 repository instructions. The corpus also covers cross-site WebSocket hijacking
 of cookie-authenticated bidirectional channels and edge/origin web-cache
-deception that exposes authenticated responses across requests. Each of the 62
-cases is scanned three times, producing 186 scans that measure both accuracy
+deception that exposes authenticated responses across requests. It additionally
+covers GraphQL alias/batch amplification of recovery-code verification across
+the HTTP-request, execution-plan, resolver, and account-state boundaries. Each
+of the 64 cases is scanned three times, producing 192 scans that measure both accuracy
 and model variance. The evaluator uses one-to-one CWE-plus-location matching, counts
 duplicate reports as false positives, and records missing scan artifacts as
 completion failures.

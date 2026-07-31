@@ -2487,6 +2487,34 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         # CWE-525 is specific to browser caches. Cross-principal edge, CDN,
         # proxy, or application shared caches use the broader CWE-524.
         return "web-cache-deception", ["CWE-524", "CWE-200"]
+    if (
+        "graphql" in text
+        and (
+            "operation amplification" in text
+            or "alias amplification" in text
+            or "aliases" in text
+            or "aliased" in text
+            or "resolver amplification" in text
+            or "resolver calls" in text
+            or "verifyrecoverycode" in text
+            or "selection fan-out" in text
+            or "selections bypass" in text
+            or "unbounded selections" in text
+            or ("unbounded" in text and "selections" in text)
+        )
+        and (
+            "rate limit" in text
+            or "quota" in text
+            or "attempt" in text
+            or "recovery code" in text
+            or "recovery-code" in text
+            or "mfa" in text
+            or "one request" in text
+        )
+    ):
+        # CWE-307 captures the defeated authentication-attempt restriction;
+        # CWE-799 captures the transport-to-resolver interaction-frequency gap.
+        return "graphql-operation-amplification", ["CWE-307", "CWE-799"]
     if isinstance(taxonomy, dict):
         cwe = taxonomy.get("cwe")
         normalized_cwe = (
@@ -2599,7 +2627,7 @@ def _standalone_location_path(value: Any) -> str | None:
         return None
     source = value.strip()
     repository = os.environ.get("COPILOT_SECURITY_REPOSITORY")
-    if repository:
+    if repository and os.path.isabs(source):
         try:
             relative = os.path.relpath(source, repository)
             if (
@@ -2805,6 +2833,16 @@ def _normalize_standalone_finding(
             if isinstance(existing_taxonomy, dict)
             else None
         )
+        existing_category = (
+            existing_taxonomy.get("category")
+            if isinstance(existing_taxonomy, dict)
+            else None
+        )
+        normalized_existing_category = (
+            existing_category.strip()
+            if isinstance(existing_category, str)
+            else ""
+        )
         normalized_existing_cwe = (
             [
                 item
@@ -2814,7 +2852,10 @@ def _normalize_standalone_finding(
             if isinstance(existing_cwe, list)
             else []
         )
-        if cwe and normalized_existing_cwe != cwe:
+        if cwe and (
+            normalized_existing_cwe != cwe
+            or normalized_existing_category != category
+        ):
             recovered = copy.deepcopy(finding)
             recovered["taxonomy"] = {"category": category, "cwe": cwe}
             return recovered

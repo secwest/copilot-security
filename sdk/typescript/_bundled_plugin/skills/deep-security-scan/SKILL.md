@@ -121,6 +121,22 @@ inventory and closure requirements.
      credentials, and lottery/selection values that protect assets; record the
      generator, encoded entropy, lifetime, storage form, comparison behavior,
      attempt limits, and whether unpredictability is actually required;
+   - GraphQL execution amplification and resolver-scoped enforcement: every
+     query, mutation, subscription, alias, fragment, nested selection, batch
+     entry, persisted document, directive, and custom scalar that can multiply
+     security-sensitive resolver calls behind one HTTP, WebSocket, or RPC
+     envelope. Trace the raw request through parsing, validation, fragment and
+     alias expansion, execution planning, resolver invocation, downstream
+     service calls, quota state, and the protected effect. Request-count limits,
+     body-size limits, authentication, or a framework complexity option are not
+     closure when one accepted document can invoke recovery-code, login/MFA,
+     invitation, payment, messaging, export, or other privileged resolvers many
+     times. Use bounded depth/selection/complexity and batch sizes, operation-
+     aware charging, at most one high-risk mutation where appropriate, and an
+     atomic principal/account/tenant/operation budget enforced at the resolver
+     or protected service boundary as the negative control. Preserve benign
+     public batching so disabling GraphQL features is not mistaken for the only
+     fix.
    - check/use and state races: the mutation path, checked snapshot or object,
      intervening yield/transaction/process boundary, consumed snapshot or
      object, lock/atomic predicate/version binding, and resulting security

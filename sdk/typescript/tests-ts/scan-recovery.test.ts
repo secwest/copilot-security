@@ -9,7 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 import { runWorkbench } from "../src/runtime.js";
 import { PLUGIN_ROOT } from "./plugin-root.js";
@@ -544,6 +544,86 @@ describe("malformed scan artifact recovery", () => {
       category: "web-cache-deception",
       cwe: ["CWE-524", "CWE-200"],
     });
+  });
+
+  test("normalizes GraphQL resolver amplification to authentication-attempt taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] = "GraphQL aliases bypass recovery-code request quota";
+    finding.summary =
+      "One accepted GraphQL-style document can invoke recovery-code verification once per attacker-controlled selection while the gateway increments its client quota only once. A successful later alias returns a reset token that changes the victim password.";
+    finding["taxonomy"] = {
+      category: "resource-management",
+      cwe: ["CWE-770"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "graphql-operation-amplification",
+      cwe: ["CWE-307", "CWE-799"],
+    });
+  });
+
+  test("canonicalizes the GraphQL category when model CWEs already match", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "Unbounded GraphQL selections bypass recovery-code throttling";
+    finding.summary =
+      "An attacker submits many aliased recovery-code guesses in one request, receives a reset token when one matches, and changes the target password.";
+    finding["taxonomy"] = {
+      category: "Improper restriction of excessive authentication attempts",
+      cwe: ["CWE-307", "CWE-799"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "graphql-operation-amplification",
+      cwe: ["CWE-307", "CWE-799"],
+    });
+  });
+
+  test("keeps relative finding paths repository-relative when the finalizer cwd is nested", () => {
+    const python = Bun.which("python3") ?? Bun.which("python");
+    expect(python).not.toBeNull();
+    const repository = resolve(process.cwd(), "..", "..");
+    const relativePath =
+      "benchmarks/fixtures/javascript-graphql-recovery-amplification/src/graphql.js";
+    const script = join(PLUGIN_ROOT, "scripts", "finalize_scan_contract.py");
+    const program = [
+      "import importlib.util",
+      "import os",
+      `spec = importlib.util.spec_from_file_location("finalizer_under_test", ${JSON.stringify(script)})`,
+      "module = importlib.util.module_from_spec(spec)",
+      "spec.loader.exec_module(module)",
+      `os.environ["COPILOT_SECURITY_REPOSITORY"] = ${JSON.stringify(repository)}`,
+      `os.chdir(${JSON.stringify(process.cwd())})`,
+      `print(module._standalone_location_path(${JSON.stringify(relativePath)}))`,
+      `print(module._standalone_location_path(${JSON.stringify(join(repository, ...relativePath.split("/")))}))`,
+    ].join("\n");
+
+    const result = spawnSync(python!, ["-I", "-B", "-c", program], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim().split(/\r?\n/u)).toEqual([
+      relativePath,
+      relativePath,
+    ]);
   });
 
   test("closes reviewed documentation and metadata instead of deferring coverage", async () => {

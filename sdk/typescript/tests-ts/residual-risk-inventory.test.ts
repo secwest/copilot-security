@@ -934,6 +934,32 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs GraphQL resolver amplification with execution-plan and account budgets", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-graphql-recovery-amplification"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-graphql-recovery-limits"),
+    );
+
+    expect(vulnerable).toContain(
+      '"graphql-operation-amplification-or-resolver-budget"',
+    );
+    expect(vulnerable).toContain("request.document.selections");
+    expect(vulnerable).toContain("recovery.verifyRecoveryCode");
+    expect(vulnerable).toContain("maxRequestsPerClient");
+    expect(safe).toContain(
+      '"graphql-operation-amplification-or-resolver-budget"',
+    );
+    expect(safe).toContain("validateExecutionPlan");
+    expect(safe).toContain("recoveryOperations > 1");
+    expect(safe).toContain("failedAttempts.set");
+    expect(safe).toContain("MAX_FAILED_ATTEMPTS");
+    expect(scanQualityGatePrompt("")).toContain(
+      "GraphQL alias/batch and persisted-document amplification across HTTP-request limits, parsed execution plans, resolver invocations, account/tenant quotas, and protected effects",
+    );
+  });
+
   test("keeps bearer-only state changes out of the specialized CSRF signal", async () => {
     const repository = await mkdtemp(
       join(tmpdir(), "copilot-security-bearer-api-"),

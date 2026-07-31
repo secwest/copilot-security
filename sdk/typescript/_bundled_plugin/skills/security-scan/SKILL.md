@@ -43,6 +43,8 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    WebSocket handshake Origin authorization and bidirectional channel exposure,
    web-cache deception across edge cache keys, cacheability and credential
    boundaries, response directives, and origin routing/normalization,
+   GraphQL alias/batch/fragment amplification from one transport request through
+   execution planning and resolver-scoped account/principal/tenant budgets,
    authorization, state changes, interpreters, filesystem, network,
    deserialization, and templates;
    SQL and document-database query selectors/operators, LDAP filter construction

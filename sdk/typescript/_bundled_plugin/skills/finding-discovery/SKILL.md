@@ -120,6 +120,22 @@ Use this checklist to keep discovery specific without turning it into validation
   account or object an operator document can select and what privilege or data
   the caller gains. Conversely, reject string-only values that cannot become
   selectors or operators even when a document-query API appears nearby.
+- For GraphQL and GraphQL-like execution engines, enumerate raw and persisted
+  documents, aliases, fragments, directives, nested selections, list fan-out,
+  multi-operation documents, HTTP batch arrays, subscription messages, custom
+  scalars, execution-plan builders, resolvers, data loaders, and downstream
+  service calls separately. Preserve the mapping from one transport envelope to
+  the actual number and identity of security-sensitive resolver invocations.
+  Request-level rate limits, WAF counts, authentication, body-size limits, or a
+  named depth/complexity plugin do not close a row unless their effective cost
+  covers aliases, fragment expansion, batches, list cardinality, and resolver
+  fan-out before execution. For login, MFA, password recovery, invitation,
+  token issuance, payment, export, messaging, and other protected operations,
+  keep the resolver or service boundary open until an atomic account/principal/
+  tenant/operation budget prevents cross-client amplification. Conversely,
+  bounded execution plans, one sensitive mutation per request where
+  appropriate, cost-based charging, and resolver-scoped quotas are strong
+  counterevidence; benign aliases or batching alone are not findings.
 - Do not collapse separate high-impact proof tuples into one candidate only because they share a route or helper. Split command execution, SSRF, path/file impact, XML/parser behavior, XSS/template execution, and authz/state-change impact when the sink, closest control, or impact differs.
 - For outbound request surfaces such as `downloadFrom`, URL importers, webhook/callback clients, preview/render fetchers, and redirect-following HTTP clients, enumerate each attacker-controlled destination source and its closest allow/deny/filter/redirect control. Do not suppress SSRF because the fetch/callback is an intended feature, because filters are optional or empty by default, or because a sibling route found a louder file/path issue; keep the network row when user input can select a destination and the hard boundary is incomplete, operator-configured, or only pre-request.
 - In XML/parser/deserializer surfaces, enumerate default parser factories, converters, validators, transformers, unmarshal/parse calls, and handler entrypoints independently. A safe sibling parser path is negative control for that sibling, not suppression evidence for a different default factory or converter.
