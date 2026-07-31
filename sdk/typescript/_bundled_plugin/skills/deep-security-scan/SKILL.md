@@ -260,6 +260,16 @@ inventory and closure requirements.
      header-supplied key URLs, resolves keys only from an allowlisted or
      issuer-pinned configuration, requires one compatible key, and binds verified
      claims and one-time state as the negative control.
+   - OIDC signed ID-token client and transaction binding: target and sibling
+     client registrations; authorization initiation and browser session; callback
+     state and requested nonce; compact token and trusted signature; scalar or
+     array `aud`, `azp`, token nonce, issuer, subject, and lifetime; every claim
+     check; replay state; and the exact local principal installed. Test a valid
+     victim token issued to a sibling client against an attacker-owned target
+     session rather than treating successful signature or issuer validation as
+     closure. Use exact target-client audience/authorized-party checks, a
+     one-time nonce bound to the initiating session transaction, replay
+     rejection, and a legitimate target-token success as the negative control.
    - OAuth/OIDC authorization-code and account-linking transaction binding:
      every login, link, consent, and reauthentication initiation and callback;
      browser session and local account; issuer/client and fixed redirect URI;
@@ -442,6 +452,13 @@ inventory and closure requirements.
    principal. Reject the candidate only when attacker-controlled key locators
    are ignored or rejected and the verified key is uniquely derived from trusted
    issuer configuration with compatible metadata and complete claim binding.
+   For OIDC ID-token client-binding candidates, execute an attacker-owned target
+   login transaction with a correctly signed victim token issued by the trusted
+   provider to a sibling client. Record target state/nonce, token audience shape,
+   `azp`, nonce, subject, signature/issuer/lifetime decisions, and installed
+   target principal. Reject only when wrong-audience, missing or foreign `azp`,
+   missing or cross-session nonce, wrong state/issuer/signature, expiry, and
+   replay all fail before installation while a matching target token succeeds.
    For OAuth/OIDC authorization-code and account-linking candidates, reproduce
    an attacker initiation and victim-session callback through the real
    transaction store and identity-provider adapter. Record the external subject,

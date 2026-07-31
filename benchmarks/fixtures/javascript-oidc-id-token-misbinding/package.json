@@ -1,0 +1,5 @@
+{
+  "name": "javascript-oidc-id-token-misbinding-fixture",
+  "private": true,
+  "type": "module"
+}

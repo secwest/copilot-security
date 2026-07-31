@@ -164,7 +164,8 @@ command injection, path traversal, object-level authorization, SQL injection,
 server-side request forgery, unsafe deserialization, reflected XSS, XML
 external entities, JWT signature-verification bypass, attacker-controlled
 JWT `alg`/key-type confusion that reuses an RSA public key as an HMAC secret,
-attacker-controlled JWT/OIDC JWKS key origin, prototype pollution, SAML
+attacker-controlled JWT/OIDC JWKS key origin, signed OIDC ID-token
+audience/authorized-party/nonce misbinding across sibling clients, prototype pollution, SAML
 signed-versus-consumed assertion confusion, disabled TLS certificate
 verification, predictable security tokens, server-side template injection,
 check/use state races, unsafe mass assignment, cookie-authenticated cross-site
@@ -183,8 +184,8 @@ the HTTP-request, execution-plan, resolver, and account-state boundaries,
 fail-open external authorization on policy exceptions and malformed decisions,
 DNS-rebinding SSRF across validation and connection-time resolution, plus
 catastrophic-backtracking regular-expression denial of service with a bounded
-linear validator as the control. Each of the 72 cases is scanned three times,
-producing 216 scans that measure both accuracy and model variance. The
+linear validator as the control. Each of the 74 cases is scanned three times,
+producing 222 scans that measure both accuracy and model variance. The
 evaluator uses one-to-one CWE-plus-location
 matching, counts duplicate reports as false positives, and records missing scan
 artifacts as completion failures.

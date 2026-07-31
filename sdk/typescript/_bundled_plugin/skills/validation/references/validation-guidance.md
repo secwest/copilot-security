@@ -324,6 +324,20 @@ Use class-specific proof tuples:
   Suppression requires a trusted issuer-to-key-source mapping, one compatible
   key, fixed algorithm, complete claim/lifetime/nonce binding, and continuity
   through principal creation.
+- OIDC ID-token client and transaction binding: a compact ID token with a valid
+  signature from the configured issuer but issued to a sibling client + the
+  exact initiating target-app browser session, callback `state`, and requested
+  nonce + scalar/array `aud`, optional or conflicting `azp`, token nonce,
+  lifetime, and subject + the relying party's validation decisions + installation
+  of that subject into the attacker's target-app session. Prove a concrete
+  cross-client token acquisition or replay path and wrong-subject session; a
+  missing check by itself is insufficient. The paired control must accept a
+  legitimate target-client token and reject wrong-audience, multi-audience with
+  absent or foreign `azp`, missing or cross-session nonce, wrong state, wrong
+  issuer, expired, invalid-signature, and replay cases before principal
+  installation. Callback `state`, signature validity, and trusted issuer are
+  counterevidence only for their own bindings, not substitutes for `aud`, `azp`,
+  or nonce validation.
 - OAuth/OIDC authorization-code callback binding: attacker-controlled code,
   `state`, issuer response, redirect parameters, or browser session + initiation
   transaction and PKCE material + exact lookup, consume, exchange, and identity

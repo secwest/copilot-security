@@ -22,15 +22,16 @@ plus source-to-impact continuity; and code evidence needs a concrete
 path-and-line anchor, source text, and explanatory reasoning. Presence and
 substantive-quality flags are both retained in per-match diagnostics.
 
-The versioned corpus currently contains thirty-six vulnerable/control pairs:
+The versioned corpus currently contains thirty-seven vulnerable/control pairs:
 command injection, path traversal, executable file upload/content placement,
 HTTP request smuggling across inconsistent gateway/backend framing,
 object-level authorization, SQL injection, document-query operator injection,
 server-side request forgery, unsafe deserialization, reflected XSS, XML
 external entities, JWT signature-verification bypass, JWT `alg`/key-type
 confusion that reinterprets an RSA public key as an HMAC secret,
-attacker-controlled JWT/OIDC JWKS key origin, SAML signed-versus-consumed assertion
-confusion, prototype pollution, disabled TLS certificate verification,
+attacker-controlled JWT/OIDC JWKS key origin, signed OIDC ID-token
+audience/authorized-party/nonce misbinding across sibling clients, SAML
+signed-versus-consumed assertion confusion, prototype pollution, disabled TLS certificate verification,
 predictable security tokens, server-side template injection, check/use state
 races, unsafe mass assignment, cookie-authenticated cross-site request forgery,
 attacker-length native-memory corruption, LDAP filter injection into
@@ -51,7 +52,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 216
+destination-pinned, redirect-free transport. Three runs per case produce 222
 scans in the complete corpus.
 
 Run scans into a directory outside this repository:

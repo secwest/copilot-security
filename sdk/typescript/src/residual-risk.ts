@@ -307,9 +307,14 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:createRemoteJWKSet|fetchJwks|jwksUri|jku|x5u)\b|\b(?:header|protectedHeader)\s*(?:\.|\[\s*["'])\s*(?:jku|kid|x5u)\b/iu,
   ],
   [
+    "oidc-id-token-client-transaction-binding",
+    102,
+    /\b(?:beginLogin|finishLogin|verifySignedIdToken|pendingOidc|OIDC_CLIENT_ID|intendedForClient|idToken)\b|\bclaims\s*\.\s*(?:aud|azp|nonce)\b/iu,
+  ],
+  [
     "jwt-oidc-claim-binding",
     98,
-    /\b(?:expectedAudience|expectedIssuer|maxTokenAgeSeconds|pendingNonces)\b|\bclaims\s*\.\s*(?:aud|exp|iat|iss|nonce|sub)\b/iu,
+    /\b(?:expectedAudience|expectedIssuer|maxTokenAgeSeconds|pendingNonces|pendingOidc|OIDC_CLIENT_ID)\b|\bclaims\s*\.\s*(?:aud|azp|exp|iat|iss|nonce|sub)\b/iu,
   ],
   [
     "saml-federation-or-assertion-boundary",

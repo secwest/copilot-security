@@ -254,6 +254,18 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   key lookup, requires a compatible key object, invokes only the intended
   primitive, accepts a legitimate token, and rejects the same forgery is
   counterevidence.
+- For OIDC ID-token client-binding findings, preserve the target and sibling
+  client registrations; attacker and victim browser sessions; target initiation
+  state and nonce; the sibling-client flow through which a valid victim token is
+  exposed to the attacker; compact token and signature result; issuer, scalar or
+  array `aud`, `azp`, nonce, subject, and lifetime; every relying-party claim
+  check; and the final target-app session identity. Prove the attacker can pair
+  their own valid target callback state with a victim token issued to another
+  client and receive the victim's target-app session. A trusted signature,
+  issuer, expiry, or callback state alone does not close audience or nonce
+  substitution. Exact target-client audience and authorized-party validation,
+  one-time session-transaction nonce equality, replay rejection, and continuity
+  through principal installation are counterevidence.
 - For OAuth/OIDC authorization-code login and account-linking findings, preserve
   both attacker and victim browser sessions; the initiation account and
   operation; authorization request; code, `state`, nonce, redirect URI, PKCE

@@ -60,7 +60,8 @@ publish findings, open issues, or contact third parties. Write only beneath
    OAuth/OIDC authorization-code state, nonce, PKCE, callback-session,
    redirect-URI, and account-linking transaction binding, JWT/OIDC protected
    headers, algorithm/key-family binding, signature-versus-MAC primitives,
-   remote key sources, JWKS/issuer mapping, and claim binding,
+   remote key sources, JWKS/issuer mapping, and signed ID-token `aud`/`azp`/
+   nonce/client-session claim binding,
    SAML/federated signature references and consumed
    identity objects, bulk object binding and mass-assignment field controls,
    browser-ambient credential and CSRF controls, credentialed CORS response
@@ -150,6 +151,9 @@ publish findings, open issues, or contact third parties. Write only beneath
      embedded-key, discovery, issuer-to-JWKS mapping, redirect, key-cache,
      matching-key cardinality, key-type/use, signature,
      issuer/audience/lifetime/nonce, or principal installation behavior;
+   - changed OIDC relying-party client registration, scalar/array `aud`, `azp`,
+     requested/token nonce, callback-session transaction, token replay, or
+     signed sibling-client ID-token acceptance behavior;
    - changed OAuth/OIDC authorization-code initiation or callback `state`, nonce,
      transaction entropy/storage/expiry/one-time use, browser-session/local-
      account/operation binding, redirect URI, PKCE challenge/verifier, code

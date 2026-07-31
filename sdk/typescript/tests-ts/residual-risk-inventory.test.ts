@@ -463,6 +463,31 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs signed sibling-client ID tokens with exact client and nonce binding", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-oidc-id-token-misbinding"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-oidc-id-token-binding"),
+    );
+
+    expect(vulnerable).toContain('"authentication-or-session"');
+    expect(vulnerable).toContain('"cryptographic-verification"');
+    expect(vulnerable).toContain('"oidc-id-token-client-transaction-binding"');
+    expect(vulnerable).toContain('"jwt-oidc-claim-binding"');
+    expect(vulnerable).toContain("verifySignedIdToken(response.idToken");
+    expect(vulnerable).toContain("response.state !== session.pendingState");
+    expect(vulnerable).toContain("session.accountId = account.id");
+    expect(safe).toContain('"oidc-id-token-client-transaction-binding"');
+    expect(safe).toContain('"jwt-oidc-claim-binding"');
+    expect(safe).toContain("pending.clientId !== OIDC_CLIENT_ID");
+    expect(safe).toContain("!intendedForClient(claims, pending.clientId)");
+    expect(safe).toContain("!sameSecret(claims.nonce, pending.nonce)");
+    expect(scanQualityGatePrompt("")).toContain(
+      "signed OIDC ID-token audience, authorized-party, nonce, and callback-session binding",
+    );
+  });
+
   test("pairs SAML signed-object confusion with exact assertion and trust binding", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-saml-signature-wrapping"),

@@ -268,6 +268,22 @@ Use this checklist to keep discovery specific without turning it into validation
   impact. Likewise, do not report support for multiple algorithms by name alone:
   prove an attacker can choose an incompatible algorithm/key interpretation and
   produce a token that reaches a protected identity or action.
+- For OIDC ID-token acceptance, separately test an otherwise valid token signed
+  by the configured issuer for a sibling registered client. Preserve the
+  initiating browser session and transaction, requested `client_id` and nonce,
+  callback state, compact token, signature result, scalar or array `aud`, `azp`,
+  token nonce, issuer, subject, lifetime, and installed local principal. A valid
+  signature, trusted issuer, unexpired token, and correct callback `state` do not
+  authorize a token issued to another client and do not bind that token to the
+  initiating browser. Missing or bypassable target-client audience, authorized-
+  party, or transaction nonce checks are candidates when a token obtainable
+  through a sibling client can create a wrong-subject session. Suppression
+  requires the target client in `aud`, exact `azp` handling for multi-audience or
+  explicitly authorized-party tokens, a one-time nonce compared with the
+  initiating session's transaction, and continuity of the verified issuer and
+  subject through principal installation. Do not infer exploitability from a
+  missing claim check alone: prove how the attacker obtains or replays a valid
+  cross-client token and receives the resulting authenticated session.
 - For OAuth/OIDC authorization-code login, account-linking, consent, and
   reauthentication callbacks, trace the exact initiation transaction through
   the browser redirect, authorization response, code exchange, verified

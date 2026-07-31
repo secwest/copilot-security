@@ -2536,6 +2536,46 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
     ):
         return "jwt-algorithm-key-confusion", ["CWE-347"]
     if (
+        ("oidc" in text or "id token" in text or "id-token" in text)
+        and (
+            "sibling client" in text
+            or "sibling-client" in text
+            or "cross-client" in text
+            or "wrong audience" in text
+            or "wrong-audience" in text
+            or "foreign azp" in text
+            or "missing audience" in text
+            or "audience misbinding" in text
+            or "nonce misbinding" in text
+            or "not bound to its client" in text
+            or "client and transaction binding" in text
+            or (
+                (
+                    "never validates" in text
+                    or "does not check" in text
+                    or "omits" in text
+                )
+                and "aud" in text
+                and "azp" in text
+                and "nonce" in text
+            )
+        )
+        and (
+            "aud" in text
+            or "azp" in text
+            or "audience" in text
+            or "nonce" in text
+        )
+        and (
+            "session" in text
+            or "login" in text
+            or "account" in text
+            or "principal" in text
+            or "authentication" in text
+        )
+    ):
+        return "oidc-id-token-binding", ["CWE-287", "CWE-345"]
+    if (
         re.search(r"\bredos\b", text)
         or "regular expression denial of service" in text
         or "regular-expression denial of service" in text

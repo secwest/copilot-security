@@ -760,6 +760,51 @@
       "expected": []
     },
     {
+      "id": "javascript-oidc-id-token-misbinding",
+      "description": "An OIDC relying party verifies a trusted EdDSA signature, issuer, expiration, and one-time callback state but omits ID-token audience, authorized-party, and nonce binding, so a victim token issued to a sibling client authenticates the attacker's target-app session as the victim.",
+      "fixture": "fixtures/javascript-oidc-id-token-misbinding",
+      "findingsPaths": [
+        "javascript-oidc-id-token-misbinding/run-1/findings.json",
+        "javascript-oidc-id-token-misbinding/run-2/findings.json",
+        "javascript-oidc-id-token-misbinding/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "signed-sibling-client-id-token-account-takeover",
+          "cwe": ["CWE-287", "CWE-345"],
+          "locations": [
+            {
+              "path": "src/login.js",
+              "startLine": 29,
+              "endLine": 37,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/login.js",
+              "startLine": 40,
+              "endLine": 46,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-oidc-id-token-binding",
+      "description": "The OIDC relying party binds a trusted signed ID token to the target client through aud and azp, compares a one-time session transaction's state and nonce, enforces issuer and lifetime, and installs only that verified subject.",
+      "fixture": "fixtures/javascript-safe-oidc-id-token-binding",
+      "findingsPaths": [
+        "javascript-safe-oidc-id-token-binding/run-1/findings.json",
+        "javascript-safe-oidc-id-token-binding/run-2/findings.json",
+        "javascript-safe-oidc-id-token-binding/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-saml-signature-wrapping",
       "description": "A SAML validator verifies the assertion selected by the signature reference but creates the session from an attacker-controlled unsigned assertion at the first list position.",
       "fixture": "fixtures/javascript-saml-signature-wrapping",

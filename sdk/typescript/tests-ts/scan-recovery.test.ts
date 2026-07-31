@@ -584,6 +584,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes OIDC ID-token client and nonce misbinding taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "OIDC callback accepts ID tokens not bound to its client or login transaction";
+    finding.summary =
+      "The callback installs a local account from a correctly signed token without validating its audience, authorized party, or nonce against the target client and initiating browser transaction.";
+    finding["taxonomy"] = {
+      category: "OIDC ID-token client and transaction binding failure",
+      cwe: ["CWE-287", "CWE-346"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "oidc-id-token-binding",
+      cwe: ["CWE-287", "CWE-345"],
+    });
+  });
+
   test("normalizes catastrophic regex backtracking taxonomy", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

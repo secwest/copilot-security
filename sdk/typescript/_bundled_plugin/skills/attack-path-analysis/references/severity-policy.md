@@ -77,6 +77,12 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   victim-session callback, missing or bypassed transaction/PKCE binding,
   resulting external-identity link, and successful later attacker login—not
   merely an absent `state` parameter.
+- OIDC ID-token client or nonce misbinding that lets an attacker replay a
+  correctly signed high-value victim token issued by the trusted provider to a
+  sibling client and obtain the victim's target-app session. Critical requires
+  the exact sibling-client token acquisition path, target callback transaction,
+  accepted `aud`/`azp`/nonce mismatch, installed victim principal, and
+  compromise-equivalent access—not merely an omitted claim check.
 - Session fixation that lets a remote attacker preserve an attacker-known
   pre-authentication identifier through an administrator, cross-tenant,
   billing, or otherwise high-value victim login and reuse it for
@@ -190,6 +196,12 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   meaningful unauthorized access, with the selected algorithm, key
   reinterpretation, verification result, claims, and protected effect
   demonstrated.
+- OIDC ID-token audience, authorized-party, or nonce misbinding that reliably
+  accepts a correctly signed victim token issued to a sibling client and
+  installs that victim in an attacker-owned target session. High requires the
+  exact cross-client token path, target transaction, accepted claim mismatch,
+  and resulting meaningful account access, plus a legitimate matching-token
+  control.
 - External authorization fail-open that reliably converts a policy exception,
   timeout, malformed/empty result, stale fallback, or retry exhaustion into
   meaningful unauthorized access. High requires the exact policy inputs,
@@ -292,6 +304,12 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   algorithm, a header-controlled `alg`, HMAC/RSA API names, or missing library
   options without proving a cross-family key reinterpretation, accepted
   attacker-computable token, and protected identity or action.
+- OIDC ID-token reports based only on absent `aud`, `azp`, or nonce checks,
+  generic claim parsing, or a signed-token API without proving an attacker can
+  obtain a valid victim token for another client, pair it with a target
+  transaction, and receive the wrong target-app principal. Suppress exact
+  target-client audience/authorized-party validation, one-time session-bound
+  nonce and state, replay rejection, and successful legitimate-token behavior.
 - OAuth/OIDC callback reports based only on missing `state`, nonce, or PKCE,
   parameter names, or a generic callback route without proving transaction
   substitution, browser-session/account misbinding, and a resulting wrong

@@ -80,6 +80,10 @@ describe("effectiveness benchmark", () => {
         "javascript-safe-jwks-key-origin",
       ],
       [
+        "javascript-oidc-id-token-misbinding",
+        "javascript-safe-oidc-id-token-binding",
+      ],
+      [
         "javascript-saml-signature-wrapping",
         "javascript-safe-saml-assertion-binding",
       ],
@@ -343,6 +347,11 @@ describe("effectiveness benchmark", () => {
     ).toEqual([["CWE-346", "CWE-347", "CWE-287"]]);
     expect(
       cases
+        .get("javascript-oidc-id-token-misbinding")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-287", "CWE-345"]]);
+    expect(
+      cases
         .get("javascript-ldap-filter-authorization")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-90", "CWE-863"]]);
@@ -430,6 +439,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "javascript-safe-jwks-key-origin",
+    );
+    const oidcIdTokenMisbinding = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-oidc-id-token-misbinding",
+    );
+    const safeOidcIdTokenBinding = join(
+      benchmarkRoot,
+      "fixtures",
+      "javascript-safe-oidc-id-token-binding",
     );
     const samlSignatureWrapping = join(
       benchmarkRoot,
@@ -549,6 +568,18 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(safeJwksKeyOrigin, "src", "token.js"), "utf8"),
     ).toContain('if ("jku" in header || "x5u" in header)');
+    expect(
+      await readFile(join(oidcIdTokenMisbinding, "src", "login.js"), "utf8"),
+    ).toContain("verifySignedIdToken(response.idToken");
+    expect(
+      await readFile(join(oidcIdTokenMisbinding, "src", "login.js"), "utf8"),
+    ).not.toContain("claims.aud");
+    expect(
+      await readFile(join(safeOidcIdTokenBinding, "src", "login.js"), "utf8"),
+    ).toContain("!intendedForClient(claims, pending.clientId)");
+    expect(
+      await readFile(join(safeOidcIdTokenBinding, "src", "login.js"), "utf8"),
+    ).toContain("!sameSecret(claims.nonce, pending.nonce)");
     expect(
       await readFile(join(samlSignatureWrapping, "src", "saml.js"), "utf8"),
     ).toContain("response.assertions[0].claims");
@@ -845,6 +876,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain(
       "JWT/JWS/OIDC algorithm, key-family, key origin, and claim binding:",
     );
+    expect(deepScan).toContain(
+      "OIDC signed ID-token client and transaction binding:",
+    );
     expect(deepScan).toContain("asymmetric public-key bytes can");
     expect(deepScan).toContain("be reinterpreted as an HMAC secret");
     expect(deepScan).toContain("SAML and federated assertion binding:");
@@ -890,6 +924,9 @@ describe("effectiveness benchmark", () => {
     expect(standardScan).toContain("untrusted uploads and");
     expect(standardScan).toContain("HTTP message framing and parser agreement");
     expect(standardScan).toContain("JWT/OIDC algorithm-to-key-family binding");
+    expect(standardScan).toContain(
+      "signed OIDC ID-token audience, authorized-party, nonce, callback-session",
+    );
     expect(standardScan).toContain("public-key-as-HMAC confusion");
     expect(standardScan).toContain("SAML/federated signed-assertion selection");
     expect(diffScan).toContain("mass-assignment field controls");
@@ -928,6 +965,9 @@ describe("effectiveness benchmark", () => {
       "JWT/JWS/OIDC `alg`, accepted algorithm set, signature-versus-MAC",
     );
     expect(diffScan).toContain("public-key/symmetric-secret representation");
+    expect(diffScan).toContain(
+      "changed OIDC relying-party client registration",
+    );
     expect(discovery).toContain(
       "distinguish attacker-controlled template source from attacker-controlled data",
     );
@@ -974,6 +1014,9 @@ describe("effectiveness benchmark", () => {
       "Do not report `kid`, `jku`, JWKS fetching, or OIDC discovery",
     );
     expect(discovery).toContain(
+      "For OIDC ID-token acceptance, separately test an otherwise valid token",
+    );
+    expect(discovery).toContain(
       "For OAuth/OIDC authorization-code login, account-linking, consent",
     );
     expect(discovery).toContain(
@@ -1018,6 +1061,9 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("untrusted upload/content placement:");
     expect(validation).toContain("HTTP request smuggling/desynchronization:");
     expect(validation).toContain("JWT/JWS/OIDC remote key origin:");
+    expect(validation).toContain(
+      "OIDC ID-token client and transaction binding:",
+    );
     expect(validation).toContain("JWT/JWS algorithm and key-type confusion:");
     expect(validation).toContain(
       "OAuth/OIDC authorization-code transaction or account-linking CSRF:",
@@ -1066,6 +1112,7 @@ describe("effectiveness benchmark", () => {
     expect(attackPath).toContain("For SAML/federated signed-object findings");
     expect(attackPath).toContain("For JWT/JWS/OIDC remote-key findings");
     expect(attackPath).toContain("For JWT/JWS algorithm-confusion findings");
+    expect(attackPath).toContain("For OIDC ID-token client-binding findings");
     expect(attackPath).toContain(
       "For OAuth/OIDC authorization-code login and account-linking findings",
     );
@@ -1142,6 +1189,12 @@ describe("effectiveness benchmark", () => {
       "OAuth/OIDC authorization-code or account-linking transaction confusion",
     );
     expect(severityPolicy).toContain(
+      "OIDC ID-token client or nonce misbinding that lets an attacker replay",
+    );
+    expect(severityPolicy).toContain(
+      "OIDC ID-token reports based only on absent `aud`, `azp`, or nonce checks",
+    );
+    expect(severityPolicy).toContain(
       "Session fixation that lets a remote attacker preserve",
     );
     expect(severityPolicy).toContain(
@@ -1175,6 +1228,9 @@ describe("effectiveness benchmark", () => {
       "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
     );
     expect(threatModelGuidance).toContain(
+      "signed OIDC ID-token audience/authorized-party/nonce/client-session binding",
+    );
+    expect(threatModelGuidance).toContain(
       "credentialed CORS response authorization",
     );
     expect(threatModelGuidance).toContain(
@@ -1195,6 +1251,9 @@ describe("effectiveness benchmark", () => {
     expect(threatModelGuidance).toContain("outbound URL and DNS trust");
     expect(repositoryWideScan).toContain(
       "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
+    );
+    expect(repositoryWideScan).toContain(
+      "signed OIDC ID-token audience/authorized-party/nonce/client-session misbinding",
     );
     expect(repositoryWideScan).toContain(
       "credentialed CORS origin authorization",
@@ -1220,6 +1279,7 @@ describe("effectiveness benchmark", () => {
     expect(finalReport).toContain(
       "For external authorization fail-open findings",
     );
+    expect(finalReport).toContain("For OIDC ID-token client-binding findings");
     expect(finalReport).toContain("For DNS-rebinding SSRF findings");
     expect(repositoryWideScan).toContain(
       "JWT/JWS token-selected algorithm and key-family confusion",
