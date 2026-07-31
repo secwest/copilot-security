@@ -31,6 +31,9 @@ AES-GCM key/nonce reuse that reveals victim plaintext from a known plaintext
 and two valid-tag ciphertexts with fresh HKDF-derived per-envelope data keys
 and profile-bound AAD as the control, even though the visible nonce repeats,
 HTTP request smuggling across inconsistent gateway/backend framing,
+duplicate-query parameter authorization confusion where a gateway selects the
+first action but a reparsing backend selects the last, with bounded strict
+decode-once handling and duplicate decoded-name rejection as the control,
 HTTP response splitting through a CR/LF-injected download filename with
 pre-serialization control-byte rejection and RFC 5987 encoding as the control,
 object-level authorization, SQL injection, document-query operator injection,
@@ -70,7 +73,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 270
+destination-pinned, redirect-free transport. Three runs per case produce 276
 scans in the complete corpus.
 
 Run scans into a directory outside this repository:

@@ -195,6 +195,41 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs duplicate-parameter parser disagreement with canonical single parsing", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(
+        benchmarkFixtures,
+        "javascript-duplicate-parameter-authorization-bypass",
+      ),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-canonical-query-authorization"),
+    );
+
+    expect(vulnerable).toContain(
+      '"duplicate-parameter-parser-or-authorization-boundary"',
+    );
+    expect(vulnerable).toContain('gatewayParameters.get("action")');
+    expect(vulnerable).toContain(
+      "Object.fromEntries(new URLSearchParams(rawQuery))",
+    );
+    expect(vulnerable).toContain("executeBackend(rawQuery, principal, state)");
+    expect(safe).toContain(
+      '"duplicate-parameter-parser-or-authorization-boundary"',
+    );
+    expect(safe).toContain("duplicate decoded parameter rejected");
+    expect(safe).toContain("Object.freeze(parameters)");
+    expect(safe).toContain(
+      "executeCanonicalRequest(parameters, principal, state)",
+    );
+    expect(scanQualityGatePrompt("")).toContain(
+      "duplicate query/form/body parameter interpretation across gateways, middleware, frameworks, signature or authorization checks, and downstream consumers",
+    );
+    expect(scanQualityGatePrompt("")).toContain(
+      "Parser presence or duplicate acceptance alone is not a finding",
+    );
+  });
+
   test("surfaces object lookup and ownership boundaries together", async () => {
     const inventory = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-safe-authorization"),

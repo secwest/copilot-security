@@ -220,6 +220,18 @@ Use class-specific proof tuples:
   matters. Header presence, `trust proxy`, or an apparent first/last selection
   alone is inconclusive without the deployed append/overwrite topology and
   bypass witness.
+- duplicate-parameter authorization confusion: one exact raw query, form, or
+  body containing an ordered duplicate decoded security key + the decoded pair
+  sequence and first/last/array/merge/rejection result at every gateway,
+  middleware, framework, signature or authorization check, router, backend, and
+  protected consumer + proof that the checked value differs from the used value
+  - an unauthorized protected effect. Reverse the duplicate order, remove the
+    extra value, and use a legitimate single-value request to isolate parser
+    disagreement from a generic missing permission check. The negative control
+    must reject literal and encoded duplicate decoded names before authorization,
+    authorize one immutable canonical object, pass that same object downstream,
+    retain downstream permission enforcement, and permit legitimate authorized
+    behavior. Parser APIs or duplicate acceptance alone are inconclusive.
 - regular-expression denial of service: attacker-controlled text or pattern +
   the exact regex, flags, engine, and evaluation API + an adversarial
   near-match that demonstrates superlinear or catastrophic work + the shared
@@ -511,6 +523,11 @@ Use this checklist to keep validation close to the prompt contract:
   bytes, routing/authorization decisions, connection reuse, and the protected
   effect. Reproduce the same bytes against the closest reachable parser pair
   and an ambiguity-rejecting negative control when feasible.
+- For duplicate-parameter candidates, save the literal request bytes, ordered
+  decoded pairs, per-component value-selection table, security decision input,
+  downstream action input, principal/resource identity, and protected effect.
+  Include reversed-order and single-value controls plus a canonical decode-once
+  path that rejects encoded aliases of duplicate security keys.
 - For HTTP response-header injection or response splitting, save the exact
   attacker input before and after URL/form/metadata decoding, raw serialized
   response bytes, parsed header/body boundaries at every downstream proxy,

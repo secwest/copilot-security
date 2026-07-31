@@ -56,6 +56,10 @@ describe("effectiveness benchmark", () => {
       ["javascript-aes-gcm-nonce-reuse", "javascript-safe-aes-gcm-nonces"],
       ["javascript-executable-file-upload", "javascript-safe-profile-upload"],
       ["javascript-http-request-smuggling", "javascript-safe-http-framing"],
+      [
+        "javascript-duplicate-parameter-authorization-bypass",
+        "javascript-safe-canonical-query-authorization",
+      ],
       ["javascript-idor", "javascript-safe-authorization"],
       ["javascript-sql-injection", "javascript-safe-sql"],
       ["javascript-nosql-auth-bypass", "javascript-safe-nosql-login"],
@@ -406,6 +410,29 @@ describe("effectiveness benchmark", () => {
         path: "src/recovery.js",
         startLine: 18,
         endLine: 30,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-duplicate-parameter-authorization-bypass")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-436", "CWE-863"]]);
+    expect(
+      cases
+        .get("javascript-duplicate-parameter-authorization-bypass")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/gateway.js",
+        startLine: 7,
+        endLine: 13,
+        lineTolerance: 3,
+      },
+      {
+        path: "src/backend.js",
+        startLine: 1,
+        endLine: 8,
         lineTolerance: 3,
       },
     ]);
@@ -1173,6 +1200,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("untrusted upload and content placement:");
     expect(deepScan).toContain("HTTP request framing and smuggling:");
     expect(deepScan).toContain(
+      "Duplicate query, form, and body parameter interpretation:",
+    );
+    expect(deepScan).toContain(
       "HTTP response-header injection and response splitting:",
     );
     expect(deepScan).toContain("archive symlink and hardlink traversal:");
@@ -1235,6 +1265,9 @@ describe("effectiveness benchmark", () => {
     expect(standardScan).toContain("untrusted uploads and");
     expect(standardScan).toContain("HTTP message framing and parser agreement");
     expect(standardScan).toContain(
+      "duplicate query/form/body parameter decoding",
+    );
+    expect(standardScan).toContain(
       "HTTP response-header injection and response splitting",
     );
     expect(standardScan).toContain("archive symlink/hardlink target traversal");
@@ -1284,6 +1317,7 @@ describe("effectiveness benchmark", () => {
     );
     expect(diffScan).toContain("new multipart/file inputs");
     expect(diffScan).toContain("duplicate or conflicting `Content-Length` and");
+    expect(diffScan).toContain("changed query/form/body parsing");
     expect(diffScan).toContain("changed response-header construction");
     expect(diffScan).toContain("changed archive entry-type handling");
     expect(diffScan).toContain(
@@ -1343,6 +1377,9 @@ describe("effectiveness benchmark", () => {
       "For HTTP request-smuggling and desynchronization",
     );
     expect(discovery).toContain("Do not promote header names alone");
+    expect(discovery).toContain(
+      "For duplicate query, form, or body parameter confusion",
+    );
     expect(discovery).toContain(
       "For HTTP response-header injection and response splitting",
     );
@@ -1421,6 +1458,9 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("untrusted upload/content placement:");
     expect(validation).toContain("HTTP request smuggling/desynchronization:");
     expect(validation).toContain(
+      "duplicate-parameter authorization confusion:",
+    );
+    expect(validation).toContain(
       "For HTTP response-header injection or response splitting",
     );
     expect(validation).toContain("for archive symlink and hardlink pivots");
@@ -1485,6 +1525,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(attackPath).toContain(
       "For HTTP request-smuggling and desynchronization findings",
+    );
+    expect(attackPath).toContain(
+      "For duplicate-parameter authorization-confusion findings",
     );
     expect(attackPath).toContain(
       "For HTTP response-header injection and response-splitting findings",
@@ -1578,6 +1621,9 @@ describe("effectiveness benchmark", () => {
       "HTTP request smuggling that demonstrably crosses",
     );
     expect(severityPolicy).toContain(
+      "Duplicate-parameter interpretation conflict that lets",
+    );
+    expect(severityPolicy).toContain(
       "HTTP response splitting that lets an unauthenticated attacker",
     );
     expect(severityPolicy).toContain(
@@ -1600,6 +1646,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(severityPolicy).toContain(
       "Request-smuggling claims based only on `Content-Length`",
+    );
+    expect(severityPolicy).toContain(
+      "Duplicate-parameter or parameter-pollution claims based only",
     );
     expect(severityPolicy).toContain(
       "Response-header-injection claims based only on string interpolation",
@@ -1649,6 +1698,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(threatModelGuidance).toContain(
       "HTTP framing/parser agreement across proxies",
+    );
+    expect(threatModelGuidance).toContain(
+      "duplicate query/form/body parameter trust across raw bytes",
     );
     expect(threatModelGuidance).toContain("HTTP response-header trust across");
     expect(threatModelGuidance).toContain(
@@ -1739,6 +1791,9 @@ describe("effectiveness benchmark", () => {
       "For proxy-derived client identity, begin at the socket peer",
     );
     expect(repositoryWideScan).toContain(
+      "For duplicate parameters, preserve the raw ordered input",
+    );
+    expect(repositoryWideScan).toContain(
       "regular-expression catastrophic backtracking",
     );
     expect(repositoryWideScan).toContain(
@@ -1770,6 +1825,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(finalReport).toContain(
       "For forwarded client-identity or proxy-trust findings",
+    );
+    expect(finalReport).toContain(
+      "For duplicate-parameter authorization-confusion findings",
     );
     expect(finalReport).toContain("For OIDC ID-token client-binding findings");
     expect(finalReport).toContain("For DNS-rebinding SSRF findings");

@@ -281,6 +281,18 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   disagreement bypasses a control or affects another request. A conflicting
   header pair without per-hop boundaries and impact is not reportable; exact
   first-hop rejection or canonical one-message forwarding is counterevidence.
+- For duplicate-parameter authorization-confusion findings, preserve the exact
+  raw query/form/body bytes, ordered decoded name/value pairs, encoding aliases,
+  and every gateway, middleware, framework, signature, authorization, router,
+  and backend interpretation. Show the security-relevant value selected at the
+  check, the different value selected at use, the principal and resource, and
+  the resulting protected effect. Reverse duplicate order or remove the extra
+  parameter to demonstrate the differential rather than an unrelated missing
+  permission check. Duplicate acceptance, a parser-name mismatch, or differing
+  generic library defaults without a changed security decision is not
+  reportable. Strict bounded decoding once, duplicate decoded-key rejection,
+  immutable canonical-object propagation, and downstream authorization of the
+  same action are counterevidence.
 - For HTTP response-header injection and response-splitting findings, preserve
   the attacker-controlled value and decoding path, exact raw response bytes,
   injected header or second response, downstream proxy/gateway/cache/browser

@@ -312,6 +312,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:content-length|transfer-encoding|chunked|rawHeaders|rawRequest|rawRequests|consumeChunkedBody|messageEnd)\b/iu,
   ],
   [
+    "duplicate-parameter-parser-or-authorization-boundary",
+    106,
+    /\b(?:URLSearchParams|Object\.(?:freeze|fromEntries)|parseQuery|parse_qs|querystring\.parse)\b|\b(?:duplicate|repeated)\s+(?:decoded\s+)?(?:parameter|query)\b|\b(?:authorizedAction|executedAction|parseCanonicalQuery)\b|\b(?:req|request)\.query\b/iu,
+  ],
+  [
     "proxy-gateway-or-multi-hop-request-boundary",
     96,
     /\b(?:authorizeAndForward|forwardedHeaders|processBackendPipeline|proxy_pass|reverseProxy|trustedProxy|upstreamRequest)\b/iu,

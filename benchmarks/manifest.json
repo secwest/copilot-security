@@ -323,6 +323,51 @@
       "expected": []
     },
     {
+      "id": "javascript-duplicate-parameter-authorization-bypass",
+      "description": "A gateway authorizes the first duplicate query action while a backend reparses the same raw query using last-value semantics and executes an administrative delete.",
+      "fixture": "fixtures/javascript-duplicate-parameter-authorization-bypass",
+      "findingsPaths": [
+        "javascript-duplicate-parameter-authorization-bypass/run-1/findings.json",
+        "javascript-duplicate-parameter-authorization-bypass/run-2/findings.json",
+        "javascript-duplicate-parameter-authorization-bypass/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "duplicate-query-action-parser-authorization-confusion",
+          "cwe": ["CWE-436", "CWE-863"],
+          "locations": [
+            {
+              "path": "src/gateway.js",
+              "startLine": 7,
+              "endLine": 13,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/backend.js",
+              "startLine": 1,
+              "endLine": 8,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-canonical-query-authorization",
+      "description": "A bounded strict decoder rejects duplicate decoded names, authorizes one immutable canonical parameter object, and passes that same object to a backend that independently enforces privileged actions.",
+      "fixture": "fixtures/javascript-safe-canonical-query-authorization",
+      "findingsPaths": [
+        "javascript-safe-canonical-query-authorization/run-1/findings.json",
+        "javascript-safe-canonical-query-authorization/run-2/findings.json",
+        "javascript-safe-canonical-query-authorization/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-idor",
       "description": "An authenticated customer can fetch another customer's invoice by identifier.",
       "fixture": "fixtures/javascript-idor",

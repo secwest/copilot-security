@@ -54,6 +54,13 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   compromise, credential/session capture, or reliable poisoning of many users.
   Critical requires the exact multi-hop parser disagreement and severe effect,
   not merely conflicting framing headers or a theoretical desynchronization.
+- Duplicate-parameter interpretation conflict that lets an unauthenticated or
+  low-privilege attacker present an allowed value to a broadly exposed
+  gateway, signature verifier, or authorization layer while a downstream
+  consumer selects a different duplicate value and performs administrative,
+  cross-tenant, credential, billing, or control-plane compromise. Critical
+  requires the exact raw request, ordered decoded pairs, per-component
+  selections, checked-versus-used values, and compromise-equivalent effect.
 - HTTP response splitting that lets an unauthenticated attacker make a
   production proxy, gateway, cache, or browser honor injected fields or a
   second response and thereby disclose crown-jewel secrets, execute
@@ -252,6 +259,12 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   or header normalization to reach meaningful protected functionality, or that
   poisons another user's request/response, when the exact bytes, parser
   boundaries, and deployed connection-reuse path are proved.
+- Duplicate query/form/body parameter confusion that reliably presents one
+  value to authorization, validation, signature, routing, or policy logic and a
+  different attacker-selected value to a downstream protected action. High
+  requires the exact ordered parameters and decodings, both component
+  interpretations, changed security decision, principal/resource, negative
+  controls, and meaningful unauthorized effect.
 - HTTP response-header injection or response splitting that reliably causes a
   deployed proxy, gateway, cache, or browser to disclose meaningful protected
   data, serve an unauthorized internal resource, set or overwrite a
@@ -417,6 +430,14 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   `Transfer-Encoding` appearing together, without proving divergent reachable
   parsers, accepted bytes, connection reuse or residual-byte handling, and a
   concrete protected effect.
+- Duplicate-parameter or parameter-pollution claims based only on repeated
+  names, `URLSearchParams`, `req.query`, multiple parser APIs, or different
+  generic first/last/array defaults without proving that the security check and
+  protected consumer select different attacker-controlled values and produce
+  an unauthorized effect. Suppress when one bounded strict decoder rejects
+  literal and encoded duplicate decoded security names, authorization consumes
+  the immutable canonical object, that same object is passed downstream, and
+  legitimate single-value behavior succeeds.
 - Response-header-injection claims based only on string interpolation,
   `Location`, `Content-Disposition`, `Set-Cookie`, or raw-header APIs, possible
   CR/LF characters, or a framework version, without proving attacker control,

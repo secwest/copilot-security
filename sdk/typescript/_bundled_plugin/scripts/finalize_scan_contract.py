@@ -2489,6 +2489,39 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         ]
     ).lower()
     if (
+        (
+            "duplicate parameter" in text
+            or "duplicate query" in text
+            or "duplicate-parameter" in text
+            or "parameter pollution" in text
+            or "repeated parameter" in text
+        )
+        and (
+            "first value" in text
+            or "first-value" in text
+            or "last value" in text
+            or "last-value" in text
+            or "parser disagreement" in text
+            or "parser differential" in text
+            or "reparse" in text
+            or "interpretation conflict" in text
+        )
+        and (
+            "authoriz" in text
+            or "signature" in text
+            or "security check" in text
+            or "validation" in text
+        )
+        and (
+            "bypass" in text
+            or "delete" in text
+            or "privileged" in text
+            or "protected effect" in text
+            or "unauthorized" in text
+        )
+    ):
+        return "duplicate-parameter-authorization-confusion", ["CWE-436", "CWE-863"]
+    if (
         "http response splitting" in text
         or "http-response-splitting" in text
         or "response header injection" in text

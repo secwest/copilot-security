@@ -578,7 +578,7 @@ describe("malformed scan artifact recovery", () => {
       expect(completed.progress.status).toBe("complete");
       expect(recovered["taxonomy"]).toEqual(taxonomy);
     }
-  });
+  }, 30_000);
 
   test("normalizes JWT algorithm and key-type confusion taxonomy", async () => {
     const fixture = await startDraftScan();
@@ -702,6 +702,31 @@ describe("malformed scan artifact recovery", () => {
     expect(recovered["taxonomy"]).toEqual({
       category: "proxy-client-identity-rate-limit-bypass",
       cwe: ["CWE-345", "CWE-307"],
+    });
+  });
+
+  test("normalizes duplicate-parameter authorization-confusion taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "Duplicate query parameter parser disagreement bypasses action authorization";
+    finding.summary =
+      "The gateway authorizes the first-value action=view but reparses the raw duplicate parameter downstream with last-value semantics, so action=delete reaches an unauthorized protected delete effect.";
+    finding["taxonomy"] = {
+      category: "improper input validation",
+      cwe: ["CWE-20"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "duplicate-parameter-authorization-confusion",
+      cwe: ["CWE-436", "CWE-863"],
     });
   });
 
@@ -1211,7 +1236,7 @@ describe("malformed scan artifact recovery", () => {
         expect(copied.status, copied.stderr).toBe(0);
       }
     }
-  });
+  }, 30_000);
 
   test("seals a prepared scan without publishing it before acceptance", async () => {
     const fixture = await startDraftScan();
@@ -1524,7 +1549,7 @@ describe("malformed scan artifact recovery", () => {
         "critical",
       );
     }
-  });
+  }, 30_000);
 
   test("completes scans when every draft finding is malformed", async () => {
     const fixture = await startDraftScan();

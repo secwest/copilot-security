@@ -177,6 +177,18 @@ CWE-307. Do not report forwarding headers or trust-proxy configuration alone
 when exact trusted-hop right-to-left peeling, canonical bounded parsing,
 untrusted-peer header ignoring, and account/principal budgets defeat the path.
 
+For duplicate-parameter authorization-confusion findings, affected lines must
+include the first security-relevant parse and authorization/signature/validation
+decision, forwarding or reparsing boundary, downstream value selection, and
+protected action when those lines are distinct. The write-up must preserve the
+exact raw query/form/body, ordered decoded pairs, each component's selection
+semantics, checked and used values, principal/resource, reversed-order and
+single-value controls, and unauthorized effect. Use the concrete category
+`duplicate-parameter-authorization-confusion` with CWE-436 and CWE-863. Do not
+report parser presence or duplicate acceptance alone when bounded strict
+decode-once handling rejects duplicate decoded names and propagates the same
+authorized canonical object through the protected consumer.
+
 For application authorization-cache findings, affected lines must include the
 trusted authenticated principal or tenant extraction, exact cache-key
 construction, hit return, authoritative scoped lookup, and cache population

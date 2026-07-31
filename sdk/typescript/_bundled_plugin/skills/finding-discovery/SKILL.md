@@ -254,6 +254,18 @@ Use this checklist to keep discovery specific without turning it into validation
   A strong negative control rejects all ambiguity at the first trust boundary,
   consumes exactly one complete message, and forwards a canonical structured
   request through the same authorization and backend path.
+- For duplicate query, form, or body parameter confusion, inventory every
+  component that decodes, normalizes, verifies a signature, authorizes, routes,
+  binds, merges, reparses, or consumes the ordered parameter sequence. Preserve
+  literal and percent-/character-encoded names, repeated decoded names, empty
+  and array-shaped values, and each component's first-value, last-value, array,
+  merge, or rejection semantics. Trace the exact value accepted by the security
+  check and the exact value used at the protected sink. Report only when an
+  attacker-controlled duplicate makes those values differ and produces an
+  unauthorized effect. A parser call, `req.query`, or duplicates accepted by
+  one component alone is not a finding. Bounded strict decoding once, rejection
+  of duplicate decoded security keys, authorization of an immutable canonical
+  object, and downstream use of that same object are strong counterevidence.
 - For HTTP response-header injection and response splitting, enumerate every
   request-, record-, filename-, metadata-, or upstream-controlled value that
   reaches `Location`, `Content-Disposition`, `Set-Cookie`, cache, CORS, internal

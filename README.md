@@ -179,7 +179,9 @@ check/use state races, unsafe mass assignment, cookie-authenticated cross-site
 request forgery,
 attacker-length native-memory corruption, document-query operator injection,
 executable file upload/content placement, cross-proxy/backend HTTP request
-smuggling, CR/LF response-header injection that makes a gateway honor an
+smuggling, duplicate-query parameter authorization confusion where a gateway
+checks the first action but a backend executes the last, CR/LF response-header
+injection that makes a gateway honor an
 attacker-injected internal redirect, LDAP filter injection into directory-backed
 group authorization,
 XPath predicate injection into XML-backed authentication, OAuth account-linking
@@ -198,8 +200,8 @@ catastrophic-backtracking regular-expression denial of service with a bounded
 linear validator as the control. It now includes AES-GCM key/nonce reuse that
 recovers victim plaintext from a chosen plaintext and two public ciphertexts,
 paired with fresh per-envelope HKDF data keys and profile-bound authenticated
-data even though the visible nonce repeats. Each of the 90 cases is scanned
-three times, producing 270 scans that measure both accuracy and model variance.
+data even though the visible nonce repeats. Each of the 92 cases is scanned
+three times, producing 276 scans that measure both accuracy and model variance.
 The evaluator uses one-to-one CWE-plus-location
 matching, counts duplicate reports as false positives, and records missing scan
 artifacts as completion failures.

@@ -87,7 +87,10 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    uniqueness, restart/worker/tenant/rollback behavior, tag verification, AAD,
    envelope publication, and plaintext or forgery impact,
    HTTP message framing and parser agreement across proxies, gateways,
-   servers, and backends, native memory allocation/copy/index/lifetime
+   servers, and backends, duplicate query/form/body parameter decoding and
+   first/last/array/merge interpretation across gateways, middleware,
+   authorization or signature checks, frameworks, and downstream consumers,
+   native memory allocation/copy/index/lifetime
    boundaries, secrets, and resource consumption. Record candidates in
    `artifacts/02_discovery/candidate_ledger.jsonl`.
 4. Perform an independent residual sweep over high-risk files and source /

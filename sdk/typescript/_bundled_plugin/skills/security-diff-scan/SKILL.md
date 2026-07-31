@@ -56,7 +56,9 @@ publish findings, open issues, or contact third parties. Write only beneath
    expression construction and selected-node security mapping, template,
    parser, deserializer, file-upload parsing/storage and downstream content
    consumers, HTTP message framing and normalization across proxies/gateways/
-   backends, login session fixation and authenticated-session rotation,
+   backends, duplicate query/form/body parameter decoding and selection across
+   authorization/signature checks and downstream consumers, login session
+   fixation and authenticated-session rotation,
    OAuth/OIDC authorization-code state, nonce, PKCE, callback-session,
    redirect-URI, and account-linking transaction binding, JWT/OIDC protected
    headers, algorithm/key-family binding, signature-versus-MAC primitives,
@@ -178,6 +180,11 @@ publish findings, open issues, or contact third parties. Write only beneath
      lengths, protocol translation, request reserialization, connection reuse,
      or authorization/routing before a differently configured downstream HTTP
      parser;
+   - changed query/form/body parsing, percent or character decoding, duplicate
+     decoded-name handling, first/last/array/merge selection, raw-request
+     forwarding, canonical-object propagation, request-signature coverage, or
+     authorization before a differently configured downstream parameter
+     consumer;
    - changed response-header construction, URL/form/metadata decoding, CR/LF or
      control-byte rejection, quoting/encoding, raw response serialization,
      internal-redirect/sendfile headers, or downstream proxy, cache, and browser

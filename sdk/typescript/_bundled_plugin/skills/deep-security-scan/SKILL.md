@@ -430,6 +430,19 @@ inventory and closure requirements.
      agrees. Use a sibling path that rejects ambiguity before forwarding,
      consumes exactly one message, and passes a canonical structured request to
      the same authorization decision and backend as the negative control.
+   - Duplicate query, form, and body parameter interpretation: every gateway,
+     middleware, framework, request-signature verifier, authorization check,
+     router, backend, serializer, and business-logic consumer that decodes or
+     selects values from the same attacker-controlled parameter sequence.
+     Preserve the exact raw bytes and ordered decoded name/value pairs; record
+     first-value, last-value, array, merge, and rejection semantics at every
+     component. Prove the value authorized, signed, validated, cached, or
+     routed differs from the value used for a protected action. Use a sibling
+     path that performs bounded strict decoding once, rejects duplicate decoded
+     security keys including encoded aliases, authorizes the immutable
+     canonical object, and passes that same object downstream as the negative
+     control. Duplicate acceptance or multiple parser APIs alone is not a
+     finding.
    - HTTP response-header injection and response splitting: every untrusted
      filename, redirect, cookie, metadata, proxy-derived, or upstream value that
      reaches a response field or raw response serializer. Preserve all decoding
