@@ -102,7 +102,8 @@ inventory and closure requirements.
 
    - authentication, authorization, tenant and object selectors;
    - command, query, expression, template, and interpreter execution;
-   - URL fetches, redirects, proxies, and callback targets;
+   - URL fetches, redirects, proxies, callback targets, DNS resolution, and the
+     destination actually connected;
    - path, file, archive, upload, and temporary-file operations;
    - parsers, deserializers, decoders, and type-confusion boundaries;
    - cryptographic verification, tokens, secrets, and key lifecycle;
@@ -112,6 +113,19 @@ inventory and closure requirements.
    Within those families, explicitly close these commonly missed proof
    surfaces rather than treating a generic family mention as review:
 
+   - outbound destination continuity and DNS rebinding: every URL parser,
+     scheme/port/userinfo gate, hostname allow/deny rule, proxy, DNS A/AAAA
+     lookup, address-set classifier, redirect hop, connection-pool lookup,
+     socket destination, Host header, and TLS server name from attacker input to
+     the final network peer. Compare the complete address set checked with the
+     address actually connected. A public answer observed before the request is
+     not closure when the HTTP client, proxy, redirect handler, or pool resolves
+     the hostname again. Use resolve-once validation of every answer followed
+     by an address-pinned connection that preserves logical Host/TLS identity,
+     plus redirect rejection or full per-hop revalidation, as the negative
+     control. Exercise direct private/link-local/loopback, mixed A/AAAA, empty,
+     malformed, public-then-private rebinding, legitimate public, and redirect
+     outcomes;
    - template construction: every path that turns request, stored, tenant,
      configuration, or error text into template or expression source; distinguish
      fixed templates receiving untrusted data from untrusted template source,
@@ -393,6 +407,15 @@ inventory and closure requirements.
    linear or unambiguous control. Do not report regex syntax, a dynamic
    `RegExp`, or an unbounded input by itself without proving the expensive
    pattern/input interaction and realistic availability impact.
+   For DNS-rebinding SSRF candidates, make the resolver return a public address
+   for validation and a private, loopback, link-local, or metadata address for
+   any later connection-time lookup. Record every lookup answer, the exact
+   connected address, Host header, TLS server name, redirect behavior, response
+   body, and whether credentials or a meaningful internal operation are
+   exposed. Compare direct private and mixed-answer rejection plus a legitimate
+   public fetch. Reject the candidate only when the validated address set is
+   complete, no later hostname resolution selects the peer, the transport is
+   pinned to an approved address, and every redirect is rejected or revalidated.
    For external authorization fail-open candidates, exercise the same
    authenticated low-privilege subject, action, and attacker-selected resource
    across explicit deny, exception or timeout, malformed/empty response, and

@@ -346,6 +346,51 @@
       "expected": []
     },
     {
+      "id": "javascript-dns-rebinding-ssrf",
+      "description": "A preview route initially resolves and rejects non-public destinations, but its HTTP client resolves the attacker-controlled hostname again at connection time, allowing a public-then-link-local DNS response sequence to expose cloud metadata credentials.",
+      "fixture": "fixtures/javascript-dns-rebinding-ssrf",
+      "findingsPaths": [
+        "javascript-dns-rebinding-ssrf/run-1/findings.json",
+        "javascript-dns-rebinding-ssrf/run-2/findings.json",
+        "javascript-dns-rebinding-ssrf/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "dns-rebinding-metadata-ssrf",
+          "cwe": ["CWE-918"],
+          "locations": [
+            {
+              "path": "src/preview.js",
+              "startLine": 21,
+              "endLine": 26,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/http-client.js",
+              "startLine": 8,
+              "endLine": 17,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-pinned-dns-fetch",
+      "description": "The preview route resolves once, validates the complete answer set, pins one approved public IPv4 address into the connection transport while preserving Host and TLS identity, disables redirects, and fails closed for private, mixed, malformed, IPv6, and empty answers.",
+      "fixture": "fixtures/javascript-safe-pinned-dns-fetch",
+      "findingsPaths": [
+        "javascript-safe-pinned-dns-fetch/run-1/findings.json",
+        "javascript-safe-pinned-dns-fetch/run-2/findings.json",
+        "javascript-safe-pinned-dns-fetch/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-unsafe-deserialization",
       "description": "A request body is deserialized with Python pickle.",
       "fixture": "fixtures/python-unsafe-deserialization",

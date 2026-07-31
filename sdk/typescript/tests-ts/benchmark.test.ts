@@ -54,6 +54,7 @@ describe("effectiveness benchmark", () => {
       ["javascript-sql-injection", "javascript-safe-sql"],
       ["javascript-nosql-auth-bypass", "javascript-safe-nosql-login"],
       ["javascript-ssrf", "javascript-safe-fetch"],
+      ["javascript-dns-rebinding-ssrf", "javascript-safe-pinned-dns-fetch"],
       ["python-unsafe-deserialization", "python-safe-json"],
       ["javascript-reflected-xss", "javascript-safe-html"],
       [
@@ -818,6 +819,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain(
       "external authentication and authorization decision failure:",
     );
+    expect(deepScan).toContain(
+      "outbound destination continuity and DNS rebinding:",
+    );
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
@@ -864,6 +868,9 @@ describe("effectiveness benchmark", () => {
       "external authentication/authorization policy decisions",
     );
     expect(standardScan).toContain(
+      "DNS-rebinding SSRF across hostname validation",
+    );
+    expect(standardScan).toContain(
       "native memory allocation/copy/index/lifetime",
     );
     expect(standardScan).toContain(
@@ -898,6 +905,7 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain(
       "changed external authorization or entitlement calls",
     );
+    expect(diffScan).toContain("changed outbound URL parsing");
     expect(diffScan).toContain("terminator space");
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("changed RFC 4515 assertion escaping");
@@ -991,6 +999,7 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain(
       "For external authentication and authorization policy decisions",
     );
+    expect(discovery).toContain("For hostname-based outbound requests");
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
@@ -1001,6 +1010,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("GraphQL operation amplification:");
     expect(validation).toContain("regular-expression denial of service:");
     expect(validation).toContain("external authorization fail-open:");
+    expect(validation).toContain("DNS-rebinding SSRF:");
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("LDAP filter injection:");
@@ -1042,6 +1052,7 @@ describe("effectiveness benchmark", () => {
     expect(attackPath).toContain(
       "For external authorization fail-open findings",
     );
+    expect(attackPath).toContain("For DNS-rebinding SSRF findings");
     expect(attackPath).toContain("For native-memory findings");
     expect(attackPath).toContain("For document-query and NoSQL findings");
     expect(attackPath).toContain("For LDAP filter findings");
@@ -1087,6 +1098,10 @@ describe("effectiveness benchmark", () => {
     );
     expect(severityPolicy).toContain(
       "Fail-open reports based only on a `catch`",
+    );
+    expect(severityPolicy).toContain("DNS rebinding supports `high`");
+    expect(severityPolicy).toContain(
+      "DNS-rebinding or SSRF reports based only",
     );
     expect(severityPolicy).toContain("GraphQL reports based only on aliases");
     expect(severityPolicy).toContain(
@@ -1177,6 +1192,7 @@ describe("effectiveness benchmark", () => {
     expect(threatModelGuidance).toContain(
       "external authentication and authorization policy/entitlement decisions",
     );
+    expect(threatModelGuidance).toContain("outbound URL and DNS trust");
     expect(repositoryWideScan).toContain(
       "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
     );
@@ -1198,9 +1214,13 @@ describe("effectiveness benchmark", () => {
     expect(repositoryWideScan).toContain(
       "For external authorization and entitlement decisions",
     );
+    expect(repositoryWideScan).toContain(
+      "For hostname-based outbound requests",
+    );
     expect(finalReport).toContain(
       "For external authorization fail-open findings",
     );
+    expect(finalReport).toContain("For DNS-rebinding SSRF findings");
     expect(repositoryWideScan).toContain(
       "JWT/JWS token-selected algorithm and key-family confusion",
     );

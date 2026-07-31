@@ -634,6 +634,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes DNS-rebinding SSRF taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "DNS rebinding reaches cloud metadata after destination validation";
+    finding.summary =
+      "The preview route approves a public DNS answer, but the HTTP client resolves the hostname again and connects to the link-local 169.254.169.254 metadata address.";
+    finding["taxonomy"] = {
+      category: "time-of-check-time-of-use",
+      cwe: ["CWE-367"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "dns-rebinding-ssrf",
+      cwe: ["CWE-918"],
+    });
+  });
+
   test("corrects browser-cache taxonomy for cross-principal web cache deception", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

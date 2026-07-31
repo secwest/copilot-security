@@ -118,7 +118,7 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
 
 Non-exhaustive examples of vulnerabilities that often support `high` when evidenced in code and context:
 
-- Server Side Request Forgery where there is actual proof that (1) an attacker can control the url being requested (bypassing protections around that) from in-scope attack-surface and (2) there are likely other local/lan/cloud services which can be reached to show actual impact. Be careful with reporting webhooks unless there is clear proof that it is dangerous, but do not treat a product-intended webhook/download/callback feature or optional operator allow/deny list as suppression evidence when attacker-controlled destinations can still reach internal, metadata, file-backed, redirect, or side-effecting targets.
+- Server Side Request Forgery where there is actual proof that (1) an attacker can control the URL or final connected address from in-scope attack-surface and (2) local/LAN/cloud services can be reached with meaningful impact. DNS rebinding supports `high` when a public validation answer and later private/link-local connection are proved and expose credentials, protected internal data, or a security-sensitive operation. Be careful with reporting webhooks unless there is clear proof that they are dangerous, but do not treat a product-intended webhook/download/callback feature, direct-private-address rejection, a public preflight lookup, or an optional operator allow/deny list as suppression evidence when attacker-controlled destinations can still reach internal, metadata, file-backed, redirect, or side-effecting targets.
 - Exploitable memory corruption with clear, major impact or ease of exploitation
 - Arbitrary file read that exposes less-sensitive user data or source code (if you have actual proof it reveals env secrets, then it is critical)
 - Arbitrary file write in executable, startup, config, or firmware paths with a realistic path to persistence or code execution
@@ -259,6 +259,13 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   objects, cold-cache misses that remain misses, exact-route rejection,
   correctly honored private/no-store or authenticated/Set-Cookie bypass, and
   correctly identity-partitioned cache entries.
+- DNS-rebinding or SSRF reports based only on a hostname, resolver call,
+  private-address helper, URL parser, or theoretical DNS change without proving
+  a second effective lookup, forbidden connected address, and meaningful
+  response or side effect. Suppress when every answer is checked, the approved
+  address is pinned into the actual socket connection with correct Host/TLS
+  identity, no later component re-resolves it, and redirects are rejected or
+  revalidated at every hop while legitimate public traffic still works.
 - GraphQL reports based only on aliases, fragments, batching, introspection,
   persisted queries, nested fields, a request limiter, or a missing named
   complexity plugin without proving the fully expanded protected resolver

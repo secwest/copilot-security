@@ -262,6 +262,16 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:axios|fetch|http\.get|http\.request|requests\.(?:get|post|put|delete)|urlopen)\s*\(/iu,
   ],
   [
+    "dns-resolution-or-rebinding-boundary",
+    101,
+    /\b(?:dns\.(?:lookup|resolve|resolve4|resolve6)|getaddrinfo|resolveAll)\s*\(|\bresolver\.resolveAll\b/iu,
+  ],
+  [
+    "network-destination-pinning",
+    102,
+    /\b(?:connectAddress|getPinned|hostHeader|tlsServerName)\b|\bredirect\s*:\s*["']error["']/iu,
+  ],
+  [
     "parser-or-deserializer",
     90,
     /\b(?:deserialize|load|loads|ObjectInputStream|parse|pickle|readObject|unmarshal|urlencoded|yaml\.load)\s*\(/iu,

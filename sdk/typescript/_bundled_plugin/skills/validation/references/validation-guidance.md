@@ -111,6 +111,19 @@ Use class-specific proof tuples:
   report anonymous public channels, bearer-only/server-only credentials the
   browser cannot attach, or non-browser Origin spoofing without access to a
   victim credential as cross-site hijacking.
+- DNS-rebinding SSRF: attacker-controlled HTTPS hostname + an initial A/AAAA
+  answer set accepted as public + a later resolver invocation by the HTTP
+  client, proxy, redirect handler, pool, or transport + a private, loopback,
+  link-local, metadata, or otherwise forbidden connection address + a
+  meaningful internal response or state change. Record every lookup and answer,
+  URL and redirect hop, final socket destination, Host header, TLS server name,
+  response, and credential or internal effect. The negative control must reject
+  direct private, mixed, malformed, unsupported-family, and empty answers,
+  resolve once, pin an approved address into the actual connection while
+  retaining logical Host/TLS identity, reject or fully revalidate redirects,
+  and preserve a legitimate public fetch. A hostname check, public first
+  answer, disabled redirect, or private-address helper alone does not close a
+  validation/use mismatch.
 - web cache deception: start from a cold shared cache and use separate victim
   and attacker clients. First prove the attacker cannot retrieve the protected
   object without credentials. Request an attacker-chosen deceptive URL as the

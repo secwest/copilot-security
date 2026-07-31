@@ -105,6 +105,16 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   lookup and handler registration, exact serialized-origin equality,
   unpredictable session-bound connection tokens, trusted-origin success, and
   `null`/sibling/suffix/scheme/port variants as distinct controls.
+- For DNS-rebinding SSRF findings, preserve the attacker-controlled URL and DNS
+  authority, every validation and connection-time A/AAAA answer, address-family
+  and special-range classification, redirect and proxy behavior, final socket
+  destination, Host header, TLS server name, request path, internal response,
+  returned credential or protected operation, and subsequent use. Show the
+  public answer passes the check while a later private/link-local answer becomes
+  the peer; direct private rejection alone is not counterevidence. Resolve-once
+  complete-answer validation, address-pinned connection, unchanged Host/TLS
+  identity, no later hostname lookup, and redirect rejection or per-hop
+  revalidation are distinct counterevidence.
 - For web-cache-deception findings, preserve the attacker-chosen URL and exact
   bytes as parsed at every edge, proxy, framework, and origin hop; the cache key
   and cacheability decision; victim credential attachment; origin route and

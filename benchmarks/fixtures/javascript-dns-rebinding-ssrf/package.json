@@ -1,0 +1,5 @@
+{
+  "name": "javascript-dns-rebinding-ssrf",
+  "private": true,
+  "type": "module"
+}

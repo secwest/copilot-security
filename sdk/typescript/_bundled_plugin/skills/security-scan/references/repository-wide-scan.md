@@ -29,6 +29,17 @@ policy call or `catch` when every failure produces unavailable or forbidden,
 permission begins unset, one exact bound affirmative decision is required, and
 no protected effect occurs.
 
+For hostname-based outbound requests, enumerate validation, proxy, HTTP-client,
+redirect, pool, and transport DNS lookups and compare every checked A/AAAA
+answer with the final socket destination. Exercise a public validation answer
+followed by a private/link-local connection answer, direct private and mixed
+answers, empty/malformed/unsupported-family answers, legitimate public traffic,
+and every redirect policy. A private-address check followed by hostname-based
+`fetch` or `get` is not closure when it re-resolves. Strong counterevidence
+resolves once, validates the complete set, pins an approved address into the
+actual connection while preserving Host/TLS identity, and rejects or fully
+revalidates each redirect.
+
 Do not stop reviewing a file after finding one bug.
 
 Write raw candidates to one or more temporary JSONL files, then combine them:

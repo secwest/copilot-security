@@ -165,6 +165,16 @@ Use this checklist to keep discovery specific without turning it into validation
   counterevidence; benign aliases or batching alone are not findings.
 - Do not collapse separate high-impact proof tuples into one candidate only because they share a route or helper. Split command execution, SSRF, path/file impact, XML/parser behavior, XSS/template execution, and authz/state-change impact when the sink, closest control, or impact differs.
 - For outbound request surfaces such as `downloadFrom`, URL importers, webhook/callback clients, preview/render fetchers, and redirect-following HTTP clients, enumerate each attacker-controlled destination source and its closest allow/deny/filter/redirect control. Do not suppress SSRF because the fetch/callback is an intended feature, because filters are optional or empty by default, or because a sibling route found a louder file/path issue; keep the network row when user input can select a destination and the hard boundary is incomplete, operator-configured, or only pre-request.
+- For hostname-based outbound requests, trace every A/AAAA lookup performed by
+  validation, proxies, HTTP clients, redirect handlers, connection pools, and
+  transports, then compare the validated answer set with the address actually
+  connected. A private-address check before `fetch`, `get`, or a client wrapper
+  is not closure if that consumer resolves the hostname again. Preserve
+  logical Host and TLS server-name binding separately from the pinned socket
+  address. Resolve once, reject any disallowed or malformed answer, connect
+  only to an approved address, and reject or revalidate redirects as strong
+  counterevidence; public-then-private DNS rebinding, mixed A/AAAA answers, and
+  direct private-address rejection are distinct controls.
 - In XML/parser/deserializer surfaces, enumerate default parser factories, converters, validators, transformers, unmarshal/parse calls, and handler entrypoints independently. A safe sibling parser path is negative control for that sibling, not suppression evidence for a different default factory or converter.
 - For command/action runners, enumerate every attacker-controllable argument type and execution mode before closing command-injection coverage. Treat type-safety maps, unsafe-type denylists, template substitution, shell wrapping, direct-exec branches, webhook/API argument ingestion, and frontend-only widget constraints as separate controls. A denylist that covers `raw`, `url`, or `email` does not close `password`, `checkbox`, `confirmation`, choice, or other nil/no-op typecheck branches that can still render into shell commands.
 - For XML parser and converter candidates, include feature-setup and resolver lines when hardening is best-effort, fail-open, or incomplete. `FEATURE_SECURE_PROCESSING` alone, swallowed/logged `setFeature` failures, or a safe default parser does not suppress caller-supplied parser factories/readers or converter paths that create SAX/DOM/StAX/Transformer sources from untrusted data.

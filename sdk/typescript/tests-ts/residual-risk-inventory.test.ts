@@ -335,6 +335,32 @@ describe("residual risk inventory", () => {
     expect(safe).toContain('redirect: "error"');
   });
 
+  test("pairs repeated DNS resolution with an address-pinned transport", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-dns-rebinding-ssrf"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-pinned-dns-fetch"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"dns-resolution-or-rebinding-boundary"');
+    expect(vulnerable).toContain('"network-destination-pinning"');
+    expect(vulnerable).toContain(
+      "validatedAddresses = await resolver.resolveAll",
+    );
+    expect(vulnerable).toContain(
+      "addresses = await resolver.resolveAll(target.hostname)",
+    );
+    expect(vulnerable).toContain("httpClient.get(target");
+    expect(safe).toContain('"dns-resolution-or-rebinding-boundary"');
+    expect(safe).toContain('"network-destination-pinning"');
+    expect(safe).toContain("httpClient.getPinned(target");
+    expect(safe).toContain("connectAddress: validatedAddresses[0]");
+    expect(safe).toContain('redirect: "error"');
+    expect(scanQualityGatePrompt("")).toContain("DNS-rebinding SSRF");
+  });
+
   test("surfaces unsafe deserialization and bounded JSON controls", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "python-unsafe-deserialization"),

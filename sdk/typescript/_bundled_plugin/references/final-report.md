@@ -116,6 +116,14 @@ when those lines are distinct. The write-up must state the exact subject,
 action, and resource authorized and consumed, and must distinguish policy
 availability failure from the authorization bypass produced by the fallback.
 
+For DNS-rebinding SSRF findings, affected lines must include the
+attacker-controlled URL/hostname, validation-time resolution and address-set
+decision, any later HTTP-client/proxy/pool resolution, and final connection
+sink when those occur on distinct lines or files. The write-up must distinguish
+the logical URL, Host header, and TLS server name from the connected address,
+record redirect behavior, and state which private/internal service, credential,
+data, or protected operation the rebound connection reaches.
+
 Then render these subsections under each finding:
 
 - `#### Summary`

@@ -73,6 +73,9 @@ publish findings, open issues, or contact third parties. Write only beneath
    worker isolation, and catastrophic-backtracking near-matches,
    external authentication/authorization policy calls, decision defaults and
    types, error/timeout/fallback paths, and subject/action/resource binding,
+   outbound URL parsing, DNS answer validation, repeated resolution, redirects,
+   proxies, connection address pinning, Host/TLS identity, and final network
+   destinations,
    native memory allocation/copy/index/lifetime boundaries, cryptographic,
    state, concurrency, and
    resource-control boundaries.
@@ -121,6 +124,11 @@ publish findings, open issues, or contact third parties. Write only beneath
      explicit-deny handling, catch/finally behavior, timeouts, retries, circuit
      breakers, caches, malformed/empty response coercion, exact-allow checks, or
      binding between the authorized and consumed subject/action/resource;
+   - changed outbound URL parsing, scheme/port/userinfo gates, DNS A/AAAA
+     lookups, private/special-range classification, selection among multiple
+     answers, resolver calls inside HTTP clients/proxies/pools, redirect
+     handling, pinned connection addresses, Host headers, TLS server names, or
+     the relationship between the validated and actually connected destination;
    - changed integer units, signedness, allocation arithmetic, object extents,
      copy/read/write lengths, indexes, terminator space, ownership, or lifetime
      around attacker-influenced native-memory operations;

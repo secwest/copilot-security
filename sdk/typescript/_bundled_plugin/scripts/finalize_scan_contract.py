@@ -2558,6 +2558,32 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         return "regular-expression-denial-of-service", ["CWE-1333"]
     if (
         (
+            "dns rebinding" in text
+            or "dns-rebinding" in text
+            or "dns rebind" in text
+            or (
+                ("resolves again" in text or "second dns" in text)
+                and ("connect" in text or "request" in text)
+            )
+        )
+        and (
+            "metadata" in text
+            or "private address" in text
+            or "private ip" in text
+            or "internal address" in text
+            or "link-local" in text
+            or "169.254.169.254" in text
+        )
+        and (
+            "request" in text
+            or "fetch" in text
+            or "http client" in text
+            or "transport" in text
+        )
+    ):
+        return "dns-rebinding-ssrf", ["CWE-918"]
+    if (
+        (
             "fail open" in text
             or "fail-open" in text
             or "fails open" in text
