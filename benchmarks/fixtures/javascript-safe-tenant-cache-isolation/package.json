@@ -1,0 +1,5 @@
+{
+  "name": "javascript-safe-tenant-cache-isolation-fixture",
+  "private": true,
+  "type": "module"
+}

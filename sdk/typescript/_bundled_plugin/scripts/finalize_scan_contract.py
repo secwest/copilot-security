@@ -2489,6 +2489,21 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         ]
     ).lower()
     if (
+        "authorization cache" in text
+        or "authorization-cache" in text
+        or "tenant cache key" in text
+        or "tenant-cache" in text
+        or "cross-tenant cache" in text
+        or "cache key omits tenant" in text
+        or "cache key omits principal" in text
+        or (
+            "application cache" in text
+            and ("cross-tenant" in text or "cross-principal" in text)
+            and ("cache hit" in text or "cached object" in text)
+        )
+    ):
+        return "authorization-cache-key-confusion", ["CWE-524", "CWE-862"]
+    if (
         "web cache deception" in text
         or "web-cache-deception" in text
         or (

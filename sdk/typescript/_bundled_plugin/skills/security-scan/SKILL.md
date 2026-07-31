@@ -49,6 +49,9 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    WebSocket handshake Origin authorization and bidirectional channel exposure,
    web-cache deception across edge cache keys, cacheability and credential
    boundaries, response directives, and origin routing/normalization,
+   application authorization caches across trusted principal/tenant/role/
+   resource key dimensions, hit-path ownership checks, and permission-change
+   invalidation,
    DNS-rebinding SSRF across hostname validation, every A/AAAA answer,
    connection-time resolution, redirects, proxies, address pinning, Host, TLS
    server name, and the final socket destination,

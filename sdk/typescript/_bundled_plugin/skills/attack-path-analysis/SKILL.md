@@ -131,6 +131,18 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   routing plus explicit public-only caching, honored private/no-store controls,
   authenticated-request bypass, Set-Cookie rejection, or correctly
   identity-partitioned keys as distinct counterevidence.
+- For application authorization-cache findings, preserve both authenticated
+  principals/tenants, the server-derived identity context, colliding logical
+  resource ID, exact cache namespace and key components, cold authoritative
+  lookup results, cached object's tenant/owner/sensitivity, population request,
+  later cross-principal hit, skipped repository/policy authorization call, and
+  disclosed object or unauthorized protected decision. Model this as a
+  temporal two-principal path even when both requests use the same ordinary
+  route. A global cache or compact key alone is not proof: demonstrate that the
+  authoritative miss path is correctly scoped but the hit path returns a value
+  authorized for someone else. Record trusted identity-partitioned keys,
+  tenant/owner validation on hits, permission-change invalidation, and
+  same-principal cache success as distinct counterevidence.
 - For GraphQL operation-amplification findings, preserve the raw request or
   subscription message, parsed document, operation and variables, aliases,
   fragments, directives, nested selections, list cardinality, HTTP batch or

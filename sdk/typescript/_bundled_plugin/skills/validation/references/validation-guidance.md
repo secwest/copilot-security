@@ -140,6 +140,19 @@ Use class-specific proof tuples:
   shared, while a legitimate public object still produces a cache hit. Do not
   report a cache or route pattern without the cold-cache denial, victim
   population, credential-free hit, and identity-preserving response witness.
+- application authorization-cache isolation: two valid authenticated
+  principals or tenants + one colliding logical resource/key + cold-cache
+  authoritative lookups proving each principal receives only its own object +
+  the exact cache key and namespace + first-principal population + second-
+  principal hit that bypasses the authoritative lookup + the wrong sensitive
+  object or protected decision. Record repository/policy call counts so the
+  hit-path bypass is explicit. The negative control must derive every
+  authorization-relevant key component from trusted session or policy context,
+  keep the principals' entries distinct, verify tenant/owner or decision
+  binding on hits, preserve a legitimate same-principal hit, and exercise
+  invalidation when permissions or ownership can change. Do not infer a leak
+  from a shared cache or omitted-looking field without the cross-principal
+  collision and wrong-object/decision witness.
 - GraphQL operation amplification: one exact HTTP/WebSocket/RPC envelope +
   parsed and fully expanded execution plan showing aliases, fragments, nested
   selections, batch entries, persisted-document substitution, list cardinality,

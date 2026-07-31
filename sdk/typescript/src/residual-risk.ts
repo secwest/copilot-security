@@ -137,6 +137,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:Cache-Control|Surrogate-Control|s-maxage|X-Cache|CDN-Cache-Control|cacheableExtensions?|sharedCache|publicCache|edgeCache|cacheKey)\b|\b(?:private|no-store|public)\s*,?\s*(?:max-age|s-maxage)\b/iu,
   ],
   [
+    "principal-or-tenant-scoped-application-cache",
+    104,
+    /\b(?:applicationCache|authorizationCache|invoiceCache|permissionCache|responseCache|tenantCache)\b|\b(?:cacheKey|cache_key)\b|\b(?:cache|cached)\.(?:get|set)\s*\(/iu,
+  ],
+  [
     "graphql-operation-amplification-or-resolver-budget",
     105,
     /\b(?:GraphQL|gql|document\.selections|selectionSet|resolverCost|chargedCost|verifyRecoveryCode|recoveryOperations|failedAttempts|MAX_(?:FAILED_ATTEMPTS|SELECTIONS))\b/iu,

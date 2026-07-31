@@ -419,6 +419,21 @@ Use this checklist to keep discovery specific without turning it into validation
   correctly identity-partitioned key are strong counterevidence. A private
   browser cache, public nonsensitive object, absent deployed shared cache, or
   deceptive path rejected before sensitive retrieval is not this vulnerability.
+- For application-level authorization caches, enumerate every cache key and
+  namespace, the authenticated principal/tenant/role/entitlement inputs, the
+  protected repository or policy lookup on a miss, the hit path, cached object
+  sensitivity, TTL/invalidation behavior, and downstream use. Trace two
+  authenticated principals or tenants through the same logical resource ID:
+  prove their cold authoritative lookups return different authorized objects,
+  let one principal populate the cache, then show the other receives that
+  object on a hit because identity or permission context is absent, mutable, or
+  attacker-controlled in the key. Distinguish this from edge-cache deception:
+  both requests may be authenticated and use an ordinary route; the defect is
+  that a server-side application cache bypasses the otherwise correct
+  authorization boundary. A cache API, short key, or tenant field alone is not
+  a finding. A key derived from trusted authenticated tenant/principal and all
+  authorization-relevant dimensions, tenant/owner verification on hits, and
+  invalidation on permission or ownership changes are strong counterevidence.
 - For native memory safety, enumerate attacker-influenced allocation, copy,
   move, receive, format, indexing, pointer-arithmetic, cast, ownership, and free
   operations across every concrete caller. Preserve the input bytes and

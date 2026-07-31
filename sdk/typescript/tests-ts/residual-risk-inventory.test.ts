@@ -1086,6 +1086,32 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs cross-tenant application-cache hits with identity-partitioned keys", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-tenant-cache-key-confusion"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-tenant-cache-isolation"),
+    );
+
+    expect(vulnerable).toContain(
+      '"principal-or-tenant-scoped-application-cache"',
+    );
+    expect(vulnerable).toContain("const cacheKey = `invoice:${invoiceId}`");
+    expect(vulnerable).toContain("invoiceCache.get(cacheKey)");
+    expect(vulnerable).toContain(
+      "invoices.findForTenant(session.tenantId, invoiceId)",
+    );
+    expect(safe).toContain('"principal-or-tenant-scoped-application-cache"');
+    expect(safe).toContain(
+      "const cacheKey = `tenant:${session.tenantId}:invoice:${invoiceId}`",
+    );
+    expect(safe).toContain("cached.tenantId !== session.tenantId");
+    expect(scanQualityGatePrompt("")).toContain(
+      "server-side application authorization-cache key isolation across trusted principal/tenant/role/resource dimensions, hit-path ownership checks, permission changes, and invalidation",
+    );
+  });
+
   test("pairs GraphQL resolver amplification with execution-plan and account budgets", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-graphql-recovery-amplification"),

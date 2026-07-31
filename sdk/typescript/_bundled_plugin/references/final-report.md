@@ -125,6 +125,16 @@ body/signature/timestamp/event-ID tuple, its first accepted effect, the repeated
 effect from an unchanged second delivery, and tamper or wrong-key controls. A
 valid HMAC is expected and does not by itself rebut capture-replay.
 
+For application authorization-cache findings, affected lines must include the
+trusted authenticated principal or tenant extraction, exact cache-key
+construction, hit return, authoritative scoped lookup, and cache population
+when those lines are distinct. The write-up must preserve two principals'
+different cold results for one logical resource ID, the first population, the
+second principal's wrong-object or wrong-decision hit, and proof that the hit
+skips the scoped authorization lookup. A shared cache or compact key alone is
+not an exploit witness; record identity-partitioned keys, hit validation, and
+permission-change invalidation when present.
+
 For external authorization fail-open findings, affected lines must include the
 permissive initial/default decision, policy or entitlement call, exception/
 timeout/malformed-response handling, final allow comparison, and protected sink

@@ -67,6 +67,10 @@ describe("effectiveness benchmark", () => {
       ],
       ["javascript-web-cache-deception", "javascript-safe-private-cache"],
       [
+        "javascript-tenant-cache-key-confusion",
+        "javascript-safe-tenant-cache-isolation",
+      ],
+      [
         "javascript-graphql-recovery-amplification",
         "javascript-safe-graphql-recovery-limits",
       ],
@@ -238,6 +242,23 @@ describe("effectiveness benchmark", () => {
         path: "src/origin.js",
         startLine: 10,
         endLine: 19,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-tenant-cache-key-confusion")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-524", "CWE-862"]]);
+    expect(
+      cases
+        .get("javascript-tenant-cache-key-confusion")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/invoices.js",
+        startLine: 52,
+        endLine: 62,
         lineTolerance: 3,
       },
     ]);
@@ -769,6 +790,32 @@ describe("effectiveness benchmark", () => {
         "utf8",
       ),
     ).toContain('request.path !== "/account"');
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-tenant-cache-key-confusion",
+          "src",
+          "invoices.js",
+        ),
+        "utf8",
+      ),
+    ).toContain("const cacheKey = `invoice:${invoiceId}`");
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-safe-tenant-cache-isolation",
+          "src",
+          "invoices.js",
+        ),
+        "utf8",
+      ),
+    ).toContain(
+      "const cacheKey = `tenant:${session.tenantId}:invoice:${invoiceId}`",
+    );
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -871,6 +918,7 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain(
       "Web cache deception and shared-cache isolation:",
     );
+    expect(deepScan).toContain("Application authorization-cache isolation:");
     expect(deepScan).toContain(
       "GraphQL execution amplification and resolver-scoped enforcement:",
     );
@@ -921,6 +969,9 @@ describe("effectiveness benchmark", () => {
       "web-cache deception across edge cache keys",
     );
     expect(standardScan).toContain(
+      "application authorization caches across trusted principal/tenant/role",
+    );
+    expect(standardScan).toContain(
       "GraphQL alias/batch/fragment amplification",
     );
     expect(standardScan).toContain(
@@ -963,6 +1014,9 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain("changed CORS origin reflection");
     expect(diffScan).toContain("changed WebSocket/socket.io upgrade handlers");
     expect(diffScan).toContain("changed CDN/proxy/application cache keys");
+    expect(diffScan).toContain(
+      "changed server-side object, response, permission, entitlement, or policy",
+    );
     expect(diffScan).toContain(
       "changed GraphQL alias, fragment, nesting, batch",
     );
@@ -1007,6 +1061,10 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain("For cross-site WebSocket hijacking");
     expect(discovery).toContain("For web cache deception");
     expect(discovery).toContain("Prefer CWE-524 for cross-principal edge, CDN");
+    expect(discovery).toContain("For application-level authorization caches");
+    expect(discovery).toContain(
+      "server-side application cache bypasses the otherwise correct",
+    );
     expect(discovery).toContain("For native memory safety");
     expect(discovery).toContain("bounded API is neither vulnerable");
     expect(discovery).toContain("For document-query and NoSQL APIs");
@@ -1078,6 +1136,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("credentialed CORS response exposure:");
     expect(validation).toContain("cross-site WebSocket hijacking:");
     expect(validation).toContain("web cache deception:");
+    expect(validation).toContain("application authorization-cache isolation:");
     expect(validation).toContain("GraphQL operation amplification:");
     expect(validation).toContain("regular-expression denial of service:");
     expect(validation).toContain("external authorization fail-open:");
@@ -1117,6 +1176,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(attackPath).toContain("For cross-site WebSocket-hijacking findings");
     expect(attackPath).toContain("For web-cache-deception findings");
+    expect(attackPath).toContain(
+      "For application authorization-cache findings",
+    );
     expect(attackPath).toContain(
       "For GraphQL operation-amplification findings",
     );
@@ -1158,6 +1220,12 @@ describe("effectiveness benchmark", () => {
     expect(severityPolicy).toContain("WebSocket-hijacking reports based only");
     expect(severityPolicy).toContain("Web cache deception that stores");
     expect(severityPolicy).toContain("Web-cache-deception reports based only");
+    expect(severityPolicy).toContain(
+      "Application authorization-cache key confusion",
+    );
+    expect(severityPolicy).toContain(
+      "Application authorization-cache reports based only",
+    );
     expect(severityPolicy).toContain(
       "GraphQL operation amplification that converts",
     );
@@ -1268,6 +1336,9 @@ describe("effectiveness benchmark", () => {
       "web-cache deception and shared-cache isolation",
     );
     expect(threatModelGuidance).toContain(
+      "application authorization-cache isolation across trusted principal/tenant/role/resource key dimensions",
+    );
+    expect(threatModelGuidance).toContain(
       "GraphQL aliases/fragments/nesting/batches/persisted documents",
     );
     expect(threatModelGuidance).toContain(
@@ -1293,6 +1364,9 @@ describe("effectiveness benchmark", () => {
       "web-cache deception across edge/shared-cache keys",
     );
     expect(repositoryWideScan).toContain(
+      "server-side application authorization-cache key isolation",
+    );
+    expect(repositoryWideScan).toContain(
       "GraphQL aliases/fragments/nesting/batches/persisted documents",
     );
     expect(repositoryWideScan).toContain(
@@ -1306,6 +1380,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(finalReport).toContain(
       "For external authorization fail-open findings",
+    );
+    expect(finalReport).toContain(
+      "For application authorization-cache findings",
     );
     expect(finalReport).toContain("For OIDC ID-token client-binding findings");
     expect(finalReport).toContain("For DNS-rebinding SSRF findings");

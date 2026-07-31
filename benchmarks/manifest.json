@@ -592,6 +592,45 @@
       "expected": []
     },
     {
+      "id": "javascript-tenant-cache-key-confusion",
+      "description": "An authenticated application cache omits tenant identity from keys for tenant-local invoice IDs, so a cache hit returns another tenant's confidential invoice without reaching the correctly tenant-scoped repository lookup.",
+      "fixture": "fixtures/javascript-tenant-cache-key-confusion",
+      "findingsPaths": [
+        "javascript-tenant-cache-key-confusion/run-1/findings.json",
+        "javascript-tenant-cache-key-confusion/run-2/findings.json",
+        "javascript-tenant-cache-key-confusion/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "tenant-omitted-application-cache-cross-tenant-leak",
+          "cwe": ["CWE-524", "CWE-862"],
+          "locations": [
+            {
+              "path": "src/invoices.js",
+              "startLine": 52,
+              "endLine": 62,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-tenant-cache-isolation",
+      "description": "The application cache derives its namespace from the authenticated tenant, verifies tenant ownership on hits, and preserves the correctly tenant-scoped repository lookup while allowing same-tenant hits.",
+      "fixture": "fixtures/javascript-safe-tenant-cache-isolation",
+      "findingsPaths": [
+        "javascript-safe-tenant-cache-isolation/run-1/findings.json",
+        "javascript-safe-tenant-cache-isolation/run-2/findings.json",
+        "javascript-safe-tenant-cache-isolation/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-graphql-recovery-amplification",
       "description": "A request-level limiter counts one GraphQL HTTP request while an unbounded aliased execution plan invokes the recovery-code resolver four times without an account-scoped attempt budget, returning a reset capability that changes the victim password.",
       "fixture": "fixtures/javascript-graphql-recovery-amplification",

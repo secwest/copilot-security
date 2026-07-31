@@ -166,7 +166,9 @@ external entities, JWT signature-verification bypass, attacker-controlled
 JWT `alg`/key-type confusion that reuses an RSA public key as an HMAC secret,
 attacker-controlled JWT/OIDC JWKS key origin, signed OIDC ID-token
 audience/authorized-party/nonce misbinding across sibling clients, signed
-payment-webhook replay despite correct HMAC verification, prototype pollution, SAML
+payment-webhook replay despite correct HMAC verification, cross-tenant
+application-cache key confusion despite correctly scoped cold repository
+lookups, prototype pollution, SAML
 signed-versus-consumed assertion confusion, disabled TLS certificate
 verification, predictable security tokens, server-side template injection,
 check/use state races, unsafe mass assignment, cookie-authenticated cross-site
@@ -185,8 +187,8 @@ the HTTP-request, execution-plan, resolver, and account-state boundaries,
 fail-open external authorization on policy exceptions and malformed decisions,
 DNS-rebinding SSRF across validation and connection-time resolution, plus
 catastrophic-backtracking regular-expression denial of service with a bounded
-linear validator as the control. Each of the 76 cases is scanned three times,
-producing 228 scans that measure both accuracy and model variance. The
+linear validator as the control. Each of the 78 cases is scanned three times,
+producing 234 scans that measure both accuracy and model variance. The
 evaluator uses one-to-one CWE-plus-location
 matching, counts duplicate reports as false positives, and records missing scan
 artifacts as completion failures.

@@ -118,6 +118,13 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   edge/origin interpretation and cache decision, later credential-free hit
   returning the same crown-jewel object without an origin call, and downstream
   impact.
+- Application authorization-cache key confusion that returns administrative,
+  cloud, signing, billing, cross-tenant, or control-plane objects or allow
+  decisions across authenticated principals and enables compromise-equivalent
+  use. Critical requires different cold scoped results, the exact colliding
+  identity-omitting key, first-principal population, second-principal hit that
+  skips authorization, the same crown-jewel object or decision, and downstream
+  impact.
 - GraphQL operation amplification that converts one accepted transport request
   into enough authentication, MFA, recovery, invitation, token-issuance, or
   similarly privileged resolver operations to compromise an administrator,
@@ -152,6 +159,14 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   stored under an attacker-reusable key, and a later credential-free hit;
   severity follows the sensitivity, privileges, affected population, cache
   lifetime, and demonstrated use of the disclosed material.
+- Application authorization-cache key confusion that reliably returns one
+  authenticated principal's or tenant's sensitive object or protected allow
+  decision to another. High requires two valid principals, different cold
+  authoritative results for one colliding logical resource ID, the exact
+  identity-omitting key, a cross-principal hit that skips the scoped lookup,
+  and meaningful confidentiality or integrity impact. Critical requires broad
+  or compromise-equivalent administrative, cloud, signing, billing, or
+  cross-tenant impact rather than one ordinary low-sensitivity record.
 - GraphQL alias, fragment, nesting, batch, or persisted-document amplification
   that bypasses an intended authentication, MFA, recovery, invitation,
   payment, messaging, export, or other security-sensitive operation budget and
@@ -283,6 +298,13 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   objects, cold-cache misses that remain misses, exact-route rejection,
   correctly honored private/no-store or authenticated/Set-Cookie bypass, and
   correctly identity-partitioned cache entries.
+- Application authorization-cache reports based only on a global cache, short
+  key, cache hit before a repository call, tenant fields elsewhere, or
+  theoretical key collision. Suppress unless two authenticated principals'
+  cold authoritative results differ and one can receive the other's sensitive
+  object or protected decision on a hit. Trusted identity-partitioned keys,
+  tenant/owner verification before use, permission-change invalidation, and
+  same-principal hit behavior are strong counterevidence.
 - DNS-rebinding or SSRF reports based only on a hostname, resolver call,
   private-address helper, URL parser, or theoretical DNS change without proving
   a second effective lookup, forbidden connected address, and meaningful

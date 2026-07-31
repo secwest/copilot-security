@@ -754,6 +754,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes cross-tenant application-cache key confusion taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "Cross-tenant application cache hit returns another tenant's invoice";
+    finding.summary =
+      "The application cache key omits tenant identity, so a cached object populated by one authenticated tenant is returned to another tenant without the correctly scoped repository lookup.";
+    finding["taxonomy"] = {
+      category: "IDOR",
+      cwe: ["CWE-639"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "authorization-cache-key-confusion",
+      cwe: ["CWE-524", "CWE-862"],
+    });
+  });
+
   test("normalizes GraphQL resolver amplification to authentication-attempt taxonomy", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

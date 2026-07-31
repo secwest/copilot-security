@@ -241,6 +241,18 @@ inventory and closure requirements.
      authenticated/Set-Cookie responses as the negative control; verify a real
      public asset still caches. Headers, cache APIs, or broad routes alone are
      not findings.
+   - Application authorization-cache isolation: every server-side object,
+     response, permission, entitlement, and policy-decision cache; exact key
+     and namespace; authenticated principal, tenant, role, ownership, resource,
+     action, and policy-version dimensions; authoritative miss lookup; hit-path
+     checks; object sensitivity; and TTL/invalidation behavior. Use two valid
+     principals or tenants with one colliding logical resource ID, prove their
+     cold authoritative results differ, populate as one, and request as the
+     other. Require a wrong-object or wrong-decision hit that skips the scoped
+     lookup before reporting. Use trusted identity-partitioned keys, tenant or
+     owner validation on hits, permission-change invalidation, and a legitimate
+     same-principal hit as the negative control. Do not merge this with edge
+     cache deception merely because both are temporal cache bugs.
    - JWT/JWS/OIDC algorithm, key-family, key origin, and claim binding: every
      protected-header parser, algorithm allowlist and selection, `kid`,
      `jku`/`x5u`/embedded key input, issuer discovery or metadata mapping, JWKS
