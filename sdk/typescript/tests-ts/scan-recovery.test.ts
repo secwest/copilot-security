@@ -836,6 +836,49 @@ describe("malformed scan artifact recovery", () => {
     expect((saved["scan"] as ScanSummary).warnings).toEqual([warning]);
   });
 
+  test("keeps a finding while pruning dangling attack-path evidence references", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding.codeEvidence = [
+      {
+        id: "cors-policy",
+        label: "Credentialed CORS policy",
+        path: "src/extract.py",
+        startLine: 1,
+        code: "# fixture",
+        explanation: "The declared code evidence remains available.",
+      },
+    ];
+    finding["attackPath"] = {
+      summary: "Attacker JavaScript reads a credentialed response.",
+      evidenceRefs: [
+        "cors-policy",
+        "artifacts/02_discovery/validation_artifacts/cors/result.txt",
+      ],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.findingCount).toBe(1);
+    expect(completed.warnings).toEqual([
+      "Recovered finding 1: removed 1 unknown attack-path code-evidence reference.",
+    ]);
+    const recovered = await readJson<FindingsDocument>(path);
+    expect(recovered.findings[0]?.["attackPath"]).toEqual({
+      summary: "Attacker JavaScript reads a credentialed response.",
+      evidenceRefs: ["cors-policy"],
+    });
+    const coverage = await readJson<CoverageDocument>(
+      join(fixture.scanDir, "coverage.json"),
+    );
+    expect(coverage.completeness).toBe("complete");
+    expect(coverage.deferred).toEqual([]);
+  });
+
   test("keeps valid findings and skips malformed or duplicate findings", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

@@ -858,6 +858,35 @@ def _finding_strength(finding: dict[str, Any]) -> tuple[int, int, int]:
     )
 
 
+def _prune_unknown_evidence_refs(finding: dict[str, Any]) -> list[tuple[str, int]]:
+    code_evidence = finding.get("codeEvidence")
+    if not isinstance(code_evidence, list):
+        return []
+    evidence_ids = {
+        evidence.get("id")
+        for evidence in code_evidence
+        if isinstance(evidence, dict)
+        and isinstance(evidence.get("id"), str)
+        and evidence["id"]
+    }
+    recovered: list[tuple[str, int]] = []
+    for section_name in ("rootCause", "validation", "attackPath"):
+        section = finding.get(section_name)
+        if not isinstance(section, dict) or "evidenceRefs" not in section:
+            continue
+        refs = section["evidenceRefs"]
+        if not isinstance(refs, list) or any(
+            not isinstance(ref, str) or not ref for ref in refs
+        ):
+            continue
+        retained = [ref for ref in refs if ref in evidence_ids]
+        removed = len(refs) - len(retained)
+        if removed:
+            section["evidenceRefs"] = retained
+            recovered.append((section_name, removed))
+    return recovered
+
+
 def _recover_unsealed_findings(
     manifest: dict[str, Any],
     findings: dict[str, Any],
@@ -916,6 +945,7 @@ def _recover_unsealed_findings(
             )
             finding_id = finding["findingId"]
             previous_position = finding_positions.get(finding_id)
+            pruned_evidence_refs = _prune_unknown_evidence_refs(finding)
             _validate_finding(finding, context)
             if "writeup" in finding:
                 try:
@@ -964,6 +994,17 @@ def _recover_unsealed_findings(
         if normalized_fields:
             warnings.append(
                 f"Recovered finding {index + 1}: normalized {', '.join(normalized_fields)}."
+            )
+        for section_name, removed in pruned_evidence_refs:
+            label = {
+                "rootCause": "root-cause",
+                "validation": "validation",
+                "attackPath": "attack-path",
+            }[section_name]
+            noun = "reference" if removed == 1 else "references"
+            warnings.append(
+                f"Recovered finding {index + 1}: removed {removed} unknown "
+                f"{label} code-evidence {noun}."
             )
 
     findings["findings"] = recovered
