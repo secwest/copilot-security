@@ -173,6 +173,19 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   identifier resolves to the victim principal after login. Distinguish this
   from harmless pre-authentication state continuity when the authenticated ID is
   fresh and the old record is atomically invalidated.
+- For password-reset, verification, invitation, or magic-link origin findings,
+  preserve the public ingress/proxy topology, raw and normalized `Host`/
+  `Forwarded`/`X-Forwarded-*` values, server-side authority selection, exact
+  secret-bearing absolute URL, legitimate outbound message, victim navigation,
+  attacker capture, canonical completion request, token consumption, and final
+  password/session/identity/trust-state change. Account takeover requires proof
+  that attacker-selected authority survives the actual trust policy and yields
+  a capability the attacker can redeem; header names or a URL builder alone are
+  not enough. A fixed configured public origin, strict canonicalization before
+  URL construction, no secret-bearing open redirect, and a negative control in
+  which the attacker receives no token are strong counterevidence. Do not treat
+  strong entropy, expiry, hashing at rest, or one-time use as counterevidence to
+  disclosure of the live token.
 - Identify the strongest repository counterevidence against the scoping and reportability-driving fields before finalizing them.
 - Lower confidence or keep fields unknown when repository evidence is incomplete; do not automatically suppress a finding solely because deployment evidence is missing.
 

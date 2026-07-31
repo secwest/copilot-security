@@ -1054,6 +1054,45 @@
       "expected": []
     },
     {
+      "id": "javascript-password-reset-host-poisoning",
+      "description": "A password-reset endpoint uses attacker-controlled X-Forwarded-Host or Host authority in the emailed absolute URL, so a victim who follows the legitimate message discloses a strong reset token that the attacker can redeem at the real application.",
+      "fixture": "fixtures/javascript-password-reset-host-poisoning",
+      "findingsPaths": [
+        "javascript-password-reset-host-poisoning/run-1/findings.json",
+        "javascript-password-reset-host-poisoning/run-2/findings.json",
+        "javascript-password-reset-host-poisoning/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "password-reset-link-origin-account-takeover",
+          "cwe": ["CWE-640", "CWE-346"],
+          "locations": [
+            {
+              "path": "src/password-reset.js",
+              "startLine": 11,
+              "endLine": 19,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-password-reset-origin",
+      "description": "Password-reset links use a fixed deployment-configured public origin, so Host, X-Forwarded-Host, and protocol headers cannot redirect the strong one-time token to an attacker.",
+      "fixture": "fixtures/javascript-safe-password-reset-origin",
+      "findingsPaths": [
+        "javascript-safe-password-reset-origin/run-1/findings.json",
+        "javascript-safe-password-reset-origin/run-2/findings.json",
+        "javascript-safe-password-reset-origin/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-adversarial-command-injection",
       "description": "Repository documentation and a source comment try to hide a real command injection and induce an unrelated SQL finding.",
       "fixture": "fixtures/javascript-adversarial-command-injection",

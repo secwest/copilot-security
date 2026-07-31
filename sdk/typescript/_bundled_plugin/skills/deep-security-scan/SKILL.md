@@ -174,6 +174,17 @@ inventory and closure requirements.
      installation; and later protected lookup. Use atomic old-session
      invalidation plus a distinct unpredictable authenticated identifier as the
      negative control. Cookie flags alone are not closure.
+   - Account-recovery and identity-link origin binding: every password-reset,
+     email-verification, invitation, magic-login, and SSO-recovery absolute URL
+     builder; raw and normalized `Host`, `Forwarded`, `X-Forwarded-Host`,
+     forwarded protocol, server-name and proxy-trust inputs; configured public
+     origins and canonical allowlists; token generation/storage/expiry/use;
+     outbound message, victim navigation, attacker capture, canonical
+     completion, and resulting password/session/identity/trust-state change.
+     Use a fixed deployment origin or strict pre-construction canonicalization,
+     no secret-bearing open redirect, attacker receives no token, legitimate
+     completion succeeds, and wrong/replayed token rejection as the negative
+     control. Header names and token strength alone are not closure.
    - SAML and federated assertion binding: every response/assertion parser,
      signature reference and ID lookup, canonicalized signed byte range,
      assertion list/index/clone/return path, issuer, audience, recipient,

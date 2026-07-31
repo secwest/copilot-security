@@ -33,7 +33,8 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    flows. Save it under `artifacts/01_context/threat_model.md`.
 3. Review every in-scope file. Trace attacker-controlled sources through
    validation, authentication, login session fixation and authenticated-session
-   rotation, OAuth/OIDC authorization-code state, nonce, PKCE,
+   rotation, password-reset, verification, invitation, and magic-login absolute URL origins,
+   OAuth/OIDC authorization-code state, nonce, PKCE,
    callback-session, redirect-URI, and account-linking transaction binding,
    JWT/OIDC algorithm, remote-key URL, key-origin, issuer, audience, and nonce
    binding, SAML/federated signed-assertion selection and trust binding,

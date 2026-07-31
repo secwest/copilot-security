@@ -173,6 +173,22 @@ Use this checklist to keep discovery specific without turning it into validation
   prove an attacker can know or inject the identifier and reuse it after victim
   login. Atomic invalidation of the old session plus a fresh unpredictable
   authenticated identifier is strong counterevidence.
+- For password-reset, email-verification, invitation, magic-login, SSO recovery,
+  and similar emailed or messaged links, enumerate every absolute-URL builder.
+  Trace `Host`, `Forwarded`, `X-Forwarded-Host`, forwarded protocol, server-name,
+  proxy-trust state, tenant configuration, and deployment public-origin
+  configuration into the URL authority; then follow any token or secret through
+  the outbound message, victim navigation, attacker capture, canonical
+  completion endpoint, and password, login, identity-link, or trust-state
+  change. Strong token entropy, digest-only storage, short expiry, and one-time
+  use do not prevent origin disclosure when the secret is sent to an
+  attacker-selected authority. Do not report a header or parameter name alone:
+  prove the deployed proxy/trust topology lets the attacker control the
+  accepted authority and that the resulting secret-bearing link enables a
+  protected action. A fixed deployment public origin or strict canonical
+  allowlist applied before URL construction, with no redirect to attacker
+  origins, is strong counterevidence; request authority used only for logging,
+  display, or non-secret links is not this vulnerability.
 - For JWT/JWS/OIDC verification, preserve the protected header and every source
   of `alg`, `kid`, `jku`, `x5u`, embedded JWK/certificate, issuer discovery,
   metadata, JWKS URI, redirects, cache entries, and selected key provenance.

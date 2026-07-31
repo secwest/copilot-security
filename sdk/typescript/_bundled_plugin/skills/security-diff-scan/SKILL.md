@@ -115,6 +115,10 @@ publish findings, open issues, or contact third parties. Write only beneath
      invalidation, store aliasing/migration, post-login Set-Cookie, principal
      installation, or protected session lookup that could preserve an
      attacker-known identifier across login;
+   - changed password-reset, verification, invitation, or magic-link absolute URL construction,
+     request/forwarded authority or protocol trust, proxy normalization, public-origin
+     configuration, canonical allowlists, outbound secret-bearing links, or
+     completion endpoints that could disclose a live capability to an attacker;
    - unsafe default, configuration, dependency, build, plugin, or update changes;
    - race, replay, idempotency, lifecycle, error-handling, and rollback changes;
    - newly affected sibling instances behind a changed shared dependency.

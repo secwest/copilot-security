@@ -88,6 +88,10 @@ describe("effectiveness benchmark", () => {
       ],
       ["javascript-session-fixation", "javascript-safe-session-rotation"],
       [
+        "javascript-password-reset-host-poisoning",
+        "javascript-safe-password-reset-origin",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],
@@ -146,6 +150,23 @@ describe("effectiveness benchmark", () => {
         path: "src/login.js",
         startLine: 25,
         endLine: 30,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-password-reset-host-poisoning")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-640", "CWE-346"]]);
+    expect(
+      cases
+        .get("javascript-password-reset-host-poisoning")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/password-reset.js",
+        startLine: 11,
+        endLine: 19,
         lineTolerance: 3,
       },
     ]);
@@ -408,6 +429,44 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(safeSamlAssertionBinding, "src", "saml.js"), "utf8"),
     ).toContain("policy.replayCache.has(claims.id)");
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-password-reset-host-poisoning",
+          "src",
+          "password-reset.js",
+        ),
+        "utf8",
+      ),
+    ).toContain('request.headers["x-forwarded-host"]');
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-password-reset-host-poisoning",
+          "src",
+          "password-reset.js",
+        ),
+        "utf8",
+      ),
+    ).toContain("mailer.sendPasswordReset");
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-safe-password-reset-origin",
+          "src",
+          "password-reset.js",
+        ),
+        "utf8",
+      ),
+    ).toContain(
+      'const PUBLIC_ORIGIN = new URL("https://accounts.example.test")',
+    );
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -511,6 +570,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain(
       "Login session fixation and authentication lifecycle:",
     );
+    expect(deepScan).toContain(
+      "Account-recovery and identity-link origin binding:",
+    );
     expect(deepScan).toContain("untrusted upload and content placement:");
     expect(deepScan).toContain("HTTP request framing and smuggling:");
     expect(deepScan).toContain("JWT/JWS/OIDC key origin and claim binding:");
@@ -532,6 +594,9 @@ describe("effectiveness benchmark", () => {
     expect(standardScan).toContain(
       "login session fixation and authenticated-session",
     );
+    expect(standardScan).toContain(
+      "password-reset, verification, invitation, and magic-login absolute URL origins",
+    );
     expect(standardScan).toContain("untrusted uploads and");
     expect(standardScan).toContain("HTTP message framing and parser agreement");
     expect(standardScan).toContain("JWT/OIDC algorithm, remote-key URL");
@@ -548,6 +613,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(diffScan).toContain(
       "changed anonymous-session creation or adoption",
+    );
+    expect(diffScan).toContain(
+      "changed password-reset, verification, invitation, or magic-link absolute URL construction",
     );
     expect(diffScan).toContain("new multipart/file inputs");
     expect(diffScan).toContain("duplicate or conflicting `Content-Length` and");
@@ -603,6 +671,12 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain(
       "Do not report pre-authentication session continuity alone",
     );
+    expect(discovery).toContain(
+      "For password-reset, email-verification, invitation, magic-login",
+    );
+    expect(discovery).toContain(
+      "Strong token entropy, digest-only storage, short expiry",
+    );
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
@@ -624,6 +698,12 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain(
       "distinct unpredictable post-authentication identifier",
     );
+    expect(validation).toContain(
+      "password-reset/verification/magic-link origin poisoning:",
+    );
+    expect(validation).toContain(
+      "attacker receives no token or security capability",
+    );
     expect(validation).toContain("SAML signed-byte-to-session binding:");
     expect(attackPath).toContain("For mass-assignment findings");
     expect(attackPath).toContain("For CSRF findings");
@@ -643,6 +723,9 @@ describe("effectiveness benchmark", () => {
       "For OAuth/OIDC authorization-code login and account-linking findings",
     );
     expect(attackPath).toContain("For login session-fixation findings");
+    expect(attackPath).toContain(
+      "For password-reset, verification, invitation, or magic-link origin findings",
+    );
     expect(severityPolicy).toContain(
       "CSRF when it enables important state-changing actions",
     );
@@ -682,6 +765,9 @@ describe("effectiveness benchmark", () => {
       "Session fixation that lets a remote attacker preserve",
     );
     expect(severityPolicy).toContain(
+      "Account-recovery or identity-link origin poisoning that discloses",
+    );
+    expect(severityPolicy).toContain(
       "JWT/JWKS reports based only on the presence of `kid`",
     );
     expect(severityPolicy).toContain(
@@ -689,6 +775,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(severityPolicy).toContain(
       "Session-management reports based only on a pre-authentication session",
+    );
+    expect(severityPolicy).toContain(
+      "Recovery-link reports based only on a `Host`, `Forwarded`",
     );
     expect(threatModelGuidance).toContain(
       "HTTP framing/parser agreement across proxies",
@@ -713,6 +802,12 @@ describe("effectiveness benchmark", () => {
     );
     expect(repositoryWideScan).toContain(
       "login session fixation and authenticated-session rotation",
+    );
+    expect(threatModelGuidance).toContain(
+      "password-reset, verification, invitation, and magic-login link origin binding",
+    );
+    expect(repositoryWideScan).toContain(
+      "password-reset, verification, invitation, and magic-login absolute URL origin binding",
     );
     expect(threatModelGuidance).toContain("SAML/federated signed-object");
     expect(threatModelGuidance).toContain(

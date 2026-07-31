@@ -82,6 +82,23 @@ Use class-specific proof tuples:
   distinct unpredictable post-authentication identifier, atomic invalidation of
   the old record, successful access with only the new identifier, and failure
   with both attacker and victim pre-authentication identifiers.
+- password-reset/verification/magic-link origin poisoning: attacker-controlled
+  request authority or forwarded authority/protocol accepted through the real
+  proxy trust path + a secret-bearing absolute URL delivered by the legitimate
+  mail/message channel + victim navigation to the attacker origin + captured
+  token redeemed at the canonical completion endpoint + resulting password,
+  login, identity-link, invitation, or verification change. Send the exact
+  malicious `Host`, `Forwarded`, `X-Forwarded-Host`, and protocol variants the
+  deployment accepts; capture the delivered URL, simulate the victim follow,
+  extract the token, and exercise the real protected transition. Token entropy,
+  digest storage, expiry, and one-time consumption are controls against other
+  attacks, not disclosure to the wrong origin. The negative control must keep
+  every malicious authority variant on the configured canonical origin, prove
+  the attacker receives no token or security capability, allow a legitimate
+  victim flow, and reject wrong and replayed tokens. Suppression also requires
+  evidence that proxies overwrite/canonicalize untrusted authority or that a
+  fixed/strictly allowlisted public origin is used before URL construction and
+  cannot open-redirect the secret.
 - native memory corruption: attacker-controlled bytes, length, index, pointer,
   object state, or scheduling action + exact allocation/object extent and
   lifetime + integer types, units, wrap/signedness, terminator/metadata space,
@@ -259,6 +276,13 @@ Use this checklist to keep validation close to the prompt contract:
   reject attacker state in the victim session before exchange, accept a
   legitimate matching session transaction, reject a wrong verifier, and reject
   replay after one-time consumption.
+- For recovery, verification, invitation, and magic-link origin candidates,
+  execute the request through the closest reachable proxy/application path with
+  malicious authority and forwarded-authority headers. Preserve ingress
+  normalization, the exact outbound link, attacker-side request/capture, token,
+  canonical completion request, and resulting account state. Repeat against a
+  fixed-origin or strict canonical-allowlist control, verify the attacker sees
+  no secret, then complete one legitimate flow and reject wrong/replayed tokens.
 - For HTTP request-smuggling candidates, save the literal request bytes and a
   per-hop framing table with normalized headers, message boundaries, residual
   bytes, routing/authorization decisions, connection reuse, and the protected

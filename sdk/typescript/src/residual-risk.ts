@@ -122,6 +122,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:changeSessionId|destroySession|invalidateSession|promoteAuthenticatedSession|regenerateSession|renewSession|rotateAuthenticatedSession|startAnonymousSession)\b|\b(?:sessionId|sessionID)\b/iu,
   ],
   [
+    "account-recovery-link-origin-binding",
+    102,
+    /\b(?:Forwarded|Host|X-Forwarded-Host|X-Forwarded-Proto)\b|\b(?:magicLink|passwordReset|public[_-]?origin|resetUrl|sendPasswordReset|verificationLink)\b|\b(?:req|request)\.(?:get\s*\(\s*["']host["']|headers\s*(?:\.|\[\s*["'])(?:forwarded|host|x-forwarded-host|x-forwarded-proto))\b/iu,
+  ],
+  [
     "security-sensitive-randomness",
     97,
     /\b(?:Math\.random|crypto\.randomBytes|randomBytes|randomUUID|SecureRandom|secrets\.(?:choice|randbelow|token_bytes|token_hex|token_urlsafe)|crypto\.getRandomValues|random\.(?:random|randint|randrange)|mt_rand|srand|uuid1)\s*\(/iu,

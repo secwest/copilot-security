@@ -265,6 +265,31 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs request-authority recovery links with a fixed public origin", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-password-reset-host-poisoning"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-password-reset-origin"),
+    );
+
+    expect(vulnerable).toContain('"account-recovery-link-origin-binding"');
+    expect(vulnerable).toContain('request.headers["x-forwarded-host"]');
+    expect(vulnerable).toContain("`https://${authority}`");
+    expect(vulnerable).toContain("mailer.sendPasswordReset");
+    expect(safe).toContain('"account-recovery-link-origin-binding"');
+    expect(safe).toContain("PUBLIC_ORIGIN");
+    expect(safe).toContain("https://accounts.example.test");
+    expect(safe).toContain("randomBytes(32)");
+    expect(safe).toContain('createHash("sha256")');
+    expect(safe).toContain("pending.delete(tokenDigest)");
+    expect(safe).toContain("activeByAccount.get(accountId)");
+    expect(safe).toContain("pending.delete(previousDigest)");
+    expect(scanQualityGatePrompt("")).toContain(
+      "password-reset/verification/magic-link request-authority and public-origin binding",
+    );
+  });
+
   test("surfaces SSRF input and fixed-destination controls", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-ssrf"),

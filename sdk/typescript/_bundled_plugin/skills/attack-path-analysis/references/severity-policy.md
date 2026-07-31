@@ -77,6 +77,12 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   compromise-equivalent authenticated access. Critical requires the exact
   fixation mechanism, unchanged identifier or store alias, installed victim
   principal, and successful attacker replay.
+- Account-recovery or identity-link origin poisoning that discloses a live
+  secret-bearing link to an attacker and yields administrator, cross-tenant,
+  billing, control-plane, or otherwise high-value account takeover. Critical
+  requires the exact externally controllable authority through the deployed
+  proxy/trust path, legitimate message, victim navigation, attacker token
+  capture, canonical redemption, and compromise-equivalent account change.
 - Logic flaws that allow irreversible or broad compromise of integrity at scale, such as unauthenticated deletion of other users' data, cross-tenant tampering with sensitive records, or unauthorized modification of security-critical configuration, when the impact is clearly demonstrated and severe enough to be compromise-equivalent; when there is actual proof that this logic can be exercised from in-scope attack-surface.
 - etc, other bugs not listed which follow this level of critical severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 
@@ -117,6 +123,10 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
 - Session fixation that reliably lets an attacker reuse a fixed
   pre-authentication identifier after victim login to obtain meaningful
   authenticated account access.
+- Password-reset, verification, invitation, or magic-link origin poisoning that
+  reliably discloses a live capability and produces meaningful ordinary account
+  takeover or identity/trust-state change. Severity follows the proven account
+  privilege, tenant boundary, victim interaction, and blast radius.
 - XXE with clear proof that an attacker can control the XML document through in-scope attack-surface and that the XML engine is vulnerable to XXE
 - etc, other bugs not listed which follow this level of high severity and impact; with actual proof that these bugs are reachable from in-scope attack-surface.
 - Dangerous upload / file handling issues that enable stored active content, trusted-origin script execution, or meaningful content-type confusion with real security impact; with actual proof that both the upload and access are reachable through in-scope attack-surface.
@@ -165,6 +175,13 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   unchanged non-security state, missing framework API name, or cookie flags
   without proving attacker knowledge or injection, identifier survival across
   authentication, and successful replay as the victim.
+- Recovery-link reports based only on a `Host`, `Forwarded`,
+  `X-Forwarded-Host`, forwarded-protocol, URL-builder, or reset-token symbol
+  without proving accepted attacker control through the actual proxy/trust
+  topology, a resulting secret-bearing attacker-origin URL, victim disclosure,
+  and successful security action. Fixed deployment origins, strict canonical
+  allowlists before URL construction, and trusted-proxy canonicalization are
+  strong counterevidence; strong token entropy or one-time use alone is not.
 - Missing headers, cookie flags, CSP weaknesses, TLS observations, or crypto hygiene issues without a concrete exploit path and meaningful demonstrated impact.
 - Reports that effectively say "this could be dangerous if combined with something else" but do not show the something else.
 - Denial of service that is transient, single-user, self-targeting, easy to mitigate, requires disproportionate attacker resources, or does not create severe and realistic business / safety impact.
