@@ -4,11 +4,13 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
+  addCopilotUsage,
   closureGapCounts,
   copilotModelTurnTimeoutMilliseconds,
   copilotModelErrorRecovery,
   COPILOT_SCANNER_SESSION_HOOKS,
   DEFAULT_MODEL_TURN_TIMEOUT_MILLISECONDS,
+  emptyCopilotUsage,
   isSafetyClassifierRefusal,
   prepareCopilotRuntime,
   resolveCopilotCli,
@@ -127,6 +129,37 @@ describe("Copilot port", () => {
       pluginRoot: "plugin",
     };
     expect(options.model).toBe("gpt-5.6-sol");
+  });
+
+  test("separates request cost units from AI-credit consumption", () => {
+    const usage = emptyCopilotUsage();
+    addCopilotUsage(usage, {
+      model: "gpt-5.6-terra",
+      inputTokens: 100,
+      outputTokens: 20,
+      cost: 2,
+      copilotUsage: { totalNanoAiu: 1_500_000_000 },
+    });
+    addCopilotUsage(usage, {
+      model: "gpt-5.6-terra",
+      inputTokens: 50,
+      cacheReadTokens: 25,
+      outputTokens: 10,
+      cost: 3,
+      copilotUsage: { totalNanoAiu: 250_000_000 },
+    });
+
+    expect(usage).toEqual({
+      input_tokens: 150,
+      cached_input_tokens: 25,
+      cache_write_input_tokens: 0,
+      output_tokens: 30,
+      reasoning_output_tokens: 0,
+      copilot_request_cost_units: 5,
+      copilot_nano_aiu: 1_750_000_000,
+      copilot_ai_credits: 1.75,
+    });
+    expect(usage).not.toHaveProperty("copilot_premium_requests");
   });
 
   test("bounds each Copilot model turn with a scanner-owned timeout", () => {

@@ -1038,7 +1038,7 @@ export async function main(
             .min(30)
             .optional()
             .describe(
-              "Stop when Copilot usage reaches this native limit (minimum 30).",
+              "Optionally cap Copilot usage for this session (minimum 30); omitted by default.",
             ),
           dryRun: z
             .boolean()

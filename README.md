@@ -130,8 +130,13 @@ The default is `gpt-5.6-sol` with `xhigh` effort.
 `--model auto` delegates model selection to Copilot and does not send a
 reasoning-effort override because Copilot rejects reasoning effort for the
 automatic model.
-Use `--max-ai-credits N` to have Copilot enforce a native credit limit across
-the root session and its subagents. Copilot CLI requires at least 30 credits.
+The scanner imposes no AI-credit or request allowance by default. Usage values
+in results are consumption telemetry, not a remaining balance. Use
+`--max-ai-credits N` only when you want Copilot to enforce an optional native
+session limit across the root session and its subagents; Copilot CLI requires
+an explicit limit of at least 30 credits. Service-side transient rate limits
+remain separate from billing or plan allowance and use the scanner's bounded
+reconnect path.
 
 ### Isolated scanner state
 

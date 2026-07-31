@@ -48,8 +48,10 @@ Configuration:
 
 Scan authentication accepts `"auto"`, `"github"`, or `"token"`. Output
 directories must be outside the scanned repository and any enclosing Git
-worktree. `maxAiCredits` maps to Copilot's native per-session AI-credit limit
-and includes subagent use; Copilot CLI requires a limit of at least `30`.
+worktree. The scanner does not impose a credit or request allowance by default.
+Usage values in scan results describe consumption, not remaining entitlement.
+`maxAiCredits` opts into Copilot's native per-session AI-credit limit and
+includes subagent use; Copilot CLI requires an explicit limit of at least `30`.
 Scanner-owned state is isolated under `COPILOT_SECURITY_HOME` (default:
 `~/.copilot-security`). `COPILOT_HOME` is read only as the source of existing
 Copilot CLI authentication; a private copy is prepared under the scanner-owned

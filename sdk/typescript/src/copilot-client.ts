@@ -170,7 +170,7 @@ class CopilotThread implements CopilotScannerThread {
       this.#options.environment,
     );
     const queue = new AsyncEventQueue<ScannerEvent>();
-    const usage = emptyUsage();
+    const usage = emptyCopilotUsage();
     const client = new CopilotClient({
       connection: RuntimeConnection.forStdio({
         path: this.#options.cliPath,
@@ -736,10 +736,10 @@ async function hasDraftArtifacts(
 function translateEvent(
   event: SessionEvent,
   queue: AsyncEventQueue<ScannerEvent>,
-  usage: ReturnType<typeof emptyUsage>,
+  usage: ReturnType<typeof emptyCopilotUsage>,
 ): void {
   if (event.type === "assistant.usage") {
-    addUsage(usage, event.data);
+    addCopilotUsage(usage, event.data);
     queue.push({ type: "copilot.usage", event });
     return;
   }
@@ -767,14 +767,15 @@ function translateEvent(
   }
 }
 
-function emptyUsage(): {
+export function emptyCopilotUsage(): {
   input_tokens: number;
   cached_input_tokens: number;
   cache_write_input_tokens: number;
   output_tokens: number;
   reasoning_output_tokens: number;
-  copilot_premium_requests: number;
+  copilot_request_cost_units: number;
   copilot_nano_aiu: number;
+  copilot_ai_credits: number;
 } {
   return {
     input_tokens: 0,
@@ -782,13 +783,14 @@ function emptyUsage(): {
     cache_write_input_tokens: 0,
     output_tokens: 0,
     reasoning_output_tokens: 0,
-    copilot_premium_requests: 0,
+    copilot_request_cost_units: 0,
     copilot_nano_aiu: 0,
+    copilot_ai_credits: 0,
   };
 }
 
-function addUsage(
-  target: ReturnType<typeof emptyUsage>,
+export function addCopilotUsage(
+  target: ReturnType<typeof emptyCopilotUsage>,
   source: AssistantUsageData,
 ): void {
   target.input_tokens += source.inputTokens ?? 0;
@@ -796,8 +798,9 @@ function addUsage(
   target.cache_write_input_tokens += source.cacheWriteTokens ?? 0;
   target.output_tokens += source.outputTokens ?? 0;
   target.reasoning_output_tokens += source.reasoningTokens ?? 0;
-  target.copilot_premium_requests += source.cost ?? 0;
+  target.copilot_request_cost_units += source.cost ?? 0;
   target.copilot_nano_aiu += source.copilotUsage?.totalNanoAiu ?? 0;
+  target.copilot_ai_credits = target.copilot_nano_aiu / 1_000_000_000;
 }
 
 function assistantMessageContent(response: unknown): string {
