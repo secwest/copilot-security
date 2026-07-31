@@ -211,6 +211,19 @@ Use this checklist to keep discovery specific without turning it into validation
   A strong negative control rejects all ambiguity at the first trust boundary,
   consumes exactly one complete message, and forwards a canonical structured
   request through the same authorization and backend path.
+- For HTTP response-header injection and response splitting, enumerate every
+  request-, record-, filename-, metadata-, or upstream-controlled value that
+  reaches `Location`, `Content-Disposition`, `Set-Cookie`, cache, CORS, internal
+  redirect, sendfile, or custom response headers. Preserve decoding and
+  normalization, the exact bytes before serialization, CR/LF or other control
+  characters, framework or raw serializer behavior, the resulting header
+  block/body boundary, and every proxy, gateway, browser, or cache consumer.
+  Require a concrete downstream effect such as protected internal-resource
+  disclosure, cookie injection, redirect/security-policy change, cache
+  poisoning, or a second response; string interpolation or a header API name
+  alone is not proof. Rejection of all response-field control bytes before
+  serialization plus context-appropriate quoted or RFC 5987 encoding and a
+  legitimate-value control is strong counterevidence.
 - When the same product area also has auth, secret, or configuration bugs, keep the path/file candidate open until its own proof tuple is closed. Do not replace it with the louder neighboring issue.
 - In framework or library scans, do not suppress a high-impact candidate solely because the affected API is deprecated, opt-in, or documented as dangerous. State that as a precondition; keep the candidate when the shipped runtime code contains a bypassable control in the restricted or normal usage path and the instance has a plausible cross-boundary source and runtime/deployment path.
 - In auth/authz surfaces, enumerate public webhook, status, callback, and API endpoints that read protected objects, trigger builds/jobs, or mutate protected state independently from nearby credential or configuration bugs.

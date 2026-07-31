@@ -142,6 +142,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:applicationCache|authorizationCache|invoiceCache|permissionCache|responseCache|tenantCache)\b|\b(?:cacheKey|cache_key)\b|\b(?:cache|cached)\.(?:get|set)\s*\(/iu,
   ],
   [
+    "http-response-header-value-boundary",
+    105,
+    /\b(?:Content-Disposition|Location|Set-Cookie|X-Accel-Redirect|X-Sendfile)\b|\b(?:appendHeader|setHeader|writeHead|rawResponse|serializeResponse)\b|\.join\s*\(\s*["']\\r\\n["']\s*\)/iu,
+  ],
+  [
     "graphql-operation-amplification-or-resolver-budget",
     105,
     /\b(?:GraphQL|gql|document\.selections|selectionSet|resolverCost|chargedCost|verifyRecoveryCode|recoveryOperations|failedAttempts|MAX_(?:FAILED_ATTEMPTS|SELECTIONS))\b/iu,

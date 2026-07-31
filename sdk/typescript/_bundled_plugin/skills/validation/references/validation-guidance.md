@@ -453,6 +453,17 @@ Use this checklist to keep validation close to the prompt contract:
   bytes, routing/authorization decisions, connection reuse, and the protected
   effect. Reproduce the same bytes against the closest reachable parser pair
   and an ambiguity-rejecting negative control when feasible.
+- For HTTP response-header injection or response splitting, save the exact
+  attacker input before and after URL/form/metadata decoding, raw serialized
+  response bytes, parsed header/body boundaries at every downstream proxy,
+  gateway, cache, or browser, and the resulting protected effect. Demonstrate
+  the same ordinary response without control bytes, then use a negative control
+  that rejects CR/LF and all response-field control characters before
+  serialization while preserving a legitimate quoted or RFC 5987 encoded
+  value. Do not validate from a `setHeader`, `Location`, or
+  `Content-Disposition` call alone: prove which injected header or second
+  response a real consumer honors and what secret, session, cache entry,
+  policy, route, or protected object changes as a result.
 - Keep commands short, non-interactive, and scoped to the touched files or the minimum referenced paths.
 - If validation fails, record what was attempted, why it was inconclusive, and what proof gap remains.
 - Save any PoCs, logs, or crafted inputs under that finding's validation artifacts path from `../../../references/scan-artifacts.md`.

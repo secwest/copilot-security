@@ -71,6 +71,10 @@ describe("effectiveness benchmark", () => {
         "javascript-safe-tenant-cache-isolation",
       ],
       [
+        "javascript-http-response-splitting",
+        "javascript-safe-http-response-headers",
+      ],
+      [
         "javascript-graphql-recovery-amplification",
         "javascript-safe-graphql-recovery-limits",
       ],
@@ -259,6 +263,29 @@ describe("effectiveness benchmark", () => {
         path: "src/invoices.js",
         startLine: 52,
         endLine: 62,
+        lineTolerance: 3,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-http-response-splitting")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-113", "CWE-200"]]);
+    expect(
+      cases
+        .get("javascript-http-response-splitting")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/download.js",
+        startLine: 6,
+        endLine: 16,
+        lineTolerance: 3,
+      },
+      {
+        path: "src/download.js",
+        startLine: 38,
+        endLine: 44,
         lineTolerance: 3,
       },
     ]);
@@ -816,6 +843,30 @@ describe("effectiveness benchmark", () => {
     ).toContain(
       "const cacheKey = `tenant:${session.tenantId}:invoice:${invoiceId}`",
     );
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-http-response-splitting",
+          "src",
+          "download.js",
+        ),
+        "utf8",
+      ),
+    ).toContain('headers.get("x-accel-redirect")');
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "javascript-safe-http-response-headers",
+          "src",
+          "download.js",
+        ),
+        "utf8",
+      ),
+    ).toContain("/[\\u0000-\\u001f\\u007f]/u.test(filename)");
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(3);
       const fixtureRoot = join(benchmarkRoot, benchmarkCase.fixture);
@@ -950,6 +1001,9 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("untrusted upload and content placement:");
     expect(deepScan).toContain("HTTP request framing and smuggling:");
     expect(deepScan).toContain(
+      "HTTP response-header injection and response splitting:",
+    );
+    expect(deepScan).toContain(
       "JWT/JWS/OIDC algorithm, key-family, key origin, and claim binding:",
     );
     expect(deepScan).toContain(
@@ -1002,6 +1056,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(standardScan).toContain("untrusted uploads and");
     expect(standardScan).toContain("HTTP message framing and parser agreement");
+    expect(standardScan).toContain(
+      "HTTP response-header injection and response splitting",
+    );
     expect(standardScan).toContain("JWT/OIDC algorithm-to-key-family binding");
     expect(standardScan).toContain(
       "signed OIDC ID-token audience, authorized-party, nonce, callback-session",
@@ -1040,6 +1097,7 @@ describe("effectiveness benchmark", () => {
     );
     expect(diffScan).toContain("new multipart/file inputs");
     expect(diffScan).toContain("duplicate or conflicting `Content-Length` and");
+    expect(diffScan).toContain("changed response-header construction");
     expect(diffScan).toContain(
       "SAML/SSO assertion ID lookup, signature-reference resolution",
     );
@@ -1089,6 +1147,9 @@ describe("effectiveness benchmark", () => {
       "For HTTP request-smuggling and desynchronization",
     );
     expect(discovery).toContain("Do not promote header names alone");
+    expect(discovery).toContain(
+      "For HTTP response-header injection and response splitting",
+    );
     expect(discovery).toContain(
       "For SAML and other signed federated identity objects",
     );
@@ -1147,6 +1208,9 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("XPath/XQuery injection:");
     expect(validation).toContain("untrusted upload/content placement:");
     expect(validation).toContain("HTTP request smuggling/desynchronization:");
+    expect(validation).toContain(
+      "For HTTP response-header injection or response splitting",
+    );
     expect(validation).toContain("JWT/JWS/OIDC remote key origin:");
     expect(validation).toContain(
       "OIDC ID-token client and transaction binding:",
@@ -1198,6 +1262,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(attackPath).toContain(
       "For HTTP request-smuggling and desynchronization findings",
+    );
+    expect(attackPath).toContain(
+      "For HTTP response-header injection and response-splitting findings",
     );
     expect(attackPath).toContain("For SAML/federated signed-object findings");
     expect(attackPath).toContain("For JWT/JWS/OIDC remote-key findings");
@@ -1272,7 +1339,16 @@ describe("effectiveness benchmark", () => {
       "HTTP request smuggling that demonstrably crosses",
     );
     expect(severityPolicy).toContain(
+      "HTTP response splitting that lets an unauthenticated attacker",
+    );
+    expect(severityPolicy).toContain(
+      "HTTP response-header injection or response splitting that reliably causes",
+    );
+    expect(severityPolicy).toContain(
       "Request-smuggling claims based only on `Content-Length`",
+    );
+    expect(severityPolicy).toContain(
+      "Response-header-injection claims based only on string interpolation",
     );
     expect(severityPolicy).toContain(
       "SAML/SSO signature wrapping or signed-object confusion",
@@ -1311,6 +1387,7 @@ describe("effectiveness benchmark", () => {
     expect(threatModelGuidance).toContain(
       "HTTP framing/parser agreement across proxies",
     );
+    expect(threatModelGuidance).toContain("HTTP response-header trust across");
     expect(threatModelGuidance).toContain(
       "JWT/JWS/OIDC algorithm-to-key-family and signature-versus-MAC binding",
     );
@@ -1367,6 +1444,9 @@ describe("effectiveness benchmark", () => {
       "server-side application authorization-cache key isolation",
     );
     expect(repositoryWideScan).toContain(
+      "For HTTP response headers, trace untrusted redirect targets",
+    );
+    expect(repositoryWideScan).toContain(
       "GraphQL aliases/fragments/nesting/batches/persisted documents",
     );
     expect(repositoryWideScan).toContain(
@@ -1383,6 +1463,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(finalReport).toContain(
       "For application authorization-cache findings",
+    );
+    expect(finalReport).toContain(
+      "For HTTP response-header injection or response-splitting findings",
     );
     expect(finalReport).toContain("For OIDC ID-token client-binding findings");
     expect(finalReport).toContain("For DNS-rebinding SSRF findings");

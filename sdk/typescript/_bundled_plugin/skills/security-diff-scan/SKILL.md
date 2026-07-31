@@ -151,6 +151,11 @@ publish findings, open issues, or contact third parties. Write only beneath
      lengths, protocol translation, request reserialization, connection reuse,
      or authorization/routing before a differently configured downstream HTTP
      parser;
+   - changed response-header construction, URL/form/metadata decoding, CR/LF or
+     control-byte rejection, quoting/encoding, raw response serialization,
+     internal-redirect/sendfile headers, or downstream proxy, cache, and browser
+     interpretation of attacker-influenced `Location`, `Content-Disposition`,
+     `Set-Cookie`, and custom response fields;
    - changed SAML/SSO assertion ID lookup, signature-reference resolution,
      canonicalization, list indexing, cloning/return selection, claims parsing,
      issuer/audience/recipient/destination binding, assertion lifetime, replay

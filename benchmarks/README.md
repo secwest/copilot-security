@@ -22,9 +22,11 @@ plus source-to-impact continuity; and code evidence needs a concrete
 path-and-line anchor, source text, and explanatory reasoning. Presence and
 substantive-quality flags are both retained in per-match diagnostics.
 
-The versioned corpus currently contains thirty-nine vulnerable/control pairs:
+The versioned corpus currently contains forty vulnerable/control pairs:
 command injection, path traversal, executable file upload/content placement,
 HTTP request smuggling across inconsistent gateway/backend framing,
+HTTP response splitting through a CR/LF-injected download filename with
+pre-serialization control-byte rejection and RFC 5987 encoding as the control,
 object-level authorization, SQL injection, document-query operator injection,
 server-side request forgery, unsafe deserialization, reflected XSS, XML
 external entities, JWT signature-verification bypass, JWT `alg`/key-type
@@ -57,7 +59,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 234
+destination-pinned, redirect-free transport. Three runs per case produce 240
 scans in the complete corpus.
 
 Run scans into a directory outside this repository:

@@ -779,6 +779,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes CRLF response-header injection taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "CRLF response header injection reaches an internal redirect";
+    finding.summary =
+      "An attacker-controlled Content-Disposition filename injects X-Accel-Redirect into the raw HTTP response, and the gateway returns a protected internal signing-key export.";
+    finding["taxonomy"] = {
+      category: "input validation",
+      cwe: ["CWE-20"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "http-response-splitting",
+      cwe: ["CWE-113", "CWE-200"],
+    });
+  });
+
   test("normalizes GraphQL resolver amplification to authentication-attempt taxonomy", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

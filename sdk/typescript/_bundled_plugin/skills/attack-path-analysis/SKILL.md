@@ -239,6 +239,15 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   disagreement bypasses a control or affects another request. A conflicting
   header pair without per-hop boundaries and impact is not reportable; exact
   first-hop rejection or canonical one-message forwarding is counterevidence.
+- For HTTP response-header injection and response-splitting findings, preserve
+  the attacker-controlled value and decoding path, exact raw response bytes,
+  injected header or second response, downstream proxy/gateway/cache/browser
+  interpretation, deployment configuration, and the secret, session, cache,
+  redirect, internal route, or protected object affected. Prove the consumer
+  honors the injected field; a raw interpolation, header name, or CR/LF-capable
+  helper without an effect is not reportable. Rejection of all response-field
+  control bytes before serialization, context-correct quoting/encoding, and a
+  legitimate-value success path are distinct counterevidence.
 - For SAML/federated signed-object findings, preserve the exact response and
   signature bytes, reference URI/ID, ID uniqueness, canonicalized byte range,
   verified assertion object, returned/cloned object, claims source, issuer,

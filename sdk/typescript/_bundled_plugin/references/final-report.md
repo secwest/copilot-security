@@ -135,6 +135,18 @@ skips the scoped authorization lookup. A shared cache or compact key alone is
 not an exploit witness; record identity-partitioned keys, hit validation, and
 permission-change invalidation when present.
 
+For HTTP response-header injection or response-splitting findings, affected
+lines must include the untrusted value extraction or decoding, missing
+control-byte boundary, response-field construction or raw serialization, and
+the downstream proxy/gateway/cache/browser decision that creates the protected
+effect when those lines are distinct. The write-up must preserve exact raw
+response bytes, the injected header or second response, deployment consumer,
+and disclosed secret, session change, redirect, cache entry, internal route, or
+protected object. A response-header API or possible CR/LF alone is not an
+exploit witness; record pre-serialization control-byte rejection,
+context-appropriate quoting or RFC 5987 encoding, and legitimate-value success
+when present.
+
 For external authorization fail-open findings, affected lines must include the
 permissive initial/default decision, policy or entitlement call, exception/
 timeout/malformed-response handling, final allow comparison, and protected sink

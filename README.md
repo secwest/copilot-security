@@ -175,7 +175,9 @@ check/use state races, unsafe mass assignment, cookie-authenticated cross-site
 request forgery,
 attacker-length native-memory corruption, document-query operator injection,
 executable file upload/content placement, cross-proxy/backend HTTP request
-smuggling, LDAP filter injection into directory-backed group authorization,
+smuggling, CR/LF response-header injection that makes a gateway honor an
+attacker-injected internal redirect, LDAP filter injection into directory-backed
+group authorization,
 XPath predicate injection into XML-backed authentication, OAuth account-linking
 CSRF leading to account takeover, login session fixation, password-reset link
 origin poisoning, credentialed CORS secret exfiltration, and adversarial
@@ -187,8 +189,8 @@ the HTTP-request, execution-plan, resolver, and account-state boundaries,
 fail-open external authorization on policy exceptions and malformed decisions,
 DNS-rebinding SSRF across validation and connection-time resolution, plus
 catastrophic-backtracking regular-expression denial of service with a bounded
-linear validator as the control. Each of the 78 cases is scanned three times,
-producing 234 scans that measure both accuracy and model variance. The
+linear validator as the control. Each of the 80 cases is scanned three times,
+producing 240 scans that measure both accuracy and model variance. The
 evaluator uses one-to-one CWE-plus-location
 matching, counts duplicate reports as false positives, and records missing scan
 artifacts as completion failures.

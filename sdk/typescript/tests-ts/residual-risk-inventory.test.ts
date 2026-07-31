@@ -1112,6 +1112,27 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs response-header injection with control-byte rejection and encoding", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-http-response-splitting"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-http-response-headers"),
+    );
+
+    expect(vulnerable).toContain('"http-response-header-value-boundary"');
+    expect(vulnerable).toContain(
+      '`Content-Disposition: attachment; filename="${filename}"`',
+    );
+    expect(vulnerable).toContain('headers.get("x-accel-redirect")');
+    expect(safe).toContain('"http-response-header-value-boundary"');
+    expect(safe).toContain("/[\\u0000-\\u001f\\u007f]/u.test(filename)");
+    expect(safe).toContain("filename*=UTF-8''${encoded}");
+    expect(scanQualityGatePrompt("")).toContain(
+      "HTTP response-header injection and response splitting across untrusted values, CR/LF boundaries, raw serializers, reverse-proxy control headers, and downstream protected effects",
+    );
+  });
+
   test("pairs GraphQL resolver amplification with execution-plan and account budgets", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-graphql-recovery-amplification"),

@@ -54,6 +54,13 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
   compromise, credential/session capture, or reliable poisoning of many users.
   Critical requires the exact multi-hop parser disagreement and severe effect,
   not merely conflicting framing headers or a theoretical desynchronization.
+- HTTP response splitting that lets an unauthenticated attacker make a
+  production proxy, gateway, cache, or browser honor injected fields or a
+  second response and thereby disclose crown-jewel secrets, execute
+  compromise-equivalent internal routes, capture privileged sessions, or
+  reliably poison many users. Critical requires exact serialized bytes,
+  deployed-consumer interpretation, and the severe effect, not merely CR/LF in
+  a string or response API.
 - SAML/SSO signature wrapping or signed-object confusion that allows an
   unauthenticated attacker to install an arbitrary administrative, cross-tenant,
   or control-plane identity despite a valid signature being checked elsewhere
@@ -204,6 +211,13 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   or header normalization to reach meaningful protected functionality, or that
   poisons another user's request/response, when the exact bytes, parser
   boundaries, and deployed connection-reuse path are proved.
+- HTTP response-header injection or response splitting that reliably causes a
+  deployed proxy, gateway, cache, or browser to disclose meaningful protected
+  data, serve an unauthorized internal resource, set or overwrite a
+  security-relevant cookie, redirect a victim into a serious exploit chain, or
+  poison another user's response, with the exact bytes and downstream
+  interpretation proved. Severity follows the protected effect, attacker
+  prerequisites, affected population, and deployment reachability.
 - SAML/federated assertion binding failures that reliably authenticate the wrong
   subject, role, tenant, issuer, audience, or recipient and produce meaningful
   unauthorized access, with the signature reference, consumed claims, and
@@ -326,6 +340,13 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   `Transfer-Encoding` appearing together, without proving divergent reachable
   parsers, accepted bytes, connection reuse or residual-byte handling, and a
   concrete protected effect.
+- Response-header-injection claims based only on string interpolation,
+  `Location`, `Content-Disposition`, `Set-Cookie`, or raw-header APIs, possible
+  CR/LF characters, or a framework version, without proving attacker control,
+  exact serialized bytes, the deployed downstream consumer, and a meaningful
+  honored header or second-response effect. Suppress when response-field
+  control bytes are rejected before serialization, context-appropriate quoting
+  or RFC 5987 encoding is applied, and legitimate values still succeed.
 - SAML/SSO reports based only on multiple assertions, index access, or a missing
   optional check without proving which exact bytes were signed, which object was
   consumed, which semantic binding failed, and what unauthorized principal or

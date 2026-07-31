@@ -382,6 +382,17 @@ inventory and closure requirements.
      agrees. Use a sibling path that rejects ambiguity before forwarding,
      consumes exactly one message, and passes a canonical structured request to
      the same authorization decision and backend as the negative control.
+   - HTTP response-header injection and response splitting: every untrusted
+     filename, redirect, cookie, metadata, proxy-derived, or upstream value that
+     reaches a response field or raw response serializer. Preserve all decoding
+     and normalization, CR/LF and other control bytes, exact serialized headers
+     and body boundary, framework rejection behavior, and each reverse proxy,
+     gateway, cache, or browser consumer. Prove a concrete injected header or
+     second-response effect such as internal-resource disclosure, cookie or
+     redirect manipulation, cache poisoning, or protected routing. Use a
+     sibling path that rejects control bytes before serialization and applies
+     context-appropriate quoted or RFC 5987 encoding while accepting a normal
+     value as the negative control. Header construction alone is not closure.
 
    Return uncovered work to discovery. Record the sweep under
    `artifacts/02_discovery/residual_sweep.md`.

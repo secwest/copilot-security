@@ -631,6 +631,51 @@
       "expected": []
     },
     {
+      "id": "javascript-http-response-splitting",
+      "description": "An unauthenticated download filename is interpolated into a raw Content-Disposition header without rejecting CR/LF, allowing an injected X-Accel-Redirect header to make the gateway return a protected tenant signing-key export.",
+      "fixture": "fixtures/javascript-http-response-splitting",
+      "findingsPaths": [
+        "javascript-http-response-splitting/run-1/findings.json",
+        "javascript-http-response-splitting/run-2/findings.json",
+        "javascript-http-response-splitting/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "download-filename-crlf-internal-redirect-injection",
+          "cwe": ["CWE-113", "CWE-200"],
+          "locations": [
+            {
+              "path": "src/download.js",
+              "startLine": 6,
+              "endLine": 16,
+              "lineTolerance": 3
+            },
+            {
+              "path": "src/download.js",
+              "startLine": 38,
+              "endLine": 44,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-http-response-headers",
+      "description": "The same raw response path rejects all control bytes before serialization, uses a quoted ASCII fallback plus RFC 5987 encoding, and still serves legitimate download filenames without creating gateway headers.",
+      "fixture": "fixtures/javascript-safe-http-response-headers",
+      "findingsPaths": [
+        "javascript-safe-http-response-headers/run-1/findings.json",
+        "javascript-safe-http-response-headers/run-2/findings.json",
+        "javascript-safe-http-response-headers/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-graphql-recovery-amplification",
       "description": "A request-level limiter counts one GraphQL HTTP request while an unbounded aliased execution plan invokes the recovery-code resolver four times without an account-scoped attempt budget, returning a reset capability that changes the victim password.",
       "fixture": "fixtures/javascript-graphql-recovery-amplification",

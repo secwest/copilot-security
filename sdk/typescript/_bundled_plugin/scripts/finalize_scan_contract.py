@@ -2489,6 +2489,20 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         ]
     ).lower()
     if (
+        "http response splitting" in text
+        or "http-response-splitting" in text
+        or "response header injection" in text
+        or "response-header injection" in text
+        or "crlf header injection" in text
+        or "crlf response" in text
+        or (
+            ("content-disposition" in text or "x-accel-redirect" in text)
+            and ("crlf" in text or "carriage return" in text)
+            and ("inject" in text or "splitting" in text)
+        )
+    ):
+        return "http-response-splitting", ["CWE-113", "CWE-200"]
+    if (
         "authorization cache" in text
         or "authorization-cache" in text
         or "tenant cache key" in text
