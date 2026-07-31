@@ -146,6 +146,18 @@ Use class-specific proof tuples:
   public batch still works. Do not report aliases, batching, introspection, a
   complexity plugin name, or a request limiter without the request-to-resolver
   mismatch and concrete security effect.
+- regular-expression denial of service: attacker-controlled text or pattern +
+  the exact regex, flags, engine, and evaluation API + an adversarial
+  near-match that demonstrates superlinear or catastrophic work + the shared
+  event loop, worker, parser, protocol negotiation, or service capacity it
+  blocks. Run the witness only inside a bounded worker, subprocess, VM
+  deadline, engine diagnostic, or deterministic complexity harness; record the
+  input length and timeout/operation result without hanging the scan. The
+  negative control must preserve intended legitimate matches and ordinary
+  rejections while using a strict pre-evaluation length bound, linear parser,
+  guaranteed linear-time engine, or structurally unambiguous expression.
+  Reject syntax-only claims and cases whose exact engine, input cap, isolation,
+  or upstream validation makes the expensive path unreachable or immaterial.
 - login session fixation: attacker-known or attacker-injectable
   pre-authentication session identifier + victim adoption of that identifier +
   successful credential transition that preserves or promotes the same

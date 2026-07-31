@@ -109,6 +109,10 @@ describe("effectiveness benchmark", () => {
         "javascript-safe-password-reset-origin",
       ],
       [
+        "javascript-redos-alias-validation",
+        "javascript-safe-linear-alias-validation",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],
@@ -797,6 +801,7 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain(
       "GraphQL execution amplification and resolver-scoped enforcement:",
     );
+    expect(deepScan).toContain("regular-expression complexity:");
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
@@ -837,6 +842,9 @@ describe("effectiveness benchmark", () => {
       "GraphQL alias/batch/fragment amplification",
     );
     expect(standardScan).toContain(
+      "regular-expression catastrophic backtracking",
+    );
+    expect(standardScan).toContain(
       "native memory allocation/copy/index/lifetime",
     );
     expect(standardScan).toContain(
@@ -867,6 +875,7 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain(
       "changed GraphQL alias, fragment, nesting, batch",
     );
+    expect(diffScan).toContain("changed regex literals");
     expect(diffScan).toContain("terminator space");
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("changed RFC 4515 assertion escaping");
@@ -956,6 +965,7 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain(
       "Preserve the mapping from one transport envelope",
     );
+    expect(discovery).toContain("For regular-expression denial of service");
     expect(validation).toContain("predictable security value:");
     expect(validation).toContain("check/use or state race:");
     expect(validation).toContain("bulk object binding/mass assignment:");
@@ -964,6 +974,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("cross-site WebSocket hijacking:");
     expect(validation).toContain("web cache deception:");
     expect(validation).toContain("GraphQL operation amplification:");
+    expect(validation).toContain("regular-expression denial of service:");
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("LDAP filter injection:");
@@ -999,6 +1010,9 @@ describe("effectiveness benchmark", () => {
     expect(attackPath).toContain(
       "For GraphQL operation-amplification findings",
     );
+    expect(attackPath).toContain(
+      "For regular-expression denial-of-service findings",
+    );
     expect(attackPath).toContain("For native-memory findings");
     expect(attackPath).toContain("For document-query and NoSQL findings");
     expect(attackPath).toContain("For LDAP filter findings");
@@ -1032,6 +1046,10 @@ describe("effectiveness benchmark", () => {
     expect(severityPolicy).toContain(
       "GraphQL operation amplification that converts",
     );
+    expect(severityPolicy).toContain(
+      "Regular-expression denial of service that lets",
+    );
+    expect(severityPolicy).toContain("Regular-expression reports based only");
     expect(severityPolicy).toContain("GraphQL reports based only on aliases");
     expect(severityPolicy).toContain(
       "Memory corruption that is theoretical, non-triggerable",
@@ -1115,6 +1133,9 @@ describe("effectiveness benchmark", () => {
     expect(threatModelGuidance).toContain(
       "GraphQL aliases/fragments/nesting/batches/persisted documents",
     );
+    expect(threatModelGuidance).toContain(
+      "regular-expression catastrophic backtracking",
+    );
     expect(repositoryWideScan).toContain(
       "OAuth/OIDC authorization-code state, nonce, PKCE, callback-session",
     );
@@ -1129,6 +1150,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(repositoryWideScan).toContain(
       "GraphQL aliases/fragments/nesting/batches/persisted documents",
+    );
+    expect(repositoryWideScan).toContain(
+      "regular-expression catastrophic backtracking",
     );
     expect(repositoryWideScan).toContain(
       "JWT/JWS token-selected algorithm and key-family confusion",

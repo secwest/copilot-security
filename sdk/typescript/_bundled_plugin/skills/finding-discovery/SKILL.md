@@ -89,6 +89,20 @@ Use this checklist to keep discovery specific without turning it into validation
   parameterization when request-controlled values can remain operator objects.
   Preserve exact primitive-type, shape, key, and bounded-grammar guards as
   negative controls.
+- For regular-expression denial of service, enumerate fixed regex literals,
+  dynamically constructed patterns, framework route/validation patterns,
+  replace/split/search operations, and patterns stored in configuration or
+  tenant data when they process attacker-controlled text. Inspect nested or
+  overlapping quantifiers, ambiguous alternation, repeated wildcard groups,
+  backreferences, anchoring, flags, and the actual runtime engine. Preserve the
+  adversarial near-match—not only a matching sample—and the input-length,
+  request-body, parser, timeout, worker, and concurrency controls in force
+  before evaluation. A regex API, nested quantifier, dynamic pattern, or
+  unbounded string alone is a candidate, not a finding: promote only when the
+  pattern/input pair has superlinear or catastrophic behavior and can
+  realistically monopolize a shared event loop, worker, parser, or security
+  negotiation. Linear parsing, a guaranteed linear-time engine, an equivalent
+  unambiguous expression, or a strict pre-evaluation bound is counterevidence.
 - For LDAP searches used in authentication, group membership, role mapping, or
   authorization, trace every request, SSO/federated claim, session value,
   stored tenant value, UID, DN, CN, and group name into the effective filter

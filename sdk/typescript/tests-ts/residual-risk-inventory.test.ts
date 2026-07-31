@@ -554,6 +554,29 @@ describe("residual risk inventory", () => {
     expect(safe).toContain('request.get_json()["display_name"]');
   });
 
+  test("pairs catastrophic regex evaluation with bounded linear validation", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-redos-alias-validation"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-linear-alias-validation"),
+    );
+
+    expect(vulnerable).toContain('"untrusted-input"');
+    expect(vulnerable).toContain('"regular-expression-complexity"');
+    expect(vulnerable).toContain("ALIAS_PATTERN = /^(a+)+$/");
+    expect(vulnerable).toContain("ALIAS_PATTERN.test(alias)");
+    expect(safe).not.toContain('"regular-expression-complexity"');
+    expect(safe).toContain('"untrusted-input"');
+    expect(safe).toContain('"input-size-or-complexity-bound"');
+    expect(safe).toContain("MAX_ALIAS_LENGTH");
+    expect(safe).toContain("alias.length > MAX_ALIAS_LENGTH");
+    expect(safe).toContain("alias.charCodeAt(index) !== 0x61");
+    expect(scanQualityGatePrompt("")).toContain(
+      "regular-expression catastrophic backtracking",
+    );
+  });
+
   test("pairs mutable check/use state with an atomic snapshot control", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "python-payout-toctou"),

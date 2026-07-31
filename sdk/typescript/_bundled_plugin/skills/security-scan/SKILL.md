@@ -46,6 +46,8 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    boundaries, response directives, and origin routing/normalization,
    GraphQL alias/batch/fragment amplification from one transport request through
    execution planning and resolver-scoped account/principal/tenant budgets,
+   regular-expression catastrophic backtracking from attacker-controlled
+   near-matches through the actual engine and shared event-loop/worker capacity,
    authorization, state changes, interpreters, filesystem, network,
    deserialization, and templates;
    SQL and document-database query selectors/operators, LDAP filter construction

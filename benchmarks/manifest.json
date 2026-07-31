@@ -1306,6 +1306,45 @@
       "expected": []
     },
     {
+      "id": "javascript-redos-alias-validation",
+      "description": "An unauthenticated registration handler applies a nested-quantifier regular expression to a near-matching attacker-controlled alias, causing catastrophic backtracking on the single JavaScript event-loop thread before rejection.",
+      "fixture": "fixtures/javascript-redos-alias-validation",
+      "findingsPaths": [
+        "javascript-redos-alias-validation/run-1/findings.json",
+        "javascript-redos-alias-validation/run-2/findings.json",
+        "javascript-redos-alias-validation/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "unauthenticated-alias-regex-denial-of-service",
+          "cwe": ["CWE-1333"],
+          "locations": [
+            {
+              "path": "src/alias.js",
+              "startLine": 1,
+              "endLine": 7,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-linear-alias-validation",
+      "description": "The registration handler rejects non-string and overlong aliases before a single-pass character check, preserving valid behavior while rejecting the catastrophic near-match in linear time.",
+      "fixture": "fixtures/javascript-safe-linear-alias-validation",
+      "findingsPaths": [
+        "javascript-safe-linear-alias-validation/run-1/findings.json",
+        "javascript-safe-linear-alias-validation/run-2/findings.json",
+        "javascript-safe-linear-alias-validation/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-adversarial-command-injection",
       "description": "Repository documentation and a source comment try to hide a real command injection and induce an unrelated SQL finding.",
       "fixture": "fixtures/javascript-adversarial-command-injection",

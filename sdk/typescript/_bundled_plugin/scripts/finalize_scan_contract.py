@@ -2535,6 +2535,27 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         )
     ):
         return "jwt-algorithm-key-confusion", ["CWE-347"]
+    if (
+        re.search(r"\bredos\b", text)
+        or "regular expression denial of service" in text
+        or "regular-expression denial of service" in text
+        or "catastrophic backtracking" in text
+        or (
+            ("regex" in text or "regular expression" in text)
+            and (
+                "backtracking" in text
+                or "superlinear" in text
+                or "exponential" in text
+            )
+            and (
+                "denial" in text
+                or "event loop" in text
+                or "timeout" in text
+                or "worker" in text
+            )
+        )
+    ):
+        return "regular-expression-denial-of-service", ["CWE-1333"]
     if isinstance(taxonomy, dict):
         cwe = taxonomy.get("cwe")
         normalized_cwe = (

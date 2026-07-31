@@ -148,6 +148,14 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   exact request-to-expanded-resolver multiplier, practical effective attempts
   or effects, missing/bypassable account or principal quota, and successful
   protected outcome; a theoretical increase in calls is not enough.
+- Regular-expression denial of service that lets a low-cost unauthenticated or
+  broadly reachable input monopolize a shared event loop, request worker,
+  parser, protocol negotiation, or comparable finite service capacity.
+  `high` requires the exact pattern/input near-match, bounded runtime or
+  complexity proof, realistic repeated-request economics, ineffective or
+  absent pre-evaluation bounds/isolation, and material multi-user availability
+  impact. Use `medium` when the affected capacity or reachability is narrower
+  but the superlinear behavior and service impact remain concrete.
 - Hardcoded or default credentials that are valid, reachable, and provide meaningful access warranting `high`, even when that access is not broad or privileged enough for `critical`.
 - Cryptographic failures that allow signature forgery, token forgery, trusted artifact forgery, secure-channel bypass, or decryption of highly sensitive data in a way that directly enables compromise, with actual proof that these attacks are practical and can be carried out from an in-scope attack surface.
 - Supply-chain or update-channel compromise that allows malicious code or malicious trusted artifacts to be delivered to users, servers, agents, or endpoints, including signing bypass or package source substitution with real impact. This should focus on actual supply-chain risk and risk around CI actions, not just "does npm report outdated packages"
@@ -283,6 +291,10 @@ Examples that usually should not remain `high`/`critical` without very strong pr
 - Missing headers, cookie flags, CSP weaknesses, TLS observations, or crypto hygiene issues without a concrete exploit path and meaningful demonstrated impact.
 - Reports that effectively say "this could be dangerous if combined with something else" but do not show the something else.
 - Denial of service that is transient, single-user, self-targeting, easy to mitigate, requires disproportionate attacker resources, or does not create severe and realistic business / safety impact.
+- Regular-expression reports based only on a nested quantifier, ambiguous
+  alternation, dynamic `RegExp`, unbounded input, or a slow development-machine
+  timing without the exact engine, adversarial near-match, effective upstream
+  bounds, shared-capacity path, and realistic attacker-to-defender cost ratio.
 - Authz findings that require already having the same privilege as the victim, or only expose trivial metadata.
 - Bugs that already require admin/root/shell access unless the privilege-escalation delta itself is the issue being reported.
 - Arbitrary file read limited to public files, low-sensitivity files, or source fragments with no realistic security consequence.

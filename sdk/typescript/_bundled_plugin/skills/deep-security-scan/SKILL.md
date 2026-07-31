@@ -116,6 +116,17 @@ inventory and closure requirements.
      configuration, or error text into template or expression source; distinguish
      fixed templates receiving untrusted data from untrusted template source,
      and record sandbox, escaping, object-capability, and recursion controls;
+   - regular-expression complexity: every fixed or dynamically constructed
+     pattern applied to request, protocol, stored, tenant, configuration, or
+     document text; inspect nested and overlapping quantifiers, ambiguous
+     alternation, repeated wildcard groups, backreferences, engine guarantees,
+     anchoring, attacker-controlled near-matches, input-length bounds, and
+     whether evaluation blocks a shared event loop, worker, parser, or security
+     negotiation. Require a bounded runtime witness or defensible complexity
+     argument plus a legitimate matching control. Prefer linear parsing,
+     linear-time engines, structurally unambiguous patterns, and pre-evaluation
+     bounds as negative controls; a timeout around an already blocked shared
+     thread is not automatically effective;
    - security-value generation: password-reset and verification tokens, session
      identifiers, API keys, nonces, invitations, CSRF values, temporary
      credentials, and lottery/selection values that protect assets; record the
@@ -361,6 +372,16 @@ inventory and closure requirements.
    tenant-selection outcome. Reject the candidate when an exact schema or
    primitive-type guard runs before construction and excludes every operator,
    key, type, and coercion needed by the claimed query.
+   For regular-expression complexity candidates, preserve the exact pattern,
+   flags, runtime engine, attacker-controlled input and length, near-match
+   suffix, evaluation API, execution context, and affected shared resource.
+   Demonstrate superlinear or catastrophic behavior inside a bounded worker,
+   subprocess, VM deadline, engine diagnostic, or deterministic complexity
+   model without hanging the scan. Compare a legitimate match, an ordinary
+   rejection, the adversarial near-match, and the nearest length-bounded
+   linear or unambiguous control. Do not report regex syntax, a dynamic
+   `RegExp`, or an unbounded input by itself without proving the expensive
+   pattern/input interaction and realistic availability impact.
    For JWT/JWS algorithm-confusion candidates, create a real asymmetric key pair,
    publish only the public key, and use those public bytes as the MAC secret for
    a token-selected symmetric algorithm. Preserve both compact tokens, decoded

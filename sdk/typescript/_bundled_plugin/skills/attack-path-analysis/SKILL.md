@@ -138,6 +138,18 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   high-risk mutation where appropriate, and atomic resolver/service-layer
   principal or account quotas are distinct counterevidence; demonstrate benign
   bounded batching through the same safe path.
+- For regular-expression denial-of-service findings, preserve the remote,
+  protocol, document, stored, or tenant-controlled input; exact pattern and
+  flags; engine and evaluation API; adversarial near-match and its length;
+  observed deadline, operation growth, or engine diagnostic; and the shared
+  event loop, request worker, parser, or negotiation capacity that becomes
+  unavailable. Separate pattern-controlled injection from fixed-pattern
+  catastrophic backtracking, and explain why request, parser, proxy, or schema
+  bounds do not defeat the witness before evaluation. Record legitimate match,
+  ordinary rejection, bounded length, linear parser/engine, worker isolation,
+  and concurrency controls as distinct counterevidence. A nested quantifier,
+  regex API, or slow local microbenchmark alone does not establish a remotely
+  exploitable service-level path.
 - For native-memory findings, preserve the attacker-controlled bytes, length,
   index, pointer, object state, or scheduling action; the allocation and exact
   source/destination object extents in consistent units; integer wrap,

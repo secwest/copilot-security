@@ -187,6 +187,16 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:from_string|parseExpression|compileExpression|render_template_string)\s*\(|\bnew\s+(?:Function|Template)\s*\(|\bTemplate\s*\(/iu,
   ],
   [
+    "regular-expression-complexity",
+    101,
+    /\b(?:RegExp|Regex|Pattern\.compile|re\.compile|regexp\.Compile)\s*\(|\b[A-Z][A-Z0-9_]*(?:PATTERN|REGEX)[A-Z0-9_]*\b|\b(?:pattern|regex|regexp)\s*\.(?:match|matches|replace|search|split|test)\s*\(/iu,
+  ],
+  [
+    "input-size-or-complexity-bound",
+    97,
+    /\bMAX_[A-Z0-9_]*(?:BYTES|DEPTH|LENGTH|SIZE)\b|\b[\w$.]+\.(?:byteLength|length)\s*(?:[<>]=?)|\bcharCodeAt\s*\(/u,
+  ],
+  [
     "dynamic-property-or-prototype",
     96,
     /\b(?:__proto__|Object\.assign|Object\.setPrototypeOf|prototype)\b|\[[A-Za-z_$][\w$]*\]\s*(?:=|\?\?=|\|\|=)/iu,

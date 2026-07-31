@@ -233,6 +233,43 @@ async function completeScan(fixture: ScanFixture): Promise<ScanSummary> {
 }
 
 describe("malformed scan artifact recovery", () => {
+  test.each([
+    ["all required drafts", []],
+    ["the manifest draft", ["findings.json", "coverage.json"]],
+    ["the findings draft", ["scan-manifest.json", "coverage.json"]],
+    ["the coverage draft", ["scan-manifest.json", "findings.json"]],
+  ] as const)(
+    "reports every missing agent artifact when completion lacks %s",
+    async (_description, present) => {
+      const fixture = await startDraftScan();
+      const requiredDrafts = [
+        "scan-manifest.json",
+        "findings.json",
+        "coverage.json",
+      ] as const;
+      const missing = requiredDrafts.filter(
+        (filename) => !present.some((candidate) => candidate === filename),
+      );
+      await Promise.all(
+        missing.map((filename) => rm(join(fixture.scanDir, filename))),
+      );
+
+      await expect(completeScan(fixture)).rejects.toThrow(
+        `Scan agent did not create required draft artifacts: ${missing.join(
+          ", ",
+        )}. Check that the scan agent can run shell commands and write to the scan directory before retrying.`,
+      );
+      const stored = await workbench(fixture, [
+        "get-scan",
+        "--scan-id",
+        fixture.scanId,
+      ]);
+      expect(stored["scan"]).toMatchObject({
+        progress: { status: "running" },
+      });
+    },
+  );
+
   test("normalizes a draft manifest with noncanonical artifact metadata", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "scan-manifest.json");
@@ -544,6 +581,31 @@ describe("malformed scan artifact recovery", () => {
     expect(recovered["taxonomy"]).toEqual({
       category: "jwt-algorithm-key-confusion",
       cwe: ["CWE-347"],
+    });
+  });
+
+  test("normalizes catastrophic regex backtracking taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "Alias validation regex permits unauthenticated event-loop denial of service";
+    finding.summary =
+      "A catastrophic-backtracking regular expression evaluates an attacker-controlled near-match with exponential work until a bounded VM witness times out, blocking the shared event loop.";
+    finding["taxonomy"] = {
+      category: "uncontrolled-resource-consumption",
+      cwe: ["CWE-400"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "regular-expression-denial-of-service",
+      cwe: ["CWE-1333"],
     });
   });
 
