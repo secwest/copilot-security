@@ -150,6 +150,22 @@ static async Task TestComparisonAsync()
     Assert.True(comparison.Regressions.Any(value => value.Contains("precision", StringComparison.Ordinal)), "Precision regression must be explicit.");
     Assert.True(comparison.Cases.Single().Regressed, "Case regression must be explicit.");
     Assert.True(comparison.CandidateQualityIndex < comparison.BaselineQualityIndex, "Quality index must preserve direction.");
+
+    var differentCorpus = fixture.File(
+        "different-corpus.json",
+        BenchmarkReport(0.5, 0, false, 1, 1, corpusId: new string('b', 64)));
+    await Assert.ThrowsAsync<InvalidDataException>(
+        () => new BenchmarkComparisonReader().CompareAsync(baseline, differentCorpus));
+    var differentPolicy = fixture.File(
+        "different-policy.json",
+        BenchmarkReport(0.5, 0, false, 1, 1, scanPolicyId: new string('c', 64)));
+    await Assert.ThrowsAsync<InvalidDataException>(
+        () => new BenchmarkComparisonReader().CompareAsync(baseline, differentPolicy));
+    var legacy = fixture.File(
+        "legacy.json",
+        BenchmarkReport(0.5, 0, false, 1, 1, includeCampaign: false));
+    await Assert.ThrowsAsync<InvalidDataException>(
+        () => new BenchmarkComparisonReader().CompareAsync(baseline, legacy));
 }
 
 static Task TestSettingsAsync()
@@ -204,18 +220,26 @@ static async Task TestProcessRunnerAsync()
     Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10), "Cancellation must terminate promptly.");
 }
 
-static string BenchmarkReport(double precision, double recall, bool passed, int falsePositives, int falseNegatives)
+static string BenchmarkReport(
+    double precision,
+    double recall,
+    bool passed,
+    int falsePositives,
+    int falseNegatives,
+    string? corpusId = null,
+    string? scanPolicyId = null,
+    bool includeCampaign = true)
 {
     var f1 = precision + recall == 0 ? 0 : 2 * precision * recall / (precision + recall);
-    var payload = new
+    var payload = new Dictionary<string, object?>
     {
-        documentType = "copilot-security.benchmark",
-        schemaVersion = "1.0",
-        generatedAt = "2026-07-31T00:00:00Z",
-        manifestPath = "manifest.json",
-        resultsDirectory = "results",
-        passed,
-        metrics = new
+        ["documentType"] = "copilot-security.benchmark",
+        ["schemaVersion"] = "1.0",
+        ["generatedAt"] = "2026-07-31T00:00:00Z",
+        ["manifestPath"] = "manifest.json",
+        ["resultsDirectory"] = "results",
+        ["passed"] = passed,
+        ["metrics"] = new
         {
             caseCount = 1,
             runCount = 1,
@@ -238,8 +262,8 @@ static string BenchmarkReport(double precision, double recall, bool passed, int 
             severityAccuracy = passed ? 1 : 0,
             falsePositivesPerRun = falsePositives,
         },
-        thresholds = Array.Empty<object>(),
-        cases = new[]
+        ["thresholds"] = Array.Empty<object>(),
+        ["cases"] = new[]
         {
             new
             {
@@ -269,6 +293,16 @@ static string BenchmarkReport(double precision, double recall, bool passed, int 
             },
         },
     };
+    if (includeCampaign)
+    {
+        payload["campaign"] = new
+        {
+            documentType = "copilot-security.benchmark-campaign",
+            schemaVersion = "1.0",
+            corpusId = corpusId ?? new string('a', 64),
+            scanPolicyId = scanPolicyId ?? new string('b', 64),
+        };
+    }
     return JsonSerializer.Serialize(payload);
 }
 

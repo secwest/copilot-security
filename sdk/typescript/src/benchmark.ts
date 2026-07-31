@@ -2,6 +2,10 @@ import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { CopilotSecurityError } from "./errors.js";
 import {
+  readBenchmarkCampaign,
+  type BenchmarkCampaignDocument,
+} from "./benchmark-campaign.js";
+import {
   isSubstantiveAttackPath,
   isSubstantiveCodeEvidence,
   isSubstantiveValidation,
@@ -143,6 +147,7 @@ export interface BenchmarkReport {
   metrics: BenchmarkMetrics;
   thresholds: BenchmarkThresholdResult[];
   cases: BenchmarkCaseResult[];
+  campaign?: BenchmarkCampaignDocument;
 }
 
 interface FindingLocation {
@@ -189,6 +194,7 @@ export async function evaluateBenchmark(options: {
   const resultsDirectory = resolve(
     options.resultsDirectory ?? join(manifestDirectory, "results"),
   );
+  const campaign = await readBenchmarkCampaign(resultsDirectory);
   const cases: BenchmarkCaseResult[] = [];
 
   for (const benchmarkCase of manifest.cases) {
@@ -205,6 +211,7 @@ export async function evaluateBenchmark(options: {
           benchmarkCase.id,
           index + 1,
           options.requireRunStatus ?? false,
+          campaign?.campaignId,
         );
         const findings = parseFindings(
           await readBoundedFile(
@@ -262,6 +269,7 @@ export async function evaluateBenchmark(options: {
     metrics,
     thresholds,
     cases,
+    ...(campaign === null ? {} : { campaign }),
   };
 }
 
@@ -270,6 +278,7 @@ async function requireSuccessfulRunStatus(
   caseId: string,
   run: number,
   required: boolean,
+  expectedCampaignId?: string,
 ): Promise<void> {
   const statusPath = `${dirname(findingsPath)}.status.json`;
   let contents: Buffer;
@@ -303,6 +312,14 @@ async function requireSuccessfulRunStatus(
   if (status["caseId"] !== caseId || status["run"] !== run) {
     throw new CopilotSecurityError(
       `Benchmark run status does not match ${caseId} run ${run}: ${statusPath}.`,
+    );
+  }
+  if (
+    expectedCampaignId !== undefined &&
+    status["campaignId"] !== expectedCampaignId
+  ) {
+    throw new CopilotSecurityError(
+      `Benchmark run status belongs to a different campaign for ${caseId} run ${run}: ${statusPath}.`,
     );
   }
   if (

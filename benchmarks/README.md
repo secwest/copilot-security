@@ -105,6 +105,10 @@ npm run build
 node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security `
   --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --max-attempts 2 `
   --mode deep
 ```
 
@@ -126,6 +130,50 @@ the requested cases and run count. Runner evaluation always requires a
 successful, case-and-run-matched status receipt. Without `--selection-only`, a
 partial slice still fails the full-manifest completion gate. Use the default
 full-manifest behavior for corpus claims.
+
+The runner creates `benchmark-campaign.json` before the first model call. Its
+identities cover the manifest and fixture bytes, exact case/run selection,
+model, effort, mode, optional credit bound, authentication source, runner bytes,
+Node runtime, scanner entrypoint, compiled scanner code, bundled policy, package
+metadata, and dependency lock. A results directory with files but no campaign
+lock is rejected. Reusing a directory with a different corpus, scanner package,
+runner, authentication source, or scan policy is also rejected; use a new
+directory instead of mixing results.
+
+Resume is fail-closed. A run is skipped only after its campaign-bound receipt,
+complete scanner contract, sealed artifacts, scan ID, and findings, coverage,
+and manifest hashes all validate. A partial, failed, mismatched, or tampered run
+is moved intact under `.benchmark-attempts/<case>/run-N/attempt-N/` before a
+fresh temporary Git repository and unique scanner-visible staging output are
+created. The staging path is never reused and is promoted to the canonical run
+directory only after the scanner returns, which keeps retries compatible with
+scanners that retain their own path registry. `--force` also preserves the
+previous run rather than deleting it. `--max-attempts N`
+controls fresh process attempts per invocation, `--scan-timeout-ms N` supplies
+an outer process-tree deadline, and `--workers N` runs up to eight independent
+case/runs concurrently. The default remains one worker.
+
+To measure another CLI that implements the same scan/output contract, select
+its Node entrypoint and keep its results in a separate campaign directory:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --results-dir C:\security-benchmarks\compatible-baseline `
+  --scanner-cli C:\tools\compatible-scanner\bin\security-scanner.mjs `
+  --scanner-label compatible-baseline `
+  --auth auto `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
+For a valid baseline/candidate comparison, both reports must have the same
+`corpusId` and `scanPolicyId`. Scanner package, label, and authentication source
+may differ and are intentionally captured by different `campaignId` values.
+The Windows comparison reader rejects one-sided provenance, changed fixture or
+manifest bytes, different case/run selections, different model policies,
+different per-case expectation counts, and redistributed run counts.
 
 Evaluate existing results without spending Copilot credits:
 

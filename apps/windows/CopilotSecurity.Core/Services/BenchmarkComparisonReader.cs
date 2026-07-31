@@ -50,6 +50,28 @@ public sealed class BenchmarkComparisonReader
         {
             throw new InvalidDataException("Benchmark reports must cover exactly the same case IDs.");
         }
+        if ((baseline.CorpusId is null) != (candidate.CorpusId is null))
+        {
+            throw new InvalidDataException(
+                "Benchmark reports must both include campaign provenance or both be legacy reports.");
+        }
+        if (baseline.CorpusId is not null &&
+            (!StringComparer.Ordinal.Equals(baseline.CorpusId, candidate.CorpusId) ||
+             !StringComparer.Ordinal.Equals(baseline.ScanPolicyId, candidate.ScanPolicyId)))
+        {
+            throw new InvalidDataException(
+                "Benchmark reports must use the same corpus bytes, case/run selection, and scan policy.");
+        }
+        foreach (var caseId in baseline.Cases.Keys)
+        {
+            var before = baseline.Cases[caseId];
+            var after = candidate.Cases[caseId];
+            if (before.ExpectedCount != after.ExpectedCount || before.RunCount != after.RunCount)
+            {
+                throw new InvalidDataException(
+                    $"Benchmark case {caseId} must use the same expectations and run count.");
+            }
+        }
 
         var metricDeltas = Metrics.Select(metric =>
         {
@@ -157,14 +179,17 @@ public sealed class BenchmarkComparisonReader
         var runCount = RequiredInteger(metricsElement, "runCount");
         var casesElement = RequiredArray(root, "cases");
         var cases = new Dictionary<string, CaseSnapshot>(StringComparer.Ordinal);
+        var countedRuns = 0;
         foreach (var item in casesElement.EnumerateArray())
         {
             var id = RequiredString(item, "id");
             var runs = RequiredArray(item, "runs");
+            var runItems = runs.EnumerateArray().ToArray();
+            countedRuns += runItems.Length;
             var truePositives = 0;
             var falsePositives = 0;
             var falseNegatives = 0;
-            foreach (var run in runs.EnumerateArray())
+            foreach (var run in runItems)
             {
                 truePositives += RequiredInteger(run, "truePositives");
                 falsePositives += RequiredInteger(run, "falsePositives");
@@ -174,6 +199,8 @@ public sealed class BenchmarkComparisonReader
                 id,
                 new CaseSnapshot(
                     RequiredBoolean(item, "passed"),
+                    RequiredInteger(item, "expectedCount"),
+                    runItems.Length,
                     truePositives,
                     falsePositives,
                     falseNegatives)))
@@ -185,13 +212,51 @@ public sealed class BenchmarkComparisonReader
         {
             throw new InvalidDataException("Benchmark case count does not match its metrics.");
         }
-        return new Snapshot(canonical, caseCount, runCount, metrics, cases);
+        if (countedRuns != runCount)
+        {
+            throw new InvalidDataException("Benchmark run count does not match its metrics.");
+        }
+        var (corpusId, scanPolicyId) = OptionalCampaignIdentity(root);
+        return new Snapshot(
+            canonical,
+            caseCount,
+            runCount,
+            corpusId,
+            scanPolicyId,
+            metrics,
+            cases);
     }
 
     private static bool IsBenchmarkDocumentType(string value) =>
         value.Length <= 128 &&
         value.EndsWith(".benchmark", StringComparison.Ordinal) &&
         value.All(character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '-');
+
+    private static (string? CorpusId, string? ScanPolicyId) OptionalCampaignIdentity(
+        JsonElement root)
+    {
+        if (!root.TryGetProperty("campaign", out var campaign))
+        {
+            return (null, null);
+        }
+        if (campaign.ValueKind != JsonValueKind.Object ||
+            RequiredString(campaign, "documentType") != "copilot-security.benchmark-campaign" ||
+            RequiredString(campaign, "schemaVersion") != "1.0")
+        {
+            throw new InvalidDataException("Benchmark campaign provenance is invalid.");
+        }
+        var corpusId = RequiredString(campaign, "corpusId");
+        var scanPolicyId = RequiredString(campaign, "scanPolicyId");
+        if (!IsSha256(corpusId) || !IsSha256(scanPolicyId))
+        {
+            throw new InvalidDataException(
+                "Benchmark campaign corpus and scan-policy IDs must be lowercase SHA-256 values.");
+        }
+        return (corpusId, scanPolicyId);
+    }
+
+    private static bool IsSha256(string value) =>
+        value.Length == 64 && value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 
     private static double QualityIndex(IReadOnlyDictionary<string, double> metrics)
     {
@@ -308,11 +373,15 @@ public sealed class BenchmarkComparisonReader
         string Path,
         int CaseCount,
         int RunCount,
+        string? CorpusId,
+        string? ScanPolicyId,
         IReadOnlyDictionary<string, double> Metrics,
         IReadOnlyDictionary<string, CaseSnapshot> Cases);
 
     private sealed record CaseSnapshot(
         bool Passed,
+        int ExpectedCount,
+        int RunCount,
         int TruePositives,
         int FalsePositives,
         int FalseNegatives);

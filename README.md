@@ -248,6 +248,10 @@ node ./bin/copilot-security.mjs benchmark `
 node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security `
   --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --max-attempts 2 `
   --mode deep
 ```
 
@@ -255,6 +259,20 @@ Use repeatable `--case <id>` options, `--runs 1`, and `--selection-only` for a
 quick paired vulnerable/control diagnostic with its own durable report. Omit
 `--selection-only` when a partial run should intentionally exercise the
 full-corpus completion gate.
+
+Every fresh run directory receives an immutable `benchmark-campaign.json`
+before scanning. It binds corpus and fixture bytes, selection, scan policy,
+runtime, runner, and the effective scanner package. Resume verifies the complete
+sealed scan and its campaign receipt before skipping; failed or partial attempts
+are preserved under `.benchmark-attempts` and retried from a fresh Git fixture.
+Every scanner invocation also receives a unique staging output path that is
+promoted to the canonical run directory only after the process returns. This
+prevents a stateful scanner's internal path registry from turning a real retry
+into an "existing scan" collision.
+Use `--workers N` for bounded concurrency, `--max-attempts N` for process-level
+retries, `--scan-timeout-ms N` for an outer process-tree deadline, and
+`--scanner-cli PATH --scanner-label NAME` to produce a separate compatible
+baseline campaign. Comparable reports must share `corpusId` and `scanPolicyId`.
 
 The measured gates cover completion, precision, recall, F1, exact-case and
 negative-control passes, repeated-run stability, validation, attack paths,

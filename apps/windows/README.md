@@ -28,7 +28,13 @@ The comparison reader accepts version `1.0` benchmark reports whose document
 type ends in `.benchmark`. This permits a compatible baseline scanner to be
 measured on exactly the same manifest without coupling this application to its
 brand, installation, credentials, or state tree. Case IDs, case counts, and run
-counts must match before a comparison is accepted.
+counts must match before a comparison is accepted. Campaign-aware reports must
+both include provenance and have identical `corpusId` and `scanPolicyId` values;
+this binds fixture and manifest bytes, the exact case/run selection, and the
+model/mode/effort policy while allowing the scanner implementation and
+authentication source to differ. Per-case expectation and run counts must also
+match. Two legacy reports without campaign provenance remain comparable, but a
+provenanced report cannot be compared with an unprovenanced one.
 
 ## Architecture and trust boundaries
 
