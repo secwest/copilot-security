@@ -393,6 +393,19 @@ inventory and closure requirements.
      nesting/concurrency limits where
      relevant, fail-closed errors, and legitimate bounded input as the negative
      control.
+   - authenticated-encryption nonce and IV reuse: every GCM, CCM, EAX,
+     ChaCha20-Poly1305, or other nonce-sensitive AEAD encryption boundary.
+     Trace exact key identity and scope, nonce/IV derivation and uniqueness
+     across messages, processes, workers, tenants, restarts, counter rollback,
+     backups, and key rotation; ciphertext and tag publication; AAD binding;
+     verification order; and plaintext or forgery impact. Validate suspected
+     reuse with a bounded known-plaintext or authenticity witness and a
+     legitimate decrypt. A valid tag, random-looking nonce, or large nonce
+     alone is not a control if the same key/nonce pair can recur. Fresh
+     cryptographic nonces, independently derived per-message data keys, or
+     atomically persistent nonrepeating counters, key-scoped uniqueness,
+     security-metadata AAD, and fail-closed tag verification are
+     counterevidence.
    - HTTP request framing and smuggling: every ingress proxy, load balancer,
      gateway, framework server, middleware, backend, connection pool, and
      protocol downgrade/upgrade boundary that parses or rewrites the same

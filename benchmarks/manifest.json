@@ -188,6 +188,45 @@
       "expected": []
     },
     {
+      "id": "javascript-aes-gcm-nonce-reuse",
+      "description": "A public encrypted-profile store reuses one fixed 96-bit nonce with the same AES-256-GCM key, allowing an attacker to recover a victim plaintext from a chosen equal-length plaintext and the two ciphertexts despite valid authentication tags and profile-bound AAD.",
+      "fixture": "fixtures/javascript-aes-gcm-nonce-reuse",
+      "findingsPaths": [
+        "javascript-aes-gcm-nonce-reuse/run-1/findings.json",
+        "javascript-aes-gcm-nonce-reuse/run-2/findings.json",
+        "javascript-aes-gcm-nonce-reuse/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "fixed-aes-gcm-key-nonce-reuse",
+          "cwe": ["CWE-323"],
+          "locations": [
+            {
+              "path": "src/profiles.js",
+              "startLine": 4,
+              "endLine": 17,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-aes-gcm-nonces",
+      "description": "Each AES-256-GCM profile envelope receives a fresh random salt and distinct HKDF-derived data key, so a repeated visible nonce never repeats under the same key; key/profile metadata is authenticated and tag verification fails closed before plaintext release.",
+      "fixture": "fixtures/javascript-safe-aes-gcm-nonces",
+      "findingsPaths": [
+        "javascript-safe-aes-gcm-nonces/run-1/findings.json",
+        "javascript-safe-aes-gcm-nonces/run-2/findings.json",
+        "javascript-safe-aes-gcm-nonces/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-executable-file-upload",
       "description": "A public upload retains attacker-controlled JavaScript bytes and filename in the application extension directory, whose separate startup loader imports and activates every module.",
       "fixture": "fixtures/javascript-executable-file-upload",

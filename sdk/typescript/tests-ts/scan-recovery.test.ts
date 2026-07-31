@@ -854,6 +854,30 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes authenticated-encryption nonce-reuse taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] = "AES-GCM nonce reuse reveals encrypted profile data";
+    finding.summary =
+      "The service reuses one fixed nonce with the same AES-GCM key, so a known plaintext and two ciphertexts recover the victim plaintext despite valid authentication tags.";
+    finding["taxonomy"] = {
+      category: "cryptographic weakness",
+      cwe: ["CWE-326"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "aead-nonce-reuse",
+      cwe: ["CWE-323"],
+    });
+  });
+
   test("normalizes GraphQL resolver amplification to authentication-attempt taxonomy", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

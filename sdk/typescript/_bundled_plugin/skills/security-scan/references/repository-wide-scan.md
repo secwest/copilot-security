@@ -39,6 +39,17 @@ witness plus a legitimate input, and recognize output caps enforced during
 decoding with cumulative input-work and pre-retention output accounting as
 counterevidence.
 
+For authenticated encryption, trace each plaintext through algorithm and mode,
+exact key identity and scope, nonce/IV construction, ciphertext and tag
+publication, AAD, verification, and plaintext use. Test key-scoped nonce
+uniqueness across messages, restarts, workers, tenants, counter rollback,
+backups, and key rotation. Require a bounded same-key witness that recovers
+plaintext or produces an accepted forgery; a constant nonce or valid tag alone
+is not complete proof. Compare fresh cryptographic nonces, independently
+derived per-message data keys, or atomically persistent nonrepeating counters,
+metadata AAD, fail-closed verification before plaintext release, and a
+legitimate encrypt/decrypt path.
+
 For HTTP response headers, trace untrusted redirect targets, filenames,
 cookies, metadata, proxy-derived values, and custom fields through all decoding,
 CR/LF and control-byte checks, quoting/encoding, framework or raw serialization,

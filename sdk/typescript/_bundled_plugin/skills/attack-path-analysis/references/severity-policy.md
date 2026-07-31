@@ -163,6 +163,13 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   cumulative input-work, cumulative output-retention, nesting, and concurrency
   controls; severity follows the affected
   availability scope and recovery cost.
+- Authenticated-encryption key/nonce reuse that lets an attacker recover
+  meaningful victim plaintext or produce an accepted forgery. High requires
+  proof of the same key and nonce across distinct messages, realistic access to
+  the needed ciphertext/known plaintext or verification oracle, a bounded
+  recovery or forgery witness, and the resulting confidentiality, integrity,
+  credential, tenant, or privilege impact. Severity follows the protected data
+  and blast radius; valid authentication tags do not reduce GCM reuse impact.
 - CSRF when it enables important state-changing actions such as credential changes, permission changes, payment / billing changes, or security-setting changes with realistic victim interaction. Evaluate actual browser request behavior, credential attachment, cookie policy, preflight requirements, server parsing, and effective anti-CSRF controls; an HTTP method or JSON content type alone is not a categorical defense.
 - Credentialed CORS exposure of ordinary but meaningful API keys, session
   tokens, account data, PII, or tenant data when attacker JavaScript can
@@ -363,6 +370,14 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   input/work and expanded output/retention are budgeted, nesting and concurrency
   are bounded where relevant, errors fail closed, and legitimate inputs remain
   usable.
+- AEAD nonce/IV reports based only on a constant, counter, short value,
+  random-looking value, encryption API, or missing documentation without
+  proving reuse under the same key and a concrete confidentiality or integrity
+  effect. Suppress when key/nonce-pair uniqueness is enforced through fresh
+  nonces, independently derived per-message data keys, or atomic counters across
+  relevant restart/worker/tenant/rollback paths, tags fail closed before
+  plaintext release, security metadata is authenticated, and legitimate
+  encrypt/decrypt controls succeed.
 - Open redirect, clickjacking, user enumeration, rate-limit weakness, banner leakage, version disclosure, directory listing, stack traces, internal hostnames, or basic error-message leakage, unless they are shown as part of a serious exploit chain.
 - Memory corruption that is theoretical, non-triggerable from in-scope input, or not plausibly exploitable in the target environment.
 - Request-smuggling claims based only on `Content-Length` and

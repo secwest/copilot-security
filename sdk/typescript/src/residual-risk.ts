@@ -102,6 +102,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:brotliDecompress|decompress|gunzip|inflate|uncompress)(?:Raw)?(?:Sync)?\s*\(|\b(?:compressedSize|expandedSize|expansionRatio|maxOutputLength|uncompressedSize|MAX_(?:BUNDLE_ENTRIES|COMPRESSED(?:_[A-Z0-9]+)*|ENTRIES|ENTRY_COUNT|EXPANDED(?:_[A-Z0-9]+)*|UNCOMPRESSED(?:_[A-Z0-9]+)*))\b/iu,
   ],
   [
+    "aead-key-nonce-or-authentication-binding",
+    108,
+    /\b(?:AESGCM|ChaCha20Poly1305|createCipheriv|createDecipheriv|hkdfSync|HKDF|EVP_(?:Decrypt|Encrypt)Init(?:_ex)?)\b|\b(?:AEAD|GCM|POLY1305)[_-]?(?:IV|NONCE)\b|\b(?:getAuthTag|setAAD|setAuthTag)\s*\(/iu,
+  ],
+  [
     "untrusted-input",
     92,
     /\b(?:req|request)\.(?:body|cookies|data|files|form|headers|json|params|query|values)\b|\b(?:req|request)\.get_json\s*\(|\b(?:process|sys)\.argv\b|\b(?:environ|getenv|stdin)\b|\bgetParameter\s*\(/iu,

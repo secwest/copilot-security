@@ -66,6 +66,18 @@ When the input contains multiple candidate instances, preserve that instance inv
   pre-retention output accounting, relevant nesting/concurrency bounds,
   fail-closed errors, and a
   usable negative control; input size or untrusted metadata alone is not enough.
+- for authenticated-encryption nonce/IV-reuse candidates, record algorithm and
+  mode, exact key identity/scope, the two nonce values, ciphertexts, tags, AAD,
+  and plaintext lengths. Use a bounded same-key pair and show actual victim
+  plaintext recovery, keystream equality, or a verified forgery rather than
+  inferring exploitation from a constant alone. Confirm both original tags and
+  legitimate decrypts when applicable: valid tags do not repair GCM key/nonce
+  reuse. Test fresh messages, restart/worker/tenant/counter-rollback paths, key
+  rotation, metadata substitution, and tampering. Suppression requires
+  key-scoped pair uniqueness through cryptographic nonces, independently
+  derived per-message data keys, or an atomic persistent counter; fail-closed
+  tag verification before plaintext use; and AAD binding for security-relevant
+  envelope metadata.
 - for archive-member traversal, static evidence can be enough to survive when uploaded package/archive bytes reach a member-name decode/filter/join/write sequence and no exact containment check runs before the write. Missing optional parser libraries or lack of a full archive harness should lower confidence or become an explicit deferred proof gap, not silently suppress or replace the row with an adjacent same-family file traversal.
 - deprecation, opt-in registration, or documentation warning that an API can be dangerous is a precondition, not counterevidence, for framework/library runtime code when the instance has a plausible cross-boundary source and runtime/deployment path. Suppress only if repository evidence proves the intended restricted/control mode defeats the exact attack; do not suppress a bypass of the restricted mode because an unrestricted mode is documented as dangerous.
 - when suppressing auth/authz candidates, name the exact permission, authentication, tenant/object, or state-transition check on that endpoint. A credential-helper issue elsewhere does not replace a public webhook/status/API endpoint that reads protected data or triggers protected work.

@@ -201,6 +201,16 @@ Use this checklist to keep discovery specific without turning it into validation
   limit alone does not bound actual output. Keep exact actual-output caps,
   cumulative input-work and pre-retention output accounting, nesting limits,
   fail-closed decoder errors, and legitimate bounded inputs as counterevidence.
+- Treat authenticated-encryption nonce or IV generation as a key-scoped state
+  boundary. Preserve algorithm/mode, exact key identity and derivation, nonce
+  bytes and construction, message count, process restart/worker/tenant/rollback
+  behavior, ciphertext, authentication tag, additional authenticated data, and
+  plaintext release. For GCM and other nonce-sensitive AEAD modes, a repeated
+  key/nonce pair is candidate-visible even when every tag verifies. Keep a
+  bounded known-plaintext comparison, unique nonce generation, independently
+  derived per-message data keys, or atomic counter persistence, fail-closed tag
+  verification, metadata binding, and legitimate encrypt/decrypt behavior as
+  counterevidence.
 - When upload/archive-member rows have a precise source to decoded/filtered member name to destination join/write tuple, keep them as candidates even if runtime package reproduction is unavailable or confidence is medium. A cleaner download/open traversal or API/auth issue in the same repository is not a reason to drop the archive-member row; report the archive row at calibrated severity/confidence or keep an explicit deferred ledger row with the missing proof.
 - For direct uploads and content placement, preserve multipart/form/parser
   configuration, size limits, attacker-controlled filename and metadata,

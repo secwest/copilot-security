@@ -22,11 +22,14 @@ plus source-to-impact continuity; and code evidence needs a concrete
 path-and-line anchor, source text, and explanatory reasoning. Presence and
 substantive-quality flags are both retained in per-match diagnostics.
 
-The versioned corpus currently contains forty-two vulnerable/control pairs:
+The versioned corpus currently contains forty-three vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
 per-entry output, expansion-ratio, and cumulative bundle budgets as the control,
+AES-GCM key/nonce reuse that reveals victim plaintext from a known plaintext
+and two valid-tag ciphertexts with fresh HKDF-derived per-envelope data keys
+and profile-bound AAD as the control, even though the visible nonce repeats,
 HTTP request smuggling across inconsistent gateway/backend framing,
 HTTP response splitting through a CR/LF-injected download filename with
 pre-serialization control-byte rejection and RFC 5987 encoding as the control,
@@ -62,7 +65,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 252
+destination-pinned, redirect-free transport. Three runs per case produce 258
 scans in the complete corpus.
 
 Run scans into a directory outside this repository:

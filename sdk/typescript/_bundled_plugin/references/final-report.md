@@ -128,6 +128,16 @@ declared sizes, actual expanded bytes, ratio, entry count/nesting/concurrency,
 streaming or allocation behavior, memory/disk/worker outcome, bounded witness,
 and legitimate-input control. A decoder API or large ratio alone is not proof.
 
+For authenticated-encryption nonce/IV-reuse findings, affected lines must
+include nonce construction, the same-key encryption call, and ciphertext/tag
+publication or protected plaintext use when distinct. Record algorithm/mode,
+key identity and scope, both nonces, plaintext and ciphertext lengths, tags,
+AAD, attacker observation path, restart/worker/tenant/rollback conditions, and
+the bounded recovered-plaintext or accepted-forgery witness. A constant nonce
+or valid tag alone is not complete proof; demonstrate key/nonce reuse and its
+confidentiality or integrity effect, plus fresh-nonce or independently derived
+per-message-key and legitimate-decrypt controls.
+
 For OIDC ID-token client-binding findings, affected lines must include the
 trusted signature/issuer acceptance boundary, the incomplete `aud`/`azp`/nonce
 validation, and the final local-principal or session installation when those

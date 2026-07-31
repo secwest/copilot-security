@@ -2753,6 +2753,28 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         )
     ):
         return "decompression-bomb", ["CWE-409", "CWE-400"]
+    if (
+        (
+            "nonce reuse" in text
+            or "nonce-reuse" in text
+            or "reused nonce" in text
+            or "reuses one fixed nonce" in text
+            or "iv reuse" in text
+            or "iv-reuse" in text
+            or "reused iv" in text
+            or "same key and nonce" in text
+            or "key/nonce pair" in text
+        )
+        and (
+            "aead" in text
+            or "authenticated encryption" in text
+            or "aes-gcm" in text
+            or "aes gcm" in text
+            or "gcm" in text
+            or "chacha20-poly1305" in text
+        )
+    ):
+        return "aead-nonce-reuse", ["CWE-323"]
     if isinstance(taxonomy, dict):
         cwe = taxonomy.get("cwe")
         normalized_cwe = (

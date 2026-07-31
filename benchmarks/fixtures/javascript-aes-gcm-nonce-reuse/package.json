@@ -1,0 +1,5 @@
+{
+  "name": "aes-gcm-nonce-reuse-fixture",
+  "private": true,
+  "type": "module"
+}

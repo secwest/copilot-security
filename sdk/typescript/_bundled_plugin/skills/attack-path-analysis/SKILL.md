@@ -251,6 +251,16 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   alone are not reportable without reachable resource impact; actual-output
   caps plus cumulative input-work and pre-retention output accounting and
   relevant nesting/concurrency controls are counterevidence.
+- For authenticated-encryption nonce/IV-reuse findings, preserve the exact
+  algorithm and mode, key identifier/derivation/scope, first and second nonce,
+  plaintext and ciphertext lengths, authentication tags, AAD, envelope
+  publication or attacker observation, restart/worker/tenant/rollback path, and
+  recovered plaintext or accepted forgery. Prove the same key/nonce pair, not
+  merely a repeated nonce under different keys. A valid tag is not
+  counterevidence for GCM reuse. Fresh key-scoped random nonces, independently
+  derived per-message data keys, or atomically persistent nonrepeating
+  counters, fail-closed verification before plaintext release, metadata AAD,
+  and a successful legitimate decrypt are distinct counterevidence.
 - For HTTP request-smuggling and desynchronization findings, preserve the exact
   raw bytes, ingress protocol, proxy/gateway/server/backend versions and
   configuration, duplicate-header normalization, effective framing decision,

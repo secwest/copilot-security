@@ -53,6 +53,7 @@ describe("effectiveness benchmark", () => {
         "javascript-safe-archive-link-isolation",
       ],
       ["javascript-decompression-bomb", "javascript-safe-decompression-limits"],
+      ["javascript-aes-gcm-nonce-reuse", "javascript-safe-aes-gcm-nonces"],
       ["javascript-executable-file-upload", "javascript-safe-profile-upload"],
       ["javascript-http-request-smuggling", "javascript-safe-http-framing"],
       ["javascript-idor", "javascript-safe-authorization"],
@@ -193,6 +194,23 @@ describe("effectiveness benchmark", () => {
         path: "src/importer.js",
         startLine: 11,
         endLine: 12,
+        lineTolerance: 2,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-aes-gcm-nonce-reuse")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-323"]]);
+    expect(
+      cases
+        .get("javascript-aes-gcm-nonce-reuse")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/profiles.js",
+        startLine: 4,
+        endLine: 17,
         lineTolerance: 2,
       },
     ]);
@@ -1053,6 +1071,7 @@ describe("effectiveness benchmark", () => {
     );
     expect(deepScan).toContain("archive symlink and hardlink traversal:");
     expect(deepScan).toContain("decompression bombs and data amplification:");
+    expect(deepScan).toContain("authenticated-encryption nonce and IV reuse:");
     expect(deepScan).toContain(
       "JWT/JWS/OIDC algorithm, key-family, key origin, and claim binding:",
     );
@@ -1111,6 +1130,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(standardScan).toContain("archive symlink/hardlink target traversal");
     expect(standardScan).toContain("decompression bombs across actual output");
+    expect(standardScan).toContain(
+      "authenticated encryption across exact algorithm/mode",
+    );
     expect(standardScan).toContain("JWT/OIDC algorithm-to-key-family binding");
     expect(standardScan).toContain(
       "signed OIDC ID-token audience, authorized-party, nonce, callback-session",
@@ -1154,6 +1176,7 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain(
       "changed archive/document/protocol/media/package decompressors",
     );
+    expect(diffScan).toContain("changed AEAD algorithm/mode selection");
     expect(diffScan).toContain(
       "SAML/SSO assertion ID lookup, signature-reference resolution",
     );
@@ -1211,6 +1234,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(discovery).toContain(
       "Treat compressed-data expansion as a separate archive",
+    );
+    expect(discovery).toContain(
+      "Treat authenticated-encryption nonce or IV generation as a key-scoped state",
     );
     expect(discovery).toContain(
       "For SAML and other signed federated identity objects",
@@ -1277,6 +1303,9 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain(
       "for decompression-bomb and data-amplification candidates",
     );
+    expect(validation).toContain(
+      "for authenticated-encryption nonce/IV-reuse candidates",
+    );
     expect(validation).toContain("JWT/JWS/OIDC remote key origin:");
     expect(validation).toContain(
       "OIDC ID-token client and transaction binding:",
@@ -1335,6 +1364,9 @@ describe("effectiveness benchmark", () => {
     expect(attackPath).toContain("For archive symlink and hardlink findings");
     expect(attackPath).toContain(
       "For decompression-bomb and data-amplification findings",
+    );
+    expect(attackPath).toContain(
+      "For authenticated-encryption nonce/IV-reuse findings",
     );
     expect(attackPath).toContain("For SAML/federated signed-object findings");
     expect(attackPath).toContain("For JWT/JWS/OIDC remote-key findings");
@@ -1421,6 +1453,9 @@ describe("effectiveness benchmark", () => {
       "Decompression-bomb or data-amplification behavior that lets",
     );
     expect(severityPolicy).toContain(
+      "Authenticated-encryption key/nonce reuse that lets an attacker recover",
+    );
+    expect(severityPolicy).toContain(
       "Request-smuggling claims based only on `Content-Length`",
     );
     expect(severityPolicy).toContain(
@@ -1431,6 +1466,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(severityPolicy).toContain(
       "Decompression-bomb reports based only on a decompressor call",
+    );
+    expect(severityPolicy).toContain(
+      "AEAD nonce/IV reports based only on a constant",
     );
     expect(severityPolicy).toContain(
       "SAML/SSO signature wrapping or signed-object confusion",
@@ -1475,6 +1513,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(threatModelGuidance).toContain(
       "compressed-data trust across archive, package, document",
+    );
+    expect(threatModelGuidance).toContain(
+      "authenticated-encryption trust across algorithm/mode",
     );
     expect(threatModelGuidance).toContain(
       "JWT/JWS/OIDC algorithm-to-key-family and signature-versus-MAC binding",
@@ -1540,6 +1581,7 @@ describe("effectiveness benchmark", () => {
     expect(repositoryWideScan).toContain(
       "For decompression and data-amplification paths",
     );
+    expect(repositoryWideScan).toContain("For authenticated encryption");
     expect(repositoryWideScan).toContain(
       "GraphQL aliases/fragments/nesting/batches/persisted documents",
     );
@@ -1566,6 +1608,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(finalReport).toContain(
       "For decompression-bomb and data-amplification findings",
+    );
+    expect(finalReport).toContain(
+      "For authenticated-encryption nonce/IV-reuse findings",
     );
     expect(finalReport).toContain("For OIDC ID-token client-binding findings");
     expect(finalReport).toContain("For DNS-rebinding SSRF findings");

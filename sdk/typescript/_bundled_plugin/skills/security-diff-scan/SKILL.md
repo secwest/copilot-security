@@ -80,6 +80,9 @@ publish findings, open issues, or contact third parties. Write only beneath
    compressed-data decoders, input/output size limits, expansion ratios,
    entry-count/per-entry limits, cumulative compressed-input/decoder-work and
    expanded-output/retention budgets, nesting, streaming, and concurrency,
+   authenticated-encryption modes, key identity/scope, nonce or IV derivation
+   and uniqueness, restart/worker/tenant/rollback state, tag verification,
+   security-metadata AAD, and plaintext release,
    external authentication/authorization policy calls, decision defaults and
    types, error/timeout/fallback paths, and subject/action/resource binding,
    outbound URL parsing, DNS answer validation, repeated resolution, redirects,
@@ -139,6 +142,10 @@ publish findings, open issues, or contact third parties. Write only beneath
      expanded-output/retention accounting, nested-container depth, streaming
      versus whole-buffer behavior, retained output, or concurrent decoder
      limits;
+   - changed AEAD algorithm/mode selection, key derivation or reuse scope,
+     nonce/IV constants, counters, random generation, persistence across
+     restarts/workers/tenants/rollback, tag verification order, AAD fields,
+     envelope publication, or plaintext release;
    - changed external authorization or entitlement calls, default decisions,
      explicit-deny handling, catch/finally behavior, timeouts, retries, circuit
      breakers, caches, malformed/empty response coercion, exact-allow checks, or

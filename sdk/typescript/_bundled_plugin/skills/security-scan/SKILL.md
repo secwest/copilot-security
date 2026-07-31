@@ -77,6 +77,9 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    per-entry limits, cumulative compressed-input/decoder-work and
    expanded-output/retention budgets, nesting, streaming, concurrency, and
    shared capacity,
+   authenticated encryption across exact algorithm/mode, key scope, nonce/IV
+   uniqueness, restart/worker/tenant/rollback behavior, tag verification, AAD,
+   envelope publication, and plaintext or forgery impact,
    HTTP message framing and parser agreement across proxies, gateways,
    servers, and backends, native memory allocation/copy/index/lifetime
    boundaries, secrets, and resource consumption. Record candidates in

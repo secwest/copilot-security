@@ -1,0 +1,5 @@
+{
+  "name": "safe-aes-gcm-nonces-fixture",
+  "private": true,
+  "type": "module"
+}

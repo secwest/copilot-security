@@ -113,6 +113,35 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs AEAD nonce reuse with derived data keys and authenticated metadata", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-aes-gcm-nonce-reuse"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-aes-gcm-nonces"),
+    );
+
+    expect(vulnerable).toContain('"aead-key-nonce-or-authentication-binding"');
+    expect(vulnerable).toContain("REUSED_NONCE = Buffer.alloc(12, 0)");
+    expect(vulnerable).toContain(
+      'createCipheriv("aes-256-gcm", key, REUSED_NONCE)',
+    );
+    expect(vulnerable).toContain("cipher.setAAD");
+    expect(safe).toContain('"aead-key-nonce-or-authentication-binding"');
+    expect(safe).toContain("randomBytes(GCM_SALT_BYTES)");
+    expect(safe).toContain("hkdfSync(");
+    expect(safe).toContain(
+      'createCipheriv("aes-256-gcm", dataKey, PER_ENVELOPE_NONCE)',
+    );
+    expect(safe).toContain("decipher.setAuthTag(envelope.tag)");
+    expect(scanQualityGatePrompt("")).toContain(
+      "exact key identity and scope, nonce or IV derivation and uniqueness under that key across messages, restarts, workers, tenants, and rollback",
+    );
+    expect(scanQualityGatePrompt("")).toContain(
+      "A valid authentication tag does not restore confidentiality or integrity after an AEAD key/nonce pair is reused",
+    );
+  });
+
   test("pairs upload placement with its separate loader and canonical data control", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-executable-file-upload"),
