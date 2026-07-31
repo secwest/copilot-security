@@ -97,6 +97,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:hardlink|issym|islnk|linkName|linkname|readlink|symlink|S_IFLNK)\b|\b(?:mkdir|open|writeFile)(?:NoFollow)\b/iu,
   ],
   [
+    "decompression-output-or-expansion-budget",
+    107,
+    /\b(?:brotliDecompress|decompress|gunzip|inflate|uncompress)(?:Raw)?(?:Sync)?\s*\(|\b(?:compressedSize|expandedSize|expansionRatio|maxOutputLength|uncompressedSize|MAX_(?:BUNDLE_ENTRIES|COMPRESSED(?:_[A-Z0-9]+)*|ENTRIES|ENTRY_COUNT|EXPANDED(?:_[A-Z0-9]+)*|UNCOMPRESSED(?:_[A-Z0-9]+)*))\b/iu,
+  ],
+  [
     "untrusted-input",
     92,
     /\b(?:req|request)\.(?:body|cookies|data|files|form|headers|json|params|query|values)\b|\b(?:req|request)\.get_json\s*\(|\b(?:process|sys)\.argv\b|\b(?:environ|getenv|stdin)\b|\bgetParameter\s*\(/iu,

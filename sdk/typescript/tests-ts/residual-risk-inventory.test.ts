@@ -91,6 +91,28 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs unbounded decompression with input-work and output-retention budgets", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-decompression-bomb"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "javascript-safe-decompression-limits"),
+    );
+
+    expect(vulnerable).toContain('"decompression-output-or-expansion-budget"');
+    expect(vulnerable).toContain("inflateRawSync(entry.compressed)");
+    expect(vulnerable).toContain("storage.put(entry.name, expanded)");
+    expect(safe).toContain('"decompression-output-or-expansion-budget"');
+    expect(safe).toContain("MAX_BUNDLE_ENTRIES");
+    expect(safe).toContain("MAX_COMPRESSED_BUNDLE_BYTES");
+    expect(safe).toContain("maxOutputLength: outputLimit + 1");
+    expect(safe).toContain("MAX_EXPANDED_BUNDLE_BYTES - expandedTotal");
+    expect(safe).toContain("MAX_EXPANSION_RATIO");
+    expect(scanQualityGatePrompt("")).toContain(
+      "actual decoder output, expansion ratio, entry count, per-entry limits, cumulative compressed-input and decoder-work budgets, cumulative expanded-output and retention budgets",
+    );
+  });
+
   test("pairs upload placement with its separate loader and canonical data control", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-executable-file-upload"),

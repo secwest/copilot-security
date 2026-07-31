@@ -239,6 +239,18 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   reportable. Link-entry rejection, root-handle-relative no-follow traversal of
   every component and final file, a pre-existing-link rejection control, and a
   legitimate nested extraction are distinct counterevidence.
+- For decompression-bomb and data-amplification findings, preserve the remote or
+  tenant-controlled compressed bytes; container/codec; compressed, declared,
+  and actual expanded sizes; ratio; entry and nesting structure; decoder call;
+  streaming/allocation behavior; entry count; per-entry limits; cumulative
+  compressed-input/decoder-work and expanded-output/retention budgets;
+  concurrency and request budgets; retained memory or disk; and the shared
+  worker, parser, event-loop,
+  disk, or service capacity made unavailable. Validate with a bounded witness
+  and a legitimate input. Codec symbols, high ratios, or absent metadata checks
+  alone are not reportable without reachable resource impact; actual-output
+  caps plus cumulative input-work and pre-retention output accounting and
+  relevant nesting/concurrency controls are counterevidence.
 - For HTTP request-smuggling and desynchronization findings, preserve the exact
   raw bytes, ingress protocol, proxy/gateway/server/backend versions and
   configuration, duplicate-header normalization, effective framing decision,

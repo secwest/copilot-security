@@ -829,6 +829,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes decompression data-amplification taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "Unbounded DEFLATE decompression exhausts shared import workers";
+    finding.summary =
+      "A tiny valid compressed entry is inflated without an actual output limit or cumulative expansion budget, causing memory and worker resource exhaustion.";
+    finding["taxonomy"] = {
+      category: "resource exhaustion",
+      cwe: ["CWE-400"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "decompression-bomb",
+      cwe: ["CWE-409", "CWE-400"],
+    });
+  });
+
   test("normalizes GraphQL resolver amplification to authentication-attempt taxonomy", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

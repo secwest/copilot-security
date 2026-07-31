@@ -53,6 +53,19 @@ When the input contains multiple candidate instances, preserve that instance inv
   reject link entries and/or use root-directory-handle-relative no-follow
   traversal for every component and final file while a legitimate nested file
   still succeeds.
+- for decompression-bomb and data-amplification candidates, use a valid bounded
+  compressed payload that expands far beyond its input and record compressed
+  bytes, declared size, actual output, expansion ratio, peak retained output,
+  entry count, per-entry totals, cumulative compressed-input/decoder-work and
+  expanded-output/retention totals, nesting, concurrency, decoder behavior, and
+  the affected memory/disk/worker/service capacity. Test lying size metadata,
+  many individually acceptable or zero-output entries, nested containers,
+  malformed input,
+  and one legitimate bounded input. Suppression requires an actual output cap
+  enforced during streaming or decompression, cumulative input-work and
+  pre-retention output accounting, relevant nesting/concurrency bounds,
+  fail-closed errors, and a
+  usable negative control; input size or untrusted metadata alone is not enough.
 - for archive-member traversal, static evidence can be enough to survive when uploaded package/archive bytes reach a member-name decode/filter/join/write sequence and no exact containment check runs before the write. Missing optional parser libraries or lack of a full archive harness should lower confidence or become an explicit deferred proof gap, not silently suppress or replace the row with an adjacent same-family file traversal.
 - deprecation, opt-in registration, or documentation warning that an API can be dangerous is a precondition, not counterevidence, for framework/library runtime code when the instance has a plausible cross-boundary source and runtime/deployment path. Suppress only if repository evidence proves the intended restricted/control mode defeats the exact attack; do not suppress a bypass of the restricted mode because an unrestricted mode is documented as dangerous.
 - when suppressing auth/authz candidates, name the exact permission, authentication, tenant/object, or state-transition check on that endpoint. A credential-helper issue elsewhere does not replace a public webhook/status/API endpoint that reads protected data or triggers protected work.

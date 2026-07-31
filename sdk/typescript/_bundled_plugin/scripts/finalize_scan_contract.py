@@ -2732,6 +2732,27 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         )
     ):
         return "archive-link-traversal", ["CWE-59", "CWE-22"]
+    if (
+        "decompression bomb" in text
+        or "decompression-bomb" in text
+        or "compression bomb" in text
+        or "compression-bomb" in text
+        or "zip bomb" in text
+        or "zip-bomb" in text
+        or "highly compressed data" in text
+        or (
+            ("decompress" in text or "inflate" in text or "uncompressed" in text)
+            and (
+                "unbounded" in text
+                or "output limit" in text
+                or "expansion ratio" in text
+                or "resource exhaustion" in text
+                or "memory exhaustion" in text
+                or "disk exhaustion" in text
+            )
+        )
+    ):
+        return "decompression-bomb", ["CWE-409", "CWE-400"]
     if isinstance(taxonomy, dict):
         cwe = taxonomy.get("cwe")
         normalized_cwe = (

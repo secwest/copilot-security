@@ -27,6 +27,18 @@ link pivots. Member-name containment alone is insufficient; compare link
 rejection and root-directory-handle-relative no-follow traversal of every
 component and final file while preserving a legitimate nested extraction.
 
+For decompression and data-amplification paths, trace untrusted compressed bytes
+through the concrete codec into actual expanded output and retained memory or
+disk. Compare compressed, declared, and observed sizes; expansion ratio;
+entry-count and per-entry limits; cumulative compressed-input/decoder-work and
+expanded-output/retention budgets; nested, request, and concurrency budgets;
+streaming versus whole-buffer allocation; and shared worker/service impact. Do
+not accept
+input-size or header-only checks as output bounds. Require a bounded valid bomb
+witness plus a legitimate input, and recognize output caps enforced during
+decoding with cumulative input-work and pre-retention output accounting as
+counterevidence.
+
 For HTTP response headers, trace untrusted redirect targets, filenames,
 cookies, metadata, proxy-derived values, and custom fields through all decoding,
 CR/LF and control-byte checks, quoting/encoding, framework or raw serialization,

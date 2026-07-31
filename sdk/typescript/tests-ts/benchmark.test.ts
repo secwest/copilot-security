@@ -52,6 +52,7 @@ describe("effectiveness benchmark", () => {
         "javascript-archive-link-pivot",
         "javascript-safe-archive-link-isolation",
       ],
+      ["javascript-decompression-bomb", "javascript-safe-decompression-limits"],
       ["javascript-executable-file-upload", "javascript-safe-profile-upload"],
       ["javascript-http-request-smuggling", "javascript-safe-http-framing"],
       ["javascript-idor", "javascript-safe-authorization"],
@@ -175,6 +176,23 @@ describe("effectiveness benchmark", () => {
         path: "src/extractor.js",
         startLine: 17,
         endLine: 19,
+        lineTolerance: 2,
+      },
+    ]);
+    expect(
+      cases
+        .get("javascript-decompression-bomb")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-409", "CWE-400"]]);
+    expect(
+      cases
+        .get("javascript-decompression-bomb")
+        ?.expected.flatMap((expectation) => expectation.locations),
+    ).toEqual([
+      {
+        path: "src/importer.js",
+        startLine: 11,
+        endLine: 12,
         lineTolerance: 2,
       },
     ]);
@@ -1034,6 +1052,7 @@ describe("effectiveness benchmark", () => {
       "HTTP response-header injection and response splitting:",
     );
     expect(deepScan).toContain("archive symlink and hardlink traversal:");
+    expect(deepScan).toContain("decompression bombs and data amplification:");
     expect(deepScan).toContain(
       "JWT/JWS/OIDC algorithm, key-family, key origin, and claim binding:",
     );
@@ -1091,6 +1110,7 @@ describe("effectiveness benchmark", () => {
       "HTTP response-header injection and response splitting",
     );
     expect(standardScan).toContain("archive symlink/hardlink target traversal");
+    expect(standardScan).toContain("decompression bombs across actual output");
     expect(standardScan).toContain("JWT/OIDC algorithm-to-key-family binding");
     expect(standardScan).toContain(
       "signed OIDC ID-token audience, authorized-party, nonce, callback-session",
@@ -1131,6 +1151,9 @@ describe("effectiveness benchmark", () => {
     expect(diffScan).toContain("duplicate or conflicting `Content-Length` and");
     expect(diffScan).toContain("changed response-header construction");
     expect(diffScan).toContain("changed archive entry-type handling");
+    expect(diffScan).toContain(
+      "changed archive/document/protocol/media/package decompressors",
+    );
     expect(diffScan).toContain(
       "SAML/SSO assertion ID lookup, signature-reference resolution",
     );
@@ -1185,6 +1208,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(discovery).toContain(
       "Treat archive link targets as independent attacker-controlled paths",
+    );
+    expect(discovery).toContain(
+      "Treat compressed-data expansion as a separate archive",
     );
     expect(discovery).toContain(
       "For SAML and other signed federated identity objects",
@@ -1248,6 +1274,9 @@ describe("effectiveness benchmark", () => {
       "For HTTP response-header injection or response splitting",
     );
     expect(validation).toContain("for archive symlink and hardlink pivots");
+    expect(validation).toContain(
+      "for decompression-bomb and data-amplification candidates",
+    );
     expect(validation).toContain("JWT/JWS/OIDC remote key origin:");
     expect(validation).toContain(
       "OIDC ID-token client and transaction binding:",
@@ -1304,6 +1333,9 @@ describe("effectiveness benchmark", () => {
       "For HTTP response-header injection and response-splitting findings",
     );
     expect(attackPath).toContain("For archive symlink and hardlink findings");
+    expect(attackPath).toContain(
+      "For decompression-bomb and data-amplification findings",
+    );
     expect(attackPath).toContain("For SAML/federated signed-object findings");
     expect(attackPath).toContain("For JWT/JWS/OIDC remote-key findings");
     expect(attackPath).toContain("For JWT/JWS algorithm-confusion findings");
@@ -1386,6 +1418,9 @@ describe("effectiveness benchmark", () => {
       "Archive symlink or hardlink traversal that reliably converts",
     );
     expect(severityPolicy).toContain(
+      "Decompression-bomb or data-amplification behavior that lets",
+    );
+    expect(severityPolicy).toContain(
       "Request-smuggling claims based only on `Content-Length`",
     );
     expect(severityPolicy).toContain(
@@ -1393,6 +1428,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(severityPolicy).toContain(
       "Archive-link reports based only on symlink/hardlink support",
+    );
+    expect(severityPolicy).toContain(
+      "Decompression-bomb reports based only on a decompressor call",
     );
     expect(severityPolicy).toContain(
       "SAML/SSO signature wrapping or signed-object confusion",
@@ -1434,6 +1472,9 @@ describe("effectiveness benchmark", () => {
     expect(threatModelGuidance).toContain("HTTP response-header trust across");
     expect(threatModelGuidance).toContain(
       "archive extraction and restore/import trust across member names",
+    );
+    expect(threatModelGuidance).toContain(
+      "compressed-data trust across archive, package, document",
     );
     expect(threatModelGuidance).toContain(
       "JWT/JWS/OIDC algorithm-to-key-family and signature-versus-MAC binding",
@@ -1497,6 +1538,9 @@ describe("effectiveness benchmark", () => {
       "For archive extraction and restore/import paths",
     );
     expect(repositoryWideScan).toContain(
+      "For decompression and data-amplification paths",
+    );
+    expect(repositoryWideScan).toContain(
       "GraphQL aliases/fragments/nesting/batches/persisted documents",
     );
     expect(repositoryWideScan).toContain(
@@ -1519,6 +1563,9 @@ describe("effectiveness benchmark", () => {
     );
     expect(finalReport).toContain(
       "For archive symlink or hardlink traversal findings",
+    );
+    expect(finalReport).toContain(
+      "For decompression-bomb and data-amplification findings",
     );
     expect(finalReport).toContain("For OIDC ID-token client-binding findings");
     expect(finalReport).toContain("For DNS-rebinding SSRF findings");

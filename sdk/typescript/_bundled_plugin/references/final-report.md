@@ -119,6 +119,15 @@ overwritten or disclosed asset. Link-related APIs alone are not an exploit
 witness; record link-entry rejection, root-handle-relative no-follow traversal,
 pre-existing-link rejection, and legitimate nested extraction when present.
 
+For decompression-bomb and data-amplification findings, affected lines must
+include the attacker-controlled compressed input boundary, decoder call,
+missing or bypassed entry-count, cumulative compressed-input/decoder-work,
+expanded-output/retention, or nesting budget, retained output, and shared
+resource effect when distinct. Record codec/container, compressed and
+declared sizes, actual expanded bytes, ratio, entry count/nesting/concurrency,
+streaming or allocation behavior, memory/disk/worker outcome, bounded witness,
+and legitimate-input control. A decoder API or large ratio alone is not proof.
+
 For OIDC ID-token client-binding findings, affected lines must include the
 trusted signature/issuer acceptance boundary, the incomplete `aud`/`azp`/nonce
 validation, and the final local-principal or session installation when those

@@ -149,6 +149,45 @@
       "expected": []
     },
     {
+      "id": "javascript-decompression-bomb",
+      "description": "An attacker-controlled raw-DEFLATE entry is inflated without compressed-size, actual-output, expansion-ratio, per-entry, or cumulative limits before the expanded bytes are retained by the importer.",
+      "fixture": "fixtures/javascript-decompression-bomb",
+      "findingsPaths": [
+        "javascript-decompression-bomb/run-1/findings.json",
+        "javascript-decompression-bomb/run-2/findings.json",
+        "javascript-decompression-bomb/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "unbounded-deflate-data-amplification",
+          "cwe": ["CWE-409", "CWE-400"],
+          "locations": [
+            {
+              "path": "src/importer.js",
+              "startLine": 11,
+              "endLine": 12,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-decompression-limits",
+      "description": "The importer snapshots and caps bundle entry count, uses bounded index iteration and stable field snapshots, rejects duplicate names, validates compressed and declared sizes, caps actual output during inflation, checks observed size and expansion ratio, applies cumulative compressed-input and expanded-output budgets, and stages the validated bundle before writes while preserving ordinary entries.",
+      "fixture": "fixtures/javascript-safe-decompression-limits",
+      "findingsPaths": [
+        "javascript-safe-decompression-limits/run-1/findings.json",
+        "javascript-safe-decompression-limits/run-2/findings.json",
+        "javascript-safe-decompression-limits/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-executable-file-upload",
       "description": "A public upload retains attacker-controlled JavaScript bytes and filename in the application extension directory, whose separate startup loader imports and activates every module.",
       "fixture": "fixtures/javascript-executable-file-upload",

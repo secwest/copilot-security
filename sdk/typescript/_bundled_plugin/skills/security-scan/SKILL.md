@@ -73,7 +73,11 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    content placement into served, executable, plugin, startup, or configuration
    roots, archive symlink/hardlink target traversal and ordered
    write-through-link pivots with root-anchored no-follow controls,
-   roots, HTTP message framing and parser agreement across proxies, gateways,
+   decompression bombs across actual output, expansion ratio, entry count,
+   per-entry limits, cumulative compressed-input/decoder-work and
+   expanded-output/retention budgets, nesting, streaming, concurrency, and
+   shared capacity,
+   HTTP message framing and parser agreement across proxies, gateways,
    servers, and backends, native memory allocation/copy/index/lifetime
    boundaries, secrets, and resource consumption. Record candidates in
    `artifacts/02_discovery/candidate_ledger.jsonl`.

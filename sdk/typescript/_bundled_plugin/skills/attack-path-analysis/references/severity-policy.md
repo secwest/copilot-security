@@ -155,6 +155,14 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   subsequent contained member, filesystem resolution, final opened object, and
   meaningful overwrite or disclosure; severity follows the asset and resulting
   persistence, privilege, or confidentiality impact.
+- Decompression-bomb or data-amplification behavior that lets a remote or
+  low-privilege attacker use a small valid input to exhaust shared memory, disk,
+  parser, worker, event-loop, or service capacity. High requires a bounded
+  measured witness, reachable shared effect, relevant request/concurrency
+  conditions, and the absence or bypass of actual-output, entry-count,
+  cumulative input-work, cumulative output-retention, nesting, and concurrency
+  controls; severity follows the affected
+  availability scope and recovery cost.
 - CSRF when it enables important state-changing actions such as credential changes, permission changes, payment / billing changes, or security-setting changes with realistic victim interaction. Evaluate actual browser request behavior, credential attachment, cookie policy, preflight requirements, server parsing, and effective anti-CSRF controls; an HTTP method or JSON content type alone is not a categorical defense.
 - Credentialed CORS exposure of ordinary but meaningful API keys, session
   tokens, account data, PII, or tenant data when attacker JavaScript can
@@ -348,6 +356,13 @@ Examples that usually should not remain `high`/`critical` without very strong pr
   components plus the final file are traversed relative to a trusted root
   handle without following links, with both malicious-link rejection and
   legitimate nested extraction demonstrated.
+- Decompression-bomb reports based only on a decompressor call, compressed
+  input, a favorable compression ratio, declared-size metadata, or theoretical
+  resource growth without a bounded valid witness and reachable shared effect.
+  Suppress when actual output and entry count are capped, cumulative compressed
+  input/work and expanded output/retention are budgeted, nesting and concurrency
+  are bounded where relevant, errors fail closed, and legitimate inputs remain
+  usable.
 - Open redirect, clickjacking, user enumeration, rate-limit weakness, banner leakage, version disclosure, directory listing, stack traces, internal hostnames, or basic error-message leakage, unless they are shown as part of a serious exploit chain.
 - Memory corruption that is theoretical, non-triggerable from in-scope input, or not plausibly exploitable in the target environment.
 - Request-smuggling claims based only on `Content-Length` and

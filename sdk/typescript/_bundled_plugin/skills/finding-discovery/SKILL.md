@@ -190,6 +190,17 @@ Use this checklist to keep discovery specific without turning it into validation
   Rejecting archive links plus root-anchored no-follow traversal of every path
   component at the actual write is strong counterevidence; a final-component
   `O_NOFOLLOW`, `resolve()`, `realpath()`, or post-extraction scan alone is not.
+- Treat compressed-data expansion as a separate archive, document, protocol,
+  package, media, backup, and import boundary. Preserve compressed byte count,
+  attacker-controlled or declared expanded size, actual output accounting,
+  expansion ratio, entry count, per-entry limits, cumulative compressed-input
+  and decoder-work budgets, cumulative expanded-output and retention budgets,
+  nesting/recursion, decoder
+  streaming versus whole-buffer behavior, destination retention, concurrency,
+  and the shared memory/disk/worker effect. Header metadata or a compressed-input
+  limit alone does not bound actual output. Keep exact actual-output caps,
+  cumulative input-work and pre-retention output accounting, nesting limits,
+  fail-closed decoder errors, and legitimate bounded inputs as counterevidence.
 - When upload/archive-member rows have a precise source to decoded/filtered member name to destination join/write tuple, keep them as candidates even if runtime package reproduction is unavailable or confidence is medium. A cleaner download/open traversal or API/auth issue in the same repository is not a reason to drop the archive-member row; report the archive row at calibrated severity/confidence or keep an explicit deferred ledger row with the missing proof.
 - For direct uploads and content placement, preserve multipart/form/parser
   configuration, size limits, attacker-controlled filename and metadata,

@@ -379,6 +379,20 @@ inventory and closure requirements.
      root-directory-handle-relative no-follow traversal of every component and
      final file, with a legitimate nested-file extraction, as the negative
      control.
+   - decompression bombs and data amplification: every archive, package,
+     document, protocol, media, backup, or import decoder receiving untrusted
+     compressed bytes. Trace compressed size, declared size, actual expanded
+     output, expansion ratio, entry count, per-item limits, cumulative
+     compressed-input and decoder-work budgets, cumulative expanded-output and
+     retention budgets,
+     nested decoding,
+     streaming versus whole-buffer allocation, retention, concurrency, and the
+     shared memory/disk/worker effect. A compressed-input limit or trusted header
+     is not an output bound. Require actual-output caps during decoding,
+     cumulative input-work and pre-retention output accounting,
+     nesting/concurrency limits where
+     relevant, fail-closed errors, and legitimate bounded input as the negative
+     control.
    - HTTP request framing and smuggling: every ingress proxy, load balancer,
      gateway, framework server, middleware, backend, connection pool, and
      protocol downgrade/upgrade boundary that parses or rewrites the same

@@ -77,6 +77,9 @@ publish findings, open issues, or contact third parties. Write only beneath
    resolver fan-out, and account/principal/tenant operation budgets,
    fixed or dynamic regular expressions, input bounds, engine selection,
    worker isolation, and catastrophic-backtracking near-matches,
+   compressed-data decoders, input/output size limits, expansion ratios,
+   entry-count/per-entry limits, cumulative compressed-input/decoder-work and
+   expanded-output/retention budgets, nesting, streaming, and concurrency,
    external authentication/authorization policy calls, decision defaults and
    types, error/timeout/fallback paths, and subject/action/resource binding,
    outbound URL parsing, DNS answer validation, repeated resolution, redirects,
@@ -130,6 +133,12 @@ publish findings, open issues, or contact third parties. Write only beneath
      alternation structure, validation/search/replace/split callsites, input
      length bounds, runtime regex engines, timeouts, or worker isolation where
      attacker-controlled near-matches can cause catastrophic backtracking;
+   - changed archive/document/protocol/media/package decompressors, declared or
+     compressed size checks, actual-output caps, expansion-ratio checks,
+     entry-count/per-entry limits, cumulative compressed-input/decoder-work and
+     expanded-output/retention accounting, nested-container depth, streaming
+     versus whole-buffer behavior, retained output, or concurrent decoder
+     limits;
    - changed external authorization or entitlement calls, default decisions,
      explicit-deny handling, catch/finally behavior, timeouts, retries, circuit
      breakers, caches, malformed/empty response coercion, exact-allow checks, or
