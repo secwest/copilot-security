@@ -48,6 +48,7 @@
     "generate:models:check": "node scripts/generate-models.cjs --check",
     "lint": "tsc --noEmit",
     "prepack": "npm run build",
+    "pretest": "pnpm run build",
     "test": "bun test --timeout 30000 ./tests-ts",
     "test:package": "node scripts/smoke-package.mjs",
     "types": "pnpm run generate:models:check && tsc --noEmit"

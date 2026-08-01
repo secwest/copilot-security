@@ -91,6 +91,7 @@ describe("TypeScript package skeleton", () => {
       "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     );
     expect(packageJson.scripts.prepack).toBe("npm run build");
+    expect(packageJson.scripts.pretest).toBe("pnpm run build");
     expect(packageJson.scripts["audit:prod"]).toBe(
       "pnpm audit --prod --audit-level high",
     );
