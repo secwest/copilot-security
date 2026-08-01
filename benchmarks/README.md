@@ -58,8 +58,8 @@ TLS certificate verification,
 predictable security tokens, server-side template injection, check/use state
 races, unsafe mass assignment, cookie-authenticated cross-site request forgery,
 attacker-length native-memory corruption, asynchronous session use-after-free
-with deterministic fixed-pool reuse and cancellation-before-release as the
-control, LDAP filter injection into
+with deterministic fixed-pool reuse and a serialized retained-lifetime control,
+LDAP filter injection into
 directory-backed group authorization, XPath predicate injection into XML-backed
 authentication, OAuth authorization-code account-linking CSRF with session
 takeover, login session fixation with authenticated-session rotation as the

@@ -1398,6 +1398,9 @@ describe("residual risk inventory", () => {
     expect(scanQualityGatePrompt("")).toContain(
       "native memory allocation/copy/index/lifetime boundaries",
     );
+    expect(scanQualityGatePrompt("")).toContain(
+      "For race-dependent findings specifically",
+    );
   });
 
   test("pairs deferred native pointer reuse with cancellation before release", async () => {
@@ -1420,8 +1423,10 @@ describe("residual risk inventory", () => {
     expect(safe).toContain('"native-object-lifetime-or-deferred-pointer"');
     expect(safe).toContain("pending_audit_session == session");
     expect(safe.indexOf("pending_audit_session == session")).toBeLessThan(
-      safe.indexOf("release_session(session)"),
+      safe.indexOf("release_reference_locked(session)"),
     );
+    expect(safe).toContain("session->references++");
+    expect(safe).toContain("atomic_flag_test_and_set_explicit");
   });
 
   test("reconciles exact immutable inventory paths against draft coverage", async () => {

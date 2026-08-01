@@ -90,6 +90,72 @@ nativeTest(
   { timeout: NATIVE_TEST_TIMEOUT_MS },
 );
 
+nativeTest(
+  "safe completion retains the claimed session across a reentrant close",
+  async () => {
+    expect(compiler).not.toBeNull();
+    const root = await mkdtemp(
+      join(tmpdir(), "copilot-security-retained-lifetime-benchmark-"),
+    );
+    temporaryPaths.push(root);
+    const harness = join(root, "reentrant-harness.c");
+    await writeFile(
+      harness,
+      [
+        "struct session;",
+        "typedef void (*send_report_fn)(void *peer, const char *report);",
+        "struct session *session_open(int is_admin, send_report_fn send_report, void *peer);",
+        "int begin_admin_audit(struct session *session);",
+        "void session_close(struct session *session);",
+        "void complete_admin_audit(const char *report);",
+        "",
+        "static struct session *victim;",
+        "static int replacement_succeeded_during_callback;",
+        "",
+        "static void receive_report(void *peer, const char *report) {",
+        "    (void)peer;",
+        "    (void)report;",
+        "    session_close(victim);",
+        "    struct session *replacement = session_open(0, receive_report, 0);",
+        "    if (replacement != 0) {",
+        "        replacement_succeeded_during_callback = 1;",
+        "        session_close(replacement);",
+        "    }",
+        "}",
+        "",
+        "int main(void) {",
+        "    victim = session_open(1, receive_report, 0);",
+        "    if (victim == 0 || begin_admin_audit(victim) != 0) return 20;",
+        '    complete_admin_audit("administrator signing audit");',
+        "    if (replacement_succeeded_during_callback != 0) return 21;",
+        "",
+        "    struct session *replacement = session_open(0, receive_report, 0);",
+        "    if (replacement == 0 || replacement != victim) return 22;",
+        "    session_close(replacement);",
+        "    return 0;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const fixtures = resolve(
+      process.cwd(),
+      "..",
+      "..",
+      "benchmarks",
+      "fixtures",
+    );
+    compileAndRun(
+      compiler!,
+      join(fixtures, "c-safe-async-audit-lifetime", "src", "session.c"),
+      harness,
+      join(root, executableName("retained-lifetime")),
+      0,
+    );
+  },
+  { timeout: NATIVE_TEST_TIMEOUT_MS },
+);
+
 function findCompiler(): string | null {
   for (const candidate of ["cc", "gcc", "clang"]) {
     const result = spawnSync(candidate, ["--version"], {

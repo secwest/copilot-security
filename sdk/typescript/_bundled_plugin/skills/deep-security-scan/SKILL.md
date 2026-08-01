@@ -359,6 +359,14 @@ inventory and closure requirements.
      same-address reuse witness where practical and compare cancellation-before-
      release, joined teardown, generation checks, or retained/ref-counted
      ownership that covers every exit path.
+     Do not invent concurrency between ordinary function calls or between a
+     check and the next expression merely because work is described as async or
+     deferred. Require a repository-evidenced thread/task/signal/interrupt,
+     scheduler/executor, reentrant callback, lock-release, or callable concurrent
+     entry path. If the claimed exploit depends on an execution model absent
+     from source, tests, build/runtime configuration, and documentation, reject
+     it rather than assigning high confidence while listing concurrency as an
+     assumption.
    - document-query and NoSQL operator injection: every JSON, form, GraphQL,
      RPC, configuration, or stored value that can become a selector key,
      selector value, comparison/operator document, aggregation stage,

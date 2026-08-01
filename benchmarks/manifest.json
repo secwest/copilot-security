@@ -1672,7 +1672,7 @@
     },
     {
       "id": "c-safe-async-audit-lifetime",
-      "description": "The same deferred administrator export cancels pending work that references the closing session before releasing its fixed-pool slot, preventing later reuse from redirecting the privileged operation.",
+      "description": "The same deferred administrator export serializes lifecycle state, gives pending work a retained reference, cancels before release when close wins, and prevents slot reuse until a claimed completion returns.",
       "fixture": "fixtures/c-safe-async-audit-lifetime",
       "findingsPaths": [
         "c-safe-async-audit-lifetime/run-1/findings.json",

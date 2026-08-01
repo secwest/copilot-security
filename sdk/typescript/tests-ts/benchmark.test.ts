@@ -1260,6 +1260,7 @@ describe("effectiveness benchmark", () => {
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
     expect(deepScan).toContain("same-address reuse witness");
+    expect(deepScan).toContain("Do not invent concurrency");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
     expect(deepScan).toContain(
       "LDAP filter and directory authorization injection:",
@@ -1438,6 +1439,7 @@ describe("effectiveness benchmark", () => {
     expect(discovery).toContain("bounded API is neither vulnerable");
     expect(discovery).toContain("For temporal memory safety");
     expect(discovery).toContain("object-lifetime ledger");
+    expect(discovery).toContain("Do not infer parallel execution");
     expect(discovery).toContain("For document-query and NoSQL APIs");
     expect(discovery).toContain(
       "For LDAP searches used in authentication, group membership",
@@ -1536,6 +1538,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("DNS-rebinding SSRF:");
     expect(validation).toContain("native memory corruption:");
     expect(validation).toContain("use-after-free / use-after-lifetime:");
+    expect(validation).toContain("concurrency and reentrancy prerequisite:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("LDAP filter injection:");
     expect(validation).toContain("XPath/XQuery injection:");

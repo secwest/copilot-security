@@ -303,6 +303,16 @@ Use class-specific proof tuples:
   after callback completion, cancels and joins pending work, clears all aliases,
   validates an unforgeable generation while holding stable ownership, or keeps
   the exact object alive through retained/ref-counted ownership.
+- concurrency and reentrancy prerequisite: identify the repository evidence that
+  permits the conflicting operations to overlap: thread/task/process creation,
+  signal or interrupt entry, scheduler/executor dispatch, reentrant callbacks,
+  a documented concurrent API contract, or a bounded runtime witness. A
+  deferred callback, global pointer, separately callable API, or two adjacent
+  expressions does not create an instruction-level interleaving by itself.
+  Reject a race candidate when its exploit requires an unproved caller/thread
+  model. A validation `remainingUncertainty` that admits concurrency is merely
+  assumed contradicts high confidence and is not a reportable high-severity
+  witness.
 - document-query/NoSQL operator injection: attacker-controlled parsed key,
   primitive, array, object, selector document, aggregation stage, projection,
   sort, update operator, or expression + exact parser/schema/coercion runtime
@@ -382,7 +392,7 @@ Use class-specific proof tuples:
 - server-side template source: attacker-controlled request, stored, tenant, configuration, or error text + compilation or parsing as template/expression source + exact sandbox/global/object-capability/recursion controls + reachable read, expression, code-execution, or secret-exposure effect. A fixed template receiving untrusted variables is a negative control unless those variables are reparsed or evaluated as source; autoescaping controls output encoding, not server-side expression execution.
 - recursive placeholder/template injection: request, tenant/client metadata, stored configuration, or error value + placeholder/template helper that recursively expands, re-parses, or evaluates resolved values + missing escape/non-recursive guard + XSS, expression execution, credential exfiltration, or code execution impact
 - predictable security value: attacker-relevant token, session identifier, invitation, nonce, temporary credential, API key, reset/verification code, or security selection + generator and all truncation/encoding transforms + effective entropy and exposure/lifetime + storage/comparison and attempt controls + concrete impersonation, replay, forgery, or boundary-bypass effect. A non-cryptographic generator name alone is not proof; quantify the feasible attacker work and suppress values that protect no boundary or have an effective independent control.
-- check/use or state race: security decision over a specific file, record, version, principal, amount, destination, permission, or state + attacker-reachable conflicting mutation + a real interleaving boundary + later use of a different or re-resolved value/object without an atomic predicate, lock, version check, stable handle, or immutable snapshot + concrete confidentiality, integrity, authorization, or availability impact. Repeated reads or asynchronous syntax alone are not proof.
+- check/use or state race: security decision over a specific file, record, version, principal, amount, destination, permission, or state + attacker-reachable conflicting mutation + a repository-evidenced thread/task/process/signal/interrupt/reentrant/scheduler boundary or bounded concurrent witness + later use of a different or re-resolved value/object without an atomic predicate, lock, version check, stable handle, or immutable snapshot + concrete confidentiality, integrity, authorization, or availability impact. Repeated reads, separately callable functions, deferred callback terminology, or asynchronous syntax alone are not proof; reject an instruction-level interleaving that exists only under an assumed caller or thread model.
 - deserialization/code execution: attacker-controlled serialized/code/template bytes + unsafe loader/evaluator + execution or object-construction effect
 - deserializer wrapper denylist/allowlist control: attacker-controlled, stored, plugin, remoting, import, or persisted-state serialized input + shared wrapper that accepts type tags or default object construction + missing/misordered deny entry, allowlist gap, converter-priority gap, or unsafe class-loader/default-converter behavior + object construction, crash, code execution, or privilege-boundary impact
 - concrete deserializer/codec control: attacker-controlled serialized or structured input + registered codec/converter/deserializer/container handler that recursively parses, resolves types, filters classes, converts values, or constructs objects + missing validation, unsafe fallback, fail-open filter, or unbounded traversal + code execution, object construction, parser confusion, denial of service, or privilege-boundary impact

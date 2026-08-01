@@ -191,6 +191,13 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   callback redirection, or service-wide availability impact. Severity follows
   attacker control, determinism, affected privilege, and blast radius; reserve
   lower severities for difficult local-only corruption or bounded crashes.
+- Race-dependent temporal-memory findings cannot be `high` or `critical` when
+  the repository supplies no execution-model evidence that the conflicting
+  operations overlap. Function names, globals, deferred-work terminology, and
+  public callability are not substitutes for a thread/task/signal/interrupt,
+  scheduler/executor, reentrant callback, documented concurrent contract, or
+  bounded witness. An analysis that lists concurrency as an assumption has not
+  established a severe attack path.
 - Arbitrary file read that exposes less-sensitive user data or source code (if you have actual proof it reveals env secrets, then it is critical)
 - Arbitrary file write in executable, startup, config, or firmware paths with a realistic path to persistence or code execution
 - Archive symlink or hardlink traversal that reliably converts an

@@ -548,6 +548,13 @@ Use this checklist to keep discovery specific without turning it into validation
   counterevidence only when it dominates every teardown and completion path.
   A raw pointer in asynchronous work is not by itself a finding; identify the
   exact release-before-use ordering and the security-relevant reused fields.
+  Do not infer parallel execution from names such as asynchronous, deferred,
+  callback, completion, event, or pending. Preserve concrete execution-model
+  evidence: thread/task/process creation, signal or interrupt context, scheduler
+  or executor dispatch, reentrant callback edges, documented caller contracts,
+  blocking operations that release a lock, or an actual concurrent witness.
+  Without such evidence, a hypothetical instruction-level interleaving is not
+  attacker-reachable and must not be promoted as a race finding.
 - Split independently exploitable native-memory rows by root operation and
   object lifetime. Do not merge a length-driven overwrite, out-of-bounds read,
   integer-overflowed allocation, use-after-free, double free, or type confusion

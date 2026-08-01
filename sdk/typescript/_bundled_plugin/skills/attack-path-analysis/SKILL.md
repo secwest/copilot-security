@@ -211,6 +211,12 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   callback substitution from generic allocator speculation. Cancellation before
   release or retained/ref-counted ownership is counterevidence only when all
   teardown and completion races are covered.
+  Anchor the ability to overlap operations to a concrete thread/task/process,
+  signal/interrupt, scheduler/executor, reentrant callback, documented caller
+  contract, or runtime witness. Separately callable C functions and deferred or
+  asynchronous terminology do not prove preemption between adjacent
+  expressions. If the attack path must assume an unstated concurrent caller,
+  mark it unproved and do not report it as a high-confidence vulnerability.
 - For document-query and NoSQL findings, preserve the attacking JSON/form/RPC
   shape and parsed runtime types; selector keys, values, operator documents,
   aggregation stages, or expressions; schema/DTO/ODM coercion and sanitization;
