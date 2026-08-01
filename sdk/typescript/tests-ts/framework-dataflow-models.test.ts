@@ -24,9 +24,16 @@ interface FrameworkRecord {
     schemaVersion: string;
     id: string;
     language: string;
-    source: { kind: string; line: number };
-    sink: { kind: string; line: number; cweIds: string[] };
-    candidateControls: Array<{ kind: string; line: number }>;
+    scope: string;
+    source: { kind: string; path: string; line: number };
+    sink: { kind: string; path: string; line: number; cweIds: string[] };
+    propagators: Array<{
+      kind: string;
+      path: string;
+      line: number;
+      symbol?: string;
+    }>;
+    candidateControls: Array<{ kind: string; path: string; line: number }>;
   };
 }
 
@@ -89,14 +96,21 @@ describe("framework-aware residual data-flow models", () => {
     const record = modelRecord(records, "node-http-command");
 
     expect(record?.frameworkModel).toMatchObject({
-      schemaVersion: "1.0",
+      schemaVersion: "1.1",
       language: "javascript-typescript",
-      source: { kind: "http-request-field", line: 4 },
+      scope: "same-file",
+      source: {
+        kind: "http-request-field",
+        path: "src/server.js",
+        line: 4,
+      },
       sink: {
         kind: "child-process-shell",
+        path: "src/server.js",
         line: 5,
         cweIds: ["CWE-78"],
       },
+      propagators: [],
       candidateControls: [],
     });
     expect(decode(record!, true)).toContain("request.query.host");
@@ -138,6 +152,7 @@ describe("framework-aware residual data-flow models", () => {
     expect(vulnerable?.frameworkModel?.candidateControls).toEqual([]);
     expect(safe?.frameworkModel?.candidateControls).toContainEqual({
       kind: "bound-query-parameters",
+      path: "src/users.js",
       line: 4,
     });
     expect(decode(safe!)).toContain("email = $1");
@@ -223,5 +238,192 @@ export function run(request) {
     expect(record).toBeDefined();
     expect(inventory).not.toContain(hostile);
     expect(`${decode(record!, true)}\n${decode(record!)}`).toContain(hostile);
+  });
+
+  test("links an imported request argument to an exported shell wrapper", async () => {
+    const records = parseRecords(
+      await buildResidualRiskInventory(
+        join(benchmarkFixtures, "javascript-cross-file-command-injection"),
+      ),
+    );
+    const record = records.find(
+      (candidate) =>
+        candidate.frameworkModel?.id === "node-http-command" &&
+        candidate.frameworkModel.scope === "cross-file-wrapper",
+    );
+
+    expect(record?.frameworkModel).toEqual({
+      schemaVersion: "1.1",
+      id: "node-http-command",
+      language: "javascript-typescript",
+      scope: "cross-file-wrapper",
+      source: {
+        kind: "http-request-field",
+        path: "src/server.js",
+        line: 4,
+      },
+      sink: {
+        kind: "child-process-shell",
+        path: "src/runner.js",
+        line: 4,
+        cweIds: ["CWE-78"],
+      },
+      propagators: [
+        {
+          kind: "relative-module-import",
+          path: "src/server.js",
+          line: 1,
+          symbol: "runHostCheck as runHostCheck",
+        },
+        {
+          kind: "wrapper-call-argument",
+          path: "src/server.js",
+          line: 5,
+          symbol: "runHostCheck[0]",
+        },
+        {
+          kind: "wrapper-parameter",
+          path: "src/runner.js",
+          line: 3,
+          symbol: "host",
+        },
+      ],
+      candidateControls: [],
+    });
+    expect(decode(record!, true)).toContain("runHostCheck(host, response)");
+    expect(decode(record!)).toContain("exec(`ping");
+  });
+
+  test("keeps cross-file shell-free and parameter-bound wrappers as negative controls", async () => {
+    const safeCommand = parseRecords(
+      await buildResidualRiskInventory(
+        join(benchmarkFixtures, "javascript-cross-file-safe-command"),
+      ),
+    );
+    const safeSql = parseRecords(
+      await buildResidualRiskInventory(
+        join(benchmarkFixtures, "javascript-cross-file-safe-sql"),
+      ),
+    );
+
+    expect(
+      safeCommand.some(
+        (record) => record.frameworkModel?.scope === "cross-file-wrapper",
+      ),
+    ).toBeFalse();
+    const sqlRecord = safeSql.find(
+      (record) => record.frameworkModel?.scope === "cross-file-wrapper",
+    );
+    expect(sqlRecord?.frameworkModel?.candidateControls).toContainEqual({
+      kind: "bound-query-parameters",
+      path: "src/users.js",
+      line: 2,
+    });
+  });
+
+  test("does not connect an unused or reassigned request value to a wrapper", async () => {
+    for (const callsite of [
+      `const host = request.query.host;\n  return runHostCheck("fixed.example");`,
+      `let host = request.query.host;\n  host = "fixed.example";\n  return runHostCheck(host);`,
+    ]) {
+      const repository = await writeRepositoryFile(
+        "src/runner.js",
+        `
+import { exec } from "node:child_process";
+export function runHostCheck(host) {
+  return exec("ping " + host);
+}
+`,
+      );
+      await mkdir(join(repository, "src"), { recursive: true });
+      await writeFile(
+        join(repository, "src", "server.js"),
+        `
+import { runHostCheck } from "./runner.js";
+export function handler(request) {
+  ${callsite}
+}
+`,
+      );
+
+      const records = parseRecords(
+        await buildResidualRiskInventory(repository),
+      );
+      expect(
+        records.some(
+          (record) => record.frameworkModel?.scope === "cross-file-wrapper",
+        ),
+      ).toBeFalse();
+    }
+  });
+
+  test("preserves aliased TypeScript imports and the exact typed parameter position", async () => {
+    const repository = await writeRepositoryFile(
+      "src/runner.ts",
+      `
+import { exec } from "node:child_process";
+export function runHostCheck(prefix: string, host?: string) {
+  return exec(prefix + host);
+}
+`,
+    );
+    await writeFile(
+      join(repository, "src", "server.ts"),
+      `
+import { runHostCheck as check } from "./runner.js";
+export function handler(request) {
+  const host = request.query.host;
+  return check("ping ", host);
+}
+`,
+    );
+
+    const records = parseRecords(await buildResidualRiskInventory(repository));
+    const record = records.find(
+      (candidate) => candidate.frameworkModel?.scope === "cross-file-wrapper",
+    );
+
+    expect(record?.frameworkModel?.source.path).toBe("src/server.ts");
+    expect(record?.frameworkModel?.sink.path).toBe("src/runner.ts");
+    expect(record?.frameworkModel?.propagators).toContainEqual({
+      kind: "wrapper-call-argument",
+      path: "src/server.ts",
+      line: 5,
+      symbol: "check[1]",
+    });
+    expect(record?.frameworkModel?.propagators).toContainEqual({
+      kind: "wrapper-parameter",
+      path: "src/runner.ts",
+      line: 3,
+      symbol: "host",
+    });
+  });
+
+  test("does not treat a sink-line comment as wrapper parameter flow", async () => {
+    const repository = await writeRepositoryFile(
+      "src/runner.js",
+      `
+import { exec } from "node:child_process";
+export function runHostCheck(host) {
+  return exec("ping fixed.example"); // host is intentionally unused
+}
+`,
+    );
+    await writeFile(
+      join(repository, "src", "server.js"),
+      `
+import { runHostCheck } from "./runner.js";
+export function handler(request) {
+  return runHostCheck(request.query.host);
+}
+`,
+    );
+
+    const records = parseRecords(await buildResidualRiskInventory(repository));
+    expect(
+      records.some(
+        (record) => record.frameworkModel?.scope === "cross-file-wrapper",
+      ),
+    ).toBeFalse();
   });
 });

@@ -1,0 +1,5 @@
+{
+  "name": "javascript-cross-file-command-injection",
+  "private": true,
+  "type": "module"
+}

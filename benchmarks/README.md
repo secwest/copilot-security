@@ -130,6 +130,21 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode standard
 ```
 
+The cross-file wrapper lane has its own strict paired manifest:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/cross-file-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-cross-file `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 `--selection-only` writes `benchmark-selection-manifest.json` and
 `benchmark-report.json` into the external results directory and enforces only
 the requested cases and run count. Runner evaluation always requires a

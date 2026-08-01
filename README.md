@@ -36,9 +36,13 @@ findings or control flow.
 The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command-execution and raw-SQL
 boundaries. Each applicable row identifies an exact source line, sink line,
-CWE family, and nearby candidate controls. These rows remain hypotheses: the
-correction turn must prove same-value flow through wrappers and transformations
-and reject API co-occurrence. Argument vectors without a shell, native SQL
+CWE family, and nearby candidate controls. For Node/TypeScript relative-module
+wrappers, the host can also emit a bounded cross-file chain containing the
+import, exact call argument position, exported wrapper parameter, and sink that
+references that parameter. These rows remain hypotheses: the correction turn
+must prove runtime same-value flow through aliases and transformations and
+reject unused imports, fixed arguments, intervening reassignment, unreachable
+wrappers, and API co-occurrence. Argument vectors without a shell, native SQL
 parameter binding, and other candidate controls count only when they apply to
 the same value, are context-correct, and dominate the sink.
 
@@ -339,6 +343,18 @@ node ../../benchmarks/run-benchmark.mjs `
   --effort high `
   --workers 2 `
   --max-attempts 2 `
+  --mode deep
+
+# Run the strict cross-file wrapper diagnostic
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/cross-file-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-cross-file `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
   --mode deep
 ```
 

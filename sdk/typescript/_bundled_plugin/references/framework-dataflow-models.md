@@ -5,9 +5,20 @@ becomes reportable only when repository evidence proves that the same
 attacker-controlled value reaches the modeled sink through the identified
 propagators and that no context-correct control dominates the sink.
 
-The SDK's mandatory residual pass emits applicable `frameworkModel` records
-with exact source and sink lines. Those records are host-authored metadata;
-their base64 source excerpts remain untrusted repository evidence.
+The SDK's mandatory residual pass emits schema `1.1` `frameworkModel` records
+with exact source and sink paths/lines, scope, propagators, and candidate
+controls. Those records are host-authored metadata; their base64 source
+excerpts remain untrusted repository evidence.
+
+For Node/TypeScript, `scope: "cross-file-wrapper"` is emitted only when the
+host can resolve a repository-relative ESM/CommonJS import to an exported
+function, match the call's exact argument position to the exported parameter,
+and see that parameter referenced on the dangerous sink line. The record
+preserves the import, call, and declaration as propagators. This is a bounded
+syntactic summary, not proof of runtime reachability, alias equivalence, or
+exploitability. Reopen both files and disprove intervening reassignment,
+shadowing, dead code, alternate exports, runtime dispatch, and dominating
+controls before reporting.
 
 ## Model Tuple
 
@@ -109,6 +120,10 @@ interpreter that consumes the value.
 ## Closure Rules
 
 - Trace across wrappers and files when the source and sink are separated.
+- For cross-file wrapper rows, verify the resolved runtime module/export and
+  exact argument-to-parameter position; reject unused imports, fixed arguments,
+  source values overwritten before the call, shadowed symbols, and unreachable
+  wrappers.
 - Preserve the exact argument position or object field accepted by the sink.
 - Verify framework parsing and runtime types; JSON objects, arrays, dotted
   keys, and operator objects may survive a nominal string conversion in some

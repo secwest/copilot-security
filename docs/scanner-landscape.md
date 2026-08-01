@@ -60,9 +60,11 @@ contract validation, and sealed outputs remain mandatory.
 
 The mandatory host residual pass now has an initial provider-neutral model pack
 for Node HTTP, Python web, Spring/servlet, and ASP.NET command execution and raw
-SQL. A model activates only when its language, request-source syntax, and
-concrete runtime or sink API are present in the same bounded source file. The
-host emits:
+SQL. Same-file models activate when their language, request-source syntax, and
+concrete runtime or sink API are present in one bounded source file. A bounded
+Node/TypeScript cross-file layer additionally resolves repository-relative
+imports into exported wrappers and preserves the exact argument-to-parameter
+position when that parameter appears on the sink line. The host emits:
 
 - a stable model id and language;
 - the exact modeled source kind and line;
@@ -71,6 +73,8 @@ host emits:
   execution, SQL parameter binding, typed query construction, or bounded
   allowlists;
 - separately base64-encoded source and sink evidence windows.
+- for cross-file rows, the exact relative import, caller, argument position,
+  exported parameter declaration, wrapper, and sink paths/lines.
 
 This is deliberately a high-recall hypothesis, not a taint verdict. The
 quality-gate prompt requires same-value tracing across assignments, wrappers,
@@ -83,13 +87,18 @@ shell-free and parameter-bound negatives. Its thresholds require perfect
 completion, precision, recall, evidence, validation, attack-path, severity, and
 negative-case performance for the selected single-run diagnostic.
 
+`benchmarks/cross-file-framework-manifest.json` applies the same gates to
+request values that cross imported command and SQL wrapper boundaries. Its
+negative cases prove that a fixed shell-free executable and native SQL
+parameter binding remain safe across the same module boundary.
+
 ## Prioritized next improvements
 
-1. **Expand typed framework security models.** Add cross-file propagator and
-   wrapper summaries, framework-specific authorization and template models,
-   manifest-derived activation evidence, and signed or hashed external model
-   packs. Benchmark every extension against paired positive and negative
-   fixtures.
+1. **Expand typed framework security models.** Extend bounded summaries beyond
+   direct Node/TypeScript relative-import wrappers, add framework-specific
+   authorization and template models, manifest-derived activation evidence,
+   and signed or hashed external model packs. Benchmark every extension against
+   paired positive and negative fixtures.
 2. **Dependency and advisory reachability.** Build deterministic lockfile/SBOM
    extraction, accept OSV identifiers and fixed-version facts, and require a
    repository call/use path or explicit deployment exposure before escalating

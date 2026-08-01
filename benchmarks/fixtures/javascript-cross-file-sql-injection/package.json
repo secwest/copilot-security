@@ -1,0 +1,5 @@
+{
+  "name": "javascript-cross-file-sql-injection",
+  "private": true,
+  "type": "module"
+}

@@ -19,7 +19,8 @@ The package is ESM-only and provides:
   deferred work instead of accepting a false complete claim
 - typed host-generated Node HTTP, Python web, Spring/servlet, and ASP.NET
   command/SQL data-flow hypotheses with exact source/sink lines and nearby
-  negative controls for the mandatory residual correction turn
+  negative controls for the mandatory residual correction turn, plus bounded
+  relative-import/call/parameter summaries for Node/TypeScript wrappers
 - bounded native Copilot model-call retries without host prompt replay, plus
   cancellation-safe cleanup of partially initialized CLI sessions
 - cancellation and streamed Copilot usage/subagent events

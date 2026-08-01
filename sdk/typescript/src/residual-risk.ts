@@ -1,5 +1,5 @@
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
-import { extname, isAbsolute, join, relative, resolve } from "node:path";
+import { extname, isAbsolute, join, posix, relative, resolve } from "node:path";
 import {
   isSubstantiveAttackPath,
   isSubstantiveCodeEvidence,
@@ -13,6 +13,10 @@ const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_CANDIDATES = 4_096;
 const MAX_SIGNALS = 96;
 const MAX_SIGNALS_PER_FILE = MAX_SIGNALS;
+const MAX_FRAMEWORK_WRAPPER_SUMMARIES = 64;
+const MAX_FRAMEWORK_CROSS_FILE_RECORDS = 64;
+const MAX_WRAPPER_FUNCTION_LINES = 160;
+const MAX_WRAPPER_CALL_DISTANCE = 12;
 const MAX_COVERAGE_GAPS = 256;
 const MAX_FINDING_QUALITY_GAPS = 256;
 const MAX_INVENTORY_BYTES = 8 * 1024 * 1024;
@@ -787,13 +791,57 @@ interface ResidualRiskRecord {
   excerpt: string;
   sourceExcerpt?: string;
   frameworkModel?: {
-    schemaVersion: "1.0";
+    schemaVersion: "1.1";
     id: string;
     language: string;
-    source: { kind: string; line: number };
-    sink: { kind: string; line: number; cweIds: readonly string[] };
-    candidateControls: Array<{ kind: string; line: number }>;
+    scope: "same-file" | "cross-file-wrapper";
+    source: { kind: string; path: string; line: number };
+    sink: {
+      kind: string;
+      path: string;
+      line: number;
+      cweIds: readonly string[];
+    };
+    propagators: Array<{
+      kind: string;
+      path: string;
+      line: number;
+      symbol?: string;
+    }>;
+    candidateControls: Array<{ kind: string; path: string; line: number }>;
   };
+}
+
+interface SourceFileSnapshot {
+  path: string;
+  extension: string;
+  lines: readonly string[];
+  text: string;
+}
+
+interface ExportedJavascriptFunction {
+  symbol: string;
+  parameters: string[];
+  startLine: number;
+  endLine: number;
+}
+
+interface FrameworkWrapperSummary {
+  model: FrameworkDataflowModel;
+  file: SourceFileSnapshot;
+  symbol: string;
+  parameter: string;
+  parameterIndex: number;
+  declarationLine: number;
+  sink: { kind: string; line: number; cweIds: readonly string[] };
+  controls: Array<{ kind: string; line: number }>;
+}
+
+interface ImportedJavascriptSymbol {
+  imported: string;
+  local: string;
+  moduleSpecifier: string;
+  line: number;
 }
 
 interface CoverageSurfaceDraft {
@@ -850,6 +898,7 @@ export async function buildResidualRiskInventory(
       ? inventoryPaths
       : await discoverSourcePaths(canonicalRepository);
   const records: ResidualRiskRecord[] = [];
+  const sourceFiles: SourceFileSnapshot[] = [];
   let totalBytes = 0;
 
   for (const candidatePath of paths.slice(0, MAX_FILES)) {
@@ -863,9 +912,14 @@ export async function buildResidualRiskInventory(
     const text = source.toString("utf8");
     if (text.includes("\0")) continue;
     const lines = text.split(/\r?\n/u);
-    records.push(
-      ...frameworkDataflowRecords(candidatePath.replaceAll("\\", "/"), lines),
-    );
+    const normalizedPath = candidatePath.replaceAll("\\", "/");
+    sourceFiles.push({
+      path: normalizedPath,
+      extension: extname(normalizedPath).toLowerCase(),
+      lines,
+      text,
+    });
+    records.push(...frameworkDataflowRecords(normalizedPath, lines));
     let fileRecords: ResidualRiskRecord[] = [];
     const retainedFileRecords: ResidualRiskRecord[] = [];
     for (let index = 0; index < lines.length; index += 1) {
@@ -899,6 +953,8 @@ export async function buildResidualRiskInventory(
       ),
     );
   }
+
+  records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
 
   return selectResidualRiskRecords(records, MAX_SIGNALS)
     .map(({ priority: _priority, excerpt, sourceExcerpt, ...record }) =>
@@ -971,21 +1027,524 @@ function frameworkDataflowRecords(
         excerpt: sourceExcerpt(lines, startLine, endLine),
         sourceExcerpt: sourceExcerpt(lines, sourceStart, sourceEnd),
         frameworkModel: {
-          schemaVersion: "1.0",
+          schemaVersion: "1.1",
           id: model.id,
           language: model.language,
-          source: { kind: source.kind, line: source.line },
+          scope: "same-file",
+          source: { kind: source.kind, path, line: source.line },
           sink: {
             kind: sink.kind,
+            path,
             line: sink.line,
             cweIds: sinkPattern.cweIds,
           },
-          candidateControls: nearbyControls,
+          propagators: [],
+          candidateControls: nearbyControls.map((control) => ({
+            ...control,
+            path,
+          })),
         },
       });
     }
   }
   return records;
+}
+
+function frameworkCrossFileDataflowRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const knownPaths = new Map(
+    files.map((file) => [modelPathComparisonKey(file.path), file.path]),
+  );
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const summaries = javascriptFrameworkWrapperSummaries(files);
+  const summariesByFileAndSymbol = new Map<string, FrameworkWrapperSummary[]>();
+  for (const summary of summaries) {
+    const key = `${summary.file.path}\0${summary.symbol}`;
+    const existing = summariesByFileAndSymbol.get(key) ?? [];
+    existing.push(summary);
+    summariesByFileAndSymbol.set(key, existing);
+  }
+
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const caller of files) {
+    if (!JAVASCRIPT_EXTENSIONS.has(caller.extension)) continue;
+    const imports = importedJavascriptSymbols(caller.lines);
+    for (const imported of imports) {
+      const importedPath = resolveRelativeModelImport(
+        caller.path,
+        imported.moduleSpecifier,
+        knownPaths,
+      );
+      if (importedPath === undefined) continue;
+      const wrapperFile = filesByPath.get(importedPath);
+      if (wrapperFile === undefined) continue;
+      const matchingSummaries =
+        summariesByFileAndSymbol.get(`${importedPath}\0${imported.imported}`) ??
+        [];
+      for (const summary of matchingSummaries) {
+        const sources = matchingModelLines(
+          caller.lines,
+          summary.model.sources,
+          32,
+        );
+        if (sources.length === 0) continue;
+        const calls = javascriptCallLines(caller.lines, imported.local);
+        for (const call of calls) {
+          const argument = call.arguments[summary.parameterIndex];
+          if (argument === undefined) continue;
+          const source = modeledCallSource(
+            caller.lines,
+            sources,
+            call.line,
+            argument,
+            summary.model.sources,
+          );
+          if (source === undefined) continue;
+          const key = [
+            summary.model.id,
+            caller.path,
+            call.line,
+            wrapperFile.path,
+            summary.sink.line,
+            summary.parameterIndex,
+          ].join("\0");
+          if (emitted.has(key)) continue;
+          emitted.add(key);
+
+          const sinkStart = Math.max(
+            1,
+            summary.sink.line - CONTEXT_LINES_BEFORE,
+          );
+          const sinkEnd = Math.min(
+            wrapperFile.lines.length,
+            summary.sink.line + CONTEXT_LINES_AFTER,
+          );
+          const sourceStart = Math.max(1, Math.min(source.line, call.line) - 2);
+          const sourceEnd = Math.min(
+            caller.lines.length,
+            Math.max(source.line, call.line) + 2,
+          );
+          records.push({
+            path: wrapperFile.path,
+            line: summary.sink.line,
+            categories: [
+              `framework-dataflow:${summary.model.id}`,
+              "framework-cross-file-wrapper",
+              `modeled-source:${source.kind}`,
+              `modeled-sink:${summary.sink.kind}`,
+              ...summary.controls.map(
+                (control) => `candidate-control:${control.kind}`,
+              ),
+            ],
+            priority: 120,
+            startLine: sinkStart,
+            endLine: sinkEnd,
+            excerpt: sourceExcerpt(wrapperFile.lines, sinkStart, sinkEnd),
+            sourceExcerpt: sourceExcerpt(caller.lines, sourceStart, sourceEnd),
+            frameworkModel: {
+              schemaVersion: "1.1",
+              id: summary.model.id,
+              language: summary.model.language,
+              scope: "cross-file-wrapper",
+              source: {
+                kind: source.kind,
+                path: caller.path,
+                line: source.line,
+              },
+              sink: {
+                kind: summary.sink.kind,
+                path: wrapperFile.path,
+                line: summary.sink.line,
+                cweIds: summary.sink.cweIds,
+              },
+              propagators: [
+                {
+                  kind: "relative-module-import",
+                  path: caller.path,
+                  line: imported.line,
+                  symbol: `${imported.imported} as ${imported.local}`,
+                },
+                {
+                  kind: "wrapper-call-argument",
+                  path: caller.path,
+                  line: call.line,
+                  symbol: `${imported.local}[${summary.parameterIndex}]`,
+                },
+                {
+                  kind: "wrapper-parameter",
+                  path: wrapperFile.path,
+                  line: summary.declarationLine,
+                  symbol: summary.parameter,
+                },
+              ],
+              candidateControls: summary.controls.map((control) => ({
+                ...control,
+                path: wrapperFile.path,
+              })),
+            },
+          });
+          if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
+            return records;
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+function javascriptFrameworkWrapperSummaries(
+  files: readonly SourceFileSnapshot[],
+): FrameworkWrapperSummary[] {
+  const summaries: FrameworkWrapperSummary[] = [];
+  for (const file of files) {
+    if (!JAVASCRIPT_EXTENSIONS.has(file.extension)) continue;
+    const exportedFunctions = exportedJavascriptFunctions(file.lines);
+    if (exportedFunctions.length === 0) continue;
+    for (const model of FRAMEWORK_DATAFLOW_MODELS) {
+      if (
+        !model.extensions.has(file.extension) ||
+        !model.activation.some((expression) => expression.test(file.text))
+      ) {
+        continue;
+      }
+      const sinks = matchingModelLines(file.lines, model.sinks, 32);
+      const controls = matchingModelLines(file.lines, model.controls, 64);
+      for (const wrapper of exportedFunctions) {
+        for (const sink of sinks) {
+          if (sink.line < wrapper.startLine || sink.line > wrapper.endLine) {
+            continue;
+          }
+          const sinkLine = javascriptCodeBeforeComment(
+            file.lines[sink.line - 1] ?? "",
+          );
+          const parameterIndexes = wrapper.parameters.flatMap(
+            (parameter, parameterIndex) =>
+              lineReferencesIdentifier(sinkLine, parameter)
+                ? [parameterIndex]
+                : [],
+          );
+          if (parameterIndexes.length === 0) continue;
+          const sinkPattern = model.sinks.find(
+            (pattern) => pattern.kind === sink.kind,
+          );
+          if (sinkPattern === undefined) continue;
+          for (const parameterIndex of parameterIndexes) {
+            summaries.push({
+              model,
+              file,
+              symbol: wrapper.symbol,
+              parameter: wrapper.parameters[parameterIndex]!,
+              parameterIndex,
+              declarationLine: wrapper.startLine,
+              sink: { ...sink, cweIds: sinkPattern.cweIds },
+              controls: controls
+                .filter(
+                  (control) =>
+                    control.line >= wrapper.startLine &&
+                    control.line <= wrapper.endLine,
+                )
+                .slice(0, 8),
+            });
+            if (summaries.length >= MAX_FRAMEWORK_WRAPPER_SUMMARIES) {
+              return summaries;
+            }
+          }
+        }
+      }
+    }
+  }
+  return summaries;
+}
+
+function exportedJavascriptFunctions(
+  lines: readonly string[],
+): ExportedJavascriptFunction[] {
+  const functions: ExportedJavascriptFunction[] = [];
+  const patterns = [
+    /^\s*export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)/u,
+    /^\s*export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>/u,
+    /^\s*(?:module\.)?exports\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?function\s*\(([^)]*)\)/u,
+    /^\s*export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?([A-Za-z_$][\w$]*)\s*=>/u,
+  ];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const match = patterns
+      .map((pattern) => pattern.exec(line))
+      .find((candidate) => candidate !== null);
+    if (match === undefined || match === null) continue;
+    const parameters = (match[2] ?? "")
+      .split(",")
+      .map((parameter) =>
+        parameter
+          .trim()
+          .replace(/\s*=.*$/u, "")
+          .replace(/\??\s*:\s*.*$/u, "")
+          .trim(),
+      )
+      .filter((parameter) => /^[A-Za-z_$][\w$]*$/u.test(parameter));
+    if (parameters.length === 0) continue;
+    functions.push({
+      symbol: match[1]!,
+      parameters,
+      startLine: index + 1,
+      endLine: javascriptFunctionEndLine(lines, index),
+    });
+  }
+  return functions;
+}
+
+function javascriptFunctionEndLine(
+  lines: readonly string[],
+  startIndex: number,
+): number {
+  let depth = 0;
+  let opened = false;
+  const maximum = Math.min(
+    lines.length,
+    startIndex + MAX_WRAPPER_FUNCTION_LINES,
+  );
+  for (let index = startIndex; index < maximum; index += 1) {
+    const line = stripJavascriptStringsAndComments(lines[index] ?? "");
+    for (const character of line) {
+      if (character === "{") {
+        depth += 1;
+        opened = true;
+      } else if (character === "}" && opened) {
+        depth -= 1;
+      }
+    }
+    if (opened && depth <= 0) return index + 1;
+  }
+  return Math.min(lines.length, startIndex + 1);
+}
+
+function stripJavascriptStringsAndComments(line: string): string {
+  return line
+    .replace(/\/\/.*$/u, "")
+    .replace(/'(?:\\.|[^'\\])*'/gu, "''")
+    .replace(/"(?:\\.|[^"\\])*"/gu, '""')
+    .replace(/`(?:\\.|[^`\\])*`/gu, "``");
+}
+
+function javascriptCodeBeforeComment(line: string): string {
+  let quote = "";
+  let escaped = false;
+  for (let index = 0; index < line.length - 1; index += 1) {
+    const character = line[index]!;
+    if (quote !== "") {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+    } else if (character === "/" && line[index + 1] === "/") {
+      return line.slice(0, index);
+    }
+  }
+  return line;
+}
+
+function importedJavascriptSymbols(
+  lines: readonly string[],
+): ImportedJavascriptSymbol[] {
+  const imports: ImportedJavascriptSymbol[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const esm = /^\s*import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/u.exec(
+      line,
+    );
+    const commonjs =
+      /^\s*(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require\s*\(\s*["']([^"']+)["']\s*\)/u.exec(
+        line,
+      );
+    const match = esm ?? commonjs;
+    if (match === null) continue;
+    for (const rawBinding of (match[1] ?? "").split(",")) {
+      const binding = rawBinding.trim();
+      const parsed =
+        /^([A-Za-z_$][\w$]*)(?:\s+as\s+|\s*:\s*)([A-Za-z_$][\w$]*)$/u.exec(
+          binding,
+        );
+      const imported = parsed?.[1] ?? binding;
+      const local = parsed?.[2] ?? binding;
+      if (
+        !/^[A-Za-z_$][\w$]*$/u.test(imported) ||
+        !/^[A-Za-z_$][\w$]*$/u.test(local)
+      ) {
+        continue;
+      }
+      imports.push({
+        imported,
+        local,
+        moduleSpecifier: match[2]!,
+        line: index + 1,
+      });
+    }
+  }
+  return imports;
+}
+
+function resolveRelativeModelImport(
+  callerPath: string,
+  moduleSpecifier: string,
+  knownPaths: ReadonlyMap<string, string>,
+): string | undefined {
+  if (!moduleSpecifier.startsWith("./") && !moduleSpecifier.startsWith("../")) {
+    return undefined;
+  }
+  const joined = posix.normalize(
+    posix.join(posix.dirname(callerPath), moduleSpecifier),
+  );
+  if (joined === ".." || joined.startsWith("../") || posix.isAbsolute(joined)) {
+    return undefined;
+  }
+  const extension = posix.extname(joined);
+  const stem = extension === "" ? joined : joined.slice(0, -extension.length);
+  const candidates = [
+    joined,
+    ...[".js", ".ts", ".mjs", ".cjs", ".jsx", ".tsx"].map(
+      (candidateExtension) => `${stem}${candidateExtension}`,
+    ),
+    ...[".js", ".ts", ".mjs", ".cjs", ".jsx", ".tsx"].map(
+      (candidateExtension) => `${joined}/index${candidateExtension}`,
+    ),
+  ];
+  for (const candidate of candidates) {
+    const resolved = knownPaths.get(modelPathComparisonKey(candidate));
+    if (resolved !== undefined) return resolved;
+  }
+  return undefined;
+}
+
+function modelPathComparisonKey(path: string): string {
+  return process.platform === "win32" ? path.toLowerCase() : path;
+}
+
+function javascriptCallLines(
+  lines: readonly string[],
+  symbol: string,
+): Array<{ line: number; arguments: string[] }> {
+  const calls: Array<{ line: number; arguments: string[] }> = [];
+  const expression = new RegExp(
+    `\\b${escapeRegularExpression(symbol)}\\s*\\(`,
+    "u",
+  );
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const match = expression.exec(line);
+    if (match === null) continue;
+    const open = line.indexOf("(", match.index);
+    const close = matchingCallParenthesis(line, open);
+    if (open < 0 || close < 0) continue;
+    calls.push({
+      line: index + 1,
+      arguments: splitJavascriptArguments(line.slice(open + 1, close)),
+    });
+  }
+  return calls;
+}
+
+function matchingCallParenthesis(line: string, open: number): number {
+  if (open < 0) return -1;
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  for (let index = open; index < line.length; index += 1) {
+    const character = line[index]!;
+    if (quote !== "") {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+    } else if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function splitJavascriptArguments(value: string): string[] {
+  const arguments_: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]!;
+    if (quote !== "") {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+    } else if (["(", "[", "{"].includes(character)) {
+      depth += 1;
+    } else if ([")", "]", "}"].includes(character)) {
+      depth -= 1;
+    } else if (character === "," && depth === 0) {
+      arguments_.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  arguments_.push(value.slice(start).trim());
+  return arguments_;
+}
+
+function modeledCallSource(
+  lines: readonly string[],
+  sources: readonly { kind: string; line: number }[],
+  callLine: number,
+  argument: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const direct = sourcePatterns.find((pattern) =>
+    pattern.expression.test(argument),
+  );
+  if (direct !== undefined) return { kind: direct.kind, line: callLine };
+  if (!/^[A-Za-z_$][\w$]*$/u.test(argument)) return undefined;
+  const earliest = Math.max(1, callLine - MAX_WRAPPER_CALL_DISTANCE);
+  for (let line = callLine - 1; line >= earliest; line -= 1) {
+    const source = sources.find((candidate) => candidate.line === line);
+    if (source === undefined) continue;
+    const assignment = new RegExp(
+      `\\b(?:const|let|var)\\s+${escapeRegularExpression(argument)}\\s*=`,
+      "u",
+    );
+    if (!assignment.test(lines[line - 1] ?? "")) continue;
+    const escapedArgument = escapeRegularExpression(argument);
+    const reassignment = new RegExp(
+      `(?:\\b${escapedArgument}\\s*(?:[+*/%&|^?-]?=|\\+\\+|--)|(?:\\+\\+|--)\\s*${escapedArgument}\\b|\\b(?:const|let|var)\\s+${escapedArgument}\\b)`,
+      "u",
+    );
+    const reassigned = lines
+      .slice(line, callLine - 1)
+      .some((candidate) => reassignment.test(candidate));
+    if (!reassigned) return source;
+  }
+  return undefined;
+}
+
+function lineReferencesIdentifier(line: string, identifier: string): boolean {
+  return new RegExp(`\\b${escapeRegularExpression(identifier)}\\b`, "u").test(
+    line,
+  );
+}
+
+function escapeRegularExpression(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 function matchingModelLines(
