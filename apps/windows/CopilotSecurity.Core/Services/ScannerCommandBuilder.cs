@@ -89,6 +89,10 @@ public sealed class ScannerCommandBuilder
         {
             throw new ArgumentException("Model turn timeout must be from one minute through 24 hours.", nameof(request));
         }
+        if (!string.IsNullOrWhiteSpace(request.SarifSourceRoot) && request.SarifSeedPaths.Count == 0)
+        {
+            throw new ArgumentException("SARIF source root requires at least one SARIF seed.", nameof(request));
+        }
 
         ValidateTarget(request);
         var arguments = new List<string>
@@ -119,6 +123,12 @@ public sealed class ScannerCommandBuilder
             repository,
             request.KnowledgeBasePaths,
             requireInsideRepository: false);
+        AppendRepeatedFile(arguments, "--seed-sarif", request.SarifSeedPaths);
+        if (!string.IsNullOrWhiteSpace(request.SarifSourceRoot))
+        {
+            arguments.Add("--sarif-source-root");
+            arguments.Add(PathPolicy.ExistingDirectory(request.SarifSourceRoot, "SARIF source root"));
+        }
 
         if (request.FailOnSeverity is not null)
         {
@@ -257,6 +267,18 @@ public sealed class ScannerCommandBuilder
                 requireInsideRepository
                     ? Path.GetRelativePath(repository, path).Replace('\\', '/')
                     : path);
+        }
+    }
+
+    private static void AppendRepeatedFile(
+        List<string> arguments,
+        string option,
+        IReadOnlyList<string> paths)
+    {
+        foreach (var rawPath in paths)
+        {
+            arguments.Add(option);
+            arguments.Add(PathPolicy.ExistingFile(rawPath, option));
         }
     }
 }

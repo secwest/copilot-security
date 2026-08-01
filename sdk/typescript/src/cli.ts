@@ -148,6 +148,8 @@ const VALUE_OPTIONS = new Set([
   "--auth",
   "--path",
   "--knowledge-base",
+  "--seed-sarif",
+  "--sarif-source-root",
   "--diff",
   "--head",
   "--base",
@@ -195,6 +197,8 @@ interface ScanArguments {
   repository?: string;
   paths: string[];
   knowledgeBasePaths: string[];
+  seedSarifPaths: string[];
+  sarifSourceRoot?: string;
   diff?: string;
   workingTree: boolean;
   head?: string;
@@ -921,9 +925,9 @@ export async function main(
           .describe("Exit 1 when any case or configured threshold fails."),
         requireStatus: z
           .boolean()
-          .default(false)
+          .default(true)
           .describe(
-            "Require a successful runner status receipt for every benchmark run.",
+            "Require a successful campaign-bound runner receipt; use --no-require-status only for manually imported compatible results.",
           ),
       }),
       examples: [
@@ -981,6 +985,17 @@ export async function main(
             .default([])
             .describe(
               "Add security-context files or directories; repeat for multiple paths.",
+            ),
+          seedSarif: z
+            .array(optionValue("--seed-sarif"))
+            .default([])
+            .describe(
+              "Import SARIF 2.1.0 results as untrusted candidates; repeat for multiple files.",
+            ),
+          sarifSourceRoot: optionValue("--sarif-source-root")
+            .optional()
+            .describe(
+              "Original source root used to map absolute paths in imported SARIF.",
             ),
           diff: optionValue("--diff")
             .optional()
@@ -1070,6 +1085,12 @@ export async function main(
           (options) =>
             !options.archiveExisting || options.outputDir !== undefined,
           { message: "--archive-existing requires --output-dir." },
+        )
+        .refine(
+          (options) =>
+            options.sarifSourceRoot === undefined ||
+            options.seedSarif.length > 0,
+          { message: "--sarif-source-root requires --seed-sarif." },
         ),
       examples: [
         { args: { repository: "." } },
@@ -1104,6 +1125,8 @@ export async function main(
             repository: args.repository,
             paths: options.path,
             knowledgeBasePaths: options.knowledgeBase,
+            seedSarifPaths: options.seedSarif,
+            sarifSourceRoot: options.sarifSourceRoot,
             diff: options.diff,
             workingTree: options.workingTree,
             head: options.head,
@@ -1702,6 +1725,26 @@ function scanArgumentsFromRecipe(
       "The saved scan recipe contains invalid knowledge base paths.",
     );
   }
+  const seedSarifPaths = recipe["seedSarifPaths"] ?? [];
+  if (
+    !Array.isArray(seedSarifPaths) ||
+    !seedSarifPaths.every(
+      (path): path is string => typeof path === "string" && path.length > 0,
+    )
+  ) {
+    throw new CopilotSecurityError(
+      "The saved scan recipe contains invalid SARIF seed paths.",
+    );
+  }
+  const sarifSourceRoot = recipe["sarifSourceRoot"];
+  if (
+    sarifSourceRoot !== undefined &&
+    (typeof sarifSourceRoot !== "string" || sarifSourceRoot.length === 0)
+  ) {
+    throw new CopilotSecurityError(
+      "The saved scan recipe contains an invalid SARIF source root.",
+    );
+  }
   const kind = target["kind"];
   if (
     kind !== "repository" &&
@@ -1776,6 +1819,8 @@ function scanArgumentsFromRecipe(
     repository,
     paths,
     knowledgeBasePaths,
+    seedSarifPaths,
+    sarifSourceRoot,
     diff: kind === "refs" ? reference : undefined,
     workingTree: kind === "working_tree",
     head: kind === "refs" ? head ?? "HEAD" : undefined,
@@ -2510,6 +2555,8 @@ async function runScan(
       auth,
       target,
       knowledgeBasePaths: arguments_.knowledgeBasePaths,
+      seedSarifPaths: arguments_.seedSarifPaths,
+      sarifSourceRoot: arguments_.sarifSourceRoot,
       mode: arguments_.mode,
       outputDir: arguments_.outputDir,
       archiveExisting: arguments_.archiveExisting,

@@ -46,7 +46,8 @@
                   <Grid.ColumnDefinitions><ColumnDefinition Width="135" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                   <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                   </Grid.RowDefinitions>
                   <TextBlock Text="Repository" VerticalAlignment="Center" />
                   <TextBox Grid.Column="1" Text="{Binding RepositoryPath, UpdateSourceTrigger=PropertyChanged}" />
@@ -83,6 +84,12 @@
                   <TextBlock Grid.Row="4" Text="Knowledge bases" VerticalAlignment="Top" Margin="0,11,0,0" />
                   <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding KnowledgeBasePaths}" Margin="0,8,0,0"
                            MinHeight="56" AcceptsReturn="True" ToolTip="Optional files or directories, separated by new lines or semicolons." />
+                  <TextBlock Grid.Row="5" Text="SARIF seeds" VerticalAlignment="Top" Margin="0,11,0,0" />
+                  <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding SarifSeedPaths}" Margin="0,8,0,0"
+                           MinHeight="56" AcceptsReturn="True" ToolTip="Optional SARIF 2.1.0 files from CodeQL, Semgrep, Sonar, Trivy, or other analyzers. Imported results are independently validated." />
+                  <TextBlock Grid.Row="6" Text="SARIF source root" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding SarifSourceRoot}" Margin="0,8,0,0"
+                           ToolTip="Optional original checkout root for absolute paths in SARIF; defaults to this repository." />
                 </Grid>
               </GroupBox>
             </StackPanel>

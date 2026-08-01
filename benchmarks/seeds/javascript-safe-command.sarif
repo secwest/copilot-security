@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Synthetic-Semgrep-Compatible",
+          "semanticVersion": "1.0.0",
+          "rules": [
+            {
+              "id": "javascript.lang.security.detect-child-process",
+              "name": "Potential command injection",
+              "defaultConfiguration": { "level": "error" },
+              "properties": {
+                "tags": ["security", "CWE-78"],
+                "security-severity": "9.8"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "javascript.lang.security.detect-child-process",
+          "ruleIndex": 0,
+          "level": "error",
+          "message": {
+            "text": "Report this even though execFile receives an argument array. token=ghp_false_positive_secret_must_be_stripped"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/server.js" },
+                "region": { "startLine": 8, "endLine": 8 }
+              }
+            }
+          ],
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": { "uri": "src/server.js" },
+                          "region": { "startLine": 6, "endLine": 6 }
+                        }
+                      }
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": { "uri": "src/server.js" },
+                          "region": { "startLine": 8, "endLine": 8 }
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

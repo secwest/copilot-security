@@ -2,8 +2,8 @@ import { constants } from "node:fs";
 import {
   lstat,
   mkdtemp,
+  opendir,
   readFile,
-  readdir,
   realpath,
   rm,
   writeFile,
@@ -19,6 +19,16 @@ const SUPPORTED_EXTENSIONS = new Set([
   ".pdf",
   ".docx",
 ]);
+export const KNOWLEDGE_BASE_LIMITS = Object.freeze({
+  paths: 256,
+  documents: 256,
+  directoryDepth: 32,
+  directoryEntries: 100_000,
+  documentBytes: 16 * 1024 * 1024,
+  totalDocumentBytes: 64 * 1024 * 1024,
+  totalExtractedBytes: 64 * 1024 * 1024,
+  pdfPages: 4_096,
+});
 
 export interface PreparedKnowledgeBase {
   path: string;
@@ -30,8 +40,14 @@ export async function prepareKnowledgeBase(
   paths: readonly string[],
   signal?: AbortSignal,
 ): Promise<PreparedKnowledgeBase> {
+  if (paths.length > KNOWLEDGE_BASE_LIMITS.paths) {
+    throw new Error(
+      `Knowledge base accepts at most ${KNOWLEDGE_BASE_LIMITS.paths} paths.`,
+    );
+  }
   const sources = new Set<string>();
   const documents = new Set<string>();
+  const discovery = { entries: 0, documents: new Set<string>() };
 
   for (const requested of paths) {
     signal?.throwIfAborted();
@@ -49,7 +65,11 @@ export async function prepareKnowledgeBase(
     }
 
     const source = await realpath(path);
-    const selected = metadata.isDirectory() ? await discover(source) : [source];
+    if (sources.has(source)) continue;
+    sources.add(source);
+    const selected = metadata.isDirectory()
+      ? await discover(source, discovery, signal)
+      : [source];
     if (selected.length === 0) {
       throw new Error(
         `Knowledge base directory contains no supported documents: ${path}`,
@@ -60,23 +80,42 @@ export async function prepareKnowledgeBase(
         throw new Error(`Unsupported knowledge base document: ${document}`);
       }
       documents.add(document);
+      if (documents.size > KNOWLEDGE_BASE_LIMITS.documents) {
+        throw new Error(
+          `Knowledge base accepts at most ${KNOWLEDGE_BASE_LIMITS.documents} documents.`,
+        );
+      }
     }
-    sources.add(source);
   }
 
   const path = await mkdtemp(join(tmpdir(), "copilot-security-knowledge-"));
   try {
     let index = 0;
-    for (const document of documents) {
+    let totalDocumentBytes = 0;
+    let totalExtractedBytes = 0;
+    for (const document of [...documents].sort()) {
       signal?.throwIfAborted();
       const metadata = await lstat(document);
+      if (metadata.isSymbolicLink() || !metadata.isFile()) {
+        throw new Error(
+          `Knowledge base document must remain a regular non-symlink file: ${document}`,
+        );
+      }
       if (process.platform !== "win32" && (metadata.mode & 0o444) === 0) {
         throw new Error(`Knowledge base document is not readable: ${document}`);
       }
+      requireDocumentSize(document, metadata.size);
       const bytes = await readFile(document, {
         flag: constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
         signal,
       });
+      requireDocumentSize(document, bytes.byteLength);
+      totalDocumentBytes += bytes.byteLength;
+      if (totalDocumentBytes > KNOWLEDGE_BASE_LIMITS.totalDocumentBytes) {
+        throw new Error(
+          `Knowledge base source documents exceed the ${KNOWLEDGE_BASE_LIMITS.totalDocumentBytes}-byte aggregate limit.`,
+        );
+      }
       const extension = extname(document).toLowerCase();
       const text =
         extension === ".pdf"
@@ -87,6 +126,12 @@ export async function prepareKnowledgeBase(
       if ((extension === ".pdf" || extension === ".docx") && !text.trim()) {
         throw new Error(
           `Knowledge base document contains no extractable text: ${document}`,
+        );
+      }
+      totalExtractedBytes += Buffer.byteLength(text, "utf8");
+      if (totalExtractedBytes > KNOWLEDGE_BASE_LIMITS.totalExtractedBytes) {
+        throw new Error(
+          `Knowledge base extracted text exceeds the ${KNOWLEDGE_BASE_LIMITS.totalExtractedBytes}-byte aggregate limit.`,
         );
       }
       await writeFile(
@@ -111,22 +156,56 @@ export async function prepareKnowledgeBase(
   };
 }
 
-async function discover(directory: string): Promise<string[]> {
+async function discover(
+  directory: string,
+  state: { entries: number; documents: Set<string> },
+  signal?: AbortSignal,
+  depth = 0,
+): Promise<string[]> {
+  if (depth > KNOWLEDGE_BASE_LIMITS.directoryDepth) {
+    throw new Error(
+      `Knowledge base directory nesting exceeds ${KNOWLEDGE_BASE_LIMITS.directoryDepth} levels: ${directory}`,
+    );
+  }
   const documents: string[] = [];
-  const entries = await readdir(directory, { withFileTypes: true });
-  for (const entry of entries) {
+  const entries = await opendir(directory);
+  for await (const entry of entries) {
+    signal?.throwIfAborted();
+    state.entries += 1;
+    if (state.entries > KNOWLEDGE_BASE_LIMITS.directoryEntries) {
+      throw new Error(
+        `Knowledge base directory traversal exceeds ${KNOWLEDGE_BASE_LIMITS.directoryEntries} entries.`,
+      );
+    }
     const path = join(directory, entry.name);
     if (entry.isSymbolicLink()) continue;
     if (entry.isDirectory()) {
-      documents.push(...(await discover(path)));
+      documents.push(...(await discover(path, state, signal, depth + 1)));
     } else if (
       entry.isFile() &&
       SUPPORTED_EXTENSIONS.has(extname(path).toLowerCase())
     ) {
+      state.documents.add(path);
+      if (state.documents.size > KNOWLEDGE_BASE_LIMITS.documents) {
+        throw new Error(
+          `Knowledge base accepts at most ${KNOWLEDGE_BASE_LIMITS.documents} documents.`,
+        );
+      }
       documents.push(path);
     }
   }
   return documents;
+}
+
+function requireDocumentSize(path: string, size: number): void {
+  if (!Number.isSafeInteger(size) || size < 0) {
+    throw new Error(`Knowledge base document has an invalid size: ${path}`);
+  }
+  if (size > KNOWLEDGE_BASE_LIMITS.documentBytes) {
+    throw new Error(
+      `Knowledge base document exceeds the ${KNOWLEDGE_BASE_LIMITS.documentBytes}-byte limit: ${path}`,
+    );
+  }
 }
 
 function decodeText(path: string, bytes: Uint8Array): string {
@@ -151,14 +230,25 @@ async function extractPdf(path: string, bytes: Uint8Array): Promise<string> {
       verbosity: VerbosityLevel.ERRORS,
     }).promise;
     try {
+      if (document.numPages > KNOWLEDGE_BASE_LIMITS.pdfPages) {
+        throw new Error(
+          `PDF exceeds the ${KNOWLEDGE_BASE_LIMITS.pdfPages}-page limit.`,
+        );
+      }
       const pages: string[] = [];
+      let extractedBytes = 0;
       for (let number = 1; number <= document.numPages; number++) {
         const content = await (await document.getPage(number)).getTextContent();
-        pages.push(
-          content.items
-            .map((item) => ("str" in item ? item.str : ""))
-            .join(" "),
-        );
+        const page = content.items
+          .map((item) => ("str" in item ? item.str : ""))
+          .join(" ");
+        extractedBytes += Buffer.byteLength(page, "utf8") + 1;
+        if (extractedBytes > KNOWLEDGE_BASE_LIMITS.totalExtractedBytes) {
+          throw new Error(
+            `PDF extracted text exceeds the ${KNOWLEDGE_BASE_LIMITS.totalExtractedBytes}-byte limit.`,
+          );
+        }
+        pages.push(page);
       }
       return pages.join("\n");
     } finally {

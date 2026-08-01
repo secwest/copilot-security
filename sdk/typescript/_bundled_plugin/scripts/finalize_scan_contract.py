@@ -1506,7 +1506,7 @@ def _validate_manifest(manifest: dict[str, Any]) -> None:
         artifact_paths.add(path)
         _require_str(artifact, "sha256", context)
         _require_str(artifact, "mediaType", context)
-    for required_path in ("findings.json", "coverage.json"):
+    for required_path in ("findings.json", "coverage.json", "report.md"):
         if required_path not in artifact_paths:
             raise ContractError(
                 f"manifest.scan.artifacts: missing required artifact: {required_path}"
@@ -1717,6 +1717,7 @@ def _validate_canonical_schemas_before_projection(
     provisional_scan["artifacts"] = [
         {"path": "findings.json", "sha256": "0" * 64, "mediaType": "application/json"},
         {"path": "coverage.json", "sha256": "0" * 64, "mediaType": "application/json"},
+        {"path": "report.md", "sha256": "0" * 64, "mediaType": "text/markdown"},
     ]
     validate_against_schema(provisional_manifest, schema_dir / "scan-manifest.schema.json")
     validate_against_schema(findings, schema_dir / "findings.schema.json")
@@ -3946,6 +3947,7 @@ def _prepare_scan_finalization(
     scan["artifacts"] = [
         _artifact_record(scan_dir, "findings.json", "application/json", findings_bytes),
         _artifact_record(scan_dir, "coverage.json", "application/json", coverage_bytes),
+        _artifact_record(scan_dir, "report.md", "text/markdown", report_markdown_bytes),
         *[
             _artifact_record(scan_dir, ref, "application/octet-stream")
             for ref in _coverage_receipt_refs(coverage)
@@ -3985,7 +3987,6 @@ def _write_prepared_scan_finalization(
     ) = prepared
     scan = _require_dict(manifest, "scan", "manifest")
     if was_sealed:
-        write_scan_local_bytes(scan_dir, "report.md", report_markdown_bytes)
         _remove_scan_local_file_if_exists(scan_dir, "report.html")
         _write_sarif_projection_if_possible(scan_dir, source_root, schema_dir)
         return manifest, findings, coverage

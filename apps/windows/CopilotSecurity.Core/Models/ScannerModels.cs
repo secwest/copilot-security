@@ -50,6 +50,8 @@ public sealed record ScanRequest
     public TimeSpan ModelTurnTimeout { get; init; } = TimeSpan.FromHours(1);
     public IReadOnlyList<string> IncludePaths { get; init; } = [];
     public IReadOnlyList<string> KnowledgeBasePaths { get; init; } = [];
+    public IReadOnlyList<string> SarifSeedPaths { get; init; } = [];
+    public string? SarifSourceRoot { get; init; }
 }
 
 public sealed record ScannerInvocation(

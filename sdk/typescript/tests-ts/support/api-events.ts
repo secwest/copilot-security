@@ -1,4 +1,4 @@
-import { cp, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 type ThreadEvent = { type: string; [key: string]: unknown };
@@ -31,7 +31,6 @@ export function createApiTestFixtures() {
       await cp(join(PLUGIN_ROOT, "examples", "completed-scan"), scanDir, {
         recursive: true,
       });
-      await writeFile(join(scanDir, "report.md"), "# Scan report\n");
       return scanDir;
     },
 

@@ -262,6 +262,12 @@ describe("benchmark campaign integrity", () => {
     expect(await sha256Directory(first)).not.toBe(
       await sha256Directory(second),
     );
+    const repositoryFixture = await temporaryDirectory("campaign-git-fixture-");
+    await mkdir(join(repositoryFixture, ".GiT"));
+    await writeFile(join(repositoryFixture, ".GiT", "config"), "[core]\n");
+    await expect(sha256Directory(repositoryFixture)).rejects.toThrow(
+      "must not contain Git repository metadata",
+    );
 
     const scanner = await temporaryDirectory("campaign-scanner-");
     for (const directory of ["bin", "dist", "_bundled_plugin"]) {
@@ -282,6 +288,7 @@ describe("benchmark campaign integrity", () => {
     const root = await temporaryDirectory("campaign-evaluator-");
     const manifestPath = join(root, "manifest.json");
     const results = join(root, "results");
+    const runDirectory = join(results, "case-one", "run-1");
     const findingsPath = join(results, "case-one", "run-1", "findings.json");
     const statusPath = join(results, "case-one", "run-1.status.json");
     const expected = campaign();
@@ -300,9 +307,34 @@ describe("benchmark campaign integrity", () => {
         ],
       })}\n`,
     );
-    await writeFile(findingsPath, `${JSON.stringify({ findings: [] })}\n`);
-    await writeBenchmarkReceipt(statusPath, {
+    const findingsBytes = Buffer.from(
+      `${JSON.stringify({ scanId: "scan-one", findings: [] })}\n`,
+    );
+    const coverageBytes = Buffer.from('{"scanId":"scan-one"}\n');
+    const scanManifestBytes = Buffer.from('{"scan":{"id":"scan-one"}}\n');
+    await writeFile(findingsPath, findingsBytes);
+    await writeFile(join(runDirectory, "coverage.json"), coverageBytes);
+    await writeFile(
+      join(runDirectory, "scan-manifest.json"),
+      scanManifestBytes,
+    );
+    const receipt = {
       ...runReceipt(expected),
+      artifacts: {
+        scanId: "scan-one",
+        findingsSha256: createHash("sha256")
+          .update(findingsBytes)
+          .digest("hex"),
+        coverageSha256: createHash("sha256")
+          .update(coverageBytes)
+          .digest("hex"),
+        manifestSha256: createHash("sha256")
+          .update(scanManifestBytes)
+          .digest("hex"),
+      },
+    };
+    await writeBenchmarkReceipt(statusPath, {
+      ...receipt,
       campaignId: hex("f"),
     });
 
@@ -313,11 +345,11 @@ describe("benchmark campaign integrity", () => {
     });
     expect(mismatched.metrics.completedRuns).toBe(0);
     expect(mismatched.cases[0]?.runs[0]?.error).toContain(
-      "belongs to a different campaign",
+      "does not match case-one run 1",
     );
 
     await rm(statusPath);
-    await writeBenchmarkReceipt(statusPath, runReceipt(expected));
+    await writeBenchmarkReceipt(statusPath, receipt);
     const matched = await evaluateBenchmark({
       manifestPath,
       resultsDirectory: results,
@@ -326,6 +358,35 @@ describe("benchmark campaign integrity", () => {
     expect(matched.passed).toBe(true);
     expect(matched.metrics.completedRuns).toBe(1);
     expect(matched.campaign?.campaignId).toBe(expected.campaignId);
+
+    await writeBenchmarkReceipt(statusPath, {
+      ...receipt,
+      fixture: { ...receipt.fixture, sha256: hex("9") },
+    });
+    const wrongFixture = await evaluateBenchmark({
+      manifestPath,
+      resultsDirectory: results,
+      requireRunStatus: true,
+    });
+    expect(wrongFixture.metrics.completedRuns).toBe(0);
+    expect(wrongFixture.cases[0]?.runs[0]?.error).toContain(
+      "policy or fixture does not match its campaign",
+    );
+
+    await writeBenchmarkReceipt(statusPath, receipt);
+    await writeFile(
+      findingsPath,
+      Buffer.concat([findingsBytes, Buffer.from(" ")]),
+    );
+    const tampered = await evaluateBenchmark({
+      manifestPath,
+      resultsDirectory: results,
+      requireRunStatus: true,
+    });
+    expect(tampered.metrics.completedRuns).toBe(0);
+    expect(tampered.cases[0]?.runs[0]?.error).toContain(
+      "receipt artifact findingsSha256 does not match",
+    );
   });
 });
 

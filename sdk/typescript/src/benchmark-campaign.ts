@@ -63,7 +63,7 @@ export interface BenchmarkCampaignDocument {
   };
   selection: BenchmarkCampaignSelection;
   scan: BenchmarkCampaignScanPolicy & {
-    auth: "auto" | "github" | "token" | "chatgpt" | "api-key";
+    auth: "auto" | "github" | "token";
   };
 }
 
@@ -258,12 +258,21 @@ export async function readBenchmarkCampaign(
 
 export async function readSuccessfulBenchmarkReceipt(
   path: string,
-  expected: { campaignId: string; caseId: string; run: number },
+  expected: SuccessfulReceiptExpectation,
 ): Promise<BenchmarkRunReceipt> {
-  const receipt = parseReceipt(
+  return parseSuccessfulBenchmarkReceipt(
     await readBounded(path, MAX_RECEIPT_BYTES, "benchmark run receipt"),
     path,
+    expected,
   );
+}
+
+export function parseSuccessfulBenchmarkReceipt(
+  bytes: Buffer,
+  path: string,
+  expected: SuccessfulReceiptExpectation,
+): BenchmarkRunReceipt {
+  const receipt = parseReceipt(bytes, path);
   if (
     receipt.campaignId !== expected.campaignId ||
     receipt.caseId !== expected.caseId ||
@@ -271,6 +280,18 @@ export async function readSuccessfulBenchmarkReceipt(
   ) {
     throw new CopilotSecurityError(
       `Benchmark run receipt does not match ${expected.caseId} run ${expected.run}: ${path}.`,
+    );
+  }
+  if (
+    (expected.scanner !== undefined &&
+      canonicalJson(receipt.scanner) !== canonicalJson(expected.scanner)) ||
+    (expected.scan !== undefined &&
+      canonicalJson(receipt.scan) !== canonicalJson(expected.scan)) ||
+    (expected.fixtureSha256 !== undefined &&
+      receipt.fixture.sha256 !== expected.fixtureSha256)
+  ) {
+    throw new CopilotSecurityError(
+      `Benchmark run receipt policy or fixture does not match its campaign: ${path}.`,
     );
   }
   if (
@@ -283,6 +304,15 @@ export async function readSuccessfulBenchmarkReceipt(
     );
   }
   return receipt;
+}
+
+interface SuccessfulReceiptExpectation {
+  campaignId: string;
+  caseId: string;
+  run: number;
+  scanner?: BenchmarkCampaignScanner;
+  scan?: BenchmarkCampaignDocument["scan"];
+  fixtureSha256?: string;
 }
 
 export async function readBenchmarkReceiptAttempt(
@@ -451,6 +481,11 @@ export async function sha256Directory(root: string): Promise<string> {
     entries.sort((left, right) => left.name.localeCompare(right.name, "en"));
     for (const entry of entries) {
       const path = join(directory, entry.name);
+      if (entry.name.toLowerCase() === ".git") {
+        throw new CopilotSecurityError(
+          `Benchmark fixture must not contain Git repository metadata: ${path}.`,
+        );
+      }
       const metadata = await lstat(path);
       if (metadata.isSymbolicLink()) {
         throw new CopilotSecurityError(
@@ -799,9 +834,7 @@ function isValidScan(
 ): value is BenchmarkCampaignDocument["scan"] {
   return (
     isRecord(value) &&
-    ["auto", "github", "token", "chatgpt", "api-key"].includes(
-      String(value["auth"]),
-    ) &&
+    ["auto", "github", "token"].includes(String(value["auth"])) &&
     (value["mode"] === "standard" || value["mode"] === "deep") &&
     (value["model"] === undefined ||
       (typeof value["model"] === "string" && value["model"].length > 0)) &&

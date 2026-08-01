@@ -548,6 +548,11 @@ describe("CLI workbench", () => {
               pluginVersion: "1.2.3",
               failOnSeverity: "high",
               knowledgeBasePaths: ["/original/security.md"],
+              seedSarifPaths: [
+                "/analysis/codeql.sarif",
+                "/analysis/trivy.sarif",
+              ],
+              sarifSourceRoot: "/original/repository",
               config: savedConfig,
             },
           }),
@@ -563,6 +568,8 @@ describe("CLI workbench", () => {
       expectedPluginVersion: "1.2.3",
       failureSeverity: "high",
       knowledgeBasePaths: ["/original/security.md"],
+      seedSarifPaths: ["/analysis/codeql.sarif", "/analysis/trivy.sarif"],
+      sarifSourceRoot: "/original/repository",
     });
 
     const references: Array<[JsonObject, ReturnType<typeof DiffTarget.refs>]> =

@@ -38,6 +38,7 @@ static Task TestScanCommandAsync()
     using var fixture = new TemporaryFixture();
     var repository = fixture.Directory("repository");
     var include = fixture.File(Path.Combine("repository", "scope & literal", "entry.ts"), "export {};\n");
+    var sarif = fixture.File("analysis results.sarif", "{\"version\":\"2.1.0\",\"runs\":[]}");
     var output = Path.Combine(fixture.Root, "results");
     var installation = fixture.Installation();
     var request = new ScanRequest
@@ -46,12 +47,16 @@ static Task TestScanCommandAsync()
         OutputDirectory = output,
         Mode = ScanMode.Standard,
         IncludePaths = [include],
+        SarifSeedPaths = [sarif],
+        SarifSourceRoot = repository,
         MaximumAiCredits = null,
     };
 
     var invocation = new ScannerCommandBuilder().BuildScan(installation, request);
     Assert.Equal(Path.GetFullPath(installation.NodeExecutable), invocation.FileName);
     Assert.True(invocation.Arguments.Contains("scope & literal/entry.ts"), "Scoped path must remain one literal argument.");
+    Assert.True(invocation.Arguments.Contains(Path.GetFullPath(sarif)), "SARIF seed must remain one literal argument.");
+    Assert.True(invocation.Arguments.Contains("--sarif-source-root"), "SARIF source root must be explicit when supplied.");
     Assert.False(invocation.Arguments.Any(argument => argument.Contains("cmd.exe", StringComparison.OrdinalIgnoreCase)), "No shell may be introduced.");
     Assert.Equal(Path.GetFullPath(installation.StateRoot), invocation.Environment["COPILOT_SECURITY_HOME"]);
     Assert.Equal(Path.GetFullPath(installation.CopilotExecutable), invocation.Environment["COPILOT_CLI_PATH"]);
@@ -85,6 +90,15 @@ static Task TestScanCommandRejectionsAsync()
             Mode = ScanMode.Deep,
             TargetKind = ScanTargetKind.CommittedDiff,
             BaseRevision = "main",
+        }));
+    Assert.Throws<ArgumentException>(() => builder.BuildScan(
+        installation,
+        new ScanRequest
+        {
+            RepositoryPath = repository,
+            OutputDirectory = Path.Combine(fixture.Root, "sarif-source-results"),
+            Mode = ScanMode.Standard,
+            SarifSourceRoot = repository,
         }));
     var repositoryEntryPoint = fixture.File(
         Path.Combine("repository", "sdk", "typescript", "bin", "copilot-security.mjs"));
@@ -145,31 +159,43 @@ static async Task TestArtifactReaderAsync()
 {
     using var fixture = new TemporaryFixture();
     var scan = fixture.Directory("scan");
+    Directory.CreateDirectory(Path.Combine(scan, "artifacts"));
     await File.WriteAllTextAsync(Path.Combine(scan, "report.md"), "# Report\n");
+    await File.WriteAllTextAsync(Path.Combine(scan, "artifacts", "receipt.json"), "{}\n");
     await File.WriteAllTextAsync(Path.Combine(scan, "coverage.json"), """
-        {"documentType":"copilot-security.coverage","completeness":"complete"}
+        {"documentType":"copilot-security.coverage","schemaVersion":"1.0","scanId":"scan-1","completeness":"complete"}
         """);
     await File.WriteAllTextAsync(Path.Combine(scan, "findings.json"), """
-        {"documentType":"copilot-security.findings","findings":[{"findingId":"F-1","title":"Injection","summary":"Input reaches a sink.","taxonomy":{"category":"injection","cwe":["CWE-78"]},"severity":{"level":"high"},"confidence":{"level":"high"},"locations":[{"path":"src/app.js","startLine":4,"endLine":5,"role":"sink"}],"validation":{"summary":"A deterministic witness executed the sink."},"attackPath":{"summary":"HTTP input reaches the shell."},"remediation":"Avoid the shell."}]}
+        {"documentType":"copilot-security.findings","schemaVersion":"1.0","scanId":"scan-1","findings":[{"findingId":"F-1","title":"Injection","summary":"Input reaches a sink.","taxonomy":{"category":"injection","cwe":["CWE-78"]},"severity":{"level":"high"},"confidence":{"level":"high"},"locations":[{"path":"src/app.js","startLine":4,"endLine":5,"role":"sink"}],"validation":{"summary":"A deterministic witness executed the sink."},"attackPath":{"summary":"HTTP input reaches the shell."},"remediation":"Avoid the shell."}]}
         """);
     var findingsDigest = await HashPathAsync(Path.Combine(scan, "findings.json"));
     var coverageDigest = await HashPathAsync(Path.Combine(scan, "coverage.json"));
+    var reportDigest = await HashPathAsync(Path.Combine(scan, "report.md"));
+    var receiptDigest = await HashPathAsync(Path.Combine(scan, "artifacts", "receipt.json"));
     await File.WriteAllTextAsync(
         Path.Combine(scan, "scan-manifest.json"),
         JsonSerializer.Serialize(new
         {
             documentType = "copilot-security.scan-manifest",
+            schemaVersion = "1.0",
             scan = new
             {
                 id = "scan-1",
-                status = "complete",
+                producer = new { name = "copilot-security-plugin", version = "test" },
+                status = "completed",
                 startedAt = "2026-07-31T00:00:00Z",
                 completedAt = "2026-07-31T00:05:00Z",
+                sealedAt = "2026-07-31T00:05:00Z",
                 target = new { displayName = "fixture" },
+                scope = new { },
+                findingsRef = "findings.json",
+                coverageRef = "coverage.json",
                 artifacts = new[]
                 {
-                    new { path = "findings.json", sha256 = findingsDigest },
-                    new { path = "coverage.json", sha256 = coverageDigest },
+                    new { path = "findings.json", sha256 = findingsDigest, mediaType = "application/json" },
+                    new { path = "coverage.json", sha256 = coverageDigest, mediaType = "application/json" },
+                    new { path = "report.md", sha256 = reportDigest, mediaType = "text/markdown" },
+                    new { path = "artifacts/receipt.json", sha256 = receiptDigest, mediaType = "application/json" },
                 },
             },
         }));
@@ -183,6 +209,12 @@ static async Task TestArtifactReaderAsync()
     await File.AppendAllTextAsync(Path.Combine(scan, "findings.json"), " ");
     await Assert.ThrowsAsync<InvalidDataException>(() => reader.ReadAsync(scan));
     await File.WriteAllTextAsync(Path.Combine(scan, "findings.json"), originalFindings);
+    await File.AppendAllTextAsync(Path.Combine(scan, "artifacts", "receipt.json"), " ");
+    await Assert.ThrowsAsync<InvalidDataException>(() => reader.ReadAsync(scan));
+    await File.WriteAllTextAsync(Path.Combine(scan, "artifacts", "receipt.json"), "{}\n");
+    await File.AppendAllTextAsync(Path.Combine(scan, "report.md"), "forged\n");
+    await Assert.ThrowsAsync<InvalidDataException>(() => reader.ReadAsync(scan));
+    await File.WriteAllTextAsync(Path.Combine(scan, "report.md"), "# Report\n");
     File.Delete(Path.Combine(scan, "coverage.json"));
     await Assert.ThrowsAsync<InvalidDataException>(() => reader.ReadAsync(scan));
 }

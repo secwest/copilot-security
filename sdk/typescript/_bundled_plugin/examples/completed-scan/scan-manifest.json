@@ -35,6 +35,11 @@
         "path": "coverage.json",
         "sha256": "3f8834a8e935ce2ea5954f940c8435b5a95d88a4c1c634d669e5c69abe7a58b1",
         "mediaType": "application/json"
+      },
+      {
+        "path": "report.md",
+        "sha256": "a151065f7fc6695b19cadbe6d6fccfd8d697cb0fada30e1ab6defbc51405c5f1",
+        "mediaType": "text/markdown"
       }
     ]
   }

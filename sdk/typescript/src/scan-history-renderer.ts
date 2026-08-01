@@ -278,6 +278,17 @@ export function renderScanHistory(
         `  ${strong("KNOWLEDGE BASE")}  ${knowledgeBase.map((path) => dim(clean(path))).join(", ")}`,
       );
     }
+    const sarifSeeds = recipe?.["seedSarifPaths"] as string[] | undefined;
+    if (sarifSeeds?.length) {
+      const candidateCount = recipe?.["seedSarifCandidateCount"];
+      lines.push(
+        `  ${strong("SARIF SEEDS")}  ${sarifSeeds.map((path) => dim(clean(path))).join(", ")}${
+          typeof candidateCount === "number"
+            ? `  ${accent("·")}  ${clean(candidateCount)} candidates`
+            : ""
+        }`,
+      );
+    }
     const artifacts = result["artifacts"] as JsonObject | undefined;
     if (artifacts && Object.keys(artifacts).length > 0) {
       lines.push(`  ${strong("ARTIFACTS")}`);

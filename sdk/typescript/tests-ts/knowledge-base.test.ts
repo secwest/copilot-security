@@ -8,13 +8,17 @@ import {
   rm,
   stat,
   symlink,
+  truncate,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 import { strToU8, zipSync } from "fflate";
-import { prepareKnowledgeBase } from "../src/knowledge-base.js";
+import {
+  KNOWLEDGE_BASE_LIMITS,
+  prepareKnowledgeBase,
+} from "../src/knowledge-base.js";
 
 const temporaryDirectories: string[] = [];
 const testPosix = process.platform === "win32" ? test.skip : test;
@@ -156,6 +160,49 @@ describe("scan knowledge bases", () => {
     );
     await expect(prepareKnowledgeBase([root])).rejects.toThrow(
       "contains no supported documents",
+    );
+  });
+
+  test("bounds path count, document count, nesting, and source bytes", async () => {
+    await expect(
+      prepareKnowledgeBase(
+        Array.from(
+          { length: KNOWLEDGE_BASE_LIMITS.paths + 1 },
+          () => "unused.md",
+        ),
+      ),
+    ).rejects.toThrow(`at most ${KNOWLEDGE_BASE_LIMITS.paths} paths`);
+
+    const documentRoot = await temporaryDirectory();
+    await Promise.all(
+      Array.from({ length: KNOWLEDGE_BASE_LIMITS.documents + 1 }, (_, index) =>
+        writeFile(join(documentRoot, `${index}.md`), "bounded"),
+      ),
+    );
+    await expect(prepareKnowledgeBase([documentRoot])).rejects.toThrow(
+      `at most ${KNOWLEDGE_BASE_LIMITS.documents} documents`,
+    );
+
+    const depthRoot = await temporaryDirectory();
+    let nested = depthRoot;
+    for (
+      let depth = 0;
+      depth <= KNOWLEDGE_BASE_LIMITS.directoryDepth;
+      depth += 1
+    ) {
+      nested = join(nested, "nested");
+      await mkdir(nested);
+    }
+    await writeFile(join(nested, "scope.md"), "too deep");
+    await expect(prepareKnowledgeBase([depthRoot])).rejects.toThrow(
+      `exceeds ${KNOWLEDGE_BASE_LIMITS.directoryDepth} levels`,
+    );
+
+    const oversized = join(await temporaryDirectory(), "oversized.md");
+    await writeFile(oversized, "x");
+    await truncate(oversized, KNOWLEDGE_BASE_LIMITS.documentBytes + 1);
+    await expect(prepareKnowledgeBase([oversized])).rejects.toThrow(
+      `${KNOWLEDGE_BASE_LIMITS.documentBytes}-byte limit`,
     );
   });
 

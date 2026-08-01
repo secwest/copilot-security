@@ -307,7 +307,7 @@ describe("malformed scan artifact recovery", () => {
     expect(recovered.scan.scope).not.toHaveProperty("type");
     expect(recovered.scan.artifacts).toBeArray();
     expect(recovered.scan.artifacts.map((artifact) => artifact.path)).toEqual(
-      expect.arrayContaining(["coverage.json", "findings.json"]),
+      expect.arrayContaining(["coverage.json", "findings.json", "report.md"]),
     );
   });
 

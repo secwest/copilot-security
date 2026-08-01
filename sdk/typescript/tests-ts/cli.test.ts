@@ -974,7 +974,11 @@ describe("CLI", () => {
                 severityCounts: { critical: 1, high: 1 },
                 findings,
               },
-              recipe: { knowledgeBasePaths: ["/demo/threat-models"] },
+              recipe: {
+                knowledgeBasePaths: ["/demo/threat-models"],
+                seedSarifPaths: ["/analysis/codeql.sarif"],
+                seedSarifCandidateCount: 12,
+              },
             }),
           }),
         ),
@@ -990,6 +994,8 @@ describe("CLI", () => {
       expect(text.match(/Known since/g)).toHaveLength(1);
       expect(text).toContain("New basket authorization bypass");
       expect(text).toContain("/demo/threat-models");
+      expect(text).toContain("/analysis/codeql.sarif");
+      expect(text).toContain("12 candidates");
       expect(text).not.toContain("internal-finding-id");
       expect(text).not.toContain("internal-occurrence-id");
       if (showLinkedFindings) {
@@ -1599,6 +1605,11 @@ describe("CLI", () => {
           "--knowledge-base",
           "/shared/architecture.pdf",
           "--knowledge-base=/shared/threat-models",
+          "--seed-sarif",
+          "/analysis/codeql.sarif",
+          "--seed-sarif=/analysis/semgrep.sarif",
+          "--sarif-source-root",
+          "/build/checkout",
           "--mode",
           "deep",
           "--plugin-path",
@@ -1621,6 +1632,8 @@ describe("CLI", () => {
     expect(pathOptions).toMatchObject({
       target: ["src", "--fixtures"],
       knowledgeBasePaths: ["/shared/architecture.pdf", "/shared/threat-models"],
+      seedSarifPaths: ["/analysis/codeql.sarif", "/analysis/semgrep.sarif"],
+      sarifSourceRoot: "/build/checkout",
     });
     expect(pathConfig).toMatchObject({
       pluginPath: "plugin.zip",
@@ -1825,6 +1838,10 @@ describe("CLI", () => {
       [
         ["export", "scan", "--export-format", "json", "--source-root", "repo"],
         "--source-root is only supported with --export-format sarif",
+      ],
+      [
+        ["scan", ".", "--sarif-source-root", "repo"],
+        "--sarif-source-root requires --seed-sarif",
       ],
     ];
     for (const [argv, message] of cases) {

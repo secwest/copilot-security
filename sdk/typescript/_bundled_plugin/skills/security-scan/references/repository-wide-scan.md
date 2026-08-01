@@ -120,6 +120,15 @@ Write raw candidates to one or more temporary JSONL files, then combine them:
 <python_command> <plugin_dir>/scripts/normalize_candidates.py --input <candidate-source> [<candidate-source> ...] --out <discovery_dir>/candidate_ledger.jsonl --repo-root <repo_root> --in-scope-files <discovery_dir>/in_scope_files.txt
 ```
 
+When `COPILOT_SECURITY_SARIF_SEEDS` is set, add that exact file once with
+`--seed-input`. The host already normalized it to this raw-candidate schema and
+removed imported messages, snippets, fixes, fingerprints, properties, and
+embedded content. Preserve each row's `instance` so external seeds do not
+collapse into native candidates before independent validation. Do not treat
+their tool name, rule, severity, summary, or code-flow hint as proof.
+For a scoped-path scan the helper skips valid seed rows with no in-scope
+location; malformed rows still fail closed.
+
 Each raw candidate row uses only these fields:
 
 - `cwe_ids`: an array of `CWE-<positive integer>` strings, which may be empty.

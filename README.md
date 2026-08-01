@@ -124,6 +124,55 @@ node ./bin/copilot-security.mjs scan C:\code\project --working-tree
 
 # Repeated independent discovery with centralized validation
 node ./bin/copilot-security.mjs scan C:\code\project --mode deep
+
+# Use CodeQL, Semgrep, Sonar, Trivy, OSV-Scanner, or other SARIF 2.1.0
+# results as untrusted candidates for independent Copilot validation
+node ./bin/copilot-security.mjs scan C:\code\project `
+  --seed-sarif C:\analysis\codeql.sarif `
+  --seed-sarif C:\analysis\trivy.sarif
+
+# Map absolute SARIF paths produced from a different checkout root
+node ./bin/copilot-security.mjs scan C:\code\project `
+  --seed-sarif C:\analysis\results.sarif `
+  --sarif-source-root C:\build\original-checkout
+```
+
+### Hybrid SARIF candidate review
+
+`--seed-sarif` accepts repeatable SARIF 2.1.0 files and turns their
+unsuppressed, repository-located results into candidate rows. It supports
+primary locations and source-to-sink code-flow locations, extracts CWE and
+severity hints, maps an optional original checkout root, validates every path
+and line against the current repository, records source SHA-256 provenance,
+and gives every imported candidate the scanner's normal validation and attack
+path workflow. Imported alerts do not bypass native inventory, independent
+discovery, residual-miss review, or final evidence requirements.
+
+SARIF is treated as hostile input. The normalizer rejects symlinked inputs,
+path traversal, locations outside the repository, malformed or oversized
+documents, and excessive result/location counts. It intentionally discards
+result messages, snippets, fixes, fingerprints, arbitrary properties, and
+embedded source so an upstream analyzer cannot inject instructions or leak a
+detected secret into the model context. Suppressed and absent results are not
+seeded, and ignored counts remain visible in the provenance artifact. Seed
+files and their source root are preserved in the launch recipe so history
+reruns use the same inputs.
+
+See [`docs/scanner-landscape.md`](docs/scanner-landscape.md) for the design
+comparison and improvement backlog derived from other mature scanners.
+
+The dedicated `benchmarks/sarif-seed-manifest.json` campaign pairs a real
+command-injection seed with a deliberately noisy safe-process-execution seed.
+It tests recall gain and false-positive rejection while its SARIF messages and
+fingerprints contain hostile text and fake secrets that must never reach scan
+artifacts or model context:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/sarif-seed-manifest.json `
+  --results-dir C:\security-benchmarks\sarif-seeds `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
 Use `--model` and `--effort` to select a Copilot model and reasoning effort.
@@ -167,6 +216,9 @@ selection; optional cost and credit bounds; live progress and process-tree
 cancellation; findings, validation, attack paths, reports, private scan
 history, diagnostics, corpus evaluation, and baseline/candidate effectiveness
 comparison.
+The New scan tab also accepts repeatable SARIF seed files and an optional
+original SARIF source root, using the same hardened normalization and
+independent-review contract as the CLI and SDK.
 
 The desktop application remains a client of this standalone scanner. It does
 not duplicate prompts or model orchestration, invoke a command shell, share
@@ -258,6 +310,12 @@ node ../../benchmarks/run-benchmark.mjs `
   --max-attempts 2 `
   --mode deep
 ```
+
+Evaluation requires successful campaign-bound runner receipts by default, so a
+manifest cannot relabel an unsealed or interrupted result as completed. Use
+`--no-require-status` only when deliberately evaluating manually imported
+compatible/cross-provider findings that have no runner receipt; reports from
+that compatibility mode do not prove scanner-process completion.
 
 Use repeatable `--case <id>` options, `--runs 1`, and `--selection-only` for a
 quick paired vulnerable/control diagnostic with its own durable report. Omit

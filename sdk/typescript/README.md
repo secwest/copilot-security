@@ -31,10 +31,20 @@ await using scanner = new CopilotSecurity({
 const result = await scanner.run("/path/to/repository", {
   auth: "github",
   outputDir: "/path/outside/repository/results",
+  seedSarifPaths: ["/path/to/codeql.sarif", "/path/to/trivy.sarif"],
+  sarifSourceRoot: "/original/build/checkout",
 });
 
 console.log(result.reportPath);
 ```
+
+`seedSarifPaths` imports SARIF 2.1.0 results only as untrusted candidate hints.
+The host strips imported messages, snippets, fixes, fingerprints, properties,
+and embedded content; validates paths and line ranges against the repository;
+and requires Copilot to independently prove or reject each in-scope seed.
+`sarifSourceRoot` remaps absolute paths emitted from another checkout. Omit it
+when SARIF paths are repository-relative or were produced from the repository
+being scanned.
 
 Configuration:
 
@@ -118,4 +128,7 @@ The command exits `1` when a case or configured threshold fails. It matches
 findings one-to-one by CWE and code location, treats duplicates as false
 positives, measures repeated-run stability and negative controls, and includes
 completion, validation, attack-path, evidence, and severity metrics. Use
-`--no-enforce` to produce a report without enforcing the gates.
+`--no-enforce` to produce a report without enforcing the gates. Successful
+campaign-bound runner receipts are required by default. The explicit
+`--no-require-status` compatibility mode accepts manually imported or
+cross-provider findings without claiming that their scanner process completed.

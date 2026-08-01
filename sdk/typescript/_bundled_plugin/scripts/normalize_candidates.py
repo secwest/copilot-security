@@ -189,8 +189,13 @@ def read_scope(path: Path, repo_root: Path) -> set[str]:
 
 
 def normalize_candidate(
-    row: dict[str, Any], repo_root: Path, scope: set[str], line_counts: dict[Path, int]
-) -> dict[str, Any]:
+    row: dict[str, Any],
+    repo_root: Path,
+    scope: set[str],
+    line_counts: dict[Path, int],
+    *,
+    skip_out_of_scope: bool = False,
+) -> dict[str, Any] | None:
     unknown = set(row) - FIELDS
     if unknown:
         raise ValueError(f"unsupported fields {', '.join(sorted(unknown))}")
@@ -198,6 +203,8 @@ def normalize_candidate(
         text_field(row, "candidate_id")
     candidate_locations = normalize_locations(row, repo_root, line_counts)
     if not any(item["path"] in scope for item in candidate_locations):
+        if skip_out_of_scope:
+            return None
         raise ValueError("locations: expected at least one in-scope file")
     result: dict[str, Any] = {
         "cwe_ids": cwe_ids(row),
@@ -258,6 +265,12 @@ def combine(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", nargs="+", required=True, help="Candidate JSONL inputs.")
+    parser.add_argument(
+        "--seed-input",
+        nargs="*",
+        default=[],
+        help="External candidate JSONL inputs; valid out-of-scope rows are skipped.",
+    )
     parser.add_argument("--out", required=True, help="Combined candidate JSONL output.")
     parser.add_argument("--repo-root", required=True, help="Repository root for candidate paths.")
     parser.add_argument("--in-scope-files", required=True, help="Repository-relative file list.")
@@ -269,14 +282,23 @@ def main() -> None:
         output = Path(args.out).expanduser().resolve(strict=False)
         scope_path = Path(args.in_scope_files).expanduser().resolve(strict=True)
         inputs = sorted({Path(value).expanduser().resolve(strict=True) for value in args.input})
-        if output in inputs:
+        seed_inputs = sorted(
+            {Path(value).expanduser().resolve(strict=True) for value in args.seed_input}
+        )
+        if set(inputs) & set(seed_inputs):
+            raise ValueError("an input cannot also be a --seed-input")
+        if output in inputs or output in seed_inputs:
             raise ValueError("--out: must not also be an input")
         if output == scope_path:
             raise ValueError("--out: must not replace --in-scope-files")
         scope = read_scope(scope_path, repo_root)
         line_counts: dict[Path, int] = {}
         rows: list[dict[str, Any]] = []
-        for source in inputs:
+        skipped_seed_rows = 0
+        for source, skip_out_of_scope in [
+            *((path, False) for path in inputs),
+            *((path, True) for path in seed_inputs),
+        ]:
             with source.open(encoding="utf-8") as handle:
                 for number, line in enumerate(handle, 1):
                     if not line.strip():
@@ -285,7 +307,17 @@ def main() -> None:
                         row = json.loads(line)
                         if not isinstance(row, dict):
                             raise ValueError("expected a JSON object")
-                        rows.append(normalize_candidate(row, repo_root, scope, line_counts))
+                        normalized = normalize_candidate(
+                            row,
+                            repo_root,
+                            scope,
+                            line_counts,
+                            skip_out_of_scope=skip_out_of_scope,
+                        )
+                        if normalized is None:
+                            skipped_seed_rows += 1
+                        else:
+                            rows.append(normalized)
                     except (ValueError, TypeError, OSError) as error:
                         raise ValueError(f"{source} row {number}: {error}") from error
         combined = combine(rows)
@@ -310,7 +342,10 @@ def main() -> None:
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
-        print(f"Combined {len(rows)} candidate rows into {len(combined)} rows in {output}")
+        print(
+            f"Combined {len(rows)} candidate rows into {len(combined)} rows in {output}; "
+            f"skipped {skipped_seed_rows} out-of-scope seed rows"
+        )
     except (OSError, ValueError) as error:
         print(f"normalize_candidates: {error}", file=sys.stderr)
         raise SystemExit(2) from error

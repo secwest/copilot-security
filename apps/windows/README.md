@@ -12,6 +12,8 @@ them.
 - standard and deep whole-repository scans;
 - scoped path, committed-diff, and working-tree targets;
 - selectable Copilot model, reasoning effort, and authentication mode;
+- repeatable hardened SARIF 2.1.0 candidate imports with optional original
+  checkout-root mapping;
 - optional cost and AI-credit ceilings, with no ceiling inferred by default;
 - live progress, elapsed time, bounded output capture, cancellation, and
   process-tree termination;
@@ -76,10 +78,10 @@ tree.
 
 The artifact reader bounds every input, rejects reparse-point artifacts,
 requires completed scan status and the expected document types, and recomputes
-the manifest SHA-256 values for `findings.json` and `coverage.json` using a
-fixed-time comparison. A canceled, failed, malformed, incomplete, or tampered
-run is not presented as a completed scan. Partial files remain available for
-diagnosis.
+the manifest SHA-256 values for every sealed artifact—including
+`findings.json`, `coverage.json`, and `report.md`—using a fixed-time comparison.
+A canceled, failed, malformed, incomplete, or tampered run is not presented as
+a completed scan. Partial files remain available for diagnosis.
 
 Preferences contain paths and ordinary scan defaults only. They never contain
 credentials. Writes use a same-directory temporary file, write-through flush,

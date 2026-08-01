@@ -41,6 +41,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string headRevision = "HEAD";
     private string includePaths = string.Empty;
     private string knowledgeBasePaths = string.Empty;
+    private string sarifSeedPaths = string.Empty;
+    private string sarifSourceRoot = string.Empty;
     private string maximumCost = string.Empty;
     private string maximumCredits = string.Empty;
     private string status = "Ready";
@@ -133,6 +135,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string HeadRevision { get => headRevision; set => SetProperty(ref headRevision, value); }
     public string IncludePaths { get => includePaths; set => SetProperty(ref includePaths, value); }
     public string KnowledgeBasePaths { get => knowledgeBasePaths; set => SetProperty(ref knowledgeBasePaths, value); }
+    public string SarifSeedPaths { get => sarifSeedPaths; set => SetProperty(ref sarifSeedPaths, value); }
+    public string SarifSourceRoot { get => sarifSourceRoot; set => SetProperty(ref sarifSourceRoot, value); }
     public string MaximumCost { get => maximumCost; set => SetProperty(ref maximumCost, value); }
     public string MaximumCredits { get => maximumCredits; set => SetProperty(ref maximumCredits, value); }
     public string Status { get => status; private set => SetProperty(ref status, value); }
@@ -212,6 +216,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 HeadRevision = HeadRevision,
                 IncludePaths = ParsePaths(IncludePaths, RepositoryPath),
                 KnowledgeBasePaths = ParsePaths(KnowledgeBasePaths, RepositoryPath),
+                SarifSeedPaths = ParsePaths(SarifSeedPaths, RepositoryPath),
+                SarifSourceRoot = string.IsNullOrWhiteSpace(SarifSourceRoot)
+                    ? null
+                    : Path.IsPathRooted(SarifSourceRoot)
+                        ? SarifSourceRoot
+                        : Path.Combine(RepositoryPath, SarifSourceRoot),
                 MaximumCostUsd = ParseOptionalDecimal(MaximumCost, "Maximum cost"),
                 MaximumAiCredits = ParseOptionalInt(MaximumCredits, "Maximum credits"),
             };

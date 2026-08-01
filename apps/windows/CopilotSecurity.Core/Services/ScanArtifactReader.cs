@@ -10,6 +10,9 @@ public sealed class ScanArtifactReader
     private const long MaximumFindingsBytes = 128 * 1024 * 1024;
     private const long MaximumCoverageBytes = 32 * 1024 * 1024;
     private const long MaximumReportBytes = 32 * 1024 * 1024;
+    private const long MaximumSealedArtifactBytes = 256 * 1024 * 1024;
+    private const long MaximumSealedArtifactAggregateBytes = 1024L * 1024 * 1024;
+    private const int MaximumSealedArtifacts = 8_192;
     private static readonly JsonDocumentOptions JsonOptions = new()
     {
         AllowTrailingCommas = false,
@@ -47,25 +50,36 @@ public sealed class ScanArtifactReader
         RequireDocumentType(manifest.RootElement, "copilot-security.scan-manifest", "scan-manifest.json");
         RequireDocumentType(findings.RootElement, "copilot-security.findings", "findings.json");
         RequireDocumentType(coverage.RootElement, "copilot-security.coverage", "coverage.json");
-        await VerifyArtifactDigestAsync(
-            manifest.RootElement,
-            findingsPath,
-            "findings.json",
-            cancellationToken).ConfigureAwait(false);
-        await VerifyArtifactDigestAsync(
-            manifest.RootElement,
-            coveragePath,
-            "coverage.json",
-            cancellationToken).ConfigureAwait(false);
+        RequireSchemaVersion(manifest.RootElement, "scan-manifest.json");
+        RequireSchemaVersion(findings.RootElement, "findings.json");
+        RequireSchemaVersion(coverage.RootElement, "coverage.json");
 
         var scan = RequiredObject(manifest.RootElement, "scan", "scan-manifest.json");
         var scanId = RequiredString(scan, "id", "scan-manifest.json.scan");
         var status = RequiredString(scan, "status", "scan-manifest.json.scan");
-        if (!status.Equals("completed", StringComparison.Ordinal) &&
-            !status.Equals("complete", StringComparison.Ordinal))
+        if (!status.Equals("completed", StringComparison.Ordinal))
         {
             throw new InvalidDataException("scan-manifest.json does not describe a completed scan.");
         }
+        _ = RequiredObject(scan, "producer", "scan-manifest.json.scan");
+        _ = RequiredObject(scan, "target", "scan-manifest.json.scan");
+        _ = RequiredObject(scan, "scope", "scan-manifest.json.scan");
+        var startedAt = RequiredDate(scan, "startedAt", "scan-manifest.json.scan");
+        var completedAt = RequiredDate(scan, "completedAt", "scan-manifest.json.scan");
+        var sealedAt = RequiredDate(scan, "sealedAt", "scan-manifest.json.scan");
+        if (completedAt != sealedAt || completedAt < startedAt)
+        {
+            throw new InvalidDataException(
+                "scan-manifest.json completion and sealing timestamps are inconsistent.");
+        }
+        RequireExactString(scan, "findingsRef", "findings.json", "scan-manifest.json.scan");
+        RequireExactString(scan, "coverageRef", "coverage.json", "scan-manifest.json.scan");
+        RequireExactString(findings.RootElement, "scanId", scanId, "findings.json");
+        RequireExactString(coverage.RootElement, "scanId", scanId, "coverage.json");
+        await VerifySealedArtifactsAsync(
+            directory,
+            scan,
+            cancellationToken).ConfigureAwait(false);
         var coverageCompleteness = RequiredString(
             coverage.RootElement,
             "completeness",
@@ -81,8 +95,8 @@ public sealed class ScanArtifactReader
             scanId,
             status,
             coverageCompleteness,
-            OptionalDate(scan, "startedAt"),
-            OptionalDate(scan, "completedAt"),
+            startedAt,
+            completedAt,
             parsedFindings,
             report);
     }
@@ -213,6 +227,10 @@ public sealed class ScanArtifactReader
 
     private static string SafeArtifactPath(string directory, string name)
     {
+        if (Path.IsPathRooted(name))
+        {
+            throw new InvalidDataException($"Required scan artifact has an unsafe path: {name}");
+        }
         var path = Path.GetFullPath(Path.Combine(directory, name));
         if (!PathPolicy.IsEqualOrNested(path, directory) || !File.Exists(path))
         {
@@ -221,6 +239,21 @@ public sealed class ScanArtifactReader
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidDataException($"Required scan artifact must not be a reparse point: {name}");
+        }
+        var relative = Path.GetRelativePath(directory, path);
+        var components = relative.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+        var parent = directory;
+        foreach (var component in components.Take(Math.Max(0, components.Length - 1)))
+        {
+            parent = Path.Combine(parent, component);
+            if (!Directory.Exists(parent) ||
+                (File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidDataException(
+                    $"Required scan artifact has an unsafe parent directory: {name}");
+            }
         }
         return path;
     }
@@ -280,46 +313,98 @@ public sealed class ScanArtifactReader
         }
     }
 
-    private static async Task VerifyArtifactDigestAsync(
-        JsonElement manifestRoot,
-        string artifactPath,
-        string relativePath,
+    private static async Task VerifySealedArtifactsAsync(
+        string directory,
+        JsonElement scan,
         CancellationToken cancellationToken)
     {
-        var scan = RequiredObject(manifestRoot, "scan", "scan-manifest.json");
         if (!scan.TryGetProperty("artifacts", out var artifacts) ||
-            artifacts.ValueKind != JsonValueKind.Array)
+            artifacts.ValueKind != JsonValueKind.Array ||
+            artifacts.GetArrayLength() == 0 ||
+            artifacts.GetArrayLength() > MaximumSealedArtifacts)
         {
-            throw new InvalidDataException("scan-manifest.json.scan.artifacts must be an array.");
+            throw new InvalidDataException(
+                $"scan-manifest.json.scan.artifacts must contain 1 to {MaximumSealedArtifacts} entries.");
         }
 
-        string? expectedHex = null;
+        var comparer = OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var paths = new HashSet<string>(comparer);
+        long aggregateBytes = 0;
         foreach (var artifact in artifacts.EnumerateArray())
         {
-            if (OptionalString(artifact, "path").Equals(relativePath, StringComparison.Ordinal))
+            cancellationToken.ThrowIfCancellationRequested();
+            var relativePath = RequiredString(artifact, "path", "scan-manifest.json.scan.artifact");
+            _ = RequiredString(artifact, "mediaType", "scan-manifest.json.scan.artifact");
+            if (Path.IsPathRooted(relativePath) ||
+                relativePath.Contains('\\') ||
+                relativePath.Split('/').Any(part => part.Length == 0 || part is "." or ".."))
             {
-                expectedHex = OptionalString(artifact, "sha256");
-                break;
+                throw new InvalidDataException(
+                    $"Sealed artifact path is not a safe repository-relative path: {relativePath}");
+            }
+            if (!paths.Add(relativePath))
+            {
+                throw new InvalidDataException($"Duplicate sealed artifact path: {relativePath}");
+            }
+            var expectedHex = RequiredString(artifact, "sha256", "scan-manifest.json.scan.artifact");
+            if (expectedHex.Length != 64 || !expectedHex.All(Uri.IsHexDigit))
+            {
+                throw new InvalidDataException(
+                    $"scan-manifest.json has an invalid SHA-256 for {relativePath}.");
+            }
+            var artifactPath = SafeArtifactPath(directory, relativePath);
+            var information = new FileInfo(artifactPath);
+            if (information.Length > MaximumSealedArtifactBytes)
+            {
+                throw new InvalidDataException(
+                    $"Sealed artifact {relativePath} exceeds the {MaximumSealedArtifactBytes}-byte limit.");
+            }
+            if (information.Length > MaximumSealedArtifactAggregateBytes - aggregateBytes)
+            {
+                throw new InvalidDataException(
+                    $"Sealed artifacts exceed the {MaximumSealedArtifactAggregateBytes}-byte aggregate limit.");
+            }
+            aggregateBytes += information.Length;
+
+            await using var stream = new FileStream(
+                artifactPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                64 * 1024,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var actual = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
+            var expected = Convert.FromHexString(expectedHex);
+            if (!CryptographicOperations.FixedTimeEquals(actual, expected))
+            {
+                throw new InvalidDataException(
+                    $"{relativePath} does not match its sealed manifest digest.");
             }
         }
-        if (expectedHex is null || expectedHex.Length != 64 ||
-            !expectedHex.All(Uri.IsHexDigit))
+        foreach (var required in new[] { "findings.json", "coverage.json", "report.md" })
         {
-            throw new InvalidDataException($"scan-manifest.json is missing a valid SHA-256 for {relativePath}.");
+            if (!paths.Contains(required))
+            {
+                throw new InvalidDataException(
+                    $"scan-manifest.json does not seal required artifact {required}.");
+            }
         }
+    }
 
-        await using var stream = new FileStream(
-            artifactPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            64 * 1024,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var actual = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
-        var expected = Convert.FromHexString(expectedHex);
-        if (!CryptographicOperations.FixedTimeEquals(actual, expected))
+    private static void RequireSchemaVersion(JsonElement root, string context) =>
+        RequireExactString(root, "schemaVersion", "1.0", context);
+
+    private static void RequireExactString(
+        JsonElement parent,
+        string name,
+        string expected,
+        string context)
+    {
+        if (!RequiredString(parent, name, context).Equals(expected, StringComparison.Ordinal))
         {
-            throw new InvalidDataException($"{relativePath} does not match its sealed manifest digest.");
+            throw new InvalidDataException($"{context}.{name} must equal {expected}.");
         }
     }
 
@@ -355,4 +440,8 @@ public sealed class ScanArtifactReader
             out var result)
             ? result
             : null;
+
+    private static DateTimeOffset RequiredDate(JsonElement parent, string name, string context) =>
+        OptionalDate(parent, name) ??
+        throw new InvalidDataException($"{context}.{name} must be an ISO-8601 timestamp.");
 }

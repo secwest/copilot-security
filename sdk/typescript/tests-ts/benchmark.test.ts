@@ -4,6 +4,7 @@ import {
   readFile,
   readdir,
   rm,
+  truncate,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -2053,6 +2054,7 @@ describe("effectiveness benchmark", () => {
     const report = await evaluateBenchmark({
       manifestPath: join(root, "manifest.json"),
       resultsDirectory: join(root, "results"),
+      requireRunStatus: false,
       now: () => new Date("2026-01-02T03:04:05.000Z"),
     });
 
@@ -2134,6 +2136,7 @@ describe("effectiveness benchmark", () => {
     const report = await evaluateBenchmark({
       manifestPath: join(root, "manifest.json"),
       resultsDirectory: join(root, "results"),
+      requireRunStatus: false,
     });
 
     expect(report.passed).toBe(false);
@@ -2201,6 +2204,7 @@ describe("effectiveness benchmark", () => {
     const report = await evaluateBenchmark({
       manifestPath: join(root, "manifest.json"),
       resultsDirectory: join(root, "results"),
+      requireRunStatus: false,
     });
 
     expect(report.passed).toBe(true);
@@ -2309,6 +2313,7 @@ describe("effectiveness benchmark", () => {
     const report = await evaluateBenchmark({
       manifestPath: join(root, "manifest.json"),
       resultsDirectory: join(root, "results"),
+      requireRunStatus: false,
     });
 
     expect(report.passed).toBe(false);
@@ -2351,6 +2356,17 @@ describe("effectiveness benchmark", () => {
     ).rejects.toThrow("Duplicate benchmark case id: duplicate");
   });
 
+  test("rejects an oversized manifest before parsing it", async () => {
+    const root = await fixtureRoot();
+    const manifestPath = join(root, "oversized-manifest.json");
+    await writeFile(manifestPath, "{");
+    await truncate(manifestPath, 4 * 1024 * 1024 + 1);
+
+    await expect(evaluateBenchmark({ manifestPath })).rejects.toThrow(
+      "4194304-byte limit",
+    );
+  });
+
   test("records missing scan artifacts as reliability failures", async () => {
     const root = await fixtureRoot();
     await writeJson(join(root, "manifest.json"), {
@@ -2374,6 +2390,7 @@ describe("effectiveness benchmark", () => {
     const report = await evaluateBenchmark({
       manifestPath: join(root, "manifest.json"),
       resultsDirectory: join(root, "missing-results"),
+      requireRunStatus: false,
     });
 
     expect(report.passed).toBe(false);
@@ -2437,6 +2454,7 @@ describe("effectiveness benchmark", () => {
       const report = await evaluateBenchmark({
         manifestPath: join(root, "manifest.json"),
         resultsDirectory: join(root, "results"),
+        requireRunStatus: false,
       });
 
       expect(report.passed).toBe(false);
@@ -2456,7 +2474,7 @@ describe("effectiveness benchmark", () => {
     }
   });
 
-  test("can require runner status receipts for every evaluated artifact", async () => {
+  test("requires receipts by default and allows an explicit compatibility opt-out", async () => {
     const root = await fixtureRoot();
     await writeJson(join(root, "manifest.json"), {
       schemaVersion: "1.0",
@@ -2476,11 +2494,11 @@ describe("effectiveness benchmark", () => {
     const compatible = await evaluateBenchmark({
       manifestPath: join(root, "manifest.json"),
       resultsDirectory: join(root, "results"),
+      requireRunStatus: false,
     });
     const receiptBound = await evaluateBenchmark({
       manifestPath: join(root, "manifest.json"),
       resultsDirectory: join(root, "results"),
-      requireRunStatus: true,
     });
 
     expect(compatible.metrics.completedRuns).toBe(1);

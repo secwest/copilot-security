@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import { cp, lstat, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
@@ -45,6 +47,7 @@ const defaultCli = join(
   "bin",
   "copilot-security.mjs",
 );
+const MAX_BENCHMARK_MANIFEST_BYTES = 4 * 1024 * 1024;
 
 if (process.argv.slice(2).includes("--help")) {
   process.stdout
@@ -57,7 +60,7 @@ Options:
   --selection-only         Evaluate only the selected cases and runs
   --scanner-cli PATH       Compatible Node scanner entrypoint
   --scanner-label NAME     Provenance label for the scanner
-  --auth SOURCE            auto, github, token, chatgpt, or api-key
+  --auth SOURCE            auto, github, or token
   --model MODEL            Scanner model
   --effort LEVEL           low, medium, high, or xhigh
   --mode MODE              standard or deep (default: deep)
@@ -83,7 +86,11 @@ const scannerPackageRoot = resolve(dirname(scannerCli), "..");
 requireOutsideRepository(resultsDirectory);
 await requireRegularFile(scannerCli, "Scanner CLI");
 
-const manifestBytes = await readFile(manifestPath);
+const manifestBytes = await readBoundedRegularFile(
+  manifestPath,
+  "Benchmark manifest",
+  MAX_BENCHMARK_MANIFEST_BYTES,
+);
 const manifest = JSON.parse(manifestBytes.toString("utf8"));
 if (manifest?.schemaVersion !== "1.0" || !Array.isArray(manifest.cases)) {
   throw new Error(`Invalid benchmark manifest: ${manifestPath}`);
@@ -92,6 +99,7 @@ const selectedCases = selectBenchmarkCases(manifest.cases, options.cases);
 const fixtureByCase = new Map();
 const findingsPathsByCase = {};
 const fixtureSha256ByCase = {};
+const seedSarifByCase = new Map();
 const seenCaseIds = new Set();
 const seenResultPaths = new Set();
 for (const benchmarkCase of selectedCases) {
@@ -129,7 +137,42 @@ for (const benchmarkCase of selectedCases) {
   }
   fixtureByCase.set(benchmarkCase.id, fixture);
   findingsPathsByCase[benchmarkCase.id] = findingsPaths;
-  fixtureSha256ByCase[benchmarkCase.id] = await sha256Directory(fixture);
+  const seedSarif = benchmarkCase.seedSarif ?? [];
+  if (
+    !Array.isArray(seedSarif) ||
+    !seedSarif.every((path) => typeof path === "string" && path.length > 0)
+  ) {
+    throw new Error(
+      `Benchmark case ${benchmarkCase.id} seedSarif must be an array of paths.`,
+    );
+  }
+  const seedPaths = [];
+  const seedDigests = [];
+  for (const requested of seedSarif) {
+    const seedPath = resolve(manifestDirectory, requested);
+    requireContained(
+      manifestDirectory,
+      seedPath,
+      `SARIF seed for ${benchmarkCase.id}`,
+    );
+    await requireRegularFile(seedPath, `SARIF seed for ${benchmarkCase.id}`);
+    seedPaths.push(seedPath);
+    seedDigests.push(await sha256File(seedPath));
+  }
+  seedSarifByCase.set(benchmarkCase.id, seedPaths);
+  const fixtureDigest = await sha256Directory(fixture);
+  fixtureSha256ByCase[benchmarkCase.id] =
+    seedDigests.length === 0
+      ? fixtureDigest
+      : createHash("sha256")
+          .update(
+            JSON.stringify({
+              schemaVersion: "1.0",
+              fixtureSha256: fixtureDigest,
+              seedSarifSha256: seedDigests,
+            }),
+          )
+          .digest("hex");
 }
 
 const campaign = createBenchmarkCampaign({
@@ -181,6 +224,7 @@ for (const benchmarkCase of selectedCases) {
       fixtureSha256: fixtureSha256ByCase[benchmarkCase.id],
       findingsPath: findingsPaths[index],
       run: index + 1,
+      seedSarif: seedSarifByCase.get(benchmarkCase.id) ?? [],
     });
   }
 }
@@ -280,6 +324,9 @@ async function runTask(task, worker) {
         campaignId: activeCampaign.campaignId,
         caseId: benchmarkCase.id,
         run,
+        scanner: activeCampaign.scanner,
+        scan: activeCampaign.scan,
+        fixtureSha256,
       });
       const contract = await loadContract(outputDirectory, {
         pluginRoot,
@@ -362,12 +409,18 @@ async function runTask(task, worker) {
         join(tmpdir(), "copilot-security-benchmark-"),
       );
       const repository = join(temporaryRoot, "repository");
+      const gitGuardDirectory = join(temporaryRoot, "git-guard");
+      const hooksDirectory = join(gitGuardDirectory, "disabled-hooks");
+      await mkdir(hooksDirectory, { recursive: true });
       await cp(fixture, repository, {
         recursive: true,
         errorOnExist: true,
         force: false,
       });
-      initializeFixtureRepository(repository);
+      initializeFixtureRepository(repository, {
+        hooksDirectory,
+        globalConfigPath: join(gitGuardDirectory, "empty-global-config"),
+      });
       repositoryRevision = runCapture("git", [
         "-C",
         repository,
@@ -377,7 +430,11 @@ async function runTask(task, worker) {
       process.stderr.write(
         `[benchmark:w${worker}] scanning ${benchmarkCase.id} run ${run}/${findingsPathsByCase[benchmarkCase.id].length} attempt ${attempt}\n`,
       );
-      scan = await runScanner(repository, attemptOutputDirectory);
+      scan = await runScanner(
+        repository,
+        attemptOutputDirectory,
+        task.seedSarif,
+      );
       if (scan.status === 0) {
         const contract = await loadContract(attemptOutputDirectory, {
           pluginRoot,
@@ -509,7 +566,7 @@ async function requireReceiptArtifacts(receipt, contract, outputDirectory) {
   }
 }
 
-function runScanner(repository, outputDirectory) {
+function runScanner(repository, outputDirectory, seedSarif) {
   const args = [
     scannerCli,
     "scan",
@@ -525,6 +582,7 @@ function runScanner(repository, outputDirectory) {
     ...(options.maxAiCredits === undefined
       ? []
       : ["--max-ai-credits", String(options.maxAiCredits)]),
+    ...seedSarif.flatMap((path) => ["--seed-sarif", path]),
   ];
   return new Promise((resolvePromise) => {
     const child = spawn(process.execPath, args, {
@@ -607,25 +665,66 @@ function forceProcessTree(pid) {
   }
 }
 
-function initializeFixtureRepository(repository) {
-  run("git", ["init", "--quiet", repository]);
-  run("git", ["-C", repository, "config", "user.name", "Benchmark Fixture"]);
-  run("git", [
-    "-C",
-    repository,
-    "config",
-    "user.email",
-    "benchmark@example.invalid",
-  ]);
-  run("git", ["-C", repository, "add", "-A"]);
-  run("git", [
-    "-C",
-    repository,
-    "commit",
-    "--quiet",
-    "-m",
-    "Benchmark fixture",
-  ]);
+function initializeFixtureRepository(
+  repository,
+  { hooksDirectory, globalConfigPath },
+) {
+  const environment = sanitizedGitEnvironment(globalConfigPath);
+  runGit(["init", "--quiet", repository], environment);
+  const command = (...args) =>
+    runGit(
+      [
+        "-C",
+        repository,
+        "-c",
+        `core.hooksPath=${hooksDirectory}`,
+        "-c",
+        "commit.gpgsign=false",
+        ...args,
+      ],
+      environment,
+    );
+  command("config", "user.name", "Benchmark Fixture");
+  command("config", "user.email", "benchmark@example.invalid");
+  command("config", "core.hooksPath", hooksDirectory);
+  command("config", "commit.gpgsign", "false");
+  command("add", "-A");
+  command("commit", "--quiet", "--no-verify", "-m", "Benchmark fixture");
+}
+
+/*
+ * Benchmark fixtures are untrusted scanner inputs. Strip inherited Git
+ * controls, disable system/global attributes and configuration, and use an
+ * empty hooks directory so corpus preparation cannot execute host commands.
+ */
+function sanitizedGitEnvironment(globalConfigPath) {
+  const environment = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) => !name.toUpperCase().startsWith("GIT_"),
+    ),
+  );
+  return {
+    ...environment,
+    GIT_ATTR_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: globalConfigPath,
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_OPTIONAL_LOCKS: "0",
+    GIT_TERMINAL_PROMPT: "0",
+  };
+}
+
+function runGit(args, environment) {
+  const result = spawnSync("git", args, {
+    cwd: repositoryRoot,
+    env: environment,
+    stdio: "inherit",
+    windowsHide: true,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `git failed with status ${result.status ?? result.signal ?? "unknown"}.`,
+    );
+  }
 }
 
 function validateFindingsPaths(caseId, findingsPaths) {
@@ -734,10 +833,8 @@ function parseArguments(args) {
   if (result.finalizeOnly && result.force) {
     throw new Error("--finalize-only cannot be combined with --force.");
   }
-  if (
-    !["auto", "github", "token", "chatgpt", "api-key"].includes(result.auth)
-  ) {
-    throw new Error("--auth must be auto, github, token, chatgpt, or api-key.");
+  if (!["auto", "github", "token"].includes(result.auth)) {
+    throw new Error("--auth must be auto, github, or token.");
   }
   if (!["standard", "deep"].includes(result.mode)) {
     throw new Error("--mode must be standard or deep.");
@@ -766,20 +863,6 @@ function positiveInteger(value, option, maximum) {
   return parsed;
 }
 
-function run(command, args) {
-  const result = spawnSync(command, args, {
-    cwd: repositoryRoot,
-    env: process.env,
-    stdio: "inherit",
-    windowsHide: true,
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `${command} failed with status ${result.status ?? result.signal ?? "unknown"}.`,
-    );
-  }
-}
-
 function runCapture(command, args) {
   const result = spawnSync(command, args, {
     cwd: repositoryRoot,
@@ -801,6 +884,23 @@ async function requireRegularFile(path, label) {
   if (!metadata.isFile() || metadata.isSymbolicLink()) {
     throw new Error(`${label} is not a regular file: ${path}`);
   }
+}
+
+async function readBoundedRegularFile(path, label, maximumBytes) {
+  const metadata = await lstat(path);
+  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new Error(`${label} is not a regular file: ${path}`);
+  }
+  if (metadata.size > maximumBytes) {
+    throw new Error(`${label} exceeds the ${maximumBytes}-byte limit: ${path}`);
+  }
+  const bytes = await readFile(path, {
+    flag: constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+  });
+  if (bytes.byteLength > maximumBytes) {
+    throw new Error(`${label} exceeds the ${maximumBytes}-byte limit: ${path}`);
+  }
+  return bytes;
 }
 
 function requireOutsideRepository(path) {

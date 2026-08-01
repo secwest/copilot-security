@@ -191,6 +191,7 @@ export async function loadContract(
     findings,
     coverage,
     documentDigests,
+    contractNamespace,
     options.signal,
     scanRoot,
   );
@@ -509,6 +510,7 @@ async function validateSeal(
   findings: FindingsDocument,
   coverage: CoverageDocument,
   documentDigests: ReadonlyMap<string, string>,
+  contractNamespace: string,
   signal?: AbortSignal,
   expectedRoot?: ScanRoot,
 ): Promise<void> {
@@ -544,6 +546,14 @@ async function validateSeal(
         `${context}: sealed artifact changed or is missing.`,
       );
     }
+  }
+  if (
+    contractNamespace === "copilot-security" &&
+    !artifactPaths.has("report.md")
+  ) {
+    throw new ContractValidationError(
+      "Native scan manifest does not seal required artifact report.md.",
+    );
   }
 
   for (const surface of coverage.surfaces) {

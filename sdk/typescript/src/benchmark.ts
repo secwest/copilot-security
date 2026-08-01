@@ -1,9 +1,13 @@
-import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { constants } from "node:fs";
+import { lstat, readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { CopilotSecurityError } from "./errors.js";
 import {
+  parseSuccessfulBenchmarkReceipt,
   readBenchmarkCampaign,
   type BenchmarkCampaignDocument,
+  type BenchmarkRunReceipt,
 } from "./benchmark-campaign.js";
 import {
   isSubstantiveAttackPath,
@@ -14,10 +18,12 @@ import type { SeverityLevel } from "./models.js";
 
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
 const MAX_FINDINGS_BYTES = 64 * 1024 * 1024;
+const MAX_COVERAGE_BYTES = 32 * 1024 * 1024;
 const MAX_STATUS_BYTES = 64 * 1024;
 const MAX_CASES = 10_000;
 const MAX_RUNS_PER_CASE = 100;
 const MAX_EXPECTATIONS_PER_CASE = 10_000;
+const MAX_SEED_SARIF_PER_CASE = 32;
 const DEFAULT_LINE_TOLERANCE = 3;
 
 export interface BenchmarkThresholds {
@@ -56,6 +62,8 @@ export interface BenchmarkCase {
   id: string;
   description?: string;
   fixture?: string;
+  /** SARIF 2.1.0 files, relative to the manifest, seeded by the campaign runner. */
+  seedSarif?: string[];
   findingsPath?: string;
   findingsPaths?: string[];
   expected: BenchmarkFindingExpectation[];
@@ -206,22 +214,33 @@ export async function evaluateBenchmark(options: {
         : resolve(resultsDirectory, paths[index]!);
       const runId = `${benchmarkCase.id}#${index + 1}`;
       try {
-        await requireSuccessfulRunStatus(
+        const receipt = await requireSuccessfulRunStatus(
           findingsPath,
           benchmarkCase.id,
           index + 1,
-          options.requireRunStatus ?? false,
-          campaign?.campaignId,
+          options.requireRunStatus ?? true,
+          campaign ?? undefined,
+        );
+        const findingsBytes = await readBoundedBytes(
+          findingsPath,
+          MAX_FINDINGS_BYTES,
+          `findings for benchmark case ${benchmarkCase.id}`,
         );
         const findings = parseFindings(
-          await readBoundedFile(
-            findingsPath,
-            MAX_FINDINGS_BYTES,
-            `findings for benchmark case ${benchmarkCase.id}`,
-          ),
+          findingsBytes.toString("utf8"),
           findingsPath,
         );
-        runs.push(evaluateRun(benchmarkCase, runId, findingsPath, findings));
+        if (receipt !== null) {
+          await requireReceiptArtifacts(
+            receipt,
+            findingsPath,
+            findingsBytes,
+            findings.scanId,
+          );
+        }
+        runs.push(
+          evaluateRun(benchmarkCase, runId, findingsPath, findings.findings),
+        );
       } catch (error) {
         runs.push(failedRun(benchmarkCase, runId, findingsPath, error));
       }
@@ -278,48 +297,48 @@ async function requireSuccessfulRunStatus(
   caseId: string,
   run: number,
   required: boolean,
-  expectedCampaignId?: string,
-): Promise<void> {
+  expectedCampaign?: BenchmarkCampaignDocument,
+): Promise<BenchmarkRunReceipt | null> {
   const statusPath = `${dirname(findingsPath)}.status.json`;
-  let contents: Buffer;
-  try {
-    contents = await readFile(statusPath);
-  } catch (error) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === "ENOENT"
-    ) {
-      if (!required) return;
-      throw new CopilotSecurityError(
-        `Missing run status for benchmark case ${caseId}: ${statusPath}.`,
-        { cause: error },
-      );
-    }
+  const contents = await readBoundedBytes(
+    statusPath,
+    MAX_STATUS_BYTES,
+    `run status for benchmark case ${caseId}`,
+    true,
+  );
+  if (contents === null) {
+    if (!required) return null;
     throw new CopilotSecurityError(
-      `Could not read run status for benchmark case ${caseId}: ${statusPath}.`,
-      { cause: error },
+      `Missing run status for benchmark case ${caseId}: ${statusPath}.`,
     );
   }
-  if (contents.byteLength > MAX_STATUS_BYTES) {
-    throw new CopilotSecurityError(
-      `Run status for benchmark case ${caseId} exceeds the ${MAX_STATUS_BYTES}-byte limit: ${statusPath}.`,
-    );
+  if (required) {
+    if (expectedCampaign === undefined) {
+      throw new CopilotSecurityError(
+        `Benchmark campaign is required to authenticate ${caseId} run ${run}.`,
+      );
+    }
+    const fixtureSha256 =
+      expectedCampaign.selection.fixtureSha256ByCase[caseId];
+    if (fixtureSha256 === undefined) {
+      throw new CopilotSecurityError(
+        `Benchmark campaign does not contain fixture identity for ${caseId}.`,
+      );
+    }
+    return parseSuccessfulBenchmarkReceipt(contents, statusPath, {
+      campaignId: expectedCampaign.campaignId,
+      caseId,
+      run,
+      scanner: expectedCampaign.scanner,
+      scan: expectedCampaign.scan,
+      fixtureSha256,
+    });
   }
   const status = parseJson(contents.toString("utf8"), statusPath);
   requireRecord(status, `Benchmark run status ${statusPath}`);
   if (status["caseId"] !== caseId || status["run"] !== run) {
     throw new CopilotSecurityError(
       `Benchmark run status does not match ${caseId} run ${run}: ${statusPath}.`,
-    );
-  }
-  if (
-    expectedCampaignId !== undefined &&
-    status["campaignId"] !== expectedCampaignId
-  ) {
-    throw new CopilotSecurityError(
-      `Benchmark run status belongs to a different campaign for ${caseId} run ${run}: ${statusPath}.`,
     );
   }
   if (
@@ -330,6 +349,44 @@ async function requireSuccessfulRunStatus(
       `Benchmark scan process failed for ${caseId} run ${run}: ${statusPath}.`,
     );
   }
+  return null;
+}
+
+async function requireReceiptArtifacts(
+  receipt: BenchmarkRunReceipt,
+  findingsPath: string,
+  findingsBytes: Buffer,
+  findingsScanId: string | undefined,
+): Promise<void> {
+  const artifacts = receipt.artifacts!;
+  const outputDirectory = dirname(findingsPath);
+  const coverageBytes = await readBoundedBytes(
+    join(outputDirectory, "coverage.json"),
+    MAX_COVERAGE_BYTES,
+    "benchmark coverage artifact",
+  );
+  const manifestBytes = await readBoundedBytes(
+    join(outputDirectory, "scan-manifest.json"),
+    MAX_MANIFEST_BYTES,
+    "benchmark scan manifest artifact",
+  );
+  const actual = {
+    scanId: findingsScanId,
+    findingsSha256: sha256(findingsBytes),
+    coverageSha256: sha256(coverageBytes),
+    manifestSha256: sha256(manifestBytes),
+  };
+  for (const key of Object.keys(actual) as Array<keyof typeof actual>) {
+    if (artifacts[key] !== actual[key]) {
+      throw new CopilotSecurityError(
+        `Benchmark receipt artifact ${key} does not match: ${findingsPath}.`,
+      );
+    }
+  }
+}
+
+function sha256(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function evaluateRun(
@@ -674,6 +731,19 @@ function parseManifest(contents: string, path: string): BenchmarkManifest {
       throw new CopilotSecurityError(`Duplicate benchmark case id: ${id}.`);
     ids.add(id);
     const fixture = optionalString(entry["fixture"]);
+    const seedSarif =
+      entry["seedSarif"] === undefined
+        ? undefined
+        : requireStringArray(
+            entry["seedSarif"],
+            `Benchmark case ${id} seedSarif`,
+            MAX_SEED_SARIF_PER_CASE,
+          );
+    if (seedSarif?.length === 0) {
+      throw new CopilotSecurityError(
+        `Benchmark case ${id} seedSarif must not be empty.`,
+      );
+    }
     const findingsPath = optionalString(entry["findingsPath"]);
     const findingsPaths =
       entry["findingsPaths"] === undefined
@@ -712,6 +782,7 @@ function parseManifest(contents: string, path: string): BenchmarkManifest {
         ? {}
         : { description: optionalString(entry["description"]) }),
       ...(fixture === undefined ? {} : { fixture }),
+      ...(seedSarif === undefined ? {} : { seedSarif }),
       ...(findingsPath === undefined ? {} : { findingsPath }),
       ...(findingsPaths === undefined ? {} : { findingsPaths }),
       expected,
@@ -844,7 +915,10 @@ function parseThresholds(value: unknown): BenchmarkThresholds {
   return thresholds;
 }
 
-function parseFindings(contents: string, path: string): BenchmarkFinding[] {
+function parseFindings(
+  contents: string,
+  path: string,
+): { scanId: string | undefined; findings: BenchmarkFinding[] } {
   const value = parseJson(contents, path);
   requireRecord(value, `Findings document ${path}`);
   const findings = value["findings"];
@@ -853,75 +927,78 @@ function parseFindings(contents: string, path: string): BenchmarkFinding[] {
       `Findings document ${path} must contain a findings array.`,
     );
   }
-  return findings.map((finding, index) => {
-    requireRecord(finding, `Finding ${index + 1} in ${path}`);
-    const taxonomy = finding["taxonomy"];
-    const severity = finding["severity"];
-    const locations = finding["locations"];
-    requireRecord(taxonomy, `Finding ${index + 1} taxonomy in ${path}`);
-    const cwe = Array.isArray(taxonomy["cwe"])
-      ? taxonomy["cwe"]
-          .filter((entry): entry is string => typeof entry === "string")
-          .map(normalizeCwe)
-      : [];
-    const parsedLocations = Array.isArray(locations)
-      ? locations.flatMap((location) => {
-          if (!isRecord(location)) return [];
-          const locationPath = optionalString(location["path"]);
-          const startLine = positiveInteger(location["startLine"]);
-          const endLine =
-            location["endLine"] === undefined
-              ? undefined
-              : positiveInteger(location["endLine"]);
-          if (
-            locationPath === undefined ||
-            startLine === null ||
-            endLine === null
-          ) {
-            return [];
-          }
-          return [
-            {
-              path: locationPath,
-              startLine,
-              ...(endLine === undefined ? {} : { endLine }),
-            },
-          ];
-        })
-      : [];
-    const findingId =
-      optionalString(finding["occurrenceId"]) ??
-      optionalString(finding["findingId"]) ??
-      `finding-${index + 1}`;
-    const validation = finding["validation"];
-    const attackPath = finding["attackPath"];
-    const codeEvidence = finding["codeEvidence"];
-    return {
-      id: findingId,
-      cwe,
-      locations: parsedLocations,
-      severity:
-        isRecord(severity) && isSeverity(severity["level"])
-          ? severity["level"]
-          : null,
-      validationPresent: isNonemptyRecord(validation),
-      validationSubstantive: isSubstantiveValidation(validation),
-      attackPathPresent: isNonemptyRecord(attackPath),
-      attackPathSubstantive: isSubstantiveAttackPath(attackPath),
-      codeEvidencePresent:
-        Array.isArray(codeEvidence) &&
-        codeEvidence.some(
-          (evidence) =>
-            isRecord(evidence) &&
-            optionalString(evidence["code"]) !== undefined &&
-            optionalString(evidence["explanation"]) !== undefined,
+  return {
+    scanId: optionalString(value["scanId"]),
+    findings: findings.map((finding, index) => {
+      requireRecord(finding, `Finding ${index + 1} in ${path}`);
+      const taxonomy = finding["taxonomy"];
+      const severity = finding["severity"];
+      const locations = finding["locations"];
+      requireRecord(taxonomy, `Finding ${index + 1} taxonomy in ${path}`);
+      const cwe = Array.isArray(taxonomy["cwe"])
+        ? taxonomy["cwe"]
+            .filter((entry): entry is string => typeof entry === "string")
+            .map(normalizeCwe)
+        : [];
+      const parsedLocations = Array.isArray(locations)
+        ? locations.flatMap((location) => {
+            if (!isRecord(location)) return [];
+            const locationPath = optionalString(location["path"]);
+            const startLine = positiveInteger(location["startLine"]);
+            const endLine =
+              location["endLine"] === undefined
+                ? undefined
+                : positiveInteger(location["endLine"]);
+            if (
+              locationPath === undefined ||
+              startLine === null ||
+              endLine === null
+            ) {
+              return [];
+            }
+            return [
+              {
+                path: locationPath,
+                startLine,
+                ...(endLine === undefined ? {} : { endLine }),
+              },
+            ];
+          })
+        : [];
+      const findingId =
+        optionalString(finding["occurrenceId"]) ??
+        optionalString(finding["findingId"]) ??
+        `finding-${index + 1}`;
+      const validation = finding["validation"];
+      const attackPath = finding["attackPath"];
+      const codeEvidence = finding["codeEvidence"];
+      return {
+        id: findingId,
+        cwe,
+        locations: parsedLocations,
+        severity:
+          isRecord(severity) && isSeverity(severity["level"])
+            ? severity["level"]
+            : null,
+        validationPresent: isNonemptyRecord(validation),
+        validationSubstantive: isSubstantiveValidation(validation),
+        attackPathPresent: isNonemptyRecord(attackPath),
+        attackPathSubstantive: isSubstantiveAttackPath(attackPath),
+        codeEvidencePresent:
+          Array.isArray(codeEvidence) &&
+          codeEvidence.some(
+            (evidence) =>
+              isRecord(evidence) &&
+              optionalString(evidence["code"]) !== undefined &&
+              optionalString(evidence["explanation"]) !== undefined,
+          ),
+        codeEvidenceSubstantive: isSubstantiveCodeEvidence(
+          codeEvidence,
+          parsedLocations,
         ),
-      codeEvidenceSubstantive: isSubstantiveCodeEvidence(
-        codeEvidence,
-        parsedLocations,
-      ),
-    };
-  });
+      };
+    }),
+  };
 }
 
 async function readBoundedFile(
@@ -929,7 +1006,47 @@ async function readBoundedFile(
   maxBytes: number,
   label: string,
 ): Promise<string> {
-  const contents = await readFile(path).catch((error: unknown) => {
+  return (await readBoundedBytes(path, maxBytes, label)).toString("utf8");
+}
+
+async function readBoundedBytes(
+  path: string,
+  maxBytes: number,
+  label: string,
+  missingAllowed?: false,
+): Promise<Buffer>;
+async function readBoundedBytes(
+  path: string,
+  maxBytes: number,
+  label: string,
+  missingAllowed: true,
+): Promise<Buffer | null>;
+async function readBoundedBytes(
+  path: string,
+  maxBytes: number,
+  label: string,
+  missingAllowed = false,
+): Promise<Buffer | null> {
+  let metadata;
+  try {
+    metadata = await lstat(path);
+  } catch (error) {
+    if (missingAllowed && isMissingFile(error)) return null;
+    throw new CopilotSecurityError(`Could not read ${label}: ${path}.`, {
+      cause: error,
+    });
+  }
+  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new CopilotSecurityError(`${label} is not a regular file: ${path}.`);
+  }
+  if (metadata.size > maxBytes) {
+    throw new CopilotSecurityError(
+      `${label} exceeds the ${maxBytes}-byte limit: ${path}.`,
+    );
+  }
+  const contents = await readFile(path, {
+    flag: constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+  }).catch((error: unknown) => {
     throw new CopilotSecurityError(`Could not read ${label}: ${path}.`, {
       cause: error,
     });
@@ -939,7 +1056,16 @@ async function readBoundedFile(
       `${label} exceeds the ${maxBytes}-byte limit: ${path}.`,
     );
   }
-  return contents.toString("utf8");
+  return contents;
+}
+
+function isMissingFile(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "ENOENT"
+  );
 }
 
 function parseJson(contents: string, path: string): unknown {

@@ -347,6 +347,12 @@ describe("canonical scan contract", () => {
     await expect(
       loadContract(second, { pluginRoot: PLUGIN_ROOT }),
     ).rejects.toThrow("schema validation failed");
+
+    const third = await copyExample();
+    await writeFile(join(third, "report.md"), "# Forged report\n");
+    await expect(
+      loadContract(third, { pluginRoot: PLUGIN_ROOT }),
+    ).rejects.toThrow("sealed artifact changed");
   });
 
   test("rejects unsafe Windows and traversal artifact paths", async () => {
