@@ -403,6 +403,367 @@ const RISK_SIGNALS: ReadonlyArray<
   ],
 ];
 
+interface FrameworkModelPattern {
+  kind: string;
+  expression: RegExp;
+}
+
+interface FrameworkDataflowModel {
+  id: string;
+  language: string;
+  extensions: ReadonlySet<string>;
+  activation: readonly RegExp[];
+  sources: readonly FrameworkModelPattern[];
+  sinks: readonly (FrameworkModelPattern & { cweIds: readonly string[] })[];
+  controls: readonly FrameworkModelPattern[];
+}
+
+const JAVASCRIPT_EXTENSIONS = new Set([
+  ".cjs",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".ts",
+  ".tsx",
+]);
+const PYTHON_EXTENSIONS = new Set([".py"]);
+const JAVA_EXTENSIONS = new Set([".java", ".kt", ".kts"]);
+const DOTNET_EXTENSIONS = new Set([".cs", ".fs", ".vb"]);
+
+const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
+  {
+    id: "node-http-command",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [
+      /\b(?:node:)?child_process\b|\brequire\s*\(\s*["'](?:node:)?child_process["']/iu,
+    ],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "child-process-shell",
+        expression: /\b(?:exec|execSync)\s*\(/iu,
+        cweIds: ["CWE-78"],
+      },
+      {
+        kind: "child-process-explicit-shell",
+        expression: /\b(?:spawn|spawnSync)\s*\([^\r\n]*\bshell\s*:\s*true\b/iu,
+        cweIds: ["CWE-78"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-executable-argument-vector",
+        expression: /\b(?:execFile|execFileSync)\s*\(|\bshell\s*:\s*false\b/iu,
+      },
+      {
+        kind: "bounded-allowlist-or-validation",
+        expression:
+          /\b(?:allowlist|allowedCommands?|isValid|safeCommands?|validate)\b|\.test\s*\(/iu,
+      },
+    ],
+  },
+  {
+    id: "node-http-sql",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [
+      /\b(?:knex|mysql2?|pg|postgres|prisma|sequelize|typeorm)\b/iu,
+      /\b(?:createConnection|createPool|DataSource|PrismaClient|Sequelize)\b/iu,
+      /\bdatabase\.(?:execute|query)\s*\(/iu,
+    ],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "raw-sql-query",
+        expression:
+          /\b(?:client|connection|database|db|knex|pool|sequelize)\.(?:execute|query|raw)\s*\(|\.\$(?:executeRawUnsafe|queryRawUnsafe)\s*\(/iu,
+        cweIds: ["CWE-89"],
+      },
+    ],
+    controls: [
+      {
+        kind: "bound-query-parameters",
+        expression:
+          /\b(?:bind|bindValue|parameterized|parameters|prepared|replacements)\b|\$\{?\d+\}?/iu,
+      },
+      {
+        kind: "typed-query-builder",
+        expression:
+          /\b(?:where|whereIn)\s*\(|\.\$(?:executeRaw|queryRaw)\s*`/iu,
+      },
+      {
+        kind: "bounded-allowlist-or-validation",
+        expression: /\b(?:allowlist|isValid|validate)\b|\.test\s*\(/iu,
+      },
+    ],
+  },
+  {
+    id: "python-web-command",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\b(?:from\s+subprocess\s+import|import\s+(?:os|subprocess))\b/iu,
+    ],
+    sources: [
+      {
+        kind: "framework-request-field",
+        expression:
+          /\brequest\.(?:args|cookies|files|form|headers|json|values)\b|\brequest\.get_json\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\b(?:Body|Cookie|Form|Header|Path|Query)\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "os-shell-command",
+        expression: /\bos\.(?:popen|system)\s*\(/iu,
+        cweIds: ["CWE-78"],
+      },
+      {
+        kind: "subprocess-explicit-shell",
+        expression:
+          /\bsubprocess\.(?:call|check_call|check_output|Popen|run)\s*\([^\r\n]*\bshell\s*=\s*True\b/iu,
+        cweIds: ["CWE-78"],
+      },
+    ],
+    controls: [
+      {
+        kind: "argument-vector-without-shell",
+        expression:
+          /\bsubprocess\.(?:call|check_call|check_output|Popen|run)\s*\(\s*[\[(]|\bshell\s*=\s*False\b/iu,
+      },
+      {
+        kind: "shell-context-quoting",
+        expression: /\bshlex\.quote\s*\(/iu,
+      },
+      {
+        kind: "bounded-allowlist-or-validation",
+        expression: /\b(?:allowlist|is_valid|validate)\b|\.fullmatch\s*\(/iu,
+      },
+    ],
+  },
+  {
+    id: "python-web-sql",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [/\b(?:django\.db|psycopg|sqlalchemy|sqlite3)\b/iu],
+    sources: [
+      {
+        kind: "framework-request-field",
+        expression:
+          /\brequest\.(?:args|cookies|form|GET|json|POST|values)\b|\brequest\.get_json\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\b(?:Body|Cookie|Form|Header|Path|Query)\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "raw-sql-execution",
+        expression:
+          /\b(?:connection|cursor|session)\.(?:execute|executemany|executescript)\s*\(|\.raw\s*\(/iu,
+        cweIds: ["CWE-89"],
+      },
+    ],
+    controls: [
+      {
+        kind: "bound-query-parameters",
+        expression:
+          /\b(?:bindparam|parameters|params)\b|\.(?:execute|executemany)\s*\([^,\r\n]+,/iu,
+      },
+      {
+        kind: "orm-expression-builder",
+        expression: /\b(?:filter|filter_by|where)\s*\(/iu,
+      },
+      {
+        kind: "bounded-allowlist-or-validation",
+        expression: /\b(?:allowlist|is_valid|validate)\b|\.fullmatch\s*\(/iu,
+      },
+    ],
+  },
+  {
+    id: "spring-http-command",
+    language: "java-kotlin",
+    extensions: JAVA_EXTENSIONS,
+    activation: [/\b(?:ProcessBuilder|Runtime\.getRuntime\s*\(\))\b/iu],
+    sources: [
+      {
+        kind: "spring-bound-parameter",
+        expression:
+          /@(?:CookieValue|PathVariable|RequestBody|RequestHeader|RequestParam)\b/iu,
+      },
+      {
+        kind: "servlet-request-parameter",
+        expression: /\b(?:getHeader|getParameter|getParameterValues)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "runtime-command-execution",
+        expression: /\bRuntime\.getRuntime\s*\(\)\.exec\s*\(/iu,
+        cweIds: ["CWE-78"],
+      },
+      {
+        kind: "process-builder-execution",
+        expression: /\bnew\s+ProcessBuilder\s*\(/iu,
+        cweIds: ["CWE-78"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-executable-argument-list",
+        expression: /\bProcessBuilder\s*\(\s*(?:List\.of|new\s+String\s*\[)/iu,
+      },
+      {
+        kind: "bounded-allowlist-or-validation",
+        expression:
+          /\b(?:allowedCommands?|isValid|validate)\b|\.matches\s*\(/iu,
+      },
+    ],
+  },
+  {
+    id: "spring-http-sql",
+    language: "java-kotlin",
+    extensions: JAVA_EXTENSIONS,
+    activation: [
+      /\b(?:EntityManager|JdbcTemplate|NamedParameterJdbcTemplate|Statement)\b/iu,
+    ],
+    sources: [
+      {
+        kind: "spring-bound-parameter",
+        expression:
+          /@(?:CookieValue|PathVariable|RequestBody|RequestHeader|RequestParam)\b/iu,
+      },
+      {
+        kind: "servlet-request-parameter",
+        expression: /\b(?:getHeader|getParameter|getParameterValues)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "raw-sql-execution",
+        expression:
+          /\b(?:createNativeQuery|executeQuery|executeUpdate)\s*\(|\b(?:jdbcTemplate|statement)\.(?:execute|query|queryForObject|update)\s*\(/iu,
+        cweIds: ["CWE-89"],
+      },
+    ],
+    controls: [
+      {
+        kind: "bound-query-parameters",
+        expression:
+          /\b(?:NamedParameterJdbcTemplate|PreparedStatement|setParameter|setString)\b/iu,
+      },
+      {
+        kind: "bounded-allowlist-or-validation",
+        expression: /\b(?:allowedColumns?|isValid|validate)\b|\.matches\s*\(/iu,
+      },
+    ],
+  },
+  {
+    id: "aspnet-http-command",
+    language: "dotnet",
+    extensions: DOTNET_EXTENSIONS,
+    activation: [
+      /\b(?:Process\.Start|ProcessStartInfo|System\.Diagnostics)\b/iu,
+    ],
+    sources: [
+      {
+        kind: "aspnet-bound-parameter",
+        expression:
+          /\[(?:FromBody|FromForm|FromHeader|FromQuery|FromRoute)\b/iu,
+      },
+      {
+        kind: "aspnet-request-field",
+        expression:
+          /\bRequest\.(?:Body|Form|Headers|Query|RouteValues)\b|\bHttpRequest\b/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "process-start",
+        expression: /\b(?:Process\.Start|new\s+ProcessStartInfo)\s*\(/iu,
+        cweIds: ["CWE-78"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-executable-argument-list",
+        expression:
+          /\bArgumentList\.Add\s*\(|\bUseShellExecute\s*=\s*false\b/iu,
+      },
+      {
+        kind: "bounded-allowlist-or-validation",
+        expression:
+          /\b(?:AllowedCommands?|IsValid|Validate)\b|Regex\.IsMatch\s*\(/iu,
+      },
+    ],
+  },
+  {
+    id: "aspnet-http-sql",
+    language: "dotnet",
+    extensions: DOTNET_EXTENSIONS,
+    activation: [/\b(?:DbContext|FromSqlRaw|SqlCommand|ExecuteSqlRaw)\b/iu],
+    sources: [
+      {
+        kind: "aspnet-bound-parameter",
+        expression:
+          /\[(?:FromBody|FromForm|FromHeader|FromQuery|FromRoute)\b/iu,
+      },
+      {
+        kind: "aspnet-request-field",
+        expression:
+          /\bRequest\.(?:Body|Form|Headers|Query|RouteValues)\b|\bHttpRequest\b/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "raw-sql-execution",
+        expression:
+          /\b(?:ExecuteSqlRaw|FromSqlRaw)\s*\(|\bnew\s+SqlCommand\s*\(/iu,
+        cweIds: ["CWE-89"],
+      },
+    ],
+    controls: [
+      {
+        kind: "bound-query-parameters",
+        expression:
+          /\b(?:DbParameter|FromSqlInterpolated|SqlParameter)\b|\.Parameters\.Add(?:WithValue)?\s*\(/iu,
+      },
+      {
+        kind: "bounded-allowlist-or-validation",
+        expression:
+          /\b(?:AllowedColumns?|IsValid|Validate)\b|Regex\.IsMatch\s*\(/iu,
+      },
+    ],
+  },
+];
+
 const IGNORED_DIRECTORIES = new Set([
   ".git",
   ".hg",
@@ -424,6 +785,15 @@ interface ResidualRiskRecord {
   startLine: number;
   endLine: number;
   excerpt: string;
+  sourceExcerpt?: string;
+  frameworkModel?: {
+    schemaVersion: "1.0";
+    id: string;
+    language: string;
+    source: { kind: string; line: number };
+    sink: { kind: string; line: number; cweIds: readonly string[] };
+    candidateControls: Array<{ kind: string; line: number }>;
+  };
 }
 
 interface CoverageSurfaceDraft {
@@ -456,6 +826,7 @@ type FindingQualityGapReason =
   | "incomplete_attack_path_reachability"
   | "missing_broken_controls"
   | "missing_attack_path_evidence_refs"
+  | "unknown_code_evidence_refs"
   | "non_reportable_validation_disposition"
   | "non_reportable_attack_path_decision";
 
@@ -492,6 +863,9 @@ export async function buildResidualRiskInventory(
     const text = source.toString("utf8");
     if (text.includes("\0")) continue;
     const lines = text.split(/\r?\n/u);
+    records.push(
+      ...frameworkDataflowRecords(candidatePath.replaceAll("\\", "/"), lines),
+    );
     let fileRecords: ResidualRiskRecord[] = [];
     const retainedFileRecords: ResidualRiskRecord[] = [];
     for (let index = 0; index < lines.length; index += 1) {
@@ -527,14 +901,123 @@ export async function buildResidualRiskInventory(
   }
 
   return selectResidualRiskRecords(records, MAX_SIGNALS)
-    .map(({ priority: _priority, excerpt, ...record }) =>
+    .map(({ priority: _priority, excerpt, sourceExcerpt, ...record }) =>
       JSON.stringify({
         ...record,
         excerptEncoding: "base64",
         excerptBase64: Buffer.from(excerpt, "utf8").toString("base64"),
+        ...(sourceExcerpt === undefined
+          ? {}
+          : {
+              sourceExcerptEncoding: "base64",
+              sourceExcerptBase64: Buffer.from(sourceExcerpt, "utf8").toString(
+                "base64",
+              ),
+            }),
       }),
     )
     .join("\n");
+}
+
+function frameworkDataflowRecords(
+  path: string,
+  lines: readonly string[],
+): ResidualRiskRecord[] {
+  const extension = extname(path).toLowerCase();
+  const text = lines.join("\n");
+  const records: ResidualRiskRecord[] = [];
+  for (const model of FRAMEWORK_DATAFLOW_MODELS) {
+    if (
+      !model.extensions.has(extension) ||
+      !model.activation.some((expression) => expression.test(text))
+    ) {
+      continue;
+    }
+    const sources = matchingModelLines(lines, model.sources, 16);
+    const sinks = matchingModelLines(lines, model.sinks, 8);
+    if (sources.length === 0 || sinks.length === 0) continue;
+    const controls = matchingModelLines(lines, model.controls, 24);
+    for (const sink of sinks) {
+      const source = nearestModeledSource(sources, sink.line);
+      const nearbyControls = controls
+        .filter(
+          (control) =>
+            control.line >= Math.min(source.line, sink.line) - 8 &&
+            control.line <= Math.max(source.line, sink.line) + 8,
+        )
+        .slice(0, 8);
+      const sinkPattern = model.sinks.find(
+        (pattern) => pattern.kind === sink.kind,
+      );
+      if (sinkPattern === undefined) continue;
+      const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
+      const endLine = Math.min(lines.length, sink.line + CONTEXT_LINES_AFTER);
+      const sourceStart = Math.max(1, source.line - 2);
+      const sourceEnd = Math.min(lines.length, source.line + 2);
+      records.push({
+        path,
+        line: sink.line,
+        categories: [
+          `framework-dataflow:${model.id}`,
+          `modeled-source:${source.kind}`,
+          `modeled-sink:${sink.kind}`,
+          ...nearbyControls.map(
+            (control) => `candidate-control:${control.kind}`,
+          ),
+        ],
+        priority: 116,
+        startLine,
+        endLine,
+        excerpt: sourceExcerpt(lines, startLine, endLine),
+        sourceExcerpt: sourceExcerpt(lines, sourceStart, sourceEnd),
+        frameworkModel: {
+          schemaVersion: "1.0",
+          id: model.id,
+          language: model.language,
+          source: { kind: source.kind, line: source.line },
+          sink: {
+            kind: sink.kind,
+            line: sink.line,
+            cweIds: sinkPattern.cweIds,
+          },
+          candidateControls: nearbyControls,
+        },
+      });
+    }
+  }
+  return records;
+}
+
+function matchingModelLines(
+  lines: readonly string[],
+  patterns: readonly FrameworkModelPattern[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const matches: Array<{ kind: string; line: number }> = [];
+  for (let index = 0; index < lines.length && matches.length < limit; index++) {
+    for (const pattern of patterns) {
+      if (pattern.expression.test(lines[index] ?? "")) {
+        matches.push({ kind: pattern.kind, line: index + 1 });
+        break;
+      }
+    }
+  }
+  return matches;
+}
+
+function nearestModeledSource(
+  sources: readonly { kind: string; line: number }[],
+  sinkLine: number,
+): { kind: string; line: number } {
+  return [...sources].sort((left, right) => {
+    const leftAfter = left.line > sinkLine ? 1 : 0;
+    const rightAfter = right.line > sinkLine ? 1 : 0;
+    return (
+      leftAfter - rightAfter ||
+      Math.abs(sinkLine - left.line) - Math.abs(sinkLine - right.line) ||
+      left.line - right.line
+    );
+  })[0]!;
 }
 
 export async function buildCoverageGapInventory(
@@ -690,6 +1173,7 @@ export async function buildFindingQualityGapInventory(
     if (!isSubstantiveCodeEvidence(finding["codeEvidence"], locations)) {
       reasons.push("missing_or_unanchored_code_evidence");
     }
+    const codeEvidenceIds = findingCodeEvidenceIds(finding["codeEvidence"]);
     if (!isSubstantiveValidation(finding["validation"])) {
       reasons.push("missing_or_weak_validation");
     }
@@ -698,6 +1182,9 @@ export async function buildFindingQualityGapInventory(
       reasons.push("missing_or_weak_attack_path");
     }
     reasons.push(...attackPathClosureGaps(finding["attackPath"]));
+    if (hasUnknownCodeEvidenceRefs(finding, codeEvidenceIds)) {
+      reasons.push("unknown_code_evidence_refs");
+    }
     if (hasNonreportableValidationDisposition(finding["validation"])) {
       reasons.push("non_reportable_validation_disposition");
     }
@@ -802,13 +1289,60 @@ function attackPathClosureGaps(value: unknown): FindingQualityGapReason[] {
   ) {
     gaps.push("incomplete_attack_path_reachability");
   }
-  if (!hasNamedSubstantiveValue(value, ["controlsBroken", "controls_broken"])) {
+  if (
+    !hasNamedSubstantiveValue(value, [
+      "controlsBroken",
+      "controls_broken",
+      "brokenControls",
+      "broken_controls",
+      "controlBreaks",
+      "control_breaks",
+    ])
+  ) {
     gaps.push("missing_broken_controls");
   }
   if (!hasNamedSubstantiveValue(value, ["evidenceRefs", "evidence_refs"], 3)) {
     gaps.push("missing_attack_path_evidence_refs");
   }
   return gaps;
+}
+
+function findingCodeEvidenceIds(value: unknown): ReadonlySet<string> {
+  if (!Array.isArray(value)) return new Set();
+  return new Set(
+    value.flatMap((evidence) => {
+      if (!isRecord(evidence)) return [];
+      const id = evidence["id"];
+      return typeof id === "string" && id.trim() !== "" ? [id] : [];
+    }),
+  );
+}
+
+function hasUnknownCodeEvidenceRefs(
+  finding: Record<string, unknown>,
+  codeEvidenceIds: ReadonlySet<string>,
+): boolean {
+  for (const sectionName of [
+    "rootCause",
+    "validation",
+    "attackPath",
+  ] as const) {
+    const section = finding[sectionName];
+    if (!isRecord(section) || section["evidenceRefs"] === undefined) continue;
+    const refs = section["evidenceRefs"];
+    if (
+      !Array.isArray(refs) ||
+      refs.some(
+        (reference) =>
+          typeof reference !== "string" ||
+          reference.trim() === "" ||
+          !codeEvidenceIds.has(reference),
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function hasNamedSubstantiveValue(

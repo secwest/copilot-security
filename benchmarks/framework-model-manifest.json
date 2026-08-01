@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "javascript-command-injection",
+      "description": "A Node HTTP request value reaches a child-process shell sink.",
+      "fixture": "fixtures/javascript-command-injection",
+      "findingsPaths": ["javascript-command-injection/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "http-host-shell-injection",
+          "cwe": ["CWE-78"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 5,
+              "endLine": 7,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-command",
+      "description": "A Node HTTP request value is validated and passed to a fixed executable without a shell.",
+      "fixture": "fixtures/javascript-safe-command",
+      "findingsPaths": ["javascript-safe-command/run-1/findings.json"],
+      "expected": []
+    },
+    {
+      "id": "javascript-sql-injection",
+      "description": "A Node HTTP request value reaches raw SQL syntax through string interpolation.",
+      "fixture": "fixtures/javascript-sql-injection",
+      "findingsPaths": ["javascript-sql-injection/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "email-query-sql-injection",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "src/users.js",
+              "startLine": 3,
+              "endLine": 4,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-sql",
+      "description": "The same Node HTTP source reaches a query through native positional parameter binding.",
+      "fixture": "fixtures/javascript-safe-sql",
+      "findingsPaths": ["javascript-safe-sql/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

@@ -20,6 +20,17 @@ Use the shared scan artifact path conventions in `../../references/scan-artifact
 
 Read `../../references/security-guidance.md` and resolve the applicable policy before inspecting each source file. A delegated file-review worker must do the same before reading its assigned source.
 
+## Framework Data-Flow Gate
+
+For diff-scoped discovery, read
+`../../references/framework-dataflow-models.md` and apply only models whose
+runtime or concrete API is present. Treat each model as a typed source,
+propagator, control, and sink hypothesis. Prove same-value flow and the exact
+dangerous sink argument; reject API co-occurrence and context-incorrect
+"sanitizers". Repository-wide and scoped-path scans use the equivalent concise
+rules embedded in their repository-wide procedure and the SDK's mandatory
+host-generated residual model inventory.
+
 ### Code Diff Workflow
 
 If the scan target is for a targeted code-diff:

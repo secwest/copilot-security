@@ -12,6 +12,7 @@
     "references/draft-contract.md",
     "references/final-report.md",
     "references/finding-detail-fields.md",
+    "references/framework-dataflow-models.md",
     "references/sarif-adapter.md",
     "references/scan-artifacts.md",
     "references/scan-contract.md",

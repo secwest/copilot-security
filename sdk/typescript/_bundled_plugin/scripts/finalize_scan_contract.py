@@ -2071,8 +2071,6 @@ def _artifact_record(
     scan_dir: Path, relative_path: str, media_type: str, contents: bytes | None = None
 ) -> dict[str, str]:
     relative_path = _require_safe_relative_path(relative_path, "artifact path")
-    if contents is not None:
-        _require_scan_local_file(scan_dir, relative_path, relative_path)
     return {
         "mediaType": media_type,
         "path": relative_path,

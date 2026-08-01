@@ -7,19 +7,19 @@ that dissimilar products can be reduced to one score.
 
 ## Design principles extracted from other scanners
 
-| Scanner or ecosystem                                                                                                         | Useful design                                                                                                                                                      | Copilot Security application                                                                                                                                                          |
-| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [CodeQL path queries](https://codeql.github.com/docs/writing-codeql-queries/creating-path-queries/)                          | A result is stronger when it explains a source-to-sink path rather than naming only a suspicious line.                                                             | Preserve SARIF code-flow locations as source/evidence/sink hints, then independently validate the exact data flow and controls.                                                       |
-| [CodeQL data-flow analysis](https://codeql.github.com/docs/writing-codeql-queries/about-data-flow-analysis/)                 | Local and global flow have different precision, performance, and completeness tradeoffs.                                                                           | Keep deterministic full-file inventory separate from expensive cross-file/deep passes; report deferred closure rather than silently narrowing scope.                                  |
-| [CodeQL custom models](https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-cpp/)            | Framework-specific source, sink, summary, barrier, and threat models extend coverage beyond built-in libraries.                                                    | Add a future bounded, typed framework-model format that augments discovery without allowing repository prompt injection.                                                              |
-| [Semgrep taint rules](https://semgrep.dev/docs/writing-rules/glossary)                                                       | Explicit sources, sinks, propagators, and sanitizers make taint assumptions reviewable; cross-file and per-file analysis have distinct guarantees.                 | Preserve model provenance and demand source/control/sink closure for imported candidates. Build regression fixtures for custom propagators and sanitizers.                            |
-| [Sonar security rules](https://docs.sonarsource.com/sonarqube-server/user-guide/rules/security-related-rules)                | Taint vulnerabilities and review-required security hotspots are different evidence classes. Sonar also supports custom sources, sanitizers, validators, and sinks. | Treat all imported results as candidates, not findings. Validation decides reportable, rejected, or deferred; a hotspot cannot inherit vulnerability status merely from its producer. |
-| [OSV-Scanner](https://google.github.io/osv-scanner/usage/) and [call analysis](https://google.github.io/osv-scanner/output/) | Extract dependencies deterministically, match authoritative advisories, and use call information to distinguish called from apparently unused vulnerable code.     | Add deterministic SBOM/lockfile inventory and advisory ingestion, then use Copilot for repository-specific reachability, compensating controls, and remediation boundary analysis.    |
-| [Trivy repository scanning](https://www.trivy.dev/docs/latest/guide/target/repository/)                                      | One repository pass can cover vulnerable dependencies, misconfiguration, secrets, and licenses.                                                                    | Accept these result families through SARIF now; later add opt-in local adapters while keeping each family’s evidence and completion semantics distinct.                               |
-| [Trivy SARIF reporting](https://trivy.dev/docs/latest/configuration/reporting/)                                              | SARIF 2.1.0 is a practical interchange format across vulnerability, misconfiguration, secret, and license scanners.                                                | Implement repeatable `--seed-sarif` intake rather than tool-specific parsers. Preserve normalized provenance and never copy a producer’s conclusion into canonical findings.          |
-| [Trivy secret scanning](https://www.trivy.dev/docs/latest/guide/scanner/secret/)                                             | Built-in and custom rules, allow rules, path bounds, and explicit skip behavior reduce secret-scanning cost and noise.                                             | Future deterministic secret discovery must redact values before model access, preserve only local fingerprints, distinguish test fixtures, and make exclusions auditable.             |
-| [Gitleaks](https://github.com/gitleaks/gitleaks)                                                                             | Full redaction, stable fingerprints, baselines, and scoped allowlists make high-volume secret findings manageable.                                                 | Extend false-positive feedback with expiring, justified fingerprint baselines; never persist or display raw secret material by default.                                               |
-| [GitHub SARIF support](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support)           | Stable rule IDs, relative paths, locations, severity/precision metadata, and partial fingerprints support interoperable alert tracking.                            | Normalize relative paths and rule metadata, but hash source documents locally and omit imported fingerprints because they may contain arbitrary or sensitive producer data.           |
+| Scanner or ecosystem                                                                                                         | Useful design                                                                                                                                                      | Copilot Security application                                                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [CodeQL path queries](https://codeql.github.com/docs/writing-codeql-queries/creating-path-queries/)                          | A result is stronger when it explains a source-to-sink path rather than naming only a suspicious line.                                                             | Preserve SARIF code-flow locations as source/evidence/sink hints, then independently validate the exact data flow and controls.                                                           |
+| [CodeQL data-flow analysis](https://codeql.github.com/docs/writing-codeql-queries/about-data-flow-analysis/)                 | Local and global flow have different precision, performance, and completeness tradeoffs.                                                                           | Keep deterministic full-file inventory separate from expensive cross-file/deep passes; report deferred closure rather than silently narrowing scope.                                      |
+| [CodeQL custom models](https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-cpp/)            | Framework-specific source, sink, summary, barrier, and threat models extend coverage beyond built-in libraries.                                                    | Emit bounded typed framework hypotheses with exact source/sink lines and context-specific control leads while keeping repository excerpts base64-encoded and requiring independent proof. |
+| [Semgrep taint rules](https://semgrep.dev/docs/writing-rules/glossary)                                                       | Explicit sources, sinks, propagators, and sanitizers make taint assumptions reviewable; cross-file and per-file analysis have distinct guarantees.                 | Preserve model provenance and demand source/control/sink closure for imported candidates. Build regression fixtures for custom propagators and sanitizers.                                |
+| [Sonar security rules](https://docs.sonarsource.com/sonarqube-server/user-guide/rules/security-related-rules)                | Taint vulnerabilities and review-required security hotspots are different evidence classes. Sonar also supports custom sources, sanitizers, validators, and sinks. | Treat all imported results as candidates, not findings. Validation decides reportable, rejected, or deferred; a hotspot cannot inherit vulnerability status merely from its producer.     |
+| [OSV-Scanner](https://google.github.io/osv-scanner/usage/) and [call analysis](https://google.github.io/osv-scanner/output/) | Extract dependencies deterministically, match authoritative advisories, and use call information to distinguish called from apparently unused vulnerable code.     | Add deterministic SBOM/lockfile inventory and advisory ingestion, then use Copilot for repository-specific reachability, compensating controls, and remediation boundary analysis.        |
+| [Trivy repository scanning](https://www.trivy.dev/docs/latest/guide/target/repository/)                                      | One repository pass can cover vulnerable dependencies, misconfiguration, secrets, and licenses.                                                                    | Accept these result families through SARIF now; later add opt-in local adapters while keeping each family’s evidence and completion semantics distinct.                                   |
+| [Trivy SARIF reporting](https://trivy.dev/docs/latest/configuration/reporting/)                                              | SARIF 2.1.0 is a practical interchange format across vulnerability, misconfiguration, secret, and license scanners.                                                | Implement repeatable `--seed-sarif` intake rather than tool-specific parsers. Preserve normalized provenance and never copy a producer’s conclusion into canonical findings.              |
+| [Trivy secret scanning](https://www.trivy.dev/docs/latest/guide/scanner/secret/)                                             | Built-in and custom rules, allow rules, path bounds, and explicit skip behavior reduce secret-scanning cost and noise.                                             | Future deterministic secret discovery must redact values before model access, preserve only local fingerprints, distinguish test fixtures, and make exclusions auditable.                 |
+| [Gitleaks](https://github.com/gitleaks/gitleaks)                                                                             | Full redaction, stable fingerprints, baselines, and scoped allowlists make high-volume secret findings manageable.                                                 | Extend false-positive feedback with expiring, justified fingerprint baselines; never persist or display raw secret material by default.                                                   |
+| [GitHub SARIF support](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support)           | Stable rule IDs, relative paths, locations, severity/precision metadata, and partial fingerprints support interoperable alert tracking.                            | Normalize relative paths and rule metadata, but hash source documents locally and omit imported fingerprints because they may contain arbitrary or sensitive producer data.               |
 
 ## Implemented: hardened SARIF seed ingestion
 
@@ -56,12 +56,40 @@ claim that a seeded tool completed its own coverage. Native inventory,
 multi-pass discovery, residual-miss review, negative controls, deterministic
 contract validation, and sealed outputs remain mandatory.
 
+## Implemented: typed framework data-flow hypotheses
+
+The mandatory host residual pass now has an initial provider-neutral model pack
+for Node HTTP, Python web, Spring/servlet, and ASP.NET command execution and raw
+SQL. A model activates only when its language, request-source syntax, and
+concrete runtime or sink API are present in the same bounded source file. The
+host emits:
+
+- a stable model id and language;
+- the exact modeled source kind and line;
+- the exact modeled sink kind, line, and CWE family;
+- nearby candidate controls such as argument-vector construction, no-shell
+  execution, SQL parameter binding, typed query construction, or bounded
+  allowlists;
+- separately base64-encoded source and sink evidence windows.
+
+This is deliberately a high-recall hypothesis, not a taint verdict. The
+quality-gate prompt requires same-value tracing across assignments, wrappers,
+parsers, and transformations. A candidate control must apply to the same value,
+be correct for the consuming interpreter, and dominate the sink. API
+co-occurrence, annotations, and unused request values must be rejected.
+
+`benchmarks/framework-model-manifest.json` pairs command and SQL positives with
+shell-free and parameter-bound negatives. Its thresholds require perfect
+completion, precision, recall, evidence, validation, attack-path, severity, and
+negative-case performance for the selected single-run diagnostic.
+
 ## Prioritized next improvements
 
-1. **Typed framework security models.** Define a bounded provider-neutral
-   schema for sources, sinks, sanitizers/barriers, propagators/summaries, and
-   threat domains. Sign or hash external model packs, treat their strings as
-   data, and benchmark each pack against paired positive and negative fixtures.
+1. **Expand typed framework security models.** Add cross-file propagator and
+   wrapper summaries, framework-specific authorization and template models,
+   manifest-derived activation evidence, and signed or hashed external model
+   packs. Benchmark every extension against paired positive and negative
+   fixtures.
 2. **Dependency and advisory reachability.** Build deterministic lockfile/SBOM
    extraction, accept OSV identifiers and fixed-version facts, and require a
    repository call/use path or explicit deployment exposure before escalating

@@ -2,6 +2,21 @@
 
 Use this procedure for a standard repository or scoped-path scan. Review every file, collect candidates in one ledger, then validate and check reachability in two compact passes over that ledger. Do not use ranking or multi-stage queues from deep scans.
 
+## Framework Data-Flow Models
+
+During detection, classify framework-aware paths as exact source,
+propagator, closest control, sink argument, and outcome tuples. Apply the
+host-provided Node HTTP, Python web, Spring/servlet, and ASP.NET command and raw
+SQL models when their concrete runtime or API is present. A source and sink in
+the same file are only a hypothesis: prove that the same attacker-controlled
+value reaches the sink across wrappers and transformations. Treat argument
+vectors without a shell and native SQL parameter binding as strong negative
+controls only when they apply to the same value and dominate the sink. Generic
+validation, escaping for another interpreter, framework annotations, and API
+names alone are neither sanitizers nor findings. The mandatory residual pass
+will provide exact typed model rows for any high-risk paths the first pass may
+have missed; close every such row explicitly.
+
 ## File Inventory And Progress
 
 Create the file list before review:

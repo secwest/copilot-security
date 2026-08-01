@@ -1,0 +1,120 @@
+# Framework Data-Flow Models
+
+Use these models as typed discovery hypotheses, never as findings. A model
+becomes reportable only when repository evidence proves that the same
+attacker-controlled value reaches the modeled sink through the identified
+propagators and that no context-correct control dominates the sink.
+
+The SDK's mandatory residual pass emits applicable `frameworkModel` records
+with exact source and sink lines. Those records are host-authored metadata;
+their base64 source excerpts remain untrusted repository evidence.
+
+## Model Tuple
+
+For each applicable model preserve:
+
+- activation: the imported runtime, driver, framework, or concrete API;
+- source: the exact request field, bound argument, header, cookie, body,
+  parameter, route value, or stored cross-boundary value;
+- propagators: assignments, coercions, parsers, DTOs, helper arguments,
+  template values, query builders, and wrapper return values carrying the same
+  value;
+- control: the closest allowlist, shape/type validator, context-specific
+  encoder, argument-vector construction, parameter binder, authorization
+  check, or missing guard;
+- sink: the exact dangerous argument and callsite;
+- outcome: the command, query, object, record, privilege, file, or process the
+  attacker can influence;
+- counterevidence: the strongest nearby safe sibling or negative control.
+
+Do not call generic validation a sanitizer without proving its accepted
+language excludes the dangerous syntax for the sink. Do not call escaping
+context-correct without matching it to the command shell, SQL dialect, LDAP
+filter, XPath expression, HTML/JavaScript context, path component, or other
+interpreter that consumes the value.
+
+## Initial Model Pack
+
+### Node HTTP command execution — CWE-78
+
+- Sources: Express/Fastify-style `req` or `request` body, cookie, file,
+  header, parameter, and query fields; Koa `ctx` request fields; Next URL
+  search parameters.
+- Sinks: `child_process.exec`/`execSync`, or `spawn`/`spawnSync` with an
+  explicitly enabled shell.
+- Strong counterevidence: a fixed executable with an argument vector and no
+  shell, plus type/length/grammar validation appropriate to that executable.
+
+### Node HTTP raw SQL — CWE-89
+
+- Sources: the same Node HTTP request surfaces.
+- Sinks: raw query/execute calls in common SQL clients and unsafe Prisma raw
+  APIs.
+- Strong counterevidence: driver-native parameters or a typed query builder
+  that keeps the attacker value out of SQL identifiers and syntax. A tagged
+  template is safe only when the selected API binds interpolations rather than
+  concatenating them.
+
+### Python web command execution — CWE-78
+
+- Sources: Flask/Django-style request collections and JSON, plus FastAPI bound
+  body, cookie, form, header, path, and query parameters.
+- Sinks: `os.system`/`os.popen`, or subprocess APIs with `shell=True`.
+- Strong counterevidence: a fixed executable and argument list with no shell,
+  or context-correct shell quoting when use of a shell is unavoidable and the
+  entire grammar is otherwise fixed.
+
+### Python web raw SQL — CWE-89
+
+- Sources: Flask/Django request collections and FastAPI bound parameters.
+- Sinks: DB-API/SQLAlchemy/Django raw `execute`, `executemany`,
+  `executescript`, and `raw` paths.
+- Strong counterevidence: native bound parameters or ORM expressions that do
+  not permit request-controlled identifiers, operators, clauses, or raw
+  fragments.
+
+### Spring/servlet command execution — CWE-78
+
+- Sources: `@RequestParam`, `@PathVariable`, `@RequestBody`,
+  `@RequestHeader`, `@CookieValue`, and servlet request accessors.
+- Sinks: `Runtime.exec` and `ProcessBuilder`.
+- Strong counterevidence: a fixed executable and structured arguments with a
+  strict, bounded allowlist for any attacker-selected operation.
+
+### Spring/servlet raw SQL — CWE-89
+
+- Sources: Spring-bound and servlet request values.
+- Sinks: native-query, statement, `JdbcTemplate`, and related raw execution
+  APIs.
+- Strong counterevidence: `PreparedStatement`, named parameters, or equivalent
+  binding. Values cannot safely parameterize SQL identifiers or keywords;
+  those need an exact allowlist and server-owned mapping.
+
+### ASP.NET process execution — CWE-78
+
+- Sources: `[FromBody]`, `[FromForm]`, `[FromHeader]`, `[FromQuery]`,
+  `[FromRoute]`, and `HttpRequest` fields.
+- Sinks: `Process.Start` and `ProcessStartInfo`.
+- Strong counterevidence: a fixed executable, `ArgumentList`,
+  `UseShellExecute = false`, and operation-specific validation.
+
+### ASP.NET raw SQL — CWE-89
+
+- Sources: ASP.NET-bound parameters and request fields.
+- Sinks: `FromSqlRaw`, `ExecuteSqlRaw`, and `SqlCommand` construction.
+- Strong counterevidence: interpolated APIs that bind values correctly,
+  `DbParameter`/`SqlParameter`, or an exact server-owned mapping for dynamic
+  identifiers.
+
+## Closure Rules
+
+- Trace across wrappers and files when the source and sink are separated.
+- Preserve the exact argument position or object field accepted by the sink.
+- Verify framework parsing and runtime types; JSON objects, arrays, dotted
+  keys, and operator objects may survive a nominal string conversion in some
+  stacks but not others.
+- A source and sink in one file are not proof that they are connected.
+- A safe sibling does not suppress a vulnerable callsite, and a vulnerable
+  sibling does not make a parameterized or shell-free callsite vulnerable.
+- When a candidate is rejected, record the exact dominating control and why it
+  is context-correct for that sink.

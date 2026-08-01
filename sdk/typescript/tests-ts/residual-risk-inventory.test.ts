@@ -981,6 +981,53 @@ describe("residual risk inventory", () => {
               evidenceRefs: ["shell-sink"],
             },
           },
+          {
+            occurrenceId: "occ_unknown_refs",
+            taxonomy: { cwe: ["CWE-89"] },
+            locations: [{ path: "src/server.js", startLine: 55 }],
+            codeEvidence: [
+              {
+                id: "sql-sink",
+                path: "src/server.js",
+                startLine: 55,
+                code: "database.query(`SELECT * FROM users WHERE id = ${id}`)",
+                explanation:
+                  "The request-controlled identifier is interpolated into SQL syntax.",
+              },
+            ],
+            validation: {
+              summary:
+                "A static source trace confirms request data reaches raw SQL syntax.",
+              method: "static source trace",
+              exploitWitness:
+                "A quote-bearing identifier changes the resulting SQL predicate.",
+              negativeControl:
+                "The safe sibling binds the identifier as a positional query parameter.",
+              evidence: [
+                "The handler interpolates the identifier into the query.",
+              ],
+              counterEvidence: ["No parameter binding occurs on this path."],
+              remainingUncertainty:
+                "No material uncertainty remains after inspecting the direct data flow.",
+              evidenceRefs: ["artifacts/03_validation/witness.json"],
+            },
+            attackPath: {
+              summary:
+                "A remote caller changes query semantics through the request handler.",
+              dataflow: {
+                source: "HTTP request parameter",
+                sink: "raw SQL query construction",
+                outcome: "attacker-controlled database query semantics",
+              },
+              reachability: {
+                attacker: "Unauthenticated remote HTTP caller",
+                entrypoint: "User lookup request handler",
+                outcome: "Unauthorized records can be selected",
+              },
+              brokenControls: ["No native query parameter binding"],
+              evidenceRefs: ["sql-sink", "artifacts/04_attack_paths/path.json"],
+            },
+          },
         ],
       }),
     );
@@ -993,9 +1040,9 @@ describe("residual risk inventory", () => {
     expect(records[0]).toEqual({
       type: "finding-quality-gap-summary",
       findingsReadable: true,
-      findingCount: 2,
-      gapCount: 1,
-      emittedGapCount: 1,
+      findingCount: 3,
+      gapCount: 2,
+      emittedGapCount: 2,
       omittedGapCount: 0,
     });
     expect(records[1]).toEqual({
@@ -1021,6 +1068,11 @@ describe("residual risk inventory", () => {
       ],
     });
     expect(inventory).not.toContain("occ_strong");
+    expect(records[2]).toEqual({
+      findingIndex: 2,
+      findingId: "occ_unknown_refs",
+      reasons: ["unknown_code_evidence_refs"],
+    });
 
     const prompt = scanQualityGatePrompt(
       "",

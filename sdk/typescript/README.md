@@ -12,8 +12,14 @@ The package is ESM-only and provides:
 - standard and deep multi-pass modes
 - deterministic scan artifacts, Markdown report, SARIF, exports, history,
   reruns, comparison, bulk scans, and finding feedback
+- host-rendered and atomically sealed `report.md` output; the model authors only
+  structured drafts, and exact finding evidence references are re-audited
+  against each finding's `codeEvidence` IDs before completion
 - host-reconciled per-file coverage that preserves omitted inventory paths as
   deferred work instead of accepting a false complete claim
+- typed host-generated Node HTTP, Python web, Spring/servlet, and ASP.NET
+  command/SQL data-flow hypotheses with exact source/sink lines and nearby
+  negative controls for the mandatory residual correction turn
 - bounded native Copilot model-call retries without host prompt replay, plus
   cancellation-safe cleanup of partially initialized CLI sessions
 - cancellation and streamed Copilot usage/subagent events

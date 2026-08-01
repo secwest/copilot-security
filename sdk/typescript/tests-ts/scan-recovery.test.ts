@@ -1644,6 +1644,26 @@ describe("malformed scan artifact recovery", () => {
     ]);
   });
 
+  test("deterministically generates a report when the model omits report.md", async () => {
+    const fixture = await startDraftScan();
+    await rm(join(fixture.scanDir, "report.md"));
+
+    const completed = await completeScan(fixture);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.findingCount).toBe(1);
+    const report = await readFile(join(fixture.scanDir, "report.md"), "utf8");
+    expect(report).toContain("# Security Review:");
+    const manifest = await readJson<Record<string, unknown>>(
+      join(fixture.scanDir, "scan-manifest.json"),
+    );
+    const scan = manifest["scan"] as Record<string, unknown>;
+    const artifacts = scan["artifacts"] as Array<Record<string, unknown>>;
+    expect(artifacts.some((artifact) => artifact["path"] === "report.md")).toBe(
+      true,
+    );
+  });
+
   test("keeps findings while removing invalid or duplicate writeups", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

@@ -33,6 +33,15 @@ rejects safe or mitigated flows. This supplements model-led discovery without
 treating lexical matches or repository-written scanner instructions as
 findings or control flow.
 
+The residual pass also applies typed framework data-flow models for Node HTTP,
+Python web, Spring/servlet, and ASP.NET command-execution and raw-SQL
+boundaries. Each applicable row identifies an exact source line, sink line,
+CWE family, and nearby candidate controls. These rows remain hypotheses: the
+correction turn must prove same-value flow through wrappers and transformations
+and reject API co-occurrence. Argument vectors without a shell, native SQL
+parameter binding, and other candidate controls count only when they apply to
+the same value, are context-correct, and dominate the sink.
+
 The correction turn also receives a deterministic reconciliation of
 `in_scope_files.txt` against the draft coverage document. This catches omitted
 files even when they contain no known lexical risk signal. The host repeats the
@@ -42,11 +51,16 @@ model-written `complete` claim cannot conceal a coverage gap.
 
 The host separately audits every draft finding before that correction turn.
 It lists missing CWE assignments, absent or unanchored code evidence, weak
-validation, weak attack paths, and validation or attack-path dispositions that
-contradict reportability. Copilot must either repair each row from repository
-evidence or remove it from `findings.json` and close coverage accurately. This
-prevents a structurally valid but evidentially empty finding from silently
-surviving the model-to-contract boundary.
+validation, weak attack paths, unknown code-evidence references, and validation
+or attack-path dispositions that contradict reportability. Every
+`rootCause`, `validation`, and `attackPath` evidence reference must name an ID
+in that finding's `codeEvidence` catalog; artifact paths belong in coverage
+receipts instead. Copilot must either repair each row from repository evidence
+or remove it from `findings.json` and close coverage accurately. Equivalent
+broken-control field names are accepted when their contents are substantive.
+This prevents a structurally valid but evidentially empty finding—or one whose
+attack path points only at unrelated artifacts—from silently surviving the
+model-to-contract boundary.
 
 After the correction turn, the host rebuilds both the coverage-gap and
 finding-quality inventories from the files Copilot actually wrote. If any gap
@@ -56,6 +70,11 @@ closed instead of reporting completion when a gap persists or the closure
 state cannot be read. The first correction turn's existing artifact-recovery
 path remains available for a transport failure after all drafts were written;
 an unsuccessful deterministic closure audit does not use that escape hatch.
+The model is never required to author `report.md`: after the structured drafts
+pass closure, the host renders the Markdown report deterministically, hashes
+that exact projection into the manifest, writes it atomically, and seals the
+canonical artifact set. A missing model-written report therefore cannot turn
+an otherwise valid scan into a late I/O failure.
 
 Recoverable Copilot model-call failures are retried by the CLI inside the
 existing turn, with a fixed two-retry ceiling. Explicit safety-classifier,
@@ -171,6 +190,18 @@ artifacts or model context:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/sarif-seed-manifest.json `
   --results-dir C:\security-benchmarks\sarif-seeds `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The strict `benchmarks/framework-model-manifest.json` campaign exercises the
+initial typed model pack with one command-injection positive, one shell-free
+negative, one SQL-injection positive, and one parameter-bound SQL negative:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/framework-model-manifest.json `
+  --results-dir C:\security-benchmarks\framework-models `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

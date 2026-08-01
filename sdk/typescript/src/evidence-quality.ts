@@ -72,7 +72,14 @@ export function isSubstantiveAttackPath(value: unknown): boolean {
     hasNonplaceholderField(value, ["source"]) &&
     hasSubstantiveField(value, ["exploit"]) &&
     (hasSubstantiveField(value, ["impact"]) ||
-      hasSubstantiveStringArray(value, ["controlsBroken", "controls_broken"]));
+      hasSubstantiveStringArray(value, [
+        "controlsBroken",
+        "controls_broken",
+        "brokenControls",
+        "broken_controls",
+        "controlBreaks",
+        "control_breaks",
+      ]));
 
   return (
     structuredDataflow ||
