@@ -159,6 +159,16 @@ controls fresh process attempts per invocation, `--scan-timeout-ms N` supplies
 an outer process-tree deadline, and `--workers N` runs up to eight independent
 case/runs concurrently. The default remains one worker.
 
+If the runner is interrupted after scan receipts are written but before its
+selection manifest or report is committed, rerun the identical campaign command
+with `--finalize-only`. This mode validates the existing campaign identity,
+does not launch or preserve any scanner attempt, atomically rebuilds
+`benchmark-selection-manifest.json` when selection mode is active, and
+atomically replaces `benchmark-report.json` from the existing fail-closed
+receipts. It cannot be combined with `--force`. This is also the safe way to
+materialize an incomplete campaign report after an outer job timeout without
+silently granting additional model attempts.
+
 To measure another CLI that implements the same scan/output contract, select
 its Node entrypoint and keep its results in a separate campaign directory:
 

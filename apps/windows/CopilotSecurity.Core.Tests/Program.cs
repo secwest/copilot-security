@@ -8,6 +8,7 @@ var tests = new (string Name, Func<Task> Run)[]
 {
     ("scan command uses an argument list and private state", TestScanCommandAsync),
     ("scan command rejects overlaps and invalid deep diff", TestScanCommandRejectionsAsync),
+    ("scanner discovery ignores the process working directory", TestInstallationDiscoveryAsync),
     ("artifact reader accepts sealed structure and rejects partial output", TestArtifactReaderAsync),
     ("benchmark comparison catches metric and case regressions", TestComparisonAsync),
     ("GUI settings persist atomically without credentials", TestSettingsAsync),
@@ -85,6 +86,58 @@ static Task TestScanCommandRejectionsAsync()
             TargetKind = ScanTargetKind.CommittedDiff,
             BaseRevision = "main",
         }));
+    var repositoryEntryPoint = fixture.File(
+        Path.Combine("repository", "sdk", "typescript", "bin", "copilot-security.mjs"));
+    var repositoryInstallation = installation with
+    {
+        ScannerEntryPoint = repositoryEntryPoint,
+    };
+    Assert.Throws<ArgumentException>(() => builder.BuildScan(
+        repositoryInstallation,
+        new ScanRequest
+        {
+            RepositoryPath = repository,
+            OutputDirectory = Path.Combine(fixture.Root, "separate-results"),
+            Mode = ScanMode.Standard,
+        }));
+    return Task.CompletedTask;
+}
+
+static Task TestInstallationDiscoveryAsync()
+{
+    using var fixture = new TemporaryFixture();
+    var applicationBase = fixture.Directory(Path.Combine("installed", "apps", "gui"));
+    var installed = fixture.File(
+        Path.Combine("installed", "sdk", "typescript", "bin", "copilot-security.mjs"),
+        "installed\n");
+    var attackerDirectory = fixture.Directory("attacker");
+    _ = fixture.File(
+        Path.Combine("attacker", "sdk", "typescript", "bin", "copilot-security.mjs"),
+        "attacker\n");
+    var originalDirectory = Environment.CurrentDirectory;
+    try
+    {
+        Environment.CurrentDirectory = attackerDirectory;
+        var discovered = ScannerInstallationDiscovery.FindInstalledFile(
+            applicationBase,
+            "sdk",
+            "typescript",
+            "bin",
+            "copilot-security.mjs");
+        Assert.Equal(Path.GetFullPath(installed), discovered);
+
+        File.Delete(installed);
+        Assert.Equal<string?>(null, ScannerInstallationDiscovery.FindInstalledFile(
+            applicationBase,
+            "sdk",
+            "typescript",
+            "bin",
+            "copilot-security.mjs"));
+    }
+    finally
+    {
+        Environment.CurrentDirectory = originalDirectory;
+    }
     return Task.CompletedTask;
 }
 

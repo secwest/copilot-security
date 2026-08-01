@@ -69,8 +69,10 @@ state is always below
 `%COPILOT_SECURITY_HOME%\copilot-security-home`. GUI runs, benchmarks, and
 preferences live in `gui-runs`, `gui-benchmarks`, and `gui` below that private
 runtime directory. The command builder refuses a state or result tree that
-overlaps the repository being scanned and rejects reparse-point ancestors that
-could turn a lexically separate path into the same physical tree.
+overlaps the repository being scanned. It also refuses to execute a scanner
+entry point from inside the target repository and rejects reparse-point
+ancestors that could turn a lexically separate path into the same physical
+tree.
 
 The artifact reader bounds every input, rejects reparse-point artifacts,
 requires completed scan status and the expected document types, and recomputes
@@ -91,9 +93,12 @@ and atomic replacement.
 - GitHub Copilot CLI authenticated on the machine; and
 - a built or installed `copilot-security.mjs` entry point.
 
-The development checkout is auto-detected when the application is launched
-from this repository. Packaged installations can set the three runtime paths
-on the **Diagnostics & settings** tab.
+The development checkout is auto-detected only by walking upward from the
+application's installed base directory. The process working directory and the
+repository selected for scanning are never searched for executable scanner
+modules. Packaged installations can set the three runtime paths on the
+**Diagnostics & settings** tab; the scanner entry point must remain outside the
+target repository.
 
 ## Build and test
 

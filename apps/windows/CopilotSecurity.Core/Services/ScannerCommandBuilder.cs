@@ -44,8 +44,13 @@ public sealed class ScannerCommandBuilder
         var output = PathPolicy.Canonical(request.OutputDirectory, "Output directory");
         var stateRoot = PathPolicy.Canonical(installation.StateRoot, "Scanner state root");
         var runtimeHome = Path.Combine(stateRoot, "copilot-security-home");
+        PathPolicy.RequireNoReparseAncestors(entryPoint, "Scanner entry point");
         PathPolicy.RequireNoReparseAncestors(output, "Output directory");
 
+        PathPolicy.RequireDisjoint(
+            entryPoint,
+            repository,
+            "Scanner entry point and scanned repository must be disjoint; use an installed scanner copy outside the target.");
         PathPolicy.RequireDisjoint(
             output,
             repository,

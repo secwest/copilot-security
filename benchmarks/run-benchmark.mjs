@@ -1,15 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from "node:child_process";
-import {
-  cp,
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   basename,
@@ -33,6 +25,7 @@ import {
   sha256File,
   sha256ScannerPackage,
   writeBenchmarkReceipt,
+  writeBenchmarkTextAtomic,
 } from "../sdk/typescript/dist/benchmark-campaign.js";
 import {
   benchmarkFindingsPaths,
@@ -72,6 +65,7 @@ Options:
   --workers N              Concurrent case/runs, 1-8 (default: 1)
   --max-attempts N         Fresh attempts per invocation, 1-10 (default: 2)
   --scan-timeout-ms N      Outer process-tree deadline, minimum 60000
+  --finalize-only          Rebuild reports from existing receipts; never scan
   --force                  Preserve and rerun already completed selected runs
   --help                   Show this help
 `);
@@ -193,28 +187,34 @@ for (const benchmarkCase of selectedCases) {
 
 let nextTask = 0;
 let scanFailures = 0;
-await Promise.all(
-  Array.from(
-    { length: Math.min(options.workers, Math.max(tasks.length, 1)) },
-    async (_, workerIndex) => {
-      while (true) {
-        const index = nextTask;
-        nextTask += 1;
-        const task = tasks[index];
-        if (task === undefined) return;
-        try {
-          const succeeded = await runTask(task, workerIndex + 1);
-          if (!succeeded) scanFailures += 1;
-        } catch (error) {
-          scanFailures += 1;
-          process.stderr.write(
-            `[benchmark:w${workerIndex + 1}] campaign task failed for ${task.benchmarkCase.id} run ${task.run}: ${errorMessage(error)}\n`,
-          );
+if (options.finalizeOnly) {
+  process.stderr.write(
+    "[benchmark] finalize-only: preserving all scan outputs and rebuilding evaluation artifacts from existing receipts\n",
+  );
+} else {
+  await Promise.all(
+    Array.from(
+      { length: Math.min(options.workers, Math.max(tasks.length, 1)) },
+      async (_, workerIndex) => {
+        while (true) {
+          const index = nextTask;
+          nextTask += 1;
+          const task = tasks[index];
+          if (task === undefined) return;
+          try {
+            const succeeded = await runTask(task, workerIndex + 1);
+            if (!succeeded) scanFailures += 1;
+          } catch (error) {
+            scanFailures += 1;
+            process.stderr.write(
+              `[benchmark:w${workerIndex + 1}] campaign task failed for ${task.benchmarkCase.id} run ${task.run}: ${errorMessage(error)}\n`,
+            );
+          }
         }
-      }
-    },
-  ),
-);
+      },
+    ),
+  );
+}
 
 let evaluationManifestPath = manifestPath;
 if (options.selectionOnly) {
@@ -227,15 +227,13 @@ if (options.selectionOnly) {
     selectedCases,
     options.runs,
   );
-  await writeFile(
+  await writeBenchmarkTextAtomic(
     evaluationManifestPath,
     `${JSON.stringify(selectionManifest, null, 2)}\n`,
-    { mode: 0o600 },
   );
 }
 
 const reportPath = join(resultsDirectory, "benchmark-report.json");
-await rm(reportPath, { force: true });
 const evaluation = spawnSync(
   process.execPath,
   [
@@ -259,7 +257,7 @@ const evaluation = spawnSync(
 );
 if (typeof evaluation.stdout === "string") {
   process.stdout.write(evaluation.stdout);
-  await writeFile(reportPath, evaluation.stdout, { mode: 0o600 });
+  await writeBenchmarkTextAtomic(reportPath, evaluation.stdout);
 }
 process.exitCode =
   scanFailures > 0 ? 1 : evaluation.status === null ? 1 : evaluation.status;
@@ -663,6 +661,7 @@ function parseArguments(args) {
     auth: "auto",
     cases: [],
     effort: undefined,
+    finalizeOnly: false,
     force: false,
     manifest: undefined,
     maxAiCredits: undefined,
@@ -681,6 +680,10 @@ function parseArguments(args) {
     const argument = args[index];
     if (argument === "--force") {
       result.force = true;
+      continue;
+    }
+    if (argument === "--finalize-only") {
+      result.finalizeOnly = true;
       continue;
     }
     if (argument === "--selection-only") {
@@ -727,6 +730,9 @@ function parseArguments(args) {
     throw new Error(
       "--results-dir is required and must be outside the repository.",
     );
+  }
+  if (result.finalizeOnly && result.force) {
+    throw new Error("--finalize-only cannot be combined with --force.");
   }
   if (
     !["auto", "github", "token", "chatgpt", "api-key"].includes(result.auth)

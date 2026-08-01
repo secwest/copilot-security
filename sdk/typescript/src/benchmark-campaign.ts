@@ -307,6 +307,30 @@ export async function writeBenchmarkReceipt(
   await writeJsonAtomic(path, receipt);
 }
 
+export async function writeBenchmarkTextAtomic(
+  path: string,
+  contents: string,
+): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = join(
+    dirname(path),
+    `.${basename(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`,
+  );
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(contents, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await rename(temporary, path);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function preserveBenchmarkAttempt(options: {
   resultsDirectory: string;
   caseId: string;
@@ -709,24 +733,7 @@ async function readBounded(
 }
 
 async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = join(
-    dirname(path),
-    `.${basename(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`,
-  );
-  const handle = await open(temporary, "wx", 0o600);
-  try {
-    await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`, "utf8");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  try {
-    await rename(temporary, path);
-  } catch (error) {
-    await rm(temporary, { force: true }).catch(() => undefined);
-    throw error;
-  }
+  await writeBenchmarkTextAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function safeCaseSegment(caseId: string): string {

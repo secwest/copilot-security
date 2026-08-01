@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -16,6 +23,7 @@ import {
   sha256Directory,
   sha256ScannerPackage,
   writeBenchmarkReceipt,
+  writeBenchmarkTextAtomic,
   type BenchmarkCampaignDocument,
   type BenchmarkRunReceipt,
 } from "../src/benchmark-campaign.js";
@@ -159,6 +167,17 @@ describe("benchmark campaign integrity", () => {
         run: 1,
       }),
     ).rejects.toThrow("not a completed sealed scan");
+  });
+
+  test("atomically replaces benchmark evaluation artifacts without staging debris", async () => {
+    const root = await temporaryDirectory("campaign-atomic-report-");
+    const path = join(root, "benchmark-report.json");
+    await writeFile(path, "stale\n");
+
+    await writeBenchmarkTextAtomic(path, '{"passed":false}\n');
+
+    expect(await readFile(path, "utf8")).toBe('{"passed":false}\n');
+    expect((await readdir(root)).sort()).toEqual(["benchmark-report.json"]);
   });
 
   test("preserves partial output and its receipt before a retry", async () => {

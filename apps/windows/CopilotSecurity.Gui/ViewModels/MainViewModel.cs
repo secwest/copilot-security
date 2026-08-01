@@ -23,7 +23,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string repositoryPath = Environment.CurrentDirectory;
     private string nodePath = FindOnPath("node.exe") ?? string.Empty;
     private string copilotPath = FindOnPath("copilot.exe") ?? FindOnPath("copilot.cmd") ?? string.Empty;
-    private string scannerEntryPoint = FindRepositoryFile("sdk", "typescript", "bin", "copilot-security.mjs") ?? string.Empty;
+    private string scannerEntryPoint = ScannerInstallationDiscovery.FindInstalledFile(
+        AppContext.BaseDirectory,
+        "sdk",
+        "typescript",
+        "bin",
+        "copilot-security.mjs") ?? string.Empty;
     private string stateRoot = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".copilot-security");
@@ -43,7 +48,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string reportMarkdown = "Run or select a scan to view its report.";
     private ScanFinding? selectedFinding;
     private ScanHistoryItem? selectedHistory;
-    private string benchmarkManifest = FindRepositoryFile("benchmarks", "manifest.json") ?? string.Empty;
+    private string benchmarkManifest = ScannerInstallationDiscovery.FindInstalledFile(
+        AppContext.BaseDirectory,
+        "benchmarks",
+        "manifest.json") ?? string.Empty;
     private string benchmarkResultsDirectory = string.Empty;
     private string baselineBenchmarkReport = string.Empty;
     private string candidateBenchmarkReport = string.Empty;
@@ -458,23 +466,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsRecoverable(Exception exception) =>
         exception is ArgumentException or IOException or InvalidDataException or UnauthorizedAccessException;
-
-    private static string? FindRepositoryFile(params string[] segments)
-    {
-        foreach (var startingPoint in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
-        {
-            var directory = new DirectoryInfo(startingPoint);
-            for (var depth = 0; directory is not null && depth < 10; depth++, directory = directory.Parent)
-            {
-                var candidate = Path.Combine([directory.FullName, .. segments]);
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-            }
-        }
-        return null;
-    }
 
     private static string? FindOnPath(string executable)
     {

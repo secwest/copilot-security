@@ -234,6 +234,9 @@ recovers victim plaintext from a chosen plaintext and two public ciphertexts,
 paired with fresh per-envelope HKDF data keys and profile-bound authenticated
 data even though the visible nonce repeats. Each of the 98 cases is scanned
 three times, producing 294 scans that measure both accuracy and model variance.
+Interrupted benchmark finalization is recoverable without another model call:
+repeat the identical runner command with `--finalize-only` to atomically rebuild
+the selected manifest and report from the sealed campaign receipts.
 The evaluator uses one-to-one CWE-plus-location
 matching, counts duplicate reports as false positives, and records missing scan
 artifacts as completion failures.
