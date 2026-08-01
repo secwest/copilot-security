@@ -111,7 +111,7 @@ npm run build
 node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security `
   --auth github `
-  --model gpt-5.6-terra `
+  --model PROVIDER_MODEL `
   --effort high `
   --workers 2 `
   --max-attempts 2 `
@@ -174,12 +174,31 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
-For a valid baseline/candidate comparison, both reports must have the same
-`corpusId` and `scanPolicyId`. Scanner package, label, and authentication source
-may differ and are intentionally captured by different `campaignId` values.
-The Windows comparison reader rejects one-sided provenance, changed fixture or
-manifest bytes, different case/run selections, different model policies,
-different per-case expectation counts, and redistributed run counts.
+The benchmark runner accepts a different bounded lowercase document namespace
+only at its sealed-result verification boundary. It normalizes namespace fields
+in memory for structural schema validation, then verifies the original scan
+IDs, scope, derived fingerprint identities, artifact hashes, canonical paths,
+and campaign receipt without rewriting the reference output. All three contract
+documents must use the same namespace. Normal scanner result loading remains
+strict to this product's namespace; compatibility mode is not available through
+the scan or GUI result-reader paths.
+
+For a valid cross-provider baseline/candidate comparison, both new reports must
+have campaign schema `1.1` and the same `corpusId` and `comparisonPolicyId`.
+The comparison identity binds mode, effort, and any explicit AI-credit bound,
+but intentionally excludes the provider model: model, scanner package, label,
+authentication source, runtime, and runner remain visible and are sealed into
+different exact `scanPolicyId` and `campaignId` values. This permits a Copilot
+model to be measured against a reference provider's model without pretending
+the model identities are equal or weakening campaign resume integrity.
+
+The Windows comparison reader rejects one-sided or mixed-version provenance,
+changed fixture or manifest bytes, different case/run selections, different
+mode/effort/credit policies, different per-case expectation counts, and
+redistributed run counts. Two campaign-schema `1.0` reports remain comparable
+only under their legacy model-bound `scanPolicyId`; they cannot be mixed with a
+`1.1` report. Two reports with no campaign provenance remain legacy-comparable,
+but a provenanced report cannot be compared with an unprovenanced one.
 
 Evaluate existing results without spending Copilot credits:
 

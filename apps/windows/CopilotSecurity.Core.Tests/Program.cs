@@ -158,9 +158,25 @@ static async Task TestComparisonAsync()
         () => new BenchmarkComparisonReader().CompareAsync(baseline, differentCorpus));
     var differentPolicy = fixture.File(
         "different-policy.json",
-        BenchmarkReport(0.5, 0, false, 1, 1, scanPolicyId: new string('c', 64)));
+        BenchmarkReport(0.5, 0, false, 1, 1, comparisonPolicyId: new string('c', 64)));
     await Assert.ThrowsAsync<InvalidDataException>(
         () => new BenchmarkComparisonReader().CompareAsync(baseline, differentPolicy));
+    var differentProviderModel = fixture.File(
+        "different-provider-model.json",
+        BenchmarkReport(1, 1, true, 0, 0,
+            scanPolicyId: new string('c', 64),
+            scannerLabel: "reference-security",
+            model: "reference-model"));
+    var crossProvider = await new BenchmarkComparisonReader().CompareAsync(
+        baseline,
+        differentProviderModel);
+    Assert.True(crossProvider.Passed, "Different provider models must remain comparable under the same provider-neutral policy.");
+    Assert.True(crossProvider.Markdown.Contains("reference-model", StringComparison.Ordinal), "Comparison output must disclose the differing model.");
+    var legacyProvenance = fixture.File(
+        "legacy-provenance.json",
+        BenchmarkReport(1, 1, true, 0, 0, campaignSchemaVersion: "1.0"));
+    await Assert.ThrowsAsync<InvalidDataException>(
+        () => new BenchmarkComparisonReader().CompareAsync(baseline, legacyProvenance));
     var legacy = fixture.File(
         "legacy.json",
         BenchmarkReport(0.5, 0, false, 1, 1, includeCampaign: false));
@@ -228,6 +244,10 @@ static string BenchmarkReport(
     int falseNegatives,
     string? corpusId = null,
     string? scanPolicyId = null,
+    string? comparisonPolicyId = null,
+    string campaignSchemaVersion = "1.1",
+    string scannerLabel = "copilot-security",
+    string model = "gpt-5.6-terra",
     bool includeCampaign = true)
 {
     var f1 = precision + recall == 0 ? 0 : 2 * precision * recall / (precision + recall);
@@ -298,9 +318,22 @@ static string BenchmarkReport(
         payload["campaign"] = new
         {
             documentType = "copilot-security.benchmark-campaign",
-            schemaVersion = "1.0",
+            schemaVersion = campaignSchemaVersion,
+            campaignId = new string('d', 64),
             corpusId = corpusId ?? new string('a', 64),
             scanPolicyId = scanPolicyId ?? new string('b', 64),
+            comparisonPolicyId = campaignSchemaVersion == "1.1"
+                ? comparisonPolicyId ?? new string('e', 64)
+                : null,
+            scanner = new
+            {
+                label = scannerLabel,
+            },
+            scan = new
+            {
+                model,
+                auth = "github",
+            },
         };
     }
     return JsonSerializer.Serialize(payload);

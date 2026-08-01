@@ -114,6 +114,60 @@ describe("canonical scan contract", () => {
     expect(contract.findings.scanId).toBe(contract.manifest.scan.id);
   });
 
+  test("accepts a fully sealed foreign namespace only in benchmark compatibility mode", async () => {
+    const scanDir = await copyExample();
+    const manifestPath = join(scanDir, "scan-manifest.json");
+    const findingsPath = join(scanDir, "findings.json");
+    const coveragePath = join(scanDir, "coverage.json");
+    const manifest = await readJson(manifestPath);
+    const findings = await readJson(findingsPath);
+    const coverage = await readJson(coveragePath);
+
+    manifest["documentType"] = "reference-security.scan-manifest";
+    manifest["scan"]["producer"]["name"] = "reference-security-plugin";
+    manifest["scan"]["target"]["snapshotDigest"] = manifest["scan"]["target"][
+      "snapshotDigest"
+    ].replace(
+      "copilot-security-snapshot/v1:",
+      "reference-security-snapshot/v1:",
+    );
+    findings["documentType"] = "reference-security.findings";
+    findings["findings"] = [];
+    coverage["documentType"] = "reference-security.coverage";
+    coverage["surfaces"] = [];
+
+    await writeJson(manifestPath, manifest);
+    await writeJson(findingsPath, findings);
+    await writeJson(coveragePath, coverage);
+    await reseal(scanDir);
+
+    await expect(
+      loadContract(scanDir, { pluginRoot: PLUGIN_ROOT }),
+    ).rejects.toThrow("foreign namespace outside benchmark compatibility mode");
+    const compatible = await loadContract(scanDir, {
+      pluginRoot: PLUGIN_ROOT,
+      allowCompatibleNamespace: true,
+    });
+    expect(compatible.manifest.documentType).toBe(
+      "copilot-security.scan-manifest",
+    );
+    expect(compatible.findings.documentType).toBe("copilot-security.findings");
+    expect(compatible.coverage.documentType).toBe("copilot-security.coverage");
+    expect((await readJson(manifestPath))["documentType"]).toBe(
+      "reference-security.scan-manifest",
+    );
+
+    coverage["documentType"] = "different-reference.coverage";
+    await writeJson(coveragePath, coverage);
+    await reseal(scanDir);
+    await expect(
+      loadContract(scanDir, {
+        pluginRoot: PLUGIN_ROOT,
+        allowCompatibleNamespace: true,
+      }),
+    ).rejects.toThrow("one bounded lowercase namespace");
+  });
+
   test("honors cancellation during contract validation", async () => {
     const scanDir = await copyExample();
     const controller = new AbortController();

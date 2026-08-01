@@ -50,17 +50,18 @@ public sealed class BenchmarkComparisonReader
         {
             throw new InvalidDataException("Benchmark reports must cover exactly the same case IDs.");
         }
-        if ((baseline.CorpusId is null) != (candidate.CorpusId is null))
+        if ((baseline.Campaign is null) != (candidate.Campaign is null))
         {
             throw new InvalidDataException(
                 "Benchmark reports must both include campaign provenance or both be legacy reports.");
         }
-        if (baseline.CorpusId is not null &&
-            (!StringComparer.Ordinal.Equals(baseline.CorpusId, candidate.CorpusId) ||
-             !StringComparer.Ordinal.Equals(baseline.ScanPolicyId, candidate.ScanPolicyId)))
+        if (baseline.Campaign is not null && candidate.Campaign is not null &&
+            (!StringComparer.Ordinal.Equals(baseline.Campaign.SchemaVersion, candidate.Campaign.SchemaVersion) ||
+             !StringComparer.Ordinal.Equals(baseline.Campaign.CorpusId, candidate.Campaign.CorpusId) ||
+             !StringComparer.Ordinal.Equals(baseline.Campaign.ComparisonPolicyId, candidate.Campaign.ComparisonPolicyId)))
         {
             throw new InvalidDataException(
-                "Benchmark reports must use the same corpus bytes, case/run selection, and scan policy.");
+                "Benchmark reports must use the same campaign provenance version, corpus bytes, case/run selection, and provider-neutral comparison policy.");
         }
         foreach (var caseId in baseline.Cases.Keys)
         {
@@ -121,6 +122,8 @@ public sealed class BenchmarkComparisonReader
         var markdown = RenderMarkdown(
             baseline.Path,
             candidate.Path,
+            DescribeCampaign(baseline.Campaign),
+            DescribeCampaign(candidate.Campaign),
             comparedAt,
             baselineScore,
             candidateScore,
@@ -216,13 +219,12 @@ public sealed class BenchmarkComparisonReader
         {
             throw new InvalidDataException("Benchmark run count does not match its metrics.");
         }
-        var (corpusId, scanPolicyId) = OptionalCampaignIdentity(root);
+        var campaign = OptionalCampaignIdentity(root);
         return new Snapshot(
             canonical,
             caseCount,
             runCount,
-            corpusId,
-            scanPolicyId,
+            campaign,
             metrics,
             cases);
     }
@@ -232,27 +234,46 @@ public sealed class BenchmarkComparisonReader
         value.EndsWith(".benchmark", StringComparison.Ordinal) &&
         value.All(character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '-');
 
-    private static (string? CorpusId, string? ScanPolicyId) OptionalCampaignIdentity(
+    private static CampaignSnapshot? OptionalCampaignIdentity(
         JsonElement root)
     {
         if (!root.TryGetProperty("campaign", out var campaign))
         {
-            return (null, null);
+            return null;
         }
         if (campaign.ValueKind != JsonValueKind.Object ||
-            RequiredString(campaign, "documentType") != "copilot-security.benchmark-campaign" ||
-            RequiredString(campaign, "schemaVersion") != "1.0")
+            RequiredString(campaign, "documentType") != "copilot-security.benchmark-campaign")
         {
             throw new InvalidDataException("Benchmark campaign provenance is invalid.");
         }
+        var schemaVersion = RequiredString(campaign, "schemaVersion");
+        if (schemaVersion is not ("1.0" or "1.1"))
+        {
+            throw new InvalidDataException("Benchmark campaign provenance version is unsupported.");
+        }
+        var campaignId = RequiredString(campaign, "campaignId");
         var corpusId = RequiredString(campaign, "corpusId");
         var scanPolicyId = RequiredString(campaign, "scanPolicyId");
-        if (!IsSha256(corpusId) || !IsSha256(scanPolicyId))
+        var comparisonPolicyId = schemaVersion == "1.1"
+            ? RequiredString(campaign, "comparisonPolicyId")
+            : scanPolicyId;
+        if (!IsSha256(campaignId) || !IsSha256(corpusId) || !IsSha256(scanPolicyId) ||
+            !IsSha256(comparisonPolicyId))
         {
             throw new InvalidDataException(
-                "Benchmark campaign corpus and scan-policy IDs must be lowercase SHA-256 values.");
+                "Benchmark campaign identity fields must be lowercase SHA-256 values.");
         }
-        return (corpusId, scanPolicyId);
+        var scanner = RequiredObject(campaign, "scanner");
+        var scan = RequiredObject(campaign, "scan");
+        return new CampaignSnapshot(
+            schemaVersion,
+            campaignId,
+            corpusId,
+            scanPolicyId,
+            comparisonPolicyId,
+            RequiredString(scanner, "label"),
+            OptionalString(scan, "model") ?? "provider default",
+            RequiredString(scan, "auth"));
     }
 
     private static bool IsSha256(string value) =>
@@ -272,9 +293,23 @@ public sealed class BenchmarkComparisonReader
         return total;
     }
 
+    private static string DescribeCampaign(CampaignSnapshot? campaign)
+    {
+        if (campaign is null)
+        {
+            return "legacy report without campaign provenance";
+        }
+        return $"{MarkdownCode(campaign.ScannerLabel)} / model {MarkdownCode(campaign.Model)} / auth {MarkdownCode(campaign.Auth)} / campaign {MarkdownCode(campaign.CampaignId[..12])} / provenance {MarkdownCode(campaign.SchemaVersion)}";
+    }
+
+    private static string MarkdownCode(string value) =>
+        $"`{value.Replace('`', '\'').Replace('\r', ' ').Replace('\n', ' ')}`";
+
     private static string RenderMarkdown(
         string baselinePath,
         string candidatePath,
+        string baselineIdentity,
+        string candidateIdentity,
         DateTimeOffset comparedAt,
         double baselineScore,
         double candidateScore,
@@ -289,6 +324,8 @@ public sealed class BenchmarkComparisonReader
         builder.AppendLine();
         builder.AppendLine($"- Baseline: `{baselinePath}`");
         builder.AppendLine($"- Candidate: `{candidatePath}`");
+        builder.AppendLine($"- Baseline identity: {baselineIdentity}");
+        builder.AppendLine($"- Candidate identity: {candidateIdentity}");
         builder.AppendLine($"- Quality index: {Format(baselineScore)} → {Format(candidateScore)} ({Format(candidateScore - baselineScore, signed: true)})");
         builder.AppendLine($"- Regression gate: {(regressions.Count == 0 ? "PASS" : "FAIL")}");
         builder.AppendLine();
@@ -352,6 +389,17 @@ public sealed class BenchmarkComparisonReader
                 ? value.GetString()!
                 : throw new InvalidDataException($"Benchmark report field {name} must be a non-empty string.");
 
+    private static string? OptionalString(JsonElement parent, string name)
+    {
+        if (!parent.TryGetProperty(name, out var value))
+        {
+            return null;
+        }
+        return value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())
+            ? value.GetString()
+            : throw new InvalidDataException($"Benchmark report field {name} must be a non-empty string when present.");
+    }
+
     private static double RequiredNumber(JsonElement parent, string name) =>
         parent.TryGetProperty(name, out var value) && value.TryGetDouble(out var result) &&
             double.IsFinite(result) && result >= 0
@@ -373,10 +421,19 @@ public sealed class BenchmarkComparisonReader
         string Path,
         int CaseCount,
         int RunCount,
-        string? CorpusId,
-        string? ScanPolicyId,
+        CampaignSnapshot? Campaign,
         IReadOnlyDictionary<string, double> Metrics,
         IReadOnlyDictionary<string, CaseSnapshot> Cases);
+
+    private sealed record CampaignSnapshot(
+        string SchemaVersion,
+        string CampaignId,
+        string CorpusId,
+        string ScanPolicyId,
+        string ComparisonPolicyId,
+        string ScannerLabel,
+        string Model,
+        string Auth);
 
     private sealed record CaseSnapshot(
         bool Passed,

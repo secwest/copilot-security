@@ -91,6 +91,7 @@ export async function loadContract(
     pluginRoot: string;
     expectation?: ScanExpectation;
     workbenchValidated?: boolean;
+    allowCompatibleNamespace?: boolean;
     signal?: AbortSignal;
   },
 ): Promise<LoadedContract> {
@@ -122,6 +123,15 @@ export async function loadContract(
   };
   throwIfAborted(options.signal);
 
+  const contractNamespace = compatibleContractNamespace(
+    payloads,
+    options.allowCompatibleNamespace === true,
+  );
+  const validationPayloads = normalizedValidationPayloads(
+    payloads,
+    contractNamespace,
+  );
+
   const ajv = createValidator();
   for (const [filename, schemaName] of Object.entries(DOCUMENTS)) {
     const schema = await readJson(
@@ -135,7 +145,7 @@ export async function loadContract(
     } catch {
       throw new ContractValidationError(`${schemaName}: invalid JSON Schema.`);
     }
-    const payload = payloads[filename as keyof typeof payloads];
+    const payload = validationPayloads[filename as keyof typeof payloads];
     let valid: boolean;
     try {
       const result = validate(payload);
@@ -173,7 +183,7 @@ export async function loadContract(
     );
   }
 
-  validateCanonicalContract(manifest, findings);
+  validateCanonicalContract(manifest, findings, contractNamespace);
 
   await validateSeal(
     scanDir,
@@ -193,12 +203,26 @@ export async function loadContract(
     );
   }
   await verifyScanRoot(scanRoot, options.signal);
-  return { manifest, findings, coverage };
+  if (contractNamespace === "copilot-security") {
+    return { manifest, findings, coverage };
+  }
+  return {
+    manifest: validationPayloads[
+      "scan-manifest.json"
+    ] as unknown as ScanManifest,
+    findings: validationPayloads[
+      "findings.json"
+    ] as unknown as FindingsDocument,
+    coverage: validationPayloads[
+      "coverage.json"
+    ] as unknown as CoverageDocument,
+  };
 }
 
 function validateCanonicalContract(
   manifest: ScanManifest,
   findings: FindingsDocument,
+  contractNamespace = "copilot-security",
 ): void {
   const remote = manifest.scan.target.remote;
   if (remote !== undefined) {
@@ -268,9 +292,10 @@ function validateCanonicalContract(
       }
     }
 
-    const fingerprint = `copilot-security/v1:sha256:${sha256Text(
+    const fingerprintAlgorithm = `${contractNamespace}/v1`;
+    const fingerprint = `${fingerprintAlgorithm}:sha256:${sha256Text(
       [
-        "copilot-security/v1",
+        fingerprintAlgorithm,
         manifest.scan.target.targetId,
         finding.ruleId,
         finding.identity.anchor,
@@ -297,6 +322,102 @@ function validateCanonicalContract(
       );
     }
   }
+}
+
+function compatibleContractNamespace(
+  payloads: Record<string, unknown>,
+  allowCompatibleNamespace: boolean,
+): string {
+  const suffixes = {
+    "scan-manifest.json": ".scan-manifest",
+    "findings.json": ".findings",
+    "coverage.json": ".coverage",
+  } as const;
+  let namespace: string | undefined;
+  for (const [filename, suffix] of Object.entries(suffixes)) {
+    const payload = payloads[filename];
+    if (!isRecord(payload) || typeof payload["documentType"] !== "string") {
+      throw new ContractValidationError(
+        `${filename}: documentType must identify a compatible scan contract.`,
+      );
+    }
+    const documentType = payload["documentType"];
+    if (!documentType.endsWith(suffix)) {
+      throw new ContractValidationError(
+        `${filename}: documentType must end with ${suffix}.`,
+      );
+    }
+    const candidate = documentType.slice(0, -suffix.length);
+    if (
+      !/^[a-z0-9][a-z0-9.-]{0,127}$/u.test(candidate) ||
+      (namespace !== undefined && namespace !== candidate)
+    ) {
+      throw new ContractValidationError(
+        "Scan contract documents must use one bounded lowercase namespace.",
+      );
+    }
+    namespace = candidate;
+  }
+  if (namespace === undefined) {
+    throw new ContractValidationError(
+      "Scan contract namespace could not be determined.",
+    );
+  }
+  if (namespace !== "copilot-security" && !allowCompatibleNamespace) {
+    throw new ContractValidationError(
+      "Scan contract uses a foreign namespace outside benchmark compatibility mode.",
+    );
+  }
+  return namespace;
+}
+
+function normalizedValidationPayloads(
+  payloads: Record<string, unknown>,
+  contractNamespace: string,
+): Record<string, unknown> {
+  if (contractNamespace === "copilot-security") return payloads;
+  const normalized = structuredClone(payloads) as Record<string, unknown>;
+  const manifest = normalized["scan-manifest.json"];
+  const findings = normalized["findings.json"];
+  const coverage = normalized["coverage.json"];
+  if (!isRecord(manifest) || !isRecord(findings) || !isRecord(coverage)) {
+    throw new ContractValidationError(
+      "Compatible scan contract documents must be objects.",
+    );
+  }
+  manifest["documentType"] = "copilot-security.scan-manifest";
+  findings["documentType"] = "copilot-security.findings";
+  coverage["documentType"] = "copilot-security.coverage";
+
+  const scan = manifest["scan"];
+  if (isRecord(scan) && isRecord(scan["target"])) {
+    const snapshotDigest = scan["target"]["snapshotDigest"];
+    const prefix = `${contractNamespace}-snapshot/v1:`;
+    if (
+      typeof snapshotDigest === "string" &&
+      snapshotDigest.startsWith(prefix)
+    ) {
+      scan["target"]["snapshotDigest"] =
+        `copilot-security-snapshot/v1:${snapshotDigest.slice(prefix.length)}`;
+    }
+  }
+  if (Array.isArray(findings["findings"])) {
+    const algorithm = `${contractNamespace}/v1`;
+    const primaryPrefix = `${algorithm}:`;
+    for (const finding of findings["findings"]) {
+      if (!isRecord(finding) || !isRecord(finding["fingerprints"])) continue;
+      const fingerprints = finding["fingerprints"];
+      if (fingerprints["algorithm"] === algorithm) {
+        fingerprints["algorithm"] = "copilot-security/v1";
+      }
+      const primary = fingerprints["primary"];
+      if (typeof primary === "string" && primary.startsWith(primaryPrefix)) {
+        fingerprints["primary"] =
+          `copilot-security/v1:${primary.slice(primaryPrefix.length)}`;
+      }
+    }
+  }
+  return normalized;
 }
 
 function sha256Text(value: string): string {

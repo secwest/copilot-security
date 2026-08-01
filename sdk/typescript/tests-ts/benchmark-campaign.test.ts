@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,20 +38,29 @@ describe("benchmark campaign integrity", () => {
     expect(recreated.campaignId).toBe(base.campaignId);
     expect(recreated.corpusId).toBe(base.corpusId);
     expect(recreated.scanPolicyId).toBe(base.scanPolicyId);
+    expect(recreated.comparisonPolicyId).toBe(base.comparisonPolicyId);
 
     const changedFixture = campaign({ fixtureSha256: hex("9") });
     expect(changedFixture.corpusId).not.toBe(base.corpusId);
     expect(changedFixture.scanPolicyId).toBe(base.scanPolicyId);
+    expect(changedFixture.comparisonPolicyId).toBe(base.comparisonPolicyId);
     expect(changedFixture.campaignId).not.toBe(base.campaignId);
 
     const changedModel = campaign({ model: "different-model" });
     expect(changedModel.corpusId).toBe(base.corpusId);
     expect(changedModel.scanPolicyId).not.toBe(base.scanPolicyId);
+    expect(changedModel.comparisonPolicyId).toBe(base.comparisonPolicyId);
     expect(changedModel.campaignId).not.toBe(base.campaignId);
+
+    const changedEffort = campaign({ effort: "xhigh" });
+    expect(changedEffort.scanPolicyId).not.toBe(base.scanPolicyId);
+    expect(changedEffort.comparisonPolicyId).not.toBe(base.comparisonPolicyId);
+    expect(changedEffort.campaignId).not.toBe(base.campaignId);
 
     const changedScanner = campaign({ packageSha256: hex("8") });
     expect(changedScanner.corpusId).toBe(base.corpusId);
     expect(changedScanner.scanPolicyId).toBe(base.scanPolicyId);
+    expect(changedScanner.comparisonPolicyId).toBe(base.comparisonPolicyId);
     expect(changedScanner.campaignId).not.toBe(base.campaignId);
 
     const changedRunner = campaign({ runnerSha256: hex("7") });
@@ -58,6 +68,9 @@ describe("benchmark campaign integrity", () => {
 
     const changedAuthentication = campaign({ auth: "token" });
     expect(changedAuthentication.scanPolicyId).toBe(base.scanPolicyId);
+    expect(changedAuthentication.comparisonPolicyId).toBe(
+      base.comparisonPolicyId,
+    );
     expect(changedAuthentication.campaignId).not.toBe(base.campaignId);
   });
 
@@ -96,6 +109,17 @@ describe("benchmark campaign integrity", () => {
     await expect(readBenchmarkCampaign(root)).rejects.toThrow(
       "identity does not match its contents",
     );
+  });
+
+  test("reads a legacy model-bound campaign without inventing cross-provider comparability", async () => {
+    const root = await temporaryDirectory("campaign-legacy-");
+    const path = join(root, BENCHMARK_CAMPAIGN_FILENAME);
+    const legacy = legacyCampaign(campaign());
+    await writeFile(path, `${JSON.stringify(legacy)}\n`);
+
+    expect(await readBenchmarkCampaign(root)).toEqual(legacy);
+    expect(legacy.schemaVersion).toBe("1.0");
+    expect(legacy.comparisonPolicyId).toBeUndefined();
   });
 
   test("requires a successful campaign-bound sealed-artifact receipt", async () => {
@@ -291,6 +315,7 @@ function campaign(
     auth?: BenchmarkCampaignDocument["scan"]["auth"];
     createdAt?: string;
     fixtureSha256?: string;
+    effort?: BenchmarkCampaignDocument["scan"]["effort"];
     model?: string;
     packageSha256?: string;
     runnerSha256?: string;
@@ -322,9 +347,52 @@ function campaign(
       auth: overrides.auth ?? "github",
       mode: "deep",
       model: overrides.model ?? "gpt-test",
-      effort: "high",
+      effort: overrides.effort ?? "high",
     },
   });
+}
+
+function legacyCampaign(
+  current: BenchmarkCampaignDocument,
+): BenchmarkCampaignDocument {
+  const legacy = structuredClone(current);
+  legacy.schemaVersion = "1.0";
+  delete legacy.comparisonPolicyId;
+  legacy.campaignId = identityDigest({
+    schemaVersion: "1.0",
+    corpusId: legacy.corpusId,
+    scanPolicyId: legacy.scanPolicyId,
+    scanner: {
+      cliSha256: legacy.scanner.cliSha256,
+      packageSha256: legacy.scanner.packageSha256,
+      label: legacy.scanner.label,
+    },
+    auth: legacy.scan.auth,
+    repositoryRevision: legacy.source.repositoryRevision,
+    runnerSha256: legacy.source.runnerSha256,
+    runtime: legacy.source.runtime,
+  });
+  return legacy;
+}
+
+function identityDigest(value: unknown): string {
+  return createHash("sha256")
+    .update(canonicalJson(value), "utf8")
+    .digest("hex");
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    return `{${Object.entries(value)
+      .filter(([, item]) => item !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right, "en"))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function runReceipt(

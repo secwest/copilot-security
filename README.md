@@ -262,8 +262,9 @@ quick paired vulnerable/control diagnostic with its own durable report. Omit
 full-corpus completion gate.
 
 Every fresh run directory receives an immutable `benchmark-campaign.json`
-before scanning. It binds corpus and fixture bytes, selection, scan policy,
-runtime, runner, and the effective scanner package. Resume verifies the complete
+before scanning. It binds corpus and fixture bytes, selection, exact provider
+model and scan policy, runtime, runner, authentication source, and the effective
+scanner package. Resume verifies the complete
 sealed scan and its campaign receipt before skipping; failed or partial attempts
 are preserved under `.benchmark-attempts` and retried from a fresh Git fixture.
 Every scanner invocation also receives a unique staging output path that is
@@ -273,7 +274,14 @@ into an "existing scan" collision.
 Use `--workers N` for bounded concurrency, `--max-attempts N` for process-level
 retries, `--scan-timeout-ms N` for an outer process-tree deadline, and
 `--scanner-cli PATH --scanner-label NAME` to produce a separate compatible
-baseline campaign. Comparable reports must share `corpusId` and `scanPolicyId`.
+baseline campaign. Comparable version `1.1` reports must share `corpusId` and
+`comparisonPolicyId`.
+Version `1.1` campaigns additionally expose a provider-neutral
+`comparisonPolicyId`; cross-provider reports compare on that identity so models
+may differ while mode, effort, explicit credit bounds, corpus bytes, selection,
+expectations, and repetition counts remain identical. Exact model identity
+continues to affect `scanPolicyId` and `campaignId`, so resuming or mixing runs
+cannot silently change providers.
 
 The measured gates cover completion, precision, recall, F1, exact-case and
 negative-control passes, repeated-run stability, validation, attack paths,

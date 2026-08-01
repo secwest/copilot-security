@@ -41,10 +41,11 @@ export interface BenchmarkCampaignSelection {
 
 export interface BenchmarkCampaignDocument {
   documentType: "copilot-security.benchmark-campaign";
-  schemaVersion: "1.0";
+  schemaVersion: "1.0" | "1.1";
   campaignId: string;
   corpusId: string;
   scanPolicyId: string;
+  comparisonPolicyId?: string;
   createdAt: string;
   manifest: {
     path: string;
@@ -109,6 +110,13 @@ export interface BenchmarkRunReceipt {
 export function createBenchmarkCampaign(
   input: BenchmarkCampaignIdentityInput,
 ): BenchmarkCampaignDocument {
+  return createBenchmarkCampaignVersion(input, "1.1");
+}
+
+function createBenchmarkCampaignVersion(
+  input: BenchmarkCampaignIdentityInput,
+  schemaVersion: BenchmarkCampaignDocument["schemaVersion"],
+): BenchmarkCampaignDocument {
   if (
     !isSha256(input.manifestSha256) ||
     !isSha256(input.runnerSha256) ||
@@ -138,10 +146,19 @@ export function createBenchmarkCampaign(
     schemaVersion: "1.0",
     ...scanPolicy,
   });
-  const campaignId = identityDigest({
+  const comparisonPolicyId = identityDigest({
     schemaVersion: "1.0",
+    mode: scanPolicy.mode,
+    ...(scanPolicy.effort === undefined ? {} : { effort: scanPolicy.effort }),
+    ...(scanPolicy.maxAiCredits === undefined
+      ? {}
+      : { maxAiCredits: scanPolicy.maxAiCredits }),
+  });
+  const campaignId = identityDigest({
+    schemaVersion,
     corpusId,
     scanPolicyId,
+    ...(schemaVersion === "1.0" ? {} : { comparisonPolicyId }),
     scanner: {
       cliSha256: input.scanner.cliSha256,
       packageSha256: input.scanner.packageSha256,
@@ -154,10 +171,11 @@ export function createBenchmarkCampaign(
   });
   return {
     documentType: "copilot-security.benchmark-campaign",
-    schemaVersion: "1.0",
+    schemaVersion,
     campaignId,
     corpusId,
     scanPolicyId,
+    ...(schemaVersion === "1.0" ? {} : { comparisonPolicyId }),
     createdAt: input.createdAt ?? new Date().toISOString(),
     manifest: {
       path: resolve(input.manifestPath),
@@ -213,7 +231,8 @@ export async function ensureBenchmarkCampaign(
   }
   if (
     existing.corpusId !== expected.corpusId ||
-    existing.scanPolicyId !== expected.scanPolicyId
+    existing.scanPolicyId !== expected.scanPolicyId ||
+    existing.comparisonPolicyId !== expected.comparisonPolicyId
   ) {
     throw new CopilotSecurityError(
       `Benchmark campaign identity fields are inconsistent in ${path}.`,
@@ -546,10 +565,14 @@ function parseCampaign(bytes: Buffer, path: string): BenchmarkCampaignDocument {
   const campaign = value as unknown as BenchmarkCampaignDocument;
   if (
     campaign.documentType !== "copilot-security.benchmark-campaign" ||
-    campaign.schemaVersion !== "1.0" ||
+    !["1.0", "1.1"].includes(campaign.schemaVersion) ||
     !isSha256(campaign.campaignId) ||
     !isSha256(campaign.corpusId) ||
     !isSha256(campaign.scanPolicyId) ||
+    (campaign.schemaVersion === "1.1" &&
+      !isSha256(campaign.comparisonPolicyId)) ||
+    (campaign.schemaVersion === "1.0" &&
+      campaign.comparisonPolicyId !== undefined) ||
     typeof campaign.createdAt !== "string" ||
     !isRecord(campaign.manifest) ||
     typeof campaign.manifest.path !== "string" ||
@@ -575,21 +598,25 @@ function parseCampaign(bytes: Buffer, path: string): BenchmarkCampaignDocument {
     throw new CopilotSecurityError(`Invalid benchmark campaign: ${path}.`);
   }
   normalizeSelection(campaign.selection);
-  const recreated = createBenchmarkCampaign({
-    createdAt: campaign.createdAt,
-    manifestPath: campaign.manifest.path,
-    manifestSha256: campaign.manifest.sha256,
-    repositoryRevision: campaign.source.repositoryRevision,
-    runnerSha256: campaign.source.runnerSha256,
-    runtime: campaign.source.runtime,
-    scanner: campaign.scanner,
-    selection: campaign.selection,
-    scan: campaign.scan,
-  });
+  const recreated = createBenchmarkCampaignVersion(
+    {
+      createdAt: campaign.createdAt,
+      manifestPath: campaign.manifest.path,
+      manifestSha256: campaign.manifest.sha256,
+      repositoryRevision: campaign.source.repositoryRevision,
+      runnerSha256: campaign.source.runnerSha256,
+      runtime: campaign.source.runtime,
+      scanner: campaign.scanner,
+      selection: campaign.selection,
+      scan: campaign.scan,
+    },
+    campaign.schemaVersion,
+  );
   if (
     recreated.campaignId !== campaign.campaignId ||
     recreated.corpusId !== campaign.corpusId ||
     recreated.scanPolicyId !== campaign.scanPolicyId ||
+    recreated.comparisonPolicyId !== campaign.comparisonPolicyId ||
     canonicalJson(recreated) !== canonicalJson(campaign)
   ) {
     throw new CopilotSecurityError(

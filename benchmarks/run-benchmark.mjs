@@ -174,7 +174,7 @@ const activeCampaign = await ensureBenchmarkCampaign(
   campaign,
 );
 process.stderr.write(
-  `[benchmark] campaign ${activeCampaign.campaignId}; corpus ${activeCampaign.corpusId}; scanner ${activeCampaign.scanner.label}@${activeCampaign.scanner.cliSha256.slice(0, 12)}\n`,
+  `[benchmark] campaign ${activeCampaign.campaignId}; corpus ${activeCampaign.corpusId}; comparison policy ${activeCampaign.comparisonPolicyId ?? activeCampaign.scanPolicyId}; scanner ${activeCampaign.scanner.label}@${activeCampaign.scanner.cliSha256.slice(0, 12)}\n`,
 );
 
 const tasks = [];
@@ -283,7 +283,10 @@ async function runTask(task, worker) {
         caseId: benchmarkCase.id,
         run,
       });
-      const contract = await loadContract(outputDirectory, { pluginRoot });
+      const contract = await loadContract(outputDirectory, {
+        pluginRoot,
+        allowCompatibleNamespace: true,
+      });
       await requireReceiptArtifacts(receipt, contract, outputDirectory);
       process.stderr.write(
         `[benchmark:w${worker}] skipping ${benchmarkCase.id} run ${run}; sealed result and campaign receipt verified\n`,
@@ -380,6 +383,7 @@ async function runTask(task, worker) {
       if (scan.status === 0) {
         const contract = await loadContract(attemptOutputDirectory, {
           pluginRoot,
+          allowCompatibleNamespace: true,
         });
         await promoteBenchmarkAttemptOutput({
           resultsDirectory,
