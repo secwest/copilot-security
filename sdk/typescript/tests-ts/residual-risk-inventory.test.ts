@@ -1403,6 +1403,33 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs attacker-controlled format grammar with a literal-format data argument", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "c-format-string-secret-disclosure"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "c-safe-literal-format-audit"),
+    );
+
+    expect(vulnerable).toContain(
+      '"format-string-or-variadic-argument-binding"',
+    );
+    expect(vulnerable).toContain("remote_username");
+    expect(vulnerable).toContain("active_session_secret");
+    expect(vulnerable).toContain("snprintf(message,");
+    expect(vulnerable).not.toContain('sizeof(message), "%s", remote_username');
+    expect(safe).toContain('"format-string-or-variadic-argument-binding"');
+    expect(safe).toContain(
+      'snprintf(message, sizeof(message), "%s", remote_username)',
+    );
+    expect(scanQualityGatePrompt("")).toContain(
+      "attacker-controlled format grammar and variadic argument selection",
+    );
+    expect(scanQualityGatePrompt("")).toContain(
+      "fixed literal format and the untrusted value only in a data argument",
+    );
+  });
+
   test("pairs deferred native pointer reuse with cancellation before release", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "c-async-audit-use-after-free"),

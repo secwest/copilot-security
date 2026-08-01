@@ -352,6 +352,13 @@ inventory and closure requirements.
      control flow. A bounded API name is not proof that its bound matches the
      destination. Use a sibling path whose source availability, destination
      capacity, arithmetic, and lifetime are all checked as the negative control.
+     For printf-family and logging calls, trace the exact format-grammar
+     parameter separately from data parameters. Preserve attacker-controlled
+     conversions and positional/width selectors, variadic argument types and
+     order, and the resulting read, write, disclosure, corruption, or crash.
+     Treat a literal format with untrusted content only in a matching data
+     argument as a negative control; a format-capable API name alone is not a
+     finding.
      For temporal defects, enumerate every alias retained by callbacks, timers,
      queues, futures, event handlers, caches, and global registries; then order
      cancellation, disconnect/error teardown, destructor/free/pool release,

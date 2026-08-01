@@ -202,6 +202,13 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   crash, or execution outcome. Distinguish a demonstrated adjacent-field or
   control-flow overwrite from generic undefined behavior, and do not infer code
   execution when the repository proves only a bounded crash.
+- For format-string findings, show the exact untrusted value entering the
+  format-grammar parameter, the conversion or positional/width syntax, the
+  corresponding variadic argument types and order, and the resulting read,
+  write, disclosure, corruption, crash, or control effect at the reachable
+  sink. Distinguish a demonstrated secret or memory effect from a merely odd
+  log message, and treat a fixed literal format with untrusted data in a
+  matching value argument as counterevidence.
 - For temporal-memory findings, show the event order explicitly: object and
   privilege at registration, retained aliases, disconnect/error/destructor or
   pool-release path, missing cancellation/join/ownership transfer, attacker-

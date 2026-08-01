@@ -538,6 +538,14 @@ Use this checklist to keep discovery specific without turning it into validation
   nor safe by name: compare the supplied bound with the exact destination and
   source extents, and retain nearby checked-arithmetic or capacity guards as
   negative controls.
+- For format-string APIs specifically, identify the exact format-grammar
+  parameter at the concrete callsite and prove that attacker-controlled bytes
+  occupy it. Preserve the conversion grammar, positional selectors, width and
+  precision sources, every variadic argument's type and order, and the first
+  resulting read, write, disclosure, corruption, or crash. `printf`, `syslog`,
+  `snprintf`, or a logging wrapper is not vulnerable by name. A fixed literal
+  format with the untrusted value supplied only as a matching data argument is
+  strong counterevidence even when the same API and sink remain reachable.
 - For temporal memory safety, build an object-lifetime ledger across allocation,
   ownership transfer, alias creation, callback/timer/work-queue registration,
   cancellation, disconnect/error teardown, release, and every deferred

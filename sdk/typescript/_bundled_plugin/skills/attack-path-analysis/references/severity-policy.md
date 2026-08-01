@@ -186,6 +186,13 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   client, rotated attacker-controlled hops, changed security keys, intended and
   effective attempt counts, and resulting protected effect.
 - Exploitable memory corruption with clear, major impact or ease of exploitation
+- Attacker-controlled format strings with a bounded witness of meaningful
+  secret disclosure, memory write, authorization impact, or control-flow
+  effect. Severity follows the reachable caller, selected variadic objects,
+  attacker control, mitigations, and exposed asset. A fixed literal format, an
+  untrusted value used only as data, cosmetic log corruption, or a bounded
+  process-local crash does not support a high-severity confidentiality or code-
+  execution claim.
 - Use-after-free or use-after-lifetime with a repeatable release/reuse or race
   witness and meaningful secret disclosure, authorization confusion, privileged
   callback redirection, or service-wide availability impact. Severity follows

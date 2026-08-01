@@ -22,7 +22,7 @@ plus source-to-impact continuity; and code evidence needs a concrete
 path-and-line anchor, source text, and explanatory reasoning. Presence and
 substantive-quality flags are both retained in per-match diagnostics.
 
-The versioned corpus currently contains forty-eight vulnerable/control pairs:
+The versioned corpus currently contains forty-nine vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -59,7 +59,9 @@ predictable security tokens, server-side template injection, check/use state
 races, unsafe mass assignment, cookie-authenticated cross-site request forgery,
 attacker-length native-memory corruption, asynchronous session use-after-free
 with deterministic fixed-pool reuse and a serialized retained-lifetime control,
-LDAP filter injection into
+attacker-controlled native format strings that select an in-scope session
+capability as a variadic string argument with a literal-format data-only call as
+the control, LDAP filter injection into
 directory-backed group authorization, XPath predicate injection into XML-backed
 authentication, OAuth authorization-code account-linking CSRF with session
 takeover, login session fixation with authenticated-session rotation as the
@@ -80,7 +82,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 288
+destination-pinned, redirect-free transport. Three runs per case produce 294
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations

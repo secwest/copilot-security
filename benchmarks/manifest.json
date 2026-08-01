@@ -1682,6 +1682,45 @@
       "expected": []
     },
     {
+      "id": "c-format-string-secret-disclosure",
+      "description": "An unauthenticated username controls snprintf's format grammar while an active administrator-session capability is supplied as a variadic argument, so a %s username discloses the capability through the external audit sink.",
+      "fixture": "fixtures/c-format-string-secret-disclosure",
+      "findingsPaths": [
+        "c-format-string-secret-disclosure/run-1/findings.json",
+        "c-format-string-secret-disclosure/run-2/findings.json",
+        "c-format-string-secret-disclosure/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "attacker-controlled-audit-format-secret-disclosure",
+          "cwe": ["CWE-134"],
+          "locations": [
+            {
+              "path": "src/audit.c",
+              "startLine": 15,
+              "endLine": 19,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "c-safe-literal-format-audit",
+      "description": "The same audit path fixes the format grammar to a literal %s and supplies the untrusted username only as data, so conversion syntax is emitted literally and the active capability is not selectable as a variadic argument.",
+      "fixture": "fixtures/c-safe-literal-format-audit",
+      "findingsPaths": [
+        "c-safe-literal-format-audit/run-1/findings.json",
+        "c-safe-literal-format-audit/run-2/findings.json",
+        "c-safe-literal-format-audit/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-ldap-filter-authorization",
       "description": "An authenticated attacker-controlled federated directory subject is interpolated into an LDAP membership filter, allowing filter-AST injection to match the administrators group and install an administrator application session.",
       "fixture": "fixtures/javascript-ldap-filter-authorization",

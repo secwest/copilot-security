@@ -128,6 +128,7 @@ describe("effectiveness benchmark", () => {
       ["javascript-csrf-recovery-email", "javascript-safe-csrf-recovery-email"],
       ["c-packet-length-overflow", "c-bounded-packet-copy"],
       ["c-async-audit-use-after-free", "c-safe-async-audit-lifetime"],
+      ["c-format-string-secret-disclosure", "c-safe-literal-format-audit"],
       [
         "javascript-ldap-filter-authorization",
         "javascript-safe-ldap-authorization",
@@ -171,6 +172,11 @@ describe("effectiveness benchmark", () => {
         .get("javascript-adversarial-command-injection")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-78"]]);
+    expect(
+      cases
+        .get("c-format-string-secret-disclosure")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-134"]]);
     expect(
       cases
         .get("javascript-archive-link-pivot")

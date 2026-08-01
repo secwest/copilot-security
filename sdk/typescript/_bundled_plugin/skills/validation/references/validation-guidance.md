@@ -291,6 +291,15 @@ Use class-specific proof tuples:
   bounds in the same units, reserved metadata/terminator space, and valid
   ownership/lifetime; a bounded-function name or compiler hardening flag alone
   is not proof.
+- format string: attacker-controlled bytes at the exact format-grammar argument
+  of a reachable printf-family or logging call + concrete conversion grammar,
+  positional selectors, dynamic width/precision, and variadic argument
+  types/order + bounded witness of the first invalid read/write, secret
+  disclosure, corruption, or crash. Test ordinary text and the malicious
+  conversion. Suppression requires a fixed literal format with the untrusted
+  value supplied only as a type-compatible data argument, or an equally strict
+  formatter that cannot interpret attacker syntax; API presence alone proves
+  neither vulnerability nor safety.
 - use-after-free / use-after-lifetime: exact object allocation and owner + alias
   retained by a callback, timer, queue, registry, cache, future, or concurrent
   task + reachable teardown/release that does not cancel, join, detach, clear,

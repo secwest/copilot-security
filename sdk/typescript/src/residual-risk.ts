@@ -382,6 +382,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:copy_from_user|gets|memcpy|memmove|readv|recv|recvfrom|scanf|snprintf|sprintf|strcat|strcpy|strncat|strncpy|vsnprintf|vsprintf)\s*\(/iu,
   ],
   [
+    "format-string-or-variadic-argument-binding",
+    106,
+    /\b(?:dprintf|fprintf|printf|snprintf|sprintf|syslog|vfprintf|vprintf|vsnprintf|vsprintf)\s*\(|\b(?:format|format_string|fmt)\b/iu,
+  ],
+  [
     "native-object-lifetime-or-deferred-pointer",
     107,
     /\b(?:free|g_free|kfree|HeapFree|LocalFree|CoTaskMemFree|arena_free|pool_free|pool_release|release_session|slab_free)\s*\(|\bdelete\s*(?:\[\s*\])?\s+[A-Za-z_$]|\b(?:pending|deferred)[A-Za-z0-9_]*(?:callback|completion|operation|pointer|session|task|work)?\b|\b(?:callback|completion|timer|work)_?(?:context|data|owner|pointer|session|state)\b/iu,
