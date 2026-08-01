@@ -1643,6 +1643,45 @@
       "expected": []
     },
     {
+      "id": "c-async-audit-use-after-free",
+      "description": "An administrator audit operation retains a raw session pointer after disconnect releases its fixed-pool slot; an unprivileged connection deterministically reuses the slot before completion and receives the privileged report through the stale callback target.",
+      "fixture": "fixtures/c-async-audit-use-after-free",
+      "findingsPaths": [
+        "c-async-audit-use-after-free/run-1/findings.json",
+        "c-async-audit-use-after-free/run-2/findings.json",
+        "c-async-audit-use-after-free/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "async-audit-session-use-after-free",
+          "cwe": ["CWE-416"],
+          "locations": [
+            {
+              "path": "src/session.c",
+              "startLine": 51,
+              "endLine": 57,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "c-safe-async-audit-lifetime",
+      "description": "The same deferred administrator export cancels pending work that references the closing session before releasing its fixed-pool slot, preventing later reuse from redirecting the privileged operation.",
+      "fixture": "fixtures/c-safe-async-audit-lifetime",
+      "findingsPaths": [
+        "c-safe-async-audit-lifetime/run-1/findings.json",
+        "c-safe-async-audit-lifetime/run-2/findings.json",
+        "c-safe-async-audit-lifetime/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-ldap-filter-authorization",
       "description": "An authenticated attacker-controlled federated directory subject is interpolated into an LDAP membership filter, allowing filter-AST injection to match the administrators group and install an administrator application session.",
       "fixture": "fixtures/javascript-ldap-filter-authorization",

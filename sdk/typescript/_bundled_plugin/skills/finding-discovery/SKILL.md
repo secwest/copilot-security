@@ -538,6 +538,16 @@ Use this checklist to keep discovery specific without turning it into validation
   nor safe by name: compare the supplied bound with the exact destination and
   source extents, and retain nearby checked-arithmetic or capacity guards as
   negative controls.
+- For temporal memory safety, build an object-lifetime ledger across allocation,
+  ownership transfer, alias creation, callback/timer/work-queue registration,
+  cancellation, disconnect/error teardown, release, and every deferred
+  dereference. Test whether attacker-controlled scheduling or same-size pool/
+  heap reuse can substitute a new object at a dangling address. Treat clearing
+  the owning registration before release, cancel-and-join semantics, generation
+  validation, or an independently retained/ref-counted object as
+  counterevidence only when it dominates every teardown and completion path.
+  A raw pointer in asynchronous work is not by itself a finding; identify the
+  exact release-before-use ordering and the security-relevant reused fields.
 - Split independently exploitable native-memory rows by root operation and
   object lifetime. Do not merge a length-driven overwrite, out-of-bounds read,
   integer-overflowed allocation, use-after-free, double free, or type confusion

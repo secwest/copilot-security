@@ -1400,6 +1400,30 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("pairs deferred native pointer reuse with cancellation before release", async () => {
+    const vulnerable = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "c-async-audit-use-after-free"),
+    );
+    const safe = await buildResidualRiskInventory(
+      join(benchmarkFixtures, "c-safe-async-audit-lifetime"),
+    );
+
+    expect(vulnerable).toContain(
+      '"native-object-lifetime-or-deferred-pointer"',
+    );
+    expect(vulnerable).toContain("pending_audit_session = session");
+    expect(vulnerable).toContain("release_session(session)");
+    expect(vulnerable).toContain(
+      "pending_audit_session->send_report(pending_audit_session->peer, report)",
+    );
+    expect(vulnerable).not.toContain("pending_audit_session == session");
+    expect(safe).toContain('"native-object-lifetime-or-deferred-pointer"');
+    expect(safe).toContain("pending_audit_session == session");
+    expect(safe.indexOf("pending_audit_session == session")).toBeLessThan(
+      safe.indexOf("release_session(session)"),
+    );
+  });
+
   test("reconciles exact immutable inventory paths against draft coverage", async () => {
     const scanDirectory = await mkdtemp(
       join(tmpdir(), "copilot-security-coverage-gap-"),

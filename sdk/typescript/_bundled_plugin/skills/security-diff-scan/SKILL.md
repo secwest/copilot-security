@@ -170,6 +170,10 @@ publish findings, open issues, or contact third parties. Write only beneath
    - changed integer units, signedness, allocation arithmetic, object extents,
      copy/read/write lengths, indexes, terminator space, ownership, or lifetime
      around attacker-influenced native-memory operations;
+   - changed callback/timer/work-queue aliases, cancellation or join ordering,
+     teardown/error paths, destructor/free/pool-release timing, generation or
+     ref-count checks, and deferred dereferences that can turn object reuse into
+     a use-after-free;
    - new multipart/file inputs, attacker-retained names or bytes, weaker size/
      type/content checks, destination-root changes, or new serving, import,
      plugin, startup, configuration, archive, media-processing, or interpreter

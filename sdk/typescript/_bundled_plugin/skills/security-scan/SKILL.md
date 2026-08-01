@@ -93,8 +93,10 @@ write only beneath `COPILOT_SECURITY_SCAN_DIR`.
    servers, and backends, duplicate query/form/body parameter decoding and
    first/last/array/merge interpretation across gateways, middleware,
    authorization or signature checks, frameworks, and downstream consumers,
-   native memory allocation/copy/index/lifetime
-   boundaries, secrets, and resource consumption. Record candidates in
+   native memory allocation/copy/index/lifetime boundaries including aliases
+   retained by callbacks, timers, queues, registries, or concurrent work across
+   disconnect/error/destructor/free/pool-release paths and later object reuse,
+   secrets, and resource consumption. Record candidates in
    `artifacts/02_discovery/candidate_ledger.jsonl`.
 4. Perform an independent residual sweep over high-risk files and source /
    control / sink families that produced no candidate. Record why each is safe

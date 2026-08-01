@@ -127,6 +127,7 @@ describe("effectiveness benchmark", () => {
       ["javascript-mass-assignment", "javascript-safe-account-update"],
       ["javascript-csrf-recovery-email", "javascript-safe-csrf-recovery-email"],
       ["c-packet-length-overflow", "c-bounded-packet-copy"],
+      ["c-async-audit-use-after-free", "c-safe-async-audit-lifetime"],
       [
         "javascript-ldap-filter-authorization",
         "javascript-safe-ldap-authorization",
@@ -499,6 +500,11 @@ describe("effectiveness benchmark", () => {
     ).toEqual([["CWE-787", "CWE-120"]]);
     expect(
       cases
+        .get("c-async-audit-use-after-free")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-416"]]);
+    expect(
+      cases
         .get("javascript-nosql-auth-bypass")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-943", "CWE-287"]]);
@@ -591,6 +597,16 @@ describe("effectiveness benchmark", () => {
       benchmarkRoot,
       "fixtures",
       "c-bounded-packet-copy",
+    );
+    const asyncAuditUseAfterFree = join(
+      benchmarkRoot,
+      "fixtures",
+      "c-async-audit-use-after-free",
+    );
+    const safeAsyncAuditLifetime = join(
+      benchmarkRoot,
+      "fixtures",
+      "c-safe-async-audit-lifetime",
     );
     const nosqlAuthBypass = join(
       benchmarkRoot,
@@ -749,6 +765,23 @@ describe("effectiveness benchmark", () => {
     expect(
       await readFile(join(boundedPacketCopy, "src", "session.c"), "utf8"),
     ).toContain("username_length > packet_size - 2");
+    expect(
+      await readFile(join(asyncAuditUseAfterFree, "src", "session.c"), "utf8"),
+    ).toContain("release_session(session)");
+    expect(
+      await readFile(join(asyncAuditUseAfterFree, "src", "session.c"), "utf8"),
+    ).toContain(
+      "pending_audit_session->send_report(pending_audit_session->peer, report)",
+    );
+    expect(
+      await readFile(join(asyncAuditUseAfterFree, "src", "session.c"), "utf8"),
+    ).not.toContain("pending_audit_session == session");
+    expect(
+      await readFile(join(safeAsyncAuditLifetime, "src", "session.c"), "utf8"),
+    ).toContain("if (pending_audit_session == session)");
+    expect(
+      await readFile(join(safeAsyncAuditLifetime, "src", "session.c"), "utf8"),
+    ).toContain("pending_audit_session = NULL");
     expect(
       await readFile(join(nosqlAuthBypass, "src", "sessions.js"), "utf8"),
     ).toContain("username: request.body.username");
@@ -1226,6 +1259,7 @@ describe("effectiveness benchmark", () => {
     );
     expect(deepScan).toContain("native memory safety:");
     expect(deepScan).toContain("destination object extents");
+    expect(deepScan).toContain("same-address reuse witness");
     expect(deepScan).toContain("document-query and NoSQL operator injection:");
     expect(deepScan).toContain(
       "LDAP filter and directory authorization injection:",
@@ -1293,6 +1327,7 @@ describe("effectiveness benchmark", () => {
     expect(standardScan).toContain(
       "native memory allocation/copy/index/lifetime",
     );
+    expect(standardScan).toContain("callbacks, timers, queues, registries");
     expect(standardScan).toContain(
       "SQL and document-database query selectors/operators",
     );
@@ -1348,6 +1383,7 @@ describe("effectiveness benchmark", () => {
     );
     expect(diffScan).toContain("changed outbound URL parsing");
     expect(diffScan).toContain("terminator space");
+    expect(diffScan).toContain("use-after-free");
     expect(diffScan).toContain("request-controlled document selectors");
     expect(diffScan).toContain("changed RFC 4515 assertion escaping");
     expect(diffScan).toContain("new XPath/XQuery interpolation");
@@ -1400,6 +1436,8 @@ describe("effectiveness benchmark", () => {
     );
     expect(discovery).toContain("For native memory safety");
     expect(discovery).toContain("bounded API is neither vulnerable");
+    expect(discovery).toContain("For temporal memory safety");
+    expect(discovery).toContain("object-lifetime ledger");
     expect(discovery).toContain("For document-query and NoSQL APIs");
     expect(discovery).toContain(
       "For LDAP searches used in authentication, group membership",
@@ -1497,6 +1535,7 @@ describe("effectiveness benchmark", () => {
     expect(validation).toContain("external authorization fail-open:");
     expect(validation).toContain("DNS-rebinding SSRF:");
     expect(validation).toContain("native memory corruption:");
+    expect(validation).toContain("use-after-free / use-after-lifetime:");
     expect(validation).toContain("document-query/NoSQL operator injection:");
     expect(validation).toContain("LDAP filter injection:");
     expect(validation).toContain("XPath/XQuery injection:");

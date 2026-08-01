@@ -21,6 +21,13 @@ Non-exhaustive examples of vulnerabilities that often support `critical` when ev
 - Missing authorization checks / authorization bypass / tenant-boundary break (trivial IDOR, easy to swap out org or use ids with no authz, etc)
 - Severe sensitive data leak (LFI, path traversal, bad scoping of file downloads, access to data without authorization, trivial side-channels) with realistic attacker access (proof the attacker can read secrets, PII, signing keys, credential stores, private keys, classified or highly confidential information (model weights etc))
 - Trivial memory corruption exploits with known exploit patterns which require little effort to exploit
+- Deterministic use-after-free or stale-callback reuse that crosses an
+  unauthenticated-to-administrator, tenant, signing, control-plane, or similarly
+  crown-jewel boundary and yields code execution, privileged capability use, or
+  severe secret disclosure. Critical requires the exact lifetime order, stale
+  alias, replacement object or controllable freed state, first invalid
+  dereference, and compromise-equivalent effect; a theoretical dangling pointer
+  or crash-only path is not enough.
 - SQL or other Database or query injection with clear proof of path from attacker input from in-scope attack surface and impact of the injection (leaks sensitive data, inserts dangerous records)
 - Document-query or NoSQL operator injection that demonstrably selects another
   account or tenant, bypasses authentication or authorization, exposes
@@ -179,6 +186,11 @@ Non-exhaustive examples of vulnerabilities that often support `high` when eviden
   client, rotated attacker-controlled hops, changed security keys, intended and
   effective attempt counts, and resulting protected effect.
 - Exploitable memory corruption with clear, major impact or ease of exploitation
+- Use-after-free or use-after-lifetime with a repeatable release/reuse or race
+  witness and meaningful secret disclosure, authorization confusion, privileged
+  callback redirection, or service-wide availability impact. Severity follows
+  attacker control, determinism, affected privilege, and blast radius; reserve
+  lower severities for difficult local-only corruption or bounded crashes.
 - Arbitrary file read that exposes less-sensitive user data or source code (if you have actual proof it reveals env secrets, then it is critical)
 - Arbitrary file write in executable, startup, config, or firmware paths with a realistic path to persistence or code execution
 - Archive symlink or hardlink traversal that reliably converts an

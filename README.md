@@ -207,7 +207,8 @@ assertion confusion across one-time request and session creation, disabled TLS c
 verification, predictable security tokens, server-side template injection,
 check/use state races, unsafe mass assignment, cookie-authenticated cross-site
 request forgery,
-attacker-length native-memory corruption, document-query operator injection,
+attacker-length native-memory corruption, deterministic asynchronous-session
+use-after-free with privileged callback redirection, document-query operator injection,
 executable file upload/content placement, cross-proxy/backend HTTP request
 smuggling, duplicate-query parameter authorization confusion where a gateway
 checks the first action but a backend executes the last, CR/LF response-header
@@ -231,8 +232,8 @@ catastrophic-backtracking regular-expression denial of service with a bounded
 linear validator as the control. It now includes AES-GCM key/nonce reuse that
 recovers victim plaintext from a chosen plaintext and two public ciphertexts,
 paired with fresh per-envelope HKDF data keys and profile-bound authenticated
-data even though the visible nonce repeats. Each of the 94 cases is scanned
-three times, producing 282 scans that measure both accuracy and model variance.
+data even though the visible nonce repeats. Each of the 96 cases is scanned
+three times, producing 288 scans that measure both accuracy and model variance.
 The evaluator uses one-to-one CWE-plus-location
 matching, counts duplicate reports as false positives, and records missing scan
 artifacts as completion failures.

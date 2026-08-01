@@ -291,6 +291,18 @@ Use class-specific proof tuples:
   bounds in the same units, reserved metadata/terminator space, and valid
   ownership/lifetime; a bounded-function name or compiler hardening flag alone
   is not proof.
+- use-after-free / use-after-lifetime: exact object allocation and owner + alias
+  retained by a callback, timer, queue, registry, cache, future, or concurrent
+  task + reachable teardown/release that does not cancel, join, detach, clear,
+  or transfer that alias + attacker-influenced scheduling and, when relevant,
+  deterministic same-size allocator/pool reuse + the first post-lifetime field,
+  function-pointer, vtable, secret, or capability dereference + concrete
+  confidentiality, integrity, authorization, execution, or availability effect.
+  A raw asynchronous pointer, a `free` call, or theoretical allocator reuse is
+  insufficient alone. Suppression requires that every release path is ordered
+  after callback completion, cancels and joins pending work, clears all aliases,
+  validates an unforgeable generation while holding stable ownership, or keeps
+  the exact object alive through retained/ref-counted ownership.
 - document-query/NoSQL operator injection: attacker-controlled parsed key,
   primitive, array, object, selector document, aggregation stage, projection,
   sort, update operator, or expression + exact parser/schema/coercion runtime

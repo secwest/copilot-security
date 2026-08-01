@@ -57,7 +57,9 @@ signed-object-to-session binding as the control, prototype pollution, disabled
 TLS certificate verification,
 predictable security tokens, server-side template injection, check/use state
 races, unsafe mass assignment, cookie-authenticated cross-site request forgery,
-attacker-length native-memory corruption, LDAP filter injection into
+attacker-length native-memory corruption, asynchronous session use-after-free
+with deterministic fixed-pool reuse and cancellation-before-release as the
+control, LDAP filter injection into
 directory-backed group authorization, XPath predicate injection into XML-backed
 authentication, OAuth authorization-code account-linking CSRF with session
 takeover, login session fixation with authenticated-session rotation as the
@@ -78,7 +80,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 282
+destination-pinned, redirect-free transport. Three runs per case produce 288
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations

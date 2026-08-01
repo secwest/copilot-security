@@ -352,6 +352,13 @@ inventory and closure requirements.
      control flow. A bounded API name is not proof that its bound matches the
      destination. Use a sibling path whose source availability, destination
      capacity, arithmetic, and lifetime are all checked as the negative control.
+     For temporal defects, enumerate every alias retained by callbacks, timers,
+     queues, futures, event handlers, caches, and global registries; then order
+     cancellation, disconnect/error teardown, destructor/free/pool release,
+     allocator or pool reuse, and deferred dereferences. Exercise a deterministic
+     same-address reuse witness where practical and compare cancellation-before-
+     release, joined teardown, generation checks, or retained/ref-counted
+     ownership that covers every exit path.
    - document-query and NoSQL operator injection: every JSON, form, GraphQL,
      RPC, configuration, or stored value that can become a selector key,
      selector value, comparison/operator document, aggregation stage,

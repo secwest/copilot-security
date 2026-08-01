@@ -202,6 +202,15 @@ Use this checklist before finalizing the attack-path facts or policy decision:
   crash, or execution outcome. Distinguish a demonstrated adjacent-field or
   control-flow overwrite from generic undefined behavior, and do not infer code
   execution when the repository proves only a bounded crash.
+- For temporal-memory findings, show the event order explicitly: object and
+  privilege at registration, retained aliases, disconnect/error/destructor or
+  pool-release path, missing cancellation/join/ownership transfer, attacker-
+  controlled timing or replacement allocation, same-address/type reuse when
+  required, first stale dereference, and the exact new recipient, capability,
+  secret, control target, or crash. Distinguish a proven stale-object data or
+  callback substitution from generic allocator speculation. Cancellation before
+  release or retained/ref-counted ownership is counterevidence only when all
+  teardown and completion races are covered.
 - For document-query and NoSQL findings, preserve the attacking JSON/form/RPC
   shape and parsed runtime types; selector keys, values, operator documents,
   aggregation stages, or expressions; schema/DTO/ODM coercion and sanitization;
