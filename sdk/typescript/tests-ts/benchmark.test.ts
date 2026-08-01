@@ -783,6 +783,12 @@ describe("effectiveness benchmark", () => {
       await readFile(join(safeAsyncAuditLifetime, "src", "session.c"), "utf8"),
     ).toContain("pending_audit_session = NULL");
     expect(
+      await readFile(join(safeAsyncAuditLifetime, "src", "session.c"), "utf8"),
+    ).toContain("slot_session()->handle == handle");
+    expect(
+      await readFile(join(safeAsyncAuditLifetime, "src", "session.c"), "utf8"),
+    ).toContain("handle == UINT64_MAX ? 0 : handle + 1");
+    expect(
       await readFile(join(nosqlAuthBypass, "src", "sessions.js"), "utf8"),
     ).toContain("username: request.body.username");
     expect(

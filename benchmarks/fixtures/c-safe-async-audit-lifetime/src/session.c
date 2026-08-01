@@ -1,10 +1,13 @@
 #include <stdatomic.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 typedef void (*send_report_fn)(void *peer, const char *report);
+typedef uint64_t session_handle;
 
 struct session {
+    session_handle handle;
     unsigned int references;
     int closed;
     int is_admin;
@@ -19,6 +22,7 @@ union session_slot {
 
 static union session_slot slot;
 static int slot_in_use;
+static session_handle next_handle = 1;
 static struct session *pending_audit_session;
 static atomic_flag state_lock = ATOMIC_FLAG_INIT;
 
@@ -36,42 +40,51 @@ static struct session *slot_session(void) {
     return (struct session *)(void *)slot.bytes;
 }
 
-static int is_live_session(const struct session *session) {
-    return slot_in_use && session == slot_session();
+static int is_live_handle(session_handle handle) {
+    return handle != 0 && slot_in_use && slot_session()->handle == handle;
 }
 
 static void release_reference_locked(struct session *session) {
-    if (!is_live_session(session) || session->references == 0) return;
+    if (!slot_in_use || session != slot_session() || session->references == 0) {
+        return;
+    }
     session->references--;
     if (session->references != 0) return;
     memset(slot.bytes, 0xdd, sizeof(slot.bytes));
     slot_in_use = 0;
 }
 
-struct session *session_open(int is_admin,
-                             send_report_fn send_report,
-                             void *peer) {
-    if (send_report == NULL) return NULL;
+session_handle session_open(int is_admin,
+                            send_report_fn send_report,
+                            void *peer) {
+    if (send_report == NULL) return 0;
     lock_state();
-    if (slot_in_use) {
+    if (slot_in_use || next_handle == 0) {
         unlock_state();
-        return NULL;
+        return 0;
     }
+    const session_handle handle = next_handle;
+    next_handle = handle == UINT64_MAX ? 0 : handle + 1;
     slot_in_use = 1;
     memset(slot.bytes, 0, sizeof(slot.bytes));
     struct session *session = slot_session();
+    session->handle = handle;
     session->references = 1;
     session->is_admin = is_admin;
     session->send_report = send_report;
     session->peer = peer;
     unlock_state();
-    return session;
+    return handle;
 }
 
-int begin_admin_audit(struct session *session) {
-    if (session == NULL) return -1;
+int begin_admin_audit(session_handle handle) {
     lock_state();
-    if (!is_live_session(session) || session->closed || !session->is_admin ||
+    if (!is_live_handle(handle)) {
+        unlock_state();
+        return -1;
+    }
+    struct session *session = slot_session();
+    if (session->closed || !session->is_admin ||
         pending_audit_session != NULL) {
         unlock_state();
         return -1;
@@ -82,10 +95,14 @@ int begin_admin_audit(struct session *session) {
     return 0;
 }
 
-void session_close(struct session *session) {
-    if (session == NULL) return;
+void session_close(session_handle handle) {
     lock_state();
-    if (!is_live_session(session) || session->closed) {
+    if (!is_live_handle(handle)) {
+        unlock_state();
+        return;
+    }
+    struct session *session = slot_session();
+    if (session->closed) {
         unlock_state();
         return;
     }

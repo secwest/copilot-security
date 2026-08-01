@@ -1427,6 +1427,8 @@ describe("residual risk inventory", () => {
     );
     expect(safe).toContain("session->references++");
     expect(safe).toContain("atomic_flag_test_and_set_explicit");
+    expect(safe).toContain("slot_session()->handle == handle");
+    expect(safe).toContain("handle == UINT64_MAX ? 0 : handle + 1");
   });
 
   test("reconciles exact immutable inventory paths against draft coverage", async () => {

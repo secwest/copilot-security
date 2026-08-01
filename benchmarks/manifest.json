@@ -1672,7 +1672,7 @@
     },
     {
       "id": "c-safe-async-audit-lifetime",
-      "description": "The same deferred administrator export serializes lifecycle state, gives pending work a retained reference, cancels before release when close wins, and prevents slot reuse until a claimed completion returns.",
+      "description": "The same deferred administrator export uses non-repeating generation-bound opaque handles, serializes lifecycle state, gives pending work a retained reference, cancels before release when close wins, and prevents slot reuse until a claimed completion returns.",
       "fixture": "fixtures/c-safe-async-audit-lifetime",
       "findingsPaths": [
         "c-safe-async-audit-lifetime/run-1/findings.json",

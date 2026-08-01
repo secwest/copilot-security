@@ -25,9 +25,9 @@ nativeTest(
       join(tmpdir(), "copilot-security-temporal-memory-benchmark-"),
     );
     temporaryPaths.push(root);
-    const harness = join(root, "harness.c");
+    const vulnerableHarness = join(root, "vulnerable-harness.c");
     await writeFile(
-      harness,
+      vulnerableHarness,
       [
         "#include <string.h>",
         "",
@@ -64,6 +64,47 @@ nativeTest(
         "",
       ].join("\n"),
     );
+    const safeHarness = join(root, "safe-harness.c");
+    await writeFile(
+      safeHarness,
+      [
+        "#include <stdint.h>",
+        "#include <string.h>",
+        "",
+        "typedef void (*send_report_fn)(void *peer, const char *report);",
+        "typedef uint64_t session_handle;",
+        "session_handle session_open(int is_admin, send_report_fn send_report, void *peer);",
+        "int begin_admin_audit(session_handle handle);",
+        "void session_close(session_handle handle);",
+        "void complete_admin_audit(const char *report);",
+        "",
+        "static int victim_received;",
+        "static int attacker_received;",
+        'static const char expected_report[] = "administrator signing audit";',
+        "",
+        "static void receive_report(void *peer, const char *report) {",
+        "    if (strcmp(report, expected_report) != 0) return;",
+        "    if (peer == &victim_received) victim_received = 1;",
+        "    if (peer == &attacker_received) attacker_received = 1;",
+        "}",
+        "",
+        "int main(void) {",
+        "    session_handle victim = session_open(1, receive_report, &victim_received);",
+        "    if (victim == 0 || begin_admin_audit(victim) != 0) return 10;",
+        "    session_close(victim);",
+        "",
+        "    session_handle attacker = session_open(0, receive_report, &attacker_received);",
+        "    if (attacker == 0 || attacker == victim) return 11;",
+        "    if (begin_admin_audit(victim) == 0) return 12;",
+        "    complete_admin_audit(expected_report);",
+        "    session_close(attacker);",
+        "",
+        "    if (victim_received != 0) return 13;",
+        "    return attacker_received == EXPECT_ATTACKER_DELIVERY ? 0 : 14;",
+        "}",
+        "",
+      ].join("\n"),
+    );
 
     const fixtures = resolve(
       process.cwd(),
@@ -75,14 +116,14 @@ nativeTest(
     compileAndRun(
       compiler!,
       join(fixtures, "c-async-audit-use-after-free", "src", "session.c"),
-      harness,
+      vulnerableHarness,
       join(root, executableName("vulnerable")),
       1,
     );
     compileAndRun(
       compiler!,
       join(fixtures, "c-safe-async-audit-lifetime", "src", "session.c"),
-      harness,
+      safeHarness,
       join(root, executableName("safe")),
       0,
     );
@@ -102,21 +143,23 @@ nativeTest(
     await writeFile(
       harness,
       [
-        "struct session;",
+        "#include <stdint.h>",
+        "",
         "typedef void (*send_report_fn)(void *peer, const char *report);",
-        "struct session *session_open(int is_admin, send_report_fn send_report, void *peer);",
-        "int begin_admin_audit(struct session *session);",
-        "void session_close(struct session *session);",
+        "typedef uint64_t session_handle;",
+        "session_handle session_open(int is_admin, send_report_fn send_report, void *peer);",
+        "int begin_admin_audit(session_handle handle);",
+        "void session_close(session_handle handle);",
         "void complete_admin_audit(const char *report);",
         "",
-        "static struct session *victim;",
+        "static session_handle victim;",
         "static int replacement_succeeded_during_callback;",
         "",
         "static void receive_report(void *peer, const char *report) {",
         "    (void)peer;",
         "    (void)report;",
         "    session_close(victim);",
-        "    struct session *replacement = session_open(0, receive_report, 0);",
+        "    session_handle replacement = session_open(0, receive_report, 0);",
         "    if (replacement != 0) {",
         "        replacement_succeeded_during_callback = 1;",
         "        session_close(replacement);",
@@ -129,8 +172,8 @@ nativeTest(
         '    complete_admin_audit("administrator signing audit");',
         "    if (replacement_succeeded_during_callback != 0) return 21;",
         "",
-        "    struct session *replacement = session_open(0, receive_report, 0);",
-        "    if (replacement == 0 || replacement != victim) return 22;",
+        "    session_handle replacement = session_open(0, receive_report, 0);",
+        "    if (replacement == 0 || replacement == victim) return 22;",
         "    session_close(replacement);",
         "    return 0;",
         "}",
@@ -150,6 +193,68 @@ nativeTest(
       join(fixtures, "c-safe-async-audit-lifetime", "src", "session.c"),
       harness,
       join(root, executableName("retained-lifetime")),
+      0,
+    );
+  },
+  { timeout: NATIVE_TEST_TIMEOUT_MS },
+);
+
+nativeTest(
+  "safe handles reject cross-generation use after slot reuse",
+  async () => {
+    expect(compiler).not.toBeNull();
+    const root = await mkdtemp(
+      join(tmpdir(), "copilot-security-generation-handle-benchmark-"),
+    );
+    temporaryPaths.push(root);
+    const harness = join(root, "generation-harness.c");
+    await writeFile(
+      harness,
+      [
+        "#include <stdint.h>",
+        "",
+        "typedef void (*send_report_fn)(void *peer, const char *report);",
+        "typedef uint64_t session_handle;",
+        "session_handle session_open(int is_admin, send_report_fn send_report, void *peer);",
+        "int begin_admin_audit(session_handle handle);",
+        "void session_close(session_handle handle);",
+        "void complete_admin_audit(const char *report);",
+        "",
+        "static void receive_report(void *peer, const char *report) {",
+        "    (void)peer;",
+        "    (void)report;",
+        "}",
+        "",
+        "int main(void) {",
+        "    session_handle stale = session_open(0, receive_report, 0);",
+        "    if (stale == 0) return 30;",
+        "    session_close(stale);",
+        "",
+        "    session_handle administrator = session_open(1, receive_report, 0);",
+        "    if (administrator == 0 || administrator == stale) return 31;",
+        "    if (begin_admin_audit(stale) == 0) return 32;",
+        "    session_close(stale);",
+        "    if (begin_admin_audit(administrator) != 0) return 33;",
+        "    session_close(administrator);",
+        '    complete_admin_audit("administrator signing audit");',
+        "    return 0;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const fixtures = resolve(
+      process.cwd(),
+      "..",
+      "..",
+      "benchmarks",
+      "fixtures",
+    );
+    compileAndRun(
+      compiler!,
+      join(fixtures, "c-safe-async-audit-lifetime", "src", "session.c"),
+      harness,
+      join(root, executableName("generation-handle")),
       0,
     );
   },
