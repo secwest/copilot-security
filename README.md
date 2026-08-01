@@ -202,8 +202,8 @@ payment-webhook replay despite correct HMAC verification, ECDSA signature
 malleability that bypasses signature-byte idempotency while the signature and
 freshness checks succeed, cross-tenant
 application-cache key confusion despite correctly scoped cold repository
-lookups, prototype pollution, SAML
-signed-versus-consumed assertion confusion, disabled TLS certificate
+lookups, prototype pollution, RSA-SHA256-verified SAML signed-versus-consumed
+assertion confusion across one-time request and session creation, disabled TLS certificate
 verification, predictable security tokens, server-side template injection,
 check/use state races, unsafe mass assignment, cookie-authenticated cross-site
 request forgery,

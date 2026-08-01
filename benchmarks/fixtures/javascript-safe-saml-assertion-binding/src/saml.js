@@ -1,66 +1,85 @@
-const CLAIM_KEYS = [
-  "audience",
-  "id",
-  "issuer",
-  "notBefore",
-  "notOnOrAfter",
-  "recipient",
-  "role",
-  "subject",
-];
+import { randomBytes, verify } from "node:crypto";
+import { assertionBytes } from "./identity-provider.js";
+import { createSession } from "./session.js";
 
-export function validateSamlResponse(response, policy) {
-  const matchingAssertions = response.assertions.filter(
-    (assertion) => assertion.id === response.signature.referenceId,
+export const serviceProviderEntityId =
+  "https://portal.example.test/saml/metadata";
+export const assertionConsumerUrl = "https://portal.example.test/saml/acs";
+export const trustedIssuer = "https://idp.example.test/metadata";
+
+export function createServiceProvider(identityProviderPublicKey) {
+  return {
+    identityProviderPublicKey,
+    requests: new Map(),
+    sessions: new Map(),
+  };
+}
+
+export function beginLogin(state, now = Date.now()) {
+  const requestId = `request-${randomBytes(24).toString("base64url")}`;
+  state.requests.set(requestId, { expiresAt: now + 5 * 60 * 1_000 });
+  return {
+    requestId,
+    destination: assertionConsumerUrl,
+    audience: serviceProviderEntityId,
+  };
+}
+
+export function consumeResponse(state, response, now = Date.now()) {
+  const request = state.requests.get(response.inResponseTo);
+  if (!request || request.expiresAt < now) {
+    throw new Error("invalid authentication request");
+  }
+  if (
+    response.issuer !== trustedIssuer ||
+    response.destination !== assertionConsumerUrl
+  ) {
+    throw new Error("invalid SAML response context");
+  }
+  if (!Array.isArray(response.assertions) || response.assertions.length !== 1) {
+    throw new Error("SAML response must contain exactly one assertion");
+  }
+  const assertionIds = new Set();
+  for (const assertion of response.assertions) {
+    if (
+      typeof assertion.id !== "string" ||
+      assertion.id.length === 0 ||
+      assertionIds.has(assertion.id)
+    ) {
+      throw new Error("invalid or duplicate assertion ID");
+    }
+    assertionIds.add(assertion.id);
+  }
+  if (
+    response.signature?.algorithm !== "RSA-SHA256" ||
+    typeof response.signature.referenceId !== "string"
+  ) {
+    throw new Error("invalid SAML signature");
+  }
+  const signedAssertion = response.assertions[0];
+  if (response.signature.referenceId !== signedAssertion.id) {
+    throw new Error("signature does not bind the consumed assertion");
+  }
+  const signatureValid = verify(
+    "RSA-SHA256",
+    assertionBytes(signedAssertion),
+    state.identityProviderPublicKey,
+    Buffer.from(response.signature.value, "base64url"),
   );
-  if (matchingAssertions.length !== 1) {
-    throw new Error("signature reference must select exactly one assertion");
-  }
-  const signedAssertion = matchingAssertions[0];
+  if (!signatureValid) throw new Error("invalid SAML signature");
   if (
-    !policy.verifySignature(
-      signedAssertion.signedPayload,
-      response.signature.signatureValue,
-    )
+    signedAssertion.issuer !== trustedIssuer ||
+    signedAssertion.audience !== serviceProviderEntityId ||
+    signedAssertion.recipient !== assertionConsumerUrl ||
+    signedAssertion.issuedAt > now ||
+    signedAssertion.expiresAt < now
   ) {
-    throw new Error("invalid SAML assertion signature");
+    throw new Error("invalid signed assertion context");
   }
-  const claims = JSON.parse(signedAssertion.signedPayload);
-  if (
-    !claims ||
-    typeof claims !== "object" ||
-    Array.isArray(claims) ||
-    Object.keys(claims).sort().join("\0") !== CLAIM_KEYS.join("\0")
-  ) {
-    throw new Error("invalid signed assertion shape");
-  }
-  if (
-    typeof claims.id !== "string" ||
-    claims.id !== signedAssertion.id ||
-    claims.id !== response.signature.referenceId
-  ) {
-    throw new Error("signed assertion identifier mismatch");
-  }
-  if (
-    claims.issuer !== policy.expectedIssuer ||
-    claims.audience !== policy.expectedAudience ||
-    claims.recipient !== policy.expectedRecipient
-  ) {
-    throw new Error("signed assertion trust binding mismatch");
-  }
-  if (
-    typeof claims.subject !== "string" ||
-    typeof claims.role !== "string" ||
-    typeof claims.notBefore !== "number" ||
-    typeof claims.notOnOrAfter !== "number" ||
-    policy.now < claims.notBefore ||
-    policy.now >= claims.notOnOrAfter
-  ) {
-    throw new Error("invalid signed assertion claims or lifetime");
-  }
-  if (policy.replayCache.has(claims.id)) {
-    throw new Error("signed assertion replay rejected");
-  }
-  policy.replayCache.add(claims.id);
-  return Object.freeze(claims);
+
+  state.requests.delete(response.inResponseTo);
+  const sessionId = randomBytes(24).toString("base64url");
+  const session = createSession(signedAssertion);
+  state.sessions.set(sessionId, session);
+  return { sessionId, userId: session.userId, roles: [...session.roles] };
 }

@@ -1,6 +1,11 @@
-# Bound SAML assertion control
+# Signature-bound SAML assertion consumption
 
-The validator requires one assertion matching the signature reference, verifies
-that assertion's exact serialized payload, derives the session claims only by
-parsing those verified bytes, and binds identifier, issuer, audience, recipient,
-lifetime, and replay state before returning the identity.
+The service provider accepts one assertion with one unique ID, resolves the
+signature reference to that exact assertion, verifies it with a pinned
+identity-provider key and algorithm, validates issuer, audience, recipient,
+lifetime, destination, and the one-time authentication request, and derives the
+application identity and roles directly from the verified assertion object.
+
+Adding an unsigned assertion, duplicating an assertion ID, changing the signed
+assertion, replaying the response, or changing relying-party context fails
+closed. A valid response still creates the identity-provider account's session.

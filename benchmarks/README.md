@@ -51,8 +51,10 @@ signature-byte replay identity with atomic signed-event-ID consumption as the
 control, cross-tenant application-cache key confusion where an
 identity-omitting hit bypasses a correctly tenant-scoped cold lookup with a
 trusted tenant-derived cache namespace and hit ownership check as the control,
-SAML
-signed-versus-consumed assertion confusion, prototype pollution, disabled TLS certificate verification,
+RSA-SHA256-verified SAML signed-versus-consumed assertion confusion with
+one-time request, issuer, destination, audience, recipient, lifetime, and
+signed-object-to-session binding as the control, prototype pollution, disabled
+TLS certificate verification,
 predictable security tokens, server-side template injection, check/use state
 races, unsafe mass assignment, cookie-authenticated cross-site request forgery,
 attacker-length native-memory corruption, LDAP filter injection into

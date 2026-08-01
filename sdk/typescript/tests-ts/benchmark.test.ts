@@ -896,13 +896,13 @@ describe("effectiveness benchmark", () => {
     );
     expect(
       await readFile(join(samlSignatureWrapping, "src", "saml.js"), "utf8"),
-    ).toContain("response.assertions[0].claims");
+    ).toContain("createSession(presentedAssertion)");
     expect(
       await readFile(join(safeSamlAssertionBinding, "src", "saml.js"), "utf8"),
-    ).toContain("JSON.parse(signedAssertion.signedPayload)");
+    ).toContain("response.signature.referenceId !== signedAssertion.id");
     expect(
       await readFile(join(safeSamlAssertionBinding, "src", "saml.js"), "utf8"),
-    ).toContain("policy.replayCache.has(claims.id)");
+    ).toContain("createSession(signedAssertion)");
     expect(
       await readFile(
         join(

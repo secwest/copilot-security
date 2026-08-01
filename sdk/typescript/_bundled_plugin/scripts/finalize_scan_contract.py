@@ -2701,6 +2701,39 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         return "jwt-algorithm-key-confusion", ["CWE-347"]
     if (
         (
+            "saml" in text
+            or "signed assertion" in text
+            or "signed-assertion" in text
+        )
+        and (
+            "signature wrapping" in text
+            or "signature-wrapping" in text
+            or "signed-versus-consumed" in text
+            or "signed versus consumed" in text
+            or "different assertion" in text
+            or "unsigned assertion" in text
+            or "attacker-positioned assertion" in text
+            or (
+                ("verifies" in text or "verified" in text)
+                and "one assertion" in text
+                and ("first assertion" in text or "another assertion" in text)
+            )
+        )
+        and (
+            "session" in text
+            or "authentication" in text
+            or "principal" in text
+            or "administrator" in text
+            or "role" in text
+        )
+    ):
+        return "saml-signed-assertion-misbinding", [
+            "CWE-347",
+            "CWE-345",
+            "CWE-287",
+        ]
+    if (
+        (
             "webauthn" in text
             or "passkey" in text
             or "publickeycredential" in text

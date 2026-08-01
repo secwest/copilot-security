@@ -681,14 +681,18 @@ describe("residual risk inventory", () => {
     expect(vulnerable).toContain('"saml-federation-or-assertion-boundary"');
     expect(vulnerable).toContain('"signed-versus-consumed-object-binding"');
     expect(vulnerable).toContain('"cryptographic-verification"');
-    expect(vulnerable).toContain("signedAssertion.signedPayload");
-    expect(vulnerable).toContain("response.assertions[0].claims");
+    expect(vulnerable).toContain("assertionBytes(signedAssertion)");
+    expect(vulnerable).toContain("createSession(presentedAssertion)");
     expect(safe).toContain('"saml-federation-or-assertion-boundary"');
     expect(safe).toContain('"signed-versus-consumed-object-binding"');
-    expect(safe).toContain("matchingAssertions.length !== 1");
-    expect(safe).toContain("JSON.parse(signedAssertion.signedPayload)");
-    expect(safe).toContain("claims.audience !== policy.expectedAudience");
-    expect(safe).toContain("policy.replayCache.has(claims.id)");
+    expect(safe).toContain("response.assertions.length !== 1");
+    expect(safe).toContain(
+      "response.signature.referenceId !== signedAssertion.id",
+    );
+    expect(safe).toContain(
+      "signedAssertion.audience !== serviceProviderEntityId",
+    );
+    expect(safe).toContain("state.requests.delete(response.inResponseTo)");
     expect(scanQualityGatePrompt("")).toContain(
       "SAML/federated signed-versus-consumed assertion binding",
     );

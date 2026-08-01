@@ -655,6 +655,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes SAML signed-versus-consumed assertion misbinding taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["title"] =
+      "SAML signature wrapping installs an unsigned administrator assertion";
+    finding.summary =
+      "The service provider verifies one signed assertion and its relying-party context, then creates the application session from a different attacker-positioned unsigned assertion at the first response position.";
+    finding["taxonomy"] = {
+      category: "improper cryptographic verification",
+      cwe: ["CWE-347"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "saml-signed-assertion-misbinding",
+      cwe: ["CWE-347", "CWE-345", "CWE-287"],
+    });
+  });
+
   test("normalizes signed webhook capture-replay taxonomy", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

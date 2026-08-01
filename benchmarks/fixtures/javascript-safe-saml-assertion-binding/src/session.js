@@ -1,7 +1,6 @@
-export function createSession(assertionClaims) {
+export function createSession(assertion) {
   return Object.freeze({
-    subject: assertionClaims.subject,
-    role: assertionClaims.role,
-    issuer: assertionClaims.issuer,
+    userId: assertion.subject,
+    roles: Object.freeze([...assertion.roles]),
   });
 }

@@ -1248,7 +1248,7 @@
     },
     {
       "id": "javascript-saml-signature-wrapping",
-      "description": "A SAML validator verifies the assertion selected by the signature reference but creates the session from an attacker-controlled unsigned assertion at the first list position.",
+      "description": "A SAML service provider verifies an RSA-SHA256 signature, issuer, destination, audience, recipient, lifetime, and a one-time request for the reference-selected assertion but creates the session from an attacker-controlled unsigned assertion at the first list position.",
       "fixture": "fixtures/javascript-saml-signature-wrapping",
       "findingsPaths": [
         "javascript-saml-signature-wrapping/run-1/findings.json",
@@ -1262,14 +1262,14 @@
           "locations": [
             {
               "path": "src/saml.js",
-              "startLine": 2,
-              "endLine": 14,
+              "startLine": 46,
+              "endLine": 76,
               "lineTolerance": 3
             },
             {
               "path": "src/session.js",
               "startLine": 1,
-              "endLine": 7,
+              "endLine": 5,
               "lineTolerance": 3
             }
           ],
@@ -1282,7 +1282,7 @@
     },
     {
       "id": "javascript-safe-saml-assertion-binding",
-      "description": "The SAML validator verifies one reference-selected payload, derives claims only from those signed bytes, and binds identifier, issuer, audience, recipient, lifetime, and replay state before session creation.",
+      "description": "The SAML service provider accepts one uniquely identified assertion, binds the signature reference to the consumed object, verifies RSA-SHA256 with a pinned key, validates issuer, destination, audience, recipient, lifetime, and one-time request state, then derives the session only from that assertion.",
       "fixture": "fixtures/javascript-safe-saml-assertion-binding",
       "findingsPaths": [
         "javascript-safe-saml-assertion-binding/run-1/findings.json",
