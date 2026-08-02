@@ -90,6 +90,27 @@ describe("Copilot port", () => {
         { sessionId: "session" },
       ),
     ).toEqual({ kind: "approve-once" });
+    const tokenHandler = createScopedScannerPermissionHandler(
+      scanDirectory,
+      repository,
+      scanDirectory,
+      false,
+    );
+    expect(
+      await tokenHandler(
+        {
+          kind: "shell",
+          fullCommandText: "git status --short",
+          intention: "inspect repository state",
+          commands: [{ identifier: "git status", readOnly: true }],
+          possiblePaths: [],
+          possibleUrls: [],
+          hasWriteFileRedirection: false,
+          canOfferSessionApproval: false,
+        },
+        { sessionId: "session" },
+      ),
+    ).toMatchObject({ kind: "reject" });
     expect(
       await handler(
         {
@@ -257,11 +278,15 @@ describe("Copilot port", () => {
     const options: CopilotScannerOptions = {
       cliPath: "copilot",
       environment: {},
+      gitHubToken: "synthetic-token",
       model: "gpt-5.6-sol",
       reasoningEffort: "xhigh",
       pluginRoot: "plugin",
     };
-    expect(options.model).toBe("gpt-5.6-sol");
+    expect(options).toMatchObject({
+      gitHubToken: "synthetic-token",
+      model: "gpt-5.6-sol",
+    });
   });
 
   test("separates request cost units from AI-credit consumption", () => {
@@ -504,11 +529,11 @@ describe("Copilot port", () => {
 
     expect(prompts).toHaveLength(3);
     expect(prompts[0]).toBe("scan the repository");
-    expect(prompts[1]).toContain("safety-refusal recovery 1/2");
-    expect(prompts[2]).toContain("safety-refusal recovery 2/2");
-    expect(prompts[1]).toContain("scan the repository");
-    expect(safetyClassifierRetryPrompt("original", 1)).toContain(
-      "<authorized-defensive-scan-request>\noriginal\n",
+    expect(prompts[1]).toContain("safety-refusal recovery 1/5");
+    expect(prompts[2]).toContain("safety-refusal recovery 2/5");
+    expect(prompts[1]).not.toContain("scan the repository");
+    expect(safetyClassifierRetryPrompt("original", 5)).toContain(
+      "Complete only the scanner's structured defensive contract",
     );
   });
 
@@ -520,9 +545,9 @@ describe("Copilot port", () => {
         throw new Error("Safety classifier refused the response.");
       }),
     ).rejects.toThrow(
-      "safety filtering rejected the authorized defensive scan after 3 prompt attempts",
+      "safety filtering rejected the authorized defensive scan after 6 prompt attempts",
     );
-    expect(refusalAttempts).toBe(3);
+    expect(refusalAttempts).toBe(6);
 
     const terminal = new Error("network stopped");
     let terminalAttempts = 0;

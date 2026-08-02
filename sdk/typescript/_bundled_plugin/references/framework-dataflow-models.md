@@ -195,6 +195,29 @@ interpreter that consumes the value.
   binding. Values cannot safely parameterize SQL identifiers or keywords;
   those need an exact allowlist and server-owned mapping.
 
+### Spring/servlet server-side template injection — CWE-1336
+
+- Sources: Spring-bound request parameters and servlet request accessors.
+- Sinks: attacker-controlled template source passed to Apache Velocity
+  `evaluate`, Jinjava `render`, Handlebars `compile`, or Pebble
+  `getLiteralTemplate`.
+- Preserve engine argument roles. Apache Velocity's template-source string is
+  the fourth `evaluate` argument after context, writer, and log tag. A request
+  value stored only in `VelocityContext`, combined with fixed server-owned
+  fourth-argument source, is strong SSTI counterevidence. It is not XSS
+  counterevidence unless the rendered output context has proven encoding or a
+  dominating equivalent control; Velocity does not provide general HTML
+  auto-escaping.
+- For cross-file rows, verify the receiver's unique declared Java type, exact
+  public service method, argument position, wrapper parameter, and final engine
+  argument. Duplicate simple class names, unresolved receiver types, values
+  reassigned before the service call, and text-only API examples do not prove a
+  flow.
+- A directly reachable Spring or servlet source flowing into unsandboxed
+  general-purpose Velocity template-source evaluation is high severity. Lower
+  it only when a proven sandbox, isolated renderer, constrained engine, or
+  other dominating control limits the same path.
+
 ### ASP.NET process execution — CWE-78
 
 - Sources: `[FromBody]`, `[FromForm]`, `[FromHeader]`, `[FromQuery]`,

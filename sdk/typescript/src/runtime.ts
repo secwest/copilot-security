@@ -224,9 +224,6 @@ export function copilotScannerExecutionEnvironment(
         COPILOT_SCANNER_INHERITED_ENVIRONMENT.has(upper) ||
         upper === "COPILOT_HOME" ||
         upper === "COPILOT_CACHE_HOME" ||
-        upper === "COPILOT_GITHUB_TOKEN" ||
-        upper === "GH_TOKEN" ||
-        upper === "GITHUB_TOKEN" ||
         upper === "PYTHON" ||
         upper.startsWith("COPILOT_SECURITY_")
       );

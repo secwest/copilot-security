@@ -191,6 +191,10 @@ describe("standalone Copilot runtime", () => {
     try {
       await Promise.all([
         mkdir(join(repository, "src"), { recursive: true }),
+        mkdir(join(repository, "src", "main", "java", "example"), {
+          recursive: true,
+        }),
+        mkdir(join(repository, "examples"), { recursive: true }),
         mkdir(join(repository, "node_modules", "dependency"), {
           recursive: true,
         }),
@@ -198,6 +202,21 @@ describe("standalone Copilot runtime", () => {
       ]);
       await Promise.all([
         writeFile(join(repository, "src", "app.js"), "export {}\n"),
+        writeFile(
+          join(
+            repository,
+            "src",
+            "main",
+            "java",
+            "example",
+            "Application.java",
+          ),
+          "package example; public final class Application {}\n",
+        ),
+        writeFile(
+          join(repository, "examples", "excluded.js"),
+          "throw new Error('example-only');\n",
+        ),
         writeFile(
           join(repository, "src", "ignored.bin"),
           Buffer.from([0, 1, 2]),
@@ -219,14 +238,17 @@ describe("standalone Copilot runtime", () => {
         environment: process.env,
       });
 
-      expect(snapshot.fileCount).toBe(1);
+      expect(snapshot.fileCount).toBe(2);
       const discovery = join(scanDirectory, "artifacts", "02_discovery");
       expect(
         await readFile(join(discovery, "in_scope_files.txt"), "utf8"),
-      ).toBe("src/app.js\n");
+      ).toBe("src/app.js\nsrc/main/java/example/Application.java\n");
       expect(
         await readFile(join(discovery, "deep_review_input.jsonl"), "utf8"),
-      ).toBe('{"path":"src/app.js","area":"."}\n');
+      ).toBe(
+        '{"path":"src/app.js","area":"."}\n' +
+          '{"path":"src/main/java/example/Application.java","area":"."}\n',
+      );
       expect(
         JSON.parse(
           await readFile(
@@ -273,10 +295,10 @@ describe("standalone Copilot runtime", () => {
       APPDATA: "C:\\Users\\scanner\\AppData\\Roaming",
       COPILOT_HOME: "C:\\scanner-home",
       COPILOT_SECURITY_SCAN_DIR: "C:\\scan",
-      GH_TOKEN: "token",
       PYTHON: python,
       SystemRoot: "C:\\Windows",
     });
+    expect(environment["GH_TOKEN"]).toBeUndefined();
     expect(environment["NODE_OPTIONS"]).toBeUndefined();
     expect(environment["SECRET_FROM_UNRELATED_TOOL"]).toBeUndefined();
     expect(environment["PATH"]?.split(";")).toEqual([

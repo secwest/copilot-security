@@ -888,6 +888,48 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "spring-http-template-injection",
+    language: "java-kotlin",
+    extensions: JAVA_EXTENSIONS,
+    activation: [/\b(?:Handlebars|Jinjava|PebbleEngine|Velocity)\b/iu],
+    sources: [
+      {
+        kind: "spring-bound-parameter",
+        expression:
+          /@(?:CookieValue|PathVariable|RequestBody|RequestHeader|RequestParam)\b/iu,
+      },
+      {
+        kind: "servlet-request-parameter",
+        expression: /\b(?:getHeader|getParameter|getParameterValues)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "dynamic-template-source",
+        expression:
+          /\bVelocity\.evaluate\s*\(|\bJinjava\.render\s*\(|\bHandlebars\.compile\s*\(|\.getLiteralTemplate\s*\(/iu,
+        cweIds: ["CWE-1336"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-template-with-data-context",
+        expression:
+          /\bVelocity\.evaluate\s*\([^,]+,[^,]+,[^,]+,\s*"|\b(?:Jinjava\.render|Handlebars\.compile)\s*\(\s*"|\.getLiteralTemplate\s*\(\s*"/iu,
+      },
+      {
+        kind: "sandboxed-template-environment",
+        expression:
+          /\b(?:SecureUberspector|Sandbox|Sandboxed|ClassFilter|MemberAccessPolicy)\b/iu,
+      },
+      {
+        kind: "bounded-template-identifier-map",
+        expression:
+          /\b(?:ALLOWED_TEMPLATES|allowedTemplates|templateMap|trustedTemplates)\b/iu,
+      },
+    ],
+  },
+  {
     id: "aspnet-http-command",
     language: "dotnet",
     extensions: DOTNET_EXTENSIONS,
@@ -1031,12 +1073,22 @@ interface ExportedPythonFunction {
   endLine: number;
 }
 
+interface ExportedJavaMethod {
+  ownerType: string;
+  symbol: string;
+  parameters: Array<{ name: string; declaration: string }>;
+  startLine: number;
+  endLine: number;
+}
+
 interface FrameworkWrapperSummary {
   model: FrameworkDataflowModel;
   file: SourceFileSnapshot;
+  ownerType?: string;
   symbol: string;
   parameter: string;
   parameterIndex: number;
+  parameterCount?: number;
   declarationLine: number;
   sink: { kind: string; line: number; cweIds: readonly string[] };
   controls: Array<{ kind: string; line: number }>;
@@ -1066,6 +1118,12 @@ interface ImportedPythonSymbol {
   imported: string;
   local: string;
   moduleSpecifier: string;
+  line: number;
+}
+
+interface JavaReceiverBinding {
+  receiver: string;
+  ownerType: string;
   line: number;
 }
 
@@ -1315,6 +1373,7 @@ function frameworkCrossFileDataflowRecords(
   return [
     ...frameworkDirectCrossFileDataflowRecords(files),
     ...frameworkDirectPythonDataflowRecords(files),
+    ...frameworkDirectJavaDataflowRecords(files),
     ...frameworkMultiHopDataflowRecords(files),
     ...frameworkPythonMultiHopDataflowRecords(files),
   ];
@@ -1602,6 +1661,179 @@ function frameworkDirectPythonDataflowRecords(
           });
           if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
             return records;
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+function frameworkDirectJavaDataflowRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const summaries = javaFrameworkWrapperSummaries(files);
+  const summariesByOwnerAndMethod = new Map<
+    string,
+    FrameworkWrapperSummary[]
+  >();
+  for (const summary of summaries) {
+    if (summary.ownerType === undefined) continue;
+    const key = `${summary.ownerType}\0${summary.symbol}`;
+    const existing = summariesByOwnerAndMethod.get(key) ?? [];
+    existing.push(summary);
+    summariesByOwnerAndMethod.set(key, existing);
+  }
+
+  const ownerPaths = new Map<string, Set<string>>();
+  for (const file of files) {
+    if (file.extension !== ".java") continue;
+    const ownerType = javaOwnerType(file.lines);
+    if (ownerType === undefined) continue;
+    const paths = ownerPaths.get(ownerType) ?? new Set<string>();
+    paths.add(file.path);
+    ownerPaths.set(ownerType, paths);
+  }
+
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const caller of files) {
+    if (caller.extension !== ".java") continue;
+    const callerMethods = exportedJavaMethods(caller.lines);
+    if (callerMethods.length === 0) continue;
+    const receiverBindings = javaReceiverBindings(caller.lines);
+    for (const [key, matchingSummaries] of summariesByOwnerAndMethod) {
+      const [ownerType, method] = key.split("\0") as [string, string];
+      if (ownerPaths.get(ownerType)?.size !== 1) continue;
+      const bindings = [
+        ...receiverBindings.filter(
+          (binding) => binding.ownerType === ownerType,
+        ),
+        { receiver: ownerType, ownerType, line: 0 },
+      ];
+      for (const binding of bindings) {
+        for (const call of javaMethodCallLines(
+          caller.lines,
+          binding.receiver,
+          method,
+        )) {
+          const callerMethod = callerMethods.find(
+            (candidate) =>
+              call.line >= candidate.startLine &&
+              call.line <= candidate.endLine,
+          );
+          if (callerMethod === undefined) continue;
+          for (const summary of matchingSummaries) {
+            if (summary.file.path === caller.path) continue;
+            if (
+              summary.parameterCount !== undefined &&
+              call.arguments.length !== summary.parameterCount
+            ) {
+              continue;
+            }
+            const argument = call.arguments[summary.parameterIndex];
+            if (argument === undefined) continue;
+            const source = modeledJavaCallSource(
+              caller.lines,
+              callerMethod,
+              call.line,
+              argument,
+              summary.model.sources,
+            );
+            if (source === undefined) continue;
+            const recordKey = [
+              summary.model.id,
+              caller.path,
+              call.line,
+              summary.file.path,
+              summary.sink.line,
+              summary.parameterIndex,
+            ].join("\0");
+            if (emitted.has(recordKey)) continue;
+            emitted.add(recordKey);
+
+            const sinkStart = Math.max(
+              1,
+              summary.sink.line - CONTEXT_LINES_BEFORE,
+            );
+            const sinkEnd = Math.min(
+              summary.file.lines.length,
+              summary.sink.line + CONTEXT_LINES_AFTER,
+            );
+            const sourceStart = Math.max(
+              1,
+              Math.min(source.line, call.line) - 2,
+            );
+            const sourceEnd = Math.min(
+              caller.lines.length,
+              Math.max(source.line, call.line) + 2,
+            );
+            records.push({
+              path: summary.file.path,
+              line: summary.sink.line,
+              categories: [
+                `framework-dataflow:${summary.model.id}`,
+                "framework-cross-file-wrapper",
+                `modeled-source:${source.kind}`,
+                `modeled-sink:${summary.sink.kind}`,
+                ...summary.controls.map(
+                  (control) => `candidate-control:${control.kind}`,
+                ),
+              ],
+              priority: 121,
+              startLine: sinkStart,
+              endLine: sinkEnd,
+              excerpt: sourceExcerpt(summary.file.lines, sinkStart, sinkEnd),
+              sourceExcerpt: sourceExcerpt(
+                caller.lines,
+                sourceStart,
+                sourceEnd,
+              ),
+              frameworkModel: {
+                schemaVersion: "1.2",
+                id: summary.model.id,
+                language: summary.model.language,
+                scope: "cross-file-wrapper",
+                source: {
+                  kind: source.kind,
+                  path: caller.path,
+                  line: source.line,
+                },
+                sink: {
+                  kind: summary.sink.kind,
+                  path: summary.file.path,
+                  line: summary.sink.line,
+                  cweIds: summary.sink.cweIds,
+                },
+                propagators: [
+                  {
+                    kind: "java-type-binding",
+                    path: caller.path,
+                    line: binding.line || call.line,
+                    symbol: `${binding.receiver}:${ownerType}`,
+                  },
+                  {
+                    kind: "wrapper-call-argument",
+                    path: caller.path,
+                    line: call.line,
+                    symbol: `${binding.receiver}.${method}[${summary.parameterIndex}]`,
+                  },
+                  {
+                    kind: "wrapper-parameter",
+                    path: summary.file.path,
+                    line: summary.declarationLine,
+                    symbol: summary.parameter,
+                  },
+                ],
+                candidateControls: summary.controls.map((control) => ({
+                  ...control,
+                  path: summary.file.path,
+                })),
+              },
+            });
+            if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
+              return records;
+            }
           }
         }
       }
@@ -2283,6 +2515,87 @@ function pythonFrameworkWrapperSummaries(
   return summaries;
 }
 
+function javaFrameworkWrapperSummaries(
+  files: readonly SourceFileSnapshot[],
+): FrameworkWrapperSummary[] {
+  const summaries: FrameworkWrapperSummary[] = [];
+  for (const file of files) {
+    if (file.extension !== ".java") continue;
+    const methods = exportedJavaMethods(file.lines);
+    if (methods.length === 0) continue;
+    const structuralText = cFamilyStructuralLines(file.lines).join("\n");
+    for (const model of FRAMEWORK_DATAFLOW_MODELS) {
+      if (
+        !model.extensions.has(file.extension) ||
+        !model.activation.some((expression) => expression.test(structuralText))
+      ) {
+        continue;
+      }
+      const sinks = matchingJavaModelLines(file.lines, model.sinks, 32);
+      const controls = matchingJavaModelLines(file.lines, model.controls, 64);
+      for (const method of methods) {
+        for (const sink of sinks) {
+          if (sink.line < method.startLine || sink.line > method.endLine) {
+            continue;
+          }
+          const sinkExpression = javaCallExpression(
+            file.lines,
+            sink.line,
+            method.endLine,
+          );
+          const parameterIndexes = method.parameters.flatMap(
+            (parameter, parameterIndex) =>
+              cFamilyLineReferencesIdentifier(sinkExpression, parameter.name)
+                ? [parameterIndex]
+                : [],
+          );
+          if (parameterIndexes.length === 0) continue;
+          const sinkPattern = model.sinks.find(
+            (pattern) => pattern.kind === sink.kind,
+          );
+          if (sinkPattern === undefined) continue;
+          const sinkControls = model.controls
+            .filter((control) => control.expression.test(sinkExpression))
+            .map((control) => ({ kind: control.kind, line: sink.line }));
+          const methodControls = [
+            ...sinkControls,
+            ...controls.filter(
+              (control) =>
+                control.line >= method.startLine &&
+                control.line <= method.endLine,
+            ),
+          ].filter(
+            (control, index, all) =>
+              all.findIndex(
+                (candidate) =>
+                  candidate.kind === control.kind &&
+                  candidate.line === control.line,
+              ) === index,
+          );
+          for (const parameterIndex of parameterIndexes) {
+            summaries.push({
+              model,
+              file,
+              ownerType: method.ownerType,
+              symbol: method.symbol,
+              parameter: method.parameters[parameterIndex]!.name,
+              parameterIndex,
+              parameterCount: method.parameters.length,
+              declarationLine: method.startLine,
+              sink: { ...sink, cweIds: sinkPattern.cweIds },
+              controls: methodControls.slice(0, 8),
+            });
+            if (summaries.length >= MAX_FRAMEWORK_WRAPPER_SUMMARIES) {
+              return summaries;
+            }
+          }
+        }
+      }
+    }
+  }
+  return summaries;
+}
+
 function pythonCallExpression(
   lines: readonly string[],
   startLine: number,
@@ -2299,6 +2612,111 @@ function pythonCallExpression(
     /\s+/gu,
     " ",
   );
+}
+
+function javaCallExpression(
+  lines: readonly string[],
+  startLine: number,
+  methodEndLine: number,
+): string {
+  const endLine = Math.min(methodEndLine, startLine + 12);
+  const callLines = lines.slice(startLine - 1, endLine);
+  const original = callLines.join("\n");
+  const structural = cFamilyStructuralLines(callLines).join("\n");
+  const open = structural.indexOf("(");
+  if (open < 0) return original;
+  const close = matchingCallParenthesis(structural, open);
+  return (close < 0 ? original : original.slice(0, close + 1)).replace(
+    /\s+/gu,
+    " ",
+  );
+}
+
+function javaOwnerType(lines: readonly string[]): string | undefined {
+  const structuralLines = cFamilyStructuralLines(lines);
+  for (const line of structuralLines) {
+    const match = /\b(?:class|record)\s+([A-Z][A-Za-z0-9_$]*)\b/u.exec(line);
+    if (match !== null) return match[1]!;
+  }
+  return undefined;
+}
+
+function exportedJavaMethods(lines: readonly string[]): ExportedJavaMethod[] {
+  const ownerType = javaOwnerType(lines);
+  if (ownerType === undefined) return [];
+  const methods: ExportedJavaMethod[] = [];
+  const structuralLines = cFamilyStructuralLines(lines);
+  const expression =
+    /^\s*(?:(?:@[A-Za-z_$][\w$.]*(?:\([^)]*\))?)\s*)*(?:public|protected)\s+(?:(?:default|final|native|static|synchronized)\s+)*(?:<[^>]+>\s+)?(?:[A-Za-z_$][\w$.[\]<>?,]*\s+)+([A-Za-z_$][\w$]*)\s*\(([\s\S]*?)\)\s*(?:throws\s+[^{}]+)?\s*\{/u;
+  for (let index = 0; index < lines.length; index += 1) {
+    const firstLine = structuralLines[index] ?? "";
+    if (!/\b(?:public|protected)\b/u.test(firstLine)) continue;
+    const declarationLines = lines.slice(
+      index,
+      Math.min(lines.length, index + 9),
+    );
+    const structuralDeclaration =
+      cFamilyStructuralLines(declarationLines).join(" ");
+    const match = expression.exec(structuralDeclaration);
+    if (match === null || match[1] === ownerType) continue;
+    const originalDeclaration = declarationLines.join(" ");
+    const methodCall = new RegExp(
+      `\\b${escapeRegularExpression(match[1]!)}\\s*\\(`,
+      "u",
+    ).exec(cFamilyStructuralLines([originalDeclaration])[0] ?? "");
+    const originalOpen =
+      methodCall === null
+        ? -1
+        : originalDeclaration.indexOf("(", methodCall.index);
+    const originalClose = matchingCallParenthesis(
+      originalDeclaration,
+      originalOpen,
+    );
+    if (originalOpen < 0 || originalClose < 0) continue;
+    const parameters = splitJavascriptArguments(
+      originalDeclaration.slice(originalOpen + 1, originalClose),
+    ).flatMap((declaration) => {
+      const name = /([A-Za-z_$][\w$]*)\s*(?:\[\s*\])?\s*$/u.exec(
+        declaration.trim(),
+      )?.[1];
+      return name === undefined
+        ? []
+        : [{ name, declaration: declaration.trim() }];
+    });
+    if (parameters.length === 0) continue;
+    methods.push({
+      ownerType,
+      symbol: match[1]!,
+      parameters,
+      startLine: index + 1,
+      endLine: cFamilyFunctionEndLine(structuralLines, index),
+    });
+  }
+  return methods;
+}
+
+function cFamilyFunctionEndLine(
+  structuralLines: readonly string[],
+  startIndex: number,
+): number {
+  let depth = 0;
+  let opened = false;
+  const maximum = Math.min(
+    structuralLines.length,
+    startIndex + MAX_WRAPPER_FUNCTION_LINES,
+  );
+  for (let index = startIndex; index < maximum; index += 1) {
+    for (const character of structuralLines[index] ?? "") {
+      if (character === "{") {
+        depth += 1;
+        opened = true;
+      } else if (character === "}" && opened) {
+        depth -= 1;
+      }
+    }
+    if (opened && depth <= 0) return index + 1;
+  }
+  return Math.min(structuralLines.length, startIndex + 1);
 }
 
 function exportedPythonFunctions(
@@ -2476,6 +2894,63 @@ function javascriptTemplateExpressionCode(line: string): string {
     }
   }
   return expressions.join("\n");
+}
+
+function cFamilyStructuralLines(lines: readonly string[]): string[] {
+  const structural: string[] = [];
+  let blockComment = false;
+  for (const line of lines) {
+    const output = [...line];
+    let quote = "";
+    let escaped = false;
+    for (let index = 0; index < output.length; index += 1) {
+      const character = line[index]!;
+      const next = line[index + 1] ?? "";
+      if (blockComment) {
+        output[index] = " ";
+        if (character === "*" && next === "/") {
+          if (index + 1 < output.length) output[index + 1] = " ";
+          index += 1;
+          blockComment = false;
+        }
+        continue;
+      }
+      if (quote !== "") {
+        output[index] = " ";
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === quote) quote = "";
+        continue;
+      }
+      if (character === "/" && next === "*") {
+        output[index] = " ";
+        if (index + 1 < output.length) output[index + 1] = " ";
+        index += 1;
+        blockComment = true;
+      } else if (character === "/" && next === "/") {
+        output.fill(" ", index);
+        break;
+      } else if (character === '"' || character === "'") {
+        quote = character;
+        output[index] = " ";
+      }
+    }
+    structural.push(output.join(""));
+  }
+  return structural;
+}
+
+function cFamilyLineReferencesIdentifier(
+  value: string,
+  identifier: string,
+): boolean {
+  const expression = new RegExp(
+    `\\b${escapeRegularExpression(identifier)}\\b`,
+    "u",
+  );
+  return expression.test(
+    cFamilyStructuralLines(value.split(/\r?\n/u)).join("\n"),
+  );
 }
 
 function pythonCodeBeforeComment(line: string): string {
@@ -2758,6 +3233,66 @@ function pythonCallLines(
   return calls;
 }
 
+function javaReceiverBindings(lines: readonly string[]): JavaReceiverBinding[] {
+  const structuralLines = cFamilyStructuralLines(lines);
+  const candidates: JavaReceiverBinding[] = [];
+  const declaration =
+    /^\s*(?:(?:final|private|protected|public|static|transient|volatile)\s+)*([A-Z][A-Za-z0-9_$]*)\s+([A-Za-z_$][\w$]*)\s*(?:[;=,)])/u;
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const match = declaration.exec(structuralLines[index] ?? "");
+    if (match === null) continue;
+    candidates.push({
+      receiver: match[2]!,
+      ownerType: match[1]!,
+      line: index + 1,
+    });
+  }
+  const ownerTypesByReceiver = new Map<string, Set<string>>();
+  for (const candidate of candidates) {
+    const types = ownerTypesByReceiver.get(candidate.receiver) ?? new Set();
+    types.add(candidate.ownerType);
+    ownerTypesByReceiver.set(candidate.receiver, types);
+  }
+  return candidates.filter(
+    (candidate, index, all) =>
+      ownerTypesByReceiver.get(candidate.receiver)?.size === 1 &&
+      all.findIndex(
+        (existing) =>
+          existing.receiver === candidate.receiver &&
+          existing.ownerType === candidate.ownerType,
+      ) === index,
+  );
+}
+
+function javaMethodCallLines(
+  lines: readonly string[],
+  receiver: string,
+  method: string,
+): Array<{ line: number; arguments: string[] }> {
+  const calls: Array<{ line: number; arguments: string[] }> = [];
+  const expression = new RegExp(
+    `\\b(?:this\\s*\\.\\s*)?${escapeRegularExpression(receiver)}\\s*\\.\\s*${escapeRegularExpression(method)}\\s*\\(`,
+    "u",
+  );
+  const structuralLines = cFamilyStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const firstLine = structuralLines[index] ?? "";
+    const match = expression.exec(firstLine);
+    if (match === null) continue;
+    const callLines = lines.slice(index, Math.min(lines.length, index + 13));
+    const callText = callLines.join("\n");
+    const structuralCallText = cFamilyStructuralLines(callLines).join("\n");
+    const open = structuralCallText.indexOf("(", match.index);
+    const close = matchingCallParenthesis(structuralCallText, open);
+    if (open < 0 || close < 0) continue;
+    calls.push({
+      line: index + 1,
+      arguments: splitJavascriptArguments(callText.slice(open + 1, close)),
+    });
+  }
+  return calls;
+}
+
 function matchingCallParenthesis(line: string, open: number): number {
   if (open < 0) return -1;
   let depth = 0;
@@ -2877,6 +3412,49 @@ function modeledPythonCallSource(
   return undefined;
 }
 
+function modeledJavaCallSource(
+  lines: readonly string[],
+  method: ExportedJavaMethod,
+  callLine: number,
+  argument: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const direct = sourcePatterns.find((pattern) =>
+    pattern.expression.test(argument),
+  );
+  if (direct !== undefined) return { kind: direct.kind, line: callLine };
+  if (!/^[A-Za-z_$][\w$]*$/u.test(argument)) return undefined;
+  for (const parameter of method.parameters) {
+    if (parameter.name !== argument) continue;
+    const source = sourcePatterns.find((pattern) =>
+      pattern.expression.test(parameter.declaration),
+    );
+    if (source !== undefined) {
+      return { kind: source.kind, line: method.startLine };
+    }
+  }
+
+  const sources = matchingJavaModelLines(lines, sourcePatterns, 32);
+  const structuralLines = cFamilyStructuralLines(lines);
+  const assignment = new RegExp(
+    `\\b(?:[A-Za-z_$][\\w$.[\\]<>?,]*\\s+)?${escapeRegularExpression(argument)}\\s*=`,
+    "u",
+  );
+  const earliest = Math.max(
+    method.startLine,
+    callLine - MAX_WRAPPER_CALL_DISTANCE,
+  );
+  for (let line = callLine - 1; line >= earliest; line -= 1) {
+    const source = sources.find((candidate) => candidate.line === line);
+    if (source === undefined) continue;
+    if (!assignment.test(structuralLines[line - 1] ?? "")) continue;
+    if (!javaIdentifierReassignedBetween(lines, argument, line, callLine)) {
+      return source;
+    }
+  }
+  return undefined;
+}
+
 function pythonIdentifierReassignedBetween(
   lines: readonly string[],
   identifier: string,
@@ -2910,6 +3488,23 @@ function javascriptIdentifierReassignedBetween(
     .some((candidate) =>
       reassignment.test(javascriptCodeBeforeComment(candidate)),
     );
+}
+
+function javaIdentifierReassignedBetween(
+  lines: readonly string[],
+  identifier: string,
+  afterLine: number,
+  beforeLine: number,
+): boolean {
+  const escapedIdentifier = escapeRegularExpression(identifier);
+  const reassignment = new RegExp(
+    `(?:\\b${escapedIdentifier}\\s*(?:[+\\-*/%&|^]?=|\\+\\+|--)|(?:\\+\\+|--)\\s*${escapedIdentifier}\\b|\\b(?:final\\s+)?[A-Za-z_$][\\w$.[\\]<>?,]*\\s+${escapedIdentifier}\\b)`,
+    "u",
+  );
+  const structuralLines = cFamilyStructuralLines(lines);
+  return structuralLines
+    .slice(afterLine, Math.max(afterLine, beforeLine - 1))
+    .some((candidate) => reassignment.test(candidate));
 }
 
 function lineReferencesIdentifier(line: string, identifier: string): boolean {
@@ -2969,6 +3564,25 @@ function matchingPythonModelLines(
 ): Array<{ kind: string; line: number }> {
   const matches: Array<{ kind: string; line: number }> = [];
   const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < lines.length && matches.length < limit; index++) {
+    const structuralLine = structuralLines[index] ?? "";
+    for (const pattern of patterns) {
+      if (pattern.expression.test(structuralLine)) {
+        matches.push({ kind: pattern.kind, line: index + 1 });
+        break;
+      }
+    }
+  }
+  return matches;
+}
+
+function matchingJavaModelLines(
+  lines: readonly string[],
+  patterns: readonly FrameworkModelPattern[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const matches: Array<{ kind: string; line: number }> = [];
+  const structuralLines = cFamilyStructuralLines(lines);
   for (let index = 0; index < lines.length && matches.length < limit; index++) {
     const structuralLine = structuralLines[index] ?? "";
     for (const pattern of patterns) {

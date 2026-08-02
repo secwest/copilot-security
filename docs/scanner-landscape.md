@@ -63,8 +63,11 @@ for Node HTTP, Python web, Spring/servlet, and ASP.NET command execution and raw
 SQL, plus Node and Python server-side request forgery and server-side template
 injection. Same-file models activate
 when their language, request-source syntax, and concrete runtime or sink API are
-present in one bounded source file. Bounded Node/TypeScript and Python
-cross-file layers additionally resolve explicit repository-relative imports
+present in one bounded source file. The bounded Java cross-file layer resolves
+unique service types from controller fields, parses public and protected method
+bodies, and preserves exact annotated-parameter or servlet-assignment flow into
+the service wrapper. Bounded Node/TypeScript and Python cross-file layers
+additionally resolve explicit repository-relative imports
 into exported or public module-level wrappers and preserve the exact
 argument-to-parameter position. Node/TypeScript follows either one direct
 wrapper or exactly one exported relay before the sink wrapper. Python follows
@@ -151,12 +154,26 @@ and [JavaScript code/template injection](https://codeql.github.com/codeql-query-
 The host retains fixed-template and sandbox leads as candidate controls, while
 the correction gate must prove exact sink argument roles and sandbox dominance.
 
+`benchmarks/java-cross-file-template-manifest.json` extends the strict lane to
+constructor-injected Spring services. The positive carries an annotated request
+parameter into the fourth, template-source argument of Apache Velocity
+`evaluate`; the negative keeps the same type binding and service call while
+HTML-encoding the request value into `VelocityContext` and evaluating fixed
+source. The encoding is necessary because fixed source disproves SSTI but raw
+Velocity context data can still produce reflected XSS.
+This follows CodeQL's high-precision, interprocedural
+[Java server-side template-injection query](https://codeql.github.com/codeql-query-help/java/java-server-side-template-injection/),
+which assigns the family security severity 9.3 and treats fixed template source
+as the principal counterexample. The shared Java method-flow layer also feeds
+the existing Spring command and raw-SQL models.
+
 ## Prioritized next improvements
 
 1. **Expand typed framework security models.** Extend bounded summaries beyond
-   two Node/TypeScript or Python relative-import hops; add Spring and ASP.NET
-   cross-file flow, framework-specific authorization models, Spring/ASP.NET
-   template models, broader outbound-client and partial-URL SSRF models,
+   two Node/TypeScript or Python relative-import hops; extend Java beyond one
+   uniquely typed service boundary, add ASP.NET cross-file flow,
+   framework-specific authorization models, ASP.NET template models, broader
+   outbound-client and partial-URL SSRF models,
    manifest-derived activation evidence,
    and signed or hashed external model packs. Benchmark every extension against
    paired positive and negative fixtures.

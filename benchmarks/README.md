@@ -188,6 +188,27 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The Java cross-file template lane exercises a constructor-injected Spring
+service and the exact fourth, template-source argument of Apache Velocity
+`evaluate`. Its negative control preserves the controller, receiver type,
+service call, and request value, but HTML-encodes that value into
+`VelocityContext` while evaluating fixed server-owned source. The explicit
+encoding also prevents the control from concealing a distinct reflected-XSS
+path in Velocity's non-auto-escaping output:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/java-cross-file-template-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-java-template `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 The Python cross-file lane applies the same gates to explicit relative
 from-imports and includes multiline parameter-binding counterevidence:
 

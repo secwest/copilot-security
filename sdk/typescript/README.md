@@ -25,15 +25,18 @@ The package is ESM-only and provides:
 - a disposable repository/plugin snapshot that omits links and special files,
   plus an allowlisted model environment, category-scoped permissions, disabled
   tool network/credential forwarding, and mandatory positive native-sandbox
-  telemetry for every shell completion
+  telemetry for every stored-credential shell completion; token-authenticated
+  sessions remove public token aliases and expose no shell tools
 - typed host-generated Node HTTP, Python web, Spring/servlet, and ASP.NET
   command/SQL data-flow hypotheses with exact source/sink lines and nearby
   negative controls for the mandatory residual correction turn, plus bounded
   one-hop and two-hop relative-import/call/parameter summaries for
   Node/TypeScript wrappers, with JavaScript string/comment masking before
   structural matching
-- bounded native Copilot model-call retries without host prompt replay, plus
-  cancellation-safe cleanup of partially initialized CLI sessions
+- bounded native Copilot model-call retries plus six concise, idempotent
+  defensive recovery prompts for explicit safety-classifier refusals, without
+  replaying the original blocked text, and cancellation-safe cleanup of
+  partially initialized CLI sessions
 - cancellation and streamed Copilot usage/subagent events
 
 ```ts

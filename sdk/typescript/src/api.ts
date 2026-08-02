@@ -986,6 +986,7 @@ export class CopilotSecurity {
         environment: definedEnvironment(
           selectedScanEnvironment(scannerEnvironment, options.auth),
         ),
+        ...(apiKey === null ? {} : { gitHubToken: apiKey }),
         model,
         reasoningEffort:
           scanModelConfiguration(effectiveConfig).reasoningEffort,

@@ -38,7 +38,11 @@ Python web, Spring/servlet, and ASP.NET command-execution and raw-SQL
 boundaries, plus Node and Python server-side request forgery and server-side
 template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
-candidate controls. For Node/TypeScript relative-module wrappers, the host can
+candidate controls. For Java, the host resolves uniquely named service types
+from controller fields, confines calls to parsed public or protected method
+bodies, and preserves annotated Spring or servlet-assigned request values
+through the exact call argument and wrapper parameter. For Node/TypeScript
+relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
 explicit relative from-imports, bind each exact positional argument, and
@@ -58,7 +62,8 @@ apply to the same value, are context-correct, and dominate the sink. A URL or
 hostname substring check is not classified as an exact-host control. Output
 escaping does not sanitize attacker-controlled template grammar, while a fixed
 template that receives untrusted data only as a named context field is not
-template-source injection.
+template-source injection. That distinction does not itself prove XSS safety:
+a non-auto-escaping engine still requires context-appropriate output encoding.
 
 The correction turn also receives a deterministic reconciliation of
 `in_scope_files.txt` against the draft coverage document. This catches omitted
@@ -294,6 +299,19 @@ negative controls:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/template-injection-framework-manifest.json `
   --results-dir C:\security-benchmarks\template-injection-framework `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Java lane pairs a constructor-injected Spring service that evaluates the
+request value as Apache Velocity template source with the same controller and
+service topology using a fixed template plus explicitly HTML-encoded
+`VelocityContext` data:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/java-cross-file-template-manifest.json `
+  --results-dir C:\security-benchmarks\java-cross-file-template `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
@@ -561,8 +579,11 @@ token variables. `--auth token` requires one of:
 - `GITHUB_TOKEN`
 
 `--auth auto` uses a token when one is present and otherwise uses the stored
-Copilot login. Token values are passed only to the child Copilot process and
-are never printed or copied into scan artifacts.
+Copilot login. Token values are passed to the child Copilot process through the
+SDK's dedicated authentication channel after the scanner removes the public
+token aliases from its allowlisted environment. Token-authenticated sessions
+disable every model shell tool, preventing child tools from inheriting or
+printing the credential. Token values are never copied into scan artifacts.
 
 ## TypeScript
 
@@ -623,14 +644,16 @@ extension, and out-of-profile permission requests are rejected. Reads are
 limited to the disposable repository/plugin and scan artifacts; writes are
 limited to the disposable workspace and exclusive scan directory. Every shell
 completion must carry positive native `sandboxApplied` telemetry or the host
-aborts the session.
+aborts the session. Sessions using an environment token expose no shell tools;
+stored-credential sessions retain the sandboxed shell profile.
 
 Windows native sandboxing is currently a public-preview defense, not the sole
 security boundary. Current preview builds can give sandboxed child-native
 processes an unusable working directory. The production workflow therefore
 uses Copilot built-in file tools for exact host-worklist repository reads,
-permits PowerShell only for scan-directory draft artifacts, and forbids
-model-side Python, Git, ripgrep, and plugin helpers. The disposable snapshot,
+permits PowerShell only for scan-directory draft artifacts in stored-credential
+sessions, disables shell tools entirely for token-authenticated sessions, and
+forbids model-side Python, Git, ripgrep, and plugin helpers. The disposable snapshot,
 omitted-link manifest, stripped environment, category-scoped permission
 handler, immutable host inventories, deterministic contract audit, and final
 artifact sealing remain independent controls if the native preview regresses.

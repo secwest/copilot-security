@@ -115,6 +115,18 @@ EXCLUDED_FILENAMES = {
     "yarn.lock",
 }
 
+# Java and Kotlin commonly use package names such as `example` beneath their
+# production source roots. Treat those names as content directories elsewhere,
+# but never let a package segment silently remove production source from the
+# immutable inventory.
+SOURCE_PACKAGE_DIRECTORY_NAMES = {"example", "examples", "sample", "samples"}
+SOURCE_PACKAGE_ROOTS = {
+    ("src", "main", "groovy"),
+    ("src", "main", "java"),
+    ("src", "main", "kotlin"),
+    ("src", "main", "scala"),
+}
+
 SHARD_INPUT_GLOB = "rank-shard-*.input.jsonl"
 SHARD_OUTPUT_GLOB = "rank-shard-*.output.jsonl"
 SHARD_INPUT_PATTERN = re.compile(r"^rank-shard-([0-9]{4,})\.input\.jsonl$")
@@ -267,12 +279,28 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def path_is_excluded(path: Path) -> bool:
-    if any(part in EXCLUDED_DIRS for part in path.parts):
+def path_is_excluded(path: Path, *, repository_path: Path | None = None) -> bool:
+    context_parts = (repository_path or path).parts
+    for part in path.parts:
+        if part not in EXCLUDED_DIRS:
+            continue
+        if part in SOURCE_PACKAGE_DIRECTORY_NAMES and source_package_path(
+            context_parts, part
+        ):
+            continue
         return True
     if path.name in EXCLUDED_FILENAMES:
         return True
     return path.name.endswith((".min.js", ".map"))
+
+
+def source_package_path(parts: tuple[str, ...], directory: str) -> bool:
+    for index in range(len(parts)):
+        for root in SOURCE_PACKAGE_ROOTS:
+            end = index + len(root)
+            if parts[index:end] == root and directory in parts[end:-1]:
+                return True
+    return False
 
 
 def resolve_scope(repo: Path, scope: str, *, expand_user: bool = True) -> Path:
@@ -431,7 +459,8 @@ def make_repo_rank_input(args: argparse.Namespace) -> None:
                 else rel
             )
             if not directly_requested and (
-                path_is_excluded(excluded_path) or path.suffix.lower() not in TEXT_CODE_EXTENSIONS
+                path_is_excluded(excluded_path, repository_path=rel)
+                or path.suffix.lower() not in TEXT_CODE_EXTENSIONS
             ):
                 continue
 
