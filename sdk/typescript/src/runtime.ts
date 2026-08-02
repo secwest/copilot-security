@@ -22,14 +22,15 @@ import {
 import { homedir, tmpdir } from "node:os";
 import {
   basename,
-  delimiter,
   dirname,
   extname,
   isAbsolute,
   join,
+  posix,
   relative,
   resolve,
   sep,
+  win32,
 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -209,6 +210,7 @@ export function copilotScannerExecutionEnvironment(
   },
   platform: NodeJS.Platform = process.platform,
 ): ProcessEnvironment {
+  const pathImplementation = platform === "win32" ? win32 : posix;
   const selected = Object.fromEntries(
     Object.entries(environment).filter(([name, value]) => {
       if (value === undefined) return false;
@@ -232,16 +234,25 @@ export function copilotScannerExecutionEnvironment(
   const systemRoot =
     environmentEntry(environment, "SYSTEMROOT") ?? "C:\\Windows";
   const candidates = [
-    dirname(executables.copilot),
-    dirname(executables.python),
-    ...(executables.git === undefined ? [] : [dirname(executables.git)]),
-    ...(executables.tools ?? []).map((path) => dirname(path)),
+    pathImplementation.dirname(executables.copilot),
+    pathImplementation.dirname(executables.python),
+    ...(executables.git === undefined
+      ? []
+      : [pathImplementation.dirname(executables.git)]),
+    ...(executables.tools ?? []).map((path) =>
+      pathImplementation.dirname(path),
+    ),
     ...(platform === "win32"
       ? [
-          join(systemRoot, "System32"),
+          pathImplementation.join(systemRoot, "System32"),
           systemRoot,
-          join(systemRoot, "System32", "Wbem"),
-          join(systemRoot, "System32", "WindowsPowerShell", "v1.0"),
+          pathImplementation.join(systemRoot, "System32", "Wbem"),
+          pathImplementation.join(
+            systemRoot,
+            "System32",
+            "WindowsPowerShell",
+            "v1.0",
+          ),
         ]
       : ["/usr/local/bin", "/usr/bin", "/bin"]),
   ];
@@ -253,7 +264,7 @@ export function copilotScannerExecutionEnvironment(
       seen.add(key);
       return true;
     })
-    .join(delimiter);
+    .join(pathImplementation.delimiter);
   selected["PYTHON"] = executables.python;
   return selected;
 }

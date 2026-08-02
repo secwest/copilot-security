@@ -11,7 +11,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { join } from "node:path";
 import {
   bundledPluginRoot,
   copilotScannerExecutionEnvironment,
@@ -261,14 +261,47 @@ describe("standalone Copilot runtime", () => {
     });
     expect(environment["NODE_OPTIONS"]).toBeUndefined();
     expect(environment["SECRET_FROM_UNRELATED_TOOL"]).toBeUndefined();
-    expect(environment["PATH"]?.split(delimiter)).toEqual([
-      dirname(copilot),
-      dirname(python),
-      dirname(git),
+    expect(environment["PATH"]?.split(";")).toEqual([
+      "C:\\tools\\copilot",
+      "C:\\tools\\python",
+      "C:\\tools\\git",
       "C:\\Windows\\System32",
       "C:\\Windows",
       "C:\\Windows\\System32\\Wbem",
       "C:\\Windows\\System32\\WindowsPowerShell\\v1.0",
+    ]);
+  });
+
+  test("uses target-platform path rules for a constrained POSIX tool path", () => {
+    const environment = copilotScannerExecutionEnvironment(
+      {
+        HOME: "/home/scanner",
+        LD_PRELOAD: "/tmp/untrusted.so",
+        PATH: "/tmp/untrusted:/usr/bin",
+        SECRET_FROM_UNRELATED_TOOL: "do-not-inherit",
+      },
+      {
+        copilot: "/opt/copilot/bin/copilot",
+        python: "/opt/python/bin/python3",
+        git: "/usr/bin/git",
+        tools: ["/opt/tools/bin/rg"],
+      },
+      "linux",
+    );
+
+    expect(environment).toMatchObject({
+      HOME: "/home/scanner",
+      PYTHON: "/opt/python/bin/python3",
+    });
+    expect(environment["LD_PRELOAD"]).toBeUndefined();
+    expect(environment["SECRET_FROM_UNRELATED_TOOL"]).toBeUndefined();
+    expect(environment["PATH"]?.split(":")).toEqual([
+      "/opt/copilot/bin",
+      "/opt/python/bin",
+      "/usr/bin",
+      "/opt/tools/bin",
+      "/usr/local/bin",
+      "/bin",
     ]);
   });
 
