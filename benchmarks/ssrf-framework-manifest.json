@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "javascript-cross-file-ssrf",
+      "description": "A Node HTTP request value crosses a relative import into a redirect-following outbound HTTP wrapper.",
+      "fixture": "fixtures/javascript-cross-file-ssrf",
+      "findingsPaths": ["javascript-cross-file-ssrf/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "cross-file-preview-url-ssrf",
+          "cwe": ["CWE-918"],
+          "locations": [
+            {
+              "path": "src/upstream.js",
+              "startLine": 2,
+              "endLine": 2,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-cross-file-safe-fetch",
+      "description": "The same Node wrapper boundary selects only complete server-owned URLs and rejects redirects.",
+      "fixture": "fixtures/javascript-cross-file-safe-fetch",
+      "findingsPaths": ["javascript-cross-file-safe-fetch/run-1/findings.json"],
+      "expected": []
+    },
+    {
+      "id": "python-cross-file-ssrf",
+      "description": "A Flask request value crosses a relative import into a redirect-following requests wrapper.",
+      "fixture": "fixtures/python-cross-file-ssrf",
+      "findingsPaths": ["python-cross-file-ssrf/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "python-cross-file-preview-url-ssrf",
+          "cwe": ["CWE-918"],
+          "locations": [
+            {
+              "path": "src/upstream.py",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-cross-file-safe-fetch",
+      "description": "The same Python wrapper boundary selects only complete server-owned URLs and disables redirects.",
+      "fixture": "fixtures/python-cross-file-safe-fetch",
+      "findingsPaths": ["python-cross-file-safe-fetch/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

@@ -114,6 +114,36 @@ describe("canonical scan contract", () => {
     expect(contract.findings.scanId).toBe(contract.manifest.scan.id);
   });
 
+  test("accepts a single UTF-8 BOM on model-authored contract documents", async () => {
+    const scanDir = await copyExample();
+    const manifestPath = join(scanDir, "scan-manifest.json");
+    const manifest = await readJson(manifestPath);
+    for (const filename of ["findings.json", "coverage.json"]) {
+      const path = join(scanDir, filename);
+      const contents = await readFile(path);
+      const withBom = Buffer.concat([
+        Buffer.from([0xef, 0xbb, 0xbf]),
+        contents,
+      ]);
+      await writeFile(path, withBom);
+      const artifact = manifest["scan"]["artifacts"].find(
+        (candidate: Record<string, unknown>) => candidate["path"] === filename,
+      );
+      artifact["sha256"] = createHash("sha256").update(withBom).digest("hex");
+    }
+    await writeFile(
+      manifestPath,
+      Buffer.concat([
+        Buffer.from([0xef, 0xbb, 0xbf]),
+        Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`),
+      ]),
+    );
+
+    await expect(
+      loadContract(scanDir, { pluginRoot: PLUGIN_ROOT }),
+    ).resolves.toBeDefined();
+  });
+
   test("accepts a fully sealed foreign namespace only in benchmark compatibility mode", async () => {
     const scanDir = await copyExample();
     const manifestPath = join(scanDir, "scan-manifest.json");

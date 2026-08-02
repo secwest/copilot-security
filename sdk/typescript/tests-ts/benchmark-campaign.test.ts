@@ -15,6 +15,7 @@ import {
   createBenchmarkAttemptOutput,
   createBenchmarkCampaign,
   ensureBenchmarkCampaign,
+  nextBenchmarkAttemptArchiveSlot,
   preserveBenchmarkAttempt,
   promoteBenchmarkAttemptOutput,
   readBenchmarkCampaign,
@@ -203,6 +204,14 @@ describe("benchmark campaign integrity", () => {
     expect(await readFile(join(archived!, "status.json"), "utf8")).toBe(
       '{"status":1}\n',
     );
+    expect(
+      await nextBenchmarkAttemptArchiveSlot({
+        resultsDirectory: results,
+        caseId: "case-one",
+        run: 1,
+        startingAt: 2,
+      }),
+    ).toBe(3);
     expect(
       await preserveBenchmarkAttempt({
         resultsDirectory: results,

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { Writable } from "node:stream";
 import {
   chmod,
   mkdtemp,
@@ -12,6 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createBestEffortWriter } from "../../../benchmarks/best-effort-output.mjs";
 
 const temporaryPaths: string[] = [];
 const repositoryRoot = join(import.meta.dir, "..", "..", "..");
@@ -27,6 +29,26 @@ afterEach(async () => {
 });
 
 describe("benchmark runner interruption recovery", () => {
+  test("best-effort output survives an asynchronous broken pipe", async () => {
+    let writes = 0;
+    const stream = new Writable({
+      write(_chunk, _encoding, callback) {
+        writes += 1;
+        const error = new Error(
+          "synthetic closed pipe",
+        ) as NodeJS.ErrnoException;
+        error.code = "EPIPE";
+        callback(error);
+      },
+    });
+    const write = createBestEffortWriter(stream);
+
+    write("first\n");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(write("second\n")).toBe(false);
+    expect(writes).toBe(1);
+  });
+
   test("rejects an oversized benchmark manifest before parsing", async () => {
     const root = await temporaryDirectory("benchmark-oversized-manifest-");
     const oversized = join(root, "manifest.json");
@@ -156,6 +178,8 @@ describe("benchmark runner interruption recovery", () => {
       scannerCli,
       [
         'import { appendFileSync } from "node:fs";',
+        'process.stdout.write("scanner standard output\\n");',
+        'process.stderr.write("scanner diagnostic output\\n");',
         `appendFileSync(${JSON.stringify(marker)}, "scan\\n", "utf8");`,
         "process.exit(1);",
         "",
@@ -195,6 +219,22 @@ describe("benchmark runner interruption recovery", () => {
     const first = runNode(baseArguments);
     expect(first.status).toBe(1);
     expect(await readFile(marker, "utf8")).toBe("scan\n");
+    const caseDirectory = join(results, "c-safe-literal-format-audit");
+    const firstLogs = await readdir(caseDirectory);
+    const stdoutLog = firstLogs.find((name) =>
+      name.endsWith(".scanner.stdout.log"),
+    );
+    const stderrLog = firstLogs.find((name) =>
+      name.endsWith(".scanner.stderr.log"),
+    );
+    expect(stdoutLog).toBeDefined();
+    expect(stderrLog).toBeDefined();
+    expect(await readFile(join(caseDirectory, stdoutLog!), "utf8")).toBe(
+      "scanner standard output\n",
+    );
+    expect(await readFile(join(caseDirectory, stderrLog!), "utf8")).toBe(
+      "scanner diagnostic output\n",
+    );
 
     const selectionPath = join(results, "benchmark-selection-manifest.json");
     const reportPath = join(results, "benchmark-report.json");
@@ -225,6 +265,37 @@ describe("benchmark runner interruption recovery", () => {
     expect((await readdir(results)).some((name) => name.endsWith(".tmp"))).toBe(
       false,
     );
+
+    const resumed = runNode(baseArguments);
+    expect(resumed.status).toBe(1);
+    expect(await readFile(marker, "utf8")).toBe("scan\nscan\n");
+    const resumedReceipt = JSON.parse(
+      await readFile(
+        join(results, "c-safe-literal-format-audit", "run-1.status.json"),
+        "utf8",
+      ),
+    );
+    expect(resumedReceipt.attempt).toBe(2);
+
+    resumedReceipt.attempt = 1;
+    await writeFile(
+      join(results, "c-safe-literal-format-audit", "run-1.status.json"),
+      `${JSON.stringify(resumedReceipt, null, 2)}\n`,
+    );
+    const collisionRecovered = runNode(baseArguments);
+    expect(collisionRecovered.status).toBe(1);
+    expect(collisionRecovered.stderr).not.toContain(
+      "Benchmark attempt archive already exists",
+    );
+    expect(await readFile(marker, "utf8")).toBe("scan\nscan\nscan\n");
+    expect(
+      JSON.parse(
+        await readFile(
+          join(results, "c-safe-literal-format-audit", "run-1.status.json"),
+          "utf8",
+        ),
+      ).attempt,
+    ).toBe(3);
   });
 });
 

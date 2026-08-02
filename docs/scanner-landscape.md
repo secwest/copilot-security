@@ -60,17 +60,18 @@ contract validation, and sealed outputs remain mandatory.
 
 The mandatory host residual pass now has an initial provider-neutral model pack
 for Node HTTP, Python web, Spring/servlet, and ASP.NET command execution and raw
-SQL. Same-file models activate when their language, request-source syntax, and
-concrete runtime or sink API are present in one bounded source file. Bounded
-Node/TypeScript and Python cross-file layers additionally resolve explicit
-repository-relative imports into exported or public module-level wrappers and
-preserve the exact argument-to-parameter position. Node/TypeScript follows
-either one direct wrapper or exactly one exported relay before the sink
-wrapper. Python follows either one direct relative from-import or exactly one
-public module-level relay and parses bounded complete relay and sink calls so
-multiline forwarding and parameter binding remain visible. The host
-masks language string and comment contents before structural matching while
-retaining exact JavaScript template and Python f-string expressions only for
+SQL, plus Node and Python server-side request forgery. Same-file models activate
+when their language, request-source syntax, and concrete runtime or sink API are
+present in one bounded source file. Bounded Node/TypeScript and Python
+cross-file layers additionally resolve explicit repository-relative imports
+into exported or public module-level wrappers and preserve the exact
+argument-to-parameter position. Node/TypeScript follows either one direct
+wrapper or exactly one exported relay before the sink wrapper. Python follows
+either one direct relative from-import or exactly one public module-level relay
+and parses bounded complete relay and sink calls so multiline forwarding,
+parameter binding, and outbound request calls remain visible. The host masks
+language string and comment contents before structural matching while retaining
+exact JavaScript template and Python f-string expressions only for
 sink-parameter reference checks, and emits:
 
 - a stable model id and language;
@@ -121,12 +122,28 @@ native SQL parameter binding remain safe, while deterministic controls reject
 fixed relay arguments, relay reassignment, calls outside the relay, private
 relays, absolute imports, and docstring pseudo-flows.
 
+`benchmarks/ssrf-framework-manifest.json` applies the same strict gates to Node
+and Python relative-import HTTP wrappers. Positive cases expose complete
+caller-controlled URLs to `fetch` or `requests`; negative cases map the
+untrusted label to one of a bounded set of complete server-owned URLs and
+disable redirects. Both sides impose the same request deadline and decoded-body
+ceiling, keeping upstream resource exhaustion from confounding the SSRF result.
+The model records exact parsed-host membership, fixed
+destination selection, redirect rejection, and address validation or pinning
+only as candidate controls requiring same-value and dominance proof. It does
+not label URL or hostname substring checks as exact-host controls, following
+the bypass boundary documented by CodeQL's
+[incomplete URL substring sanitization](https://codeql.github.com/codeql-query-help/javascript/js-incomplete-url-substring-sanitization/)
+guidance. The sink family follows the path-query treatment in CodeQL's
+[JavaScript SSRF query](https://codeql.github.com/codeql-query-help/javascript/js-request-forgery/)
+and Python's separate full/partial SSRF flow model.
+
 ## Prioritized next improvements
 
 1. **Expand typed framework security models.** Extend bounded summaries beyond
    two Node/TypeScript or Python relative-import hops; add Spring and ASP.NET
    cross-file flow, framework-specific authorization and template models,
-   manifest-derived activation evidence,
+   broader outbound-client and partial-URL SSRF models, manifest-derived activation evidence,
    and signed or hashed external model packs. Benchmark every extension against
    paired positive and negative fixtures.
 2. **Dependency and advisory reachability.** Build deterministic lockfile/SBOM

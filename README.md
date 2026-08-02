@@ -35,13 +35,14 @@ findings or control flow.
 
 The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command-execution and raw-SQL
-boundaries. Each applicable row identifies an exact source line, sink line,
-CWE family, and nearby candidate controls. For Node/TypeScript relative-module
-wrappers, the host can emit bounded one-hop and two-hop cross-file chains. For
-Python, it can resolve either one direct wrapper or exactly one public
-module-level relay through explicit relative from-imports, bind each exact
-positional argument, and inspect bounded multiline relay and sink calls,
-including DB-API binding. A two-hop row contains the exact caller import and
+boundaries, plus Node and Python server-side request forgery. Each applicable
+row identifies an exact source line, sink line, CWE family, and nearby
+candidate controls. For Node/TypeScript relative-module wrappers, the host can
+emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
+either one direct wrapper or exactly one public module-level relay through
+explicit relative from-imports, bind each exact positional argument, and
+inspect bounded multiline relay and sink calls, including DB-API binding and
+outbound HTTP calls. A two-hop row contains the exact caller import and
 argument, relay parameter, relay import and argument, sink-wrapper parameter,
 and sink that references that parameter. Language strings and comments are
 masked before structural source, sink, and call matching. These rows remain
@@ -49,8 +50,11 @@ hypotheses: the correction turn must prove runtime same-value flow through
 every recorded file and reject unused imports, fixed arguments, intervening
 reassignment, out-of-function calls, unreachable wrappers, text that only
 resembles code, and API co-occurrence. Argument vectors without a shell,
-native SQL parameter binding, and other candidate controls count only when
-they apply to the same value, are context-correct, and dominate the sink.
+native SQL parameter binding, exact parsed-host or fixed-destination
+allowlists, redirect rejection, connection-address validation or pinning, and
+other candidate controls count only when they apply to the same value, are
+context-correct, and dominate the sink. A URL or hostname substring check is
+not classified as an exact-host control.
 
 The correction turn also receives a deterministic reconciliation of
 `in_scope_files.txt` against the draft coverage document. This catches omitted
@@ -267,6 +271,17 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
+The SSRF framework lane pairs Node and Python cross-file absolute-URL flows
+with fixed complete-URL selection and redirect-free negative controls:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/ssrf-framework-manifest.json `
+  --results-dir C:\security-benchmarks\ssrf-framework `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
 Use `--model` and `--effort` to select a Copilot model and reasoning effort.
 The default is `gpt-5.6-sol` with `xhigh` effort.
 `--model auto` delegates model selection to Copilot and does not send a
@@ -425,6 +440,18 @@ node ../../benchmarks/run-benchmark.mjs `
   --effort high `
   --workers 2 `
   --mode deep
+
+# Run the strict Node/Python SSRF framework diagnostic
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/ssrf-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-ssrf-framework `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
 ```
 
 Evaluation requires successful campaign-bound runner receipts by default, so a
@@ -447,7 +474,14 @@ are preserved under `.benchmark-attempts` and retried from a fresh Git fixture.
 Every scanner invocation also receives a unique staging output path that is
 promoted to the canonical run directory only after the process returns. This
 prevents a stateful scanner's internal path registry from turning a real retry
-into an "existing scan" collision.
+into an "existing scan" collision. Archived attempt slots remain monotonic even
+when recovery encounters an older duplicate receipt. Scanner stdout and stderr
+are drained into per-attempt logs and mirrored only on a best-effort basis, so a
+closed terminal cannot abort a long scan or erase its diagnostic evidence.
+Model-authored contract drafts may contain one UTF-8 byte-order mark; the
+workbench removes it at the unsealed-draft boundary and records recovery before
+canonical sealing. Invalid UTF-8, non-finite numbers, malformed structure, and
+post-seal mutations remain fatal.
 Use `--workers N` for bounded concurrency, `--max-attempts N` for process-level
 retries, `--scan-timeout-ms N` for an outer process-tree deadline, and
 `--scanner-cli PATH --scanner-label NAME` to produce a separate compatible

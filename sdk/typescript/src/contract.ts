@@ -950,6 +950,7 @@ function parseJson(path: string, bytes: Uint8Array): Record<string, unknown> {
       cause: error,
     });
   }
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
   requireJsonNesting(text, path);
   let payload: unknown;
   try {

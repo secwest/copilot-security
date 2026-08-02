@@ -148,6 +148,26 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The SSRF framework lane applies the same strict gates to Node and Python
+relative-import wrappers. Its positives pass complete caller-controlled URLs
+to outbound HTTP sinks. Its negative controls select only complete
+server-owned URLs by exact key and disable redirects. Both sides use the same
+strict request deadline and decoded-response size ceiling so the pair isolates
+destination control without introducing an unrelated buffering weakness:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/ssrf-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-ssrf-framework `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 The Python cross-file lane applies the same gates to explicit relative
 from-imports and includes multiline parameter-binding counterevidence:
 
@@ -223,7 +243,11 @@ fresh temporary Git repository and unique scanner-visible staging output are
 created. The staging path is never reused and is promoted to the canonical run
 directory only after the scanner returns, which keeps retries compatible with
 scanners that retain their own path registry. `--force` also preserves the
-previous run rather than deleting it. `--max-attempts N`
+previous run rather than deleting it. Archive allocation skips occupied slots,
+including duplicate legacy receipts, instead of terminating the retry loop.
+Each child process is drained through adjacent `.scanner.stdout.log` and
+`.scanner.stderr.log` files; console mirroring is best-effort, so terminal or CI
+log disconnection does not kill the campaign. `--max-attempts N`
 controls fresh process attempts per invocation, `--scan-timeout-ms N` supplies
 an outer process-tree deadline, and `--workers N` runs up to eight independent
 case/runs concurrently. The default remains one worker.

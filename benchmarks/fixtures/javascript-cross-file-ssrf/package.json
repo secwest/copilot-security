@@ -1,0 +1,5 @@
+{
+  "name": "javascript-cross-file-ssrf",
+  "private": true,
+  "type": "module"
+}

@@ -571,10 +571,16 @@ def _read_scan_local_json_bytes(
                 if maximum is None
                 else _read_bounded_json_document(handle, context, maximum)
             )
+        had_utf8_bom = raw.startswith(b"\xef\xbb\xbf")
         try:
-            text = raw.decode("utf-8")
+            text = raw.decode("utf-8-sig")
         except UnicodeDecodeError as exc:
             raise ContractError(f"{context}: invalid JSON: {exc}") from exc
+        if had_utf8_bom and draft_recovery_warnings is not None:
+            raw = text.encode("utf-8")
+            warning = f"Removed a UTF-8 BOM from unsealed {context}."
+            if warning not in draft_recovery_warnings:
+                draft_recovery_warnings.append(warning)
         try:
             payload = _loads_json(text)
         except ValueError as exc:

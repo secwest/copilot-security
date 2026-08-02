@@ -527,6 +527,60 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-ssrf",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [
+      /\b(?:axios|fetch|got|undici)\b/iu,
+      /\b(?:node:)?https?\b|\brequire\s*\(\s*["'](?:node:)?https?["']/iu,
+    ],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "outbound-http-url",
+        expression:
+          /\b(?:axios|fetch|got)\s*\(|\b(?:axios|got)\.(?:delete|get|head|options|patch|post|put|request)\s*\(|\b(?:https?|undici)\.(?:get|request)\s*\(/iu,
+        cweIds: ["CWE-918"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-destination-allowlist",
+        expression:
+          /\b(?:allowedUrls?|assetUrls?|trustedUrls?)\b|\bObject\.hasOwn\s*\(/iu,
+      },
+      {
+        kind: "parsed-host-exact-allowlist",
+        expression:
+          /\b(?:allowedHosts?|trustedHosts?)\.(?:has|includes)\s*\([^)]*\.(?:host|hostname)\b|\.(?:host|hostname)\b\s*(?:===|==)/iu,
+      },
+      {
+        kind: "fixed-origin-url-construction",
+        expression: /\bnew\s+URL\s*\(/iu,
+      },
+      {
+        kind: "redirects-disabled",
+        expression: /\bmaxRedirects\s*:\s*0\b|\bredirect\s*:\s*["']error["']/iu,
+      },
+      {
+        kind: "network-address-validation-or-pinning",
+        expression:
+          /\b(?:dns\.(?:lookup|resolve|resolve4|resolve6)|isPrivateAddress|isPublicAddress|lookupAndPin|pinnedAddress|connectAddress)\b/iu,
+      },
+    ],
+  },
+  {
     id: "python-web-command",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -610,6 +664,58 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
       {
         kind: "bounded-allowlist-or-validation",
         expression: /\b(?:allowlist|is_valid|validate)\b|\.fullmatch\s*\(/iu,
+      },
+    ],
+  },
+  {
+    id: "python-web-ssrf",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\b(?:aiohttp|httpx|requests|urllib3?)\b/iu,
+      /\bfrom\s+urllib\.request\s+import\s+urlopen\b/iu,
+    ],
+    sources: [
+      {
+        kind: "framework-request-field",
+        expression:
+          /\brequest\.(?:args|cookies|form|GET|headers|json|POST|values)\b|\brequest\.get_json\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\b(?:Body|Cookie|Form|Header|Path|Query)\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "outbound-http-url",
+        expression:
+          /\b(?:aiohttp|httpx|requests|urllib3)\.(?:delete|get|head|options|patch|post|put|request)\s*\(|\b(?:urllib\.request\.)?urlopen\s*\(/iu,
+        cweIds: ["CWE-918"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-destination-allowlist",
+        expression: /\b(?:allowed_urls?|asset_urls?|trusted_urls?)\b/iu,
+      },
+      {
+        kind: "parsed-host-exact-allowlist",
+        expression:
+          /\.hostname\b\s*(?:==|\b(?:not\s+)?in\b)[^\r\n]*\b(?:allowed_hosts?|trusted_hosts?)\b|\.hostname\b\s*==/iu,
+      },
+      {
+        kind: "fixed-origin-url-construction",
+        expression: /\b(?:urljoin|urlunsplit)\s*\(/iu,
+      },
+      {
+        kind: "redirects-disabled",
+        expression: /\b(?:allow_redirects|follow_redirects)\s*=\s*False\b/u,
+      },
+      {
+        kind: "network-address-validation-or-pinning",
+        expression:
+          /\b(?:getaddrinfo|ip_address|is_global|is_private|pinned_address|connect_address)\b/iu,
       },
     ],
   },

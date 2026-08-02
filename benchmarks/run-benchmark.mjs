@@ -2,7 +2,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
+import { appendFileSync, constants, writeFileSync } from "node:fs";
 import { cp, lstat, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
@@ -19,6 +19,7 @@ import {
   createBenchmarkAttemptOutput,
   createBenchmarkCampaign,
   ensureBenchmarkCampaign,
+  nextBenchmarkAttemptArchiveSlot,
   preserveBenchmarkAttempt,
   promoteBenchmarkAttemptOutput,
   readBenchmarkReceiptAttempt,
@@ -29,6 +30,7 @@ import {
   writeBenchmarkReceipt,
   writeBenchmarkTextAtomic,
 } from "../sdk/typescript/dist/benchmark-campaign.js";
+import { createBestEffortWriter } from "./best-effort-output.mjs";
 import {
   benchmarkFindingsPaths,
   buildBenchmarkSelection,
@@ -48,6 +50,8 @@ const defaultCli = join(
   "copilot-security.mjs",
 );
 const MAX_BENCHMARK_MANIFEST_BYTES = 4 * 1024 * 1024;
+const writeStandardOutput = createBestEffortWriter(process.stdout);
+const writeDiagnostic = createBestEffortWriter(process.stderr);
 
 if (process.argv.slice(2).includes("--help")) {
   process.stdout
@@ -210,7 +214,7 @@ const activeCampaign = await ensureBenchmarkCampaign(
   resultsDirectory,
   campaign,
 );
-process.stderr.write(
+writeDiagnostic(
   `[benchmark] campaign ${activeCampaign.campaignId}; corpus ${activeCampaign.corpusId}; comparison policy ${activeCampaign.comparisonPolicyId ?? activeCampaign.scanPolicyId}; scanner ${activeCampaign.scanner.label}@${activeCampaign.scanner.cliSha256.slice(0, 12)}\n`,
 );
 
@@ -232,7 +236,7 @@ for (const benchmarkCase of selectedCases) {
 let nextTask = 0;
 let scanFailures = 0;
 if (options.finalizeOnly) {
-  process.stderr.write(
+  writeDiagnostic(
     "[benchmark] finalize-only: preserving all scan outputs and rebuilding evaluation artifacts from existing receipts\n",
   );
 } else {
@@ -250,7 +254,7 @@ if (options.finalizeOnly) {
             if (!succeeded) scanFailures += 1;
           } catch (error) {
             scanFailures += 1;
-            process.stderr.write(
+            writeDiagnostic(
               `[benchmark:w${workerIndex + 1}] campaign task failed for ${task.benchmarkCase.id} run ${task.run}: ${errorMessage(error)}\n`,
             );
           }
@@ -300,8 +304,8 @@ const evaluation = spawnSync(
   },
 );
 if (typeof evaluation.stdout === "string") {
-  process.stdout.write(evaluation.stdout);
   await writeBenchmarkTextAtomic(reportPath, evaluation.stdout);
+  writeStandardOutput(evaluation.stdout);
 }
 process.exitCode =
   scanFailures > 0 ? 1 : evaluation.status === null ? 1 : evaluation.status;
@@ -333,7 +337,7 @@ async function runTask(task, worker) {
         allowCompatibleNamespace: true,
       });
       await requireReceiptArtifacts(receipt, contract, outputDirectory);
-      process.stderr.write(
+      writeDiagnostic(
         `[benchmark:w${worker}] skipping ${benchmarkCase.id} run ${run}; sealed result and campaign receipt verified\n`,
       );
       return true;
@@ -344,14 +348,13 @@ async function runTask(task, worker) {
       ) {
         // A new run has nothing to resume.
       } else {
-        process.stderr.write(
+        writeDiagnostic(
           `[benchmark:w${worker}] preserving incomplete ${benchmarkCase.id} run ${run}: ${errorMessage(error)}\n`,
         );
-        await preserveBenchmarkAttempt({
-          resultsDirectory,
-          caseId: benchmarkCase.id,
+        lastAttempt = await preserveCurrentAttempt({
+          benchmarkCase,
           run,
-          attempt: lastAttempt,
+          lastAttempt,
           outputDirectory,
           statusPath,
         });
@@ -361,11 +364,10 @@ async function runTask(task, worker) {
     (await lstat(outputDirectory).catch(() => null)) !== null ||
     (await lstat(statusPath).catch(() => null)) !== null
   ) {
-    await preserveBenchmarkAttempt({
-      resultsDirectory,
-      caseId: benchmarkCase.id,
+    lastAttempt = await preserveCurrentAttempt({
+      benchmarkCase,
       run,
-      attempt: lastAttempt,
+      lastAttempt,
       outputDirectory,
       statusPath,
     });
@@ -376,17 +378,16 @@ async function runTask(task, worker) {
     invocationAttempt <= options.maxAttempts;
     invocationAttempt += 1
   ) {
-    const attempt = lastAttempt + invocationAttempt;
     if (invocationAttempt > 1) {
-      await preserveBenchmarkAttempt({
-        resultsDirectory,
-        caseId: benchmarkCase.id,
+      lastAttempt = await preserveCurrentAttempt({
+        benchmarkCase,
         run,
-        attempt: attempt - 1,
+        lastAttempt,
         outputDirectory,
         statusPath,
       });
     }
+    const attempt = lastAttempt + 1;
     const started = Date.now();
     const startedAt = new Date(started).toISOString();
     let repositoryRevision = "unavailable";
@@ -427,7 +428,7 @@ async function runTask(task, worker) {
         "rev-parse",
         "HEAD",
       ]);
-      process.stderr.write(
+      writeDiagnostic(
         `[benchmark:w${worker}] scanning ${benchmarkCase.id} run ${run}/${findingsPathsByCase[benchmarkCase.id].length} attempt ${attempt}\n`,
       );
       scan = await runScanner(
@@ -467,7 +468,7 @@ async function runTask(task, worker) {
           },
         });
         await writeBenchmarkReceipt(statusPath, receipt);
-        process.stderr.write(
+        writeDiagnostic(
           `[benchmark:w${worker}] completed ${benchmarkCase.id} run ${run} attempt ${attempt}\n`,
         );
         return true;
@@ -509,11 +510,38 @@ async function runTask(task, worker) {
         scan,
       }),
     );
-    process.stderr.write(
+    lastAttempt = attempt;
+    writeDiagnostic(
       `[benchmark:w${worker}] failed ${benchmarkCase.id} run ${run} attempt ${attempt}: ${scan.error ?? `status ${scan.status}`}\n`,
     );
   }
   return false;
+}
+
+async function preserveCurrentAttempt({
+  benchmarkCase,
+  run,
+  lastAttempt,
+  outputDirectory,
+  statusPath,
+}) {
+  const archiveAttempt = await nextBenchmarkAttemptArchiveSlot({
+    resultsDirectory,
+    caseId: benchmarkCase.id,
+    run,
+    startingAt: lastAttempt,
+  });
+  const archived = await preserveBenchmarkAttempt({
+    resultsDirectory,
+    caseId: benchmarkCase.id,
+    run,
+    attempt: archiveAttempt,
+    outputDirectory,
+    statusPath,
+  });
+  return archived === null
+    ? lastAttempt
+    : Math.max(lastAttempt, archiveAttempt);
 }
 
 function buildReceipt({
@@ -584,14 +612,23 @@ function runScanner(repository, outputDirectory, seedSarif) {
       : ["--max-ai-credits", String(options.maxAiCredits)]),
     ...seedSarif.flatMap((path) => ["--seed-sarif", path]),
   ];
+  const stdoutPath = `${outputDirectory}.scanner.stdout.log`;
+  const stderrPath = `${outputDirectory}.scanner.stderr.log`;
+  const captureStdout = createScannerOutputCapture(
+    stdoutPath,
+    writeStandardOutput,
+  );
+  const captureStderr = createScannerOutputCapture(stderrPath, writeDiagnostic);
   return new Promise((resolvePromise) => {
     const child = spawn(process.execPath, args, {
       cwd: repositoryRoot,
       detached: process.platform !== "win32",
       env: process.env,
-      stdio: "inherit",
+      stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
+    child.stdout.on("data", captureStdout);
+    child.stderr.on("data", captureStderr);
     let timedOut = false;
     let settled = false;
     let forceTimer;
@@ -626,10 +663,31 @@ function runScanner(repository, outputDirectory, seedSarif) {
           ? { error: `Scanner exceeded ${options.scanTimeoutMs} ms.` }
           : code === 0
             ? {}
-            : { error: `Scanner exited with ${code ?? signal ?? "unknown"}.` }),
+            : {
+                error: `Scanner exited with ${code ?? signal ?? "unknown"}. Diagnostics: ${relative(resultsDirectory, stdoutPath)}, ${relative(resultsDirectory, stderrPath)}.`,
+              }),
       });
     });
   });
+}
+
+function createScannerOutputCapture(path, relay) {
+  let persistent = true;
+  try {
+    writeFileSync(path, "", { encoding: "utf8", flag: "wx", mode: 0o600 });
+  } catch {
+    persistent = false;
+  }
+  return (chunk) => {
+    if (persistent) {
+      try {
+        appendFileSync(path, chunk);
+      } catch {
+        persistent = false;
+      }
+    }
+    relay(chunk);
+  };
 }
 
 function terminateProcessTree(pid) {

@@ -408,6 +408,42 @@ export async function preserveBenchmarkAttempt(options: {
   return destination;
 }
 
+export async function nextBenchmarkAttemptArchiveSlot(options: {
+  resultsDirectory: string;
+  caseId: string;
+  run: number;
+  startingAt: number;
+}): Promise<number> {
+  if (!Number.isSafeInteger(options.run) || options.run < 1) {
+    throw new CopilotSecurityError("Benchmark run must be a positive integer.");
+  }
+  if (!Number.isSafeInteger(options.startingAt) || options.startingAt < 0) {
+    throw new CopilotSecurityError(
+      "Benchmark archive slot must be a nonnegative integer.",
+    );
+  }
+  const root = resolve(options.resultsDirectory);
+  const segment = safeCaseSegment(options.caseId);
+  let attempt = options.startingAt;
+  while (
+    (await lstat(
+      join(
+        root,
+        ".benchmark-attempts",
+        segment,
+        `run-${options.run}`,
+        `attempt-${attempt}`,
+      ),
+    ).catch(() => null)) !== null
+  ) {
+    if (attempt === Number.MAX_SAFE_INTEGER) {
+      throw new CopilotSecurityError("Benchmark attempt counter overflowed.");
+    }
+    attempt += 1;
+  }
+  return attempt;
+}
+
 export async function createBenchmarkAttemptOutput(options: {
   resultsDirectory: string;
   outputDirectory: string;

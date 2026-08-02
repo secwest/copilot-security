@@ -3508,7 +3508,7 @@ def require_canonical_scan_directory(scan_dir: Path) -> Path:
 def read_json_object(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(
-            path.read_text(encoding="utf-8"),
+            path.read_text(encoding="utf-8-sig"),
             parse_constant=reject_non_finite_json,
         )
     except (OSError, ValueError) as exc:

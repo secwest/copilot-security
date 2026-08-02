@@ -93,6 +93,20 @@ interpreter that consumes the value.
   template is safe only when the selected API binds interpolations rather than
   concatenating them.
 
+### Node HTTP server-side request forgery — CWE-918
+
+- Sources: the same Node HTTP request surfaces.
+- Sinks: complete or partial outbound request URLs passed to `fetch`, common
+  `axios`/`got` methods, Node `http`/`https`, Undici, or an activated HTTP
+  client wrapper.
+- Strong counterevidence: selection of one complete server-owned URL by exact
+  key with redirects disabled, or a parsed exact-host allowlist combined with
+  complete A/AAAA validation, connection-address pinning, preserved Host/TLS
+  identity, and redirect revalidation or rejection. `new URL` alone is not a
+  sanitizer: an attacker-controlled absolute first argument overrides its
+  base. URL or hostname substring checks are bypassable and never count as
+  exact-host validation.
+
 ### Python web command execution — CWE-78
 
 - Sources: Flask/Django-style request collections and JSON, plus FastAPI bound
@@ -110,6 +124,17 @@ interpreter that consumes the value.
 - Strong counterevidence: native bound parameters or ORM expressions that do
   not permit request-controlled identifiers, operators, clauses, or raw
   fragments.
+
+### Python web server-side request forgery — CWE-918
+
+- Sources: Flask/Django request collections and FastAPI bound parameters.
+- Sinks: outbound URL arguments to `requests`, HTTPX, urllib/urlopen, or an
+  activated client/session wrapper.
+- Strong counterevidence: selection of one complete server-owned URL by exact
+  key with redirects disabled, or parsed exact-host validation plus complete
+  address validation and connection pinning. `urljoin` is only safe when the
+  attacker cannot supply a scheme-relative or absolute destination; parsing a
+  URL without constraining the consumed host is not validation.
 
 ### Spring/servlet command execution — CWE-78
 
@@ -161,5 +186,10 @@ interpreter that consumes the value.
 - A source and sink in one file are not proof that they are connected.
 - A safe sibling does not suppress a vulnerable callsite, and a vulnerable
   sibling does not make a parameterized or shell-free callsite vulnerable.
+- For SSRF, distinguish full URL authority control from a bounded path segment.
+  Reopen redirect behavior, proxy selection, DNS resolution, every A/AAAA
+  answer, connection-pool reuse, the actual socket destination, and Host/TLS
+  identity. A hostname allowlist without address validation and connection
+  pinning does not close DNS rebinding.
 - When a candidate is rejected, record the exact dominating control and why it
   is context-correct for that sink.

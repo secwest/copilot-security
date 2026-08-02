@@ -487,6 +487,36 @@ describe("malformed scan artifact recovery", () => {
     expect(recovered.findings).toEqual([]);
   });
 
+  test("normalizes UTF-8 BOMs on unsealed model-authored drafts", async () => {
+    const fixture = await startDraftScan();
+    for (const filename of [
+      "scan-manifest.json",
+      "findings.json",
+      "coverage.json",
+    ]) {
+      const path = join(fixture.scanDir, filename);
+      await writeFile(
+        path,
+        Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), await readFile(path)]),
+      );
+    }
+
+    const completed = await completeScan(fixture);
+    expect(completed.progress.status).toBe("complete");
+    for (const filename of ["findings.json", "coverage.json"]) {
+      expect(completed.warnings).toContain(
+        `Removed a UTF-8 BOM from unsealed ${filename}.`,
+      );
+    }
+    for (const filename of [
+      "scan-manifest.json",
+      "findings.json",
+      "coverage.json",
+    ]) {
+      expect((await readFile(join(fixture.scanDir, filename)))[0]).toBe(0x7b);
+    }
+  });
+
   test("repairs bounded unescaped quotes only in unsealed draft JSON", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");
