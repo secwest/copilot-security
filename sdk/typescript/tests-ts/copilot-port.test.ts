@@ -12,11 +12,17 @@ import {
   COPILOT_SCANNER_SESSION_HOOKS,
   createCopilotScannerSessionHooks,
   createScopedScannerPermissionHandler,
+  DEFAULT_FRESH_SESSION_ATTEMPTS,
   DEFAULT_MODEL_TURN_TIMEOUT_MILLISECONDS,
+  disconnectManagedCopilotSession,
   emptyCopilotUsage,
+  freshSessionRecoveryPrompt,
+  freshSessionRetryReason,
   isSafetyClassifierRefusal,
+  MAX_FRESH_SESSION_ATTEMPTS,
   prepareCopilotRuntime,
   resolveCopilotCli,
+  runWithFreshCopilotSessions,
   runScanQualityCorrection,
   safetyClassifierRetryPrompt,
   sendCopilotPromptWithSafetyRecovery,
@@ -27,6 +33,9 @@ import {
 } from "../src/copilot-client.js";
 import {
   CopilotSecurity,
+  CopilotSecurityError,
+  ModelTransportInterruptedError,
+  ModelTurnDeadlineExceededError,
   scanAuthentication,
   type ScanAuthentication,
 } from "../src/index.js";
@@ -383,6 +392,143 @@ describe("Copilot port", () => {
       timeoutMilliseconds: 100,
     });
     expect(aborts).toBe(1);
+  });
+
+  test("retries deadline failures in isolated sessions with idempotent recovery prompts", async () => {
+    const attempts: Array<{ attempt: number; prompt: string }> = [];
+    const retries: Array<[number, number, string]> = [];
+    const result = await runWithFreshCopilotSessions({
+      maxAttempts: DEFAULT_FRESH_SESSION_ATTEMPTS,
+      prompt: "run the immutable scanner contract",
+      runAttempt: async (attempt, prompt) => {
+        attempts.push({ attempt, prompt });
+        if (attempt < 3) throw new ModelTurnDeadlineExceededError(60_000);
+        return "completed";
+      },
+      onRetry: (attempt, maximum, reason) => {
+        retries.push([attempt, maximum, reason]);
+      },
+    });
+
+    expect(result).toBe("completed");
+    expect(attempts.map(({ attempt }) => attempt)).toEqual([1, 2, 3]);
+    expect(attempts[0]?.prompt).toBe("run the immutable scanner contract");
+    expect(attempts[1]?.prompt).toContain("Fresh-session recovery attempt 2/3");
+    expect(attempts[1]?.prompt).toContain(
+      "existing scan artifact as an untrusted, possibly partial draft",
+    );
+    expect(attempts[1]?.prompt).toContain(
+      "trusted host will independently verify target identity",
+    );
+    expect(retries).toEqual([
+      [2, 3, "model_timeout"],
+      [3, 3, "model_timeout"],
+    ]);
+  });
+
+  test("fails closed after the configured fresh-session budget", async () => {
+    const terminal = new ModelTurnDeadlineExceededError(60_000);
+    const attempts: number[] = [];
+
+    await expect(
+      runWithFreshCopilotSessions({
+        maxAttempts: MAX_FRESH_SESSION_ATTEMPTS,
+        prompt: "scan",
+        runAttempt: async (attempt) => {
+          attempts.push(attempt);
+          throw terminal;
+        },
+      }),
+    ).rejects.toBe(terminal);
+    expect(attempts).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  test("never retries authentication, classifier, contract, or cancellation failures", async () => {
+    for (const terminal of [
+      new Error("401 unauthorized token"),
+      new Error("Safety classifier rejected the response"),
+      new Error("coverage contract validation failed"),
+    ]) {
+      let attempts = 0;
+      await expect(
+        runWithFreshCopilotSessions({
+          maxAttempts: 3,
+          prompt: "scan",
+          runAttempt: async () => {
+            attempts += 1;
+            throw terminal;
+          },
+        }),
+      ).rejects.toBe(terminal);
+      expect(attempts).toBe(1);
+    }
+
+    const cancellation = new AbortController();
+    const reason = new Error("user cancelled");
+    let attempts = 0;
+    await expect(
+      runWithFreshCopilotSessions({
+        maxAttempts: 3,
+        signal: cancellation.signal,
+        prompt: "scan",
+        runAttempt: async () => {
+          attempts += 1;
+          cancellation.abort(reason);
+          throw new ModelTurnDeadlineExceededError(60_000);
+        },
+      }),
+    ).rejects.toBe(reason);
+    expect(attempts).toBe(1);
+  });
+
+  test("classifies only bounded timeout and transport failures for fresh sessions", () => {
+    expect(
+      freshSessionRetryReason(new ModelTurnDeadlineExceededError(60_000)),
+    ).toBe("model_timeout");
+    expect(freshSessionRetryReason(new ModelTransportInterruptedError())).toBe(
+      "transport_interrupted",
+    );
+    for (const message of [
+      "Responses stream ended without a completed response",
+      "read ECONNRESET while waiting for model transport",
+      "socket hang up",
+    ]) {
+      expect(freshSessionRetryReason(new Error(message))).toBe(
+        "transport_interrupted",
+      );
+    }
+    for (const message of [
+      "403 model access forbidden",
+      "Safety filtering rejected the request",
+      "sandbox telemetry missing",
+      "scan contract is incomplete",
+    ]) {
+      expect(freshSessionRetryReason(new Error(message))).toBeNull();
+    }
+    expect(
+      freshSessionRetryReason(
+        new CopilotSecurityError(
+          "Scanner contract failed after a transport closed.",
+        ),
+      ),
+    ).toBeNull();
+    expect(() => freshSessionRecoveryPrompt("scan", 2, 3)).not.toThrow();
+  });
+
+  test("retries a sanitized model-transport interruption", async () => {
+    const attempts: number[] = [];
+    const result = await runWithFreshCopilotSessions({
+      maxAttempts: 2,
+      prompt: "scan",
+      runAttempt: async (attempt) => {
+        attempts.push(attempt);
+        if (attempt === 1) throw new ModelTransportInterruptedError();
+        return "completed";
+      },
+    });
+
+    expect(result).toBe("completed");
+    expect(attempts).toEqual([1, 2]);
   });
 
   test("requests bounded native retries only for recoverable model calls", () => {
@@ -798,6 +944,20 @@ describe("Copilot port", () => {
     await stopManagedCopilotClient(client, 5);
 
     expect(events).toEqual(["stop", "force-stop"]);
+  });
+
+  test("bounds a hung session disconnect before opening a fresh session", async () => {
+    let disconnects = 0;
+    await disconnectManagedCopilotSession(
+      {
+        async disconnect(): Promise<never> {
+          disconnects += 1;
+          return await new Promise<never>(() => {});
+        },
+      },
+      5,
+    );
+    expect(disconnects).toBe(1);
   });
 
   test("honors cancellation before and during session initialization", async () => {

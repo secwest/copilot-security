@@ -28,6 +28,21 @@ export class OutputInsideProtectedRootError extends OutputDirectoryError {
   }
 }
 export class IncompleteScanError extends CopilotSecurityError {}
+export class ModelTurnDeadlineExceededError extends IncompleteScanError {
+  public readonly timeoutMilliseconds: number;
+
+  public constructor(timeoutMilliseconds: number) {
+    super(
+      `Copilot model turn exceeded the ${timeoutMilliseconds} millisecond scanner deadline.`,
+    );
+    this.timeoutMilliseconds = timeoutMilliseconds;
+  }
+}
+export class ModelTransportInterruptedError extends IncompleteScanError {
+  public constructor() {
+    super("Copilot model transport ended before the scanner turn completed.");
+  }
+}
 export class ScanClosureIncompleteError extends IncompleteScanError {
   public constructor(
     public readonly findingQualityGapCount: number,

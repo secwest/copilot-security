@@ -543,6 +543,61 @@ describe("one-shot scan events", () => {
     expect(JSON.stringify(reconnects)).not.toContain("org-private");
   });
 
+  test("reports bounded fresh-session recovery without provider error text", async () => {
+    const scanDir = await copyCompletedScan(await temporaryDirectory());
+    const reconnects: Array<{
+      attempt: number;
+      maximum: number;
+      details?: ScanReconnectDetails;
+    }> = [];
+    let starts = 0;
+    async function* events(): AsyncGenerator<ThreadEvent> {
+      yield { type: "thread.started", thread_id: "thread-attempt-1" };
+      yield {
+        type: "copilot.fresh_session_retry",
+        attempt: 2,
+        max_attempts: 3,
+        reason: "model_timeout",
+        provider_error: "private provider detail",
+      };
+      yield {
+        type: "copilot.fresh_session_retry",
+        attempt: 999,
+        max_attempts: 999,
+        reason: "model_timeout",
+      };
+      yield { type: "thread.started", thread_id: "thread-attempt-2" };
+      yield {
+        type: "turn.completed",
+        usage: { input_tokens: 30, output_tokens: 5 },
+      };
+    }
+
+    const result = await runEvents(
+      scanDir,
+      events(),
+      new AbortController(),
+      (attempt, maximum, details) => {
+        reconnects.push({ attempt, maximum, details });
+      },
+      undefined,
+      () => {
+        starts += 1;
+      },
+    );
+
+    expect(result.threadId).toBe("thread-attempt-2");
+    expect(starts).toBe(1);
+    expect(reconnects).toEqual([
+      {
+        attempt: 2,
+        maximum: 3,
+        details: { reason: "model_timeout" },
+      },
+    ]);
+    expect(JSON.stringify(reconnects)).not.toContain("private provider detail");
+  });
+
   test("classifies retryable reconnect causes without exposing provider details", async () => {
     const scanDir = await copyCompletedScan(await temporaryDirectory());
     const reconnects: ScanReconnectDetails[] = [];

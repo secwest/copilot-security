@@ -553,6 +553,7 @@ describe("CLI workbench", () => {
                 "/analysis/trivy.sarif",
               ],
               sarifSourceRoot: "/original/repository",
+              maxSessionAttempts: 4,
               config: savedConfig,
             },
           }),
@@ -570,6 +571,7 @@ describe("CLI workbench", () => {
       knowledgeBasePaths: ["/original/security.md"],
       seedSarifPaths: ["/analysis/codeql.sarif", "/analysis/trivy.sarif"],
       sarifSourceRoot: "/original/repository",
+      maxSessionAttempts: 4,
     });
 
     const references: Array<[JsonObject, ReturnType<typeof DiffTarget.refs>]> =
@@ -613,6 +615,7 @@ describe("CLI workbench", () => {
         ),
       ).toBe(0);
       expect(runOptions?.["target"]).toEqual(expected);
+      expect(runOptions?.["maxSessionAttempts"]).toBe(3);
     }
   });
 

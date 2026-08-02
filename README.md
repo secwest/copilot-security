@@ -151,6 +151,20 @@ the SDK's maximum process lifetime. Set
 `COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS` to a whole number from `60000` through
 `86400000` when a shorter benchmark bound or a longer deep-scan turn is needed.
 
+A hard model-turn deadline or recognized transport interruption starts a new,
+isolated Copilot CLI session over the same disposable analysis snapshot and
+immutable host worklist. Direct scans allow three sessions by default. Set
+`--max-session-attempts N`, or SDK `maxSessionAttempts`, from `1` through `5`;
+`1` disables fresh-session recovery. Authentication, authorization, scanner
+contract, sandbox, cancellation, cost-limit, and exhausted safety-classifier
+failures remain terminal. Recovery never trusts conversational state or a
+prior session's files: the new session must re-consume the inventory, treat
+existing artifacts as possibly partial drafts, reopen repository evidence,
+and pass the same deterministic host audits before sealing. Session shutdown
+is bounded so a hung disconnect cannot prevent the next attempt. Streamed and
+persisted token usage is accumulated across all attempt roots and their
+subagents, so scanner-owned cost enforcement cannot be reset by recovery.
+
 ## Requirements
 
 - GitHub Copilot CLI, installed and signed in (`copilot login`)
@@ -327,7 +341,9 @@ in results are consumption telemetry, not a remaining balance. Use
 session limit across the root session and its subagents; Copilot CLI requires
 an explicit limit of at least 30 credits. Service-side transient rate limits
 remain separate from billing or plan allowance and use the scanner's bounded
-reconnect path.
+reconnect path. A configured native AI-credit limit is applied independently
+to every fresh session; scanner-owned `--max-cost` accounting remains
+cumulative across all fresh sessions.
 
 ### Isolated scanner state
 

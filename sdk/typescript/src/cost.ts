@@ -60,7 +60,7 @@ const SESSION_READ_SIZE = 64 * 1_024;
 export class ScanCostTracker {
   readonly #options: ScanCostTrackerOptions;
   readonly #sessions = new Map<string, SessionUsage>();
-  #threadId: string | null = null;
+  readonly #threadIds = new Set<string>();
   #timer: NodeJS.Timeout | null = null;
   #pending: Promise<void> = Promise.resolve();
   #snapshot: ScanCostSnapshot = { usage: null, cost: null };
@@ -71,8 +71,9 @@ export class ScanCostTracker {
   }
 
   public start(threadId: string): void {
-    if (this.#threadId !== null) return;
-    this.#threadId = threadId;
+    const wasEmpty = this.#threadIds.size === 0;
+    this.#threadIds.add(threadId);
+    if (!wasEmpty) return;
     if (this.#options.maxCostUsd === undefined) return;
     const poll = () => {
       void this.refresh().catch((error: unknown) => {
@@ -96,9 +97,7 @@ export class ScanCostTracker {
   public observe(usage: unknown): ScanCostSnapshot {
     const normalized = tokenUsage(usage);
     if (normalized === null) return this.#snapshot;
-    const cost = estimateScanCost(this.#options.model, normalized);
-    this.#snapshot = { usage: normalized, cost };
-    this.#reportCost(cost);
+    this.#updateSnapshot(normalized);
     return this.#snapshot;
   }
 
@@ -108,15 +107,13 @@ export class ScanCostTracker {
       this.#timer = null;
     }
     await this.refresh();
-    if (this.#snapshot.usage !== null) return this.#snapshot;
-    const cost = estimateScanCost(this.#options.model, fallbackUsage);
-    this.#snapshot = { usage: fallbackUsage ?? null, cost };
-    this.#reportCost(cost);
+    const fallback = tokenUsage(fallbackUsage);
+    if (fallback !== null) this.#updateSnapshot(fallback, fallbackUsage);
     return this.#snapshot;
   }
 
   async #readSessions(): Promise<void> {
-    if (this.#threadId === null) return;
+    if (this.#threadIds.size === 0) return;
     for await (const path of sessionFiles(
       join(this.#options.copilotHome, "sessions"),
     )) {
@@ -134,7 +131,7 @@ export class ScanCostTracker {
       await readSessionUsage(path, session);
     }
 
-    const included = new Set([this.#threadId]);
+    const included = new Set(this.#threadIds);
     let changed = true;
     while (changed) {
       changed = false;
@@ -162,8 +159,16 @@ export class ScanCostTracker {
       }
     }
     if (usage === null) return;
+    this.#updateSnapshot(usage);
+  }
+
+  #updateSnapshot(usage: ScanTokenUsage, snapshotUsage: unknown = usage): void {
+    const current = tokenUsage(this.#snapshot.usage);
+    if (current !== null && usage.total_tokens < current.total_tokens) {
+      return;
+    }
     const cost = estimateScanCost(this.#options.model, usage);
-    this.#snapshot = { usage, cost };
+    this.#snapshot = { usage: snapshotUsage, cost };
     this.#reportCost(cost);
   }
 

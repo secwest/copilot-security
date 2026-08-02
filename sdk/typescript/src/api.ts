@@ -15,6 +15,8 @@ import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import {
   copilotAuthStatus,
   CopilotScannerClient,
+  DEFAULT_FRESH_SESSION_ATTEMPTS,
+  MAX_FRESH_SESSION_ATTEMPTS,
   prepareCopilotRuntime,
   type CopilotScannerOptions,
 } from "./copilot-client.js";
@@ -155,6 +157,8 @@ export interface ScanOptions {
   maxCostUsd?: number;
   /** Native Copilot AI-credit limit for the root session and subagents. */
   maxAiCredits?: number;
+  /** Isolated Copilot sessions allowed for retryable model-turn failures. */
+  maxSessionAttempts?: number;
   onCost?: (cost: Readonly<ScanCost>) => void;
   onOutputArchived?: (archiveDir: string) => void;
   onOutputDirReady?: (scanDir: string) => void;
@@ -185,7 +189,13 @@ export type ScanAuthentication =
     };
 
 export interface ScanReconnectDetails {
-  reason: "rate_limit" | "network" | "authentication" | "authorization";
+  reason:
+    | "rate_limit"
+    | "network"
+    | "authentication"
+    | "authorization"
+    | "model_timeout"
+    | "transport_interrupted";
   retryAfterSeconds?: number;
 }
 
@@ -214,6 +224,7 @@ export interface ScanPreflight {
   reasoningEffort: string;
   maxCostUsd?: number;
   maxAiCredits?: number;
+  maxSessionAttempts: number;
 }
 
 interface LocalScanInputs
@@ -348,6 +359,7 @@ export class CopilotSecurity {
       ...(options.maxAiCredits === undefined
         ? {}
         : { maxAiCredits: options.maxAiCredits }),
+      maxSessionAttempts: scanSessionAttempts(options.maxSessionAttempts),
     };
   }
 
@@ -656,6 +668,9 @@ export class CopilotSecurity {
       const effectiveConfig =
         runtime.effectiveConfig ?? (await mergedCopilotConfig(this.config));
       const { model } = scanModelConfiguration(effectiveConfig);
+      const maxSessionAttempts = scanSessionAttempts(
+        options.maxSessionAttempts,
+      );
       validateScanCostLimit(options.maxCostUsd, model);
       const trustedCopilot = await resolveTrustedExecutable(
         environmentValue(runtime.environment, "COPILOT_CLI_PATH") ??
@@ -717,6 +732,7 @@ export class CopilotSecurity {
           : sarifSeeds?.sourceRoot,
         options.maxCostUsd,
         options.maxAiCredits,
+        maxSessionAttempts,
       );
       const workbenchOptions: WorkbenchCommandOptions = {
         python,
@@ -995,6 +1011,7 @@ export class CopilotSecurity {
         ...(options.maxAiCredits === undefined
           ? {}
           : { maxAiCredits: options.maxAiCredits }),
+        maxSessionAttempts,
       });
       const thread = copilot.startThread({
         workingDirectory: modelRepository,
@@ -1400,6 +1417,7 @@ export class CopilotSecurity {
       target: normalized,
       mode,
       outputDir: requestedOutput,
+      maxSessionAttempts: scanSessionAttempts(options.maxSessionAttempts),
       protectedRoot,
     };
   }
@@ -1613,6 +1631,28 @@ export async function runScanEvents(
             options.onObserverError,
           );
         }
+      } else if (
+        event.type === "copilot.fresh_session_retry" &&
+        Number.isSafeInteger(event["attempt"]) &&
+        Number.isSafeInteger(event["max_attempts"]) &&
+        (event["attempt"] as number) >= 2 &&
+        (event["attempt"] as number) <= (event["max_attempts"] as number) &&
+        (event["max_attempts"] as number) <= MAX_FRESH_SESSION_ATTEMPTS &&
+        typeof event["reason"] === "string" &&
+        ["model_timeout", "transport_interrupted"].includes(event["reason"])
+      ) {
+        notifyObserver(
+          "onReconnect",
+          options.onReconnect,
+          options.onObserverError,
+          event["attempt"] as number,
+          event["max_attempts"] as number,
+          {
+            reason: event["reason"] as
+              | "model_timeout"
+              | "transport_interrupted",
+          },
+        );
       } else if (
         event.type === "copilot.usage" &&
         event["usage"] !== undefined
@@ -1843,6 +1883,7 @@ function scanRecipe(
   sarifSourceRoot?: string,
   maxCostUsd?: number,
   maxAiCredits?: number,
+  maxSessionAttempts = DEFAULT_FRESH_SESSION_ATTEMPTS,
 ): JsonObject {
   return {
     repository,
@@ -1872,7 +1913,22 @@ function scanRecipe(
         }),
     ...(maxCostUsd === undefined ? {} : { maxCostUsd }),
     ...(maxAiCredits === undefined ? {} : { maxAiCredits }),
+    maxSessionAttempts,
   };
+}
+
+function scanSessionAttempts(value: number | undefined): number {
+  const attempts = value ?? DEFAULT_FRESH_SESSION_ATTEMPTS;
+  if (
+    !Number.isSafeInteger(attempts) ||
+    attempts < 1 ||
+    attempts > MAX_FRESH_SESSION_ATTEMPTS
+  ) {
+    throw new CopilotSecurityError(
+      `The maximum Copilot session attempts must be between 1 and ${MAX_FRESH_SESSION_ATTEMPTS}.`,
+    );
+  }
+  return attempts;
 }
 
 function validateScanCostLimit(

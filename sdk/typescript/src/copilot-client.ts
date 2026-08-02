@@ -17,6 +17,8 @@ import {
 import {
   ConfigurationError,
   CopilotSecurityError,
+  ModelTransportInterruptedError,
+  ModelTurnDeadlineExceededError,
   ScanClosureIncompleteError,
 } from "./errors.js";
 import {
@@ -36,6 +38,8 @@ import {
 } from "./residual-risk.js";
 
 export const DEFAULT_MODEL_TURN_TIMEOUT_MILLISECONDS = 60 * 60 * 1_000;
+export const DEFAULT_FRESH_SESSION_ATTEMPTS = 3;
+export const MAX_FRESH_SESSION_ATTEMPTS = 5;
 const MIN_MODEL_TURN_TIMEOUT_MILLISECONDS = 60 * 1_000;
 const MAX_MODEL_TURN_TIMEOUT_MILLISECONDS = 24 * 60 * 60 * 1_000;
 
@@ -207,12 +211,17 @@ interface CopilotModelErrorRecovery {
   retryCount: number;
 }
 
-interface CopilotTurnSession {
+interface CopilotDeadlineSession {
   abort(): Promise<unknown>;
   sendAndWait(
     input: { prompt: string },
     timeoutMilliseconds: number,
   ): Promise<unknown>;
+}
+
+interface CopilotTurnSession extends CopilotDeadlineSession {
+  readonly sessionId: string;
+  disconnect(): Promise<unknown>;
 }
 
 export interface CopilotScannerOptions {
@@ -224,6 +233,7 @@ export interface CopilotScannerOptions {
   pluginRoot: string;
   analysisWorkspace?: string;
   maxAiCredits?: number;
+  maxSessionAttempts?: number;
 }
 
 interface ScannerEvent {
@@ -367,6 +377,9 @@ class CopilotThread implements CopilotScannerThread {
     const modelTurnTimeoutMilliseconds = copilotModelTurnTimeoutMilliseconds(
       this.#options.environment,
     );
+    const maxSessionAttempts = requireFreshSessionAttempts(
+      this.#options.maxSessionAttempts ?? DEFAULT_FRESH_SESSION_ATTEMPTS,
+    );
     const queue = new AsyncEventQueue<ScannerEvent>();
     const usage = emptyCopilotUsage();
     let sandboxViolation: ConfigurationError | null = null;
@@ -376,90 +389,9 @@ class CopilotThread implements CopilotScannerThread {
       sandboxViolation = error;
       void sandboxedSession?.abort().catch(() => undefined);
     };
-    const client = new CopilotClient({
-      connection: RuntimeConnection.forStdio({
-        path: this.#options.cliPath,
-        args: ["--no-auto-update", "--no-remote", "--no-remote-export"],
-        env: this.#options.environment,
-      }),
-      mode: "copilot-cli",
-      workingDirectory: this.#workingDirectory,
-      ...(this.#options.gitHubToken === undefined
-        ? { useLoggedInUser: true }
-        : {
-            gitHubToken: this.#options.gitHubToken,
-            useLoggedInUser: false,
-          }),
-      logLevel: "error",
-    });
-
-    const session = await startManagedCopilotSession(
-      client,
-      options.signal,
-      async () =>
-        await createSandboxedCopilotSession(
-          client,
-          {
-            clientName: "copilot-security",
-            model: this.#options.model,
-            ...(this.#options.model === "auto"
-              ? {}
-              : {
-                  reasoningEffort: requireReasoningEffort(
-                    this.#options.reasoningEffort,
-                  ),
-                }),
-            workingDirectory: this.#workingDirectory,
-            streaming: true,
-            includeSubAgentStreamingEvents: true,
-            pluginDirectories: [this.#options.pluginRoot],
-            enableSkills: true,
-            enableConfigDiscovery: false,
-            skipCustomInstructions: true,
-            customAgentsLocalOnly: true,
-            coauthorEnabled: false,
-            remoteSession: "off",
-            enableSessionStore: false,
-            skipEmbeddingRetrieval: true,
-            embeddingCacheStorage: "in-memory",
-            ...(this.#options.gitHubToken === undefined
-              ? {}
-              : {
-                  excludedTools: [
-                    "builtin:bash",
-                    "builtin:cmd",
-                    "builtin:powershell",
-                    "builtin:sh",
-                    "builtin:shell",
-                    "builtin:zsh",
-                  ],
-                }),
-            hooks: createCopilotScannerSessionHooks(reportSandboxViolation),
-            ...(this.#options.maxAiCredits === undefined
-              ? {}
-              : {
-                  sessionLimits: { maxAiCredits: this.#options.maxAiCredits },
-                }),
-            onPermissionRequest: createScopedScannerPermissionHandler(
-              this.#options.environment["COPILOT_SECURITY_SCAN_DIR"],
-              this.#workingDirectory,
-              this.#options.pluginRoot,
-              this.#options.gitHubToken === undefined,
-            ),
-            onEvent: (event) => {
-              translateEvent(event, queue, usage);
-            },
-          },
-          this.#options,
-          this.#workingDirectory,
-        ),
-    );
-    sandboxedSession = session;
-    this.id = session.sessionId;
-    queue.push({ type: "thread.started", thread_id: session.sessionId });
 
     const abort = (): void => {
-      void session.abort().catch(() => undefined);
+      void sandboxedSession?.abort().catch(() => undefined);
     };
     options.signal.addEventListener("abort", abort, { once: true });
     if (options.signal.aborted) abort();
@@ -470,78 +402,220 @@ class CopilotThread implements CopilotScannerThread {
     const completionGuard = setInterval(() => undefined, 60_000);
     void (async () => {
       try {
-        options.signal.throwIfAborted();
-        await sendCopilotPromptWithSafetyRecovery(
-          input,
-          async (prompt) =>
-            await sendCopilotTurnWithDeadline(
-              session,
-              prompt,
-              modelTurnTimeoutMilliseconds,
-            ),
-          options.signal,
-        );
-        if (sandboxViolation !== null) throw sandboxViolation;
-        if (!options.signal.aborted) {
-          try {
-            const scanDirectory =
-              this.#options.environment["COPILOT_SECURITY_SCAN_DIR"];
-            const [
-              residualRiskInventory,
-              coverageGapInventory,
-              findingQualityGapInventory,
-            ] = await Promise.all([
-              buildResidualRiskInventory(
-                this.#workingDirectory,
-                scanDirectory,
-              ).catch(() => ""),
-              buildCoverageGapInventory(scanDirectory).catch(() => ""),
-              buildFindingQualityGapInventory(
-                scanDirectory,
-                this.#workingDirectory,
-              ).catch(() => ""),
-            ]);
-            await runScanQualityCorrection({
-              residualRiskInventory,
-              coverageGapInventory,
-              findingQualityGapInventory,
-              sendPrompt: async (prompt) => {
-                await sendCopilotPromptWithSafetyRecovery(
-                  prompt,
-                  async (retryPrompt) =>
-                    await sendCopilotTurnWithDeadline(
-                      session,
-                      retryPrompt,
-                      modelTurnTimeoutMilliseconds,
-                    ),
+        await runWithFreshCopilotSessions({
+          maxAttempts: maxSessionAttempts,
+          signal: options.signal,
+          prompt: input,
+          onRetry: (nextAttempt, maxAttempts, reason) => {
+            queue.push({
+              type: "copilot.fresh_session_retry",
+              attempt: nextAttempt,
+              max_attempts: maxAttempts,
+              reason,
+            });
+          },
+          runAttempt: async (_attempt, attemptPrompt) => {
+            const client = new CopilotClient({
+              connection: RuntimeConnection.forStdio({
+                path: this.#options.cliPath,
+                args: ["--no-auto-update", "--no-remote", "--no-remote-export"],
+                env: this.#options.environment,
+              }),
+              mode: "copilot-cli",
+              workingDirectory: this.#workingDirectory,
+              ...(this.#options.gitHubToken === undefined
+                ? { useLoggedInUser: true }
+                : {
+                    gitHubToken: this.#options.gitHubToken,
+                    useLoggedInUser: false,
+                  }),
+              logLevel: "error",
+            });
+            let clientAlreadyStopped = false;
+            let session: CopilotTurnSession | null = null;
+            let attemptTransportInterruption: ModelTransportInterruptedError | null =
+              null;
+            try {
+              try {
+                session = await startManagedCopilotSession(
+                  client,
                   options.signal,
+                  async () =>
+                    await createSandboxedCopilotSession(
+                      client,
+                      {
+                        clientName: "copilot-security",
+                        model: this.#options.model,
+                        ...(this.#options.model === "auto"
+                          ? {}
+                          : {
+                              reasoningEffort: requireReasoningEffort(
+                                this.#options.reasoningEffort,
+                              ),
+                            }),
+                        workingDirectory: this.#workingDirectory,
+                        streaming: true,
+                        includeSubAgentStreamingEvents: true,
+                        pluginDirectories: [this.#options.pluginRoot],
+                        enableSkills: true,
+                        enableConfigDiscovery: false,
+                        skipCustomInstructions: true,
+                        customAgentsLocalOnly: true,
+                        coauthorEnabled: false,
+                        remoteSession: "off",
+                        enableSessionStore: false,
+                        skipEmbeddingRetrieval: true,
+                        embeddingCacheStorage: "in-memory",
+                        ...(this.#options.gitHubToken === undefined
+                          ? {}
+                          : {
+                              excludedTools: [
+                                "builtin:bash",
+                                "builtin:cmd",
+                                "builtin:powershell",
+                                "builtin:sh",
+                                "builtin:shell",
+                                "builtin:zsh",
+                              ],
+                            }),
+                        hooks: createCopilotScannerSessionHooks(
+                          reportSandboxViolation,
+                        ),
+                        ...(this.#options.maxAiCredits === undefined
+                          ? {}
+                          : {
+                              sessionLimits: {
+                                maxAiCredits: this.#options.maxAiCredits,
+                              },
+                            }),
+                        onPermissionRequest:
+                          createScopedScannerPermissionHandler(
+                            this.#options.environment[
+                              "COPILOT_SECURITY_SCAN_DIR"
+                            ],
+                            this.#workingDirectory,
+                            this.#options.pluginRoot,
+                            this.#options.gitHubToken === undefined,
+                          ),
+                        onEvent: (event) => {
+                          translateEvent(event, queue, usage, () => {
+                            attemptTransportInterruption ??=
+                              new ModelTransportInterruptedError();
+                          });
+                        },
+                      },
+                      this.#options,
+                      this.#workingDirectory,
+                    ),
                 );
-                if (sandboxViolation !== null) throw sandboxViolation;
-              },
-              readClosureInventories: async () => ({
-                coverageGapInventory:
-                  await buildCoverageGapInventory(scanDirectory),
-                findingQualityGapInventory:
-                  await buildFindingQualityGapInventory(
+              } catch (error) {
+                clientAlreadyStopped = true;
+                throw error;
+              }
+              sandboxedSession = session;
+              this.id = session.sessionId;
+              queue.push({
+                type: "thread.started",
+                thread_id: session.sessionId,
+              });
+              const sendModelPrompt = async (
+                prompt: string,
+              ): Promise<unknown> => {
+                try {
+                  const result = await sendCopilotTurnWithDeadline(
+                    session!,
+                    prompt,
+                    modelTurnTimeoutMilliseconds,
+                  );
+                  if (sandboxViolation !== null) throw sandboxViolation;
+                  if (attemptTransportInterruption !== null) {
+                    throw attemptTransportInterruption;
+                  }
+                  return result;
+                } catch (error) {
+                  if (sandboxViolation !== null) throw sandboxViolation;
+                  if (
+                    freshSessionRetryReason(error) === "transport_interrupted"
+                  ) {
+                    throw (
+                      attemptTransportInterruption ??
+                      new ModelTransportInterruptedError()
+                    );
+                  }
+                  throw error;
+                }
+              };
+              await sendCopilotPromptWithSafetyRecovery(
+                attemptPrompt,
+                sendModelPrompt,
+                options.signal,
+              );
+              if (sandboxViolation !== null) throw sandboxViolation;
+              options.signal.throwIfAborted();
+              try {
+                const scanDirectory =
+                  this.#options.environment["COPILOT_SECURITY_SCAN_DIR"];
+                const [
+                  residualRiskInventory,
+                  coverageGapInventory,
+                  findingQualityGapInventory,
+                ] = await Promise.all([
+                  buildResidualRiskInventory(
+                    this.#workingDirectory,
+                    scanDirectory,
+                  ).catch(() => ""),
+                  buildCoverageGapInventory(scanDirectory).catch(() => ""),
+                  buildFindingQualityGapInventory(
                     scanDirectory,
                     this.#workingDirectory,
-                  ),
-              }),
-            });
-          } catch (error) {
-            if (error instanceof ScanClosureIncompleteError) {
-              throw error;
+                  ).catch(() => ""),
+                ]);
+                await runScanQualityCorrection({
+                  residualRiskInventory,
+                  coverageGapInventory,
+                  findingQualityGapInventory,
+                  sendPrompt: async (prompt) => {
+                    await sendCopilotPromptWithSafetyRecovery(
+                      prompt,
+                      sendModelPrompt,
+                      options.signal,
+                    );
+                    if (sandboxViolation !== null) throw sandboxViolation;
+                  },
+                  readClosureInventories: async () => ({
+                    coverageGapInventory:
+                      await buildCoverageGapInventory(scanDirectory),
+                    findingQualityGapInventory:
+                      await buildFindingQualityGapInventory(
+                        scanDirectory,
+                        this.#workingDirectory,
+                      ),
+                  }),
+                });
+              } catch (error) {
+                if (freshSessionRetryReason(error) !== null) throw error;
+                if (error instanceof ScanClosureIncompleteError) throw error;
+                if (!(await hasDraftArtifacts(this.#options.environment))) {
+                  throw error;
+                }
+                queue.push({
+                  type: "copilot.quality_gate_incomplete",
+                  message:
+                    "The correction turn ended after the first turn wrote all draft artifacts.",
+                });
+              }
+              options.signal.throwIfAborted();
+            } finally {
+              if (sandboxedSession === session) sandboxedSession = null;
+              if (session !== null) {
+                await disconnectManagedCopilotSession(session);
+              }
+              if (!clientAlreadyStopped) {
+                await stopManagedCopilotClient(client);
+              }
             }
-            if (!(await hasDraftArtifacts(this.#options.environment))) {
-              throw error;
-            }
-            queue.push({
-              type: "copilot.quality_gate_incomplete",
-              message:
-                "The correction turn ended after the first turn wrote all draft artifacts.",
-            });
-          }
-        }
+          },
+        });
         if (!options.signal.aborted) {
           queue.push({ type: "turn.completed", usage });
         }
@@ -556,8 +630,6 @@ class CopilotThread implements CopilotScannerThread {
       } finally {
         clearInterval(completionGuard);
         options.signal.removeEventListener("abort", abort);
-        await session.disconnect().catch(() => undefined);
-        await stopManagedCopilotClient(client);
         queue.close();
       }
     })();
@@ -592,7 +664,7 @@ export function copilotModelTurnTimeoutMilliseconds(
 }
 
 export async function sendCopilotTurnWithDeadline(
-  session: CopilotTurnSession,
+  session: CopilotDeadlineSession,
   prompt: string,
   timeoutMilliseconds: number,
 ): Promise<unknown> {
@@ -603,17 +675,99 @@ export async function sendCopilotTurnWithDeadline(
       new Promise<never>((_resolve, reject) => {
         deadline = setTimeout(() => {
           void session.abort().catch(() => undefined);
-          reject(
-            new CopilotSecurityError(
-              `Copilot model turn exceeded the ${timeoutMilliseconds} millisecond scanner deadline.`,
-            ),
-          );
+          reject(new ModelTurnDeadlineExceededError(timeoutMilliseconds));
         }, timeoutMilliseconds);
       }),
     ]);
   } finally {
     if (deadline !== undefined) clearTimeout(deadline);
   }
+}
+
+export type FreshSessionRetryReason = "model_timeout" | "transport_interrupted";
+
+export function freshSessionRetryReason(
+  error: unknown,
+): FreshSessionRetryReason | null {
+  if (error instanceof ModelTurnDeadlineExceededError) return "model_timeout";
+  if (error instanceof ModelTransportInterruptedError) {
+    return "transport_interrupted";
+  }
+  if (error instanceof CopilotSecurityError) return null;
+  if (isSafetyClassifierRefusal(error)) return null;
+  const message = errorMessage(error).slice(0, 8 * 1024);
+  if (
+    /\b(?:401|403|unauthorized|forbidden|invalid[ -]+(?:api[ -]+key|token)|authentication[ -]+failed|permission[ -]+denied)\b/iu.test(
+      message,
+    )
+  ) {
+    return null;
+  }
+  return /\b(?:ECONNABORTED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ENOTFOUND|ETIMEDOUT|connection (?:closed|interrupted|lost|reset)|network (?:error|interrupted|unavailable)|responses? stream ended|socket hang up|transport (?:closed|disconnected|ended))\b/iu.test(
+    message,
+  )
+    ? "transport_interrupted"
+    : null;
+}
+
+export async function runWithFreshCopilotSessions<T>(options: {
+  maxAttempts: number;
+  signal?: AbortSignal;
+  runAttempt: (attempt: number, prompt: string) => Promise<T>;
+  prompt: string;
+  onRetry?: (
+    nextAttempt: number,
+    maxAttempts: number,
+    reason: FreshSessionRetryReason,
+  ) => void;
+}): Promise<T> {
+  const maxAttempts = requireFreshSessionAttempts(options.maxAttempts);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    options.signal?.throwIfAborted();
+    const prompt =
+      attempt === 1
+        ? options.prompt
+        : freshSessionRecoveryPrompt(options.prompt, attempt, maxAttempts);
+    try {
+      return await options.runAttempt(attempt, prompt);
+    } catch (error) {
+      options.signal?.throwIfAborted();
+      const reason = freshSessionRetryReason(error);
+      if (reason === null || attempt === maxAttempts) throw error;
+      options.onRetry?.(attempt + 1, maxAttempts, reason);
+    }
+  }
+  throw new CopilotSecurityError(
+    "Copilot fresh-session recovery ended without a result.",
+  );
+}
+
+export function freshSessionRecoveryPrompt(
+  prompt: string,
+  attempt: number,
+  maxAttempts: number,
+): string {
+  return [
+    prompt,
+    "",
+    `Fresh-session recovery attempt ${attempt}/${maxAttempts}.`,
+    "A prior isolated Copilot session ended before host-validated completion. This is a new session with no trusted conversational state from that attempt.",
+    "Treat every existing scan artifact as an untrusted, possibly partial draft. Re-consume the immutable inventory and worklist, reopen cited repository evidence, preserve correct work idempotently, repair incomplete work, and satisfy the full installed scan skill.",
+    "Do not infer coverage or validation from the prior session having written a file. The trusted host will independently verify target identity, inventory integrity, closure, canonical artifacts, and cost across every attempt before sealing the scan.",
+  ].join("\n");
+}
+
+function requireFreshSessionAttempts(value: number): number {
+  if (
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    value > MAX_FRESH_SESSION_ATTEMPTS
+  ) {
+    throw new ConfigurationError(
+      `Copilot fresh-session attempts must be between 1 and ${MAX_FRESH_SESSION_ATTEMPTS}.`,
+    );
+  }
+  return value;
 }
 
 export function copilotModelErrorRecovery(
@@ -772,6 +926,23 @@ export async function startManagedCopilotSession<T>(
   } catch (error) {
     await stopManagedCopilotClient(client);
     throw error;
+  }
+}
+
+export async function disconnectManagedCopilotSession(
+  session: Pick<CopilotTurnSession, "disconnect">,
+  timeoutMilliseconds = CLIENT_STOP_TIMEOUT_MILLISECONDS,
+): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      session.disconnect().catch(() => undefined),
+      new Promise<void>((resolveTimeout) => {
+        timeout = setTimeout(resolveTimeout, timeoutMilliseconds);
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
   }
 }
 
@@ -1041,6 +1212,7 @@ function translateEvent(
   event: SessionEvent,
   queue: AsyncEventQueue<ScannerEvent>,
   usage: ReturnType<typeof emptyCopilotUsage>,
+  onTransportInterruption?: () => void,
 ): void {
   if (event.type === "assistant.usage") {
     addCopilotUsage(usage, event.data);
@@ -1057,6 +1229,14 @@ function translateEvent(
   if (event.type === "session.error") {
     if (isSafetyClassifierRefusal(event.data.message)) {
       queue.push({ type: "copilot.safety_refusal" });
+      return;
+    }
+    if (
+      onTransportInterruption !== undefined &&
+      freshSessionRetryReason(new Error(event.data.message)) ===
+        "transport_interrupted"
+    ) {
+      onTransportInterruption();
       return;
     }
     queue.push({ type: "error", message: event.data.message });

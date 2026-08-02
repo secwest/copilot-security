@@ -192,6 +192,62 @@ describe("live scan cost tracking", () => {
     });
   });
 
+  test("aggregates independent fresh-session roots and their delegated workers", async () => {
+    const home = await copilotHome();
+    await writeSession(home, "attempt-1", {
+      input_tokens: 100,
+      output_tokens: 10,
+    });
+    await writeSession(home, "attempt-2", {
+      input_tokens: 200,
+      output_tokens: 20,
+    });
+    await writeSession(
+      home,
+      "attempt-2-worker",
+      { input_tokens: 50, output_tokens: 5 },
+      "attempt-2",
+    );
+    await writeSession(home, "unrelated", {
+      input_tokens: 10_000,
+      output_tokens: 10_000,
+    });
+    const tracker = new ScanCostTracker({
+      copilotHome: home,
+      model: "gpt-5.6-terra",
+    });
+    tracker.start("attempt-1");
+    tracker.start("attempt-2");
+
+    expect((await tracker.stop()).usage).toEqual({
+      input_tokens: 350,
+      cached_input_tokens: 0,
+      cache_write_input_tokens: 0,
+      output_tokens: 35,
+      reasoning_output_tokens: 0,
+      total_tokens: 385,
+    });
+  });
+
+  test("never lets a partial session log reduce cumulative streamed retry usage", async () => {
+    const home = await copilotHome();
+    await writeSession(home, "attempt-1", {
+      input_tokens: 100,
+      output_tokens: 10,
+    });
+    const tracker = new ScanCostTracker({
+      copilotHome: home,
+      model: "gpt-5.6-terra",
+    });
+    tracker.start("attempt-1");
+    tracker.observe({ input_tokens: 500, output_tokens: 50 });
+
+    expect((await tracker.stop()).usage).toMatchObject({
+      input_tokens: 500,
+      output_tokens: 50,
+    });
+  });
+
   test("uses each session's final cumulative usage without double counting", async () => {
     const home = await copilotHome();
     const path = await writeSession(home, "scan-thread", {

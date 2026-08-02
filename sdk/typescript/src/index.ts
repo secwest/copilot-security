@@ -34,6 +34,8 @@ export {
   ContractValidationError,
   IncompleteScanError,
   InvalidTargetError,
+  ModelTransportInterruptedError,
+  ModelTurnDeadlineExceededError,
   OutputDirectoryError,
   OutputInsideProtectedRootError,
   PluginBootstrapError,

@@ -36,7 +36,12 @@ import {
   type ScanOptions,
   type ScanPreflight,
 } from "./api.js";
-import { copilotAuthStatus, resolveCopilotCli } from "./copilot-client.js";
+import {
+  copilotAuthStatus,
+  DEFAULT_FRESH_SESSION_ATTEMPTS,
+  MAX_FRESH_SESSION_ATTEMPTS,
+  resolveCopilotCli,
+} from "./copilot-client.js";
 import { evaluateBenchmark } from "./benchmark.js";
 import {
   createBulkScanDiscoveryDependencies,
@@ -164,6 +169,7 @@ const VALUE_OPTIONS = new Set([
   "--fail-on-severity",
   "--max-cost",
   "--max-ai-credits",
+  "--max-session-attempts",
   "--workers",
   "--max-attempts",
   "--export-format",
@@ -216,6 +222,7 @@ interface ScanArguments {
   failOnSeverity?: FailureSeverity;
   maxCostUsd?: number;
   maxAiCredits?: number;
+  maxSessionAttempts: number;
   dryRun: boolean;
   parentScanId?: string;
   expectedPluginVersion?: string;
@@ -1069,6 +1076,15 @@ export async function main(
             .describe(
               "Optionally cap Copilot usage for this session (minimum 30); omitted by default.",
             ),
+          maxSessionAttempts: z
+            .number()
+            .int()
+            .min(1)
+            .max(MAX_FRESH_SESSION_ATTEMPTS)
+            .default(DEFAULT_FRESH_SESSION_ATTEMPTS)
+            .describe(
+              "Fresh Copilot sessions allowed for retryable model-turn failures.",
+            ),
           dryRun: z
             .boolean()
             .default(false)
@@ -1156,6 +1172,7 @@ export async function main(
             failOnSeverity: options.failOnSeverity,
             maxCostUsd: options.maxCost,
             maxAiCredits: options.maxAiCredits,
+            maxSessionAttempts: options.maxSessionAttempts,
             dryRun: options.dryRun,
           },
           errorOutput,
@@ -1841,6 +1858,18 @@ function scanArgumentsFromRecipe(
       "The saved scan recipe contains an invalid Copilot AI-credit limit.",
     );
   }
+  const maxSessionAttempts =
+    recipe["maxSessionAttempts"] ?? DEFAULT_FRESH_SESSION_ATTEMPTS;
+  if (
+    typeof maxSessionAttempts !== "number" ||
+    !Number.isSafeInteger(maxSessionAttempts) ||
+    maxSessionAttempts < 1 ||
+    maxSessionAttempts > MAX_FRESH_SESSION_ATTEMPTS
+  ) {
+    throw new CopilotSecurityError(
+      "The saved scan recipe contains an invalid fresh-session attempt limit.",
+    );
+  }
   return {
     repository,
     paths,
@@ -1858,6 +1887,7 @@ function scanArgumentsFromRecipe(
     failOnSeverity: threshold as FailureSeverity | undefined,
     maxCostUsd,
     maxAiCredits,
+    maxSessionAttempts,
     dryRun: false,
     parentScanId,
     expectedPluginVersion:
@@ -2591,6 +2621,7 @@ async function runScan(
       failureSeverity: arguments_.failOnSeverity,
       maxCostUsd: arguments_.maxCostUsd,
       maxAiCredits: arguments_.maxAiCredits,
+      maxSessionAttempts: arguments_.maxSessionAttempts,
       onCost: (cost) => {
         if (arguments_.maxCostUsd === undefined) return;
         progress?.stopTimer();
@@ -2641,11 +2672,15 @@ async function runScan(
               } (${attempt}/${maxAttempts}).`
             : details?.reason === "network"
               ? `Network connection interrupted; retrying (${attempt}/${maxAttempts}).`
-              : details?.reason === "authentication"
-                ? `Authentication interrupted; retrying (${attempt}/${maxAttempts}).`
-                : details?.reason === "authorization"
-                  ? `Model access interrupted; retrying (${attempt}/${maxAttempts}).`
-                  : `Copilot connection interrupted; retrying (${attempt}/${maxAttempts})`;
+              : details?.reason === "model_timeout"
+                ? `Model turn deadline reached; starting fresh session (${attempt}/${maxAttempts}).`
+                : details?.reason === "transport_interrupted"
+                  ? `Model transport ended; starting fresh session (${attempt}/${maxAttempts}).`
+                  : details?.reason === "authentication"
+                    ? `Authentication interrupted; retrying (${attempt}/${maxAttempts}).`
+                    : details?.reason === "authorization"
+                      ? `Model access interrupted; retrying (${attempt}/${maxAttempts}).`
+                      : `Copilot connection interrupted; retrying (${attempt}/${maxAttempts})`;
         progress?.stage(message);
         progress?.startTimer(runningMessage());
       },

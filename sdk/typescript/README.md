@@ -37,6 +37,10 @@ The package is ESM-only and provides:
   defensive recovery prompts for explicit safety-classifier refusals, without
   replaying the original blocked text, and cancellation-safe cleanup of
   partially initialized CLI sessions
+- up to three isolated Copilot sessions by default after hard model-turn
+  deadlines or recognized transport interruptions, with untrusted-draft
+  recovery over the same immutable snapshot, bounded disconnects, and
+  cumulative root/subagent cost accounting across attempts
 - cancellation and streamed Copilot usage/subagent events
 
 ```ts
@@ -83,6 +87,15 @@ worktree. The scanner does not impose a credit or request allowance by default.
 Usage values in scan results describe consumption, not remaining entitlement.
 `maxAiCredits` opts into Copilot's native per-session AI-credit limit and
 includes subagent use; Copilot CLI requires an explicit limit of at least `30`.
+`maxSessionAttempts` accepts `1` through `5` and defaults to `3`; `1` disables
+fresh-session recovery. Only scanner-owned model-turn deadlines and recognized
+transport interruptions open a new session. Authentication, authorization,
+contract, sandbox, cancellation, cost-limit, and exhausted safety-filter
+failures remain terminal. A new session receives the original scan contract,
+re-consumes the immutable host inventory, and treats existing artifacts as
+untrusted partial drafts. Native AI-credit limits apply per fresh session;
+scanner-owned cost tracking is cumulative across all attempt roots and their
+subagents.
 Scanner-owned state is isolated under `COPILOT_SECURITY_HOME` (default:
 `~/.copilot-security`). `COPILOT_HOME` is read only as the source of existing
 Copilot CLI authentication; a private copy is prepared under the scanner-owned

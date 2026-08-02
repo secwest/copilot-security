@@ -19,6 +19,7 @@ import { describe, expect, test } from "bun:test";
 import type {
   CopilotSecurityConfig,
   JsonObject,
+  ScanOptions,
   ScanPreflight,
 } from "../src/index.js";
 import {
@@ -1476,6 +1477,7 @@ describe("CLI", () => {
     expect(help.text()).toContain("Usage: copilot-security scan [repository]");
     expect(help.text()).toContain("--path <array>");
     expect(help.text()).toContain("--max-cost <number>");
+    expect(help.text()).toContain("--max-session-attempts <number>");
     expect(help.text()).toContain("--model <string>");
     expect(help.text()).toContain(
       `Copilot model to use (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
@@ -1748,6 +1750,14 @@ describe("CLI", () => {
       [["scan", ".", "--base", "HEAD"], "--base requires --working-tree"],
       [["scan", ".", "--archive-existing"], "requires --output-dir"],
       [["scan", ".", "--max-cost=0"], "expected number to be >0"],
+      [
+        ["scan", ".", "--max-session-attempts", "0"],
+        "expected number to be >=1",
+      ],
+      [
+        ["scan", ".", "--max-session-attempts", "6"],
+        "expected number to be <=5",
+      ],
       [["scan", ".", "--path="], "--path must not be empty"],
       [["scan", ".", "--model="], "--model must not be empty"],
       [
@@ -1899,7 +1909,10 @@ describe("CLI", () => {
   test("maps configuration and emits JSON only on stdout", async () => {
     const stdout = capture();
     const stderr = capture();
-    const captured: { config?: CopilotSecurityConfig } = {};
+    const captured: {
+      config?: CopilotSecurityConfig;
+      scanOptions?: ScanOptions;
+    } = {};
     let repository = "";
     const exit = await main(
       [
@@ -1911,6 +1924,8 @@ describe("CLI", () => {
         "/managed/python",
         "--copilot",
         "features.goals=true",
+        "--max-session-attempts",
+        "5",
         "--json",
       ],
       stdout.stream,
@@ -1919,8 +1934,9 @@ describe("CLI", () => {
         onConfig: (value) => {
           captured.config = value;
         },
-        onTurn: (value) => {
+        onTurn: (value, options) => {
           repository = value;
+          captured.scanOptions = options as ScanOptions;
         },
       }),
     );
@@ -1935,6 +1951,7 @@ describe("CLI", () => {
       copilotOverrides: { features: { goals: true } },
     });
     expect(repository).toBe("repo");
+    expect(captured.scanOptions?.maxSessionAttempts).toBe(5);
   });
 
   test("reports reconnect progress on stderr and keeps JSON output clean", async () => {
@@ -2000,6 +2017,10 @@ describe("CLI", () => {
     deps.createSecurity = () => ({
       run: async (_repository, options) => {
         options?.onReconnect?.(1, 5, { reason: "network" });
+        options?.onReconnect?.(2, 3, { reason: "model_timeout" });
+        options?.onReconnect?.(3, 3, {
+          reason: "transport_interrupted",
+        });
         options?.onReconnect?.(2, 5, { reason: "authentication" });
         options?.onReconnect?.(3, 5, { reason: "authorization" });
         return fakeResult();
@@ -2012,6 +2033,12 @@ describe("CLI", () => {
       await main(["scan", "--json"], stdout.stream, stderr.stream, deps),
     ).toBe(0);
     expect(stderr.text()).toContain("Network connection interrupted; retrying");
+    expect(stderr.text()).toContain(
+      "Model turn deadline reached; starting fresh session (2/3).",
+    );
+    expect(stderr.text()).toContain(
+      "Model transport ended; starting fresh session (3/3).",
+    );
     expect(stderr.text()).toContain("Authentication interrupted; retrying");
     expect(stderr.text()).toContain("Model access interrupted; retrying");
     expect(JSON.parse(stdout.text())).toEqual(fakeResult().toJSON());
