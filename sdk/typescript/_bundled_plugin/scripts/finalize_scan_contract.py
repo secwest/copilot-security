@@ -524,6 +524,51 @@ def _require_scan_local_file(scan_dir: Path, relative_path: str, context: str) -
     os.close(descriptor)
 
 
+def _json_receipt_filename_key(filename: str) -> str | None:
+    suffix = PurePosixPath(filename).suffix.casefold()
+    if suffix not in {".json", ".jsonl"}:
+        return None
+    stem = filename[: -len(suffix)]
+    key = re.sub(r"[^a-z0-9]", "", stem.casefold())
+    return key or None
+
+
+def _recover_filename_equivalent_receipt(
+    scan_dir: Path, relative_path: str, context: str
+) -> str | None:
+    """Recover one verified JSON receipt renamed only by separators or JSON/L suffix.
+
+    Recovery is deliberately non-recursive and constrained to the referenced
+    parent directory. Every candidate is reopened through the scan-local
+    no-follow verifier; zero or multiple verified matches fail closed.
+    """
+
+    path = PurePosixPath(relative_path)
+    expected_key = _json_receipt_filename_key(path.name)
+    if expected_key is None:
+        return None
+    parent = path.parent
+    parent_path = scan_dir.joinpath(*parent.parts)
+    try:
+        names = [entry.name for entry in parent_path.iterdir()]
+    except (OSError, ValueError):
+        return None
+
+    matches: list[str] = []
+    for name in names:
+        if _json_receipt_filename_key(name) != expected_key:
+            continue
+        candidate = (parent / name).as_posix()
+        try:
+            _require_scan_local_file(scan_dir, candidate, context)
+        except ContractError:
+            continue
+        matches.append(candidate)
+        if len(matches) > 1:
+            return None
+    return matches[0] if len(matches) == 1 else None
+
+
 def _require_derived_writeup_files(scan_dir: Path, findings: dict[str, Any]) -> None:
     for index, finding in enumerate(findings.get("findings", [])):
         if not isinstance(finding, dict):
@@ -1154,7 +1199,19 @@ def _recover_unsealed_coverage(
                                 raise ContractError(
                                     f"{ref_context}: expected a file under artifacts/"
                                 )
-                            _require_scan_local_file(scan_dir, normalized_ref, ref_context)
+                            try:
+                                _require_scan_local_file(scan_dir, normalized_ref, ref_context)
+                            except ContractError:
+                                recovered_ref = _recover_filename_equivalent_receipt(
+                                    scan_dir, normalized_ref, ref_context
+                                )
+                                if recovered_ref is None:
+                                    raise
+                                warnings.append(
+                                    f"Recovered coverage receipt {index + 1}.{ref_index + 1}: "
+                                    "replaced a unique filename-equivalent reference."
+                                )
+                                normalized_ref = recovered_ref
                         except ContractError as exc:
                             warnings.append(
                                 f"Skipped malformed coverage receipt "
@@ -2551,6 +2608,7 @@ def _normalize_standalone_manifest_draft(
 def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
     taxonomy = finding.get("taxonomy")
     category = taxonomy.get("category") if isinstance(taxonomy, dict) else None
+    rule_id = str(finding.get("ruleId", "")).lower()
     text = " ".join(
         [
             *(
@@ -3008,6 +3066,23 @@ def _standalone_taxonomy(finding: dict[str, Any]) -> tuple[str, list[str]]:
         )
     ):
         return "aead-nonce-reuse", ["CWE-323"]
+    if (
+        "server-side template injection" in text
+        or "server side template injection" in text
+        or "template injection" in text
+        or "untrusted-template-source" in rule_id
+        or "template-source-injection" in rule_id
+        or (
+            ("template source" in text or "template-language source" in text)
+            and (
+                "compile" in text
+                or "render_template_string" in text
+                or "from_string" in text
+                or "evaluat" in text
+            )
+        )
+    ):
+        return "server-side-template-injection", ["CWE-1336"]
     if isinstance(taxonomy, dict):
         cwe = taxonomy.get("cwe")
         normalized_cwe = (

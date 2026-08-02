@@ -60,7 +60,8 @@ contract validation, and sealed outputs remain mandatory.
 
 The mandatory host residual pass now has an initial provider-neutral model pack
 for Node HTTP, Python web, Spring/servlet, and ASP.NET command execution and raw
-SQL, plus Node and Python server-side request forgery. Same-file models activate
+SQL, plus Node and Python server-side request forgery and server-side template
+injection. Same-file models activate
 when their language, request-source syntax, and concrete runtime or sink API are
 present in one bounded source file. Bounded Node/TypeScript and Python
 cross-file layers additionally resolve explicit repository-relative imports
@@ -138,12 +139,25 @@ guidance. The sink family follows the path-query treatment in CodeQL's
 [JavaScript SSRF query](https://codeql.github.com/codeql-query-help/javascript/js-request-forgery/)
 and Python's separate full/partial SSRF flow model.
 
+`benchmarks/template-injection-framework-manifest.json` adds strict Node/Pug
+and Python/Jinja template-source injection lanes. Positive request values cross
+a relative import into `pug.compile` or `render_template_string`. Negative
+controls preserve the same request and wrapper topology while compiling only a
+fixed server-owned template and passing the untrusted value through an explicit
+escaped render-data field. This follows CodeQL's high-precision distinction
+between attacker-controlled template grammar and fixed-template data binding
+for [Java server-side template injection](https://codeql.github.com/codeql-query-help/java/java-server-side-template-injection/)
+and [JavaScript code/template injection](https://codeql.github.com/codeql-query-help/javascript/js-code-injection/).
+The host retains fixed-template and sandbox leads as candidate controls, while
+the correction gate must prove exact sink argument roles and sandbox dominance.
+
 ## Prioritized next improvements
 
 1. **Expand typed framework security models.** Extend bounded summaries beyond
    two Node/TypeScript or Python relative-import hops; add Spring and ASP.NET
-   cross-file flow, framework-specific authorization and template models,
-   broader outbound-client and partial-URL SSRF models, manifest-derived activation evidence,
+   cross-file flow, framework-specific authorization models, Spring/ASP.NET
+   template models, broader outbound-client and partial-URL SSRF models,
+   manifest-derived activation evidence,
    and signed or hashed external model packs. Benchmark every extension against
    paired positive and negative fixtures.
 2. **Dependency and advisory reachability.** Build deterministic lockfile/SBOM

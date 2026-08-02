@@ -35,7 +35,8 @@ findings or control flow.
 
 The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command-execution and raw-SQL
-boundaries, plus Node and Python server-side request forgery. Each applicable
+boundaries, plus Node and Python server-side request forgery and server-side
+template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Node/TypeScript relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
@@ -52,9 +53,12 @@ reassignment, out-of-function calls, unreachable wrappers, text that only
 resembles code, and API co-occurrence. Argument vectors without a shell,
 native SQL parameter binding, exact parsed-host or fixed-destination
 allowlists, redirect rejection, connection-address validation or pinning, and
-other candidate controls count only when they apply to the same value, are
-context-correct, and dominate the sink. A URL or hostname substring check is
-not classified as an exact-host control.
+fixed template source with explicit render-data binding count only when they
+apply to the same value, are context-correct, and dominate the sink. A URL or
+hostname substring check is not classified as an exact-host control. Output
+escaping does not sanitize attacker-controlled template grammar, while a fixed
+template that receives untrusted data only as a named context field is not
+template-source injection.
 
 The correction turn also receives a deterministic reconciliation of
 `in_scope_files.txt` against the draft coverage document. This catches omitted
@@ -282,6 +286,18 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
+The template-injection framework lane pairs Node/Pug and Python/Jinja
+cross-file template-source flows with fixed-template, explicit-render-data
+negative controls:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/template-injection-framework-manifest.json `
+  --results-dir C:\security-benchmarks\template-injection-framework `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
 Use `--model` and `--effort` to select a Copilot model and reasoning effort.
 The default is `gpt-5.6-sol` with `xhigh` effort.
 `--model auto` delegates model selection to Copilot and does not send a
@@ -445,6 +461,18 @@ node ../../benchmarks/run-benchmark.mjs `
 node ../../benchmarks/run-benchmark.mjs `
   --manifest ../../benchmarks/ssrf-framework-manifest.json `
   --results-dir C:\security-benchmarks\copilot-security-ssrf-framework `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+# Run the strict Node/Python template-source-injection diagnostic
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/template-injection-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-template-injection-framework `
   --runs 1 `
   --selection-only `
   --auth github `

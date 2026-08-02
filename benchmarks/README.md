@@ -168,6 +168,26 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The template-injection framework lane applies the same strict gates to Node
+and Python relative-import wrappers. Its positives compile caller-controlled
+Pug or Jinja template source. Its negative controls pass the same untrusted
+display value across the same boundary but bind it only to an explicitly
+constructed render-data field in a fixed server-owned template. This isolates
+template grammar control from ordinary escaped data interpolation:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/template-injection-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-template-injection-framework `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 The Python cross-file lane applies the same gates to explicit relative
 from-imports and includes multiline parameter-binding counterevidence:
 

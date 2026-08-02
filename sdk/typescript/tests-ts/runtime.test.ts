@@ -12,9 +12,10 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import {
   bundledPluginRoot,
+  cleanupSdkDirectory,
   copilotScannerExecutionEnvironment,
   copilotSecurityCredentialHome,
   copilotSecurityStateDirectory,
@@ -29,6 +30,16 @@ import {
 } from "../src/runtime.js";
 
 describe("standalone Copilot runtime", () => {
+  test("removes nested SDK temporary directories idempotently", async () => {
+    const root = await mkdtemp(join(tmpdir(), "copilot-sdk-cleanup-"));
+    await mkdir(join(root, "nested"), { recursive: true });
+    await writeFile(join(root, "nested", "artifact.json"), "{}\n");
+
+    await cleanupSdkDirectory(root);
+    expect(await lstat(root).catch(() => null)).toBeNull();
+    await expect(cleanupSdkDirectory(root)).resolves.toBeUndefined();
+  });
+
   test("stages expendable repository and plugin copies without link escapes", async () => {
     const root = await mkdtemp(join(tmpdir(), "copilot-analysis-input-"));
     const repository = join(root, "repository");
@@ -82,6 +93,12 @@ describe("standalone Copilot runtime", () => {
           },
         ],
       });
+      expect(workspace.linkManifest).toBe(
+        join(workspace.pluginRoot, ".copilot-security-runtime", "links.json"),
+      );
+      expect(
+        relative(workspace.repository, workspace.linkManifest).startsWith(".."),
+      ).toBe(true);
     } finally {
       if (workspace !== null) {
         await rm(workspace.root, { recursive: true, force: true });

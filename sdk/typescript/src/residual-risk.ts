@@ -581,6 +581,51 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-template-injection",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [
+      /\b(?:ejs|handlebars|nunjucks|pug)\b/iu,
+      /\b(?:doT\.template|lodash\.template|mustache\.render)\b/iu,
+    ],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "dynamic-template-source",
+        expression:
+          /\b(?:ejs\.render|Handlebars\.compile|nunjucks\.renderString|pug\.compile|doT\.template|mustache\.render|_\.template)\s*\(/iu,
+        cweIds: ["CWE-1336"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-template-with-data-context",
+        expression: /\b(?:compile|render|renderString|template)\s*\(\s*["']/iu,
+      },
+      {
+        kind: "sandboxed-template-environment",
+        expression:
+          /\b(?:sandbox|SandboxedEnvironment|allowedGlobals?|safeRuntime)\b/iu,
+      },
+      {
+        kind: "bounded-template-identifier-map",
+        expression:
+          /\b(?:allowedTemplates?|templateMap|templateNames?|trustedTemplates?)\b|\bObject\.hasOwn\s*\(/iu,
+      },
+    ],
+  },
+  {
     id: "python-web-command",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -716,6 +761,51 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         kind: "network-address-validation-or-pinning",
         expression:
           /\b(?:getaddrinfo|ip_address|is_global|is_private|pinned_address|connect_address)\b/iu,
+      },
+    ],
+  },
+  {
+    id: "python-web-template-injection",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\b(?:django\.template|flask|jinja2|mako)\b/iu,
+      /\b(?:Environment|render_template_string|Template)\b/iu,
+    ],
+    sources: [
+      {
+        kind: "framework-request-field",
+        expression:
+          /\brequest\.(?:args|cookies|form|GET|headers|json|POST|values)\b|\brequest\.get_json\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\b(?:Body|Cookie|Form|Header|Path|Query)\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "dynamic-template-source",
+        expression:
+          /\b(?:render_template_string|Template)\s*\(|\.from_string\s*\(/iu,
+        cweIds: ["CWE-1336"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-template-with-data-context",
+        expression:
+          /\b(?:render_template_string|Template)\s*\(\s*[rub]*(?:["']|["']{3})/iu,
+      },
+      {
+        kind: "sandboxed-template-environment",
+        expression:
+          /\b(?:ImmutableSandboxedEnvironment|SandboxedEnvironment)\b/iu,
+      },
+      {
+        kind: "bounded-template-identifier-map",
+        expression:
+          /\b(?:allowed_templates?|template_map|template_names?|trusted_templates?)\b/iu,
       },
     ],
   },
@@ -1145,11 +1235,30 @@ function frameworkDataflowRecords(
       : matchingModelLines(lines, model.controls, 24);
     for (const sink of sinks) {
       const source = nearestModeledSource(sources, sink.line);
-      const nearbyControls = controls
-        .filter(
+      const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
+        ? model.controls
+            .filter((control) =>
+              control.expression.test(
+                pythonCallExpression(lines, sink.line, lines.length),
+              ),
+            )
+            .map((control) => ({ kind: control.kind, line: sink.line }))
+        : [];
+      const nearbyControls = [
+        ...sinkExpressionControls,
+        ...controls.filter(
           (control) =>
             control.line >= Math.min(source.line, sink.line) - 8 &&
             control.line <= Math.max(source.line, sink.line) + 8,
+        ),
+      ]
+        .filter(
+          (control, index, all) =>
+            all.findIndex(
+              (candidate) =>
+                candidate.kind === control.kind &&
+                candidate.line === control.line,
+            ) === index,
         )
         .slice(0, 8);
       const sinkPattern = model.sinks.find(

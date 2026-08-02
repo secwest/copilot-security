@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "javascript-cross-file-template-injection",
+      "description": "A Node HTTP request value crosses a relative import into Pug template-source compilation.",
+      "fixture": "fixtures/javascript-cross-file-template-injection",
+      "findingsPaths": [
+        "javascript-cross-file-template-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "cross-file-pug-template-source-injection",
+          "cwe": ["CWE-1336"],
+          "locations": [
+            {
+              "path": "src/template.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-cross-file-safe-template",
+      "description": "The same Node boundary passes untrusted display data into a fixed escaped Pug template.",
+      "fixture": "fixtures/javascript-cross-file-safe-template",
+      "findingsPaths": [
+        "javascript-cross-file-safe-template/run-1/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "python-cross-file-template-injection",
+      "description": "A Flask request value crosses a relative import into Jinja template-source evaluation.",
+      "fixture": "fixtures/python-cross-file-template-injection",
+      "findingsPaths": [
+        "python-cross-file-template-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-cross-file-jinja-template-source-injection",
+          "cwe": ["CWE-1336"],
+          "locations": [
+            {
+              "path": "src/template.py",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-cross-file-safe-template",
+      "description": "The same Python boundary passes untrusted display data into a fixed autoescaped Jinja template.",
+      "fixture": "fixtures/python-cross-file-safe-template",
+      "findingsPaths": ["python-cross-file-safe-template/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

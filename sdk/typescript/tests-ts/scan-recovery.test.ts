@@ -649,6 +649,31 @@ describe("malformed scan artifact recovery", () => {
     });
   });
 
+  test("normalizes server-side template-source injection taxonomy", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding["ruleId"] = "python.flask.jinja.template-source-injection";
+    finding["title"] = "Untrusted form data is compiled as a Jinja template";
+    finding.summary =
+      "The route passes attacker-controlled template source to render_template_string for evaluation in the server process.";
+    finding["taxonomy"] = {
+      category: "code-injection",
+      cwe: ["CWE-94"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+
+    expect(completed.progress.status).toBe("complete");
+    expect(recovered["taxonomy"]).toEqual({
+      category: "server-side-template-injection",
+      cwe: ["CWE-1336"],
+    });
+  });
+
   test("normalizes OIDC ID-token client and nonce misbinding taxonomy", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");
@@ -1910,6 +1935,80 @@ describe("malformed scan artifact recovery", () => {
     expect(manifest.scan.artifacts.map((artifact) => artifact.path)).toContain(
       receipt,
     );
+  });
+
+  test("recovers one filename-equivalent JSON coverage receipt in the same directory", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "coverage.json");
+    const document = await readJson<CoverageDocument>(path);
+    const expected =
+      "artifacts/02_discovery/passes/product-supply/completion_ledger.jsonl";
+    const actual =
+      "artifacts/02_discovery/passes/product-supply/completion-ledger.json";
+    await mkdir(
+      join(
+        fixture.scanDir,
+        "artifacts",
+        "02_discovery",
+        "passes",
+        "product-supply",
+      ),
+      { recursive: true },
+    );
+    await writeFile(join(fixture.scanDir, actual), '{"status":"reviewed"}\n');
+    (document.surfaces as CoverageSurface[])[0]!.receiptRefs = [expected];
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.warnings).toEqual([
+      "Recovered coverage receipt 1.1: replaced a unique filename-equivalent reference.",
+    ]);
+    const recovered = await readJson<CoverageDocument>(path);
+    expect(recovered.completeness).toBe("complete");
+    expect((recovered.surfaces as CoverageSurface[])[0]).toMatchObject({
+      disposition: "reported",
+      receiptRefs: [actual],
+    });
+  });
+
+  test("fails closed when filename-equivalent coverage receipts are ambiguous", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "coverage.json");
+    const document = await readJson<CoverageDocument>(path);
+    const directory = "artifacts/02_discovery/passes/compositional-temporal";
+    await mkdir(join(fixture.scanDir, directory), { recursive: true });
+    await Promise.all([
+      writeFile(
+        join(fixture.scanDir, directory, "completion-ledger.json"),
+        '{"status":"reviewed"}\n',
+      ),
+      writeFile(
+        join(fixture.scanDir, directory, "completion_ledger.jsonl"),
+        '{"status":"reviewed"}\n',
+      ),
+    ]);
+    (document.surfaces as CoverageSurface[])[0]!.receiptRefs = [
+      `${directory}/completion.ledger.jsonl`,
+    ];
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.warnings).toHaveLength(1);
+    expect(
+      completed.warnings[0]?.startsWith(
+        "Skipped malformed coverage receipt 1.1",
+      ),
+    ).toBe(true);
+    const recovered = await readJson<CoverageDocument>(path);
+    expect(recovered.completeness).toBe("partial");
+    expect((recovered.surfaces as CoverageSurface[])[0]).toMatchObject({
+      disposition: "needs_follow_up",
+      receiptRefs: [],
+    });
   });
 
   test("downgrades malformed coverage collections without claiming completeness", async () => {

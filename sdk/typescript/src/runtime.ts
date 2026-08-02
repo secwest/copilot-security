@@ -72,6 +72,8 @@ const INCOMPLETE_CREDENTIAL_LOCK_MILLISECONDS = 30_000;
 const SETTINGS_REPLACE_ATTEMPTS = 20;
 const SETTINGS_REPLACE_INITIAL_DELAY_MILLISECONDS = 10;
 const SETTINGS_REPLACE_MAX_DELAY_MILLISECONDS = 250;
+const SDK_DIRECTORY_CLEANUP_MAX_RETRIES = 10;
+const SDK_DIRECTORY_CLEANUP_RETRY_DELAY_MILLISECONDS = 100;
 
 export interface PluginInstall {
   pluginRoot: string;
@@ -344,7 +346,8 @@ export async function prepareCopilotAnalysisWorkspace(
   const root = await mkdtemp(join(tmpdir(), "copilot-security-analysis-"));
   const stagedRepository = join(root, "repository");
   const stagedPlugin = join(root, "plugin");
-  const linkManifest = join(root, "links.json");
+  const runtimeMetadataRoot = join(stagedPlugin, ".copilot-security-runtime");
+  const linkManifest = join(runtimeMetadataRoot, "links.json");
   const links: Array<{
     tree: "repository" | "plugin";
     path: string;
@@ -436,6 +439,7 @@ export async function prepareCopilotAnalysisWorkspace(
     await stage(repository, stagedRepository, "repository");
     await stage(pluginRoot, stagedPlugin, "plugin");
     signal?.throwIfAborted();
+    await mkdir(runtimeMetadataRoot, { mode: 0o700 });
     await writeFile(
       linkManifest,
       `${JSON.stringify({ schemaVersion: "1.0", entries: links }, null, 2)}\n`,
@@ -2437,7 +2441,14 @@ export function pluginExecutionEnvironment(
 }
 
 export async function cleanupSdkDirectory(path: string): Promise<void> {
-  await rm(path, { recursive: true, force: true });
+  await rm(path, {
+    recursive: true,
+    force: true,
+    // Windows scanners, indexers, and antivirus can retain a handle briefly
+    // after Copilot exits. Node retries EBUSY, EPERM, and ENOTEMPTY for us.
+    maxRetries: SDK_DIRECTORY_CLEANUP_MAX_RETRIES,
+    retryDelay: SDK_DIRECTORY_CLEANUP_RETRY_DELAY_MILLISECONDS,
+  });
 }
 
 async function runCopilot(

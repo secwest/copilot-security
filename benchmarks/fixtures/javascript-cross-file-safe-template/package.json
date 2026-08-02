@@ -1,0 +1,8 @@
+{
+  "name": "javascript-cross-file-safe-template",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pug": "3.0.3"
+  }
+}

@@ -905,6 +905,27 @@ describe("residual risk inventory", () => {
     expect(prompt).toContain("last repair turn");
   });
 
+  test("rejects speculative coverage deferrals outside the immutable host scope", () => {
+    const qualityPrompt = scanQualityGatePrompt(
+      "",
+      '{"path":"coverage.deferred[0]"}',
+    );
+    const closurePrompt = scanClosureRepairPrompt(
+      '{"path":"coverage.deferred[0]"}',
+      "",
+    );
+
+    expect(qualityPrompt).toContain("complete selected repository scope");
+    expect(qualityPrompt).toContain("no paths and no surfaceIds");
+    expect(qualityPrompt).toContain("empty host link-manifest entries array");
+    expect(closurePrompt).toContain(
+      "missing-file theories outside the complete host worklist",
+    );
+    expect(closurePrompt).toContain(
+      "bound to at least one exact affected repository path or coverage surface",
+    );
+  });
+
   test("forces weak or internally rejected draft findings back through evidence closure", async () => {
     const scanDirectory = await mkdtemp(
       join(tmpdir(), "copilot-security-finding-quality-"),

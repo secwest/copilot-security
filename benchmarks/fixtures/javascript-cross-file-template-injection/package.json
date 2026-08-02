@@ -1,0 +1,8 @@
+{
+  "name": "javascript-cross-file-template-injection",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pug": "3.0.3"
+  }
+}

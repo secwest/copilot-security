@@ -107,6 +107,23 @@ interpreter that consumes the value.
   base. URL or hostname substring checks are bypassable and never count as
   exact-host validation.
 
+### Node HTTP server-side template injection — CWE-1336
+
+- Sources: the same Node HTTP request surfaces.
+- Sinks: attacker-controlled template source passed to Pug, Handlebars, EJS,
+  Nunjucks, Mustache, doT, or Lodash template compilation/evaluation APIs.
+- Strong counterevidence: a fixed server-owned template whose untrusted value
+  is supplied only through an explicitly constructed render-data field. Output
+  escaping protects a data context; it does not sanitize attacker-controlled
+  template grammar. A sandbox counts only when its callable, member, and global
+  restrictions dominate the exact compilation and render path.
+- Severity: a directly reachable HTTP source flowing into unsandboxed,
+  general-purpose Pug template-source compilation or rendering is high
+  severity even when deployment privileges, secrets, or runtime exploitation
+  are outside static scope. Lower severity only when a proven sandbox, isolated
+  renderer, constrained engine, or other dominating control materially limits
+  impact on the same path.
+
 ### Python web command execution — CWE-78
 
 - Sources: Flask/Django-style request collections and JSON, plus FastAPI bound
@@ -135,6 +152,31 @@ interpreter that consumes the value.
   address validation and connection pinning. `urljoin` is only safe when the
   attacker cannot supply a scheme-relative or absolute destination; parsing a
   URL without constraining the consumed host is not validation.
+
+### Python web server-side template injection — CWE-1336
+
+- Sources: Flask/Django request collections and FastAPI bound parameters.
+- Sinks: attacker-controlled template source passed to Flask/Jinja
+  `render_template_string`, Jinja/Django/Mako `Template`, or environment
+  `from_string` compilation.
+- Strong counterevidence: a fixed server-owned template with the untrusted
+  value supplied only as a named render-context field. Autoescaping applies to
+  data interpolation, not attacker-controlled template code. A Jinja sandbox
+  is a lead rather than a verdict until its attribute, callable, and global
+  restrictions are proven on the same environment and sink.
+- Severity: a directly reachable HTTP source flowing into unsandboxed,
+  general-purpose Jinja template-source compilation or rendering is high
+  severity even when deployment privileges, secrets, or runtime exploitation
+  are outside static scope. Lower severity only when a proven sandbox, isolated
+  renderer, constrained engine, or other dominating control materially limits
+  impact on the same path.
+- Keep XSS separate from template-source injection. Jinja's
+  `select_autoescape` defaults `default_for_string` to `true`; consequently,
+  `select_autoescape(default=True)` also escapes unnamed `from_string`
+  templates. A fixed HTML template, that autoescape policy, and a value passed
+  only as `render(name=value)` are strong XSS counterevidence unless the path
+  disables autoescape, applies `|safe`/`Markup`, concatenates into HTML, or
+  otherwise bypasses the escaping context.
 
 ### Spring/servlet command execution — CWE-78
 
@@ -191,5 +233,11 @@ interpreter that consumes the value.
   answer, connection-pool reuse, the actual socket destination, and Host/TLS
   identity. A hostname allowlist without address validation and connection
   pinning does not close DNS rebinding.
+- For template injection, preserve the template engine's exact argument roles.
+  Prove the attacker value becomes template source, grammar, or an evaluated
+  expression. Classify that broken control as CWE-1336 rather than substituting
+  generic code-injection CWE-94. A fixed template plus an untrusted context value is not SSTI;
+  template-name selection and whole-object template-context injection are
+  separate families that need their own source, sink, and impact proof.
 - When a candidate is rejected, record the exact dominating control and why it
   is context-correct for that sink.
