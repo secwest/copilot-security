@@ -69,6 +69,9 @@ const CREDENTIAL_LOCK_NAME = ".copilot-security-scan.lock";
 const CREDENTIAL_LOGOUT_MARKER = ".copilot-security-logged-out";
 const CREDENTIAL_LOCK_POLL_MILLISECONDS = 25;
 const INCOMPLETE_CREDENTIAL_LOCK_MILLISECONDS = 30_000;
+const SETTINGS_REPLACE_ATTEMPTS = 20;
+const SETTINGS_REPLACE_INITIAL_DELAY_MILLISECONDS = 10;
+const SETTINGS_REPLACE_MAX_DELAY_MILLISECONDS = 250;
 
 export interface PluginInstall {
   pluginRoot: string;
@@ -831,10 +834,34 @@ export async function writeCopilotScannerSandboxSettings(
     } finally {
       await handle.close();
     }
-    await rename(temporary, settingsPath);
+    await replaceScannerSettings(temporary, settingsPath);
     created = false;
   } finally {
     if (created) await rm(temporary, { force: true }).catch(() => undefined);
+  }
+}
+
+async function replaceScannerSettings(
+  temporary: string,
+  destination: string,
+): Promise<void> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await rename(temporary, destination);
+      return;
+    } catch (error) {
+      const code = nodeErrorCode(error);
+      const retryable =
+        process.platform === "win32" &&
+        (code === "EACCES" || code === "EBUSY" || code === "EPERM");
+      if (!retryable || attempt >= SETTINGS_REPLACE_ATTEMPTS) throw error;
+      await delay(
+        Math.min(
+          SETTINGS_REPLACE_INITIAL_DELAY_MILLISECONDS * 2 ** (attempt - 1),
+          SETTINGS_REPLACE_MAX_DELAY_MILLISECONDS,
+        ),
+      );
+    }
   }
 }
 

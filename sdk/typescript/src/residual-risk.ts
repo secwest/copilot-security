@@ -828,6 +828,13 @@ interface ExportedJavascriptFunction {
   endLine: number;
 }
 
+interface ExportedPythonFunction {
+  symbol: string;
+  parameters: string[];
+  startLine: number;
+  endLine: number;
+}
+
 interface FrameworkWrapperSummary {
   model: FrameworkDataflowModel;
   file: SourceFileSnapshot;
@@ -853,6 +860,13 @@ interface FrameworkRelaySummary {
 }
 
 interface ImportedJavascriptSymbol {
+  imported: string;
+  local: string;
+  moduleSpecifier: string;
+  line: number;
+}
+
+interface ImportedPythonSymbol {
   imported: string;
   local: string;
   moduleSpecifier: string;
@@ -996,22 +1010,31 @@ function frameworkDataflowRecords(
 ): ResidualRiskRecord[] {
   const extension = extname(path).toLowerCase();
   const text = lines.join("\n");
+  const activationText = PYTHON_EXTENSIONS.has(extension)
+    ? pythonStructuralLines(lines).join("\n")
+    : text;
   const records: ResidualRiskRecord[] = [];
   for (const model of FRAMEWORK_DATAFLOW_MODELS) {
     if (
       !model.extensions.has(extension) ||
-      !model.activation.some((expression) => expression.test(text))
+      !model.activation.some((expression) => expression.test(activationText))
     ) {
       continue;
     }
     const sources = JAVASCRIPT_EXTENSIONS.has(extension)
       ? matchingJavascriptModelLines(lines, model.sources, 16)
-      : matchingModelLines(lines, model.sources, 16);
+      : PYTHON_EXTENSIONS.has(extension)
+        ? matchingPythonModelLines(lines, model.sources, 16)
+        : matchingModelLines(lines, model.sources, 16);
     const sinks = JAVASCRIPT_EXTENSIONS.has(extension)
       ? matchingJavascriptModelLines(lines, model.sinks, 8)
-      : matchingModelLines(lines, model.sinks, 8);
+      : PYTHON_EXTENSIONS.has(extension)
+        ? matchingPythonModelLines(lines, model.sinks, 8)
+        : matchingModelLines(lines, model.sinks, 8);
     if (sources.length === 0 || sinks.length === 0) continue;
-    const controls = matchingModelLines(lines, model.controls, 24);
+    const controls = PYTHON_EXTENSIONS.has(extension)
+      ? matchingPythonModelLines(lines, model.controls, 24)
+      : matchingModelLines(lines, model.controls, 24);
     for (const sink of sinks) {
       const source = nearestModeledSource(sources, sink.line);
       const nearbyControls = controls
@@ -1074,6 +1097,7 @@ function frameworkCrossFileDataflowRecords(
 ): ResidualRiskRecord[] {
   return [
     ...frameworkDirectCrossFileDataflowRecords(files),
+    ...frameworkDirectPythonDataflowRecords(files),
     ...frameworkMultiHopDataflowRecords(files),
   ];
 }
@@ -1190,6 +1214,151 @@ function frameworkDirectCrossFileDataflowRecords(
               propagators: [
                 {
                   kind: "relative-module-import",
+                  path: caller.path,
+                  line: imported.line,
+                  symbol: `${imported.imported} as ${imported.local}`,
+                },
+                {
+                  kind: "wrapper-call-argument",
+                  path: caller.path,
+                  line: call.line,
+                  symbol: `${imported.local}[${summary.parameterIndex}]`,
+                },
+                {
+                  kind: "wrapper-parameter",
+                  path: wrapperFile.path,
+                  line: summary.declarationLine,
+                  symbol: summary.parameter,
+                },
+              ],
+              candidateControls: summary.controls.map((control) => ({
+                ...control,
+                path: wrapperFile.path,
+              })),
+            },
+          });
+          if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
+            return records;
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+function frameworkDirectPythonDataflowRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const knownPaths = new Map(
+    files.map((file) => [modelPathComparisonKey(file.path), file.path]),
+  );
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const summaries = pythonFrameworkWrapperSummaries(files);
+  const summariesByFileAndSymbol = new Map<string, FrameworkWrapperSummary[]>();
+  for (const summary of summaries) {
+    const key = `${summary.file.path}\0${summary.symbol}`;
+    const existing = summariesByFileAndSymbol.get(key) ?? [];
+    existing.push(summary);
+    summariesByFileAndSymbol.set(key, existing);
+  }
+
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const caller of files) {
+    if (!PYTHON_EXTENSIONS.has(caller.extension)) continue;
+    const imports = importedPythonSymbols(caller.lines);
+    for (const imported of imports) {
+      const importedPath = resolveRelativePythonImport(
+        caller.path,
+        imported.moduleSpecifier,
+        knownPaths,
+      );
+      if (importedPath === undefined) continue;
+      const wrapperFile = filesByPath.get(importedPath);
+      if (wrapperFile === undefined) continue;
+      const matchingSummaries =
+        summariesByFileAndSymbol.get(`${importedPath}\0${imported.imported}`) ??
+        [];
+      for (const summary of matchingSummaries) {
+        const sources = matchingPythonModelLines(
+          caller.lines,
+          summary.model.sources,
+          32,
+        );
+        if (sources.length === 0) continue;
+        const calls = pythonCallLines(caller.lines, imported.local);
+        for (const call of calls) {
+          const argument = call.arguments[summary.parameterIndex];
+          if (argument === undefined) continue;
+          const source = modeledPythonCallSource(
+            caller.lines,
+            sources,
+            call.line,
+            argument,
+            summary.model.sources,
+          );
+          if (source === undefined) continue;
+          const key = [
+            summary.model.id,
+            caller.path,
+            call.line,
+            wrapperFile.path,
+            summary.sink.line,
+            summary.parameterIndex,
+          ].join("\0");
+          if (emitted.has(key)) continue;
+          emitted.add(key);
+
+          const sinkStart = Math.max(
+            1,
+            summary.sink.line - CONTEXT_LINES_BEFORE,
+          );
+          const sinkEnd = Math.min(
+            wrapperFile.lines.length,
+            summary.sink.line + CONTEXT_LINES_AFTER,
+          );
+          const sourceStart = Math.max(1, Math.min(source.line, call.line) - 2);
+          const sourceEnd = Math.min(
+            caller.lines.length,
+            Math.max(source.line, call.line) + 2,
+          );
+          records.push({
+            path: wrapperFile.path,
+            line: summary.sink.line,
+            categories: [
+              `framework-dataflow:${summary.model.id}`,
+              "framework-cross-file-wrapper",
+              `modeled-source:${source.kind}`,
+              `modeled-sink:${summary.sink.kind}`,
+              ...summary.controls.map(
+                (control) => `candidate-control:${control.kind}`,
+              ),
+            ],
+            priority: 120,
+            startLine: sinkStart,
+            endLine: sinkEnd,
+            excerpt: sourceExcerpt(wrapperFile.lines, sinkStart, sinkEnd),
+            sourceExcerpt: sourceExcerpt(caller.lines, sourceStart, sourceEnd),
+            frameworkModel: {
+              schemaVersion: "1.2",
+              id: summary.model.id,
+              language: summary.model.language,
+              scope: "cross-file-wrapper",
+              source: {
+                kind: source.kind,
+                path: caller.path,
+                line: source.line,
+              },
+              sink: {
+                kind: summary.sink.kind,
+                path: wrapperFile.path,
+                line: summary.sink.line,
+                cweIds: summary.sink.cweIds,
+              },
+              propagators: [
+                {
+                  kind: "relative-python-import",
                   path: caller.path,
                   line: imported.line,
                   symbol: `${imported.imported} as ${imported.local}`,
@@ -1552,6 +1721,155 @@ function javascriptFrameworkWrapperSummaries(
   return summaries;
 }
 
+function pythonFrameworkWrapperSummaries(
+  files: readonly SourceFileSnapshot[],
+): FrameworkWrapperSummary[] {
+  const summaries: FrameworkWrapperSummary[] = [];
+  for (const file of files) {
+    if (!PYTHON_EXTENSIONS.has(file.extension)) continue;
+    const exportedFunctions = exportedPythonFunctions(file.lines);
+    if (exportedFunctions.length === 0) continue;
+    const structuralText = pythonStructuralLines(file.lines).join("\n");
+    for (const model of FRAMEWORK_DATAFLOW_MODELS) {
+      if (
+        !model.extensions.has(file.extension) ||
+        !model.activation.some((expression) => expression.test(structuralText))
+      ) {
+        continue;
+      }
+      const sinks = matchingPythonModelLines(file.lines, model.sinks, 32);
+      const controls = matchingPythonModelLines(file.lines, model.controls, 64);
+      for (const wrapper of exportedFunctions) {
+        for (const sink of sinks) {
+          if (sink.line < wrapper.startLine || sink.line > wrapper.endLine) {
+            continue;
+          }
+          const sinkExpression = pythonCallExpression(
+            file.lines,
+            sink.line,
+            wrapper.endLine,
+          );
+          const parameterIndexes = wrapper.parameters.flatMap(
+            (parameter, parameterIndex) =>
+              pythonLineReferencesIdentifier(sinkExpression, parameter)
+                ? [parameterIndex]
+                : [],
+          );
+          if (parameterIndexes.length === 0) continue;
+          const sinkPattern = model.sinks.find(
+            (pattern) => pattern.kind === sink.kind,
+          );
+          if (sinkPattern === undefined) continue;
+          const sinkControls = model.controls
+            .filter((control) => control.expression.test(sinkExpression))
+            .map((control) => ({ kind: control.kind, line: sink.line }));
+          const wrapperControls = [
+            ...sinkControls,
+            ...controls.filter(
+              (control) =>
+                control.line >= wrapper.startLine &&
+                control.line <= wrapper.endLine,
+            ),
+          ].filter(
+            (control, index, all) =>
+              all.findIndex(
+                (candidate) =>
+                  candidate.kind === control.kind &&
+                  candidate.line === control.line,
+              ) === index,
+          );
+          for (const parameterIndex of parameterIndexes) {
+            summaries.push({
+              model,
+              file,
+              symbol: wrapper.symbol,
+              parameter: wrapper.parameters[parameterIndex]!,
+              parameterIndex,
+              declarationLine: wrapper.startLine,
+              sink: { ...sink, cweIds: sinkPattern.cweIds },
+              controls: wrapperControls.slice(0, 8),
+            });
+            if (summaries.length >= MAX_FRAMEWORK_WRAPPER_SUMMARIES) {
+              return summaries;
+            }
+          }
+        }
+      }
+    }
+  }
+  return summaries;
+}
+
+function pythonCallExpression(
+  lines: readonly string[],
+  startLine: number,
+  functionEndLine: number,
+): string {
+  const endLine = Math.min(functionEndLine, startLine + 12);
+  const firstLine = lines[startLine - 1] ?? "";
+  const structuralFirstLine = pythonStructuralCode(firstLine);
+  const open = structuralFirstLine.indexOf("(");
+  if (open < 0) return firstLine;
+  const joined = lines.slice(startLine - 1, endLine).join("\n");
+  const close = matchingCallParenthesis(joined, open);
+  return (close < 0 ? joined : joined.slice(0, close + 1)).replace(
+    /\s+/gu,
+    " ",
+  );
+}
+
+function exportedPythonFunctions(
+  lines: readonly string[],
+): ExportedPythonFunction[] {
+  const functions: ExportedPythonFunction[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  const expression =
+    /^(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*(?:->\s*[^:]+)?\s*:/u;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = structuralLines[index] ?? "";
+    if (/^\s/u.test(line)) continue;
+    const match = expression.exec(line);
+    if (match === null || match[1]!.startsWith("_")) continue;
+    const parameters = splitPythonArguments(match[2] ?? "")
+      .map((parameter) =>
+        parameter
+          .trim()
+          .replace(/^\*{1,2}/u, "")
+          .replace(/\s*=.*$/u, "")
+          .replace(/\s*:\s*.*$/u, "")
+          .trim(),
+      )
+      .filter((parameter) => /^[A-Za-z_]\w*$/u.test(parameter));
+    if (parameters.length === 0) continue;
+    functions.push({
+      symbol: match[1]!,
+      parameters,
+      startLine: index + 1,
+      endLine: pythonFunctionEndLine(lines, index),
+    });
+  }
+  return functions;
+}
+
+function pythonFunctionEndLine(
+  lines: readonly string[],
+  startIndex: number,
+): number {
+  const maximum = Math.min(
+    lines.length,
+    startIndex + MAX_WRAPPER_FUNCTION_LINES,
+  );
+  let lastBodyLine = startIndex + 1;
+  for (let index = startIndex + 1; index < maximum; index += 1) {
+    const line = lines[index] ?? "";
+    const code = pythonCodeBeforeComment(line);
+    if (code.trim() === "") continue;
+    if (!/^\s/u.test(code)) return Math.max(startIndex + 1, lastBodyLine);
+    lastBodyLine = index + 1;
+  }
+  return Math.min(lines.length, Math.max(startIndex + 1, lastBodyLine));
+}
+
 function exportedJavascriptFunctions(
   lines: readonly string[],
 ): ExportedJavascriptFunction[] {
@@ -1677,6 +1995,104 @@ function javascriptTemplateExpressionCode(line: string): string {
   return expressions.join("\n");
 }
 
+function pythonCodeBeforeComment(line: string): string {
+  let quote = "";
+  let escaped = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index]!;
+    if (quote !== "") {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === "#") {
+      return line.slice(0, index);
+    }
+  }
+  return line;
+}
+
+function pythonStructuralCode(line: string): string {
+  return pythonStructuralLines([line])[0] ?? "";
+}
+
+function pythonStructuralLines(lines: readonly string[]): string[] {
+  const structural: string[] = [];
+  let tripleQuote = "";
+  for (const line of lines) {
+    const output = [...line];
+    let quote = "";
+    let escaped = false;
+    for (let index = 0; index < output.length; index += 1) {
+      const character = line[index]!;
+      if (tripleQuote !== "") {
+        output[index] = " ";
+        if (line.startsWith(tripleQuote, index)) {
+          for (let offset = 1; offset < tripleQuote.length; offset += 1) {
+            if (index + offset < output.length) output[index + offset] = " ";
+          }
+          index += tripleQuote.length - 1;
+          tripleQuote = "";
+        }
+        continue;
+      }
+      if (quote !== "") {
+        output[index] = " ";
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === quote) quote = "";
+        continue;
+      }
+      const possibleTriple = line.slice(index, index + 3);
+      if (possibleTriple === '"""' || possibleTriple === "'''") {
+        for (let offset = 0; offset < possibleTriple.length; offset += 1) {
+          output[index + offset] = " ";
+        }
+        index += possibleTriple.length - 1;
+        tripleQuote = possibleTriple;
+      } else if (character === '"' || character === "'") {
+        quote = character;
+        output[index] = " ";
+      } else if (character === "#") {
+        output.fill(" ", index);
+        break;
+      }
+    }
+    structural.push(output.join(""));
+  }
+  return structural;
+}
+
+function pythonFormattedExpressionCode(line: string): string {
+  const expressions: string[] = [];
+  const code = pythonCodeBeforeComment(line);
+  for (const formatted of code.matchAll(
+    /(?:^|[^A-Za-z0-9_])(?:f|fr|rf)(["'])(.*?)\1/giu,
+  )) {
+    for (const expression of (formatted[2] ?? "").matchAll(/\{([^{}]*)\}/gu)) {
+      expressions.push(expression[1] ?? "");
+    }
+  }
+  return expressions.join("\n");
+}
+
+function pythonLineReferencesIdentifier(
+  line: string,
+  identifier: string,
+): boolean {
+  const expression = new RegExp(
+    `\\b${escapeRegularExpression(identifier)}\\b`,
+    "u",
+  );
+  return (
+    expression.test(pythonStructuralCode(line)) ||
+    expression.test(pythonFormattedExpressionCode(line))
+  );
+}
+
 function importedJavascriptSymbols(
   lines: readonly string[],
 ): ImportedJavascriptSymbol[] {
@@ -1717,6 +2133,33 @@ function importedJavascriptSymbols(
   return imports;
 }
 
+function importedPythonSymbols(
+  lines: readonly string[],
+): ImportedPythonSymbol[] {
+  const imports: ImportedPythonSymbol[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  const expression =
+    /^\s*from\s+(\.+[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+import\s+([^#]+?)(?:\s+#.*)?$/u;
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = expression.exec(structuralLines[index] ?? "");
+    if (match === null) continue;
+    for (const rawBinding of splitPythonArguments(match[2] ?? "")) {
+      const binding = rawBinding.trim();
+      const parsed = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        binding,
+      );
+      if (parsed === null) continue;
+      imports.push({
+        imported: parsed[1]!,
+        local: parsed[2] ?? parsed[1]!,
+        moduleSpecifier: match[1]!,
+        line: index + 1,
+      });
+    }
+  }
+  return imports;
+}
+
 function resolveRelativeModelImport(
   callerPath: string,
   moduleSpecifier: string,
@@ -1749,6 +2192,32 @@ function resolveRelativeModelImport(
   return undefined;
 }
 
+function resolveRelativePythonImport(
+  callerPath: string,
+  moduleSpecifier: string,
+  knownPaths: ReadonlyMap<string, string>,
+): string | undefined {
+  const match = /^(\.+)([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)$/u.exec(
+    moduleSpecifier,
+  );
+  if (match === null) return undefined;
+  let base = posix.dirname(callerPath);
+  for (let level = 1; level < match[1]!.length; level += 1) {
+    base = posix.dirname(base);
+  }
+  const joined = posix.normalize(
+    posix.join(base, match[2]!.replaceAll(".", "/")),
+  );
+  if (joined === ".." || joined.startsWith("../") || posix.isAbsolute(joined)) {
+    return undefined;
+  }
+  for (const candidate of [`${joined}.py`, `${joined}/__init__.py`]) {
+    const resolved = knownPaths.get(modelPathComparisonKey(candidate));
+    if (resolved !== undefined) return resolved;
+  }
+  return undefined;
+}
+
 function modelPathComparisonKey(path: string): string {
   return process.platform === "win32" ? path.toLowerCase() : path;
 }
@@ -1773,6 +2242,32 @@ function javascriptCallLines(
     calls.push({
       line: index + 1,
       arguments: splitJavascriptArguments(line.slice(open + 1, close)),
+    });
+  }
+  return calls;
+}
+
+function pythonCallLines(
+  lines: readonly string[],
+  symbol: string,
+): Array<{ line: number; arguments: string[] }> {
+  const calls: Array<{ line: number; arguments: string[] }> = [];
+  const structuralLines = pythonStructuralLines(lines);
+  const expression = new RegExp(
+    `\\b${escapeRegularExpression(symbol)}\\s*\\(`,
+    "u",
+  );
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const structuralLine = structuralLines[index] ?? "";
+    const match = expression.exec(structuralLine);
+    if (match === null) continue;
+    const open = structuralLine.indexOf("(", match.index);
+    const close = matchingCallParenthesis(line, open);
+    if (open < 0 || close < 0) continue;
+    calls.push({
+      line: index + 1,
+      arguments: splitPythonArguments(line.slice(open + 1, close)),
     });
   }
   return calls;
@@ -1832,6 +2327,10 @@ function splitJavascriptArguments(value: string): string[] {
   return arguments_;
 }
 
+function splitPythonArguments(value: string): string[] {
+  return splitJavascriptArguments(value);
+}
+
 function modeledCallSource(
   lines: readonly string[],
   sources: readonly { kind: string; line: number }[],
@@ -1860,6 +2359,54 @@ function modeledCallSource(
     }
   }
   return undefined;
+}
+
+function modeledPythonCallSource(
+  lines: readonly string[],
+  sources: readonly { kind: string; line: number }[],
+  callLine: number,
+  argument: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const structuralLines = pythonStructuralLines(lines);
+  const direct = sourcePatterns.find((pattern) =>
+    pattern.expression.test(argument),
+  );
+  if (direct !== undefined) return { kind: direct.kind, line: callLine };
+  if (!/^[A-Za-z_]\w*$/u.test(argument)) return undefined;
+  const earliest = Math.max(1, callLine - MAX_WRAPPER_CALL_DISTANCE);
+  const assignment = new RegExp(
+    `^\\s*${escapeRegularExpression(argument)}\\s*(?::[^=]+)?=`,
+    "u",
+  );
+  for (let line = callLine - 1; line >= earliest; line -= 1) {
+    const source = sources.find((candidate) => candidate.line === line);
+    if (source === undefined) continue;
+    if (!assignment.test(structuralLines[line - 1] ?? "")) {
+      continue;
+    }
+    if (!pythonIdentifierReassignedBetween(lines, argument, line, callLine)) {
+      return source;
+    }
+  }
+  return undefined;
+}
+
+function pythonIdentifierReassignedBetween(
+  lines: readonly string[],
+  identifier: string,
+  afterLine: number,
+  beforeLine: number,
+): boolean {
+  const structuralLines = pythonStructuralLines(lines);
+  const escapedIdentifier = escapeRegularExpression(identifier);
+  const reassignment = new RegExp(
+    `^\\s*${escapedIdentifier}\\s*(?::[^=]+)?(?:[+\\-*/%&|^]?=|:=)`,
+    "u",
+  );
+  return structuralLines
+    .slice(afterLine, Math.max(afterLine, beforeLine - 1))
+    .some((candidate) => reassignment.test(candidate));
 }
 
 function javascriptIdentifierReassignedBetween(
@@ -1920,6 +2467,25 @@ function matchingJavascriptModelLines(
   const matches: Array<{ kind: string; line: number }> = [];
   for (let index = 0; index < lines.length && matches.length < limit; index++) {
     const structuralLine = javascriptStructuralCode(lines[index] ?? "");
+    for (const pattern of patterns) {
+      if (pattern.expression.test(structuralLine)) {
+        matches.push({ kind: pattern.kind, line: index + 1 });
+        break;
+      }
+    }
+  }
+  return matches;
+}
+
+function matchingPythonModelLines(
+  lines: readonly string[],
+  patterns: readonly FrameworkModelPattern[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const matches: Array<{ kind: string; line: number }> = [];
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < lines.length && matches.length < limit; index++) {
+    const structuralLine = structuralLines[index] ?? "";
     for (const pattern of patterns) {
       if (pattern.expression.test(structuralLine)) {
         matches.push({ kind: pattern.kind, line: index + 1 });

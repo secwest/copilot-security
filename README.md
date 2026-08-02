@@ -37,12 +37,15 @@ The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command-execution and raw-SQL
 boundaries. Each applicable row identifies an exact source line, sink line,
 CWE family, and nearby candidate controls. For Node/TypeScript relative-module
-wrappers, the host can also emit bounded one-hop and two-hop cross-file chains.
-A two-hop row contains the exact caller import and argument, exported relay
-parameter, relay import and argument, exported sink-wrapper parameter, and
-sink that references that parameter. JavaScript strings and comments are
-masked before structural source, sink, and call matching. These rows remain
-hypotheses: the correction turn must prove runtime same-value flow through
+wrappers, the host can emit bounded one-hop and two-hop cross-file chains. For
+Python, it can resolve one explicit relative from-import into a public
+module-level wrapper, bind the exact positional argument, and inspect a bounded
+complete sink call including multiline DB-API binding. A two-hop JavaScript row
+contains the exact caller import and argument, exported relay parameter, relay
+import and argument, exported sink-wrapper parameter, and sink that references
+that parameter. Language strings and comments are masked before structural
+source, sink, and call matching. These rows remain hypotheses: the correction
+turn must prove runtime same-value flow through
 every recorded file and reject unused imports, fixed arguments, intervening
 reassignment, out-of-function calls, unreachable wrappers, text that only
 resembles code, and API co-occurrence. Argument vectors without a shell,
@@ -225,6 +228,17 @@ negative, one SQL-injection positive, and one parameter-bound SQL negative:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/framework-model-manifest.json `
   --results-dir C:\security-benchmarks\framework-models `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Python relative-import lane measures cross-file command and SQL wrappers
+against shell-free and multiline parameter-bound negative controls:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/python-cross-file-framework-manifest.json `
+  --results-dir C:\security-benchmarks\python-cross-file `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

@@ -145,6 +145,22 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The Python cross-file lane applies the same gates to explicit relative
+from-imports and includes multiline parameter-binding counterevidence:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/python-cross-file-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-python-cross-file `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 The bounded multi-hop lane adds an exported service relay between the request
 caller and command or SQL sink wrapper. Its paired negatives retain the same
 three-file topology while using bounded shell-free execution or native SQL

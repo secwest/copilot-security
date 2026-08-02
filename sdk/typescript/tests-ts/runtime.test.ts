@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   readlink,
   rm,
   symlink,
@@ -361,6 +362,46 @@ describe("standalone Copilot runtime", () => {
       expect(settings.sandbox.userPolicy.filesystem.deniedPaths).toContain(
         join(home, "config.json"),
       );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps concurrent native sandbox policy replacement valid", async () => {
+    const root = await mkdtemp(join(tmpdir(), "copilot-sandbox-concurrent-"));
+    const home = join(root, "home");
+    const repository = join(root, "repository");
+    const scanDirectory = join(root, "scan");
+    const pluginRoot = join(root, "plugin");
+    try {
+      await Promise.all(
+        [home, repository, scanDirectory, pluginRoot].map(
+          async (path) => await mkdir(path, { recursive: true }),
+        ),
+      );
+
+      await Promise.all(
+        Array.from(
+          { length: 16 },
+          async () =>
+            await writeCopilotScannerSandboxSettings(home, {
+              repository,
+              scanDirectory,
+              pluginRoot,
+            }),
+        ),
+      );
+
+      const settings = JSON.parse(
+        await readFile(join(home, "settings.json"), "utf8"),
+      );
+      expect(settings.sandbox.userPolicy.filesystem).toMatchObject({
+        readwritePaths: [scanDirectory],
+        readonlyPaths: [repository, pluginRoot],
+      });
+      expect(
+        (await readdir(home)).filter((name) => name.endsWith(".tmp")),
+      ).toEqual([]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

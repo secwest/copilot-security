@@ -61,13 +61,16 @@ contract validation, and sealed outputs remain mandatory.
 The mandatory host residual pass now has an initial provider-neutral model pack
 for Node HTTP, Python web, Spring/servlet, and ASP.NET command execution and raw
 SQL. Same-file models activate when their language, request-source syntax, and
-concrete runtime or sink API are present in one bounded source file. A bounded
-Node/TypeScript cross-file layer additionally resolves repository-relative
-imports into exported wrappers and preserves the exact argument-to-parameter
-position when that parameter appears on the sink line. It now follows either
-one direct wrapper or exactly one exported relay before the sink wrapper. The
-host masks JavaScript string and comment contents before structural matching
-and emits:
+concrete runtime or sink API are present in one bounded source file. Bounded
+Node/TypeScript and Python cross-file layers additionally resolve explicit
+repository-relative imports into exported or public module-level wrappers and
+preserve the exact argument-to-parameter position. Node/TypeScript follows
+either one direct wrapper or exactly one exported relay before the sink
+wrapper. Python follows one direct relative from-import and parses a bounded
+complete sink call so multiline parameter binding remains visible. The host
+masks language string and comment contents before structural matching while
+retaining exact JavaScript template and Python f-string expressions only for
+sink-parameter reference checks, and emits:
 
 - a stable model id and language;
 - the exact modeled source kind and line;
@@ -100,13 +103,23 @@ caller-to-relay-to-sink chains. Fixed arguments, relay reassignment, calls
 outside the exported relay, comments, and string examples are deterministic
 negative controls rather than propagators.
 
+`benchmarks/python-cross-file-framework-manifest.json` applies the same strict
+gates to Flask request values crossing relative Python imports into command and
+SQL wrappers. The negative cases preserve fixed shell-free execution and
+multiline DB-API parameter binding. Deterministic tests also reject fixed
+arguments, reassignment after request input, ambiguous absolute imports,
+comments, and string-only pseudo-calls. The SQL expectation accepts medium
+severity because the fixture proves unauthorized row selection but deliberately
+does not invent authentication, write, sensitive-column, or deployment impact.
+
 ## Prioritized next improvements
 
 1. **Expand typed framework security models.** Extend bounded summaries beyond
-   two Node/TypeScript relative-import hops and into Python, Spring, and ASP.NET;
-   add framework-specific authorization and template models, manifest-derived
-   activation evidence, and signed or hashed external model packs. Benchmark
-   every extension against paired positive and negative fixtures.
+   two Node/TypeScript relative-import hops and one Python relative-import hop;
+   add Python relays, Spring and ASP.NET cross-file flow, framework-specific
+   authorization and template models, manifest-derived activation evidence,
+   and signed or hashed external model packs. Benchmark every extension against
+   paired positive and negative fixtures.
 2. **Dependency and advisory reachability.** Build deterministic lockfile/SBOM
    extraction, accept OSV identifiers and fixed-version facts, and require a
    repository call/use path or explicit deployment exposure before escalating

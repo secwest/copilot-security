@@ -20,6 +20,19 @@ exploitability. Reopen both files and disprove intervening reassignment,
 shadowing, dead code, alternate exports, runtime dispatch, and dominating
 controls before reporting.
 
+For Python, the same scope is emitted only for an explicit relative
+`from .module import symbol` boundary resolved to a repository `.py` module or
+package initializer and a public module-level function. The host binds the
+call's exact positional argument to the wrapper parameter and parses a bounded
+complete sink call, including multiline DB-API parameter binding and f-string
+expressions. Python comments and ordinary string contents cannot create
+imports, calls, sources, or sink references. Reject absolute imports whose
+runtime module identity is ambiguous, fixed arguments, request values
+reassigned before the call, private or nested wrappers, and text-only examples.
+This is still a syntactic summary; decorators, monkey patching, re-exports,
+dynamic imports, keyword remapping, and arbitrary transformations require
+manual closure.
+
 `scope: "cross-file-multi-hop-wrapper"` is the same bounded syntax extended by
 exactly one exported relay. Its propagators are ordered as caller import and
 argument, relay parameter, relay import and argument, then sink-wrapper
@@ -135,6 +148,9 @@ interpreter that consumes the value.
   exact argument-to-parameter position; reject unused imports, fixed arguments,
   source values overwritten before the call, shadowed symbols, and unreachable
   wrappers.
+- For Python rows, verify package execution makes the relative import valid and
+  preserve the distinction between a formatted SQL/shell expression and a
+  driver-bound or shell-free multiline call.
 - Preserve the exact argument position or object field accepted by the sink.
 - Verify framework parsing and runtime types; JSON objects, arrays, dotted
   keys, and operator objects may survive a nominal string conversion in some
