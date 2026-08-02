@@ -66,8 +66,9 @@ Node/TypeScript and Python cross-file layers additionally resolve explicit
 repository-relative imports into exported or public module-level wrappers and
 preserve the exact argument-to-parameter position. Node/TypeScript follows
 either one direct wrapper or exactly one exported relay before the sink
-wrapper. Python follows one direct relative from-import and parses a bounded
-complete sink call so multiline parameter binding remains visible. The host
+wrapper. Python follows either one direct relative from-import or exactly one
+public module-level relay and parses bounded complete relay and sink calls so
+multiline forwarding and parameter binding remain visible. The host
 masks language string and comment contents before structural matching while
 retaining exact JavaScript template and Python f-string expressions only for
 sink-parameter reference checks, and emits:
@@ -112,12 +113,20 @@ comments, and string-only pseudo-calls. The SQL expectation accepts medium
 severity because the fixture proves unauthorized row selection but deliberately
 does not invent authentication, write, sensitive-column, or deployment impact.
 
+`benchmarks/python-multi-hop-framework-manifest.json` adds a public Python
+service relay between each registered Flask route and its command or SQL sink
+wrapper. The host emits all six ordered import, call-argument, and parameter
+propagators. Paired negatives prove shell-free argument-vector execution and
+native SQL parameter binding remain safe, while deterministic controls reject
+fixed relay arguments, relay reassignment, calls outside the relay, private
+relays, absolute imports, and docstring pseudo-flows.
+
 ## Prioritized next improvements
 
 1. **Expand typed framework security models.** Extend bounded summaries beyond
-   two Node/TypeScript relative-import hops and one Python relative-import hop;
-   add Python relays, Spring and ASP.NET cross-file flow, framework-specific
-   authorization and template models, manifest-derived activation evidence,
+   two Node/TypeScript or Python relative-import hops; add Spring and ASP.NET
+   cross-file flow, framework-specific authorization and template models,
+   manifest-derived activation evidence,
    and signed or hashed external model packs. Benchmark every extension against
    paired positive and negative fixtures.
 2. **Dependency and advisory reachability.** Build deterministic lockfile/SBOM

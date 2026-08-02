@@ -1527,6 +1527,41 @@ describe("malformed scan artifact recovery", () => {
     }
   });
 
+  test("normalizes line aliases and re-anchors snippets from repository bytes", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding.locations = [
+      { path: "src/extract.py", startLine: 1, endLine: 1, role: "sink" },
+    ] as unknown as Finding["locations"];
+    finding.codeEvidence = [
+      {
+        id: "repository-sink",
+        label: "Repository sink",
+        path: "src/extract.py",
+        line: 1,
+        code: "model-authored paraphrase",
+        explanation: "The cited repository line is security relevant.",
+      },
+    ] as unknown as NonNullable<Finding["codeEvidence"]>;
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.warnings).toContain(
+      "Recovered finding 1: re-anchored 1 code-evidence excerpt from repository bytes.",
+    );
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+    expect(recovered.codeEvidence?.[0]).toMatchObject({
+      id: "repository-sink",
+      path: "src/extract.py",
+      startLine: 1,
+      code: "# fixture",
+    });
+  });
+
   test("keeps valid findings and skips malformed or duplicate findings", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");

@@ -3251,6 +3251,95 @@ def _standalone_source_evidence(
     }
 
 
+def _ground_standalone_findings_evidence(
+    findings: dict[str, Any],
+    warnings: list[str] | None,
+) -> None:
+    """Replace model-authored snippets with repository bytes at their claimed lines."""
+
+    repository_value = os.environ.get("COPILOT_SECURITY_REPOSITORY")
+    rows = findings.get("findings")
+    if not repository_value or not isinstance(rows, list):
+        return
+    repository = Path(repository_value).resolve()
+    source_cache: dict[str, list[str] | None] = {}
+    remaining_budget = [SOURCE_READ_MAX_BYTES]
+
+    def source_lines(relative_path: str) -> list[str] | None:
+        if relative_path in source_cache:
+            return source_cache[relative_path]
+        candidate = (repository / relative_path).resolve()
+        try:
+            candidate.relative_to(repository)
+            metadata = candidate.lstat()
+        except (OSError, ValueError):
+            source_cache[relative_path] = None
+            return None
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or candidate.is_symlink()
+            or metadata.st_size > 1024 * 1024
+            or metadata.st_size > remaining_budget[0]
+        ):
+            source_cache[relative_path] = None
+            return None
+        try:
+            contents = candidate.read_bytes().decode("utf-8-sig")
+        except (OSError, UnicodeDecodeError):
+            source_cache[relative_path] = None
+            return None
+        remaining_budget[0] -= metadata.st_size
+        source_cache[relative_path] = contents.splitlines()
+        return source_cache[relative_path]
+
+    for finding_index, finding in enumerate(rows):
+        if not isinstance(finding, dict):
+            continue
+        evidence_rows = finding.get("codeEvidence")
+        if not isinstance(evidence_rows, list):
+            continue
+        grounded: list[dict[str, Any]] = []
+        reanchored = 0
+        removed = 0
+        for evidence in evidence_rows:
+            location = _standalone_location(evidence)
+            if not isinstance(evidence, dict) or location is None:
+                removed += 1
+                continue
+            lines = source_lines(location["path"])
+            start = location["startLine"]
+            end = location["endLine"]
+            if lines is None or start > len(lines):
+                removed += 1
+                continue
+            bounded_end = min(end, start + 40, len(lines))
+            code = "\n".join(lines[start - 1 : bounded_end]).strip()
+            if not code:
+                removed += 1
+                continue
+            if evidence.get("code") != code:
+                reanchored += 1
+            evidence["path"] = location["path"]
+            evidence["startLine"] = start
+            evidence["endLine"] = bounded_end
+            evidence["role"] = location.get("role", evidence.get("role", "sink"))
+            evidence["code"] = code
+            grounded.append(evidence)
+        finding["codeEvidence"] = grounded
+        if warnings is not None and reanchored:
+            noun = "excerpt" if reanchored == 1 else "excerpts"
+            warnings.append(
+                f"Recovered finding {finding_index + 1}: re-anchored "
+                f"{reanchored} code-evidence {noun} from repository bytes."
+            )
+        if warnings is not None and removed:
+            noun = "item" if removed == 1 else "items"
+            warnings.append(
+                f"Recovered finding {finding_index + 1}: removed "
+                f"{removed} ungrounded code-evidence {noun}."
+            )
+
+
 def _normalize_standalone_finding(
     finding: Any,
     index: int,
@@ -3416,8 +3505,20 @@ def _normalize_standalone_finding(
                     raw.get("file", raw.get("filePath", raw.get("filename"))),
                 )
             )
-            start = raw.get("startLine", raw.get("start_line"))
-            end = raw.get("endLine", raw.get("end_line", start))
+            start = raw.get(
+                "startLine",
+                raw.get(
+                    "start_line",
+                    raw.get("line", raw.get("lineNumber", raw.get("line_number"))),
+                ),
+            )
+            end = raw.get(
+                "endLine",
+                raw.get(
+                    "end_line",
+                    raw.get("endLineNumber", raw.get("end_line_number", start)),
+                ),
+            )
             code = raw.get("code", raw.get("snippet"))
             if (
                 path is None
@@ -3925,6 +4026,7 @@ def _prepare_scan_finalization(
     )
     if not was_sealed:
         findings, simplified_findings = _normalize_standalone_findings_draft(findings)
+        _ground_standalone_findings_evidence(findings, completion_warnings)
         coverage, simplified_coverage = _normalize_standalone_coverage_draft(
             coverage, completion_binding
         )

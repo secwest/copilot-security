@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-multi-hop-command-injection",
+      "description": "A Flask request value crosses a public Python service relay and imported os.system wrapper.",
+      "fixture": "fixtures/python-multi-hop-command-injection",
+      "findingsPaths": [
+        "python-multi-hop-command-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-multi-hop-report-command-injection",
+          "cwe": ["CWE-78"],
+          "locations": [
+            {
+              "path": "src/runner.py",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-multi-hop-safe-command",
+      "description": "The same Python service relay reaches a fixed shell-free executable with bounded execution.",
+      "fixture": "fixtures/python-multi-hop-safe-command",
+      "findingsPaths": ["python-multi-hop-safe-command/run-1/findings.json"],
+      "expected": []
+    },
+    {
+      "id": "python-multi-hop-sql-injection",
+      "description": "A Flask request value crosses a public Python service relay into interpolated SQLite grammar.",
+      "fixture": "fixtures/python-multi-hop-sql-injection",
+      "findingsPaths": ["python-multi-hop-sql-injection/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "python-multi-hop-email-sql-injection",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "src/users.py",
+              "startLine": 8,
+              "endLine": 8,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-multi-hop-safe-sql",
+      "description": "The same Python service relay reaches native SQLite positional parameter binding.",
+      "fixture": "fixtures/python-multi-hop-safe-sql",
+      "findingsPaths": ["python-multi-hop-safe-sql/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

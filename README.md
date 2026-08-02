@@ -38,14 +38,14 @@ Python web, Spring/servlet, and ASP.NET command-execution and raw-SQL
 boundaries. Each applicable row identifies an exact source line, sink line,
 CWE family, and nearby candidate controls. For Node/TypeScript relative-module
 wrappers, the host can emit bounded one-hop and two-hop cross-file chains. For
-Python, it can resolve one explicit relative from-import into a public
-module-level wrapper, bind the exact positional argument, and inspect a bounded
-complete sink call including multiline DB-API binding. A two-hop JavaScript row
-contains the exact caller import and argument, exported relay parameter, relay
-import and argument, exported sink-wrapper parameter, and sink that references
-that parameter. Language strings and comments are masked before structural
-source, sink, and call matching. These rows remain hypotheses: the correction
-turn must prove runtime same-value flow through
+Python, it can resolve either one direct wrapper or exactly one public
+module-level relay through explicit relative from-imports, bind each exact
+positional argument, and inspect bounded multiline relay and sink calls,
+including DB-API binding. A two-hop row contains the exact caller import and
+argument, relay parameter, relay import and argument, sink-wrapper parameter,
+and sink that references that parameter. Language strings and comments are
+masked before structural source, sink, and call matching. These rows remain
+hypotheses: the correction turn must prove runtime same-value flow through
 every recorded file and reject unused imports, fixed arguments, intervening
 reassignment, out-of-function calls, unreachable wrappers, text that only
 resembles code, and API co-occurrence. Argument vectors without a shell,
@@ -76,9 +76,11 @@ This removes model-selected scope and avoids unreliable model-side Git,
 ripgrep, Python, or policy-glob execution.
 
 The host separately audits every draft finding before that correction turn.
-It lists missing CWE assignments, absent or unanchored code evidence, weak
-validation, weak attack paths, unknown code-evidence references, and validation
-or attack-path dispositions that contradict reportability. Every
+It lists missing CWE assignments, absent, unanchored, out-of-range, or
+repository-ungrounded code evidence, weak validation, weak attack paths,
+unknown code-evidence references, and validation or attack-path dispositions
+that contradict reportability. Common draft line aliases are accepted only
+when the claimed path and line resolve inside the registered repository. Every
 `rootCause`, `validation`, and `attackPath` evidence reference must name an ID
 in that finding's `codeEvidence` catalog; artifact paths belong in coverage
 receipts instead. Copilot must either repair each row from repository evidence
@@ -88,6 +90,14 @@ This prevents a structurally valid but evidentially empty finding—or one whose
 attack path points only at unrelated artifacts—from silently surviving the
 model-to-contract boundary.
 
+During deterministic sealing, every accepted code-evidence excerpt is read
+again from the registered repository at its claimed path and line range. The
+repository bytes replace model-authored snippet text; missing, escaping,
+oversized, binary, empty, or out-of-range evidence is removed and cannot be
+used as proof. Draft JSON parsing tolerates an optional UTF-8 BOM so a valid
+PowerShell-authored artifact does not trigger an otherwise needless full scan
+retry.
+
 After the correction turn, the host rebuilds both the coverage-gap and
 finding-quality inventories from the files Copilot actually wrote. If any gap
 remains, Copilot receives one bounded repair turn containing only the
@@ -96,6 +106,9 @@ closed instead of reporting completion when a gap persists or the closure
 state cannot be read. The first correction turn's existing artifact-recovery
 path remains available for a transport failure after all drafts were written;
 an unsuccessful deterministic closure audit does not use that escape hatch.
+The coverage audit includes synthetic `coverage.deferred[index]` rows as well
+as immutable repository paths, so an orphan or speculative deferral cannot
+appear only during sealing and unexpectedly downgrade an otherwise closed scan.
 The model is never required to author `report.md`: after the structured drafts
 pass closure, the host renders the Markdown report deterministically, hashes
 that exact projection into the manifest, writes it atomically, and seals the
@@ -239,6 +252,17 @@ against shell-free and multiline parameter-bound negative controls:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/python-cross-file-framework-manifest.json `
   --results-dir C:\security-benchmarks\python-cross-file `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Python multi-hop lane adds one public service relay and keeps the same
+strict positive, safe, reassignment, fixed-argument, and text-only controls:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/python-multi-hop-framework-manifest.json `
+  --results-dir C:\security-benchmarks\python-multi-hop `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

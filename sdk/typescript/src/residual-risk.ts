@@ -853,7 +853,7 @@ interface FrameworkRelaySummary {
   parameter: string;
   parameterIndex: number;
   declarationLine: number;
-  downstreamImport: ImportedJavascriptSymbol;
+  downstreamImport: ImportedJavascriptSymbol | ImportedPythonSymbol;
   downstreamCallLine: number;
   downstream: FrameworkWrapperSummary;
   controls: Array<{ kind: string; line: number }>;
@@ -883,6 +883,7 @@ interface CoverageGapRecord {
   reason:
     | "missing_coverage_surface"
     | "needs_follow_up"
+    | "deferred_coverage_item"
     | "invalid_coverage_disposition"
     | "conflicting_coverage_surfaces";
   dispositions?: string[];
@@ -891,6 +892,7 @@ interface CoverageGapRecord {
 type FindingQualityGapReason =
   | "missing_explicit_cwe"
   | "missing_or_unanchored_code_evidence"
+  | "invalid_or_ungrounded_code_evidence"
   | "missing_or_weak_validation"
   | "missing_validation_method"
   | "missing_exploit_witness"
@@ -1099,6 +1101,7 @@ function frameworkCrossFileDataflowRecords(
     ...frameworkDirectCrossFileDataflowRecords(files),
     ...frameworkDirectPythonDataflowRecords(files),
     ...frameworkMultiHopDataflowRecords(files),
+    ...frameworkPythonMultiHopDataflowRecords(files),
   ];
 }
 
@@ -1566,6 +1569,180 @@ function frameworkMultiHopDataflowRecords(
   return records;
 }
 
+function frameworkPythonMultiHopDataflowRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const knownPaths = new Map(
+    files.map((file) => [modelPathComparisonKey(file.path), file.path]),
+  );
+  const sinkSummaries = pythonFrameworkWrapperSummaries(files);
+  const relaySummaries = pythonFrameworkRelaySummaries(
+    files,
+    sinkSummaries,
+    knownPaths,
+  );
+  const summariesByFileAndSymbol = new Map<string, FrameworkRelaySummary[]>();
+  for (const summary of relaySummaries) {
+    const key = `${summary.file.path}\0${summary.symbol}`;
+    const existing = summariesByFileAndSymbol.get(key) ?? [];
+    existing.push(summary);
+    summariesByFileAndSymbol.set(key, existing);
+  }
+
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const caller of files) {
+    if (!PYTHON_EXTENSIONS.has(caller.extension)) continue;
+    for (const imported of importedPythonSymbols(caller.lines)) {
+      const importedPath = resolveRelativePythonImport(
+        caller.path,
+        imported.moduleSpecifier,
+        knownPaths,
+      );
+      if (importedPath === undefined) continue;
+      const matchingSummaries =
+        summariesByFileAndSymbol.get(`${importedPath}\0${imported.imported}`) ??
+        [];
+      for (const summary of matchingSummaries) {
+        const sources = matchingPythonModelLines(
+          caller.lines,
+          summary.model.sources,
+          32,
+        );
+        if (sources.length === 0) continue;
+        for (const call of pythonCallLines(caller.lines, imported.local)) {
+          const argument = call.arguments[summary.parameterIndex];
+          if (argument === undefined) continue;
+          const source = modeledPythonCallSource(
+            caller.lines,
+            sources,
+            call.line,
+            argument,
+            summary.model.sources,
+          );
+          if (source === undefined) continue;
+          const sinkSummary = summary.downstream;
+          const key = [
+            summary.model.id,
+            caller.path,
+            call.line,
+            summary.file.path,
+            summary.downstreamCallLine,
+            sinkSummary.file.path,
+            sinkSummary.sink.line,
+            summary.parameterIndex,
+            sinkSummary.parameterIndex,
+          ].join("\0");
+          if (emitted.has(key)) continue;
+          emitted.add(key);
+
+          const sinkStart = Math.max(
+            1,
+            sinkSummary.sink.line - CONTEXT_LINES_BEFORE,
+          );
+          const sinkEnd = Math.min(
+            sinkSummary.file.lines.length,
+            sinkSummary.sink.line + CONTEXT_LINES_AFTER,
+          );
+          const sourceStart = Math.max(1, Math.min(source.line, call.line) - 2);
+          const sourceEnd = Math.min(
+            caller.lines.length,
+            Math.max(source.line, call.line) + 2,
+          );
+          const candidateControls = [
+            ...summary.controls.map((control) => ({
+              ...control,
+              path: summary.file.path,
+            })),
+            ...sinkSummary.controls.map((control) => ({
+              ...control,
+              path: sinkSummary.file.path,
+            })),
+          ];
+          records.push({
+            path: sinkSummary.file.path,
+            line: sinkSummary.sink.line,
+            categories: [
+              `framework-dataflow:${summary.model.id}`,
+              "framework-cross-file-multi-hop-wrapper",
+              `modeled-source:${source.kind}`,
+              `modeled-sink:${sinkSummary.sink.kind}`,
+              ...candidateControls.map(
+                (control) => `candidate-control:${control.kind}`,
+              ),
+            ],
+            priority: 122,
+            startLine: sinkStart,
+            endLine: sinkEnd,
+            excerpt: sourceExcerpt(sinkSummary.file.lines, sinkStart, sinkEnd),
+            sourceExcerpt: sourceExcerpt(caller.lines, sourceStart, sourceEnd),
+            frameworkModel: {
+              schemaVersion: "1.2",
+              id: summary.model.id,
+              language: summary.model.language,
+              scope: "cross-file-multi-hop-wrapper",
+              source: {
+                kind: source.kind,
+                path: caller.path,
+                line: source.line,
+              },
+              sink: {
+                kind: sinkSummary.sink.kind,
+                path: sinkSummary.file.path,
+                line: sinkSummary.sink.line,
+                cweIds: sinkSummary.sink.cweIds,
+              },
+              propagators: [
+                {
+                  kind: "relative-python-import",
+                  path: caller.path,
+                  line: imported.line,
+                  symbol: `${imported.imported} as ${imported.local}`,
+                },
+                {
+                  kind: "wrapper-call-argument",
+                  path: caller.path,
+                  line: call.line,
+                  symbol: `${imported.local}[${summary.parameterIndex}]`,
+                },
+                {
+                  kind: "wrapper-parameter",
+                  path: summary.file.path,
+                  line: summary.declarationLine,
+                  symbol: summary.parameter,
+                },
+                {
+                  kind: "relative-python-import",
+                  path: summary.file.path,
+                  line: summary.downstreamImport.line,
+                  symbol: `${summary.downstreamImport.imported} as ${summary.downstreamImport.local}`,
+                },
+                {
+                  kind: "wrapper-call-argument",
+                  path: summary.file.path,
+                  line: summary.downstreamCallLine,
+                  symbol: `${summary.downstreamImport.local}[${sinkSummary.parameterIndex}]`,
+                },
+                {
+                  kind: "wrapper-parameter",
+                  path: sinkSummary.file.path,
+                  line: sinkSummary.declarationLine,
+                  symbol: sinkSummary.parameter,
+                },
+              ],
+              candidateControls,
+            },
+          });
+          if (records.length >= MAX_FRAMEWORK_MULTI_HOP_RECORDS) {
+            return records;
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
 function javascriptFrameworkRelaySummaries(
   files: readonly SourceFileSnapshot[],
   sinkSummaries: readonly FrameworkWrapperSummary[],
@@ -1625,6 +1802,97 @@ function javascriptFrameworkRelaySummaries(
               if (argument !== parameter) continue;
               if (
                 javascriptIdentifierReassignedBetween(
+                  file.lines,
+                  parameter,
+                  wrapper.startLine,
+                  call.line,
+                )
+              ) {
+                continue;
+              }
+              summaries.push({
+                model: downstream.model,
+                file,
+                symbol: wrapper.symbol,
+                parameter,
+                parameterIndex,
+                declarationLine: wrapper.startLine,
+                downstreamImport: imported,
+                downstreamCallLine: call.line,
+                downstream,
+                controls,
+              });
+              if (summaries.length >= MAX_FRAMEWORK_RELAY_SUMMARIES) {
+                return summaries;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return summaries;
+}
+
+function pythonFrameworkRelaySummaries(
+  files: readonly SourceFileSnapshot[],
+  sinkSummaries: readonly FrameworkWrapperSummary[],
+  knownPaths: ReadonlyMap<string, string>,
+): FrameworkRelaySummary[] {
+  const summariesByFileAndSymbol = new Map<string, FrameworkWrapperSummary[]>();
+  for (const summary of sinkSummaries) {
+    const key = `${summary.file.path}\0${summary.symbol}`;
+    const existing = summariesByFileAndSymbol.get(key) ?? [];
+    existing.push(summary);
+    summariesByFileAndSymbol.set(key, existing);
+  }
+
+  const summaries: FrameworkRelaySummary[] = [];
+  for (const file of files) {
+    if (!PYTHON_EXTENSIONS.has(file.extension)) continue;
+    const exportedFunctions = exportedPythonFunctions(file.lines);
+    if (exportedFunctions.length === 0) continue;
+    for (const imported of importedPythonSymbols(file.lines)) {
+      const importedPath = resolveRelativePythonImport(
+        file.path,
+        imported.moduleSpecifier,
+        knownPaths,
+      );
+      if (importedPath === undefined || importedPath === file.path) continue;
+      const downstreamSummaries =
+        summariesByFileAndSymbol.get(`${importedPath}\0${imported.imported}`) ??
+        [];
+      if (downstreamSummaries.length === 0) continue;
+      const calls = pythonCallLines(file.lines, imported.local);
+      for (const wrapper of exportedFunctions) {
+        const wrapperCalls = calls.filter(
+          (call) =>
+            call.line > wrapper.startLine && call.line <= wrapper.endLine,
+        );
+        for (const downstream of downstreamSummaries) {
+          const controls = matchingPythonModelLines(
+            file.lines,
+            downstream.model.controls,
+            64,
+          )
+            .filter(
+              (control) =>
+                control.line >= wrapper.startLine &&
+                control.line <= wrapper.endLine,
+            )
+            .slice(0, 8);
+          for (const call of wrapperCalls) {
+            const argument = call.arguments[downstream.parameterIndex];
+            if (argument === undefined) continue;
+            for (
+              let parameterIndex = 0;
+              parameterIndex < wrapper.parameters.length;
+              parameterIndex += 1
+            ) {
+              const parameter = wrapper.parameters[parameterIndex]!;
+              if (argument !== parameter) continue;
+              if (
+                pythonIdentifierReassignedBetween(
                   file.lines,
                   parameter,
                   wrapper.startLine,
@@ -2258,16 +2526,18 @@ function pythonCallLines(
     "u",
   );
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
     const structuralLine = structuralLines[index] ?? "";
     const match = expression.exec(structuralLine);
     if (match === null) continue;
-    const open = structuralLine.indexOf("(", match.index);
-    const close = matchingCallParenthesis(line, open);
+    const callLines = lines.slice(index, Math.min(lines.length, index + 13));
+    const callText = callLines.join("\n");
+    const structuralCallText = pythonStructuralLines(callLines).join("\n");
+    const open = structuralCallText.indexOf("(", match.index);
+    const close = matchingCallParenthesis(structuralCallText, open);
     if (open < 0 || close < 0) continue;
     calls.push({
       line: index + 1,
-      arguments: splitPythonArguments(line.slice(open + 1, close)),
+      arguments: splitPythonArguments(callText.slice(open + 1, close)),
     });
   }
   return calls;
@@ -2588,6 +2858,12 @@ export async function buildCoverageGapInventory(
       coveredPathCount += 1;
     }
   }
+  for (let index = 0; index < coverage.deferredCount; index += 1) {
+    gaps.push({
+      path: `coverage.deferred[${index}]`,
+      reason: "deferred_coverage_item",
+    });
+  }
 
   const selected = gaps.sort(compareCoverageGaps).slice(0, MAX_COVERAGE_GAPS);
   return [
@@ -2606,12 +2882,18 @@ export async function buildCoverageGapInventory(
 
 export async function buildFindingQualityGapInventory(
   scanDirectory: string | undefined,
+  repository?: string,
 ): Promise<string> {
   if (scanDirectory === undefined) return "";
   const canonicalScanDirectory = await realpath(scanDirectory).catch(
     () => null,
   );
   if (canonicalScanDirectory === null) return "";
+  const canonicalRepository =
+    repository === undefined
+      ? null
+      : await realpath(repository).catch(() => null);
+  const repositoryFileCache = new Map<string, string[] | null>();
   const findingsBytes = await readBoundedScanFile(
     canonicalScanDirectory,
     "findings.json",
@@ -2623,7 +2905,9 @@ export async function buildFindingQualityGapInventory(
 
   let document: unknown;
   try {
-    document = JSON.parse(findingsBytes.toString("utf8")) as unknown;
+    document = JSON.parse(
+      stripUtf8Bom(findingsBytes.toString("utf8")),
+    ) as unknown;
   } catch {
     return findingQualityInventoryFailure("invalid_findings_json");
   }
@@ -2661,14 +2945,31 @@ export async function buildFindingQualityGapInventory(
       reasons.push("missing_explicit_cwe");
     }
     const locations = parseFindingLocations(finding["locations"]);
-    if (!isSubstantiveCodeEvidence(finding["codeEvidence"], locations)) {
+    const repositoryGrounding =
+      canonicalRepository === null
+        ? null
+        : await repositoryCodeEvidenceGrounding(
+            canonicalRepository,
+            finding["codeEvidence"],
+            locations,
+            repositoryFileCache,
+          );
+    if (
+      !isSubstantiveCodeEvidence(finding["codeEvidence"], locations) &&
+      repositoryGrounding !== true
+    ) {
       reasons.push("missing_or_unanchored_code_evidence");
+    }
+    if (repositoryGrounding === false) {
+      reasons.push("invalid_or_ungrounded_code_evidence");
     }
     const codeEvidenceIds = findingCodeEvidenceIds(finding["codeEvidence"]);
     if (!isSubstantiveValidation(finding["validation"])) {
       reasons.push("missing_or_weak_validation");
     }
-    reasons.push(...validationClosureGaps(finding["validation"]));
+    reasons.push(
+      ...validationClosureGaps(finding["validation"], codeEvidenceIds),
+    );
     if (!isSubstantiveAttackPath(finding["attackPath"])) {
       reasons.push("missing_or_weak_attack_path");
     }
@@ -2706,7 +3007,10 @@ export async function buildFindingQualityGapInventory(
   ].join("\n");
 }
 
-function validationClosureGaps(value: unknown): FindingQualityGapReason[] {
+function validationClosureGaps(
+  value: unknown,
+  codeEvidenceIds: ReadonlySet<string>,
+): FindingQualityGapReason[] {
   if (!isRecord(value)) {
     return [
       "missing_validation_method",
@@ -2729,7 +3033,10 @@ function validationClosureGaps(value: unknown): FindingQualityGapReason[] {
   ) {
     gaps.push("missing_negative_control");
   }
-  if (!hasNamedSubstantiveValue(value, ["evidence"])) {
+  if (
+    !hasNamedSubstantiveValue(value, ["evidence"]) &&
+    !hasKnownCodeEvidenceRef(value, codeEvidenceIds)
+  ) {
     gaps.push("missing_validation_evidence");
   }
   if (
@@ -2750,6 +3057,20 @@ function validationClosureGaps(value: unknown): FindingQualityGapReason[] {
     gaps.push("missing_remaining_uncertainty");
   }
   return gaps;
+}
+
+function hasKnownCodeEvidenceRef(
+  value: Record<string, unknown>,
+  codeEvidenceIds: ReadonlySet<string>,
+): boolean {
+  const refs = value["evidenceRefs"] ?? value["evidence_refs"];
+  return (
+    Array.isArray(refs) &&
+    refs.some(
+      (reference) =>
+        typeof reference === "string" && codeEvidenceIds.has(reference),
+    )
+  );
 }
 
 function attackPathClosureGaps(value: unknown): FindingQualityGapReason[] {
@@ -2879,6 +3200,129 @@ function findingQualityInventoryFailure(reason: string): string {
       reasons: [reason],
     }),
   ].join("\n");
+}
+
+function stripUtf8Bom(value: string): string {
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
+}
+
+async function repositoryCodeEvidenceGrounding(
+  repository: string,
+  value: unknown,
+  findingLocations: readonly EvidenceLocation[],
+  fileCache: Map<string, string[] | null>,
+): Promise<boolean> {
+  if (!Array.isArray(value) || value.length === 0) return false;
+
+  let anchored = false;
+  for (const evidence of value) {
+    if (!isRecord(evidence)) return false;
+    const path = draftEvidencePath(evidence);
+    const startLine = draftEvidenceStartLine(evidence);
+    const endLine = draftEvidenceEndLine(evidence, startLine);
+    if (
+      path === null ||
+      startLine === null ||
+      endLine === null ||
+      endLine < startLine ||
+      !hasSubstantiveValue(evidence["code"] ?? evidence["snippet"], 3) ||
+      !hasSubstantiveValue(evidence["explanation"], 8)
+    ) {
+      return false;
+    }
+
+    let lines = fileCache.get(path);
+    if (lines === undefined) {
+      const bytes = await readBoundedRepositoryFile(repository, path);
+      lines =
+        bytes === null
+          ? null
+          : stripUtf8Bom(bytes.toString("utf8")).split(/\r?\n/u);
+      fileCache.set(path, lines);
+    }
+    if (
+      lines === null ||
+      startLine > lines.length ||
+      lines
+        .slice(startLine - 1, Math.min(endLine, lines.length))
+        .every((line) => line.trim() === "")
+    ) {
+      return false;
+    }
+
+    const primaryLocation = findingLocations[0];
+    anchored ||=
+      primaryLocation !== undefined &&
+      evidenceLocationsOverlap({ path, startLine, endLine }, primaryLocation);
+  }
+  return anchored;
+}
+
+function draftEvidencePath(evidence: Record<string, unknown>): string | null {
+  for (const key of ["path", "file", "filePath", "filename"]) {
+    const candidate = evidence[key];
+    if (typeof candidate !== "string") continue;
+    const path = candidate.trim().replaceAll("\\", "/");
+    return isSafeInventoryPath(path) ? path : null;
+  }
+  return null;
+}
+
+function draftEvidenceStartLine(
+  evidence: Record<string, unknown>,
+): number | null {
+  return draftPositiveInteger(evidence, [
+    "startLine",
+    "start_line",
+    "line",
+    "lineNumber",
+    "line_number",
+  ]);
+}
+
+function draftEvidenceEndLine(
+  evidence: Record<string, unknown>,
+  startLine: number | null,
+): number | null {
+  return (
+    draftPositiveInteger(evidence, [
+      "endLine",
+      "end_line",
+      "endLineNumber",
+      "end_line_number",
+    ]) ?? startLine
+  );
+}
+
+function draftPositiveInteger(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+): number | null {
+  for (const key of keys) {
+    const candidate = value[key];
+    if (Number.isSafeInteger(candidate) && Number(candidate) > 0) {
+      return Number(candidate);
+    }
+  }
+  return null;
+}
+
+function evidenceLocationsOverlap(
+  left: EvidenceLocation,
+  right: EvidenceLocation,
+): boolean {
+  const normalize = (path: string): string =>
+    path.replaceAll("\\", "/").toLowerCase();
+  if (normalize(left.path) !== normalize(right.path)) return false;
+  const leftEnd = left.endLine ?? left.startLine;
+  const rightEnd = right.endLine ?? right.startLine;
+  const distance =
+    left.startLine > rightEnd
+      ? left.startLine - rightEnd
+      : right.startLine > leftEnd
+        ? right.startLine - leftEnd
+        : 0;
+  return distance === 0;
 }
 
 function parseFindingLocations(value: unknown): EvidenceLocation[] {
@@ -3126,26 +3570,33 @@ function isSafeInventoryPath(path: string): boolean {
 function parseCoverageSurfaces(coverageBytes: Buffer | null): {
   readable: boolean;
   surfaces: CoverageSurfaceDraft[];
+  deferredCount: number;
 } {
-  if (coverageBytes === null) return { readable: false, surfaces: [] };
+  if (coverageBytes === null) {
+    return { readable: false, surfaces: [], deferredCount: 0 };
+  }
   try {
-    const coverage = JSON.parse(coverageBytes.toString("utf8")) as unknown;
+    const coverage = JSON.parse(
+      stripUtf8Bom(coverageBytes.toString("utf8")),
+    ) as unknown;
     if (
       typeof coverage !== "object" ||
       coverage === null ||
       !Array.isArray((coverage as { surfaces?: unknown }).surfaces)
     ) {
-      return { readable: false, surfaces: [] };
+      return { readable: false, surfaces: [], deferredCount: 0 };
     }
+    const deferred = (coverage as { deferred?: unknown }).deferred;
     return {
       readable: true,
       surfaces: (coverage as { surfaces: unknown[] }).surfaces.filter(
         (surface): surface is CoverageSurfaceDraft =>
           typeof surface === "object" && surface !== null,
       ),
+      deferredCount: Array.isArray(deferred) ? deferred.length : 0,
     };
   } catch {
-    return { readable: false, surfaces: [] };
+    return { readable: false, surfaces: [], deferredCount: 0 };
   }
 }
 
@@ -3156,8 +3607,9 @@ function compareCoverageGaps(
   const priority = {
     missing_coverage_surface: 0,
     needs_follow_up: 1,
-    invalid_coverage_disposition: 2,
-    conflicting_coverage_surfaces: 3,
+    deferred_coverage_item: 2,
+    invalid_coverage_disposition: 3,
+    conflicting_coverage_surfaces: 4,
   } as const;
   return (
     priority[left.reason] - priority[right.reason] ||

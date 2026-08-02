@@ -34,15 +34,18 @@ dynamic imports, keyword remapping, and arbitrary transformations require
 manual closure.
 
 `scope: "cross-file-multi-hop-wrapper"` is the same bounded syntax extended by
-exactly one exported relay. Its propagators are ordered as caller import and
-argument, relay parameter, relay import and argument, then sink-wrapper
-parameter. The host requires the relay argument to be the exact unreassigned
-relay parameter and ignores downstream calls outside the exported relay.
-JavaScript strings and comments are masked before structural source, sink, and
-call matching; template expressions remain visible only for exact parameter
-reference checks. This is not general interprocedural taint analysis and does
-not cover a third import hop, dynamic dispatch, re-export graphs, callbacks, or
-arbitrary transformations.
+exactly one exported JavaScript/TypeScript or public module-level Python relay.
+Its propagators are ordered as caller import and argument, relay parameter,
+relay import and argument, then sink-wrapper parameter. The host requires the
+relay argument to be the exact unreassigned relay parameter and ignores
+downstream calls outside the relay. Python relays require explicit relative
+from-imports and exact positional forwarding; bounded multiline calls are
+parsed, but keyword remapping remains outside the summary. Language strings
+and comments are masked before structural matching; template and formatted-
+string expressions remain visible only for exact parameter reference checks.
+This is not general interprocedural taint analysis and does not cover a third
+import hop, dynamic dispatch, re-export graphs, callbacks, or arbitrary
+transformations.
 
 ## Model Tuple
 

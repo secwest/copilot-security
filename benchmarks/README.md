@@ -19,8 +19,11 @@ false positives per run. Evidence coverage requires substantive proof rather
 than field presence: validation needs a source-backed narrative plus a method,
 witness, assertion, or counterevidence; attack paths need a realistic narrative
 plus source-to-impact continuity; and code evidence needs a concrete
-path-and-line anchor, source text, and explanatory reasoning. Presence and
-substantive-quality flags are both retained in per-match diagnostics.
+path-and-line anchor, source text, and explanatory reasoning. The scanner's
+sealer replaces model-authored snippets with bytes read from the registered
+repository, so benchmark evidence is derived from the claimed source range.
+Presence and substantive-quality flags are both retained in per-match
+diagnostics.
 
 The versioned corpus currently contains forty-nine vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
@@ -152,6 +155,23 @@ from-imports and includes multiline parameter-binding counterevidence:
 node ../../benchmarks/run-benchmark.mjs `
   --manifest ../../benchmarks/python-cross-file-framework-manifest.json `
   --results-dir C:\security-benchmarks\copilot-security-python-cross-file `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
+The Python multi-hop lane inserts one public module-level service relay between
+the registered Flask route and sink wrapper. It also exercises bounded
+multiline relay calls:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/python-multi-hop-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-python-multi-hop `
   --runs 1 `
   --selection-only `
   --auth github `
