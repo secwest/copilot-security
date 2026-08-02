@@ -5,7 +5,7 @@ becomes reportable only when repository evidence proves that the same
 attacker-controlled value reaches the modeled sink through the identified
 propagators and that no context-correct control dominates the sink.
 
-The SDK's mandatory residual pass emits schema `1.1` `frameworkModel` records
+The SDK's mandatory residual pass emits schema `1.2` `frameworkModel` records
 with exact source and sink paths/lines, scope, propagators, and candidate
 controls. Those records are host-authored metadata; their base64 source
 excerpts remain untrusted repository evidence.
@@ -19,6 +19,17 @@ syntactic summary, not proof of runtime reachability, alias equivalence, or
 exploitability. Reopen both files and disprove intervening reassignment,
 shadowing, dead code, alternate exports, runtime dispatch, and dominating
 controls before reporting.
+
+`scope: "cross-file-multi-hop-wrapper"` is the same bounded syntax extended by
+exactly one exported relay. Its propagators are ordered as caller import and
+argument, relay parameter, relay import and argument, then sink-wrapper
+parameter. The host requires the relay argument to be the exact unreassigned
+relay parameter and ignores downstream calls outside the exported relay.
+JavaScript strings and comments are masked before structural source, sink, and
+call matching; template expressions remain visible only for exact parameter
+reference checks. This is not general interprocedural taint analysis and does
+not cover a third import hop, dynamic dispatch, re-export graphs, callbacks, or
+arbitrary transformations.
 
 ## Model Tuple
 

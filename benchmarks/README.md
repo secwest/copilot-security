@@ -145,6 +145,24 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The bounded multi-hop lane adds an exported service relay between the request
+caller and command or SQL sink wrapper. Its paired negatives retain the same
+three-file topology while using bounded shell-free execution or native SQL
+binding:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/multi-hop-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-multi-hop `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 `--selection-only` writes `benchmark-selection-manifest.json` and
 `benchmark-report.json` into the external results directory and enforces only
 the requested cases and run count. Runner evaluation always requires a

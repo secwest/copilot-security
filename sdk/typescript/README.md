@@ -17,10 +17,21 @@ The package is ESM-only and provides:
   against each finding's `codeEvidence` IDs before completion
 - host-reconciled per-file coverage that preserves omitted inventory paths as
   deferred work instead of accepting a false complete claim
+- pre-session host-generated and SHA-256-verified repository, review, and
+  `SECURITY.md` path inventories; the model cannot choose, narrow, or rewrite
+  scan scope
+- registered-target checks surrounding staged-file SHA-256 comparisons before
+  model execution and final sealing, so checkout races fail closed
+- a disposable repository/plugin snapshot that omits links and special files,
+  plus an allowlisted model environment, category-scoped permissions, disabled
+  tool network/credential forwarding, and mandatory positive native-sandbox
+  telemetry for every shell completion
 - typed host-generated Node HTTP, Python web, Spring/servlet, and ASP.NET
   command/SQL data-flow hypotheses with exact source/sink lines and nearby
   negative controls for the mandatory residual correction turn, plus bounded
-  relative-import/call/parameter summaries for Node/TypeScript wrappers
+  one-hop and two-hop relative-import/call/parameter summaries for
+  Node/TypeScript wrappers, with JavaScript string/comment masking before
+  structural matching
 - bounded native Copilot model-call retries without host prompt replay, plus
   cancellation-safe cleanup of partially initialized CLI sessions
 - cancellation and streamed Copilot usage/subagent events
@@ -74,6 +85,19 @@ Scanner-owned state is isolated under `COPILOT_SECURITY_HOME` (default:
 Copilot CLI authentication; a private copy is prepared under the scanner-owned
 `copilot-security-home` runtime directory. The deprecated
 `COPILOT_SECURITY_STATE_DIR` alias selects this scanner's state root only.
+
+During a scan, Copilot sees only an expendable repository/plugin copy and an
+empty staged scanner-state directory. Repository links and special files are
+represented in a link manifest instead of being recreated. The trusted host
+generates immutable worklists and repository-policy paths before model
+execution and verifies their digests before completion. Registered-target
+checks surround SHA-256 comparisons of every authoritative and staged inventory
+file before model execution, preparation, and completion. Model-side Python,
+Git, ripgrep, and plugin helpers are prohibited; deterministic helpers run in
+the trusted host, while the model uses built-in file tools for exact worklist
+paths and writes drafts only beneath the exclusive scan directory. This also
+works around current Windows native-sandbox preview limitations without
+treating the preview sandbox as the only security boundary.
 
 ### Runtime environment
 

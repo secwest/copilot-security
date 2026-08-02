@@ -3,12 +3,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { constants, type Stats } from "node:fs";
 import {
   chmod,
+  cp,
   copyFile,
   lstat,
   mkdir,
   mkdtemp,
   open,
   readFile,
+  readlink,
   readdir,
   realpath,
   rename,
@@ -20,6 +22,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import {
   basename,
+  delimiter,
   dirname,
   extname,
   isAbsolute,
@@ -41,7 +44,10 @@ import {
   PluginPythonUnavailableError,
 } from "./errors.js";
 import type { JsonObject } from "./config.js";
-import { resolveTrustedExecutable } from "./trusted-executable.js";
+import {
+  resolveTrustedExecutable,
+  resolveTrustedWindowsCommandWrapper,
+} from "./trusted-executable.js";
 
 const execFile = promisify(execFileCallback);
 
@@ -94,6 +100,731 @@ export interface WorkbenchCommandOptions {
   environment: ProcessEnvironment;
   signal?: AbortSignal;
   failureMessage?: string;
+}
+
+export interface CopilotScannerSandboxOptions {
+  repository: string;
+  scanDirectory: string;
+  pluginRoot: string;
+  analysisWorkspace?: string;
+}
+
+export interface CopilotAnalysisWorkspace {
+  root: string;
+  repository: string;
+  pluginRoot: string;
+  linkManifest: string;
+}
+
+export interface CopilotInventoryTarget {
+  kind: "repository" | "paths" | "refs" | "working_tree";
+  paths: readonly string[];
+  base?: string;
+  head?: string;
+}
+
+export interface CopilotScanInventorySnapshot {
+  fileCount: number;
+  repositoryPaths: readonly string[];
+  files: ReadonlyArray<{ path: string; sha256: string }>;
+}
+
+export interface CopilotScannerSandboxConfig {
+  enabled: true;
+  addCurrentWorkingDirectory: false;
+  userPolicy: {
+    filesystem: {
+      readwritePaths: string[];
+      readonlyPaths: string[];
+      deniedPaths: string[];
+      clearPolicyOnExit: true;
+    };
+    network: {
+      allowOutbound: false;
+      allowLocalNetwork: false;
+    };
+  };
+}
+
+const COPILOT_SCANNER_INHERITED_ENVIRONMENT = new Set([
+  "ALLUSERSPROFILE",
+  "APPDATA",
+  "COLORTERM",
+  "COMSPEC",
+  "FORCE_COLOR",
+  "GH_HOST",
+  "GITHUB_HOST",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "HOME",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "LANG",
+  "LC_ALL",
+  "LOCALAPPDATA",
+  "NO_COLOR",
+  "NO_PROXY",
+  "NUMBER_OF_PROCESSORS",
+  "OS",
+  "PATHEXT",
+  "PROCESSOR_ARCHITECTURE",
+  "PROCESSOR_IDENTIFIER",
+  "PROCESSOR_LEVEL",
+  "PROCESSOR_REVISION",
+  "PROGRAMDATA",
+  "PROGRAMFILES",
+  "PROGRAMFILES(X86)",
+  "PROGRAMW6432",
+  "REQUESTS_CA_BUNDLE",
+  "SHELL",
+  "SSL_CERT_DIR",
+  "SSL_CERT_FILE",
+  "SYSTEMDRIVE",
+  "SYSTEMROOT",
+  "TEMP",
+  "TERM",
+  "TMP",
+  "TMPDIR",
+  "USERDOMAIN",
+  "USERNAME",
+  "USERPROFILE",
+  "WINDIR",
+  "XDG_CACHE_HOME",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+]);
+
+/**
+ * Build the environment inherited by the Copilot process and its shell tools.
+ * Scanner paths and authentication are retained, but unrelated ambient secrets,
+ * executable-injection variables, and arbitrary PATH entries are not.
+ */
+export function copilotScannerExecutionEnvironment(
+  environment: ProcessEnvironment,
+  executables: {
+    copilot: string;
+    python: string;
+    git?: string;
+    tools?: readonly string[];
+  },
+  platform: NodeJS.Platform = process.platform,
+): ProcessEnvironment {
+  const selected = Object.fromEntries(
+    Object.entries(environment).filter(([name, value]) => {
+      if (value === undefined) return false;
+      const upper = name.toUpperCase();
+      return (
+        COPILOT_SCANNER_INHERITED_ENVIRONMENT.has(upper) ||
+        upper === "COPILOT_HOME" ||
+        upper === "COPILOT_CACHE_HOME" ||
+        upper === "COPILOT_GITHUB_TOKEN" ||
+        upper === "GH_TOKEN" ||
+        upper === "GITHUB_TOKEN" ||
+        upper === "PYTHON" ||
+        upper.startsWith("COPILOT_SECURITY_")
+      );
+    }),
+  );
+  for (const name of Object.keys(selected)) {
+    if (name.toUpperCase() === "PATH") delete selected[name];
+  }
+
+  const systemRoot =
+    environmentEntry(environment, "SYSTEMROOT") ?? "C:\\Windows";
+  const candidates = [
+    dirname(executables.copilot),
+    dirname(executables.python),
+    ...(executables.git === undefined ? [] : [dirname(executables.git)]),
+    ...(executables.tools ?? []).map((path) => dirname(path)),
+    ...(platform === "win32"
+      ? [
+          join(systemRoot, "System32"),
+          systemRoot,
+          join(systemRoot, "System32", "Wbem"),
+          join(systemRoot, "System32", "WindowsPowerShell", "v1.0"),
+        ]
+      : ["/usr/local/bin", "/usr/bin", "/bin"]),
+  ];
+  const seen = new Set<string>();
+  selected["PATH"] = candidates
+    .filter((path) => {
+      const key = platform === "win32" ? path.toLowerCase() : path;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(delimiter);
+  selected["PYTHON"] = executables.python;
+  return selected;
+}
+
+function environmentEntry(
+  environment: ProcessEnvironment,
+  requested: string,
+): string | undefined {
+  const upper = requested.toUpperCase();
+  return Object.entries(environment).find(
+    ([name, value]) => name.toUpperCase() === upper && value?.trim(),
+  )?.[1];
+}
+
+export function copilotScannerSandboxConfig(
+  copilotHome: string,
+  options: CopilotScannerSandboxOptions,
+): CopilotScannerSandboxConfig {
+  const sensitivePaths = [
+    join(homedir(), ".aws"),
+    join(homedir(), ".azure"),
+    join(homedir(), ".copilot"),
+    join(homedir(), ".gnupg"),
+    join(homedir(), ".kube"),
+    join(homedir(), ".ssh"),
+    join(copilotHome, "auth.json"),
+    join(copilotHome, "config.json"),
+    join(copilotHome, "mcp-oauth-config"),
+    join(copilotHome, "mcp-secrets"),
+    join(copilotHome, "permissions-config.json"),
+    join(copilotHome, "session-state"),
+    join(copilotHome, "session-store.db"),
+    join(copilotHome, "session-store.db-shm"),
+    join(copilotHome, "session-store.db-wal"),
+  ];
+  return {
+    enabled: true,
+    addCurrentWorkingDirectory: false,
+    userPolicy: {
+      filesystem: {
+        readwritePaths: [
+          options.scanDirectory,
+          ...(options.analysisWorkspace === undefined
+            ? []
+            : [options.analysisWorkspace]),
+        ],
+        readonlyPaths:
+          options.analysisWorkspace === undefined
+            ? [options.repository, options.pluginRoot]
+            : [],
+        deniedPaths: sensitivePaths,
+        clearPolicyOnExit: true,
+      },
+      network: {
+        allowOutbound: false,
+        allowLocalNetwork: false,
+      },
+    },
+  };
+}
+
+/**
+ * Copy model-visible inputs into an expendable workspace. Symbolic links and
+ * other special entries are recorded instead of recreated, so no staged path
+ * can traverse back into the source repository or another host location.
+ */
+export async function prepareCopilotAnalysisWorkspace(
+  repository: string,
+  pluginRoot: string,
+  signal?: AbortSignal,
+  repositoryScopes?: readonly string[],
+): Promise<CopilotAnalysisWorkspace> {
+  signal?.throwIfAborted();
+  const root = await mkdtemp(join(tmpdir(), "copilot-security-analysis-"));
+  const stagedRepository = join(root, "repository");
+  const stagedPlugin = join(root, "plugin");
+  const linkManifest = join(root, "links.json");
+  const links: Array<{
+    tree: "repository" | "plugin";
+    path: string;
+    target?: string;
+    kind: "symbolic_link" | "special";
+  }> = [];
+  const normalizedRepositoryScopes = repositoryScopes
+    ?.map((path) =>
+      path.replaceAll("\\", "/").replace(/^\.\//u, "").replace(/\/$/u, ""),
+    )
+    .filter((path) => path !== "" && path !== ".");
+
+  const repositoryPathIsInScope = (path: string): boolean =>
+    normalizedRepositoryScopes === undefined ||
+    normalizedRepositoryScopes.length === 0 ||
+    path === "" ||
+    normalizedRepositoryScopes.some(
+      (scope) =>
+        path === scope ||
+        path.startsWith(`${scope}/`) ||
+        scope.startsWith(`${path}/`),
+    );
+
+  const repositoryPathIsExcluded = (path: string): boolean => {
+    const parts = path.split("/");
+    if (parts.includes(".git")) return true;
+    for (const excluded of ["node_modules", ".pnpm-store"]) {
+      const index = parts.indexOf(excluded);
+      if (index < 0) continue;
+      const excludedRoot = parts.slice(0, index + 1).join("/");
+      const explicitlySelected = normalizedRepositoryScopes?.some(
+        (scope) =>
+          scope === excludedRoot || scope.startsWith(`${excludedRoot}/`),
+      );
+      if (explicitlySelected !== true) return true;
+    }
+    return false;
+  };
+
+  const stage = async (
+    source: string,
+    destination: string,
+    tree: "repository" | "plugin",
+  ): Promise<void> => {
+    const canonicalSource = await realpath(source);
+    await cp(canonicalSource, destination, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+      dereference: false,
+      verbatimSymlinks: true,
+      filter: async (current) => {
+        signal?.throwIfAborted();
+        const repositoryPath = relative(canonicalSource, current)
+          .split(sep)
+          .join("/");
+        if (
+          tree === "repository" &&
+          (!repositoryPathIsInScope(repositoryPath) ||
+            repositoryPathIsExcluded(repositoryPath))
+        ) {
+          return false;
+        }
+        const metadata = await lstat(current);
+        if (metadata.isSymbolicLink()) {
+          links.push({
+            tree,
+            path: repositoryPath,
+            target: await readlink(current),
+            kind: "symbolic_link",
+          });
+          return false;
+        }
+        if (!metadata.isDirectory() && !metadata.isFile()) {
+          links.push({
+            tree,
+            path: repositoryPath,
+            kind: "special",
+          });
+          return false;
+        }
+        return true;
+      },
+    });
+  };
+
+  let complete = false;
+  try {
+    await stage(repository, stagedRepository, "repository");
+    await stage(pluginRoot, stagedPlugin, "plugin");
+    signal?.throwIfAborted();
+    await writeFile(
+      linkManifest,
+      `${JSON.stringify({ schemaVersion: "1.0", entries: links }, null, 2)}\n`,
+      { flag: "wx", mode: 0o400 },
+    );
+    complete = true;
+    return {
+      root: await realpath(root),
+      repository: await realpath(stagedRepository),
+      pluginRoot: await realpath(stagedPlugin),
+      linkManifest: await realpath(linkManifest),
+    };
+  } finally {
+    if (!complete) await rm(root, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Generate the model's immutable file inventory in the trusted host process.
+ * The model consumes this worklist but cannot select or silently narrow scope.
+ */
+export async function prepareCopilotScanInventory(options: {
+  python: string;
+  pluginRoot: string;
+  repository: string;
+  scanDirectory: string;
+  target: CopilotInventoryTarget;
+  scopesFile?: string;
+  environment: ProcessEnvironment;
+  signal?: AbortSignal;
+}): Promise<CopilotScanInventorySnapshot> {
+  options.signal?.throwIfAborted();
+  const discoveryDirectory = join(
+    options.scanDirectory,
+    "artifacts",
+    "02_discovery",
+  );
+  await mkdir(discoveryDirectory, { recursive: true, mode: 0o700 });
+  const rankInput = join(discoveryDirectory, "host_rank_input.jsonl");
+  const inventory = join(discoveryDirectory, "in_scope_files.txt");
+  const deepReviewInput = join(discoveryDirectory, "deep_review_input.jsonl");
+  const securityGuidancePaths = join(
+    discoveryDirectory,
+    "security_guidance_paths.json",
+  );
+  const script = join(options.pluginRoot, "scripts", "generate_rank_input.py");
+  const target = options.target;
+  const args =
+    target.kind === "refs" || target.kind === "working_tree"
+      ? [
+          "make-diff-rank-input",
+          "--repo",
+          options.repository,
+          "--base",
+          target.base ?? "HEAD",
+          "--mode",
+          target.kind === "refs" ? "revisions" : "local-patch",
+          ...(target.kind === "refs" ? ["--head", target.head ?? "HEAD"] : []),
+          "--preview-bytes",
+          "0",
+          "--out",
+          rankInput,
+        ]
+      : [
+          "make-repo-rank-input",
+          "--repo",
+          options.repository,
+          ...(target.kind === "paths"
+            ? ["--scopes-file", requireScopesFile(options.scopesFile)]
+            : []),
+          "--preview-bytes",
+          "0",
+          "--out",
+          rankInput,
+        ];
+  try {
+    await execFile(options.python, ["-I", "-B", script, ...args], {
+      env: options.environment,
+      encoding: "utf8",
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+      signal: options.signal,
+    });
+    await execFile(
+      options.python,
+      [
+        "-I",
+        "-B",
+        join(options.pluginRoot, "scripts", "resolve_security_md.py"),
+        "--repo",
+        options.repository,
+        "--list",
+        "--out",
+        securityGuidancePaths,
+      ],
+      {
+        env: options.environment,
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024,
+        windowsHide: true,
+        signal: options.signal,
+      },
+    );
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    throw new CopilotSecurityError(
+      `Could not generate the immutable scan inventory: ${processErrorDetail(error)}`,
+      { cause: error },
+    );
+  }
+
+  const metadata = await lstat(rankInput);
+  if (
+    !metadata.isFile() ||
+    metadata.isSymbolicLink() ||
+    metadata.size > 32 * 1024 * 1024
+  ) {
+    throw new CopilotSecurityError(
+      "The generated scan worklist is not a bounded regular file.",
+    );
+  }
+  const rankBytes = await readFile(rankInput);
+  const guidanceMetadata = await lstat(securityGuidancePaths);
+  if (
+    !guidanceMetadata.isFile() ||
+    guidanceMetadata.isSymbolicLink() ||
+    guidanceMetadata.size > 1024 * 1024
+  ) {
+    throw new CopilotSecurityError(
+      "The generated security-guidance inventory is not a bounded regular file.",
+    );
+  }
+  let guidancePaths: unknown;
+  try {
+    guidancePaths = JSON.parse(await readFile(securityGuidancePaths, "utf8"));
+  } catch (error) {
+    throw new CopilotSecurityError(
+      "The generated security-guidance inventory is invalid JSON.",
+      { cause: error },
+    );
+  }
+  if (
+    !Array.isArray(guidancePaths) ||
+    guidancePaths.some(
+      (path) => typeof path !== "string" || !safeInventoryPath(path),
+    )
+  ) {
+    throw new CopilotSecurityError(
+      "The generated security-guidance inventory contains an invalid path.",
+    );
+  }
+  const rows: Array<{ path: string; area: string }> = [];
+  const seen = new Set<string>();
+  for (const [index, line] of rankBytes
+    .toString("utf8")
+    .split(/\r?\n/u)
+    .entries()) {
+    if (line === "") continue;
+    let value: unknown;
+    try {
+      value = JSON.parse(line);
+    } catch (error) {
+      throw new CopilotSecurityError(
+        `The generated scan worklist has invalid JSON at line ${index + 1}.`,
+        { cause: error },
+      );
+    }
+    if (
+      !isRecord(value) ||
+      typeof value["path"] !== "string" ||
+      typeof value["area"] !== "string" ||
+      !safeInventoryPath(value["path"]) ||
+      seen.has(value["path"])
+    ) {
+      throw new CopilotSecurityError(
+        `The generated scan worklist has an invalid path at line ${index + 1}.`,
+      );
+    }
+    seen.add(value["path"]);
+    rows.push({ path: value["path"], area: value["area"] });
+  }
+  const inventoryBytes = Buffer.from(
+    rows.length === 0 ? "" : `${rows.map((row) => row.path).join("\n")}\n`,
+    "utf8",
+  );
+  if (inventoryBytes.length > 8 * 1024 * 1024) {
+    throw new CopilotSecurityError(
+      "The generated scan inventory exceeds the deterministic size limit.",
+    );
+  }
+  const deepReviewBytes = Buffer.from(
+    rows
+      .map((row) => JSON.stringify({ path: row.path, area: row.area }))
+      .join("\n") + (rows.length === 0 ? "" : "\n"),
+    "utf8",
+  );
+  await Promise.all([
+    writeFile(inventory, inventoryBytes, { flag: "wx", mode: 0o400 }),
+    writeFile(deepReviewInput, deepReviewBytes, { flag: "wx", mode: 0o400 }),
+  ]);
+  await Promise.all([
+    chmod(rankInput, 0o400),
+    chmod(inventory, 0o400),
+    chmod(deepReviewInput, 0o400),
+    chmod(securityGuidancePaths, 0o400),
+  ]);
+  const files = await Promise.all(
+    [rankInput, inventory, deepReviewInput, securityGuidancePaths].map(
+      async (path) => ({
+        path,
+        sha256: createHash("sha256")
+          .update(await readFile(path))
+          .digest("hex"),
+      }),
+    ),
+  );
+  return {
+    fileCount: rows.length,
+    repositoryPaths: rows.map((row) => row.path),
+    files,
+  };
+}
+
+/** Fail closed if a model or tool altered the host-owned worklist. */
+export async function verifyCopilotScanInventory(
+  snapshot: CopilotScanInventorySnapshot,
+): Promise<void> {
+  for (const file of snapshot.files) {
+    const metadata = await lstat(file.path).catch(() => null);
+    if (
+      metadata === null ||
+      !metadata.isFile() ||
+      metadata.isSymbolicLink() ||
+      createHash("sha256")
+        .update(await readFile(file.path))
+        .digest("hex") !== file.sha256
+    ) {
+      throw new CopilotSecurityError(
+        "The immutable host-generated scan inventory was modified during model execution.",
+      );
+    }
+  }
+}
+
+/**
+ * Bind every model-visible file to the authoritative target bytes. Callers
+ * sandwich this comparison between workbench target-snapshot checks so a
+ * mutable worktree cannot be attested as a different model input.
+ */
+export async function verifyCopilotAnalysisWorkspaceSnapshot(
+  repository: string,
+  stagedRepository: string,
+  repositoryPaths: readonly string[],
+): Promise<void> {
+  const [sourceRoot, stagedRoot] = await Promise.all([
+    realpath(repository),
+    realpath(stagedRepository),
+  ]);
+  for (const path of repositoryPaths) {
+    if (!safeInventoryPath(path)) {
+      throw new CopilotSecurityError(
+        "The model-visible repository inventory contains an unsafe path.",
+      );
+    }
+    const source = join(sourceRoot, ...path.split("/"));
+    const staged = join(stagedRoot, ...path.split("/"));
+    const [sourceMetadata, stagedMetadata] = await Promise.all([
+      lstat(source).catch(() => null),
+      lstat(staged).catch(() => null),
+    ]);
+    if (
+      sourceMetadata === null ||
+      stagedMetadata === null ||
+      !sourceMetadata.isFile() ||
+      !stagedMetadata.isFile() ||
+      sourceMetadata.isSymbolicLink() ||
+      stagedMetadata.isSymbolicLink() ||
+      sourceMetadata.size !== stagedMetadata.size
+    ) {
+      throw new CopilotSecurityError(
+        "The disposable analysis workspace does not match the registered scan target.",
+      );
+    }
+    const [sourceBytes, stagedBytes] = await Promise.all([
+      readFile(source),
+      readFile(staged),
+    ]);
+    if (
+      !createHash("sha256")
+        .update(sourceBytes)
+        .digest()
+        .equals(createHash("sha256").update(stagedBytes).digest())
+    ) {
+      throw new CopilotSecurityError(
+        "The disposable analysis workspace does not match the registered scan target.",
+      );
+    }
+  }
+}
+
+function requireScopesFile(path: string | undefined): string {
+  if (path === undefined) {
+    throw new CopilotSecurityError(
+      "Scoped scans require a host-generated target-paths file.",
+    );
+  }
+  return path;
+}
+
+function safeInventoryPath(path: string): boolean {
+  if (
+    path.length === 0 ||
+    path.length > 4096 ||
+    path.startsWith("/") ||
+    path.includes("\\") ||
+    MODEL_UNSAFE_PATH.test(path) ||
+    /^[A-Za-z]:/u.test(path)
+  ) {
+    return false;
+  }
+  const parts = path.split("/");
+  return parts.every(
+    (part) => part.length > 0 && part !== "." && part !== "..",
+  );
+}
+
+/**
+ * Install a scanner-owned native Copilot CLI sandbox policy. The SDK runtime
+ * reads this file through COPILOT_HOME before it creates the session.
+ */
+export async function writeCopilotScannerSandboxSettings(
+  copilotHome: string,
+  options: CopilotScannerSandboxOptions,
+): Promise<void> {
+  const [
+    canonicalHome,
+    repository,
+    scanDirectory,
+    pluginRoot,
+    analysisWorkspace,
+  ] = await Promise.all([
+    realpath(copilotHome),
+    realpath(options.repository),
+    realpath(options.scanDirectory),
+    realpath(options.pluginRoot),
+    options.analysisWorkspace === undefined
+      ? Promise.resolve(undefined)
+      : realpath(options.analysisWorkspace),
+  ]);
+  const settingsPath = join(canonicalHome, "settings.json");
+  const existing = await lstat(settingsPath).catch((error) => {
+    if (nodeErrorCode(error) === "ENOENT") return null;
+    throw error;
+  });
+  if (existing !== null && (!existing.isFile() || existing.isSymbolicLink())) {
+    throw new OutputDirectoryError(
+      `Copilot Security sandbox settings are not a regular file: ${settingsPath}`,
+    );
+  }
+
+  const sandbox = copilotScannerSandboxConfig(canonicalHome, {
+    repository,
+    scanDirectory,
+    pluginRoot,
+    ...(analysisWorkspace === undefined ? {} : { analysisWorkspace }),
+  });
+  const settings = {
+    askUser: false,
+    autoUpdate: false,
+    experimental: true,
+    includeCoAuthoredBy: false,
+    remote: "off",
+    remoteExport: false,
+    permissions: { disableBypassPermissionsMode: "disable" },
+    sandbox: {
+      ...sandbox,
+      allowBypass: false,
+      gitAuth: false,
+      ghAuth: false,
+      sandboxMcpServers: true,
+      sandboxLspServers: true,
+    },
+  };
+  const temporary = join(
+    canonicalHome,
+    `.copilot-security-settings-${randomUUID()}.tmp`,
+  );
+  let created = false;
+  try {
+    const handle = await open(temporary, "wx", 0o600);
+    created = true;
+    try {
+      await handle.chmod(0o600);
+      await handle.writeFile(`${JSON.stringify(settings, null, 2)}\n`, "utf8");
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, settingsPath);
+    created = false;
+  } finally {
+    if (created) await rm(temporary, { force: true }).catch(() => undefined);
+  }
 }
 
 export function copilotSecurityStateDirectory(
@@ -1433,9 +2164,42 @@ export async function bootstrapPlugin(
   }
 
   throwIfSignalAborted(options.signal);
-  const command = options.copilotCommand ?? resolveCopilotCommand();
+  const baseEnvironment = options.environment ?? process.env;
+  const configuredCommand = Object.entries(baseEnvironment).find(
+    ([name]) => name.toUpperCase() === "COPILOT_CLI_PATH",
+  )?.[1];
+  const unresolvedCommand =
+    options.copilotCommand ??
+    (configuredCommand?.trim()
+      ? { command: configuredCommand.trim(), prefixArgs: [] }
+      : resolveCopilotCommand());
+  const directTrustedCommand =
+    options.copilotCommand === undefined
+      ? await resolveTrustedExecutable(
+          unresolvedCommand.command,
+          baseEnvironment,
+          process.cwd(),
+        )
+      : null;
+  const trustedCommand =
+    options.copilotCommand === undefined && directTrustedCommand === null
+      ? await resolveTrustedWindowsCommandWrapper(
+          unresolvedCommand.command,
+          baseEnvironment,
+          process.cwd(),
+        )
+      : directTrustedCommand;
+  if (options.copilotCommand === undefined && trustedCommand === null) {
+    throw new PluginBootstrapError(
+      "A trusted GitHub Copilot CLI executable was not found for plugin bootstrap.",
+    );
+  }
+  const command =
+    trustedCommand === null
+      ? unresolvedCommand
+      : { command: trustedCommand.executable, prefixArgs: [] };
   const environment = {
-    ...(options.environment ?? process.env),
+    ...(trustedCommand?.environment ?? baseEnvironment),
     COPILOT_HOME: copilotHome,
   };
   const run = options.runCopilot ?? runCopilot;

@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, extname, join, resolve } from "node:path";
+import { Worker } from "node:worker_threads";
 import { unzipSync } from "fflate";
 
 const SUPPORTED_EXTENSIONS = new Set([
@@ -27,7 +28,10 @@ export const KNOWLEDGE_BASE_LIMITS = Object.freeze({
   documentBytes: 16 * 1024 * 1024,
   totalDocumentBytes: 64 * 1024 * 1024,
   totalExtractedBytes: 64 * 1024 * 1024,
-  pdfPages: 4_096,
+  pdfPages: 512,
+  pdfTextItems: 1_000_000,
+  pdfDecodeTimeoutMilliseconds: 60_000,
+  pdfWorkerMemoryMegabytes: 256,
 });
 
 export interface PreparedKnowledgeBase {
@@ -119,7 +123,7 @@ export async function prepareKnowledgeBase(
       const extension = extname(document).toLowerCase();
       const text =
         extension === ".pdf"
-          ? await extractPdf(document, bytes)
+          ? await extractPdf(document, bytes, signal)
           : extension === ".docx"
             ? extractDocx(document, bytes)
             : decodeText(document, bytes);
@@ -218,43 +222,132 @@ function decodeText(path: string, bytes: Uint8Array): string {
   }
 }
 
-async function extractPdf(path: string, bytes: Uint8Array): Promise<string> {
+const PDF_WORKER_SOURCE = String.raw`
+const { parentPort, workerData } = require("node:worker_threads");
+(async () => {
+  let document;
   try {
-    const { getDocument, VerbosityLevel } = await import(
-      "pdfjs-dist/legacy/build/pdf.mjs"
-    );
-    const document = await getDocument({
-      data: new Uint8Array(bytes),
+    const { getDocument, VerbosityLevel } = await import(workerData.moduleUrl);
+    document = await getDocument({
+      data: workerData.bytes,
+      disableFontFace: true,
       isEvalSupported: false,
       stopAtErrors: true,
+      useSystemFonts: false,
       verbosity: VerbosityLevel.ERRORS,
     }).promise;
-    try {
-      if (document.numPages > KNOWLEDGE_BASE_LIMITS.pdfPages) {
-        throw new Error(
-          `PDF exceeds the ${KNOWLEDGE_BASE_LIMITS.pdfPages}-page limit.`,
-        );
-      }
-      const pages: string[] = [];
-      let extractedBytes = 0;
-      for (let number = 1; number <= document.numPages; number++) {
-        const content = await (await document.getPage(number)).getTextContent();
-        const page = content.items
-          .map((item) => ("str" in item ? item.str : ""))
-          .join(" ");
-        extractedBytes += Buffer.byteLength(page, "utf8") + 1;
-        if (extractedBytes > KNOWLEDGE_BASE_LIMITS.totalExtractedBytes) {
-          throw new Error(
-            `PDF extracted text exceeds the ${KNOWLEDGE_BASE_LIMITS.totalExtractedBytes}-byte limit.`,
-          );
-        }
-        pages.push(page);
-      }
-      return pages.join("\n");
-    } finally {
-      await document.destroy();
+    if (document.numPages > workerData.limits.pdfPages) {
+      throw new Error("PDF page count exceeds the configured limit.");
     }
+    const pages = [];
+    let extractedBytes = 0;
+    let textItems = 0;
+    for (let number = 1; number <= document.numPages; number += 1) {
+      const page = await document.getPage(number);
+      const content = await page.getTextContent();
+      textItems += content.items.length;
+      if (textItems > workerData.limits.pdfTextItems) {
+        throw new Error("PDF text-item count exceeds the configured limit.");
+      }
+      const text = content.items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ");
+      extractedBytes += Buffer.byteLength(text, "utf8") + 1;
+      if (extractedBytes > workerData.limits.totalExtractedBytes) {
+        throw new Error("PDF extracted text exceeds the configured byte limit.");
+      }
+      pages.push(text);
+      page.cleanup();
+    }
+    parentPort.postMessage({ ok: true, text: pages.join("\n") });
   } catch (error) {
+    parentPort.postMessage({
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    if (document !== undefined) await document.destroy().catch(() => undefined);
+  }
+})().catch((error) => {
+  parentPort.postMessage({
+    ok: false,
+    message: error instanceof Error ? error.message : String(error),
+  });
+});
+`;
+
+async function extractPdf(
+  path: string,
+  bytes: Uint8Array,
+  signal?: AbortSignal,
+): Promise<string> {
+  try {
+    signal?.throwIfAborted();
+    const transferable = new Uint8Array(bytes);
+    const worker = new Worker(PDF_WORKER_SOURCE, {
+      eval: true,
+      workerData: {
+        bytes: transferable,
+        moduleUrl: import.meta.resolve("pdfjs-dist/legacy/build/pdf.mjs"),
+        limits: KNOWLEDGE_BASE_LIMITS,
+      },
+      transferList: [transferable.buffer],
+      resourceLimits: {
+        maxOldGenerationSizeMb: KNOWLEDGE_BASE_LIMITS.pdfWorkerMemoryMegabytes,
+        maxYoungGenerationSizeMb: 32,
+        stackSizeMb: 4,
+      },
+    });
+    return await new Promise<string>((resolveText, rejectText) => {
+      let settled = false;
+      const finish = (error: Error | null, text = ""): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        signal?.removeEventListener("abort", abort);
+        void worker.terminate();
+        if (error === null) resolveText(text);
+        else rejectText(error);
+      };
+      const abort = (): void =>
+        finish(new Error("PDF extraction was interrupted."));
+      const timeout = setTimeout(
+        () => finish(new Error("PDF extraction exceeded its decode deadline.")),
+        KNOWLEDGE_BASE_LIMITS.pdfDecodeTimeoutMilliseconds,
+      );
+      timeout.unref();
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted === true) abort();
+      worker.once("message", (message: unknown) => {
+        if (
+          typeof message === "object" &&
+          message !== null &&
+          "ok" in message &&
+          message.ok === true &&
+          "text" in message &&
+          typeof message.text === "string"
+        ) {
+          finish(null, message.text);
+          return;
+        }
+        const detail =
+          typeof message === "object" &&
+          message !== null &&
+          "message" in message &&
+          typeof message.message === "string"
+            ? message.message
+            : "PDF decoder returned an invalid response.";
+        finish(new Error(detail));
+      });
+      worker.once("error", (error) => finish(error));
+      worker.once("exit", (code) => {
+        if (code !== 0) {
+          finish(new Error(`PDF decoder exited with status ${code}.`));
+        }
+      });
+    });
+  } catch (error) {
+    if (signal?.aborted === true) signal.throwIfAborted();
     throw new Error(`Cannot extract text from knowledge base PDF: ${path}`, {
       cause: error,
     });

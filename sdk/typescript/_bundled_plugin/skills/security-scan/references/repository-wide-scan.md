@@ -19,12 +19,13 @@ have missed; close every such row explicitly.
 
 ## File Inventory And Progress
 
-Create the file list before review:
-
-```text
-mkdir -p "<discovery_dir>"
-(cd "<repo_root>" && rg --files --hidden --glob '!.git/**' -- "<scope>" | LC_ALL=C sort) > "<discovery_dir>/in_scope_files.txt"
-```
+The trusted host creates `COPILOT_SECURITY_INVENTORY_PATH` and
+`COPILOT_SECURITY_REVIEW_WORKLIST` before model execution. Consume every row
+without recreating, overwriting, appending to, deleting, narrowing, or
+reordering either file. Use Copilot's built-in file tools with the exact
+repository-relative paths. On Windows do not use shell/native tools for
+repository enumeration or reads, and do not change directories; the native
+sandbox preview may give child shells an unusable working directory.
 
 Keep repository-relative paths in artifacts. Do not skip a file just because it is educational, an example, a demo, a fixture, or a test. Include it when it contains runnable behavior such as a route, parser, or template. List binary or generated files that could not be reviewed. Because every file is reviewed, do not create ranking or deep-review worklists.
 
@@ -129,32 +130,36 @@ revalidates each redirect.
 
 Do not stop reviewing a file after finding one bug.
 
-Write raw candidates to one or more temporary JSONL files, then combine them:
+Write candidates directly to `<discovery_dir>/candidate_ledger.jsonl`. Use one
+JSON object per line and assign each row a unique, stable `candidate_id` based
+on its root-control path, line, CWE family, and instance. Do not invoke Python,
+Git, ripgrep, or `normalize_candidates.py` from the model sandbox. The trusted
+host validates and canonicalizes the completed artifacts.
 
-```text
-<python_command> <plugin_dir>/scripts/normalize_candidates.py --input <candidate-source> [<candidate-source> ...] --out <discovery_dir>/candidate_ledger.jsonl --repo-root <repo_root> --in-scope-files <discovery_dir>/in_scope_files.txt
-```
-
-When `COPILOT_SECURITY_SARIF_SEEDS` is set, add that exact file once with
-`--seed-input`. The host already normalized it to this raw-candidate schema and
+When `COPILOT_SECURITY_SARIF_SEEDS` is set, review that exact file once and
+merge each independently reviewed in-scope row into the candidate ledger with
+a unique candidate ID. The host already normalized it to this candidate schema and
 removed imported messages, snippets, fixes, fingerprints, properties, and
 embedded content. Preserve each row's `instance` so external seeds do not
 collapse into native candidates before independent validation. Do not treat
 their tool name, rule, severity, summary, or code-flow hint as proof.
-For a scoped-path scan the helper skips valid seed rows with no in-scope
-location; malformed rows still fail closed.
+For a scoped-path scan, include only seed rows with an exact location in the
+immutable inventory; malformed rows fail closed.
 
-Each raw candidate row uses only these fields:
+Each discovery candidate row initially uses these fields:
 
+- `candidate_id`: a unique stable `candidate-<descriptive-id>` string.
 - `cwe_ids`: an array of `CWE-<positive integer>` strings, which may be empty.
 - `locations`: an array of repository-relative `path`, positive `start_line`, optional `end_line`, and `role`. The role is one of `entrypoint`, `entrypoint/wrapper`, `source`, `root_control`, `sink`, `concrete_implementation`, or `evidence`. At least one location must be in `in_scope_files.txt`; supporting locations may be elsewhere in the repository.
 - `summary` and `evidence`: concise text describing the possible bug and the code path.
 - optional `context`: concise text that may help the review.
 - optional `instance`: a short label for separate bugs that share the same locations, such as different request parameters or operations.
 
-The combiner validates this shape and merges rows with the same CWE ids, locations, and optional instance. It preserves their text and writes deterministic rows with a stable `candidate_id`. It does not infer a status or decide whether a candidate is a bug. `candidate_ledger.jsonl` is the sole durable candidate artifact for a standard scan. Do not create one ledger or report per candidate, validation or attack-path queues, duplicate reports, or repeated receipts.
+Merge equivalent discoveries by CWE ids, locations, and optional instance before writing. Preserve distinct instances and do not infer a validation status from discovery alone. `candidate_ledger.jsonl` is the sole durable candidate artifact for a standard scan. Do not create one ledger or report per candidate, validation or attack-path queues, duplicate reports, or repeated receipts.
 
-After normalization, freeze every discovery field, including `candidate_id`, `locations`, and `instance`. The two compact phase passes below may only add their nested records. Rewrite the ledger atomically and preserve its row order. Never feed an enriched ledger back through `normalize_candidates.py`; that script accepts raw discovery rows only.
+After discovery, freeze every discovery field, including `candidate_id`,
+`locations`, and `instance`. The two compact phase passes below may only add
+their nested records. Rewrite the ledger atomically and preserve its row order.
 
 ## Validate And Check Reachability
 

@@ -96,7 +96,7 @@ describe("framework-aware residual data-flow models", () => {
     const record = modelRecord(records, "node-http-command");
 
     expect(record?.frameworkModel).toMatchObject({
-      schemaVersion: "1.1",
+      schemaVersion: "1.2",
       language: "javascript-typescript",
       scope: "same-file",
       source: {
@@ -253,7 +253,7 @@ export function run(request) {
     );
 
     expect(record?.frameworkModel).toEqual({
-      schemaVersion: "1.1",
+      schemaVersion: "1.2",
       id: "node-http-command",
       language: "javascript-typescript",
       scope: "cross-file-wrapper",
@@ -425,5 +425,198 @@ export function handler(request) {
         (record) => record.frameworkModel?.scope === "cross-file-wrapper",
       ),
     ).toBeFalse();
+  });
+
+  test("does not treat source or sink names inside JavaScript strings as code", async () => {
+    const repository = await writeRepositoryFile(
+      "src/runner.js",
+      `
+import { exec } from "node:child_process";
+export function runHostCheck(host) {
+  return console.info("exec(" + host);
+}
+`,
+    );
+    await writeFile(
+      join(repository, "src", "server.js"),
+      `
+import { runHostCheck } from "./runner.js";
+export function handler() {
+  const host = "request.query.host";
+  return runHostCheck(host);
+}
+`,
+    );
+
+    const records = parseRecords(await buildResidualRiskInventory(repository));
+    expect(
+      records.some((record) => record.frameworkModel !== undefined),
+    ).toBeFalse();
+  });
+
+  test("preserves an exact request-to-relay-to-shell chain across three files", async () => {
+    const records = parseRecords(
+      await buildResidualRiskInventory(
+        join(benchmarkFixtures, "javascript-multi-hop-command-injection"),
+      ),
+    );
+    const record = records.find(
+      (candidate) =>
+        candidate.frameworkModel?.id === "node-http-command" &&
+        candidate.frameworkModel.scope === "cross-file-multi-hop-wrapper",
+    );
+
+    expect(record?.frameworkModel).toEqual({
+      schemaVersion: "1.2",
+      id: "node-http-command",
+      language: "javascript-typescript",
+      scope: "cross-file-multi-hop-wrapper",
+      source: {
+        kind: "http-request-field",
+        path: "src/server.js",
+        line: 4,
+      },
+      sink: {
+        kind: "child-process-shell",
+        path: "src/runner.js",
+        line: 4,
+        cweIds: ["CWE-78"],
+      },
+      propagators: [
+        {
+          kind: "relative-module-import",
+          path: "src/server.js",
+          line: 1,
+          symbol: "dispatchHostCheck as dispatchHostCheck",
+        },
+        {
+          kind: "wrapper-call-argument",
+          path: "src/server.js",
+          line: 5,
+          symbol: "dispatchHostCheck[0]",
+        },
+        {
+          kind: "wrapper-parameter",
+          path: "src/service.js",
+          line: 3,
+          symbol: "host",
+        },
+        {
+          kind: "relative-module-import",
+          path: "src/service.js",
+          line: 1,
+          symbol: "runHostCheck as runHostCheck",
+        },
+        {
+          kind: "wrapper-call-argument",
+          path: "src/service.js",
+          line: 4,
+          symbol: "runHostCheck[0]",
+        },
+        {
+          kind: "wrapper-parameter",
+          path: "src/runner.js",
+          line: 3,
+          symbol: "host",
+        },
+      ],
+      candidateControls: [],
+    });
+    expect(decode(record!, true)).toContain(
+      "dispatchHostCheck(host, response)",
+    );
+    expect(decode(record!)).toContain("exec(`ping");
+  });
+
+  test("preserves multi-hop negative controls without inventing shell flow", async () => {
+    const safeCommand = parseRecords(
+      await buildResidualRiskInventory(
+        join(benchmarkFixtures, "javascript-multi-hop-safe-command"),
+      ),
+    );
+    const safeSql = parseRecords(
+      await buildResidualRiskInventory(
+        join(benchmarkFixtures, "javascript-multi-hop-safe-sql"),
+      ),
+    );
+
+    expect(
+      safeCommand.some(
+        (record) =>
+          record.frameworkModel?.scope === "cross-file-multi-hop-wrapper",
+      ),
+    ).toBeFalse();
+    const sqlRecord = safeSql.find(
+      (record) =>
+        record.frameworkModel?.scope === "cross-file-multi-hop-wrapper",
+    );
+    expect(sqlRecord?.frameworkModel?.source.path).toBe("src/server.js");
+    expect(sqlRecord?.frameworkModel?.sink.path).toBe("src/users.js");
+    expect(sqlRecord?.frameworkModel?.candidateControls).toContainEqual({
+      kind: "bound-query-parameters",
+      path: "src/users.js",
+      line: 2,
+    });
+  });
+
+  test("rejects fixed, reassigned, and out-of-function relay arguments", async () => {
+    for (const serviceBody of [
+      `export function dispatchHostCheck(host) {
+  return runHostCheck("fixed.example");
+}`,
+      `export function dispatchHostCheck(host) {
+  host = "fixed.example";
+  return runHostCheck(host);
+}`,
+      `export function dispatchHostCheck(host) {
+  return host;
+}
+runHostCheck(globalThis.host);`,
+      `export function dispatchHostCheck(host) {
+  // runHostCheck(host);
+  return host;
+}`,
+      `export function dispatchHostCheck(host) {
+  const example = "runHostCheck(host)";
+  return example;
+}`,
+    ]) {
+      const repository = await writeRepositoryFile(
+        "src/runner.js",
+        `
+import { exec } from "node:child_process";
+export function runHostCheck(host) {
+  return exec("ping " + host);
+}
+`,
+      );
+      await writeFile(
+        join(repository, "src", "service.js"),
+        `
+import { runHostCheck } from "./runner.js";
+${serviceBody}
+`,
+      );
+      await writeFile(
+        join(repository, "src", "server.js"),
+        `
+import { dispatchHostCheck } from "./service.js";
+export function handler(request) {
+  const host = request.query.host;
+  return dispatchHostCheck(host);
+}
+`,
+      );
+
+      const records = parseRecords(
+        await buildResidualRiskInventory(repository),
+      );
+      expect(
+        records.some(
+          (record) =>
+            record.frameworkModel?.scope === "cross-file-multi-hop-wrapper",
+        ),
+      ).toBeFalse();
+    }
   });
 });

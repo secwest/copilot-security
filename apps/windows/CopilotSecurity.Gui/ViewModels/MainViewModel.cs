@@ -65,8 +65,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public MainViewModel()
     {
         settingsPath = Path.Combine(
-            stateRoot,
-            "copilot-security-home",
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Secwest",
+            "CopilotSecurity",
             "gui",
             "settings.json");
         LoadSettings();

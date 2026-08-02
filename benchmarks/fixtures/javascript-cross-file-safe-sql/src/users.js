@@ -1,5 +1,3 @@
 export async function findUserByEmail(email, database) {
-  return database.query("SELECT id, email FROM users WHERE email = $1", [
-    email,
-  ]);
+  return database.query("SELECT 1 WHERE value = $1", [email]);
 }

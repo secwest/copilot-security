@@ -1,6 +1,9 @@
 """Shared constants for the Copilot Security workbench."""
 
 import argparse
+import os
+import tempfile
+from pathlib import Path
 
 MODES = ("diff", "standard", "deep")
 DIFF_TARGET_KINDS = ("working_tree", "commit", "range")
@@ -71,6 +74,67 @@ GIT_REPOSITORY_ENVIRONMENT = (
     "GIT_WORK_TREE",
 )
 EMPTY_GIT_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+
+def _path_within(root: Path, candidate: Path) -> bool:
+    try:
+        candidate.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def trusted_git_executable() -> str | None:
+    """Resolve Git without allowing a repository or scanner state to supply it."""
+    unsafe_roots: list[Path] = []
+    for name in (
+        "COPILOT_SECURITY_REPOSITORY",
+        "COPILOT_SECURITY_HOME",
+        "COPILOT_SECURITY_STATE_DIR",
+        "COPILOT_SECURITY_SCAN_DIR",
+    ):
+        value = os.environ.get(name)
+        if value:
+            try:
+                unsafe_roots.append(Path(value).expanduser().resolve(strict=False))
+            except OSError:
+                pass
+    try:
+        unsafe_roots.append(Path(tempfile.gettempdir()).resolve(strict=False))
+    except OSError:
+        pass
+
+    configured = os.environ.get("COPILOT_SECURITY_GIT_PATH")
+    candidates: list[Path] = []
+    if configured and Path(configured).is_absolute():
+        candidates.append(Path(configured))
+    path_value = next(
+        (value for name, value in os.environ.items() if name.upper() == "PATH"), ""
+    )
+    suffixes = (".exe", ".com") if os.name == "nt" else ("",)
+    for entry in path_value.split(os.pathsep):
+        if not entry or not Path(entry).is_absolute():
+            continue
+        for suffix in suffixes:
+            candidates.append(Path(entry) / f"git{suffix}")
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            canonical = candidate.resolve(strict=True)
+        except OSError:
+            continue
+        if canonical in seen:
+            continue
+        seen.add(canonical)
+        if any(_path_within(root, canonical) for root in unsafe_roots):
+            continue
+        if not canonical.is_file():
+            continue
+        if os.name != "nt" and not os.access(canonical, os.X_OK):
+            continue
+        return str(canonical)
+    return None
 
 
 def main() -> None:

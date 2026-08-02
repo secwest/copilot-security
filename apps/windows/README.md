@@ -69,12 +69,23 @@ does not read, store, or copy Copilot tokens.
 `StateRoot` defaults to `%USERPROFILE%\.copilot-security`. Scanner runtime
 state is always below
 `%COPILOT_SECURITY_HOME%\copilot-security-home`. GUI runs, benchmarks, and
-preferences live in `gui-runs`, `gui-benchmarks`, and `gui` below that private
-runtime directory. The command builder refuses a state or result tree that
+scanner artifacts live in `gui-runs` and `gui-benchmarks` below that private
+runtime directory. Executable and scanner-path preferences are stored instead
+under `%LOCALAPPDATA%\Secwest\CopilotSecurity\gui`, outside the model-writable
+scanner state tree. The command builder refuses a state or result tree that
 overlaps the repository being scanned. It also refuses to execute a scanner
 entry point from inside the target repository and rejects reparse-point
 ancestors that could turn a lexically separate path into the same physical
 tree.
+
+Every GUI scan inherits the CLI's complete model boundary: an expendable
+repository/plugin snapshot with links omitted into a manifest, a stripped
+allowlisted environment, category-scoped permissions, disabled tool network
+and credential forwarding, positive native-sandbox telemetry, and immutable
+host-generated file/review/`SECURITY.md` inventories verified again before
+sealing. The Windows native sandbox is treated as a public-preview layer; the
+model uses built-in file tools for exact worklist reads and does not execute
+Python, Git, ripgrep, or plugin helpers inside that sandbox.
 
 The artifact reader bounds every input, rejects reparse-point artifacts,
 requires completed scan status and the expected document types, and recomputes

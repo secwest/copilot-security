@@ -1,11 +1,13 @@
 import { constants } from "node:fs";
-import { access, realpath, stat } from "node:fs/promises";
+import { access, lstat, readFile, realpath, stat } from "node:fs/promises";
 import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export interface TrustedExecutable {
   executable: string;
   environment: Record<string, string | undefined>;
 }
+
+const MAX_WINDOWS_WRAPPER_BYTES = 16 * 1024;
 
 export async function resolveTrustedExecutable(
   candidate: string,
@@ -80,6 +82,50 @@ export async function resolveTrustedExecutable(
     .filter((entry) => !unsafeEntries.has(entry))
     .join(delimiter);
   return { executable, environment: sanitizedEnvironment };
+}
+
+export async function resolveTrustedWindowsCommandWrapper(
+  candidate: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  protectedRoot: string,
+): Promise<TrustedExecutable | null> {
+  if (process.platform !== "win32" || /[\\/]/u.test(candidate)) return null;
+  const path = Object.entries(environment).find(
+    ([name]) => name.toUpperCase() === "PATH",
+  )?.[1];
+  for (const entry of path?.split(delimiter) ?? []) {
+    if (!isAbsolute(entry)) continue;
+    const wrapper = join(entry, `${candidate}.cmd`);
+    const metadata = await lstat(wrapper).catch(() => null);
+    if (
+      metadata === null ||
+      !metadata.isFile() ||
+      metadata.isSymbolicLink() ||
+      metadata.size > MAX_WINDOWS_WRAPPER_BYTES
+    ) {
+      continue;
+    }
+    const contents = await readFile(wrapper, "utf8");
+    const invocation = contents
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0 && !/^@?echo off$/iu.test(line));
+    const escapedCandidate = candidate.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    const match = new RegExp(
+      `^"([^"\\r\\n]+\\\\${escapedCandidate}\\.exe)"\\s+%\\*$`,
+      "iu",
+    ).exec(invocation ?? "");
+    if (match?.[1] === undefined) continue;
+    const executable = await realpath(resolve(match[1])).catch(() => null);
+    if (executable === null) continue;
+    const trusted = await resolveTrustedExecutable(
+      executable,
+      environment,
+      protectedRoot,
+    );
+    if (trusted !== null) return trusted;
+  }
+  return null;
 }
 
 function isWithin(root: string, candidate: string): boolean {

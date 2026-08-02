@@ -2886,6 +2886,18 @@ def scan_context(
     return context
 
 
+def verify_scan_target(connection: sqlite3.Connection, scan_id: str) -> dict[str, Any]:
+    scan = require_scan(connection, scan_id)
+    if scan["status"] != "running":
+        raise SystemExit("Only a running scan target can be verified.")
+    warning = scan_target_warning(scan)
+    if warning is not None:
+        raise SystemExit(
+            "The selected scan target changed after registration. Start a new scan."
+        )
+    return {"scanId": scan["id"], "targetUnchanged": True}
+
+
 def list_findings(connection: sqlite3.Connection, args: argparse.Namespace) -> dict[str, Any]:
     scan = require_scan(connection, args.scan_id)
     backfill_legacy_finding_details(connection, scan)
@@ -3596,6 +3608,8 @@ def main() -> None:
             result = register_cli_scan(connection, args)
         elif args.command == "get-scan-recipe":
             result = get_scan_recipe(connection, args)
+        elif args.command == "verify-scan-target":
+            result = verify_scan_target(connection, args.scan_id)
         elif args.command == "compare-scans":
             result = scan_history.compare_scans(
                 connection,

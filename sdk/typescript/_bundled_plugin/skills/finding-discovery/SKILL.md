@@ -18,7 +18,12 @@ Use the shared scan artifact path conventions in `../../references/scan-artifact
 
 ## SECURITY.md Guidance Gate
 
-Read `../../references/security-guidance.md` and resolve the applicable policy before inspecting each source file. A delegated file-review worker must do the same before reading its assigned source.
+Read `../../references/security-guidance.md` and use the immutable
+`COPILOT_SECURITY_GUIDANCE_PATHS` array to resolve applicable policy before
+inspecting each source file. An empty array is authoritative. Never glob,
+search, or execute a helper to discover additional policy files. A delegated
+file-review worker must receive the applicable listed policy paths with its
+assigned source.
 
 ## Framework Data-Flow Gate
 
@@ -36,8 +41,9 @@ host-generated residual model inventory.
 If the scan target is for a targeted code-diff:
 
 - Read `../security-scan/references/scan-artifacts-and-ledger.md`.
-- Generate `rank_input.jsonl` deterministically from changed source-like files with `<python_command> <plugin_dir>/scripts/generate_rank_input.py make-diff-rank-input --repo <repo_root> --base <base> --mode revisions --head <head> --out <discovery_dir>/rank_input.jsonl` for PR, commit, and branch diffs, or `<python_command> <plugin_dir>/scripts/generate_rank_input.py make-diff-rank-input --repo <repo_root> --base <base> --mode local-patch --out <discovery_dir>/rank_input.jsonl` for a local patch.
-- Copy every diff row into `deep_review_input.jsonl` with `<python_command> <plugin_dir>/scripts/generate_rank_input.py copy-deep-review-input --rank-input <discovery_dir>/rank_input.jsonl --out <discovery_dir>/deep_review_input.jsonl`. Diff scans do not rank or drop changed files before deep review.
+- Consume the exact immutable host-generated inventory and review worklist.
+  Never invoke Python, Git, ripgrep, or plugin helpers to regenerate, narrow,
+  or reorder scope. Diff scans do not rank or drop changed files before review.
 - Add directly supporting files required to understand the changed security behavior only when repository evidence shows they are needed. Do not use them to broaden into unrelated repository-wide enumeration.
 - Deep-review every file in `deep_review_input.jsonl` using the shared scoped file-review rules.
 - Stay anchored to the changed code and directly supporting files. Unchanged siblings are context or negative controls unless the diff newly reaches them, weakens their shared control, or changes a shared sink/helper they depend on.

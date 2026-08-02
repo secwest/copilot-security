@@ -83,6 +83,8 @@ def register_subcommands(subparsers: Any, positive_int: Callable[[str], int]) ->
 
     finish_deep_scan = subparsers.add_parser("finish-deep-scan")
     finish_deep_scan.add_argument("--scan-id", required=True)
+    finish_deep_scan.add_argument("--thread-id", required=True)
+    finish_deep_scan.add_argument("--claim-token")
     finish_deep_scan.add_argument(
         "--terminal-reason", choices=DEEP_SCAN_TERMINAL_REASONS, required=True
     )
@@ -91,6 +93,8 @@ def register_subcommands(subparsers: Any, positive_int: Callable[[str], int]) ->
 
     fail_deep_scan = subparsers.add_parser("fail-deep-scan")
     fail_deep_scan.add_argument("--scan-id", required=True)
+    fail_deep_scan.add_argument("--thread-id", required=True)
+    fail_deep_scan.add_argument("--claim-token")
     fail_deep_scan.add_argument("--message", required=True)
     fail_deep_scan.add_argument("--manifest-path")
     fail_deep_scan.add_argument(
@@ -1265,7 +1269,12 @@ def finish_deep_scan(connection: sqlite3.Connection, args: argparse.Namespace) -
     connection.execute("BEGIN IMMEDIATE")
     try:
         run = require_deep_scan_run(connection, scan_id)
-        scan = require_scan(connection, scan_id)
+        scan, _ = require_owned_scan(connection, scan_id, args.thread_id)
+        require_current_continuation(
+            scan,
+            args.claim_token,
+            error_message="Deep Scan orchestration is owned by another continuation.",
+        )
         manifest_path = deep_scan_path(
             scan, args.manifest_path, "Deep Scan coordinator manifest path", kind="file"
         )
@@ -1408,7 +1417,12 @@ def fail_deep_scan(connection: sqlite3.Connection, args: argparse.Namespace) -> 
     connection.execute("BEGIN IMMEDIATE")
     try:
         run = require_deep_scan_run(connection, scan_id)
-        scan = require_scan(connection, scan_id)
+        scan, _ = require_owned_scan(connection, scan_id, args.thread_id)
+        require_current_continuation(
+            scan,
+            args.claim_token,
+            error_message="Deep Scan orchestration is owned by another continuation.",
+        )
         manifest_path = (
             deep_scan_path(
                 scan,

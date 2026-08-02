@@ -25,6 +25,42 @@ const { cleanup, copyCompletedScan, temporaryDirectory } =
 afterEach(cleanup);
 
 describe("one-shot scan events", () => {
+  test("surfaces cumulative streamed usage before turn completion", async () => {
+    const scanDir = await copyCompletedScan(await temporaryDirectory());
+    const observed: unknown[] = [];
+    async function* events(): AsyncGenerator<ThreadEvent> {
+      yield { type: "thread.started", thread_id: "thread-1" };
+      yield {
+        type: "copilot.usage",
+        usage: { input_tokens: 20, output_tokens: 4 },
+      };
+      yield* completedEvents();
+    }
+
+    await runScanEvents({
+      thread: {
+        id: null,
+        async runStreamed() {
+          return { events: events() };
+        },
+      },
+      events: events(),
+      signal: new AbortController().signal,
+      scanDir,
+      pluginRoot: PLUGIN_ROOT,
+      expectation: {
+        repository: "/repository",
+        repositoryRevision: "deadbeef",
+        target: { kind: "repository", paths: [] },
+        mode: "standard",
+        pluginVersion: "0.1.0",
+      },
+      onUsage: (usage) => observed.push(usage),
+    });
+
+    expect(observed).toEqual([{ input_tokens: 20, output_tokens: 4 }]);
+  });
+
   test("validates completed scan artifacts", async () => {
     const scanDir = await copyCompletedScan(await temporaryDirectory());
     const result = await runEvents(scanDir, completedEvents());

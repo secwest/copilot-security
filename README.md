@@ -37,14 +37,17 @@ The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command-execution and raw-SQL
 boundaries. Each applicable row identifies an exact source line, sink line,
 CWE family, and nearby candidate controls. For Node/TypeScript relative-module
-wrappers, the host can also emit a bounded cross-file chain containing the
-import, exact call argument position, exported wrapper parameter, and sink that
-references that parameter. These rows remain hypotheses: the correction turn
-must prove runtime same-value flow through aliases and transformations and
-reject unused imports, fixed arguments, intervening reassignment, unreachable
-wrappers, and API co-occurrence. Argument vectors without a shell, native SQL
-parameter binding, and other candidate controls count only when they apply to
-the same value, are context-correct, and dominate the sink.
+wrappers, the host can also emit bounded one-hop and two-hop cross-file chains.
+A two-hop row contains the exact caller import and argument, exported relay
+parameter, relay import and argument, exported sink-wrapper parameter, and
+sink that references that parameter. JavaScript strings and comments are
+masked before structural source, sink, and call matching. These rows remain
+hypotheses: the correction turn must prove runtime same-value flow through
+every recorded file and reject unused imports, fixed arguments, intervening
+reassignment, out-of-function calls, unreachable wrappers, text that only
+resembles code, and API co-occurrence. Argument vectors without a shell,
+native SQL parameter binding, and other candidate controls count only when
+they apply to the same value, are context-correct, and dominate the sink.
 
 The correction turn also receives a deterministic reconciliation of
 `in_scope_files.txt` against the draft coverage document. This catches omitted
@@ -52,6 +55,22 @@ files even when they contain no known lexical risk signal. The host repeats the
 same reconciliation while sealing: an unreviewed inventory path is added as
 explicit deferred work and coverage is downgraded to `partial`, so a
 model-written `complete` claim cannot conceal a coverage gap.
+
+The immutable scope is created before Copilot starts. A trusted host helper
+walks the disposable repository snapshot for repository/path scans or resolves
+the exact changed-file set for diff scans, writes zero-preview rank metadata,
+`in_scope_files.txt`, and `deep_review_input.jsonl`, and records the SHA-256 of
+all three. The host also writes an exact JSON inventory of repository
+`SECURITY.md` paths. Copilot must consume these files without regenerating,
+narrowing, reordering, or modifying them; empty inventories are authoritative.
+The host verifies every digest before preparation and again before sealing.
+It also sandwiches a SHA-256 comparison of every model-visible file between
+authoritative registered-target checks before model execution, before contract
+preparation, and before completion. A concurrent checkout mutation therefore
+fails the scan instead of associating reviewed bytes with a different target
+snapshot.
+This removes model-selected scope and avoids unreliable model-side Git,
+ripgrep, Python, or policy-glob execution.
 
 The host separately audits every draft finding before that correction turn.
 It lists missing CWE assignments, absent or unanchored code evidence, weak
@@ -356,6 +375,18 @@ node ../../benchmarks/run-benchmark.mjs `
   --effort high `
   --workers 2 `
   --mode deep
+
+# Run the strict three-file relay diagnostic
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/multi-hop-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-multi-hop `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
 ```
 
 Evaluation requires successful campaign-bound runner receipts by default, so a
@@ -467,9 +498,44 @@ canonical SDK names. Scanner-owned environment variables use the
 Scans are report-only. The scanning prompt forbids modifying the target
 repository, publishing findings, opening issues, committing, pushing, or
 contacting third parties. Scan output must be outside the target repository and
-its enclosing Git worktree. The Copilot CLI still receives normal local tool
-permissions so it can inspect files and run bounded repository-native
-validation; run only against repositories you are authorized to assess.
+its enclosing Git worktree. Run only against repositories you are authorized
+to assess.
+
+### Model execution boundary
+
+The model never operates on the authoritative checkout. Before session
+creation, the host copies the repository and installed plugin into a unique
+disposable analysis workspace. Symbolic links, junctions, and special files
+are not recreated; their repository-relative paths and link targets are
+recorded in `links.json` for security review. The model receives an empty
+disposable scanner-state directory rather than the workbench database or
+authoritative `COPILOT_SECURITY_HOME`. Scoped scans stage only requested paths,
+and dependency stores are omitted unless explicitly selected. Registered
+target-state checks surround host byte-for-byte verification of every staged
+inventory file, closing setup and completion races against mutable checkouts.
+
+The Copilot process receives an allowlisted environment instead of the ambient
+process environment. Unrelated secrets and executable-injection variables are
+removed, `PATH` is rebuilt from trusted executable directories, the tool
+sandbox denies outbound and local network access, Git/GitHub credential
+forwarding and permission bypass are disabled, and URL, MCP, memory,
+extension, and out-of-profile permission requests are rejected. Reads are
+limited to the disposable repository/plugin and scan artifacts; writes are
+limited to the disposable workspace and exclusive scan directory. Every shell
+completion must carry positive native `sandboxApplied` telemetry or the host
+aborts the session.
+
+Windows native sandboxing is currently a public-preview defense, not the sole
+security boundary. Current preview builds can give sandboxed child-native
+processes an unusable working directory. The production workflow therefore
+uses Copilot built-in file tools for exact host-worklist repository reads,
+permits PowerShell only for scan-directory draft artifacts, and forbids
+model-side Python, Git, ripgrep, and plugin helpers. The disposable snapshot,
+omitted-link manifest, stripped environment, category-scoped permission
+handler, immutable host inventories, deterministic contract audit, and final
+artifact sealing remain independent controls if the native preview regresses.
+See GitHub's [local sandbox settings documentation](https://docs.github.com/en/copilot/how-tos/cloud-and-local-sandboxes/configuring-local-sandbox-settings)
+and the current [MXC security notice](https://github.com/microsoft/mxc).
 
 ## License
 

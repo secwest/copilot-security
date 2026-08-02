@@ -78,6 +78,7 @@ import {
   renderScanHistory,
   type HistoryCommand,
 } from "./scan-history-renderer.js";
+import { resolveTrustedExecutable } from "./trusted-executable.js";
 import type { ScanWorkerPhase, ScanWorkerStatus } from "./worker-progress.js";
 import { DiffTarget, type ScanMode, type ScanTarget } from "./targets.js";
 import {
@@ -298,8 +299,21 @@ const DEFAULT_DEPENDENCIES: CliDependencies = {
         (entry): entry is [string, string] => entry[1] !== undefined,
       ),
     );
-    return (await copilotAuthStatus(command.command, environment))
-      .authenticated;
+    const resolved = await resolveCopilotCli(
+      command.command,
+      environment,
+      process.cwd(),
+    );
+    return (
+      await copilotAuthStatus(
+        resolved.executable,
+        Object.fromEntries(
+          Object.entries(resolved.environment).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined,
+          ),
+        ),
+      )
+    ).authenticated;
   },
   currentDirectory: cwd,
   now: Date.now,
@@ -1190,17 +1204,29 @@ export async function main(
         .optional(),
       async run({ args, options }) {
         try {
-          const hook = execFileSync(
+          const repository = resolve(
+            dependencies.currentDirectory(),
+            args.repository ?? ".",
+          );
+          const git = await resolveTrustedExecutable(
             "git",
+            dependencies.environment,
+            repository,
+          );
+          if (git === null) {
+            throw new Error("A trusted Git executable was not found.");
+          }
+          const hook = execFileSync(
+            git.executable,
             [
               "-C",
-              resolve(dependencies.currentDirectory(), args.repository ?? "."),
+              repository,
               "rev-parse",
               "--path-format=absolute",
               "--git-path",
               "hooks/pre-commit",
             ],
-            { encoding: "utf8" },
+            { encoding: "utf8", env: git.environment },
           ).trim();
           const command = [
             realpathSync(process.execPath),

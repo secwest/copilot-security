@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -8,7 +8,10 @@ import {
   closureGapCounts,
   copilotModelTurnTimeoutMilliseconds,
   copilotModelErrorRecovery,
+  copilotShellSandboxViolation,
   COPILOT_SCANNER_SESSION_HOOKS,
+  createCopilotScannerSessionHooks,
+  createScopedScannerPermissionHandler,
   DEFAULT_MODEL_TURN_TIMEOUT_MILLISECONDS,
   emptyCopilotUsage,
   isSafetyClassifierRefusal,
@@ -54,6 +57,136 @@ afterEach(async () => {
 });
 
 describe("Copilot port", () => {
+  test("restricts noninteractive permission approval to isolated scan writes", async () => {
+    const root = join(tmpdir(), `copilot-permissions-${randomUUID()}`);
+    const repository = join(root, "repository");
+    const scanDirectory = join(root, "scan");
+    const outsideDirectory = join(root, "outside");
+    temporaryPaths.push(root);
+    await mkdir(repository, { recursive: true });
+    await mkdir(scanDirectory, { recursive: true });
+    await mkdir(outsideDirectory, { recursive: true });
+    const redirectedDirectory = join(scanDirectory, "redirected");
+    await symlink(
+      outsideDirectory,
+      redirectedDirectory,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const handler = createScopedScannerPermissionHandler(
+      scanDirectory,
+      repository,
+      scanDirectory,
+    );
+
+    expect(
+      await handler(
+        {
+          kind: "write",
+          fileName: join(scanDirectory, "findings.json"),
+          diff: "",
+          intention: "correct draft findings",
+          canOfferSessionApproval: true,
+        },
+        { sessionId: "session" },
+      ),
+    ).toEqual({ kind: "approve-once" });
+    expect(
+      await handler(
+        {
+          kind: "read",
+          path: join(repository, "source.ts"),
+          intention: "inspect repository source",
+        },
+        { sessionId: "session" },
+      ),
+    ).toEqual({ kind: "approve-once" });
+    expect(
+      await handler(
+        {
+          kind: "shell",
+          fullCommandText: "git status --short",
+          intention: "inspect repository state",
+          commands: [{ identifier: "git status", readOnly: true }],
+          possiblePaths: [],
+          possibleUrls: [],
+          hasWriteFileRedirection: false,
+          canOfferSessionApproval: false,
+        },
+        { sessionId: "session" },
+      ),
+    ).toEqual({ kind: "approve-once" });
+    expect(
+      await handler(
+        {
+          kind: "url",
+          url: "https://example.invalid",
+          intention: "test denial",
+        },
+        { sessionId: "session" },
+      ),
+    ).toEqual({
+      kind: "reject",
+      feedback:
+        "Copilot Security permits only sandboxed, offline repository reads and scan-directory artifact operations; this request is outside that profile.",
+    });
+    expect(
+      await handler(
+        {
+          kind: "write",
+          fileName: join(repository, "source.ts"),
+          diff: "",
+          intention: "unexpected repository mutation",
+          canOfferSessionApproval: true,
+        },
+        { sessionId: "session" },
+      ),
+    ).toEqual({
+      kind: "reject",
+      feedback:
+        "Copilot Security permits only sandboxed, offline repository reads and scan-directory artifact operations; this request is outside that profile.",
+    });
+    expect(
+      await handler(
+        {
+          kind: "write",
+          fileName: join(redirectedDirectory, "escaped.json"),
+          diff: "",
+          intention: "follow a redirected scan path",
+          canOfferSessionApproval: true,
+        },
+        { sessionId: "session" },
+      ),
+    ).toMatchObject({ kind: "reject" });
+    expect(
+      await handler(
+        {
+          kind: "shell",
+          fullCommandText: "curl https://example.invalid",
+          intention: "attempt network access",
+          commands: [{ identifier: "curl", readOnly: false }],
+          possiblePaths: [],
+          possibleUrls: [{ url: "https://example.invalid" }],
+          hasWriteFileRedirection: false,
+          canOfferSessionApproval: false,
+        },
+        { sessionId: "session" },
+      ),
+    ).toMatchObject({ kind: "reject" });
+    expect(
+      await handler(
+        {
+          kind: "write",
+          fileName: join(scanDirectory, "coverage.json"),
+          diff: "",
+          intention: "request an unnecessary sandbox bypass",
+          canOfferSessionApproval: true,
+          requestSandboxBypass: true,
+        },
+        { sessionId: "session" },
+      ),
+    ).toMatchObject({ kind: "reject" });
+  });
+
   test("exports the Copilot product surface and metadata", () => {
     const scanner = new CopilotSecurity();
     expect(scanner.metadata).toMatchObject({
@@ -275,6 +408,56 @@ describe("Copilot port", () => {
     ]) {
       expect(copilotModelErrorRecovery(input)).toBeUndefined();
     }
+  });
+
+  test("requires positive native-sandbox telemetry for every shell tool", async () => {
+    const base = {
+      sessionId: "session-1",
+      timestamp: new Date(),
+      workingDirectory: "C:\\repository",
+      toolName: "powershell",
+      toolArgs: {},
+    };
+    const result = {
+      textResultForLlm: "ok",
+      resultType: "success" as const,
+    };
+
+    expect(
+      copilotShellSandboxViolation({
+        ...base,
+        toolResult: {
+          ...result,
+          toolTelemetry: { properties: { sandboxApplied: "true" } },
+        },
+      }),
+    ).toBeNull();
+    expect(
+      copilotShellSandboxViolation({ ...base, toolResult: result }),
+    ).toBeInstanceOf(Error);
+    expect(
+      copilotShellSandboxViolation({
+        ...base,
+        toolName: "view",
+        toolResult: result,
+      }),
+    ).toBeNull();
+
+    const violations: Error[] = [];
+    const hooks = createCopilotScannerSessionHooks((error) =>
+      violations.push(error),
+    );
+    await hooks.onPostToolUse?.(
+      { ...base, toolResult: result },
+      { sessionId: "session-1" },
+    );
+    await hooks.onPostToolUseFailure?.(
+      { ...base, error: "sandbox backend failed" },
+      { sessionId: "session-1" },
+    );
+    expect(violations).toHaveLength(2);
+    expect(violations[0]?.message).toContain("did not report");
+    expect(violations[1]?.message).toContain("without verifiable");
   });
 
   test("retries only explicit safety-classifier refusals", async () => {

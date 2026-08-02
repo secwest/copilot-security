@@ -64,7 +64,10 @@ SQL. Same-file models activate when their language, request-source syntax, and
 concrete runtime or sink API are present in one bounded source file. A bounded
 Node/TypeScript cross-file layer additionally resolves repository-relative
 imports into exported wrappers and preserves the exact argument-to-parameter
-position when that parameter appears on the sink line. The host emits:
+position when that parameter appears on the sink line. It now follows either
+one direct wrapper or exactly one exported relay before the sink wrapper. The
+host masks JavaScript string and comment contents before structural matching
+and emits:
 
 - a stable model id and language;
 - the exact modeled source kind and line;
@@ -73,8 +76,8 @@ position when that parameter appears on the sink line. The host emits:
   execution, SQL parameter binding, typed query construction, or bounded
   allowlists;
 - separately base64-encoded source and sink evidence windows.
-- for cross-file rows, the exact relative import, caller, argument position,
-  exported parameter declaration, wrapper, and sink paths/lines.
+- for cross-file rows, every ordered relative import, caller, argument
+  position, exported parameter declaration, wrapper, and sink path/line.
 
 This is deliberately a high-recall hypothesis, not a taint verdict. The
 quality-gate prompt requires same-value tracing across assignments, wrappers,
@@ -92,13 +95,18 @@ request values that cross imported command and SQL wrapper boundaries. Its
 negative cases prove that a fixed shell-free executable and native SQL
 parameter binding remain safe across the same module boundary.
 
+`benchmarks/multi-hop-framework-manifest.json` applies the gates to three-file
+caller-to-relay-to-sink chains. Fixed arguments, relay reassignment, calls
+outside the exported relay, comments, and string examples are deterministic
+negative controls rather than propagators.
+
 ## Prioritized next improvements
 
 1. **Expand typed framework security models.** Extend bounded summaries beyond
-   direct Node/TypeScript relative-import wrappers, add framework-specific
-   authorization and template models, manifest-derived activation evidence,
-   and signed or hashed external model packs. Benchmark every extension against
-   paired positive and negative fixtures.
+   two Node/TypeScript relative-import hops and into Python, Spring, and ASP.NET;
+   add framework-specific authorization and template models, manifest-derived
+   activation evidence, and signed or hashed external model packs. Benchmark
+   every extension against paired positive and negative fixtures.
 2. **Dependency and advisory reachability.** Build deterministic lockfile/SBOM
    extraction, accept OSV identifiers and fixed-version facts, and require a
    repository call/use path or explicit deployment exposure before escalating

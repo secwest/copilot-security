@@ -193,6 +193,9 @@ async function startDraftScan(
   await cp(join(PLUGIN_ROOT, "examples", "completed-scan"), scanDir, {
     recursive: true,
   });
+  const discoveryDirectory = join(scanDir, "artifacts", "02_discovery");
+  await mkdir(discoveryDirectory, { recursive: true });
+  await writeFile(join(discoveryDirectory, "in_scope_files.txt"), "");
   const manifestPath = join(scanDir, "scan-manifest.json");
   const manifest = await readJson<{
     scan: {
@@ -233,6 +236,17 @@ async function completeScan(fixture: ScanFixture): Promise<ScanSummary> {
 }
 
 describe("malformed scan artifact recovery", () => {
+  test("refuses to seal a scan without its immutable in-scope inventory", async () => {
+    const fixture = await startDraftScan();
+    await rm(
+      join(fixture.scanDir, "artifacts", "02_discovery", "in_scope_files.txt"),
+    );
+
+    await expect(completeScan(fixture)).rejects.toThrow(
+      "in-scope file inventory: required before a scan can be sealed",
+    );
+  });
+
   test.each([
     ["all required drafts", []],
     ["the manifest draft", ["findings.json", "coverage.json"]],
@@ -1337,6 +1351,26 @@ describe("malformed scan artifact recovery", () => {
     expect((stored["scan"] as ScanSummary).progress.status).toBe("failed");
   });
 
+  test("fails closed when a registered target changes before model execution", async () => {
+    for (const repositoryKind of ["directory", "clean"] as const) {
+      const fixture = await startDraftScan(repositoryKind);
+      await expect(
+        workbench(fixture, ["verify-scan-target", "--scan-id", fixture.scanId]),
+      ).resolves.toMatchObject({
+        scanId: fixture.scanId,
+        targetUnchanged: true,
+      });
+
+      await writeFile(
+        join(fixture.repository, "src", "extract.py"),
+        "# changed after registration\n",
+      );
+      await expect(
+        workbench(fixture, ["verify-scan-target", "--scan-id", fixture.scanId]),
+      ).rejects.toThrow("selected scan target changed after registration");
+    }
+  });
+
   test("normalizes finding identities and persists recovery warnings", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "findings.json");
@@ -1438,6 +1472,59 @@ describe("malformed scan artifact recovery", () => {
     );
     expect(coverage.completeness).toBe("complete");
     expect(coverage.deferred).toEqual([]);
+  });
+
+  test("normalizes malformed code-evidence identifiers and reconnects references", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding.codeEvidence = [
+      {
+        id: "Request Source #1",
+        label: "Request-controlled archive name",
+        path: "src/extract.py",
+        startLine: 1,
+        code: "# fixture",
+        explanation: "The request value reaches archive extraction.",
+      },
+    ];
+    finding["rootCause"] = {
+      summary:
+        "An untrusted archive name reaches extraction without containment.",
+      evidenceRefs: ["Request Source #1"],
+    };
+    finding["attackPath"] = {
+      summary: "A remote caller supplies the archive name.",
+      evidenceRefs: ["Request Source #1"],
+    };
+    const validation = finding["validation"];
+    finding["validation"] = {
+      ...(typeof validation === "object" && validation !== null
+        ? validation
+        : {}),
+      evidenceRefs: ["Request Source #1"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.findingCount).toBe(1);
+    expect(completed.warnings).toEqual([
+      "Recovered finding 1: normalized 1 code-evidence identifier.",
+    ]);
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+    expect(recovered.codeEvidence?.[0]?.id).toBe("request-source-1");
+    for (const section of [
+      recovered["rootCause"],
+      recovered["validation"],
+      recovered["attackPath"],
+    ]) {
+      expect(
+        (section as { evidenceRefs?: string[] } | undefined)?.evidenceRefs,
+      ).toEqual(["request-source-1"]);
+    }
   });
 
   test("keeps valid findings and skips malformed or duplicate findings", async () => {

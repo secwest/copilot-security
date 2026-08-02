@@ -93,6 +93,15 @@ export class ScanCostTracker {
     return this.#snapshot;
   }
 
+  public observe(usage: unknown): ScanCostSnapshot {
+    const normalized = tokenUsage(usage);
+    if (normalized === null) return this.#snapshot;
+    const cost = estimateScanCost(this.#options.model, normalized);
+    this.#snapshot = { usage: normalized, cost };
+    this.#reportCost(cost);
+    return this.#snapshot;
+  }
+
   public async stop(fallbackUsage?: unknown): Promise<ScanCostSnapshot> {
     if (this.#timer !== null) {
       clearInterval(this.#timer);

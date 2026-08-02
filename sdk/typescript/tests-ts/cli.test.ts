@@ -493,6 +493,7 @@ describe("CLI", () => {
       const hook = join(root, ".custom hooks", "pre-commit");
       const deps = dependencies({
         currentDirectory: root,
+        environment: process.env,
         onRun: () => (started = true),
       });
       for (let attempt = 0; attempt < 2; attempt += 1) {

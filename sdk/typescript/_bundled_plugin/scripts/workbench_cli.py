@@ -164,6 +164,9 @@ def parse_args(description: str) -> argparse.Namespace:
     get_scan_recipe = subparsers.add_parser("get-scan-recipe")
     get_scan_recipe.add_argument("--scan-id", required=True)
 
+    verify_scan_target = subparsers.add_parser("verify-scan-target")
+    verify_scan_target.add_argument("--scan-id", required=True)
+
     compare_scans = subparsers.add_parser("compare-scans")
     compare_scans.add_argument("--before-scan-id", required=True)
     compare_scans.add_argument("--after-scan-id", required=True)

@@ -247,6 +247,27 @@ describe("live scan cost tracking", () => {
     expect(updates).toEqual([0.00625]);
   });
 
+  test("tracks streamed SDK usage without persisted session files", async () => {
+    const updates: number[] = [];
+    const tracker = new ScanCostTracker({
+      copilotHome: await copilotHome(),
+      model: "gpt-5.6-terra",
+      maxCostUsd: 0.001,
+      onCost: (cost) => updates.push(cost.estimatedUsd),
+    });
+    tracker.start("scan-thread");
+
+    const snapshot = tracker.observe({
+      input_tokens: 1_000,
+      cached_input_tokens: 100,
+      output_tokens: 100,
+    });
+
+    expect(snapshot.cost?.estimatedUsd).toBe(0.003775);
+    expect(updates).toEqual([0.003775]);
+    expect(await tracker.stop()).toEqual(snapshot);
+  });
+
   test("falls back to the completed turn when session logs are unavailable", async () => {
     const tracker = new ScanCostTracker({
       copilotHome: await copilotHome(),

@@ -14,7 +14,9 @@ const MAX_CANDIDATES = 4_096;
 const MAX_SIGNALS = 96;
 const MAX_SIGNALS_PER_FILE = MAX_SIGNALS;
 const MAX_FRAMEWORK_WRAPPER_SUMMARIES = 64;
+const MAX_FRAMEWORK_RELAY_SUMMARIES = 64;
 const MAX_FRAMEWORK_CROSS_FILE_RECORDS = 64;
+const MAX_FRAMEWORK_MULTI_HOP_RECORDS = 64;
 const MAX_WRAPPER_FUNCTION_LINES = 160;
 const MAX_WRAPPER_CALL_DISTANCE = 12;
 const MAX_COVERAGE_GAPS = 256;
@@ -791,10 +793,10 @@ interface ResidualRiskRecord {
   excerpt: string;
   sourceExcerpt?: string;
   frameworkModel?: {
-    schemaVersion: "1.1";
+    schemaVersion: "1.2";
     id: string;
     language: string;
-    scope: "same-file" | "cross-file-wrapper";
+    scope: "same-file" | "cross-file-wrapper" | "cross-file-multi-hop-wrapper";
     source: { kind: string; path: string; line: number };
     sink: {
       kind: string;
@@ -834,6 +836,19 @@ interface FrameworkWrapperSummary {
   parameterIndex: number;
   declarationLine: number;
   sink: { kind: string; line: number; cweIds: readonly string[] };
+  controls: Array<{ kind: string; line: number }>;
+}
+
+interface FrameworkRelaySummary {
+  model: FrameworkDataflowModel;
+  file: SourceFileSnapshot;
+  symbol: string;
+  parameter: string;
+  parameterIndex: number;
+  declarationLine: number;
+  downstreamImport: ImportedJavascriptSymbol;
+  downstreamCallLine: number;
+  downstream: FrameworkWrapperSummary;
   controls: Array<{ kind: string; line: number }>;
 }
 
@@ -989,8 +1004,12 @@ function frameworkDataflowRecords(
     ) {
       continue;
     }
-    const sources = matchingModelLines(lines, model.sources, 16);
-    const sinks = matchingModelLines(lines, model.sinks, 8);
+    const sources = JAVASCRIPT_EXTENSIONS.has(extension)
+      ? matchingJavascriptModelLines(lines, model.sources, 16)
+      : matchingModelLines(lines, model.sources, 16);
+    const sinks = JAVASCRIPT_EXTENSIONS.has(extension)
+      ? matchingJavascriptModelLines(lines, model.sinks, 8)
+      : matchingModelLines(lines, model.sinks, 8);
     if (sources.length === 0 || sinks.length === 0) continue;
     const controls = matchingModelLines(lines, model.controls, 24);
     for (const sink of sinks) {
@@ -1027,7 +1046,7 @@ function frameworkDataflowRecords(
         excerpt: sourceExcerpt(lines, startLine, endLine),
         sourceExcerpt: sourceExcerpt(lines, sourceStart, sourceEnd),
         frameworkModel: {
-          schemaVersion: "1.1",
+          schemaVersion: "1.2",
           id: model.id,
           language: model.language,
           scope: "same-file",
@@ -1051,6 +1070,15 @@ function frameworkDataflowRecords(
 }
 
 function frameworkCrossFileDataflowRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  return [
+    ...frameworkDirectCrossFileDataflowRecords(files),
+    ...frameworkMultiHopDataflowRecords(files),
+  ];
+}
+
+function frameworkDirectCrossFileDataflowRecords(
   files: readonly SourceFileSnapshot[],
 ): ResidualRiskRecord[] {
   const knownPaths = new Map(
@@ -1084,7 +1112,7 @@ function frameworkCrossFileDataflowRecords(
         summariesByFileAndSymbol.get(`${importedPath}\0${imported.imported}`) ??
         [];
       for (const summary of matchingSummaries) {
-        const sources = matchingModelLines(
+        const sources = matchingJavascriptModelLines(
           caller.lines,
           summary.model.sources,
           32,
@@ -1144,7 +1172,7 @@ function frameworkCrossFileDataflowRecords(
             excerpt: sourceExcerpt(wrapperFile.lines, sinkStart, sinkEnd),
             sourceExcerpt: sourceExcerpt(caller.lines, sourceStart, sourceEnd),
             frameworkModel: {
-              schemaVersion: "1.1",
+              schemaVersion: "1.2",
               id: summary.model.id,
               language: summary.model.language,
               scope: "cross-file-wrapper",
@@ -1195,6 +1223,271 @@ function frameworkCrossFileDataflowRecords(
   return records;
 }
 
+function frameworkMultiHopDataflowRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const knownPaths = new Map(
+    files.map((file) => [modelPathComparisonKey(file.path), file.path]),
+  );
+  const sinkSummaries = javascriptFrameworkWrapperSummaries(files);
+  const relaySummaries = javascriptFrameworkRelaySummaries(
+    files,
+    sinkSummaries,
+    knownPaths,
+  );
+  const summariesByFileAndSymbol = new Map<string, FrameworkRelaySummary[]>();
+  for (const summary of relaySummaries) {
+    const key = `${summary.file.path}\0${summary.symbol}`;
+    const existing = summariesByFileAndSymbol.get(key) ?? [];
+    existing.push(summary);
+    summariesByFileAndSymbol.set(key, existing);
+  }
+
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const caller of files) {
+    if (!JAVASCRIPT_EXTENSIONS.has(caller.extension)) continue;
+    for (const imported of importedJavascriptSymbols(caller.lines)) {
+      const importedPath = resolveRelativeModelImport(
+        caller.path,
+        imported.moduleSpecifier,
+        knownPaths,
+      );
+      if (importedPath === undefined) continue;
+      const matchingSummaries =
+        summariesByFileAndSymbol.get(`${importedPath}\0${imported.imported}`) ??
+        [];
+      for (const summary of matchingSummaries) {
+        const sources = matchingJavascriptModelLines(
+          caller.lines,
+          summary.model.sources,
+          32,
+        );
+        if (sources.length === 0) continue;
+        for (const call of javascriptCallLines(caller.lines, imported.local)) {
+          const argument = call.arguments[summary.parameterIndex];
+          if (argument === undefined) continue;
+          const source = modeledCallSource(
+            caller.lines,
+            sources,
+            call.line,
+            argument,
+            summary.model.sources,
+          );
+          if (source === undefined) continue;
+          const sinkSummary = summary.downstream;
+          const key = [
+            summary.model.id,
+            caller.path,
+            call.line,
+            summary.file.path,
+            summary.downstreamCallLine,
+            sinkSummary.file.path,
+            sinkSummary.sink.line,
+            summary.parameterIndex,
+            sinkSummary.parameterIndex,
+          ].join("\0");
+          if (emitted.has(key)) continue;
+          emitted.add(key);
+
+          const sinkStart = Math.max(
+            1,
+            sinkSummary.sink.line - CONTEXT_LINES_BEFORE,
+          );
+          const sinkEnd = Math.min(
+            sinkSummary.file.lines.length,
+            sinkSummary.sink.line + CONTEXT_LINES_AFTER,
+          );
+          const sourceStart = Math.max(1, Math.min(source.line, call.line) - 2);
+          const sourceEnd = Math.min(
+            caller.lines.length,
+            Math.max(source.line, call.line) + 2,
+          );
+          const candidateControls = [
+            ...summary.controls.map((control) => ({
+              ...control,
+              path: summary.file.path,
+            })),
+            ...sinkSummary.controls.map((control) => ({
+              ...control,
+              path: sinkSummary.file.path,
+            })),
+          ];
+          records.push({
+            path: sinkSummary.file.path,
+            line: sinkSummary.sink.line,
+            categories: [
+              `framework-dataflow:${summary.model.id}`,
+              "framework-cross-file-multi-hop-wrapper",
+              `modeled-source:${source.kind}`,
+              `modeled-sink:${sinkSummary.sink.kind}`,
+              ...candidateControls.map(
+                (control) => `candidate-control:${control.kind}`,
+              ),
+            ],
+            priority: 122,
+            startLine: sinkStart,
+            endLine: sinkEnd,
+            excerpt: sourceExcerpt(sinkSummary.file.lines, sinkStart, sinkEnd),
+            sourceExcerpt: sourceExcerpt(caller.lines, sourceStart, sourceEnd),
+            frameworkModel: {
+              schemaVersion: "1.2",
+              id: summary.model.id,
+              language: summary.model.language,
+              scope: "cross-file-multi-hop-wrapper",
+              source: {
+                kind: source.kind,
+                path: caller.path,
+                line: source.line,
+              },
+              sink: {
+                kind: sinkSummary.sink.kind,
+                path: sinkSummary.file.path,
+                line: sinkSummary.sink.line,
+                cweIds: sinkSummary.sink.cweIds,
+              },
+              propagators: [
+                {
+                  kind: "relative-module-import",
+                  path: caller.path,
+                  line: imported.line,
+                  symbol: `${imported.imported} as ${imported.local}`,
+                },
+                {
+                  kind: "wrapper-call-argument",
+                  path: caller.path,
+                  line: call.line,
+                  symbol: `${imported.local}[${summary.parameterIndex}]`,
+                },
+                {
+                  kind: "wrapper-parameter",
+                  path: summary.file.path,
+                  line: summary.declarationLine,
+                  symbol: summary.parameter,
+                },
+                {
+                  kind: "relative-module-import",
+                  path: summary.file.path,
+                  line: summary.downstreamImport.line,
+                  symbol: `${summary.downstreamImport.imported} as ${summary.downstreamImport.local}`,
+                },
+                {
+                  kind: "wrapper-call-argument",
+                  path: summary.file.path,
+                  line: summary.downstreamCallLine,
+                  symbol: `${summary.downstreamImport.local}[${sinkSummary.parameterIndex}]`,
+                },
+                {
+                  kind: "wrapper-parameter",
+                  path: sinkSummary.file.path,
+                  line: sinkSummary.declarationLine,
+                  symbol: sinkSummary.parameter,
+                },
+              ],
+              candidateControls,
+            },
+          });
+          if (records.length >= MAX_FRAMEWORK_MULTI_HOP_RECORDS) {
+            return records;
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+function javascriptFrameworkRelaySummaries(
+  files: readonly SourceFileSnapshot[],
+  sinkSummaries: readonly FrameworkWrapperSummary[],
+  knownPaths: ReadonlyMap<string, string>,
+): FrameworkRelaySummary[] {
+  const summariesByFileAndSymbol = new Map<string, FrameworkWrapperSummary[]>();
+  for (const summary of sinkSummaries) {
+    const key = `${summary.file.path}\0${summary.symbol}`;
+    const existing = summariesByFileAndSymbol.get(key) ?? [];
+    existing.push(summary);
+    summariesByFileAndSymbol.set(key, existing);
+  }
+
+  const summaries: FrameworkRelaySummary[] = [];
+  for (const file of files) {
+    if (!JAVASCRIPT_EXTENSIONS.has(file.extension)) continue;
+    const exportedFunctions = exportedJavascriptFunctions(file.lines);
+    if (exportedFunctions.length === 0) continue;
+    for (const imported of importedJavascriptSymbols(file.lines)) {
+      const importedPath = resolveRelativeModelImport(
+        file.path,
+        imported.moduleSpecifier,
+        knownPaths,
+      );
+      if (importedPath === undefined || importedPath === file.path) continue;
+      const downstreamSummaries =
+        summariesByFileAndSymbol.get(`${importedPath}\0${imported.imported}`) ??
+        [];
+      if (downstreamSummaries.length === 0) continue;
+      const calls = javascriptCallLines(file.lines, imported.local);
+      for (const wrapper of exportedFunctions) {
+        const wrapperCalls = calls.filter(
+          (call) =>
+            call.line > wrapper.startLine && call.line <= wrapper.endLine,
+        );
+        for (const downstream of downstreamSummaries) {
+          const controls = matchingModelLines(
+            file.lines,
+            downstream.model.controls,
+            64,
+          )
+            .filter(
+              (control) =>
+                control.line >= wrapper.startLine &&
+                control.line <= wrapper.endLine,
+            )
+            .slice(0, 8);
+          for (const call of wrapperCalls) {
+            const argument = call.arguments[downstream.parameterIndex];
+            if (argument === undefined) continue;
+            for (
+              let parameterIndex = 0;
+              parameterIndex < wrapper.parameters.length;
+              parameterIndex += 1
+            ) {
+              const parameter = wrapper.parameters[parameterIndex]!;
+              if (argument !== parameter) continue;
+              if (
+                javascriptIdentifierReassignedBetween(
+                  file.lines,
+                  parameter,
+                  wrapper.startLine,
+                  call.line,
+                )
+              ) {
+                continue;
+              }
+              summaries.push({
+                model: downstream.model,
+                file,
+                symbol: wrapper.symbol,
+                parameter,
+                parameterIndex,
+                declarationLine: wrapper.startLine,
+                downstreamImport: imported,
+                downstreamCallLine: call.line,
+                downstream,
+                controls,
+              });
+              if (summaries.length >= MAX_FRAMEWORK_RELAY_SUMMARIES) {
+                return summaries;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return summaries;
+}
+
 function javascriptFrameworkWrapperSummaries(
   files: readonly SourceFileSnapshot[],
 ): FrameworkWrapperSummary[] {
@@ -1210,7 +1503,7 @@ function javascriptFrameworkWrapperSummaries(
       ) {
         continue;
       }
-      const sinks = matchingModelLines(file.lines, model.sinks, 32);
+      const sinks = matchingJavascriptModelLines(file.lines, model.sinks, 32);
       const controls = matchingModelLines(file.lines, model.controls, 64);
       for (const wrapper of exportedFunctions) {
         for (const sink of sinks) {
@@ -1349,6 +1642,41 @@ function javascriptCodeBeforeComment(line: string): string {
   return line;
 }
 
+function javascriptStructuralCode(line: string): string {
+  const output = [...line];
+  let quote = "";
+  let escaped = false;
+  for (let index = 0; index < output.length; index += 1) {
+    const character = line[index]!;
+    if (quote !== "") {
+      output[index] = " ";
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+      output[index] = " ";
+    } else if (character === "/" && line[index + 1] === "/") {
+      output.fill(" ", index);
+      break;
+    }
+  }
+  return output.join("");
+}
+
+function javascriptTemplateExpressionCode(line: string): string {
+  const expressions: string[] = [];
+  const code = javascriptCodeBeforeComment(line);
+  for (const template of code.matchAll(/`(?:\\.|[^`\\])*`/gu)) {
+    for (const expression of template[0].matchAll(/\$\{([^{}]*)\}/gu)) {
+      expressions.push(expression[1] ?? "");
+    }
+  }
+  return expressions.join("\n");
+}
+
 function importedJavascriptSymbols(
   lines: readonly string[],
 ): ImportedJavascriptSymbol[] {
@@ -1436,10 +1764,11 @@ function javascriptCallLines(
   );
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
-    const match = expression.exec(line);
+    const structuralLine = javascriptStructuralCode(line);
+    const match = expression.exec(structuralLine);
     if (match === null) continue;
-    const open = line.indexOf("(", match.index);
-    const close = matchingCallParenthesis(line, open);
+    const open = structuralLine.indexOf("(", match.index);
+    const close = matchingCallParenthesis(structuralLine, open);
     if (open < 0 || close < 0) continue;
     calls.push({
       line: index + 1,
@@ -1524,22 +1853,41 @@ function modeledCallSource(
       "u",
     );
     if (!assignment.test(lines[line - 1] ?? "")) continue;
-    const escapedArgument = escapeRegularExpression(argument);
-    const reassignment = new RegExp(
-      `(?:\\b${escapedArgument}\\s*(?:[+*/%&|^?-]?=|\\+\\+|--)|(?:\\+\\+|--)\\s*${escapedArgument}\\b|\\b(?:const|let|var)\\s+${escapedArgument}\\b)`,
-      "u",
-    );
-    const reassigned = lines
-      .slice(line, callLine - 1)
-      .some((candidate) => reassignment.test(candidate));
-    if (!reassigned) return source;
+    if (
+      !javascriptIdentifierReassignedBetween(lines, argument, line, callLine)
+    ) {
+      return source;
+    }
   }
   return undefined;
 }
 
+function javascriptIdentifierReassignedBetween(
+  lines: readonly string[],
+  identifier: string,
+  afterLine: number,
+  beforeLine: number,
+): boolean {
+  const escapedIdentifier = escapeRegularExpression(identifier);
+  const reassignment = new RegExp(
+    `(?:\\b${escapedIdentifier}\\s*(?:[+*/%&|^?-]?=|\\+\\+|--)|(?:\\+\\+|--)\\s*${escapedIdentifier}\\b|\\b(?:const|let|var)\\s+${escapedIdentifier}\\b)`,
+    "u",
+  );
+  return lines
+    .slice(afterLine, Math.max(afterLine, beforeLine - 1))
+    .some((candidate) =>
+      reassignment.test(javascriptCodeBeforeComment(candidate)),
+    );
+}
+
 function lineReferencesIdentifier(line: string, identifier: string): boolean {
-  return new RegExp(`\\b${escapeRegularExpression(identifier)}\\b`, "u").test(
-    line,
+  const expression = new RegExp(
+    `\\b${escapeRegularExpression(identifier)}\\b`,
+    "u",
+  );
+  return (
+    expression.test(javascriptStructuralCode(line)) ||
+    expression.test(javascriptTemplateExpressionCode(line))
   );
 }
 
@@ -1556,6 +1904,24 @@ function matchingModelLines(
   for (let index = 0; index < lines.length && matches.length < limit; index++) {
     for (const pattern of patterns) {
       if (pattern.expression.test(lines[index] ?? "")) {
+        matches.push({ kind: pattern.kind, line: index + 1 });
+        break;
+      }
+    }
+  }
+  return matches;
+}
+
+function matchingJavascriptModelLines(
+  lines: readonly string[],
+  patterns: readonly FrameworkModelPattern[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const matches: Array<{ kind: string; line: number }> = [];
+  for (let index = 0; index < lines.length && matches.length < limit; index++) {
+    const structuralLine = javascriptStructuralCode(lines[index] ?? "");
+    for (const pattern of patterns) {
+      if (pattern.expression.test(structuralLine)) {
         matches.push({ kind: pattern.kind, line: index + 1 });
         break;
       }

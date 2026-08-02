@@ -887,6 +887,66 @@ def _prune_unknown_evidence_refs(finding: dict[str, Any]) -> list[tuple[str, int
     return recovered
 
 
+def _normalize_unsealed_code_evidence_ids(finding: dict[str, Any]) -> int:
+    """Normalize model-owned evidence IDs and keep their references connected."""
+
+    code_evidence = finding.get("codeEvidence")
+    if not isinstance(code_evidence, list):
+        return 0
+
+    reserved_ids = {
+        evidence.get("id")
+        for evidence in code_evidence
+        if isinstance(evidence, dict)
+        and isinstance(evidence.get("id"), str)
+        and SLUG_RE.fullmatch(evidence["id"])
+    }
+    normalized_ids: set[str] = set()
+    replacements: dict[str, str] = {}
+    changed = 0
+    for index, evidence in enumerate(code_evidence):
+        if not isinstance(evidence, dict):
+            continue
+        raw_id = evidence.get("id")
+        if not isinstance(raw_id, str) or not raw_id:
+            continue
+        if SLUG_RE.fullmatch(raw_id):
+            continue
+        if raw_id in replacements:
+            # Repeated malformed IDs are ambiguous. Leave the duplicate for the
+            # validator to reject rather than silently reconnecting references
+            # to an arbitrary evidence row.
+            continue
+
+        base = re.sub(r"[^a-z0-9._/-]+", "-", raw_id.lower()).strip("._/-")
+        if not SLUG_RE.fullmatch(base):
+            base = f"code-evidence-{index + 1}"
+        normalized = base
+        suffix = 2
+        while normalized in reserved_ids or normalized in normalized_ids:
+            normalized = f"{base}-{suffix}"
+            suffix += 1
+        evidence["id"] = normalized
+        normalized_ids.add(normalized)
+        replacements[raw_id] = normalized
+        changed += 1
+
+    if not replacements:
+        return changed
+    for section_name in ("rootCause", "validation", "attackPath"):
+        section = finding.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        refs = section.get("evidenceRefs")
+        if not isinstance(refs, list):
+            continue
+        section["evidenceRefs"] = [
+            replacements.get(reference, reference) if isinstance(reference, str) else reference
+            for reference in refs
+        ]
+    return changed
+
+
 def _recover_unsealed_findings(
     manifest: dict[str, Any],
     findings: dict[str, Any],
@@ -939,6 +999,7 @@ def _recover_unsealed_findings(
                 parent[field] = normalized
                 normalized_fields.append(label)
 
+            normalized_evidence_ids = _normalize_unsealed_code_evidence_ids(finding)
             _populate_unsealed_finding_identities(
                 manifest,
                 {"scanId": scan_id, "findings": [finding]},
@@ -994,6 +1055,12 @@ def _recover_unsealed_findings(
         if normalized_fields:
             warnings.append(
                 f"Recovered finding {index + 1}: normalized {', '.join(normalized_fields)}."
+            )
+        if normalized_evidence_ids:
+            noun = "identifier" if normalized_evidence_ids == 1 else "identifiers"
+            warnings.append(
+                f"Recovered finding {index + 1}: normalized "
+                f"{normalized_evidence_ids} code-evidence {noun}."
             )
         for section_name, removed in pruned_evidence_refs:
             label = {
@@ -3707,7 +3774,9 @@ def _read_in_scope_inventory(scan_dir: Path) -> list[str]:
     relative_path = "artifacts/02_discovery/in_scope_files.txt"
     inventory_path = scan_dir / PurePosixPath(relative_path)
     if not inventory_path.exists() and not inventory_path.is_symlink():
-        return []
+        raise ContractError(
+            "in-scope file inventory: required before a scan can be sealed"
+        )
     descriptor = open_scan_local_file_descriptor(
         scan_dir, relative_path, "in-scope file inventory"
     )

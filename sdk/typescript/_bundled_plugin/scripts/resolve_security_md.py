@@ -11,6 +11,14 @@ import sys
 from pathlib import Path
 
 MAX_SECURITY_MD_BYTES = 1024 * 1024
+EXCLUDED_POLICY_TREES = {
+    ".git",
+    ".pnpm-store",
+    ".venv",
+    "__pycache__",
+    "node_modules",
+    "venv",
+}
 
 
 class ResolutionError(ValueError):
@@ -47,9 +55,15 @@ def list_security_md(repo: Path) -> list[str]:
     ):
         safe_subdirectories: list[str] = []
         for name in sorted(subdirectories):
-            if name == ".git":
+            if name in EXCLUDED_POLICY_TREES:
                 continue
-            directory_stat = (Path(directory) / name).stat(follow_symlinks=False)
+            try:
+                directory_stat = (Path(directory) / name).stat(follow_symlinks=False)
+            except FileNotFoundError:
+                # Dependency managers and build tools may remove ignored trees
+                # concurrently. A vanished directory cannot contain an
+                # applicable policy and must not abort an otherwise stable scan.
+                continue
             if not stat.S_ISDIR(directory_stat.st_mode):
                 continue
             reparse_point = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
