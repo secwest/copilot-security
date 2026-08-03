@@ -280,6 +280,97 @@ describe("ASP.NET path framework-model effectiveness benchmark", () => {
     ).toMatchObject({ kind: "filesystem-path", cweIds: ["CWE-22"] });
   });
 
+  test("recognizes System.IO supplied by SDK implicit usings without accepting shadows", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "Enabled/Enabled.csproj",
+      [
+        '<Project Sdk="Microsoft.NET.Sdk.Web">',
+        "  <PropertyGroup>",
+        "    <TargetFramework>net8.0</TargetFramework>",
+        "    <ImplicitUsings>enable</ImplicitUsings>",
+        "  </PropertyGroup>",
+        "</Project>",
+        "",
+      ].join("\n"),
+    );
+    await writeRepositoryFile(
+      repository,
+      "Enabled/ImplicitController.cs",
+      [
+        "using Microsoft.AspNetCore.Mvc;",
+        "public sealed class ImplicitController : ControllerBase {",
+        "  public string Get([FromQuery] string path) {",
+        "    return File.ReadAllText(path);",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    await writeRepositoryFile(
+      repository,
+      "Shadowed/Shadowed.csproj",
+      [
+        '<Project Sdk="Microsoft.NET.Sdk.Web">',
+        "  <PropertyGroup>",
+        "    <TargetFramework>net8.0</TargetFramework>",
+        "    <ImplicitUsings>enable</ImplicitUsings>",
+        "  </PropertyGroup>",
+        "</Project>",
+        "",
+      ].join("\n"),
+    );
+    await writeRepositoryFile(
+      repository,
+      "Shadowed/ShadowController.cs",
+      [
+        "using Microsoft.AspNetCore.Mvc;",
+        "public sealed class File { public static string ReadAllText(string value) => value; }",
+        "public sealed class ShadowController : ControllerBase {",
+        "  public string Get([FromQuery] string path) => File.ReadAllText(path);",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    await writeRepositoryFile(
+      repository,
+      "Disabled/Disabled.csproj",
+      [
+        '<Project Sdk="Microsoft.NET.Sdk.Web">',
+        "  <PropertyGroup>",
+        "    <TargetFramework>net8.0</TargetFramework>",
+        "    <ImplicitUsings>disable</ImplicitUsings>",
+        "  </PropertyGroup>",
+        "</Project>",
+        "",
+      ].join("\n"),
+    );
+    await writeRepositoryFile(
+      repository,
+      "Disabled/UnqualifiedController.cs",
+      [
+        "using Microsoft.AspNetCore.Mvc;",
+        "public sealed class UnqualifiedController : ControllerBase {",
+        "  public string Get([FromQuery] string path) {",
+        "    return File.ReadAllText(path);",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const records = aspnetPathRecords(
+      await buildResidualRiskInventory(repository),
+    );
+    expect(records).toHaveLength(1);
+    expect(records[0]?.path).toBe("Enabled/ImplicitController.cs");
+    expect(records[0]?.frameworkModel?.sink).toMatchObject({
+      kind: "filesystem-path",
+      cweIds: ["CWE-22"],
+    });
+  });
+
   test("rejects shadow types, comments, strings, fixed values, and reassigned relays", async () => {
     const repository = await temporaryRepository();
     await writeRepositoryFile(

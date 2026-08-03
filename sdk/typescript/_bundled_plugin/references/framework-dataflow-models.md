@@ -10,6 +10,10 @@ with exact source and sink paths/lines, scope, propagators, and candidate
 controls. Those records are host-authored metadata; their base64 source
 excerpts remain untrusted repository evidence.
 
+Within the host's bounded repository snapshot, wrapper and relay summaries are
+enumerated before source reachability and final candidate selection. A large
+set of unrelated wrappers must not silently hide a later reachable sink.
+
 For Node/TypeScript, `scope: "cross-file-wrapper"` is emitted only when the
 host can resolve a repository-relative ESM/CommonJS import to an exported
 function, match the call's exact argument position to the exported parameter,
@@ -57,10 +61,11 @@ For Java, `scope: "cross-file-multi-hop-wrapper"` now applies the same exact
 two-boundary contract to public or protected methods. Both simple owner types
 must resolve to one `.java` source file, each call must preserve the exact
 positional parameter without reassignment, and the final wrapper parameter
-must occur in the typed sink expression. The host records both Java receiver
+must reach the typed sink through either the sink expression or bounded local
+Java assignments. The host records both Java receiver
 bindings, calls, and wrapper declarations in order. It rejects duplicate type
-names, local filesystem-type shadows, fixed arguments, text-only calls, and a
-third service hop; it does not infer interfaces, framework registrations,
+names, local filesystem or outbound-client type shadows, fixed arguments,
+text-only calls, and a third service hop; it does not infer interfaces, framework registrations,
 overload resolution, named Kotlin arguments, callbacks, or reflection.
 
 `scope: "cross-file-multi-hop-wrapper"` is the same bounded syntax extended by
@@ -248,6 +253,26 @@ interpreter that consumes the value.
   it only when a proven sandbox, isolated renderer, constrained engine, or
   other dominating control limits the same path.
 
+### Spring/servlet server-side request forgery — CWE-918
+
+- Sources: Spring-bound request parameters and servlet request accessors.
+- Sinks: request objects or complete URI values passed to typed JDK
+  `HttpClient.send`/`sendAsync` or typed Spring `RestTemplate` operations.
+- Preserve both uniquely resolved Java service types, exact arguments and
+  parameters, and bounded local URI/request assignments. A local class that
+  shadows `HttpClient` or `RestTemplate` is not an outbound HTTP sink.
+- `URI.create`, `new URI`, `HttpRequest.newBuilder`, parsing, and encoding do
+  not authorize a destination. `HttpClient.Redirect.NEVER` rejects automatic
+  redirect following but does not constrain the initial request URI.
+- Strong counterevidence is exact request-key selection from fixed,
+  server-owned complete destinations plus redirect rejection. URL substring,
+  suffix, scheme-only, or userinfo-insensitive checks are not host
+  authorization.
+- A parsed host allowlist still requires every DNS A/AAAA answer,
+  connection-time resolution and pool reuse, proxies, the final socket address,
+  and Host/TLS identity to remain bound or revalidated. Otherwise DNS rebinding
+  and redirect pivots remain open.
+
 ### Spring/servlet filesystem path injection — CWE-22
 
 - Sources: Spring-bound request parameters and servlet request accessors.
@@ -316,6 +341,10 @@ interpreter that consumes the value.
 - Sources: ASP.NET-bound parameters and request fields.
 - Sinks: path arguments to typed `System.IO.File` operations and `FileStream`
   construction, including reads, writes, creates, moves, copies, and deletes.
+- Unqualified `File` and `FileStream` calls may be typed by a file-local using,
+  a project-wide global using, or the nearest `.csproj`/applicable MSBuild
+  property file with `ImplicitUsings` enabled. Local type shadows and projects
+  that disable implicit usings remain negative evidence.
 - `Path.Combine` and `Path.Join` construct strings; they do not establish
   containment. A rooted later `Path.Combine` operand can discard the trusted
   prefix, parent components can escape it, and normalization alone does not

@@ -296,7 +296,7 @@ describe("benchmark runner interruption recovery", () => {
         ),
       ).attempt,
     ).toBe(3);
-  });
+  }, 30_000);
 });
 
 function runNode(

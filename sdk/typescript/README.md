@@ -29,7 +29,8 @@ The package is ESM-only and provides:
   telemetry for every stored-credential shell completion; token-authenticated
   sessions remove public token aliases and expose no shell tools
 - typed host-generated Node HTTP, Python web, Spring/servlet, and ASP.NET
-  command/SQL/SSRF/filesystem-path data-flow hypotheses with exact source/sink
+  command/SQL/SSRF/filesystem-path data-flow hypotheses, including JDK
+  `HttpClient` and Spring `RestTemplate`, with exact source/sink
   lines and nearby negative controls for the mandatory residual correction
   turn, plus bounded one-hop or two-hop C# controller/service summaries,
   one-hop or two-hop Java controller/service summaries, and one-hop or two-hop

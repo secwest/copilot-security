@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   spring-security-fixtures:
-    name: Spring fixtures and path witnesses
+    name: Spring fixtures and JDK witnesses
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -35,6 +35,8 @@ jobs:
             benchmarks/fixtures/java-cross-file-safe-template/pom.xml
             benchmarks/fixtures/java-multi-hop-path-traversal/pom.xml
             benchmarks/fixtures/java-multi-hop-safe-path/pom.xml
+            benchmarks/fixtures/java-multi-hop-ssrf/pom.xml
+            benchmarks/fixtures/java-multi-hop-safe-fetch/pom.xml
 
       - name: Compile Spring benchmark fixtures
         shell: bash
@@ -44,6 +46,8 @@ jobs:
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-cross-file-safe-template/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-path-traversal/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-safe-path/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-ssrf/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-safe-fetch/pom.xml verify
 
       - name: Prove vulnerable and safe path behavior
         shell: bash
@@ -54,3 +58,13 @@ jobs:
           java -cp "$RUNNER_TEMP/java-path-vulnerable" VulnerablePathWitness
           javac -d "$RUNNER_TEMP/java-path-safe" benchmarks/witnesses/java-multi-hop-safe-path/SafePathWitness.java
           java -cp "$RUNNER_TEMP/java-path-safe" SafePathWitness
+
+      - name: Prove vulnerable and safe outbound-request behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/java-ssrf-vulnerable" "$RUNNER_TEMP/java-ssrf-safe"
+          javac --add-modules jdk.httpserver -d "$RUNNER_TEMP/java-ssrf-vulnerable" benchmarks/witnesses/java-multi-hop-ssrf/VulnerableSsrfWitness.java
+          java --add-modules jdk.httpserver -cp "$RUNNER_TEMP/java-ssrf-vulnerable" VulnerableSsrfWitness
+          javac --add-modules jdk.httpserver -d "$RUNNER_TEMP/java-ssrf-safe" benchmarks/witnesses/java-multi-hop-safe-fetch/SafeFetchWitness.java
+          java --add-modules jdk.httpserver -cp "$RUNNER_TEMP/java-ssrf-safe" SafeFetchWitness

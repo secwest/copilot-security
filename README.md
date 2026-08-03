@@ -40,9 +40,9 @@ diff scope remains authoritative; ignored generated output cannot silently
 stand in for reviewed application source.
 
 The residual pass also applies typed framework data-flow models for Node HTTP,
-Python web, Spring/servlet, and ASP.NET command-execution, raw-SQL, filesystem
-path, and server-side request-forgery boundaries, plus Node and Python
-server-side request forgery and server-side template injection. Each applicable
+Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
+paths, and server-side request forgery, plus Node, Python, and Spring
+server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
@@ -373,6 +373,22 @@ in-root document:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/java-multi-hop-path-manifest.json `
   --results-dir C:\security-benchmarks\java-multi-hop-path `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Spring SSRF lane carries an annotated request parameter across the same
+two uniquely typed Java services into the complete URI of a JDK `HttpRequest`
+sent by `HttpClient`. Its negative control treats the request value only as an
+exact key into fixed server-owned complete destinations and requires
+`HttpClient.Redirect.NEVER`. Pure-JDK loopback witnesses prove that the
+vulnerable complete URI reaches a private service while the control rejects it
+before transport:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/java-multi-hop-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\java-multi-hop-ssrf `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

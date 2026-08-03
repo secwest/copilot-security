@@ -248,6 +248,48 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The Java SSRF lane carries an annotated Spring request value through two
+constructor-injected service boundaries, builds a JDK `HttpRequest` from the
+complete caller-controlled URI, and sends it through a typed `HttpClient`. The
+negative control retains the same topology and local request construction, but
+uses the request value only as an exact key into fixed server-owned complete
+URIs and requires `HttpClient.Redirect.NEVER`. Redirect rejection is not
+initial-destination authorization; it is paired with fixed selection so the
+control closes both boundaries. Pure-JDK witnesses bind loopback-only HTTP
+servers to prove that the vulnerable URI reaches a private service while the
+control rejects a complete URI before transport and still accepts the fixed
+`status` key:
+
+```powershell
+javac --add-modules jdk.httpserver `
+  -d C:\security-benchmarks\java-ssrf-vulnerable `
+  benchmarks\witnesses\java-multi-hop-ssrf\VulnerableSsrfWitness.java
+java --add-modules jdk.httpserver `
+  -cp C:\security-benchmarks\java-ssrf-vulnerable VulnerableSsrfWitness
+
+javac --add-modules jdk.httpserver `
+  -d C:\security-benchmarks\java-ssrf-safe `
+  benchmarks\witnesses\java-multi-hop-safe-fetch\SafeFetchWitness.java
+java --add-modules jdk.httpserver `
+  -cp C:\security-benchmarks\java-ssrf-safe SafeFetchWitness
+```
+
+Run the strict live pair with:
+
+```powershell
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/java-multi-hop-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-java-multi-hop-ssrf `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 The ASP.NET cross-file lane applies the same strict gates to constructor-
 injected controller/service flows. Its command positive reaches `cmd.exe /c`,
 while its control uses a fixed executable, disables shell execution, and adds

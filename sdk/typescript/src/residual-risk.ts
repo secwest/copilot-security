@@ -13,8 +13,6 @@ const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_CANDIDATES = 4_096;
 const MAX_SIGNALS = 96;
 const MAX_SIGNALS_PER_FILE = MAX_SIGNALS;
-const MAX_FRAMEWORK_WRAPPER_SUMMARIES = 64;
-const MAX_FRAMEWORK_RELAY_SUMMARIES = 64;
 const MAX_FRAMEWORK_CROSS_FILE_RECORDS = 64;
 const MAX_FRAMEWORK_MULTI_HOP_RECORDS = 64;
 const MAX_WRAPPER_FUNCTION_LINES = 160;
@@ -44,6 +42,7 @@ const SOURCE_EXTENSIONS = new Set([
   ".coffee",
   ".cpp",
   ".cs",
+  ".csproj",
   ".dart",
   ".ex",
   ".exs",
@@ -68,6 +67,7 @@ const SOURCE_EXTENSIONS = new Set([
   ".php",
   ".pl",
   ".pm",
+  ".props",
   ".ps1",
   ".py",
   ".rb",
@@ -935,6 +935,64 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "spring-http-ssrf",
+    language: "java-kotlin",
+    extensions: JAVA_EXTENSIONS,
+    activation: [
+      /\b(?:java\.net\.http|HttpClient|HttpRequest|RestTemplate)\b/iu,
+    ],
+    sources: [
+      {
+        kind: "spring-bound-parameter",
+        expression:
+          /@(?:CookieValue|PathVariable|RequestBody|RequestHeader|RequestParam)\b/iu,
+      },
+      {
+        kind: "servlet-request-parameter",
+        expression: /\b(?:getHeader|getParameter|getParameterValues)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "outbound-http-url",
+        expression:
+          /\b[A-Za-z_$][\w$]*\s*\.\s*(?:send|sendAsync)\s*\(|\b(?:java\.net\.http\.)?HttpClient\s*\.\s*(?:newHttpClient|newBuilder)\s*\(\)[^;\r\n]*?\.\s*(?:send|sendAsync)\s*\(|\b[A-Za-z_$][\w$]*\s*\.\s*(?:delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(|\bnew\s+(?:org\.springframework\.web\.client\.)?RestTemplate\s*\([^)]*\)\s*\.\s*(?:delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(/iu,
+        cweIds: ["CWE-918"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-destination-allowlist",
+        expression:
+          /\b(?:ALLOWED|KNOWN|TRUSTED|VALID)_(?:DESTINATIONS?|ENDPOINTS?|URIS?|URLS?)\b|\b(?:allowed|known|trusted|valid)(?:Destinations?|Endpoints?|Uris?|Urls?)\b|\.containsKey\s*\(/iu,
+      },
+      {
+        kind: "parsed-host-exact-allowlist",
+        expression:
+          /\.getHost\s*\(\)\s*\.equals\s*\(|\b(?:allowed|trusted)Hosts?\.contains\s*\(/iu,
+      },
+      {
+        kind: "allowed-uri-scheme",
+        expression:
+          /\.getScheme\s*\(\)\s*\.equals\s*\(|\b(?:allowed|trusted)Schemes?\.contains\s*\(/iu,
+      },
+      {
+        kind: "fixed-origin-url-construction",
+        expression:
+          /\b(?:URI\.create|new\s+URI)\s*\(\s*"|\bHttpRequest\.newBuilder\s*\(\s*URI\.create\s*\(\s*"/iu,
+      },
+      {
+        kind: "redirects-disabled",
+        expression: /\b(?:HttpClient\.)?Redirect\.NEVER\b/iu,
+      },
+      {
+        kind: "network-address-validation-or-pinning",
+        expression:
+          /\b(?:InetAddress\.getAllByName|isLoopbackAddress|isSiteLocalAddress|isLinkLocalAddress|isPublicAddress|lookupAndPin|pinnedAddress|connectAddress)\b/iu,
+      },
+    ],
+  },
+  {
     id: "spring-http-path",
     language: "java-kotlin",
     extensions: JAVA_EXTENSIONS,
@@ -1129,7 +1187,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     language: "dotnet",
     extensions: DOTNET_EXTENSIONS,
     activation: [
-      /\b(?:System\.IO|FileStream|Path\.(?:Combine|Join|GetFullPath|GetRelativePath)|File\.(?:Open|Read|Write|Delete|Move|Copy|Create|Append))\b/iu,
+      /\b(?:System\.IO|FileStream|Path\.(?:Combine|Join|GetFullPath|GetRelativePath)|File\.(?:Append\w*|Copy|Create\w*|Delete|Move|Open\w*|Read\w*|Write\w*)\s*\()/iu,
     ],
     sources: [
       {
@@ -1410,7 +1468,6 @@ export async function buildResidualRiskInventory(
       lines,
       text,
     });
-    records.push(...frameworkDataflowRecords(normalizedPath, lines));
     let fileRecords: ResidualRiskRecord[] = [];
     const retainedFileRecords: ResidualRiskRecord[] = [];
     for (let index = 0; index < lines.length; index += 1) {
@@ -1445,6 +1502,11 @@ export async function buildResidualRiskInventory(
     );
   }
 
+  for (const file of sourceFiles) {
+    records.push(
+      ...frameworkDataflowRecords(file.path, file.lines, sourceFiles),
+    );
+  }
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
 
   return selectResidualRiskRecords(records, MAX_SIGNALS)
@@ -1469,6 +1531,7 @@ export async function buildResidualRiskInventory(
 function frameworkDataflowRecords(
   path: string,
   lines: readonly string[],
+  files: readonly SourceFileSnapshot[] = [],
 ): ResidualRiskRecord[] {
   const extension = extname(path).toLowerCase();
   const text = lines.join("\n");
@@ -1514,7 +1577,17 @@ function frameworkDataflowRecords(
       }
       if (
         model.id === "aspnet-http-path" &&
-        !dotnetFilesystemSinkHasTypedReceiver(lines, sink.line)
+        !dotnetFilesystemSinkHasTypedReceiver(
+          lines,
+          sink.line,
+          dotnetProjectProvidesSystemIo(files, path),
+        )
+      ) {
+        continue;
+      }
+      if (
+        model.id === "spring-http-ssrf" &&
+        !javaOutboundHttpSinkHasTypedReceiver(lines, sink.line)
       ) {
         continue;
       }
@@ -3111,9 +3184,6 @@ function javaFrameworkRelaySummaries(
                   downstream,
                   controls: controls.slice(0, 8),
                 });
-                if (summaries.length >= MAX_FRAMEWORK_RELAY_SUMMARIES) {
-                  return summaries;
-                }
               }
             }
           }
@@ -3240,9 +3310,6 @@ function dotnetFrameworkRelaySummaries(
                   downstream,
                   controls: controls.slice(0, 8),
                 });
-                if (summaries.length >= MAX_FRAMEWORK_RELAY_SUMMARIES) {
-                  return summaries;
-                }
               }
             }
           }
@@ -3347,9 +3414,6 @@ function javascriptFrameworkRelaySummaries(
                 downstream,
                 controls,
               });
-              if (summaries.length >= MAX_FRAMEWORK_RELAY_SUMMARIES) {
-                return summaries;
-              }
             }
           }
         }
@@ -3438,9 +3502,6 @@ function pythonFrameworkRelaySummaries(
                 downstream,
                 controls,
               });
-              if (summaries.length >= MAX_FRAMEWORK_RELAY_SUMMARIES) {
-                return summaries;
-              }
             }
           }
         }
@@ -3503,9 +3564,6 @@ function javascriptFrameworkWrapperSummaries(
                 )
                 .slice(0, 8),
             });
-            if (summaries.length >= MAX_FRAMEWORK_WRAPPER_SUMMARIES) {
-              return summaries;
-            }
           }
         }
       }
@@ -3582,9 +3640,6 @@ function pythonFrameworkWrapperSummaries(
               sink: { ...sink, cweIds: sinkPattern.cweIds },
               controls: wrapperControls.slice(0, 8),
             });
-            if (summaries.length >= MAX_FRAMEWORK_WRAPPER_SUMMARIES) {
-              return summaries;
-            }
           }
         }
       }
@@ -3621,6 +3676,22 @@ function javaFrameworkWrapperSummaries(
             sink.line,
             method.endLine,
           );
+          const parameterSinkExpression =
+            model.id === "spring-http-ssrf"
+              ? javaOutboundDestinationArgument(
+                  javaOutboundCallExpression(
+                    file.lines,
+                    sink.line,
+                    method.endLine,
+                  ),
+                )
+              : sinkExpression;
+          if (
+            model.id === "spring-http-ssrf" &&
+            !javaOutboundHttpSinkHasTypedReceiver(file.lines, sink.line)
+          ) {
+            continue;
+          }
           if (
             model.id === "spring-http-path" &&
             !javaFilesystemSinkHasTypedReceiver(file.lines, sink.line)
@@ -3628,12 +3699,12 @@ function javaFrameworkWrapperSummaries(
             continue;
           }
           const parameterIndexes =
-            model.id === "spring-http-path"
+            model.id === "spring-http-path" || model.id === "spring-http-ssrf"
               ? javaMethodParameterIndexesReachingSink(
                   file.lines,
                   method,
                   sink.line,
-                  sinkExpression,
+                  parameterSinkExpression,
                 )
               : method.parameters.flatMap((parameter, parameterIndex) =>
                   cFamilyLineReferencesIdentifier(
@@ -3679,9 +3750,6 @@ function javaFrameworkWrapperSummaries(
               sink: { ...sink, cweIds: sinkPattern.cweIds },
               controls: methodControls.slice(0, 8),
             });
-            if (summaries.length >= MAX_FRAMEWORK_WRAPPER_SUMMARIES) {
-              return summaries;
-            }
           }
         }
       }
@@ -3726,7 +3794,11 @@ function dotnetFrameworkWrapperSummaries(
           }
           if (
             model.id === "aspnet-http-path" &&
-            !dotnetFilesystemSinkHasTypedReceiver(file.lines, sink.line)
+            !dotnetFilesystemSinkHasTypedReceiver(
+              file.lines,
+              sink.line,
+              dotnetProjectProvidesSystemIo(files, file.path),
+            )
           ) {
             continue;
           }
@@ -3772,9 +3844,6 @@ function dotnetFrameworkWrapperSummaries(
               sink: { ...sink, cweIds: sinkPattern.cweIds },
               controls: methodControls.slice(0, 8),
             });
-            if (summaries.length >= MAX_FRAMEWORK_WRAPPER_SUMMARIES) {
-              return summaries;
-            }
           }
         }
       }
@@ -3816,6 +3885,41 @@ function javaCallExpression(
   return (close < 0 ? original : original.slice(0, close + 1)).replace(
     /\s+/gu,
     " ",
+  );
+}
+
+function javaOutboundCallExpression(
+  lines: readonly string[],
+  startLine: number,
+  methodEndLine: number,
+): string {
+  const endLine = Math.min(methodEndLine, startLine + 12);
+  const callLines = lines.slice(startLine - 1, endLine);
+  const original = callLines.join("\n");
+  const structural = cFamilyStructuralLines(callLines).join("\n");
+  const call =
+    /\.\s*(?:send|sendAsync|delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(/u.exec(
+      structural,
+    );
+  if (call === null) return javaCallExpression(lines, startLine, methodEndLine);
+  const open = structural.indexOf("(", call.index);
+  const close = matchingCallParenthesis(structural, open);
+  return (
+    close < 0
+      ? original.slice(call.index)
+      : original.slice(call.index, close + 1)
+  ).replace(/\s+/gu, " ");
+}
+
+function javaOutboundDestinationArgument(callExpression: string): string {
+  const structural = cFamilyStructuralLines(
+    callExpression.split(/\r?\n/u),
+  ).join("\n");
+  const open = structural.indexOf("(");
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return callExpression;
+  return (
+    splitJavascriptArguments(callExpression.slice(open + 1, close))[0] ?? ""
   );
 }
 
@@ -4783,6 +4887,123 @@ function dotnetHttpClientSinkHasTypedReceiver(
   );
 }
 
+function javaOutboundHttpSinkHasTypedReceiver(
+  lines: readonly string[],
+  sinkLine: number,
+): boolean {
+  const sinkExpression = cFamilyStructuralLines(
+    lines.slice(sinkLine - 1, Math.min(lines.length, sinkLine + 12)),
+  ).join("\n");
+  const structuralText = cFamilyStructuralLines(lines).join("\n");
+
+  const httpClientMethods = "send|sendAsync";
+  if (
+    new RegExp(
+      `\\bjava\\s*\\.\\s*net\\s*\\.\\s*http\\s*\\.\\s*HttpClient\\s*\\.\\s*(?:newHttpClient|newBuilder)\\s*\\(\\)[\\s\\S]*?\\.\\s*(?:${httpClientMethods})\\s*\\(`,
+      "u",
+    ).test(sinkExpression)
+  ) {
+    return true;
+  }
+  const httpClientImported =
+    /^\s*import\s+java\.net\.http\.(?:HttpClient|\*)\s*;/mu.test(
+      structuralText,
+    );
+  const shadowsHttpClient = /\b(?:class|interface|record)\s+HttpClient\b/u.test(
+    structuralText,
+  );
+  if (
+    httpClientImported &&
+    !shadowsHttpClient &&
+    new RegExp(
+      `\\bHttpClient\\s*\\.\\s*(?:newHttpClient|newBuilder)\\s*\\(\\)[\\s\\S]*?\\.\\s*(?:${httpClientMethods})\\s*\\(`,
+      "u",
+    ).test(sinkExpression)
+  ) {
+    return true;
+  }
+  const httpClientReceiver = new RegExp(
+    `\\b([A-Za-z_$][\\w$]*)\\s*\\.\\s*(?:${httpClientMethods})\\s*\\(`,
+    "u",
+  ).exec(sinkExpression)?.[1];
+  if (httpClientReceiver !== undefined) {
+    const receiver = escapeRegularExpression(httpClientReceiver);
+    const fullyQualifiedDeclaration = new RegExp(
+      `\\bjava\\s*\\.\\s*net\\s*\\.\\s*http\\s*\\.\\s*HttpClient\\s+${receiver}\\b`,
+      "u",
+    );
+    if (fullyQualifiedDeclaration.test(structuralText)) return true;
+    const importedDeclaration = new RegExp(
+      `\\bHttpClient\\s+${receiver}\\b`,
+      "u",
+    );
+    const constructedClient = new RegExp(
+      `\\bvar\\s+${receiver}\\s*=\\s*(?:java\\s*\\.\\s*net\\s*\\.\\s*http\\s*\\.\\s*)?HttpClient\\s*\\.\\s*(?:newHttpClient|newBuilder)\\s*\\(`,
+      "u",
+    );
+    if (
+      !shadowsHttpClient &&
+      httpClientImported &&
+      (importedDeclaration.test(structuralText) ||
+        constructedClient.test(structuralText))
+    ) {
+      return true;
+    }
+  }
+
+  const restTemplateMethods =
+    "delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put";
+  if (
+    new RegExp(
+      `\\bnew\\s+org\\s*\\.\\s*springframework\\s*\\.\\s*web\\s*\\.\\s*client\\s*\\.\\s*RestTemplate\\s*\\([^)]*\\)\\s*\\.\\s*(?:${restTemplateMethods})\\s*\\(`,
+      "u",
+    ).test(sinkExpression)
+  ) {
+    return true;
+  }
+  const restTemplateImported =
+    /^\s*import\s+org\.springframework\.web\.client\.(?:RestTemplate|\*)\s*;/mu.test(
+      structuralText,
+    );
+  const shadowsRestTemplate =
+    /\b(?:class|interface|record)\s+RestTemplate\b/u.test(structuralText);
+  if (
+    restTemplateImported &&
+    !shadowsRestTemplate &&
+    new RegExp(
+      `\\bnew\\s+RestTemplate\\s*\\([^)]*\\)\\s*\\.\\s*(?:${restTemplateMethods})\\s*\\(`,
+      "u",
+    ).test(sinkExpression)
+  ) {
+    return true;
+  }
+  const restTemplateReceiver = new RegExp(
+    `\\b([A-Za-z_$][\\w$]*)\\s*\\.\\s*(?:${restTemplateMethods})\\s*\\(`,
+    "u",
+  ).exec(sinkExpression)?.[1];
+  if (restTemplateReceiver === undefined) return false;
+  const receiver = escapeRegularExpression(restTemplateReceiver);
+  const fullyQualifiedDeclaration = new RegExp(
+    `\\borg\\s*\\.\\s*springframework\\s*\\.\\s*web\\s*\\.\\s*client\\s*\\.\\s*RestTemplate\\s+${receiver}\\b`,
+    "u",
+  );
+  if (fullyQualifiedDeclaration.test(structuralText)) return true;
+  const importedDeclaration = new RegExp(
+    `\\bRestTemplate\\s+${receiver}\\b`,
+    "u",
+  );
+  const constructedTemplate = new RegExp(
+    `\\bvar\\s+${receiver}\\s*=\\s*new\\s+(?:org\\s*\\.\\s*springframework\\s*\\.\\s*web\\s*\\.\\s*client\\s*\\.\\s*)?RestTemplate\\s*\\(`,
+    "u",
+  );
+  return (
+    !shadowsRestTemplate &&
+    restTemplateImported &&
+    (importedDeclaration.test(structuralText) ||
+      constructedTemplate.test(structuralText))
+  );
+}
+
 function javaFilesystemSinkHasTypedReceiver(
   lines: readonly string[],
   sinkLine: number,
@@ -4874,6 +5095,7 @@ function javaMethodParameterIndexesReachingSink(
 function dotnetFilesystemSinkHasTypedReceiver(
   lines: readonly string[],
   sinkLine: number,
+  projectProvidesSystemIo = false,
 ): boolean {
   const sinkExpression = javaCallExpression(lines, sinkLine, lines.length);
   if (
@@ -4887,7 +5109,10 @@ function dotnetFilesystemSinkHasTypedReceiver(
 
   const structuralLines = cFamilyStructuralLines(lines);
   const structuralText = structuralLines.join("\n");
-  if (!/^\s*(?:global\s+)?using\s+System\.IO\s*;/mu.test(structuralText)) {
+  if (
+    !projectProvidesSystemIo &&
+    !/^\s*(?:global\s+)?using\s+System\.IO\s*;/mu.test(structuralText)
+  ) {
     return false;
   }
   const shadowsFileType = /\b(?:class|record|struct)\s+File\b/u.test(
@@ -4903,6 +5128,62 @@ function dotnetFilesystemSinkHasTypedReceiver(
   return (
     (staticFileSink && !shadowsFileType) ||
     (fileStreamSink && !shadowsFileStreamType)
+  );
+}
+
+function dotnetProjectProvidesSystemIo(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+): boolean {
+  const projects = files
+    .filter(
+      (file) =>
+        file.extension === ".csproj" &&
+        pathWithinDirectory(sourcePath, posix.dirname(file.path)),
+    )
+    .sort(
+      (left, right) =>
+        posix.dirname(right.path).length - posix.dirname(left.path).length,
+    );
+  const project = projects[0];
+  if (project === undefined) return false;
+
+  const projectRoot = posix.dirname(project.path);
+  const configurationFiles = files.filter(
+    (file) =>
+      file.path === project.path ||
+      (file.extension === ".props" &&
+        pathWithinDirectory(sourcePath, posix.dirname(file.path))),
+  );
+  if (
+    configurationFiles.some((file) => {
+      const configuration = file.text.replace(/<!--[\s\S]*?-->/gu, "");
+      return (
+        /<ImplicitUsings\b[^>]*>\s*(?:enable|true)\s*<\/ImplicitUsings>/iu.test(
+          configuration,
+        ) ||
+        /<Using\b[^>]*\bInclude\s*=\s*["']System\.IO["'][^>]*\/?\s*>/iu.test(
+          configuration,
+        )
+      );
+    })
+  ) {
+    return true;
+  }
+
+  return files.some(
+    (file) =>
+      file.extension === ".cs" &&
+      pathWithinDirectory(file.path, projectRoot) &&
+      /^\s*global\s+using\s+System\.IO\s*;/mu.test(
+        cFamilyStructuralLines(file.lines).join("\n"),
+      ),
+  );
+}
+
+function pathWithinDirectory(path: string, directory: string): boolean {
+  return (
+    directory === "." || path === directory || path.startsWith(`${directory}/`)
   );
 }
 
