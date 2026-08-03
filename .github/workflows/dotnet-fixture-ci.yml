@@ -35,8 +35,12 @@ jobs:
           dotnet build benchmarks/fixtures/aspnet-cross-file-safe-command/AspnetCrossFileSafeCommand.csproj --configuration Release --nologo
           dotnet build benchmarks/fixtures/aspnet-cross-file-sql-injection/AspnetCrossFileSqlInjection.csproj --configuration Release --nologo
           dotnet build benchmarks/fixtures/aspnet-cross-file-safe-sql/AspnetCrossFileSafeSql.csproj --configuration Release --nologo
+          dotnet build benchmarks/fixtures/aspnet-cross-file-ssrf/AspnetCrossFileSsrf.csproj --configuration Release --nologo
+          dotnet build benchmarks/fixtures/aspnet-cross-file-safe-fetch/AspnetCrossFileSafeFetch.csproj --configuration Release --nologo
 
-      - name: Prove SQL exploit and parameterized control
+      - name: Prove SQL and SSRF exploits and controls
         run: |
           dotnet run --project benchmarks/witnesses/aspnet-cross-file-sql-injection/AspNetCrossFileSqlInjectionWitness.csproj --configuration Release
           dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-sql/AspNetCrossFileSafeSqlWitness.csproj --configuration Release
+          dotnet run --project benchmarks/witnesses/aspnet-cross-file-ssrf/AspNetCrossFileSsrfWitness.csproj --configuration Release
+          dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-fetch/AspNetCrossFileSafeFetchWitness.csproj --configuration Release

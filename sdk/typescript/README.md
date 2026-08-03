@@ -19,7 +19,8 @@ The package is ESM-only and provides:
   deferred work instead of accepting a false complete claim
 - pre-session host-generated and SHA-256-verified repository, review, and
   `SECURITY.md` path inventories; the model cannot choose, narrow, or rewrite
-  scan scope
+  scan scope, and conventional generated trees such as .NET `bin`/`obj` are
+  omitted before ranking
 - registered-target checks surrounding staged-file SHA-256 comparisons before
   model execution and final sealing, so checkout races fail closed
 - a disposable repository/plugin snapshot that omits links and special files,
@@ -28,7 +29,7 @@ The package is ESM-only and provides:
   telemetry for every stored-credential shell completion; token-authenticated
   sessions remove public token aliases and expose no shell tools
 - typed host-generated Node HTTP, Python web, Spring/servlet, and ASP.NET
-  command/SQL data-flow hypotheses with exact source/sink lines and nearby
+  command/SQL/SSRF data-flow hypotheses with exact source/sink lines and nearby
   negative controls for the mandatory residual correction turn, plus bounded
   one-hop C# controller/service and Java controller/service summaries and
   one-hop or two-hop relative-import/call/parameter summaries for
@@ -42,6 +43,10 @@ The package is ESM-only and provides:
   deadlines or recognized transport interruptions, with untrusted-draft
   recovery over the same immutable snapshot, bounded disconnects, and
   cumulative root/subagent cost accounting across attempts
+- bounded, data-only normalization of complete flow-style model drafts before
+  deterministic sealing; aliases, duplicate keys, ambiguous syntax, symlinks,
+  and non-object roots remain terminal, and canonical schemas still decide
+  acceptance
 - cancellation and streamed Copilot usage/subagent events
 
 ```ts

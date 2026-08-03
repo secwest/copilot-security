@@ -34,8 +34,10 @@ import {
   requireScanFile,
   type ScanExpectation,
 } from "./contract.js";
+import { normalizeMalformedScanDrafts } from "./model-draft-recovery.js";
 import {
   AuthenticationRequiredError,
+  CompleteDraftArtifactsError,
   CopilotSecurityError,
   IncompleteScanError,
   OutputDirectoryError,
@@ -1050,6 +1052,15 @@ export class CopilotSecurity {
           }
           await verifyCopilotScanInventory(inventorySnapshot);
           await verifyModelInputBinding();
+          const repairedDrafts = await normalizeMalformedScanDrafts(scanDir);
+          if (repairedDrafts.length > 0) {
+            notifyObserver(
+              "onWarning",
+              options.onWarning,
+              options.onObserverError,
+              `Recovered malformed model draft notation in ${repairedDrafts.join(", ")}; canonical schema and evidence validation still apply.`,
+            );
+          }
           if (options.maxCostUsd !== undefined && snapshot.cost === null) {
             notifyObserver(
               "onWarning",
@@ -1610,97 +1621,102 @@ export async function runScanEvents(
   let terminalFailure: Error | null = null;
   let finalized = false;
   try {
-    for await (const event of options.events) {
-      const workerStatus = workerStatusFromEvent(event);
-      if (workerStatus !== null) {
-        notifyObserver(
-          "onWorkerStatus",
-          options.onWorkerStatus,
-          options.onObserverError,
-          workerStatus,
-        );
-      }
-      if (event.type === "thread.started") {
-        const startedThreadId = event["thread_id"];
-        if (typeof startedThreadId === "string") {
-          threadId = startedThreadId;
-          options.onThreadStarted?.(startedThreadId);
-        }
-        if (!scanStarted) {
-          scanStarted = true;
+    try {
+      for await (const event of options.events) {
+        const workerStatus = workerStatusFromEvent(event);
+        if (workerStatus !== null) {
           notifyObserver(
-            "onScanStarted",
-            options.onScanStarted,
+            "onWorkerStatus",
+            options.onWorkerStatus,
             options.onObserverError,
+            workerStatus,
           );
         }
-      } else if (
-        event.type === "copilot.fresh_session_retry" &&
-        Number.isSafeInteger(event["attempt"]) &&
-        Number.isSafeInteger(event["max_attempts"]) &&
-        (event["attempt"] as number) >= 2 &&
-        (event["attempt"] as number) <= (event["max_attempts"] as number) &&
-        (event["max_attempts"] as number) <= MAX_FRESH_SESSION_ATTEMPTS &&
-        typeof event["reason"] === "string" &&
-        ["model_timeout", "transport_interrupted"].includes(event["reason"])
-      ) {
-        notifyObserver(
-          "onReconnect",
-          options.onReconnect,
-          options.onObserverError,
-          event["attempt"] as number,
-          event["max_attempts"] as number,
-          {
-            reason: event["reason"] as
-              | "model_timeout"
-              | "transport_interrupted",
-          },
-        );
-      } else if (
-        event.type === "copilot.usage" &&
-        event["usage"] !== undefined
-      ) {
-        options.onUsage?.(event["usage"]);
-      } else if (
-        event.type === "item.completed" &&
-        isRecord(event["item"]) &&
-        event["item"]["type"] === "agent_message" &&
-        typeof event["item"]["text"] === "string"
-      ) {
-        finalResponse = event["item"]["text"];
-      } else if (event.type === "turn.completed") {
-        status = "completed";
-        usage = event["usage"];
-      } else if (
-        event.type === "turn.failed" &&
-        isRecord(event["error"]) &&
-        typeof event["error"]["message"] === "string"
-      ) {
-        terminalFailure = new CopilotSecurityError(event["error"]["message"]);
-        if (event["usage"] !== undefined) usage = event["usage"];
-      } else if (
-        event.type === "error" &&
-        typeof event["message"] === "string"
-      ) {
-        const message = event["message"];
-        const classification = classifyConnectionFailure(message);
-        if (
-          classification === "unauthorized" ||
-          classification === "forbidden"
+        if (event.type === "thread.started") {
+          const startedThreadId = event["thread_id"];
+          if (typeof startedThreadId === "string") {
+            threadId = startedThreadId;
+            options.onThreadStarted?.(startedThreadId);
+          }
+          if (!scanStarted) {
+            scanStarted = true;
+            notifyObserver(
+              "onScanStarted",
+              options.onScanStarted,
+              options.onObserverError,
+            );
+          }
+        } else if (
+          event.type === "copilot.fresh_session_retry" &&
+          Number.isSafeInteger(event["attempt"]) &&
+          Number.isSafeInteger(event["max_attempts"]) &&
+          (event["attempt"] as number) >= 2 &&
+          (event["attempt"] as number) <= (event["max_attempts"] as number) &&
+          (event["max_attempts"] as number) <= MAX_FRESH_SESSION_ATTEMPTS &&
+          typeof event["reason"] === "string" &&
+          ["model_timeout", "transport_interrupted"].includes(event["reason"])
         ) {
-          throw new CopilotSecurityError(message);
+          notifyObserver(
+            "onReconnect",
+            options.onReconnect,
+            options.onObserverError,
+            event["attempt"] as number,
+            event["max_attempts"] as number,
+            {
+              reason: event["reason"] as
+                | "model_timeout"
+                | "transport_interrupted",
+            },
+          );
+        } else if (
+          event.type === "copilot.usage" &&
+          event["usage"] !== undefined
+        ) {
+          options.onUsage?.(event["usage"]);
+        } else if (
+          event.type === "item.completed" &&
+          isRecord(event["item"]) &&
+          event["item"]["type"] === "agent_message" &&
+          typeof event["item"]["text"] === "string"
+        ) {
+          finalResponse = event["item"]["text"];
+        } else if (event.type === "turn.completed") {
+          status = "completed";
+          usage = event["usage"];
+        } else if (
+          event.type === "turn.failed" &&
+          isRecord(event["error"]) &&
+          typeof event["error"]["message"] === "string"
+        ) {
+          terminalFailure = new CopilotSecurityError(event["error"]["message"]);
+          if (event["usage"] !== undefined) usage = event["usage"];
+        } else if (
+          event.type === "error" &&
+          typeof event["message"] === "string"
+        ) {
+          const message = event["message"];
+          const classification = classifyConnectionFailure(message);
+          if (
+            classification === "unauthorized" ||
+            classification === "forbidden"
+          ) {
+            throw new CopilotSecurityError(message);
+          }
+          const reconnect = reconnectAttempt(message);
+          if (reconnect === null) throw new CopilotSecurityError(message);
+          lastStreamError = message;
+          notifyObserver(
+            "onReconnect",
+            options.onReconnect,
+            options.onObserverError,
+            ...reconnect,
+            reconnectDetails(message),
+          );
         }
-        const reconnect = reconnectAttempt(message);
-        if (reconnect === null) throw new CopilotSecurityError(message);
-        lastStreamError = message;
-        notifyObserver(
-          "onReconnect",
-          options.onReconnect,
-          options.onObserverError,
-          ...reconnect,
-          reconnectDetails(message),
-        );
       }
+    } catch (error) {
+      if (!(error instanceof CompleteDraftArtifactsError)) throw error;
+      terminalFailure = error;
     }
     if (options.signal.aborted) {
       throw new ScanInterruptedError(
@@ -1728,7 +1744,13 @@ export async function runScanEvents(
           try {
             options.onRecovered?.(failure);
           } catch {}
-        } catch {
+        } catch (finalizationError) {
+          if (failure instanceof CompleteDraftArtifactsError) {
+            throw new CompleteDraftArtifactsError(
+              "Copilot produced all scan drafts, but deterministic host validation rejected them.",
+              { cause: finalizationError },
+            );
+          }
           throw failure;
         }
       } else {

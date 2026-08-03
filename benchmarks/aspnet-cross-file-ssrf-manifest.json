@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "aspnet-cross-file-ssrf",
+      "description": "An ASP.NET query parameter crosses a constructor-injected service boundary into the complete URI passed to HttpClient.GetAsync.",
+      "fixture": "fixtures/aspnet-cross-file-ssrf",
+      "findingsPaths": ["aspnet-cross-file-ssrf/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "aspnet-controller-service-ssrf",
+          "cwe": ["CWE-918"],
+          "locations": [
+            {
+              "path": "Services/PreviewClient.cs",
+              "startLine": 15,
+              "endLine": 19,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "aspnet-cross-file-safe-fetch",
+      "description": "The same ASP.NET topology treats the request value only as an exact key into fixed server-owned HTTPS destinations and rejects redirects.",
+      "fixture": "fixtures/aspnet-cross-file-safe-fetch",
+      "findingsPaths": ["aspnet-cross-file-safe-fetch/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

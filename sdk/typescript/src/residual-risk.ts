@@ -1006,6 +1006,60 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
       },
     ],
   },
+  {
+    id: "aspnet-http-ssrf",
+    language: "dotnet",
+    extensions: DOTNET_EXTENSIONS,
+    activation: [
+      /\b(?:HttpClient|HttpClientHandler|IHttpClientFactory|SocketsHttpHandler)\b/iu,
+    ],
+    sources: [
+      {
+        kind: "aspnet-bound-parameter",
+        expression:
+          /\[(?:FromBody|FromForm|FromHeader|FromQuery|FromRoute)\b/iu,
+      },
+      {
+        kind: "aspnet-request-field",
+        expression:
+          /\bRequest\.(?:Body|Form|Headers|Query|RouteValues)\b|\bHttpRequest\b/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "outbound-http-url",
+        expression:
+          /\.(?:DeleteAsync|GetAsync|GetByteArrayAsync|GetStreamAsync|GetStringAsync|PatchAsync|PostAsync|PutAsync)\s*\(/iu,
+        cweIds: ["CWE-918"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-destination-allowlist",
+        expression:
+          /\b(?:Allowed|Asset|Trusted)(?:Hosts?|Uris?|Urls?)\b|\.TryGetValue\s*\(/iu,
+      },
+      {
+        kind: "parsed-host-exact-allowlist",
+        expression:
+          /\.(?:DnsSafeHost|Host|IdnHost)\b\s*(?:==|!=)|\b(?:Allowed|Trusted)Hosts?\.(?:Contains|TryGetValue)\s*\(/iu,
+      },
+      {
+        kind: "fixed-origin-url-construction",
+        expression:
+          /\b(?:new\s+Uri|Uri\.TryCreate)\s*\(\s*"|\bBaseAddress\s*=\s*new\s+Uri\s*\(\s*"/iu,
+      },
+      {
+        kind: "redirects-disabled",
+        expression: /\bAllowAutoRedirect\s*=\s*false\b/iu,
+      },
+      {
+        kind: "network-address-validation-or-pinning",
+        expression:
+          /\b(?:ConnectCallback|Dns\.GetHostAddressesAsync?|IPAddress\.IsLoopback|IsPrivateAddress|IsPublicAddress|PinnedAddress|SocketsHttpHandler)\b/iu,
+      },
+    ],
+  },
 ];
 
 const IGNORED_DIRECTORIES = new Set([
@@ -1013,10 +1067,12 @@ const IGNORED_DIRECTORIES = new Set([
   ".hg",
   ".svn",
   ".venv",
+  "bin",
   "build",
   "coverage",
   "dist",
   "node_modules",
+  "obj",
   "target",
   "vendor",
 ]);
@@ -1308,6 +1364,12 @@ function frameworkDataflowRecords(
         ? matchingJavaModelLines(lines, model.controls, 24)
         : matchingModelLines(lines, model.controls, 24);
     for (const sink of sinks) {
+      if (
+        model.id === "aspnet-http-ssrf" &&
+        !dotnetHttpClientSinkHasTypedReceiver(lines, sink.line)
+      ) {
+        continue;
+      }
       const source = nearestModeledSource(sources, sink.line);
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -2728,6 +2790,12 @@ function javaFrameworkWrapperSummaries(
           if (sink.line < method.startLine || sink.line > method.endLine) {
             continue;
           }
+          if (
+            model.id === "aspnet-http-ssrf" &&
+            !dotnetHttpClientSinkHasTypedReceiver(file.lines, sink.line)
+          ) {
+            continue;
+          }
           const sinkExpression = javaCallExpression(
             file.lines,
             sink.line,
@@ -3831,6 +3899,40 @@ function modeledDotnetCallSource(
     }
   }
   return undefined;
+}
+
+function dotnetHttpClientSinkHasTypedReceiver(
+  lines: readonly string[],
+  sinkLine: number,
+): boolean {
+  const sinkExpression = javaCallExpression(lines, sinkLine, lines.length);
+  if (
+    /\bnew\s+HttpClient\s*\([^)]*\)\s*\.(?:DeleteAsync|GetAsync|GetByteArrayAsync|GetStreamAsync|GetStringAsync|PatchAsync|PostAsync|PutAsync)\s*\(/u.test(
+      sinkExpression,
+    )
+  ) {
+    return true;
+  }
+  const receiver =
+    /\b([A-Za-z_]\w*)\s*\.(?:DeleteAsync|GetAsync|GetByteArrayAsync|GetStreamAsync|GetStringAsync|PatchAsync|PostAsync|PutAsync)\s*\(/u.exec(
+      sinkExpression,
+    )?.[1];
+  if (receiver === undefined) return false;
+
+  const structuralText = cFamilyStructuralLines(lines).join("\n");
+  const escapedReceiver = escapeRegularExpression(receiver);
+  const typedDeclaration = new RegExp(
+    `\\bHttpClient\\s+${escapedReceiver}\\b`,
+    "u",
+  );
+  const constructedClient = new RegExp(
+    `\\bvar\\s+${escapedReceiver}\\s*=\\s*(?:new\\s+HttpClient\\s*\\(|[A-Za-z_]\\w*\\.CreateClient\\s*\\()`,
+    "u",
+  );
+  return (
+    typedDeclaration.test(structuralText) ||
+    constructedClient.test(structuralText)
+  );
 }
 
 function pythonIdentifierReassignedBetween(

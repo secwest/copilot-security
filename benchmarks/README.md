@@ -223,6 +223,34 @@ dotnet run --project benchmarks/witnesses/aspnet-cross-file-sql-injection/AspNet
 dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-sql/AspNetCrossFileSafeSqlWitness.csproj --configuration Release
 ```
 
+The ASP.NET SSRF lane carries a complete `[FromQuery]` URI through the same
+constructor-injected topology into `HttpClient.GetAsync`. Its control uses the
+request value only as an exact key into fixed server-owned HTTPS destinations,
+rejects unknown keys before transport, and disables redirects. In-memory
+message handlers prove the exploit and control without issuing real network
+requests:
+
+```powershell
+dotnet run --project benchmarks/witnesses/aspnet-cross-file-ssrf/AspNetCrossFileSsrfWitness.csproj --configuration Release
+dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-fetch/AspNetCrossFileSafeFetchWitness.csproj --configuration Release
+```
+
+Run the strict live pair with:
+
+```powershell
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '360000'
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/aspnet-cross-file-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-aspnet-cross-file-ssrf `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 Run the live scanner lane with an inner model-turn deadline below the outer
 process deadline:
 

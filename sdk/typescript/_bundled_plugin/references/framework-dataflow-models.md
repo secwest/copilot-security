@@ -254,6 +254,23 @@ interpreter that consumes the value.
   counterevidence, not raw SQL flow; values still cannot parameterize
   identifiers or clauses.
 
+### ASP.NET server-side request forgery — CWE-918
+
+- Sources: ASP.NET-bound parameters and request fields.
+- Sinks: complete request-URI arguments to `HttpClient` convenience methods,
+  including `GetAsync`, `GetStringAsync`, and the corresponding verb helpers.
+- Strong counterevidence: an exact request value used only as a key into a
+  bounded server-owned map of complete destinations, redirect rejection, and
+  correct address validation plus connection pinning when hostnames remain
+  configurable.
+- `Uri` parsing, `BaseAddress`, timeouts, response ceilings, and
+  `AllowAutoRedirect = false` do not constrain an arbitrary initial absolute
+  URI. Hostname substring or suffix checks are not exact authority checks.
+- Reopen proxies, every DNS A/AAAA answer, connection-time re-resolution,
+  pooled connections, the actual socket destination, and Host/TLS identity.
+  Redirect rejection closes only the redirect leg; it does not authorize the
+  first destination.
+
 ## Closure Rules
 
 - Trace across wrappers and files when the source and sink are separated.

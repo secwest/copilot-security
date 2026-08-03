@@ -29,6 +29,7 @@ export type { AccountStatus, LoginResult } from "./auth.js";
 
 export {
   AuthenticationRequiredError,
+  CompleteDraftArtifactsError,
   CopilotSecurityError,
   ConfigurationError,
   ContractValidationError,

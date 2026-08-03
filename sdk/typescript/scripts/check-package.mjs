@@ -152,6 +152,7 @@ const distFiles = new Set(
     "evidence-quality",
     "index",
     "knowledge-base",
+    "model-draft-recovery",
     "models",
     "multiscan",
     "residual-risk",

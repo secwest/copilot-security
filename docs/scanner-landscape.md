@@ -60,9 +60,9 @@ contract validation, and sealed outputs remain mandatory.
 ## Implemented: typed framework data-flow hypotheses
 
 The mandatory host residual pass now has an initial provider-neutral model pack
-for Node HTTP, Python web, Spring/servlet, and ASP.NET command execution and raw
-SQL, plus Node and Python server-side request forgery and server-side template
-injection. Same-file models activate
+for Node HTTP, Python web, Spring/servlet, and ASP.NET command execution, raw
+SQL, and server-side request forgery, plus Node and Python server-side request
+forgery and server-side template injection. Same-file models activate
 when their language, request-source syntax, and concrete runtime or sink API are
 present in one bounded source file. The bounded Java cross-file layer resolves
 unique service types from controller fields, parses public and protected method
@@ -70,8 +70,8 @@ bodies, and preserves exact annotated-parameter or servlet-assignment flow into
 the service wrapper. The bounded C# layer applies the same unique-type and
 exact-argument discipline to class, record, or struct receivers; public,
 protected, or internal controller and service methods; ASP.NET bound parameters
-or assigned request fields; and `ProcessStartInfo`/`Process.Start` or raw SQL
-query-text sinks. Bounded Node/TypeScript and Python cross-file layers
+or assigned request fields; and `ProcessStartInfo`/`Process.Start`, raw SQL
+query-text, or complete `HttpClient` request-URI sinks. Bounded Node/TypeScript and Python cross-file layers
 additionally resolve explicit repository-relative imports
 into exported or public module-level wrappers and preserve the exact
 argument-to-parameter position. Node/TypeScript follows either one direct
@@ -186,14 +186,27 @@ wrapper-parameter propagators. This follows CodeQL's high-precision
 and its documented
 [C# `SqlCommand` sink model](https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-csharp/).
 
+`benchmarks/aspnet-cross-file-ssrf-manifest.json` adds a strict outbound-client
+pair. The positive sends an ASP.NET query parameter as the complete URI to
+`HttpClient.GetAsync`; its request deadline and response ceiling isolate SSRF
+from resource exhaustion without changing destination control. The negative
+uses the same controller/service topology but accepts only an exact key into a
+server-owned map of complete HTTPS URIs and disables redirects. In-memory
+`HttpMessageHandler` witnesses prove that the positive reaches a link-local
+attacker URI while the control rejects that same string before transport. This
+adopts CodeQL's high-precision distinction between attacker-controlled URL
+authority and fixed destination selection from its
+[JavaScript SSRF path query](https://codeql.github.com/codeql-query-help/javascript/js-request-forgery/),
+and preserves .NET's documented default redirect behavior from
+[HttpClientHandler.AllowAutoRedirect](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclienthandler.allowautoredirect).
+
 ## Prioritized next improvements
 
 1. **Expand typed framework security models.** Extend bounded summaries beyond
    two Node/TypeScript or Python relative-import hops; extend Java beyond one
    uniquely typed service boundary; extend ASP.NET beyond one uniquely typed
    service boundary; add framework-specific authorization models, ASP.NET
-   template models, broader
-   outbound-client and partial-URL SSRF models,
+   template models, broader outbound-client APIs and partial-URL SSRF models,
    manifest-derived activation evidence,
    and signed or hashed external model packs. Benchmark every extension against
    paired positive and negative fixtures.

@@ -33,10 +33,16 @@ rejects safe or mitigated flows. This supplements model-led discovery without
 treating lexical matches or repository-written scanner instructions as
 findings or control flow.
 
+The immutable host inventory omits conventional generated and dependency
+trees, including .NET `bin`/`obj`, Node `node_modules`, and common build,
+coverage, fixture, example, test, and vendor directories. Explicit path and
+diff scope remains authoritative; ignored generated output cannot silently
+stand in for reviewed application source.
+
 The residual pass also applies typed framework data-flow models for Node HTTP,
-Python web, Spring/servlet, and ASP.NET command-execution and raw-SQL
-boundaries, plus Node and Python server-side request forgery and server-side
-template injection. Each applicable
+Python web, Spring/servlet, and ASP.NET command-execution, raw-SQL, and
+server-side request-forgery boundaries, plus Node and Python server-side
+request forgery and server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
@@ -46,8 +52,9 @@ likewise resolves one uniquely named class, record, or struct from an ASP.NET
 controller field or static receiver, binds the exact service-call argument to
 the public, protected, or internal wrapper parameter, and preserves either an
 annotated bound parameter or an assigned `HttpRequest` field through
-`ProcessStartInfo`/`Process.Start` or the query-text argument of `SqlCommand`,
-`FromSqlRaw`, or `ExecuteSqlRaw`. For Node/TypeScript
+`ProcessStartInfo`/`Process.Start`, the query-text argument of `SqlCommand`,
+`FromSqlRaw`, or `ExecuteSqlRaw`, or a complete outbound `HttpClient` request
+URI. For Node/TypeScript
 relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
@@ -163,6 +170,15 @@ exist, the scanner stops replaying the full scan and hands the drafts to the
 deterministic workbench. The workbench must normalize, validate, and seal them
 before the result can succeed; missing drafts still start a fresh isolated
 session.
+
+Model turns occasionally leave complete flow-style object literals instead of
+strict JSON. Before workbench sealing, the host may normalize only bounded,
+regular, non-symlink draft files as data. The parser does not evaluate draft
+content, rejects aliases, duplicate keys, empty files, non-object roots, and
+ambiguous syntax, and stages every repair before replacing any draft. Existing
+strict JSON is not rewritten. A normalized draft still has to pass the same
+canonical schemas, repository evidence grounding, coverage reconciliation, and
+seal checks; normalization cannot make an invalid security result acceptable.
 
 A hard model-turn deadline or recognized transport interruption starts a new,
 isolated Copilot CLI session over the same disposable analysis snapshot and
@@ -351,6 +367,20 @@ executable plus `ArgumentList`, or fixed SQL plus a typed `SqlParameter`:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/aspnet-cross-file-framework-manifest.json `
   --results-dir C:\security-benchmarks\aspnet-cross-file-framework `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The separate ASP.NET SSRF lane passes a complete attacker-controlled URI to
+`HttpClient.GetAsync`; its negative control treats the request value only as
+an exact key into a server-owned map of complete HTTPS destinations and
+disables redirects. Dependency-free transport witnesses prove both behaviors
+without sending traffic to the real network:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/aspnet-cross-file-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\aspnet-cross-file-ssrf `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

@@ -203,7 +203,13 @@ describe("standalone Copilot runtime", () => {
           recursive: true,
         }),
         mkdir(join(repository, "examples"), { recursive: true }),
+        mkdir(join(repository, "bin", "Release", "net8.0"), {
+          recursive: true,
+        }),
         mkdir(join(repository, "node_modules", "dependency"), {
+          recursive: true,
+        }),
+        mkdir(join(repository, "obj", "Release", "net8.0"), {
           recursive: true,
         }),
         mkdir(scanDirectory, { recursive: true }),
@@ -224,6 +230,14 @@ describe("standalone Copilot runtime", () => {
         writeFile(
           join(repository, "examples", "excluded.js"),
           "throw new Error('example-only');\n",
+        ),
+        writeFile(
+          join(repository, "bin", "Release", "net8.0", "generated.cs"),
+          'Process.Start(request.Query["command"]);\n',
+        ),
+        writeFile(
+          join(repository, "obj", "Release", "net8.0", "generated.cs"),
+          'client.GetAsync(request.Query["target"]);\n',
         ),
         writeFile(
           join(repository, "src", "ignored.bin"),

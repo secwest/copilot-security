@@ -47,6 +47,46 @@ function decodeResidualRiskExcerpts(inventory: string): string[] {
 }
 
 describe("residual risk inventory", () => {
+  test("omits generated .NET bin and obj trees from residual discovery", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-dotnet-generated-"),
+    );
+    temporaryPaths.push(repository);
+    await mkdir(join(repository, "bin", "Release", "net8.0"), {
+      recursive: true,
+    });
+    await mkdir(join(repository, "obj", "Release", "net8.0"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(repository, "bin", "Release", "net8.0", "generated.cs"),
+      [
+        "using System.Diagnostics;",
+        "public class GeneratedController {",
+        "  public void Run([FromQuery] string command) { Process.Start(command); }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(repository, "obj", "Release", "net8.0", "generated.cs"),
+      [
+        "using System.Net.Http;",
+        "public class GeneratedController {",
+        "  private readonly HttpClient client = new();",
+        "  public object Fetch([FromQuery] string target) { return client.GetAsync(target); }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(repository, "Program.cs"),
+      "public static class Program { public static void Main() {} }\n",
+    );
+
+    expect(await buildRawResidualRiskInventory(repository)).toBe("");
+  });
+
   test("puts exact archive path and filesystem-write evidence in the correction prompt", async () => {
     const inventory = await buildResidualRiskInventory(
       join(benchmarkFixtures, "python-path-traversal"),

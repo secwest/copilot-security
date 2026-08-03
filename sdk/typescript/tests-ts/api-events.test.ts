@@ -5,6 +5,7 @@ type ThreadEvent = { type: string; [key: string]: unknown };
 import { afterEach, describe, expect, test } from "bun:test";
 import { runScanEvents } from "../src/api.js";
 import {
+  CompleteDraftArtifactsError,
   CopilotSecurityError,
   IncompleteScanError,
   ScanInterruptedError,
@@ -454,6 +455,58 @@ describe("one-shot scan events", () => {
     });
   });
 
+  test("recovers a thrown complete-draft signal when deterministic finalization accepts the artifacts", async () => {
+    const root = await temporaryDirectory();
+    const scanDir = join(root, "scan");
+    let recovered: Error | null = null;
+    let finalized = 0;
+    const failure = new CompleteDraftArtifactsError(
+      "complete drafts await host validation",
+    );
+    async function* throwsAfterDrafts(): AsyncGenerator<ThreadEvent> {
+      yield { type: "thread.started", thread_id: "thread-thrown-drafts" };
+      throw failure;
+    }
+
+    const result = await runScanEvents({
+      thread: {
+        id: null,
+        async runStreamed() {
+          return { events: throwsAfterDrafts() };
+        },
+      },
+      events: throwsAfterDrafts(),
+      signal: new AbortController().signal,
+      scanDir,
+      pluginRoot: PLUGIN_ROOT,
+      expectation: {
+        repository: "/repository",
+        repositoryRevision: "deadbeef",
+        target: { kind: "repository", paths: [] },
+        mode: "standard",
+        pluginVersion: "0.1.0",
+      },
+      recoverIncompleteWithFinalize: true,
+      onFinalize: async (observedUsage) => {
+        finalized += 1;
+        expect(observedUsage).toBeNull();
+        await copyCompletedScan(root);
+        return observedUsage;
+      },
+      onRecovered: (observedFailure) => {
+        recovered = observedFailure;
+      },
+    });
+
+    expect(finalized).toBe(1);
+    expect(recovered as Error | null).toBe(failure);
+    expect(result.threadId).toBe("thread-thrown-drafts");
+    expect(result.turnResult).toMatchObject({
+      status: "completed",
+      usage: null,
+    });
+  });
+
   test("preserves the terminal stream error when deterministic recovery rejects incomplete artifacts", async () => {
     const scanDir = join(await temporaryDirectory(), "partial-scan");
     await mkdir(scanDir, { mode: 0o700 });
@@ -492,6 +545,47 @@ describe("one-shot scan events", () => {
     ).rejects.toMatchObject({
       name: CopilotSecurityError.name,
       message: "model stream exhausted its retries",
+    });
+  });
+
+  test("reports deterministic rejection of a thrown complete-draft signal", async () => {
+    const root = await temporaryDirectory();
+    const scanDir = join(root, "scan");
+    async function* throwsAfterDrafts(): AsyncGenerator<ThreadEvent> {
+      yield { type: "thread.started", thread_id: "thread-rejected-drafts" };
+      throw new CompleteDraftArtifactsError(
+        "complete drafts await host validation",
+      );
+    }
+
+    await expect(
+      runScanEvents({
+        thread: {
+          id: null,
+          async runStreamed() {
+            return { events: throwsAfterDrafts() };
+          },
+        },
+        events: throwsAfterDrafts(),
+        signal: new AbortController().signal,
+        scanDir,
+        pluginRoot: PLUGIN_ROOT,
+        expectation: {
+          repository: "/repository",
+          repositoryRevision: "deadbeef",
+          target: { kind: "repository", paths: [] },
+          mode: "standard",
+          pluginVersion: "0.1.0",
+        },
+        recoverIncompleteWithFinalize: true,
+        onFinalize: async () => {
+          throw new Error("malformed manifest");
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: CompleteDraftArtifactsError.name,
+      message:
+        "Copilot produced all scan drafts, but deterministic host validation rejected them.",
     });
   });
 

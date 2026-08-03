@@ -43,6 +43,7 @@ export class ModelTransportInterruptedError extends IncompleteScanError {
     super("Copilot model transport ended before the scanner turn completed.");
   }
 }
+export class CompleteDraftArtifactsError extends IncompleteScanError {}
 export class ScanClosureIncompleteError extends IncompleteScanError {
   public constructor(
     public readonly findingQualityGapCount: number,
