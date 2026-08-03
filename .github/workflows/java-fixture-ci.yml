@@ -39,8 +39,12 @@ jobs:
             benchmarks/fixtures/java-multi-hop-safe-fetch/pom.xml
             benchmarks/fixtures/java-webclient-multi-hop-ssrf/pom.xml
             benchmarks/fixtures/java-webclient-multi-hop-safe-fetch/pom.xml
+            benchmarks/fixtures/java-okhttp-multi-hop-ssrf/pom.xml
+            benchmarks/fixtures/java-okhttp-multi-hop-safe-fetch/pom.xml
             benchmarks/witnesses/java-webclient-ssrf/pom.xml
             benchmarks/witnesses/java-webclient-safe-fetch/pom.xml
+            benchmarks/witnesses/java-okhttp-ssrf/pom.xml
+            benchmarks/witnesses/java-okhttp-safe-fetch/pom.xml
 
       - name: Compile Spring benchmark fixtures
         shell: bash
@@ -54,6 +58,8 @@ jobs:
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-safe-fetch/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-webclient-multi-hop-ssrf/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-webclient-multi-hop-safe-fetch/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-okhttp-multi-hop-ssrf/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-okhttp-multi-hop-safe-fetch/pom.xml verify
 
       - name: Prove vulnerable and safe path behavior
         shell: bash
@@ -81,3 +87,10 @@ jobs:
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress --file benchmarks/witnesses/java-webclient-ssrf/pom.xml compile exec:java -Dexec.mainClass=example.VulnerableWebClientWitness
           mvn --batch-mode --no-transfer-progress --file benchmarks/witnesses/java-webclient-safe-fetch/pom.xml compile exec:java -Dexec.mainClass=example.SafeWebClientWitness
+
+      - name: Prove vulnerable and safe OkHttp outbound-request behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress --file benchmarks/witnesses/java-okhttp-ssrf/pom.xml compile exec:java -Dexec.mainClass=example.VulnerableOkHttpWitness
+          mvn --batch-mode --no-transfer-progress --file benchmarks/witnesses/java-okhttp-safe-fetch/pom.xml compile exec:java -Dexec.mainClass=example.SafeOkHttpWitness

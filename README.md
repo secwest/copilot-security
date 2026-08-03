@@ -411,6 +411,22 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
+The OkHttp lane requires more than a suspicious builder call: the annotated
+value must reach `Request.Builder.url`, the resulting typed `Request` must be
+passed to a typed `OkHttpClient.newCall`, and that call must actually be
+executed or enqueued. Inert builders, prepared-but-unexecuted calls, local
+lookalike types, and component-only `HttpUrl.Builder` operations are negative
+controls. Its safe pair selects one fixed complete URL by exact server-owned
+key and disables both HTTP and HTTPS redirect following:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/java-okhttp-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\java-okhttp-ssrf `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
 The ASP.NET lane pairs constructor-injected controller/service flows for
 command and SQL injection with the same topologies using a fixed shell-free
 executable plus `ArgumentList`, or fixed SQL plus a typed `SqlParameter`:

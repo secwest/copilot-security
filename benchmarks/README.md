@@ -326,6 +326,41 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The Java OkHttp lane follows the same three-file Spring topology into
+`Request.Builder.url`, but emits a host hypothesis only when the exact request
+is passed to a typed `OkHttpClient.newCall` and then `execute` or `enqueue`.
+This execution-aware closure rejects unused request construction, `newCall`
+without dispatch, unrelated URL builders, and local `Request` or
+`OkHttpClient` lookalikes. The safe fixture treats input only as an exact key
+into fixed complete URLs and configures both `followRedirects(false)` and
+`followSslRedirects(false)`.
+
+The executable witnesses use OkHttp 5.3.0 against loopback-only HTTP servers:
+
+```powershell
+mvn --file benchmarks\witnesses\java-okhttp-ssrf\pom.xml `
+  compile exec:java -Dexec.mainClass=example.VulnerableOkHttpWitness
+
+mvn --file benchmarks\witnesses\java-okhttp-safe-fetch\pom.xml `
+  compile exec:java -Dexec.mainClass=example.SafeOkHttpWitness
+```
+
+Run the strict live pair with:
+
+```powershell
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/java-okhttp-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-java-okhttp-ssrf `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 The ASP.NET cross-file lane applies the same strict gates to constructor-
 injected controller/service flows. Its command positive reaches `cmd.exe /c`,
 while its control uses a fixed executable, disables shell execution, and adds

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "java-okhttp-multi-hop-ssrf",
+      "description": "A Spring request parameter crosses two typed Java services into Request.Builder.url and the resulting request is executed by a typed OkHttpClient.",
+      "fixture": "fixtures/java-okhttp-multi-hop-ssrf",
+      "findingsPaths": ["java-okhttp-multi-hop-ssrf/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "spring-java-okhttp-multi-hop-ssrf",
+          "cwe": ["CWE-918"],
+          "locations": [
+            {
+              "path": "src/main/java/example/PreviewTransport.java",
+              "startLine": 17,
+              "endLine": 17,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "java-okhttp-multi-hop-safe-fetch",
+      "description": "The request value is only an exact key into fixed complete URLs and the executing OkHttp client rejects HTTP and HTTPS redirects.",
+      "fixture": "fixtures/java-okhttp-multi-hop-safe-fetch",
+      "findingsPaths": ["java-okhttp-multi-hop-safe-fetch/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

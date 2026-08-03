@@ -939,7 +939,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     language: "java-kotlin",
     extensions: JAVA_EXTENSIONS,
     activation: [
-      /\b(?:java\.net\.http|HttpClient|HttpRequest|RestTemplate|WebClient)\b/iu,
+      /\b(?:java\.net\.http|okhttp3|HttpClient|HttpRequest|OkHttpClient|Request\.Builder|RestTemplate|WebClient)\b/iu,
     ],
     sources: [
       {
@@ -956,7 +956,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
       {
         kind: "outbound-http-url",
         expression:
-          /\b[A-Za-z_$][\w$]*\s*\.\s*(?:send|sendAsync|uri)\s*\(|\.\s*uri\s*\(|\b(?:java\.net\.http\.)?HttpClient\s*\.\s*(?:newHttpClient|newBuilder)\s*\(\)[^;\r\n]*?\.\s*(?:send|sendAsync)\s*\(|\b[A-Za-z_$][\w$]*\s*\.\s*(?:delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(|\bnew\s+(?:org\.springframework\.web\.client\.)?RestTemplate\s*\([^)]*\)\s*\.\s*(?:delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(/iu,
+          /\b[A-Za-z_$][\w$]*\s*\.\s*(?:send|sendAsync|uri|url)\s*\(|\.\s*(?:uri|url)\s*\(|\b(?:java\.net\.http\.)?HttpClient\s*\.\s*(?:newHttpClient|newBuilder)\s*\(\)[^;\r\n]*?\.\s*(?:send|sendAsync)\s*\(|\b[A-Za-z_$][\w$]*\s*\.\s*(?:delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(|\bnew\s+(?:org\.springframework\.web\.client\.)?RestTemplate\s*\([^)]*\)\s*\.\s*(?:delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(/iu,
         cweIds: ["CWE-918"],
       },
     ],
@@ -984,12 +984,12 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
       {
         kind: "redirects-disabled",
         expression:
-          /\b(?:HttpClient\.)?Redirect\.NEVER\b|\.followRedirect\s*\(\s*false\s*\)/iu,
+          /\b(?:HttpClient\.)?Redirect\.NEVER\b|\.followRedirects?\s*\(\s*false\s*\)|\.followSslRedirects\s*\(\s*false\s*\)/iu,
       },
       {
         kind: "network-address-validation-or-pinning",
         expression:
-          /\b(?:InetAddress\.getAllByName|isLoopbackAddress|isSiteLocalAddress|isLinkLocalAddress|isPublicAddress|lookupAndPin|pinnedAddress|connectAddress)\b/iu,
+          /\b(?:InetAddress\.getAllByName|Dns\.SYSTEM|isLoopbackAddress|isSiteLocalAddress|isLinkLocalAddress|isPublicAddress|lookupAndPin|pinnedAddress|connectAddress)\b|\.dns\s*\(/iu,
       },
     ],
   },
@@ -3904,7 +3904,7 @@ function javaOutboundCallExpression(
   const original = callLines.join("\n");
   const structural = cFamilyStructuralLines(callLines).join("\n");
   const call =
-    /\.\s*(?:send|sendAsync|uri|delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(/u.exec(
+    /\.\s*(?:send|sendAsync|uri|url|delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(/u.exec(
       structural,
     );
   if (call === null) return javaCallExpression(lines, startLine, methodEndLine);
@@ -5047,10 +5047,220 @@ function javaWebClientUriSinkHasTypedReceiver(
   );
 }
 
+function javaOkHttpUrlSinkHasTypedDispatch(
+  lines: readonly string[],
+  sinkLine: number,
+): boolean {
+  const sinkExpression = javaOutboundCallExpression(
+    lines,
+    sinkLine,
+    lines.length,
+  );
+  if (!/^\.\s*url\s*\(/u.test(sinkExpression)) return false;
+
+  const method = exportedJavaMethods(lines).find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  if (method === undefined) return false;
+
+  const structuralLines = cFamilyStructuralLines(lines);
+  const structuralText = structuralLines.join("\n");
+  const methodLines = structuralLines.slice(
+    method.startLine - 1,
+    method.endLine,
+  );
+  const methodText = methodLines.join("\n");
+  const sinkLineText = structuralLines[sinkLine - 1] ?? "";
+  const sinkColumn = sinkLineText.search(/\.\s*url\s*\(/u);
+  if (sinkColumn < 0) return false;
+  const sinkOffset =
+    methodLines
+      .slice(0, sinkLine - method.startLine)
+      .reduce((length, line) => length + line.length + 1, 0) + sinkColumn;
+
+  const requestImported = /^\s*import\s+okhttp3\.(?:Request|\*)\s*;/mu.test(
+    structuralText,
+  );
+  const clientImported = /^\s*import\s+okhttp3\.(?:OkHttpClient|\*)\s*;/mu.test(
+    structuralText,
+  );
+  const callImported = /^\s*import\s+okhttp3\.(?:Call|\*)\s*;/mu.test(
+    structuralText,
+  );
+  const shadowsRequest = /\b(?:class|interface|record)\s+Request\b/u.test(
+    structuralText,
+  );
+  const shadowsClient = /\b(?:class|interface|record)\s+OkHttpClient\b/u.test(
+    structuralText,
+  );
+  const shadowsCall = /\b(?:class|interface|record)\s+Call\b/u.test(
+    structuralText,
+  );
+  const simpleRequestIsTyped = requestImported && !shadowsRequest;
+  const simpleClientIsTyped = clientImported && !shadowsClient;
+  const simpleCallIsTyped = callImported && !shadowsCall;
+  const requestType = simpleRequestIsTyped
+    ? String.raw`(?:okhttp3\s*\.\s*)?Request`
+    : String.raw`okhttp3\s*\.\s*Request`;
+  const requestBuilderConstruction = String.raw`new\s+${requestType}\s*\.\s*Builder\s*\(\s*\)`;
+  const callType = simpleCallIsTyped
+    ? String.raw`(?:(?:okhttp3\s*\.\s*)?Call|var)`
+    : String.raw`(?:okhttp3\s*\.\s*Call|var)`;
+
+  const clientReceiverIsTyped = (receiverName: string): boolean => {
+    const receiver = escapeRegularExpression(receiverName);
+    if (
+      new RegExp(
+        String.raw`\bokhttp3\s*\.\s*OkHttpClient\s+${receiver}\b`,
+        "u",
+      ).test(structuralText)
+    ) {
+      return true;
+    }
+    if (!simpleClientIsTyped) return false;
+    return (
+      new RegExp(String.raw`\bOkHttpClient\s+${receiver}\b`, "u").test(
+        structuralText,
+      ) ||
+      new RegExp(
+        String.raw`\bvar\s+${receiver}\s*=\s*new\s+(?:okhttp3\s*\.\s*)?OkHttpClient(?:\s*\.\s*Builder)?\s*\(`,
+        "u",
+      ).test(structuralText)
+    );
+  };
+
+  const dispatchedByTypedClient = (
+    textAfterConstruction: string,
+    requestName: string,
+  ): boolean => {
+    const request = escapeRegularExpression(requestName);
+    const directConstruction = new RegExp(
+      String.raw`\bnew\s+okhttp3\s*\.\s*OkHttpClient(?:\s*\.\s*Builder\s*\(\s*\)[^;{}]{0,400}?\.\s*build\s*\(\s*\)|\s*\(\s*\))\s*\.\s*newCall\s*\(\s*${request}\s*\)\s*\.\s*(?:execute|enqueue)\s*\(`,
+      "u",
+    );
+    if (directConstruction.test(textAfterConstruction)) return true;
+    if (
+      simpleClientIsTyped &&
+      new RegExp(
+        String.raw`\bnew\s+OkHttpClient(?:\s*\.\s*Builder\s*\(\s*\)[^;{}]{0,400}?\.\s*build\s*\(\s*\)|\s*\(\s*\))\s*\.\s*newCall\s*\(\s*${request}\s*\)\s*\.\s*(?:execute|enqueue)\s*\(`,
+        "u",
+      ).test(textAfterConstruction)
+    ) {
+      return true;
+    }
+    const dispatch = new RegExp(
+      String.raw`\b([A-Za-z_$][\w$]*)\s*\.\s*newCall\s*\(\s*${request}\s*\)\s*\.\s*(?:execute|enqueue)\s*\(`,
+      "gu",
+    );
+    if (
+      [...textAfterConstruction.matchAll(dispatch)].some(
+        (match) => match[1] !== undefined && clientReceiverIsTyped(match[1]),
+      )
+    ) {
+      return true;
+    }
+
+    const preparedDispatch = new RegExp(
+      String.raw`\b${callType}\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*\.\s*newCall\s*\(\s*${request}\s*\)\s*;([^{}]{0,800}?)\b\1\s*\.\s*(?:execute|enqueue)\s*\(`,
+      "gu",
+    );
+    return [...textAfterConstruction.matchAll(preparedDispatch)].some(
+      (match) => {
+        const callName = match[1];
+        const clientName = match[2];
+        const between = match[3] ?? "";
+        if (callName === undefined || clientName === undefined) return false;
+        const callReassigned = new RegExp(
+          String.raw`\b${escapeRegularExpression(callName)}\s*=(?!=)`,
+          "u",
+        ).test(between);
+        return !callReassigned && clientReceiverIsTyped(clientName);
+      },
+    );
+  };
+
+  const assignedRequest = new RegExp(
+    String.raw`\b(?:${requestType}|var)\s+([A-Za-z_$][\w$]*)\s*=\s*${requestBuilderConstruction}[^;{}]{0,1600}?\.\s*url\s*\([^;{}]*\)[^;{}]{0,800}?\.\s*build\s*\(\s*\)`,
+    "gu",
+  );
+  for (const match of methodText.matchAll(assignedRequest)) {
+    if (match.index === undefined || match[1] === undefined) continue;
+    const end = match.index + match[0].length;
+    if (sinkOffset < match.index || sinkOffset >= end) continue;
+    if (dispatchedByTypedClient(methodText.slice(end), match[1])) return true;
+  }
+
+  const builderReceiver = new RegExp(
+    String.raw`\b([A-Za-z_$][\w$]*)\s*\.\s*url\s*\(`,
+    "u",
+  ).exec(sinkLineText)?.[1];
+  if (builderReceiver !== undefined) {
+    const builder = escapeRegularExpression(builderReceiver);
+    const beforeSink = methodText.slice(0, sinkOffset);
+    const afterSink = methodText.slice(sinkOffset);
+    const typedBuilder = new RegExp(
+      String.raw`\b(?:${requestType}\s*\.\s*Builder|var)\s+${builder}\s*=\s*${requestBuilderConstruction}`,
+      "u",
+    );
+    const builtRequest = new RegExp(
+      String.raw`\b(?:${requestType}|var)\s+([A-Za-z_$][\w$]*)\s*=\s*${builder}\s*\.\s*build\s*\(\s*\)`,
+      "u",
+    ).exec(afterSink);
+    if (
+      typedBuilder.test(beforeSink) &&
+      builtRequest?.[1] !== undefined &&
+      dispatchedByTypedClient(
+        afterSink.slice((builtRequest.index ?? 0) + builtRequest[0].length),
+        builtRequest[1],
+      )
+    ) {
+      return true;
+    }
+  }
+
+  const inlineStart = Math.max(0, sinkOffset - 1000);
+  const inlineEnd = Math.min(methodText.length, sinkOffset + 1200);
+  const inlineWindow = methodText.slice(inlineStart, inlineEnd);
+  const inlineSinkOffset = sinkOffset - inlineStart;
+  const inlineRequest = new RegExp(
+    String.raw`\b([A-Za-z_$][\w$]*)\s*\.\s*newCall\s*\(\s*${requestBuilderConstruction}[^;{}]{0,800}?\.\s*url\s*\([^;{}]*\)[^;{}]{0,400}?\.\s*build\s*\(\s*\)\s*\)\s*\.\s*(?:execute|enqueue)\s*\(`,
+    "gu",
+  );
+  if (
+    [...inlineWindow.matchAll(inlineRequest)].some((match) => {
+      if (match.index === undefined || match[1] === undefined) return false;
+      const matchEnd = match.index + match[0].length;
+      return (
+        inlineSinkOffset >= match.index &&
+        inlineSinkOffset < matchEnd &&
+        clientReceiverIsTyped(match[1])
+      );
+    })
+  ) {
+    return true;
+  }
+
+  const directInlineRequest = new RegExp(
+    String.raw`\bnew\s+(?:okhttp3\s*\.\s*)?OkHttpClient(?:\s*\.\s*Builder\s*\(\s*\)[^;{}]{0,400}?\.\s*build\s*\(\s*\)|\s*\(\s*\))\s*\.\s*newCall\s*\(\s*${requestBuilderConstruction}[^;{}]{0,800}?\.\s*url\s*\([^;{}]*\)[^;{}]{0,400}?\.\s*build\s*\(\s*\)\s*\)\s*\.\s*(?:execute|enqueue)\s*\(`,
+    "gu",
+  );
+  return [...inlineWindow.matchAll(directInlineRequest)].some((match) => {
+    if (match.index === undefined) return false;
+    const matchEnd = match.index + match[0].length;
+    return (
+      inlineSinkOffset >= match.index &&
+      inlineSinkOffset < matchEnd &&
+      (/\bnew\s+okhttp3\s*\./u.test(match[0]) || simpleClientIsTyped)
+    );
+  });
+}
+
 function javaOutboundHttpSinkHasTypedReceiver(
   lines: readonly string[],
   sinkLine: number,
 ): boolean {
+  if (javaOkHttpUrlSinkHasTypedDispatch(lines, sinkLine)) return true;
   if (javaWebClientUriSinkHasTypedReceiver(lines, sinkLine)) return true;
   const sinkExpression = cFamilyStructuralLines(
     lines.slice(sinkLine - 1, Math.min(lines.length, sinkLine + 12)),
