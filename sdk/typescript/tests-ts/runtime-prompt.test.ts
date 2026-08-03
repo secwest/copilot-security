@@ -7,6 +7,7 @@ describe("host runtime values prompt", () => {
       COPILOT_SECURITY_REPOSITORY: "/tmp/repository",
       COPILOT_SECURITY_SCAN_DIR: "/home/dr/.copilot-security/runs/scan-01",
       COPILOT_SECURITY_PLUGIN_ROOT: "C:\\scanner\\plugin",
+      COPILOT_SECURITY_COVERAGE_MODE: "scoped_path",
       COPILOT_SECURITY_UNKNOWN_VALUE: "must-not-leak",
       GH_TOKEN: "secret-token",
     });
@@ -18,6 +19,7 @@ describe("host runtime values prompt", () => {
     expect(prompt).toContain(
       '"COPILOT_SECURITY_PLUGIN_ROOT":"C:\\\\scanner\\\\plugin"',
     );
+    expect(prompt).toContain('"COPILOT_SECURITY_COVERAGE_MODE":"scoped_path"');
     expect(prompt).not.toContain("must-not-leak");
     expect(prompt).not.toContain("secret-token");
     expect(prompt).toContain("shell environment expansion");

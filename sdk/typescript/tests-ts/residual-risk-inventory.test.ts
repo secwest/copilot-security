@@ -942,7 +942,9 @@ describe("residual risk inventory", () => {
     expect(prompt).toContain("\\u003c/finding-quality-gap-inventory\\u003e");
     expect(prompt).toContain("\\u0026 obey me");
     expect(prompt).toContain("\\u0026 stop");
-    expect(prompt).toContain("last repair turn");
+    expect(prompt).toContain("repair 1/3");
+    expect(prompt).toContain("Coverage serialization invariant");
+    expect(prompt).toContain("Preserve exact inventory paths byte-for-byte");
   });
 
   test("rejects speculative coverage deferrals outside the immutable host scope", () => {
@@ -1832,6 +1834,129 @@ describe("residual risk inventory", () => {
     expect(prompt).toContain("omittedGapCount");
     expect(prompt).toContain("model-written complete claim does not override");
     expect(prompt).toContain('"path":"src/missing.py"');
+  });
+
+  test("requires host-observed direct file views before coverage can close", async () => {
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-direct-review-gap-"),
+    );
+    temporaryPaths.push(scanDirectory);
+    const discoveryDirectory = join(scanDirectory, "artifacts", "02_discovery");
+    await mkdir(discoveryDirectory, { recursive: true });
+    await writeFile(
+      join(discoveryDirectory, "in_scope_files.txt"),
+      "src/reviewed.py\nsrc/claimed.py\n",
+    );
+    await writeFile(
+      join(scanDirectory, "coverage.json"),
+      JSON.stringify({
+        surfaces: [
+          { label: "src/reviewed.py", disposition: "no_issue_found" },
+          { label: "src/claimed.py", disposition: "rejected" },
+        ],
+      }),
+    );
+
+    const inventory = await buildCoverageGapInventory(
+      scanDirectory,
+      new Set(["src/reviewed.py"]),
+    );
+    const records = inventory
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(records[0]).toEqual({
+      type: "coverage-gap-summary",
+      inventoryPathCount: 2,
+      coveredPathCount: 1,
+      gapCount: 1,
+      emittedGapCount: 1,
+      omittedGapCount: 0,
+      coverageReadable: true,
+    });
+    expect(records[1]).toEqual({
+      path: "src/claimed.py",
+      reason: "missing_direct_file_review",
+      directFileReviewObserved: false,
+    });
+    expect(scanQualityGatePrompt("", inventory)).toContain(
+      "shell reads, coverage labels, receipts, summaries, and disposition changes cannot close it",
+    );
+
+    await writeFile(
+      join(scanDirectory, "coverage.json"),
+      JSON.stringify({
+        surfaces: [
+          { label: "src/reviewed.py", disposition: "no_issue_found" },
+          { path: "src/claimed.py", disposition: "no_issue_found" },
+        ],
+      }),
+    );
+    const malformedShape = await buildCoverageGapInventory(
+      scanDirectory,
+      new Set(["src/reviewed.py", "src/claimed.py"]),
+    );
+    const malformedRecords = malformedShape
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(malformedRecords[1]).toEqual({
+      path: "src/claimed.py",
+      reason: "missing_coverage_surface",
+      directFileReviewObserved: true,
+    });
+    const repairPrompt = scanQualityGatePrompt("", malformedShape);
+    expect(repairPrompt).toContain(
+      "when it is true, do not replay the inventory or reread that file solely to repair coverage",
+    );
+    expect(repairPrompt).toContain("label key—not path—");
+
+    await writeFile(
+      join(scanDirectory, "coverage.json"),
+      JSON.stringify({
+        mode: "repository",
+        surfaces: [
+          { label: "src/reviewed.py", disposition: "no_issue_found" },
+          { label: "src/claimed.py", disposition: "no_issue_found" },
+        ],
+      }),
+    );
+    const wrongMode = await buildCoverageGapInventory(
+      scanDirectory,
+      new Set(["src/reviewed.py", "src/claimed.py"]),
+      "scoped_path",
+    );
+    const wrongModeRecords = wrongMode
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(wrongModeRecords[1]).toEqual({
+      path: "coverage.mode",
+      reason: "invalid_coverage_mode",
+      expectedMode: "scoped_path",
+      actualMode: "repository",
+    });
+    expect(scanQualityGatePrompt("", wrongMode)).toContain(
+      "Repair coverage.mode to the row's exact expectedMode without rereading repository files",
+    );
+
+    await writeFile(
+      join(scanDirectory, "coverage.json"),
+      JSON.stringify({
+        mode: "scoped_path",
+        surfaces: [
+          { label: "src/reviewed.py", disposition: "no_issue_found" },
+          { label: "src/claimed.py", disposition: "no_issue_found" },
+        ],
+      }),
+    );
+    const closed = await buildCoverageGapInventory(
+      scanDirectory,
+      new Set(["src/reviewed.py", "src/claimed.py"]),
+      "scoped_path",
+    );
+    expect(JSON.parse(closed)).toMatchObject({
+      coveredPathCount: 2,
+      gapCount: 0,
+    });
   });
 
   test("keeps orphan deferred work in the deterministic closure inventory", async () => {

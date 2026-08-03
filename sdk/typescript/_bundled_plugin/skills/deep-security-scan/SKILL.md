@@ -64,6 +64,12 @@ PowerShell only for scan-directory draft artifacts.
    shell/native tools to enumerate or read repository files, and never run
    `cd`, `Set-Location`, or `Push-Location`; the native sandbox preview may
    give a child shell an unusable working directory.
+   View each exact inventory path once during this initial inventory pass and
+   keep that progress for the whole session. Do not replay the full inventory
+   after a tool call, context compaction, discovery pass, ledger write, or
+   draft edit. Reopen only a narrow file or line range tied to a candidate,
+   failed view, or specific proof gap. Host telemetry—not repeated reads—proves
+   direct file review.
 2. Read applicable repository security guidance and build a repository-specific
    threat model. Cover entry points, trust boundaries, identity and
    authorization, tenant isolation, sensitive assets, privileged operations,
@@ -686,6 +692,8 @@ PowerShell only for scan-directory draft artifacts.
    pass count, pass failures or fallbacks, per-file closure, candidate
    dispositions, residual-sweep outcomes, negative controls, unrun checks, and
    material limitations.
+   Every per-file surface uses `label` for the exact repository-relative path;
+   never substitute a `path` key for `label`.
 10. Do not seal or finalize the draft files. The host validates the contract,
     reconciles every immutable inventory path against exact-path coverage
     surfaces, derives stable identities, generates report and SARIF

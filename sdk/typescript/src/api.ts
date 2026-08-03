@@ -56,7 +56,7 @@ import {
   writePreparedSarifSeeds,
   type PreparedSarifSeeds,
 } from "./sarif-seeds.js";
-import type { SeverityLevel } from "./models.js";
+import type { CoverageDocument, SeverityLevel } from "./models.js";
 import {
   workerStatusFromEvent,
   type ScanWorkerStatus,
@@ -940,6 +940,7 @@ export class CopilotSecurity {
           ? {}
           : { COPILOT_SECURITY_RG_PATH: trustedRipgrep.executable }),
         COPILOT_SECURITY_TARGET_KIND: targetKind,
+        COPILOT_SECURITY_COVERAGE_MODE: coverageModeForScan(normalized, mode),
         ...(targetRevision === null
           ? {}
           : { COPILOT_SECURITY_TARGET_REVISION: targetRevision }),
@@ -1816,6 +1817,7 @@ async function scanPrompt(
   hasSarifSeeds = false,
 ): Promise<string> {
   const skillName = skillNameFor(target, mode);
+  const coverageMode = coverageModeForScan(target, mode);
   const skillPath = join(pluginRoot, "skills", skillName, "SKILL.md");
   const metadata = await lstat(skillPath).catch(() => null);
   if (metadata === null || !metadata.isFile() || metadata.isSymbolicLink()) {
@@ -1846,6 +1848,7 @@ async function scanPrompt(
     'Use exactly "$COPILOT_SECURITY_TARGET_ID" as scan.target.targetId; do not derive a different target ID.',
     'Use exactly "$COPILOT_SECURITY_TARGET_DISPLAY_NAME" as scan.target.displayName; do not infer a display name from the Git remote.',
     'Use exactly "$COPILOT_SECURITY_TARGET_KIND" as scan.target.kind; do not infer the target kind from the checkout.',
+    `Use exactly "${coverageMode}" as coverage.mode. This host-selected value is also supplied as "$COPILOT_SECURITY_COVERAGE_MODE"; do not infer or substitute repository mode for a scoped or diff target.`,
     'When "$COPILOT_SECURITY_TARGET_REVISION" is set, use its exact value as scan.target.revision.',
     'When "$COPILOT_SECURITY_TARGET_SNAPSHOT_DIGEST" is set, use its exact value as scan.target.snapshotDigest. For git_revision, omit scan.target.snapshotDigest.',
     'Use exactly "copilot-security-plugin" as scan.producer.name.',
@@ -1888,6 +1891,16 @@ function skillNameFor(target: NormalizedTarget, mode: ScanMode): string {
   if (target.kind === "refs" || target.kind === "working_tree")
     return "security-diff-scan";
   return mode === "deep" ? "deep-security-scan" : "security-scan";
+}
+
+function coverageModeForScan(
+  target: NormalizedTarget,
+  mode: ScanMode,
+): CoverageDocument["mode"] {
+  if (target.kind === "paths") return "scoped_path";
+  if (target.kind === "refs") return "branch_diff";
+  if (target.kind === "working_tree") return "working_tree";
+  return mode === "deep" ? "deep_repository" : "repository";
 }
 
 function targetInstruction(target: NormalizedTarget): string {

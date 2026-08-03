@@ -1401,11 +1401,16 @@ interface CoverageGapRecord {
   path: string;
   reason:
     | "missing_coverage_surface"
+    | "missing_direct_file_review"
+    | "invalid_coverage_mode"
     | "needs_follow_up"
     | "deferred_coverage_item"
     | "invalid_coverage_disposition"
     | "conflicting_coverage_surfaces";
   dispositions?: string[];
+  directFileReviewObserved?: boolean;
+  expectedMode?: string;
+  actualMode?: unknown;
 }
 
 type FindingQualityGapReason =
@@ -5715,6 +5720,8 @@ function nearestModeledSource(
 
 export async function buildCoverageGapInventory(
   scanDirectory: string | undefined,
+  reviewedInventoryPaths?: ReadonlySet<string>,
+  expectedCoverageMode?: string,
 ): Promise<string> {
   if (scanDirectory === undefined) return "";
   const canonicalScanDirectory = await realpath(scanDirectory).catch(
@@ -5752,6 +5759,16 @@ export async function buildCoverageGapInventory(
   let coveredPathCount = 0;
   const gaps: CoverageGapRecord[] = [];
   for (const path of inventoryPaths) {
+    const addGap = (gap: CoverageGapRecord): void => {
+      gaps.push(
+        reviewedInventoryPaths === undefined
+          ? gap
+          : {
+              ...gap,
+              directFileReviewObserved: reviewedInventoryPaths.has(path),
+            },
+      );
+    };
     const surfaces = surfacesByPath.get(path) ?? [];
     const dispositions = [
       ...new Set(
@@ -5769,9 +5786,9 @@ export async function buildCoverageGapInventory(
         CLOSED_COVERAGE_DISPOSITIONS.has(surface.disposition),
     );
     if (surfaces.length === 0) {
-      gaps.push({ path, reason: "missing_coverage_surface" });
+      addGap({ path, reason: "missing_coverage_surface" });
     } else if (closed.length === 0) {
-      gaps.push({
+      addGap({
         path,
         reason:
           dispositions.length > 0 &&
@@ -5781,11 +5798,16 @@ export async function buildCoverageGapInventory(
         dispositions,
       });
     } else if (surfaces.length > 1) {
-      gaps.push({
+      addGap({
         path,
         reason: "conflicting_coverage_surfaces",
         dispositions,
       });
+    } else if (
+      reviewedInventoryPaths !== undefined &&
+      !reviewedInventoryPaths.has(path)
+    ) {
+      addGap({ path, reason: "missing_direct_file_review" });
     } else {
       coveredPathCount += 1;
     }
@@ -5794,6 +5816,17 @@ export async function buildCoverageGapInventory(
     gaps.push({
       path: `coverage.deferred[${index}]`,
       reason: "deferred_coverage_item",
+    });
+  }
+  if (
+    expectedCoverageMode !== undefined &&
+    coverage.mode !== expectedCoverageMode
+  ) {
+    gaps.push({
+      path: "coverage.mode",
+      reason: "invalid_coverage_mode",
+      expectedMode: expectedCoverageMode,
+      actualMode: coverage.mode,
     });
   }
 
@@ -6581,9 +6614,10 @@ function parseCoverageSurfaces(coverageBytes: Buffer | null): {
   readable: boolean;
   surfaces: CoverageSurfaceDraft[];
   deferredCount: number;
+  mode: unknown;
 } {
   if (coverageBytes === null) {
-    return { readable: false, surfaces: [], deferredCount: 0 };
+    return { readable: false, surfaces: [], deferredCount: 0, mode: undefined };
   }
   try {
     const coverage = JSON.parse(
@@ -6594,7 +6628,12 @@ function parseCoverageSurfaces(coverageBytes: Buffer | null): {
       coverage === null ||
       !Array.isArray((coverage as { surfaces?: unknown }).surfaces)
     ) {
-      return { readable: false, surfaces: [], deferredCount: 0 };
+      return {
+        readable: false,
+        surfaces: [],
+        deferredCount: 0,
+        mode: undefined,
+      };
     }
     const deferred = (coverage as { deferred?: unknown }).deferred;
     return {
@@ -6604,9 +6643,10 @@ function parseCoverageSurfaces(coverageBytes: Buffer | null): {
           typeof surface === "object" && surface !== null,
       ),
       deferredCount: Array.isArray(deferred) ? deferred.length : 0,
+      mode: (coverage as { mode?: unknown }).mode,
     };
   } catch {
-    return { readable: false, surfaces: [], deferredCount: 0 };
+    return { readable: false, surfaces: [], deferredCount: 0, mode: undefined };
   }
 }
 
@@ -6616,10 +6656,12 @@ function compareCoverageGaps(
 ): number {
   const priority = {
     missing_coverage_surface: 0,
-    needs_follow_up: 1,
-    deferred_coverage_item: 2,
-    invalid_coverage_disposition: 3,
-    conflicting_coverage_surfaces: 4,
+    missing_direct_file_review: 1,
+    invalid_coverage_mode: 2,
+    needs_follow_up: 3,
+    deferred_coverage_item: 4,
+    invalid_coverage_disposition: 5,
+    conflicting_coverage_surfaces: 6,
   } as const;
   return (
     priority[left.reason] - priority[right.reason] ||

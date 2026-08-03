@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import {
   addCopilotUsage,
   closureGapCounts,
+  CopilotFileReviewTracker,
   copilotModelTurnTimeoutMilliseconds,
   copilotModelErrorRecovery,
   copilotShellSandboxViolation,
@@ -67,6 +68,46 @@ afterEach(async () => {
 });
 
 describe("Copilot port", () => {
+  test("records only successful built-in views beneath the staged repository", () => {
+    const repository = join(tmpdir(), "copilot-review-tracker");
+    const tracker = new CopilotFileReviewTracker(repository);
+    const start = (
+      toolCallId: string,
+      toolName: string,
+      path: string,
+      mcpServerName?: string,
+    ): void => {
+      tracker.record({
+        type: "tool.execution_start",
+        data: {
+          toolCallId,
+          toolName,
+          arguments: { path },
+          ...(mcpServerName === undefined ? {} : { mcpServerName }),
+        },
+      } as never);
+    };
+    const complete = (toolCallId: string, success: boolean): void => {
+      tracker.record({
+        type: "tool.execution_complete",
+        data: { toolCallId, success },
+      } as never);
+    };
+
+    start("accepted", "view", join(repository, "src", "accepted.ts"));
+    complete("accepted", true);
+    start("failed", "view", join(repository, "src", "failed.ts"));
+    complete("failed", false);
+    start("outside", "view", join(repository, "..", "outside.ts"));
+    complete("outside", true);
+    start("shell", "bash", join(repository, "src", "shell.ts"));
+    complete("shell", true);
+    start("mcp", "view", join(repository, "src", "mcp.ts"), "untrusted-server");
+    complete("mcp", true);
+
+    expect([...tracker.reviewedInventoryPaths]).toEqual(["src/accepted.ts"]);
+  });
+
   test("restricts noninteractive permission approval to isolated scan writes", async () => {
     const root = join(tmpdir(), `copilot-permissions-${randomUUID()}`);
     const repository = join(root, "repository");
@@ -791,7 +832,7 @@ describe("Copilot port", () => {
     expect(reads).toBe(1);
   });
 
-  test("uses one bounded repair turn when corrected artifacts retain gaps", async () => {
+  test("uses the first bounded repair when corrected artifacts retain gaps", async () => {
     const prompts: string[] = [];
     const closureStates = [
       {
@@ -817,9 +858,9 @@ describe("Copilot port", () => {
     });
 
     expect(prompts).toHaveLength(2);
-    expect(prompts[1]).toContain(
-      "Final bounded Copilot Security closure repair",
-    );
+    expect(prompts[1]).toContain("Bounded Copilot Security closure repair 1/3");
+    expect(prompts[1]).toContain("Coverage serialization invariant");
+    expect(prompts[1]).toContain("Never repair JSON with regular-expression");
     expect(prompts[1]).toContain("<coverage-gap-inventory>");
     expect(prompts[1]).toContain("<finding-quality-gap-inventory>");
     expect(closureStates).toHaveLength(0);
@@ -849,7 +890,52 @@ describe("Copilot port", () => {
     expect(reads).toBe(0);
   });
 
-  test("fails closed after the bounded repair when deterministic gaps persist", async () => {
+  test("closes on a later repair only after every intermediate host re-audit", async () => {
+    const prompts: string[] = [];
+    const closureStates = [
+      {
+        coverageGapInventory:
+          '{"type":"coverage-gap-summary","gapCount":2}\n{"path":"src/first.ts"}',
+        findingQualityGapInventory: "",
+      },
+      {
+        coverageGapInventory:
+          '{"type":"coverage-gap-summary","gapCount":1}\n{"path":"src/second.ts"}',
+        findingQualityGapInventory: "",
+      },
+      {
+        coverageGapInventory:
+          '{"type":"coverage-gap-summary","gapCount":1}\n{"path":"src/third.ts"}',
+        findingQualityGapInventory: "",
+      },
+      {
+        coverageGapInventory: '{"type":"coverage-gap-summary","gapCount":0}',
+        findingQualityGapInventory: "",
+      },
+    ];
+
+    await runScanQualityCorrection({
+      residualRiskInventory: "",
+      coverageGapInventory: "",
+      findingQualityGapInventory: "",
+      sendPrompt: async (prompt) => {
+        prompts.push(prompt);
+      },
+      readClosureInventories: async () => closureStates.shift()!,
+    });
+
+    expect(prompts).toHaveLength(4);
+    expect(prompts[1]).toContain("closure repair 1/3");
+    expect(prompts[1]).toContain("src/first.ts");
+    expect(prompts[2]).toContain("closure repair 2/3");
+    expect(prompts[2]).toContain("src/second.ts");
+    expect(prompts[2]).not.toContain("src/first.ts");
+    expect(prompts[3]).toContain("closure repair 3/3");
+    expect(prompts[3]).toContain("src/third.ts");
+    expect(closureStates).toHaveLength(0);
+  });
+
+  test("fails closed after all bounded repairs when deterministic gaps persist", async () => {
     const prompts: string[] = [];
     let reads = 0;
     const coverageGapInventory = '{"type":"coverage-gap-summary","gapCount":0}';
@@ -874,10 +960,35 @@ describe("Copilot port", () => {
       findingQualityGapCount: 3,
       coverageGapCount: 0,
     });
-    expect(prompts).toHaveLength(2);
-    expect(prompts[1]).not.toContain("<coverage-gap-inventory>");
-    expect(prompts[1]).toContain("<finding-quality-gap-inventory>");
-    expect(reads).toBe(2);
+    expect(prompts).toHaveLength(4);
+    for (const prompt of prompts.slice(1)) {
+      expect(prompt).not.toContain("<coverage-gap-inventory>");
+      expect(prompt).toContain("<finding-quality-gap-inventory>");
+    }
+    expect(prompts[3]).toContain("closure repair 3/3");
+    expect(reads).toBe(4);
+  });
+
+  test("rejects an invalid closure repair bound before sending a repair", async () => {
+    let sends = 0;
+    const correction = runScanQualityCorrection({
+      residualRiskInventory: "",
+      coverageGapInventory: "",
+      findingQualityGapInventory: "",
+      maxRepairAttempts: 0,
+      sendPrompt: async () => {
+        sends += 1;
+      },
+      readClosureInventories: async () => ({
+        coverageGapInventory: '{"type":"coverage-gap-summary","gapCount":1}',
+        findingQualityGapInventory: "",
+      }),
+    });
+
+    await expect(correction).rejects.toThrow(
+      "Scan closure repair attempts must be a positive whole number.",
+    );
+    expect(sends).toBe(1);
   });
 
   test("fails closed when the targeted repair transport stops", async () => {

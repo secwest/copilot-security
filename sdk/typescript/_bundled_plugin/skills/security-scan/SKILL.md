@@ -47,6 +47,12 @@ discovery, or residual-miss review.
    shell/native tools to enumerate or read repository files, and never run
    `cd`, `Set-Location`, or `Push-Location`; the native sandbox preview may
    give a child shell an unusable working directory.
+   View each exact inventory path once during this initial inventory pass and
+   keep that progress for the whole session. Do not replay the full inventory
+   after a tool call, context compaction, discovery phase, ledger write, or
+   draft edit. Reopen only a narrow file or line range tied to a candidate,
+   failed view, or specific proof gap. Host telemetry—not repeated reads—proves
+   direct file review.
 2. Build a concise threat model: entry points, trust boundaries, privileged
    operations, sensitive assets, attacker capabilities, and highest-risk data
    flows. Save it under `artifacts/01_context/threat_model.md`.
@@ -142,6 +148,8 @@ discovery, or residual-miss review.
    path. Do not seal or finalize the drafts; the host reconciles inventory
    closure, validates, projects report/SARIF, and seals the artifacts. An
    omitted path becomes deferred work with partial coverage.
+   Every per-file surface uses `label` for the exact repository-relative path;
+   never substitute a `path` key for `label`.
 
 The scan is not complete until the three draft JSON files exist and every
 inventory item and candidate has a coverage outcome. Before returning, reopen
