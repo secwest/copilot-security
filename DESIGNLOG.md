@@ -2,6 +2,16 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-03 — Keep the URI implementation on its patched security floor
+
+**Decision.** Pin `fast-uri` to 3.1.5 as both the scanner's direct URI implementation and AJV's resolved URI dependency. Keep the high-severity production advisory audit as a blocking CI gate rather than suppressing the advisory or permitting the vulnerable transitive edge.
+
+**Why.** `GHSA-7p8r-x3mc-p8w7` classifies `fast-uri` versions from 3.0.0 through 3.1.4 as vulnerable to host confusion through a backslash authority introducer. URI interpretation sits on a security-sensitive boundary for a scanner, and allowing the direct import and schema validator to resolve different versions would complicate assurance without benefit.
+
+**Evidence.** The post-change matrix passed all platform, container, GUI, and non-audit Node jobs; its designated Node 22 audit job was the only failure and identified both dependency paths, `.>fast-uri` and `.>ajv>fast-uri`. Updating the manifest and frozen lock graph to 3.1.5 makes both paths converge on the patched release. A fresh `pnpm audit --prod --audit-level high` reports no known vulnerabilities. The public registry's 3.1.5 integrity matches the frozen lockfile, and the 199-entry release archive passes an isolated registry installation plus its public-import, CLI, and 79-file bundled-plugin contract checks.
+
+**Consequence.** Future dependency refreshes must retain a version outside the advisory range and preserve one audited URI implementation across the direct and AJV paths. The CI gate should fail on a newly disclosed high-severity production advisory; it is an early-warning control, not a flaky check to bypass.
+
 ## 2026-08-03 — Prove direct review and repair serialization without inferred conclusions
 
 **Decision.** Permit up to three closure-repair turns after the independent quality correction, with a deterministic host re-audit after every turn. Feed each repair only the current gap inventories and stop as soon as both inventories close. Require `coverage.json` to be a single parsed object with exact inventory paths and canonical scalar dispositions; broad rewrites use a serializer, parse-and-set verification, and atomic replacement rather than repeated textual edits. In addition, require host-observed proof of a successful built-in `view` for every exact immutable inventory path before its coverage surface can close.
