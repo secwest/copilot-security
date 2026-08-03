@@ -53,7 +53,7 @@ describe("Copilot configuration", () => {
       },
     });
     expect(merged["agents"]).toBeUndefined();
-    expect(merged["model"]).toBe("gpt-5.6-sol");
+    expect(merged["model"]).toBe("auto");
     expect(merged["model_reasoning_effort"]).toBe("high");
     expect(merged["windows"]).toEqual({ sandbox: "elevated" });
   });
@@ -260,7 +260,7 @@ describe("Copilot configuration", () => {
       },
     });
     expect(await mergedCopilotConfig({})).toMatchObject({
-      model: "gpt-5.6-sol",
+      model: "auto",
       model_reasoning_effort: "xhigh",
       windows: {
         sandbox: "unelevated",

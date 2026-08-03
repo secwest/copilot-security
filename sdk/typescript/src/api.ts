@@ -63,6 +63,7 @@ import {
 } from "./worker-progress.js";
 import { resolveTrustedExecutable } from "./trusted-executable.js";
 import { COPILOT_EXECUTABLE_VERSION, COPILOT_SDK_VERSION } from "./version.js";
+import { hostRuntimeValuesPrompt } from "./runtime-prompt.js";
 import {
   acquireCopilotSecurityCredentialHomeLock,
   bootstrapPlugin,
@@ -961,6 +962,7 @@ export class CopilotSecurity {
           ? {}
           : { COPILOT_SECURITY_TARGET_PATHS_FILE: targetPathsFile }),
       };
+      prompt = [prompt, "", hostRuntimeValuesPrompt(runtimePaths)].join("\n");
       const copilotRuntimePaths = Object.fromEntries(
         Object.entries(runtimePaths)
           .filter(([name]) => name.startsWith("COPILOT_SECURITY_"))
@@ -1832,7 +1834,7 @@ async function scanPrompt(
           "This exhaustive scan authorizes the delegated-worker phases required by the selected skill; use available subagent tools and continue with parent-agent fallback if capacity changes.",
         ]),
     "This SDK host does not render MCP Apps; use the terminal/chat workflow.",
-    "Do not execute Python, Git, ripgrep, or plugin helper scripts from the model sandbox. The trusted host owns deterministic inventory, normalization, contract validation, projection, and sealing. Use built-in file tools for repository evidence and PowerShell only for scan-directory draft artifacts.",
+    "Do not execute Python, Git, ripgrep, or plugin helper scripts from the model sandbox. The trusted host owns deterministic inventory, normalization, contract validation, projection, and sealing. Use built-in file tools for repository evidence and scan-directory draft artifacts on every platform; shell access is optional and must never be required for either task.",
     'Repository root: "$COPILOT_SECURITY_REPOSITORY". The session is rooted at this expendable snapshot.',
     'The trusted host already generated the complete immutable repository-relative file list at "$COPILOT_SECURITY_INVENTORY_PATH" and the complete JSONL review worklist at "$COPILOT_SECURITY_REVIEW_WORKLIST" for the selected scope. Consume every row and never recreate, overwrite, append to, delete, narrow, or reorder either file. Files hypothetically present in a dependency, build, deployment, or runtime environment but absent from this host worklist are not unreviewed repository units and must not create deferred coverage.',
     'The trusted host also generated "$COPILOT_SECURITY_GUIDANCE_PATHS", an immutable JSON array of every repository SECURITY.md path. Use only those exact paths to resolve root-to-leaf policy for a worklist row. An empty array means no repository SECURITY.md exists; never glob or search for additional policy files.',
@@ -1876,7 +1878,7 @@ async function scanPrompt(
               ]),
         ]
       : []),
-    "Runtime paths are environment-backed; keep them quoted in POSIX shells and use the corresponding $env: names in PowerShell. Do not copy or reparse their values.",
+    "Runtime paths are environment-backed and also supplied as exact JSON string values in the trusted host runtime map below. Prefer that map and built-in file tools; do not use a shell merely to expand or rediscover paths.",
     targetInstruction(target),
     "Write the complete canonical scan-manifest.json, findings.json, and coverage.json, but do not finalize or seal them; the SDK workbench owns authoritative metadata, finalization, report generation, and sealing.",
   ].join("\n");

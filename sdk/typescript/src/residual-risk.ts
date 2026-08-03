@@ -5906,7 +5906,9 @@ export async function buildFindingQualityGapInventory(
     if (!isSubstantiveAttackPath(finding["attackPath"])) {
       reasons.push("missing_or_weak_attack_path");
     }
-    reasons.push(...attackPathClosureGaps(finding["attackPath"]));
+    reasons.push(
+      ...attackPathClosureGaps(finding["attackPath"], codeEvidenceIds),
+    );
     if (hasUnknownCodeEvidenceRefs(finding, codeEvidenceIds)) {
       reasons.push("unknown_code_evidence_refs");
     }
@@ -5968,7 +5970,7 @@ function validationClosureGaps(
   }
   if (
     !hasNamedSubstantiveValue(value, ["evidence"]) &&
-    !hasKnownCodeEvidenceRef(value, codeEvidenceIds)
+    !hasKnownCodeEvidenceRef(value, codeEvidenceIds, true)
   ) {
     gaps.push("missing_validation_evidence");
   }
@@ -5993,20 +5995,41 @@ function validationClosureGaps(
 }
 
 function hasKnownCodeEvidenceRef(
-  value: Record<string, unknown>,
+  value: unknown,
   codeEvidenceIds: ReadonlySet<string>,
+  allowValidationEvidence = false,
 ): boolean {
-  const refs = value["evidenceRefs"] ?? value["evidence_refs"];
-  return (
-    Array.isArray(refs) &&
-    refs.some(
-      (reference) =>
-        typeof reference === "string" && codeEvidenceIds.has(reference),
-    )
-  );
+  if (Array.isArray(value)) {
+    return value.some((entry) =>
+      hasKnownCodeEvidenceRef(entry, codeEvidenceIds, allowValidationEvidence),
+    );
+  }
+  if (!isRecord(value)) return false;
+  for (const [name, entry] of Object.entries(value)) {
+    if (
+      (["evidenceRefs", "evidence_refs"].includes(name) ||
+        (allowValidationEvidence && name === "evidence")) &&
+      Array.isArray(entry) &&
+      entry.some(
+        (reference) =>
+          typeof reference === "string" && codeEvidenceIds.has(reference),
+      )
+    ) {
+      return true;
+    }
+    if (
+      hasKnownCodeEvidenceRef(entry, codeEvidenceIds, allowValidationEvidence)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
-function attackPathClosureGaps(value: unknown): FindingQualityGapReason[] {
+function attackPathClosureGaps(
+  value: unknown,
+  codeEvidenceIds: ReadonlySet<string>,
+): FindingQualityGapReason[] {
   if (!isRecord(value)) {
     return [
       "incomplete_attack_path_dataflow",
@@ -6019,9 +6042,10 @@ function attackPathClosureGaps(value: unknown): FindingQualityGapReason[] {
   const dataflow = value["dataflow"];
   if (
     !isRecord(dataflow) ||
-    !["source", "sink", "outcome"].every((field) =>
-      hasNamedSubstantiveValue(dataflow, [field], 3),
-    )
+    !["source", "sink"].every((field) =>
+      hasSubstantiveOrKnownEvidenceValue(dataflow[field], codeEvidenceIds),
+    ) ||
+    !hasNamedSubstantiveValue(dataflow, ["outcome"], 3)
   ) {
     gaps.push("incomplete_attack_path_dataflow");
   }
@@ -6046,10 +6070,23 @@ function attackPathClosureGaps(value: unknown): FindingQualityGapReason[] {
   ) {
     gaps.push("missing_broken_controls");
   }
-  if (!hasNamedSubstantiveValue(value, ["evidenceRefs", "evidence_refs"], 3)) {
+  if (
+    !hasNamedSubstantiveValue(value, ["evidenceRefs", "evidence_refs"], 3) &&
+    !hasKnownCodeEvidenceRef(value, codeEvidenceIds)
+  ) {
     gaps.push("missing_attack_path_evidence_refs");
   }
   return gaps;
+}
+
+function hasSubstantiveOrKnownEvidenceValue(
+  value: unknown,
+  codeEvidenceIds: ReadonlySet<string>,
+): boolean {
+  return (
+    hasSubstantiveValue(value, 3) ||
+    (typeof value === "string" && codeEvidenceIds.has(value))
+  );
 }
 
 function findingCodeEvidenceIds(value: unknown): ReadonlySet<string> {
@@ -6073,19 +6110,37 @@ function hasUnknownCodeEvidenceRefs(
     "attackPath",
   ] as const) {
     const section = finding[sectionName];
-    if (!isRecord(section) || section["evidenceRefs"] === undefined) continue;
-    const refs = section["evidenceRefs"];
-    if (
-      !Array.isArray(refs) ||
-      refs.some(
-        (reference) =>
-          typeof reference !== "string" ||
-          reference.trim() === "" ||
-          !codeEvidenceIds.has(reference),
-      )
-    ) {
-      return true;
+    if (hasUnknownEvidenceRefs(section, codeEvidenceIds)) return true;
+  }
+  return false;
+}
+
+function hasUnknownEvidenceRefs(
+  value: unknown,
+  codeEvidenceIds: ReadonlySet<string>,
+): boolean {
+  if (Array.isArray(value)) {
+    return value.some((entry) =>
+      hasUnknownEvidenceRefs(entry, codeEvidenceIds),
+    );
+  }
+  if (!isRecord(value)) return false;
+  for (const [name, entry] of Object.entries(value)) {
+    if (name === "evidenceRefs" || name === "evidence_refs") {
+      if (
+        !Array.isArray(entry) ||
+        entry.some(
+          (reference) =>
+            typeof reference !== "string" ||
+            reference.trim() === "" ||
+            !codeEvidenceIds.has(reference),
+        )
+      ) {
+        return true;
+      }
+      continue;
     }
+    if (hasUnknownEvidenceRefs(entry, codeEvidenceIds)) return true;
   }
   return false;
 }

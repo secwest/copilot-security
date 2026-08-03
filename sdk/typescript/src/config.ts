@@ -26,7 +26,7 @@ export interface ScanModelConfiguration {
 
 export const DEFAULT_COPILOT_CONFIG: Readonly<JsonObject> = {
   cli_auth_credentials_store: "auto",
-  model: "gpt-5.6-sol",
+  model: "auto",
   model_reasoning_effort: "xhigh",
   features: {
     plugins: true,

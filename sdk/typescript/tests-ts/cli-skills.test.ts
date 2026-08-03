@@ -47,7 +47,7 @@ describe("CLI skill commands", () => {
           "--prompt",
           expect.any(String),
           "--model",
-          "gpt-5.6-sol",
+          "auto",
           "--effort",
           "xhigh",
           "--plugin-dir",

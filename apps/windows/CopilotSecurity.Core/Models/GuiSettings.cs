@@ -7,7 +7,7 @@ public sealed record GuiSettings
     public string ScannerEntryPoint { get; init; } = string.Empty;
     public string CopilotPath { get; init; } = string.Empty;
     public string StateRoot { get; init; } = string.Empty;
-    public string Model { get; init; } = "gpt-5.6-terra";
+    public string Model { get; init; } = "auto";
     public string Effort { get; init; } = "high";
     public string AuthMode { get; init; } = "github";
     public ScanMode Mode { get; init; } = ScanMode.Deep;

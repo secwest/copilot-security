@@ -40,7 +40,7 @@ public sealed record ScanRequest
     public ScanMode Mode { get; init; } = ScanMode.Deep;
     public ScanTargetKind TargetKind { get; init; } = ScanTargetKind.Repository;
     public string AuthMode { get; init; } = "github";
-    public string Model { get; init; } = "gpt-5.6-terra";
+    public string Model { get; init; } = "auto";
     public string Effort { get; init; } = "high";
     public string? BaseRevision { get; init; }
     public string HeadRevision { get; init; } = "HEAD";

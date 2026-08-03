@@ -84,7 +84,7 @@ Configuration:
 | Option                              | Meaning                                                               |
 | ----------------------------------- | --------------------------------------------------------------------- |
 | `copilotPath`                       | System Copilot CLI executable; otherwise `COPILOT_CLI_PATH` or `PATH` |
-| `copilotOverrides.model`            | Copilot model, default `gpt-5.6-sol`                                  |
+| `copilotOverrides.model`            | Copilot model, default `auto`                                         |
 | `copilotOverrides.reasoning_effort` | `low`, `medium`, `high`, or `xhigh`                                   |
 | `pluginPath`                        | Alternate Copilot Security plugin directory or ZIP                    |
 | `pythonPath`                        | Python interpreter used by deterministic helpers                      |
@@ -144,7 +144,7 @@ treating the preview sandbox as the only security boundary.
 The default native Copilot configuration is equivalent to:
 
 ```toml
-model = "gpt-5.6-sol"
+model = "auto"
 model_reasoning_effort = "xhigh"
 
 [features]

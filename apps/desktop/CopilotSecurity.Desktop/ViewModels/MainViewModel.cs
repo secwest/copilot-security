@@ -23,16 +23,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string repositoryPath = Environment.CurrentDirectory;
     private string nodePath = string.Empty;
     private string copilotPath = string.Empty;
-    private string scannerEntryPoint = ScannerInstallationDiscovery.FindInstalledFile(
-        AppContext.BaseDirectory,
-        "sdk",
-        "typescript",
-        "bin",
-        "copilot-security.mjs") ?? string.Empty;
+    private string scannerEntryPoint = DiscoverScannerEntryPoint();
     private string stateRoot = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".copilot-security");
-    private string model = "gpt-5.6-terra";
+    private string model = "auto";
     private string effort = "high";
     private string authMode = "github";
     private ScanMode mode = ScanMode.Deep;
@@ -95,7 +90,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public IReadOnlyList<string> Efforts { get; } = ["low", "medium", "high", "xhigh"];
     public IReadOnlyList<string> AuthModes { get; } = ["auto", "github", "token"];
     public IReadOnlyList<string> ModelSuggestions { get; } =
-        ["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.4", "claude-opus-4.6", "claude-sonnet-4.6"];
+        ["auto", "gpt-5.4", "claude-opus-4.6", "claude-sonnet-4.6", "gpt-5.6-terra", "gpt-5.6-sol"];
 
     public AsyncRelayCommand StartScanCommand { get; }
     public RelayCommand CancelCommand { get; }
@@ -189,6 +184,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ScanArtifacts? CurrentArtifacts { get; private set; }
 
     private ScannerInstallation Installation => new(NodePath, ScannerEntryPoint, CopilotPath, StateRoot);
+
+    private static string DiscoverScannerEntryPoint() =>
+        ScannerInstallationDiscovery.FindInstalledFile(
+            AppContext.BaseDirectory,
+            "scanner",
+            "bin",
+            "copilot-security.mjs")
+        ?? ScannerInstallationDiscovery.FindInstalledFile(
+            AppContext.BaseDirectory,
+            "sdk",
+            "typescript",
+            "bin",
+            "copilot-security.mjs")
+        ?? string.Empty;
 
     private async Task StartScanAsync()
     {

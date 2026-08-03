@@ -1,0 +1,118 @@
+name: linux-gui-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  AVALONIA_TELEMETRY_OPTOUT: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-test-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          package_json_file: sdk/typescript/package.json
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: sdk/typescript/pnpm-lock.yaml
+
+      - name: Build and inspect standalone scanner package
+        working-directory: sdk/typescript
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+          mkdir -p ../../dist
+          pnpm pack --pack-destination ../../dist
+          pnpm run check:package ../../dist/*.tgz
+
+      - name: Install native GUI and Copilot sandbox prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap xvfb
+
+      - name: Restore locked GUI and test dependencies
+        run: |
+          dotnet restore apps/linux/CopilotSecurity.Gui.Tests/CopilotSecurity.Gui.Tests.csproj --configfile apps/linux/NuGet.Config --locked-mode
+          dotnet restore apps/linux/CopilotSecurity.Gui/CopilotSecurity.Gui.csproj --configfile apps/linux/NuGet.Config --runtime linux-x64 --locked-mode
+
+      - name: Build Linux application
+        run: dotnet build apps/linux/CopilotSecurity.Gui/CopilotSecurity.Gui.csproj --configuration Release --no-restore --nologo
+
+      - name: Test scanner execution and shared desktop behavior
+        run: |
+          dotnet run --project apps/windows/CopilotSecurity.Core.Tests/CopilotSecurity.Core.Tests.csproj --configuration Release
+          dotnet run --project apps/desktop/CopilotSecurity.Desktop.Tests/CopilotSecurity.Desktop.Tests.csproj --configuration Release
+
+      - name: Test headless Linux interface
+        run: dotnet run --project apps/linux/CopilotSecurity.Gui.Tests/CopilotSecurity.Gui.Tests.csproj --configuration Release --no-restore
+
+      - name: Publish self-contained Linux application
+        run: >-
+          dotnet publish
+          apps/linux/CopilotSecurity.Gui/CopilotSecurity.Gui.csproj
+          --configuration Release
+          --runtime linux-x64
+          --self-contained true
+          -p:DebugType=None
+          --no-restore
+          --output artifacts/linux-x64
+
+      - name: Verify non-graphical and X11 startup
+        run: |
+          chmod 0755 artifacts/linux-x64/CopilotSecurity
+          ./artifacts/linux-x64/CopilotSecurity --smoke-test
+          timeout 20s xvfb-run -a ./artifacts/linux-x64/CopilotSecurity --ui-smoke-test
+
+      - name: Assemble installable archive
+        run: |
+          mkdir -p artifacts/package/app
+          cp -a artifacts/linux-x64/. artifacts/package/app/
+          mkdir -p artifacts/package/app/scanner
+          tar -xzf dist/*.tgz -C artifacts/package/app/scanner --strip-components=1
+          pnpm --dir sdk/typescript prune --prod
+          cp -a sdk/typescript/node_modules artifacts/package/app/scanner/
+          cp apps/linux/packaging/copilot-security-gui artifacts/package/
+          cp apps/linux/packaging/copilot-security.desktop artifacts/package/
+          cp apps/linux/packaging/copilot-security.svg artifacts/package/
+          cp apps/linux/packaging/install.sh artifacts/package/
+          chmod 0755 artifacts/package/copilot-security-gui artifacts/package/install.sh artifacts/package/app/CopilotSecurity artifacts/package/app/scanner/bin/copilot-security.mjs
+          artifacts/package/app/CopilotSecurity --smoke-test
+          node artifacts/package/app/scanner/bin/copilot-security.mjs --version
+          test -d artifacts/package/app/scanner/node_modules/@github/copilot-sdk
+          tar -C artifacts/package -czf artifacts/copilot-security-linux-x64.tar.gz .
+          sha256sum artifacts/copilot-security-linux-x64.tar.gz
+
+      - name: Retain Linux package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: copilot-security-linux-x64
+          path: artifacts/copilot-security-linux-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 14

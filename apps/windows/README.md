@@ -1,7 +1,7 @@
 # Copilot Security for Windows
 
-This directory contains the native Windows desktop interface and its separately
-testable execution core. The application is a WPF `.NET 8` client for the
+This directory contains the native Windows desktop interface and the shared,
+separately testable execution core. The application is a WPF `.NET 8` client for the
 standalone scanner; it does not reimplement security analysis or make model
 calls itself. It builds an exact argument list for the scanner CLI, supervises
 that process, and validates the scanner's sealed artifacts before displaying
@@ -47,7 +47,12 @@ be compared with an unprovenanced one.
 ## Architecture and trust boundaries
 
 ```text
-WPF views / view model
+WPF views
+        |
+        v
+CopilotSecurity.Desktop
+  - shared view model and durable settings
+  - progress, history, findings, and benchmarks
         |
         v
 CopilotSecurity.Core

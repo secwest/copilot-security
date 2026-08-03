@@ -837,7 +837,7 @@ describe("CLI", () => {
       cliVersion: VERSION,
       copilotVersion: "system",
       copilotSdkVersion: "1.0.7",
-      model: "gpt-5.6-sol",
+      model: "auto",
       reasoningEffort: "xhigh",
       nextStep: "copilot-security scan . --dry-run",
     });
@@ -1161,7 +1161,7 @@ describe("CLI", () => {
       ),
     ).toBe(0);
     expect(JSON.parse(stdout.text())).toEqual({
-      model: "gpt-5.6-sol",
+      model: "auto",
       reasoningEffort: "xhigh",
       nextStep: "copilot-security scan . --dry-run",
     });

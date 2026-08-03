@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Copilot Security</title>
+  <defs>
+    <linearGradient id="shield" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#46d1a6"/>
+      <stop offset="1" stop-color="#20a985"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="24" fill="#10151d"/>
+  <path d="M64 14 107 30v31c0 27-17 45-43 55C38 106 21 88 21 61V30Z" fill="url(#shield)"/>
+  <path d="M64 27 94 38v22c0 18-10 31-30 40-20-9-30-22-30-40V38Z" fill="#17202b"/>
+  <path d="m45 64 12 12 27-29" fill="none" stroke="#edf3f8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -157,6 +157,7 @@ const distFiles = new Set(
     "multiscan",
     "residual-risk",
     "result",
+    "runtime-prompt",
     "runtime",
     "sarif-seeds",
     "scan-comparison",

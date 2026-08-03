@@ -163,10 +163,13 @@ async function createComparisonCopilot(
           useLoggedInUser: true,
           logLevel: "error",
         });
+        const model = threadOptions.model ?? "auto";
         const session = await client.createSession({
           clientName: "copilot-security-comparison",
-          model: threadOptions.model ?? "gpt-5.6-sol",
-          reasoningEffort: threadOptions.modelReasoningEffort,
+          model,
+          ...(model === "auto"
+            ? {}
+            : { reasoningEffort: threadOptions.modelReasoningEffort }),
           workingDirectory: threadOptions.workingDirectory,
           availableTools: [],
           enableSkills: false,

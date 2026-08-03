@@ -469,7 +469,9 @@ node benchmarks/run-benchmark.mjs `
 ```
 
 Use `--model` and `--effort` to select a Copilot model and reasoning effort.
-The default is `gpt-5.6-sol` with `xhigh` effort.
+The default is Copilot's `auto` model selection. The configured `xhigh` effort
+is retained for explicit models and is deliberately not sent for `auto`, because
+Copilot rejects reasoning-effort overrides when it selects the model.
 `--model auto` delegates model selection to Copilot and does not send a
 reasoning-effort override because Copilot rejects reasoning effort for the
 automatic model.
@@ -502,10 +504,11 @@ scanner home. The deprecated `COPILOT_SECURITY_STATE_DIR` alias selects this
 scanner's state root only. This separation lets multiple scanners run
 concurrently without sharing mutable state.
 
-## Native Windows application
+## Native desktop applications
 
-The repository includes a native WPF `.NET 8` desktop application in
-[`apps/windows`](apps/windows). It exposes whole-repository, scoped path,
+The repository includes a native WPF `.NET 8` Windows application in
+[`apps/windows`](apps/windows) and an Avalonia `.NET 8` Linux application in
+[`apps/linux`](apps/linux). They expose whole-repository, scoped path,
 committed-diff, and working-tree scans; standard/deep modes; model and effort
 selection; optional cost and credit bounds; live progress and process-tree
 cancellation; findings, validation, attack paths, reports, private scan
@@ -515,10 +518,15 @@ The New scan tab also accepts repeatable SARIF seed files and an optional
 original SARIF source root, using the same hardened normalization and
 independent-review contract as the CLI and SDK.
 
-The desktop application remains a client of this standalone scanner. It does
+Both desktop applications remain clients of this standalone scanner. They do
 not duplicate prompts or model orchestration, invoke a command shell, share
 another scanner's state, or read credentials. Before findings are displayed it
 recomputes the sealed manifest digests for the findings and coverage artifacts.
+The shared platform-neutral desktop layer keeps command construction, process
+supervision, artifact acceptance, history, and benchmark behavior identical.
+Linux preferences and generated history use Linux-specific paths below the
+same scanner-owned `copilot-security-home`, so WSL and Windows can run without
+overwriting one another.
 
 ```powershell
 dotnet run `
@@ -530,8 +538,18 @@ dotnet run `
   --configuration Release
 ```
 
-See [`apps/windows/README.md`](apps/windows/README.md) for the architecture,
-trust boundaries, publication command, benchmark comparison workflow, and
+On Linux or WSL:
+
+```bash
+dotnet run --project apps/linux/CopilotSecurity.Gui.Tests/CopilotSecurity.Gui.Tests.csproj \
+  --configuration Release
+dotnet run --project apps/linux/CopilotSecurity.Gui/CopilotSecurity.Gui.csproj \
+  --configuration Release
+```
+
+See [`apps/windows/README.md`](apps/windows/README.md) and
+[`apps/linux/README.md`](apps/linux/README.md) for architecture, trust
+boundaries, publication and installation commands, benchmark comparison, and
 failure/recovery behavior.
 
 ## Effectiveness benchmark

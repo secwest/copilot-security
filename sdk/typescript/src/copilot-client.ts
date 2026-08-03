@@ -22,6 +22,7 @@ import {
   ModelTurnDeadlineExceededError,
   ScanClosureIncompleteError,
 } from "./errors.js";
+import { hostRuntimeValuesPrompt } from "./runtime-prompt.js";
 import {
   copilotScannerSandboxConfig,
   importAmbientAuth,
@@ -609,7 +610,11 @@ class CopilotThread implements CopilotScannerThread {
                   findingQualityGapInventory,
                   sendPrompt: async (prompt) => {
                     await sendCopilotPromptWithSafetyRecovery(
-                      prompt,
+                      [
+                        prompt,
+                        "",
+                        hostRuntimeValuesPrompt(this.#options.environment),
+                      ].join("\n"),
                       sendModelPrompt,
                       options.signal,
                     );
@@ -1480,9 +1485,7 @@ function copilotConfiguration(config: {
     overrides["reasoning_effort"] ?? overrides["model_reasoning_effort"];
   return {
     model:
-      typeof model === "string" && model.trim().length > 0
-        ? model
-        : "gpt-5.6-sol",
+      typeof model === "string" && model.trim().length > 0 ? model : "auto",
     model_reasoning_effort:
       typeof effort === "string" && effort.trim().length > 0 ? effort : "xhigh",
   };

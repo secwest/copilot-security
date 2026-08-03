@@ -1,0 +1,44 @@
+<Application x:Class="Secwest.CopilotSecurity.Gui.Linux.App"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Application.Resources>
+    <SolidColorBrush x:Key="WindowBrush" Color="#10151D" />
+    <SolidColorBrush x:Key="PanelBrush" Color="#17202B" />
+    <SolidColorBrush x:Key="InsetBrush" Color="#0C1118" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#344355" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#46D1A6" />
+    <SolidColorBrush x:Key="TextBrush" Color="#EDF3F8" />
+    <SolidColorBrush x:Key="MutedBrush" Color="#A9B7C6" />
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{StaticResource WindowBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="FontFamily" Value="Inter" />
+    </Style>
+    <Style Selector="GroupBox">
+      <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="Margin" Value="0,0,0,12" />
+      <Setter Property="Padding" Value="10" />
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="Background" Value="{StaticResource InsetBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+      <Setter Property="Padding" Value="6,4" />
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="Margin" Value="4,0" />
+      <Setter Property="MinWidth" Value="88" />
+    </Style>
+    <Style Selector="DataGrid">
+      <Setter Property="Background" Value="{StaticResource InsetBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+    </Style>
+  </Application.Styles>
+</Application>

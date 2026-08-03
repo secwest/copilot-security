@@ -1164,6 +1164,86 @@ describe("residual risk inventory", () => {
     expect(inventory).not.toContain("</finding-quality-gap-inventory>");
   });
 
+  test("accepts short canonical evidence IDs across nested validation and attack-path steps", async () => {
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-short-evidence-"),
+    );
+    temporaryPaths.push(scanDirectory);
+    await writeFile(
+      join(scanDirectory, "findings.json"),
+      JSON.stringify({
+        findings: [
+          {
+            occurrenceId: "occ_short_refs",
+            taxonomy: { cwe: ["CWE-918"] },
+            locations: [
+              { path: "src/controller.java", startLine: 10, role: "source" },
+              { path: "src/client.java", startLine: 20, role: "sink" },
+            ],
+            codeEvidence: [
+              {
+                id: "e1",
+                path: "src/controller.java",
+                startLine: 10,
+                code: "fetch(target);",
+                explanation:
+                  "The remote request parameter enters the call chain.",
+                role: "source",
+              },
+              {
+                id: "e2",
+                path: "src/client.java",
+                startLine: 20,
+                code: "client.get(target);",
+                explanation: "The same value selects the outbound destination.",
+                role: "sink",
+              },
+            ],
+            validation: {
+              summary: "The request value reaches the network destination.",
+              method: "static source trace",
+              exploitWitness:
+                "A loopback URL supplied by the caller becomes the outbound target.",
+              negativeControl:
+                "A fixed server-owned destination would prevent authority control.",
+              evidence: ["e1", "e2"],
+              steps: [
+                { description: "Read the source", evidenceRefs: ["e1"] },
+                { description: "Trace the sink", evidenceRefs: ["e2"] },
+              ],
+              counterEvidence: [
+                "No exact destination allowlist dominates the network call.",
+              ],
+              remainingUncertainty:
+                "External egress policy is outside the repository boundary.",
+            },
+            attackPath: {
+              summary:
+                "A remote caller selects the destination reached by the service.",
+              dataflow: {
+                source: "e1",
+                sink: "e2",
+                outcome: "outbound request to an attacker-selected authority",
+              },
+              steps: [
+                { description: "Enter request data", evidenceRefs: ["e1"] },
+                { description: "Execute network call", evidenceRefs: ["e2"] },
+              ],
+              reachability: {
+                attacker: "Unauthenticated remote caller",
+                entrypoint: "HTTP preview endpoint",
+                outcome: "Internal network resources become reachable",
+              },
+              brokenControls: ["No destination boundary"],
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(await buildFindingQualityGapInventory(scanDirectory)).toBe("");
+  });
+
   test("accepts UTF-8 BOM drafts and repository-grounded line aliases", async () => {
     const root = await mkdtemp(
       join(tmpdir(), "copilot-security-grounded-evidence-"),

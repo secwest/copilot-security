@@ -1,0 +1,238 @@
+<Window x:Class="Secwest.CopilotSecurity.Gui.Linux.MainWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Copilot Security" Width="1320" Height="860" MinWidth="980" MinHeight="680"
+        WindowStartupLocation="CenterScreen">
+  <Grid Margin="18" RowDefinitions="Auto,*,Auto">
+    <Grid Grid.Row="0" Margin="0,0,0,14" ColumnDefinitions="*,Auto">
+      <StackPanel>
+        <TextBlock Text="C O P I L O T   S E C U R I T Y" Foreground="{StaticResource AccentBrush}"
+                   FontSize="13" FontWeight="Bold" />
+        <TextBlock Text="Code security scanner" FontSize="26" FontWeight="SemiBold" />
+        <TextBlock Text="Evidence-based discovery, validation, attack-path analysis, and reproducible benchmarking"
+                   Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+        <TextBlock Text="{Binding CurrentStage}" HorizontalAlignment="Right"
+                   Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding Elapsed}" HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}" />
+      </StackPanel>
+    </Grid>
+
+    <TabControl x:Name="MainTabs" Grid.Row="1" Background="{StaticResource PanelBrush}">
+      <TabItem Header="New scan">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <Grid Margin="16" MaxWidth="1120" ColumnDefinitions="*,20,*">
+            <StackPanel Grid.Column="0">
+              <GroupBox Header="Target">
+                <Grid ColumnDefinitions="135,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                  <TextBlock Text="Repository" VerticalAlignment="Center" />
+                  <TextBox x:Name="RepositoryPathBox" Grid.Column="1" Text="{Binding RepositoryPath}" />
+                  <Button Grid.Column="2" Content="Browse…" Click="BrowseRepository_Click" />
+                  <TextBlock Grid.Row="1" Text="Target" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding TargetKinds}" SelectedItem="{Binding TargetKind}" Margin="0,8,0,0" />
+                  <TextBlock Grid.Row="2" Text="Base revision" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding BaseRevision}" Margin="0,8,0,0" />
+                  <TextBlock Grid.Row="3" Text="Head revision" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding HeadRevision}" Margin="0,8,0,0" />
+                  <TextBlock Grid.Row="4" Text="Scoped paths" VerticalAlignment="Top" Margin="0,11,0,0" />
+                  <TextBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding IncludePaths}"
+                           Margin="0,8,0,0" MinHeight="58" AcceptsReturn="True"
+                           PlaceholderText="Optional repository-relative paths, one per line" />
+                </Grid>
+              </GroupBox>
+
+              <GroupBox Header="Analysis">
+                <Grid ColumnDefinitions="135,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                  <TextBlock Text="Mode" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding Modes}" SelectedItem="{Binding Mode}" />
+                  <TextBlock Grid.Row="1" Text="Model" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding ModelSuggestions}" SelectedItem="{Binding Model}" Margin="0,8,0,0" />
+                  <TextBlock Grid.Row="2" Text="Reasoning effort" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Efforts}" SelectedItem="{Binding Effort}" Margin="0,8,0,0" />
+                  <TextBlock Grid.Row="3" Text="Authentication" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding AuthModes}" SelectedItem="{Binding AuthMode}" Margin="0,8,0,0" />
+                  <TextBlock Grid.Row="4" Text="Cost / credits" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,10,*" Margin="0,8,0,0">
+                    <TextBox Text="{Binding MaximumCost}" PlaceholderText="Optional USD ceiling" />
+                    <TextBox Grid.Column="2" Text="{Binding MaximumCredits}" PlaceholderText="Optional AI-credit ceiling" />
+                  </Grid>
+                </Grid>
+              </GroupBox>
+
+              <GroupBox Header="Candidate inputs">
+                <StackPanel Spacing="8">
+                  <TextBox Text="{Binding KnowledgeBasePaths}" MinHeight="54" AcceptsReturn="True" PlaceholderText="Knowledge-base files, one per line" />
+                  <TextBox Text="{Binding SarifSeedPaths}" MinHeight="54" AcceptsReturn="True" PlaceholderText="SARIF seed files, one per line" />
+                  <TextBox Text="{Binding SarifSourceRoot}" PlaceholderText="Optional original SARIF checkout root" />
+                </StackPanel>
+              </GroupBox>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2">
+              <GroupBox Header="Installation and isolated state">
+                <Grid ColumnDefinitions="125,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+                  <TextBlock Text="Node.js" VerticalAlignment="Center" />
+                  <TextBox Grid.Column="1" Text="{Binding NodePath}" />
+                  <Button Grid.Column="2" Content="Browse…" Click="BrowseNode_Click" />
+                  <TextBlock Grid.Row="1" Text="Copilot CLI" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding CopilotPath}" Margin="0,8,0,0" />
+                  <Button Grid.Row="1" Grid.Column="2" Content="Browse…" Click="BrowseCopilot_Click" Margin="4,8,0,0" />
+                  <TextBlock Grid.Row="2" Text="Scanner entry" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding ScannerEntryPoint}" Margin="0,8,0,0" />
+                  <Button Grid.Row="2" Grid.Column="2" Content="Browse…" Click="BrowseScanner_Click" Margin="4,8,0,0" />
+                  <TextBlock Grid.Row="3" Text="State root" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding StateRoot}" Margin="0,8,0,0" />
+                  <Button Grid.Row="3" Grid.Column="2" Content="Browse…" Click="BrowseStateRoot_Click" Margin="4,8,0,0" />
+                </Grid>
+              </GroupBox>
+
+              <Border Background="{StaticResource InsetBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="14">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="Runtime isolation" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding RuntimeHome}" TextWrapping="Wrap" />
+                  <TextBlock Text="Linux runs and benchmarks use separate names below this scanner-owned runtime home."
+                             Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Grid>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Progress">
+        <Grid Margin="14" RowDefinitions="*,Auto">
+          <DataGrid x:Name="ProgressGrid" ItemsSource="{Binding ProgressItems}" IsReadOnly="True" AutoGenerateColumns="False">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Time" Binding="{Binding Timestamp}" Width="190" />
+              <DataGridTextColumn Header="Stage" Binding="{Binding Stage}" Width="150" />
+              <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*" />
+            </DataGrid.Columns>
+          </DataGrid>
+          <TextBlock Grid.Row="1" Text="{Binding Status}" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" />
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Findings">
+        <Grid Margin="14" RowDefinitions="2*,Auto,2*">
+          <DataGrid x:Name="FindingsGrid" ItemsSource="{Binding Findings}" SelectedItem="{Binding SelectedFinding}"
+                    IsReadOnly="True" AutoGenerateColumns="False">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="95" />
+              <DataGridTextColumn Header="Confidence" Binding="{Binding Confidence}" Width="105" />
+              <DataGridTextColumn Header="Finding" Binding="{Binding Title}" Width="2*" />
+              <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="*" />
+              <DataGridTextColumn Header="ID" Binding="{Binding FindingId}" Width="130" />
+            </DataGrid.Columns>
+          </DataGrid>
+          <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,10">
+            <Button Content="Export findings…" Click="ExportFindings_Click" />
+            <Button Content="Export report…" Click="ExportReport_Click" />
+          </StackPanel>
+          <ScrollViewer Grid.Row="2">
+            <StackPanel Spacing="7">
+              <TextBlock Text="{Binding SelectedFinding.Title}" FontSize="20" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding SelectedFinding.Summary}" TextWrapping="Wrap" />
+              <TextBlock Text="Validation" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding SelectedFinding.Validation}" TextWrapping="Wrap" />
+              <TextBlock Text="Attack path" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding SelectedFinding.AttackPath}" TextWrapping="Wrap" />
+              <TextBlock Text="Remediation" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding SelectedFinding.Remediation}" TextWrapping="Wrap" />
+              <ItemsControl ItemsSource="{Binding SelectedFinding.Locations}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Path}" Foreground="{StaticResource MutedBrush}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Report">
+        <Grid Margin="14" RowDefinitions="Auto,*">
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
+            <Button Content="Open native" Command="{Binding OpenReportCommand}" />
+            <Button Content="Export…" Click="ExportReport_Click" />
+          </StackPanel>
+          <TextBox x:Name="ReportBox" Grid.Row="1" Text="{Binding ReportMarkdown}" IsReadOnly="True"
+                   AcceptsReturn="True" TextWrapping="Wrap" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                   FontFamily="monospace" />
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="History">
+        <Grid Margin="14" RowDefinitions="Auto,*">
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
+            <Button Content="Refresh" Command="{Binding RefreshHistoryCommand}" />
+            <Button Content="Load selected" Command="{Binding LoadHistoryCommand}" />
+          </StackPanel>
+          <DataGrid x:Name="HistoryGrid" Grid.Row="1" ItemsSource="{Binding History}" SelectedItem="{Binding SelectedHistory}"
+                    IsReadOnly="True" AutoGenerateColumns="False">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Completed" Binding="{Binding CompletedAt}" Width="180" />
+              <DataGridTextColumn Header="Repository" Binding="{Binding Repository}" Width="2*" />
+              <DataGridTextColumn Header="Findings" Binding="{Binding FindingCount}" Width="90" />
+              <DataGridTextColumn Header="Coverage" Binding="{Binding Coverage}" Width="110" />
+              <DataGridTextColumn Header="Scan ID" Binding="{Binding ScanId}" Width="*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Benchmark">
+        <Grid Margin="14" RowDefinitions="Auto,Auto,*">
+          <GroupBox Header="Run benchmark">
+            <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto,Auto">
+              <TextBlock Text="Manifest" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Text="{Binding BenchmarkManifest}" />
+              <Button Grid.Column="2" Content="Browse…" Click="BrowseBenchmarkManifest_Click" />
+              <TextBlock Grid.Row="1" Text="Results directory" VerticalAlignment="Center" Margin="0,8,0,0" />
+              <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding BenchmarkResultsDirectory}" Margin="0,8,0,0" />
+              <Button Grid.Row="1" Grid.Column="2" Content="Browse…" Click="BrowseBenchmarkResults_Click" Margin="4,8,0,0" />
+              <CheckBox Grid.Row="2" Grid.Column="1" Content="Require completed scan status" IsChecked="{Binding BenchmarkRequireStatus}" Margin="0,8,0,0" />
+              <Button Grid.Row="2" Grid.Column="2" Content="Run" Command="{Binding RunBenchmarkCommand}" Margin="4,8,0,0" />
+            </Grid>
+          </GroupBox>
+          <GroupBox Grid.Row="1" Header="Compare baseline and candidate">
+            <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto">
+              <TextBlock Text="Baseline report" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Text="{Binding BaselineBenchmarkReport}" />
+              <Button Grid.Column="2" Content="Browse…" Click="BrowseBaselineReport_Click" />
+              <TextBlock Grid.Row="1" Text="Candidate report" VerticalAlignment="Center" Margin="0,8,0,0" />
+              <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding CandidateBenchmarkReport}" Margin="0,8,0,0" />
+              <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Margin="4,8,0,0">
+                <Button Content="Browse…" Click="BrowseCandidateReport_Click" />
+                <Button Content="Compare" Command="{Binding CompareBenchmarksCommand}" />
+              </StackPanel>
+            </Grid>
+          </GroupBox>
+          <TextBox Grid.Row="2" Text="{Binding BenchmarkOutput}" IsReadOnly="True" AcceptsReturn="True"
+                   TextWrapping="Wrap" ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="monospace" />
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Diagnostics &amp; settings">
+        <Grid Margin="14" RowDefinitions="Auto,*">
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
+            <Button Content="Refresh" Command="{Binding RefreshDiagnosticsCommand}" />
+          </StackPanel>
+          <ListBox x:Name="DiagnosticsList" Grid.Row="1" ItemsSource="{Binding DiagnosticItems}" />
+        </Grid>
+      </TabItem>
+    </TabControl>
+
+    <Border Grid.Row="2" Margin="0,12,0,0" Padding="10" Background="{StaticResource PanelBrush}"
+            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="{Binding Status}" VerticalAlignment="Center" TextWrapping="Wrap" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal">
+          <Button x:Name="CancelButton" Content="Cancel" Command="{Binding CancelCommand}" />
+          <Button x:Name="StartScanButton" Content="Start scan" Command="{Binding StartScanCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Copilot Security
+GenericName=Code Security Scanner
+Comment=Evidence-based code security scanning with GitHub Copilot CLI
+Exec=/usr/local/bin/copilot-security-gui
+TryExec=/usr/local/bin/copilot-security-gui
+Icon=copilot-security
+Terminal=false
+Categories=Development;Security;
+StartupNotify=true
