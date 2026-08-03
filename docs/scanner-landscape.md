@@ -326,13 +326,30 @@ shape and render semantics follow Scriban's
 [official package and API documentation](https://www.nuget.org/packages/Scriban/),
 with fixtures pinned to non-vulnerable Scriban 7.2.5.
 
+`benchmarks/aspnet-razorlight-template-framework-manifest.json` extends the
+same strict ASP.NET lane to RazorLight runtime compilation. The typed model
+requires a proven `IRazorLightEngine` or `RazorLightEngine` receiver and treats
+only `CompileRenderStringAsync`'s second `content` argument as template source.
+The first template key and third model argument retain their distinct roles,
+including when C# named arguments are reordered. `CompileRenderAsync(key,
+model)` resolves a project-owned template and is deliberately excluded. The
+positive fixture compiles attacker `@Model.ApiKey` source and the executable
+witness proves disclosure of a server-owned model property. The matched
+control compiles fixed source and passes that same text only as `Model.Name`,
+where it remains ordinary encoded data. The model also rejects reassignment,
+untyped receivers, local engine shadows, incomplete builders, and comment or
+string lookalikes. Argument order and runtime-compilation behavior follow the
+[official RazorLight interface and documentation](https://github.com/toddams/RazorLight/blob/master/src/RazorLight/IRazorLightEngine.cs),
+with fixtures pinned to the official RazorLight 2.3.1 package and explicit
+patched .NET 8 dependency floors for its legacy caching and JSON transitives.
+
 ## Prioritized next improvements
 
 1. **Expand typed framework security models.** Extend bounded summaries beyond
    two Node/TypeScript or Python relative-import hops; extend Java and ASP.NET
    beyond two uniquely typed service boundaries;
    add framework-specific authorization models, ASP.NET template engines
-   beyond the typed Scriban lane,
+   beyond the typed Scriban and RazorLight lanes,
    outbound-client APIs beyond JDK `HttpClient`, Spring `RestTemplate`,
    Spring `WebClient`, OkHttp, and .NET `HttpClient`, partial-URL SSRF models,
    manifest-derived activation evidence,

@@ -39,8 +39,25 @@ jobs:
           dotnet build benchmarks/fixtures/aspnet-cross-file-safe-fetch/AspnetCrossFileSafeFetch.csproj --configuration Release --nologo
           dotnet build benchmarks/fixtures/aspnet-cross-file-template-injection/AspnetCrossFileTemplateInjection.csproj --configuration Release --nologo
           dotnet build benchmarks/fixtures/aspnet-cross-file-safe-template/AspnetCrossFileSafeTemplate.csproj --configuration Release --nologo
+          dotnet build benchmarks/fixtures/aspnet-cross-file-razorlight-template-injection/AspnetCrossFileRazorLightTemplateInjection.csproj --configuration Release --nologo
+          dotnet build benchmarks/fixtures/aspnet-cross-file-safe-razorlight-template/AspnetCrossFileSafeRazorLightTemplate.csproj --configuration Release --nologo
           dotnet build benchmarks/fixtures/aspnet-multi-hop-path-traversal/AspnetMultiHopPathTraversal.csproj --configuration Release --nologo
           dotnet build benchmarks/fixtures/aspnet-multi-hop-safe-path/AspnetMultiHopSafePath.csproj --configuration Release --nologo
+
+      - name: Audit RazorLight fixture dependencies
+        run: |
+          audit_project() {
+            project="$1"
+            audit_file="$(mktemp)"
+            dotnet list "$project" package --vulnerable --include-transitive --format json --source https://api.nuget.org/v3/index.json > "$audit_file"
+            if jq -e '[.projects[]?.frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?) | select(((.vulnerabilities // []) | length) > 0)] | length > 0' "$audit_file" >/dev/null; then
+              cat "$audit_file"
+              echo "Vulnerable NuGet package detected in $project" >&2
+              exit 1
+            fi
+          }
+          audit_project benchmarks/fixtures/aspnet-cross-file-razorlight-template-injection/AspnetCrossFileRazorLightTemplateInjection.csproj
+          audit_project benchmarks/fixtures/aspnet-cross-file-safe-razorlight-template/AspnetCrossFileSafeRazorLightTemplate.csproj
 
       - name: Prove SQL, template, SSRF, and path exploits and controls
         run: |
@@ -50,5 +67,7 @@ jobs:
           dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-fetch/AspNetCrossFileSafeFetchWitness.csproj --configuration Release
           dotnet run --project benchmarks/witnesses/aspnet-cross-file-template-injection/AspNetCrossFileTemplateInjectionWitness.csproj --configuration Release
           dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-template/AspNetCrossFileSafeTemplateWitness.csproj --configuration Release
+          dotnet run --project benchmarks/witnesses/aspnet-cross-file-razorlight-template-injection/AspNetCrossFileRazorLightTemplateInjectionWitness.csproj --configuration Release
+          dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-razorlight-template/AspNetCrossFileSafeRazorLightTemplateWitness.csproj --configuration Release
           dotnet run --project benchmarks/witnesses/aspnet-multi-hop-path-traversal/AspNetMultiHopPathTraversalWitness.csproj --configuration Release
           dotnet run --project benchmarks/witnesses/aspnet-multi-hop-safe-path/AspNetMultiHopSafePathWitness.csproj --configuration Release

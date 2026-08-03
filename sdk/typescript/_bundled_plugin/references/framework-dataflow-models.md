@@ -329,20 +329,31 @@ interpreter that consumes the value.
 ### ASP.NET server-side template injection — CWE-1336
 
 - Sources: ASP.NET-bound parameters and request fields.
-- Sink: the first template-source argument to the real Scriban
+- Sinks: the first template-source argument to the real Scriban
   `Template.Parse` API when that parsed template reaches `Render` or
-  `RenderAsync`. Parsing without rendering is inert. Require a `Scriban` import
-  or fully qualified type and reject local `Template` lookalikes.
+  `RenderAsync`, and the second `content` argument of a typed RazorLight
+  `IRazorLightEngine.CompileRenderStringAsync` call. Parsing without rendering
+  is inert for Scriban; RazorLight's string API compiles and renders in the
+  same call. Require the corresponding import or fully qualified type and
+  reject local engine lookalikes.
 - Preserve the uniquely resolved C# service type, controller argument,
   wrapper parameter, bounded local aliases, and exact first parse argument.
   The optional second source-file-name argument and parser options are not
   template source.
+- For RazorLight, preserve the template key, content, and model roles. The key
+  is the first argument, runtime template content is the second, and the model
+  is the third. Resolve a named `content` argument by semantic name even when
+  named arguments are reordered. `CompileRenderAsync(key, model)` resolves a
+  project template and is not the direct string-source sink.
 - Strong counterevidence is fixed server-owned template source parsed once,
   with attacker-controlled values supplied only through the resulting
-  template's render model. Render-model strings are data and are not
-  recursively parsed merely because they contain Scriban delimiters.
+  template's render model. The same applies to a fixed RazorLight content
+  string with attacker values supplied only as model properties. Model strings
+  are data and are not recursively compiled merely because they contain
+  template delimiters.
 - `TemplateContext`, `ScriptObject`, syntax validation, output encoding, and
-  source-file metadata do not make attacker-controlled template source safe.
+  source-file metadata, RazorLight template keys or view bags do not make
+  attacker-controlled template source safe.
   A restricted member filter or isolated context is a candidate control only
   after proving it dominates the same parsed template and removes the
   demonstrated capability.

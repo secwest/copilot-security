@@ -1136,6 +1136,8 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     activation: [
       /^\s*(?:global\s+)?using\s+Scriban\s*;/mu,
       /\b(?:global\s*::\s*)?Scriban\s*\.\s*Template\s*\.\s*Parse\s*\(/iu,
+      /^\s*(?:global\s+)?using\s+RazorLight\s*;/mu,
+      /\bCompileRenderStringAsync(?:\s*<[^;(){}]+>)?\s*\(/iu,
     ],
     sources: [
       {
@@ -1154,6 +1156,11 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         kind: "dynamic-template-source",
         expression:
           /\b(?:(?:global\s*::\s*)?Scriban\s*\.\s*)?Template\s*\.\s*Parse\s*\(/iu,
+        cweIds: ["CWE-1336"],
+      },
+      {
+        kind: "dynamic-razor-template-source",
+        expression: /\bCompileRenderStringAsync(?:\s*<[^;(){}]+>)?\s*\(/iu,
         cweIds: ["CWE-1336"],
       },
     ],
@@ -1634,7 +1641,7 @@ function frameworkDataflowRecords(
       }
       if (
         model.id === "aspnet-http-template-injection" &&
-        dotnetScribanTemplateSourceArgument(lines, sink.line) === undefined
+        dotnetTemplateSourceArgument(lines, sink.line) === undefined
       ) {
         continue;
       }
@@ -3868,7 +3875,7 @@ function dotnetFrameworkWrapperSummaries(
           }
           const templateSourceArgument =
             model.id === "aspnet-http-template-injection"
-              ? dotnetScribanTemplateSourceArgument(
+              ? dotnetTemplateSourceArgument(
                   file.lines,
                   sink.line,
                   method.endLine,
@@ -5072,6 +5079,90 @@ function dotnetScribanTemplateSourceArgument(
   return source.trim();
 }
 
+function dotnetRazorLightTemplateSourceArgument(
+  lines: readonly string[],
+  sinkLine: number,
+  methodEndLine = lines.length,
+): string | undefined {
+  const callLines = lines.slice(
+    sinkLine - 1,
+    Math.min(methodEndLine, sinkLine + 16),
+  );
+  const original = callLines.join("\n");
+  const structural = cFamilyStructuralLines(callLines).join("\n");
+  const call =
+    /\b(?:this\s*\.\s*)?([A-Za-z_]\w*)\s*\.\s*CompileRenderStringAsync(?:\s*<[^;(){}]+>)?\s*\(/u.exec(
+      structural,
+    );
+  const receiver = call?.[1];
+  if (call?.index === undefined || receiver === undefined) return undefined;
+
+  const structuralFile = cFamilyStructuralLines(lines).join("\n");
+  const imported = /^\s*(?:global\s+)?using\s+RazorLight\s*;/mu.test(
+    structuralFile,
+  );
+  const shadowsUnqualifiedType =
+    /\b(?:class|interface|record|struct)\s+(?:IRazorLightEngine|RazorLightEngine|RazorLightEngineBuilder)\b/u.test(
+      structuralFile,
+    );
+  const shadowsQualifiedType =
+    /\bnamespace\s+RazorLight\b[\s\S]*\b(?:class|interface|record|struct)\s+(?:IRazorLightEngine|RazorLightEngine|RazorLightEngineBuilder)\b/u.test(
+      structuralFile,
+    );
+  const escapedReceiver = escapeRegularExpression(receiver);
+  const fullyQualifiedType = new RegExp(
+    String.raw`\b(?:global\s*::\s*)?RazorLight\s*\.\s*(?:IRazorLightEngine|RazorLightEngine)\s+${escapedReceiver}\b`,
+    "u",
+  ).test(structuralFile);
+  const importedType = new RegExp(
+    String.raw`\b(?:IRazorLightEngine|RazorLightEngine)\s+${escapedReceiver}\b`,
+    "u",
+  ).test(structuralFile);
+  const fullyQualifiedBuilder = new RegExp(
+    String.raw`\bvar\s+${escapedReceiver}\s*=\s*new\s+(?:global\s*::\s*)?RazorLight\s*\.\s*RazorLightEngineBuilder\s*\([^;{}]*\)[^;{}]{0,512}?\.\s*Build\s*\(\s*\)\s*;`,
+    "u",
+  ).test(structuralFile);
+  const importedBuilder = new RegExp(
+    String.raw`\bvar\s+${escapedReceiver}\s*=\s*new\s+RazorLightEngineBuilder\s*\([^;{}]*\)[^;{}]{0,512}?\.\s*Build\s*\(\s*\)\s*;`,
+    "u",
+  ).test(structuralFile);
+  const typedReceiver =
+    (!shadowsQualifiedType && (fullyQualifiedType || fullyQualifiedBuilder)) ||
+    (imported && !shadowsUnqualifiedType && (importedType || importedBuilder));
+  if (!typedReceiver) return undefined;
+
+  const open = structural.indexOf("(", call.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  const arguments_ = splitJavascriptArguments(original.slice(open + 1, close));
+  const namedContent = arguments_.find((argument) =>
+    /^\s*content\s*:/u.test(argument),
+  );
+  const source =
+    namedContent === undefined
+      ? arguments_[1]
+      : namedContent.replace(/^\s*content\s*:\s*/u, "");
+  if (
+    source === undefined ||
+    source.trim() === "" ||
+    (namedContent === undefined && /^\s*(?:model|viewBag)\s*:/u.test(source))
+  ) {
+    return undefined;
+  }
+  return source.replace(/^\s*content\s*:\s*/u, "").trim();
+}
+
+function dotnetTemplateSourceArgument(
+  lines: readonly string[],
+  sinkLine: number,
+  methodEndLine = lines.length,
+): string | undefined {
+  return (
+    dotnetScribanTemplateSourceArgument(lines, sinkLine, methodEndLine) ??
+    dotnetRazorLightTemplateSourceArgument(lines, sinkLine, methodEndLine)
+  );
+}
+
 function dotnetMethodParameterIndexesReachingExpression(
   lines: readonly string[],
   method: ExportedDotnetMethod,
@@ -5114,7 +5205,7 @@ function modeledSameFileDotnetTemplateSource(
       sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
   );
   if (method === undefined) return undefined;
-  const templateSource = dotnetScribanTemplateSourceArgument(
+  const templateSource = dotnetTemplateSourceArgument(
     lines,
     sinkLine,
     method.endLine,

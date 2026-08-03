@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "aspnet-cross-file-razorlight-template-injection",
+      "description": "An ASP.NET request body crosses a constructor-injected service boundary into RazorLight runtime compilation with a server-owned secret in the model.",
+      "fixture": "fixtures/aspnet-cross-file-razorlight-template-injection",
+      "findingsPaths": [
+        "aspnet-cross-file-razorlight-template-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "aspnet-controller-service-razorlight-template-injection",
+          "cwe": ["CWE-1336"],
+          "locations": [
+            {
+              "path": "Services/RazorTemplateRenderer.cs",
+              "startLine": 17,
+              "endLine": 17,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "aspnet-cross-file-safe-razorlight-template",
+      "description": "The same ASP.NET topology compiles fixed server-owned Razor source and passes request data only as a model property.",
+      "fixture": "fixtures/aspnet-cross-file-safe-razorlight-template",
+      "findingsPaths": [
+        "aspnet-cross-file-safe-razorlight-template/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}
