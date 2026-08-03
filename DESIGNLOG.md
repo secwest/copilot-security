@@ -28,7 +28,7 @@ This log records consequential implementation decisions, their evidence, and the
 
 **Why.** Avalonia provides one Linux-native control tree that can run under X11, WSLg, and a headless test platform. A self-contained directory is larger than a framework-dependent executable but produces a predictable operator experience and permits the runtime patch to be pinned, audited, and deliberately upgraded.
 
-**Verification boundary.** The non-graphical smoke mode validates platform/state contracts without loading graphics. The headless test loads the complete XAML tree and verifies tabs, data grids, commands, bindings, report surface, and state paths. CI then starts the published binary under `xvfb-run`, covering native Linux loading separately from headless rendering.
+**Verification boundary.** The project declares `linux-x64` as its runtime identity so direct, transitive test, and self-contained publish restores all validate against the same committed lock graph. The non-graphical smoke mode validates platform/state contracts without loading graphics. The headless test loads the complete XAML tree and verifies tabs, data grids, commands, bindings, report surface, and state paths. CI then starts the published binary under `xvfb-run`, covering native Linux loading separately from headless rendering.
 
 **Packaging boundary.** The installer refuses an incomplete payload before writing system paths. It copies only the published application and fixed launcher/desktop/icon files. Scanner state and preferences remain per-user and are never installed below `/opt` or copied from Windows.
 
