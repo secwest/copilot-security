@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace Secwest.CopilotSecurity.Gui.Infrastructure;
+namespace Secwest.CopilotSecurity.Desktop.Infrastructure;
 
 public abstract class ObservableObject : INotifyPropertyChanged
 {

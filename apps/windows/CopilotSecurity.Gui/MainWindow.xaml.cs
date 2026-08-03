@@ -1,7 +1,8 @@
 using System.IO;
 using System.Windows;
 using Microsoft.Win32;
-using Secwest.CopilotSecurity.Gui.ViewModels;
+using Secwest.CopilotSecurity.Desktop;
+using Secwest.CopilotSecurity.Desktop.ViewModels;
 using Forms = System.Windows.Forms;
 
 namespace Secwest.CopilotSecurity.Gui;
@@ -13,7 +14,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        DataContext = new MainViewModel();
+        DataContext = new MainViewModel(DesktopPlatformOptions.Windows());
     }
 
     protected override void OnClosed(EventArgs e)

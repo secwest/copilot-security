@@ -19,3 +19,6 @@ __pycache__/
 /benchmarks/**/bin/
 /benchmarks/**/obj/
 /benchmarks/**/target/
+# .NET build output
+**/bin/
+**/obj/

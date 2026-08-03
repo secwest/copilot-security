@@ -38,6 +38,12 @@ jobs:
           --project apps/windows/CopilotSecurity.Core.Tests/CopilotSecurity.Core.Tests.csproj
           --configuration Release
 
+      - name: Test shared desktop behavior
+        run: >-
+          dotnet run
+          --project apps/desktop/CopilotSecurity.Desktop.Tests/CopilotSecurity.Desktop.Tests.csproj
+          --configuration Release
+
       - name: Publish framework-dependent single file
         run: >-
           dotnet publish

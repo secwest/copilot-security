@@ -13,5 +13,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\CopilotSecurity.Core\CopilotSecurity.Core.csproj" />
+    <ProjectReference Include="..\..\desktop\CopilotSecurity.Desktop\CopilotSecurity.Desktop.csproj" />
   </ItemGroup>
 </Project>

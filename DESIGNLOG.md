@@ -11,3 +11,13 @@ This log records consequential implementation decisions, their evidence, and the
 **Evidence.** The regression corpus includes imported and fully qualified APIs, aliases, inline construction, direct client construction, later execution, inert construction, unexecuted calls, unrelated `execute` methods, separated builders, local type shadows, and input/call reassignment. Vulnerable and safe Maven witnesses exercise OkHttp 5.3.0 against a loopback server.
 
 **Consequence.** This bounded model intentionally misses highly dynamic dispatch that cannot be tied to the request with local typed evidence; the AI review pass remains responsible for those cases. Future extensions should add explicit data-flow evidence rather than relax the dispatch requirement.
+
+## 2026-08-03 — Share behavior, isolate platform presentation and state
+
+**Decision.** Move scanner orchestration and GUI state into a platform-neutral .NET 8 project. Keep WPF and the Linux presentation shell separate, and inject a small immutable platform profile for executable discovery, settings, path comparison, scan history, and benchmark output names.
+
+**Why.** Duplicating the orchestration in two GUIs would cause security-sensitive drift in command construction, cancellation, sealed-artifact acceptance, and benchmark handling. Sharing presentation code would instead couple Linux to Windows-only assemblies. A narrow platform profile preserves one behavioral implementation without erasing native UI differences.
+
+**Isolation.** Both applications use the scanner's `COPILOT_SECURITY_HOME` contract and `copilot-security-home` runtime directory. Linux GUI preferences and generated history use Linux-specific names, while Windows retains its established paths. Neither profile reads or writes another scanner's runtime names.
+
+**Failure behavior.** Executable discovery accepts only actual runnable files; Linux additionally requires an execute bit. A relative `XDG_CONFIG_HOME` is invalid under the XDG convention and is ignored in favor of the user's `.config` directory, avoiding a startup crash or a working-directory-relative settings file.

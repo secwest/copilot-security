@@ -13,3 +13,6 @@ All notable scanner, application, benchmark, and operational changes are recorde
 ### Resilience
 
 - Kept the OkHttp typed fallback bounded to a confirmed request-construction-to-network-dispatch path so incomplete or ambiguous code does not become a synthetic finding.
+- Extracted the scanner GUI's commands, durable settings, process control, progress, scan history, artifact loading, benchmark comparison, and diagnostics into a platform-neutral .NET 8 desktop layer while preserving the existing Windows application contract.
+- Added explicit Windows and Linux platform profiles. Linux uses executable names without Windows suffixes, XDG-compatible settings, case-sensitive path identity, and separate `gui-linux-runs` and `gui-linux-benchmarks` directories beneath `copilot-security-home`.
+- Added desktop regression tests for platform defaults, runtime-home isolation, durable settings, and the absence of implicit executable fallbacks.

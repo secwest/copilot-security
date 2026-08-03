@@ -4,12 +4,11 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
-using System.Windows;
 using Secwest.CopilotSecurity.Core.Models;
 using Secwest.CopilotSecurity.Core.Services;
-using Secwest.CopilotSecurity.Gui.Infrastructure;
+using Secwest.CopilotSecurity.Desktop.Infrastructure;
 
-namespace Secwest.CopilotSecurity.Gui.ViewModels;
+namespace Secwest.CopilotSecurity.Desktop.ViewModels;
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
@@ -18,11 +17,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly ScanArtifactReader artifactReader = new();
     private readonly BenchmarkComparisonReader benchmarkComparisonReader = new();
     private readonly GuiSettingsStore settingsStore = new();
+    private readonly DesktopPlatformOptions platform;
     private readonly string settingsPath;
     private CancellationTokenSource? operationCancellation;
     private string repositoryPath = Environment.CurrentDirectory;
-    private string nodePath = FindOnPath("node.exe") ?? string.Empty;
-    private string copilotPath = FindOnPath("copilot.exe") ?? FindOnPath("copilot.cmd") ?? string.Empty;
+    private string nodePath = string.Empty;
+    private string copilotPath = string.Empty;
     private string scannerEntryPoint = ScannerInstallationDiscovery.FindInstalledFile(
         AppContext.BaseDirectory,
         "sdk",
@@ -62,14 +62,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool isBusy;
     private TimeSpan elapsed;
 
-    public MainViewModel()
+    public MainViewModel(DesktopPlatformOptions? platformOptions = null)
     {
-        settingsPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Secwest",
-            "CopilotSecurity",
-            "gui",
-            "settings.json");
+        platform = platformOptions ?? DesktopPlatformOptions.Current();
+        settingsPath = platform.SettingsPath;
+        nodePath = FindOnPath(platform.NodeExecutableNames) ?? string.Empty;
+        copilotPath = FindOnPath(platform.CopilotExecutableNames) ?? string.Empty;
         LoadSettings();
         StartScanCommand = new AsyncRelayCommand(StartScanAsync, () => !IsBusy);
         CancelCommand = new RelayCommand(Cancel, () => IsBusy);
@@ -81,7 +79,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RefreshDiagnosticsCommand = new AsyncRelayCommand(RefreshDiagnosticsAsync, () => !IsBusy);
         if (string.IsNullOrWhiteSpace(benchmarkResultsDirectory))
         {
-            benchmarkResultsDirectory = Path.Combine(RuntimeHome, "gui-benchmarks");
+            benchmarkResultsDirectory = Path.Combine(RuntimeHome, platform.BenchmarkDirectoryName);
         }
         candidateBenchmarkReport = Path.Combine(benchmarkResultsDirectory, "benchmark-report.json");
         _ = RefreshHistoryAsync();
@@ -121,12 +119,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 RaisePropertyChanged(nameof(RuntimeHome));
                 RaisePropertyChanged(nameof(HistoryRoot));
-                BenchmarkResultsDirectory = Path.Combine(RuntimeHome, "gui-benchmarks");
+                BenchmarkResultsDirectory = Path.Combine(RuntimeHome, platform.BenchmarkDirectoryName);
             }
         }
     }
     public string RuntimeHome => Path.Combine(StateRoot, "copilot-security-home");
-    public string HistoryRoot => Path.Combine(RuntimeHome, "gui-runs");
+    public string HistoryRoot => Path.Combine(RuntimeHome, platform.HistoryDirectoryName);
     public string Model { get => model; set => SetProperty(ref model, value); }
     public string Effort { get => effort; set => SetProperty(ref effort, value); }
     public string AuthMode { get => authMode; set => SetProperty(ref authMode, value); }
@@ -433,10 +431,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + "-" + safeName);
     }
 
-    private static IReadOnlyList<string> ParsePaths(string value, string repository) =>
+    private IReadOnlyList<string> ParsePaths(string value, string repository) =>
         value.Split([';', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(path => Path.IsPathRooted(path) ? path : Path.Combine(repository, path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(platform.PathComparer)
             .ToArray();
 
     private static decimal? ParseOptionalDecimal(string value, string label)
@@ -478,29 +476,57 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static bool IsRecoverable(Exception exception) =>
         exception is ArgumentException or IOException or InvalidDataException or UnauthorizedAccessException;
 
-    private static string? FindOnPath(string executable)
+    private static string? FindOnPath(IEnumerable<string> executableNames)
     {
-        if (Path.IsPathRooted(executable) && File.Exists(executable))
+        foreach (var executable in executableNames)
         {
-            return Path.GetFullPath(executable);
-        }
-        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            try
+            if (Path.IsPathRooted(executable) && IsRunnable(executable))
             {
-                var candidate = Path.Combine(directory.Trim('"'), executable);
-                if (File.Exists(candidate))
-                {
-                    return Path.GetFullPath(candidate);
-                }
+                return Path.GetFullPath(executable);
             }
-            catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
+            foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
-                // Ignore malformed PATH entries and continue through the bounded list.
+                try
+                {
+                    var candidate = Path.Combine(directory.Trim('"'), executable);
+                    if (IsRunnable(candidate))
+                    {
+                        return Path.GetFullPath(candidate);
+                    }
+                }
+                catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
+                {
+                    // Ignore malformed PATH entries and continue through the bounded list.
+                }
             }
         }
         return null;
+    }
+
+    private static bool IsRunnable(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+        if (OperatingSystem.IsWindows())
+        {
+            return true;
+        }
+        try
+        {
+            const UnixFileMode executable = UnixFileMode.UserExecute
+                | UnixFileMode.GroupExecute
+                | UnixFileMode.OtherExecute;
+            return (File.GetUnixFileMode(path) & executable) != 0;
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or PlatformNotSupportedException)
+        {
+            return false;
+        }
     }
 
     private void LoadSettings()
@@ -527,7 +553,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             benchmarkManifest = Prefer(settings.BenchmarkManifest, benchmarkManifest);
             benchmarkResultsDirectory = Prefer(
                 settings.BenchmarkResultsDirectory,
-                Path.Combine(stateRoot, "copilot-security-home", "gui-benchmarks"));
+                Path.Combine(stateRoot, "copilot-security-home", platform.BenchmarkDirectoryName));
         }
         catch (Exception exception) when (IsRecoverable(exception) || exception is JsonException)
         {
