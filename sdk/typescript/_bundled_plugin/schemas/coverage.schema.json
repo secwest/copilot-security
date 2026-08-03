@@ -99,7 +99,7 @@
             "items": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)artifacts/.+$"
+              "pattern": "^(?!.*#)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)artifacts/.+$"
             }
           },
           "riskArea": {

@@ -939,7 +939,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     language: "java-kotlin",
     extensions: JAVA_EXTENSIONS,
     activation: [
-      /\b(?:java\.net\.http|HttpClient|HttpRequest|RestTemplate)\b/iu,
+      /\b(?:java\.net\.http|HttpClient|HttpRequest|RestTemplate|WebClient)\b/iu,
     ],
     sources: [
       {
@@ -956,7 +956,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
       {
         kind: "outbound-http-url",
         expression:
-          /\b[A-Za-z_$][\w$]*\s*\.\s*(?:send|sendAsync)\s*\(|\b(?:java\.net\.http\.)?HttpClient\s*\.\s*(?:newHttpClient|newBuilder)\s*\(\)[^;\r\n]*?\.\s*(?:send|sendAsync)\s*\(|\b[A-Za-z_$][\w$]*\s*\.\s*(?:delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(|\bnew\s+(?:org\.springframework\.web\.client\.)?RestTemplate\s*\([^)]*\)\s*\.\s*(?:delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(/iu,
+          /\b[A-Za-z_$][\w$]*\s*\.\s*(?:send|sendAsync|uri)\s*\(|\.\s*uri\s*\(|\b(?:java\.net\.http\.)?HttpClient\s*\.\s*(?:newHttpClient|newBuilder)\s*\(\)[^;\r\n]*?\.\s*(?:send|sendAsync)\s*\(|\b[A-Za-z_$][\w$]*\s*\.\s*(?:delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(|\bnew\s+(?:org\.springframework\.web\.client\.)?RestTemplate\s*\([^)]*\)\s*\.\s*(?:delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(/iu,
         cweIds: ["CWE-918"],
       },
     ],
@@ -983,7 +983,8 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
       },
       {
         kind: "redirects-disabled",
-        expression: /\b(?:HttpClient\.)?Redirect\.NEVER\b/iu,
+        expression:
+          /\b(?:HttpClient\.)?Redirect\.NEVER\b|\.followRedirect\s*\(\s*false\s*\)/iu,
       },
       {
         kind: "network-address-validation-or-pinning",
@@ -1597,7 +1598,12 @@ function frameworkDataflowRecords(
       ) {
         continue;
       }
-      const source = nearestModeledSource(sources, sink.line);
+      const source =
+        extension === ".java" &&
+        (model.id === "spring-http-ssrf" || model.id === "spring-http-path")
+          ? modeledSameFileJavaSource(lines, sink.line, model.id, model.sources)
+          : nearestModeledSource(sources, sink.line);
+      if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
             .filter((control) =>
@@ -3898,7 +3904,7 @@ function javaOutboundCallExpression(
   const original = callLines.join("\n");
   const structural = cFamilyStructuralLines(callLines).join("\n");
   const call =
-    /\.\s*(?:send|sendAsync|delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(/u.exec(
+    /\.\s*(?:send|sendAsync|uri|delete|exchange|execute|getForEntity|getForObject|headForHeaders|optionsForAllow|patchForObject|postForEntity|postForLocation|postForObject|put)\s*\(/u.exec(
       structural,
     );
   if (call === null) return javaCallExpression(lines, startLine, methodEndLine);
@@ -4784,7 +4790,15 @@ function modeledJavaCallSource(
     const source = sourcePatterns.find((pattern) =>
       pattern.expression.test(parameter.declaration),
     );
-    if (source !== undefined) {
+    if (
+      source !== undefined &&
+      !javaIdentifierReassignedBetween(
+        lines,
+        argument,
+        method.startLine,
+        callLine,
+      )
+    ) {
       return { kind: source.kind, line: method.startLine };
     }
   }
@@ -4806,6 +4820,52 @@ function modeledJavaCallSource(
     if (!javaIdentifierReassignedBetween(lines, argument, line, callLine)) {
       return source;
     }
+  }
+  return undefined;
+}
+
+function modeledSameFileJavaSource(
+  lines: readonly string[],
+  sinkLine: number,
+  modelId: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const method = exportedJavaMethods(lines).find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  if (method === undefined) return undefined;
+  const sinkExpression =
+    modelId === "spring-http-ssrf"
+      ? javaOutboundDestinationArgument(
+          javaOutboundCallExpression(lines, sinkLine, method.endLine),
+        )
+      : javaCallExpression(lines, sinkLine, method.endLine);
+  const direct = modeledJavaCallSource(
+    lines,
+    method,
+    sinkLine,
+    sinkExpression.trim(),
+    sourcePatterns,
+  );
+  if (direct !== undefined) return direct;
+
+  for (const parameterIndex of javaMethodParameterIndexesReachingSink(
+    lines,
+    method,
+    sinkLine,
+    sinkExpression,
+  )) {
+    const parameter = method.parameters[parameterIndex];
+    if (parameter === undefined) continue;
+    const source = modeledJavaCallSource(
+      lines,
+      method,
+      sinkLine,
+      parameter.name,
+      sourcePatterns,
+    );
+    if (source !== undefined) return source;
   }
   return undefined;
 }
@@ -4887,10 +4947,111 @@ function dotnetHttpClientSinkHasTypedReceiver(
   );
 }
 
+function javaWebClientUriSinkHasTypedReceiver(
+  lines: readonly string[],
+  sinkLine: number,
+): boolean {
+  const structuralLines = cFamilyStructuralLines(lines);
+  const structuralText = structuralLines.join("\n");
+  const windowStart = Math.max(0, sinkLine - 13);
+  const windowEnd = Math.min(lines.length, sinkLine + 12);
+  const windowLines = structuralLines.slice(windowStart, windowEnd);
+  const windowText = windowLines.join("\n");
+  const precedingLength = structuralLines
+    .slice(windowStart, Math.max(windowStart, sinkLine - 1))
+    .join("\n").length;
+  const uriCall = [...windowText.matchAll(/\.\s*uri\s*\(/gu)].find(
+    (match) => (match.index ?? -1) >= precedingLength,
+  );
+  if (uriCall?.index === undefined) return false;
+
+  const statementPrefix = windowText.slice(0, uriCall.index);
+  const statementBoundary = Math.max(
+    statementPrefix.lastIndexOf(";"),
+    statementPrefix.lastIndexOf("{"),
+    statementPrefix.lastIndexOf("}"),
+  );
+  const statement = windowText.slice(statementBoundary + 1);
+  const webClientMethods = "delete|get|head|method|options|patch|post|put";
+  const webClientImported =
+    /^\s*import\s+org\.springframework\.web\.reactive\.function\.client\.(?:WebClient|\*)\s*;/mu.test(
+      structuralText,
+    );
+  const shadowsWebClient = /\b(?:class|interface|record)\s+WebClient\b/u.test(
+    structuralText,
+  );
+
+  const receiverIsTypedWebClient = (receiverName: string): boolean => {
+    const receiver = escapeRegularExpression(receiverName);
+    if (
+      new RegExp(
+        String.raw`\borg\s*\.\s*springframework\s*\.\s*web\s*\.\s*reactive\s*\.\s*function\s*\.\s*client\s*\.\s*WebClient\s+${receiver}\b`,
+        "u",
+      ).test(structuralText)
+    ) {
+      return true;
+    }
+    if (!webClientImported || shadowsWebClient) return false;
+    return (
+      new RegExp(String.raw`\bWebClient\s+${receiver}\b`, "u").test(
+        structuralText,
+      ) ||
+      new RegExp(
+        String.raw`\bvar\s+${receiver}\s*=\s*WebClient\s*\.\s*(?:create|builder)\s*\(`,
+        "u",
+      ).test(structuralText)
+    );
+  };
+
+  const fullyQualifiedConstruction = new RegExp(
+    String.raw`\borg\s*\.\s*springframework\s*\.\s*web\s*\.\s*reactive\s*\.\s*function\s*\.\s*client\s*\.\s*WebClient\s*\.\s*(?:create\s*\([^)]*\)|builder\s*\(\)[\s\S]*?\.\s*build\s*\(\))[\s\S]*?\.\s*(?:${webClientMethods})\s*\([^;{}]*\)[\s\S]*?\.\s*uri\s*\(`,
+    "u",
+  );
+  if (fullyQualifiedConstruction.test(statement)) return true;
+  if (
+    webClientImported &&
+    !shadowsWebClient &&
+    new RegExp(
+      String.raw`\bWebClient\s*\.\s*(?:create\s*\([^)]*\)|builder\s*\(\)[\s\S]*?\.\s*build\s*\(\))[\s\S]*?\.\s*(?:${webClientMethods})\s*\([^;{}]*\)[\s\S]*?\.\s*uri\s*\(`,
+      "u",
+    ).test(statement)
+  ) {
+    return true;
+  }
+
+  const directReceiver = new RegExp(
+    String.raw`\b([A-Za-z_$][\w$]*)\s*\.\s*(?:${webClientMethods})\s*\([^;{}]*\)[\s\S]*?\.\s*uri\s*\(`,
+    "u",
+  ).exec(statement)?.[1];
+  if (
+    directReceiver !== undefined &&
+    receiverIsTypedWebClient(directReceiver)
+  ) {
+    return true;
+  }
+
+  const uriReceiver = /\b([A-Za-z_$][\w$]*)\s*\.\s*uri\s*\(/u.exec(
+    statement,
+  )?.[1];
+  if (uriReceiver === undefined) return false;
+  const priorMethodText = structuralLines
+    .slice(Math.max(0, sinkLine - MAX_WRAPPER_FUNCTION_LINES), sinkLine - 1)
+    .join("\n");
+  const requestSpec = escapeRegularExpression(uriReceiver);
+  const assignedClient = new RegExp(
+    String.raw`\b(?:var|(?:(?:org\s*\.\s*springframework\s*\.\s*web\s*\.\s*reactive\s*\.\s*function\s*\.\s*client\s*\.)?WebClient\s*\.\s*)?(?:RequestHeadersUriSpec|RequestBodyUriSpec)(?:\s*<[^;=]+>)?)\s+${requestSpec}\s*=\s*([A-Za-z_$][\w$]*)\s*\.\s*(?:${webClientMethods})\s*\(`,
+    "u",
+  ).exec(priorMethodText)?.[1];
+  return (
+    assignedClient !== undefined && receiverIsTypedWebClient(assignedClient)
+  );
+}
+
 function javaOutboundHttpSinkHasTypedReceiver(
   lines: readonly string[],
   sinkLine: number,
 ): boolean {
+  if (javaWebClientUriSinkHasTypedReceiver(lines, sinkLine)) return true;
   const sinkExpression = cFamilyStructuralLines(
     lines.slice(sinkLine - 1, Math.min(lines.length, sinkLine + 12)),
   ).join("\n");

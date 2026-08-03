@@ -30,7 +30,7 @@ The package is ESM-only and provides:
   sessions remove public token aliases and expose no shell tools
 - typed host-generated Node HTTP, Python web, Spring/servlet, and ASP.NET
   command/SQL/SSRF/filesystem-path data-flow hypotheses, including JDK
-  `HttpClient` and Spring `RestTemplate`, with exact source/sink
+  `HttpClient`, Spring `RestTemplate`, and reactive Spring `WebClient`, with exact source/sink
   lines and nearby negative controls for the mandatory residual correction
   turn, plus bounded one-hop or two-hop C# controller/service summaries,
   one-hop or two-hop Java controller/service summaries, and one-hop or two-hop
@@ -101,7 +101,9 @@ transport interruptions open a new session. Authentication, authorization,
 contract, sandbox, cancellation, cost-limit, and exhausted safety-filter
 failures remain terminal. A new session receives the original scan contract,
 re-consumes the immutable host inventory, and treats existing artifacts as
-untrusted partial drafts. Native AI-credit limits apply per fresh session;
+untrusted partial drafts. Direct writes to host-owned inventory files are
+denied, and the original in-scope inventory digest is verified independently
+by both completion phases. Native AI-credit limits apply per fresh session;
 scanner-owned cost tracking is cumulative across all attempt roots and their
 subagents.
 Scanner-owned state is isolated under `COPILOT_SECURITY_HOME` (default:

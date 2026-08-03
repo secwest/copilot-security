@@ -94,7 +94,11 @@ the exact changed-file set for diff scans, writes zero-preview rank metadata,
 all three. The host also writes an exact JSON inventory of repository
 `SECURITY.md` paths. Copilot must consume these files without regenerating,
 narrowing, reordering, or modifying them; empty inventories are authoritative.
-The host verifies every digest before preparation and again before sealing.
+Direct model write requests to all four host-owned inventory files are denied.
+The host verifies every digest before preparation and again before sealing,
+and both completion phases pass the original `in_scope_files.txt` SHA-256 to
+the trusted finalizer for an independent check immediately before it reads the
+inventory.
 It also sandwiches a SHA-256 comparison of every model-visible file between
 authoritative registered-target checks before model execution, before contract
 preparation, and before completion. A concurrent checkout mutation therefore
@@ -389,6 +393,20 @@ before transport:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/java-multi-hop-ssrf-manifest.json `
   --results-dir C:\security-benchmarks\java-multi-hop-ssrf `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Spring WebClient lane carries the same annotated value through two typed
+service boundaries into the first argument of reactive `WebClient.uri`. Its
+control maps the request value to a fixed complete `URI` and configures the
+underlying JDK connector with `HttpClient.Redirect.NEVER`. Executable witnesses
+use the actual WebClient and loopback-only services to prove both behaviors:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/java-webclient-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\java-webclient-ssrf `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

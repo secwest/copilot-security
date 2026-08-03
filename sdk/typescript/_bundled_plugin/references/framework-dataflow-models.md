@@ -257,13 +257,20 @@ interpreter that consumes the value.
 
 - Sources: Spring-bound request parameters and servlet request accessors.
 - Sinks: request objects or complete URI values passed to typed JDK
-  `HttpClient.send`/`sendAsync` or typed Spring `RestTemplate` operations.
+  `HttpClient.send`/`sendAsync`, typed Spring `RestTemplate` operations, or the
+  first destination argument of typed reactive `WebClient.UriSpec.uri` calls.
 - Preserve both uniquely resolved Java service types, exact arguments and
   parameters, and bounded local URI/request assignments. A local class that
-  shadows `HttpClient` or `RestTemplate` is not an outbound HTTP sink.
+  shadows `HttpClient`, `RestTemplate`, or `WebClient` is not an outbound HTTP
+  sink. For WebClient request-spec aliases, reopen the typed root client and
+  the request-producing method before accepting the `uri` receiver.
 - `URI.create`, `new URI`, `HttpRequest.newBuilder`, parsing, and encoding do
-  not authorize a destination. `HttpClient.Redirect.NEVER` rejects automatic
-  redirect following but does not constrain the initial request URI.
+  not authorize a destination. A WebClient `baseUrl` does not make an absolute
+  attacker URI safe. Later variables applied to a fixed URI template are not
+  complete-authority control. `HttpClient.Redirect.NEVER` or Reactor Netty
+  `followRedirect(false)` rejects automatic redirect following but does not
+  constrain the initial request URI; inspect the configured
+  `ClientHttpConnector` for the actual transport behavior.
 - Strong counterevidence is exact request-key selection from fixed,
   server-owned complete destinations plus redirect rejection. URL substring,
   suffix, scheme-only, or userinfo-insensitive checks are not host

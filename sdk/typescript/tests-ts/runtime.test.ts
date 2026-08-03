@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmod,
   lstat,
@@ -265,6 +266,11 @@ describe("standalone Copilot runtime", () => {
       expect(
         await readFile(join(discovery, "in_scope_files.txt"), "utf8"),
       ).toBe("src/app.js\nsrc/main/java/example/Application.java\n");
+      expect(snapshot.inventorySha256).toBe(
+        createHash("sha256")
+          .update("src/app.js\nsrc/main/java/example/Application.java\n")
+          .digest("hex"),
+      );
       expect(
         await readFile(join(discovery, "deep_review_input.jsonl"), "utf8"),
       ).toBe(

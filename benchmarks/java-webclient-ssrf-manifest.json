@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "java-webclient-multi-hop-ssrf",
+      "description": "A Spring request parameter crosses two constructor-injected Java services into a typed reactive WebClient request with an attacker-controlled complete URI.",
+      "fixture": "fixtures/java-webclient-multi-hop-ssrf",
+      "findingsPaths": ["java-webclient-multi-hop-ssrf/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "spring-java-webclient-multi-hop-ssrf",
+          "cwe": ["CWE-918"],
+          "locations": [
+            {
+              "path": "src/main/java/example/PreviewTransport.java",
+              "startLine": 16,
+              "endLine": 16,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "java-webclient-multi-hop-safe-fetch",
+      "description": "The same Spring flow uses the request value only as an exact key into fixed complete destinations and configures the underlying JDK connector to reject redirects.",
+      "fixture": "fixtures/java-webclient-multi-hop-safe-fetch",
+      "findingsPaths": [
+        "java-webclient-multi-hop-safe-fetch/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

@@ -1367,9 +1367,19 @@ def complete_scan(
 ) -> dict[str, Any]:
     scan_id = require_uuid(args.scan_id, "scan-id")
     cost_json = None if prepare_only else parse_scan_cost(args.cost_json)
+    inventory_digest = (
+        None
+        if args.inventory_sha256 is None
+        else require_sha256_digest(args.inventory_sha256, "inventory-sha256")
+    )
     with scan_completion_lock(scan_id):
         return complete_scan_locked(
-            connection, scan_id, args.claim_token, cost_json, prepare_only=prepare_only
+            connection,
+            scan_id,
+            args.claim_token,
+            cost_json,
+            inventory_digest,
+            prepare_only=prepare_only,
         )
 
 
@@ -1378,6 +1388,7 @@ def complete_scan_locked(
     scan_id: str,
     claim_token: str | None,
     cost_json: str | None,
+    inventory_digest: str | None,
     *,
     prepare_only: bool = False,
 ) -> dict[str, Any]:
@@ -1404,13 +1415,30 @@ def complete_scan_locked(
         claim_token,
         error_message="Scan completion is owned by another continuation.",
     )
+    scan_dir = require_canonical_scan_directory(Path(scan["scan_dir"]))
     if scan["recipe_json"] is None:
         deep_scan.require_deep_scan_ready_for_parent_completion(connection, scan)
+    else:
+        if inventory_digest is None:
+            raise SystemExit(
+                "CLI scan completion requires the host in-scope inventory digest."
+            )
+        try:
+            actual_inventory_digest = scan_local_file_digest(
+                scan_dir, "artifacts/02_discovery/in_scope_files.txt"
+            )
+        except SystemExit as exc:
+            raise SystemExit(
+                "The immutable host-generated in-scope inventory is missing or unreadable before finalization."
+            ) from exc
+        if actual_inventory_digest != inventory_digest:
+            raise SystemExit(
+                "The immutable host-generated in-scope inventory changed before finalization."
+            )
     warnings = json.loads(scan["completion_warnings_json"])
     warning = scan_target_warning(scan)
     if warning is not None and warning not in warnings:
         warnings.append(warning)
-    scan_dir = require_canonical_scan_directory(Path(scan["scan_dir"]))
     completion_timestamp = now()
     completion_binding = workbench_completion_binding(scan, completion_timestamp)
     if scan["recipe_json"] is not None:

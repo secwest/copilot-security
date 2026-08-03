@@ -216,11 +216,13 @@ def parse_args(description: str) -> argparse.Namespace:
     prepare_scan_completion = subparsers.add_parser("prepare-scan-completion")
     prepare_scan_completion.add_argument("--scan-id", required=True)
     prepare_scan_completion.add_argument("--claim-token")
+    prepare_scan_completion.add_argument("--inventory-sha256")
 
     complete_scan = subparsers.add_parser("complete-scan")
     complete_scan.add_argument("--scan-id", required=True)
     complete_scan.add_argument("--claim-token")
     complete_scan.add_argument("--cost-json")
+    complete_scan.add_argument("--inventory-sha256")
 
     cancel_scan = subparsers.add_parser("cancel-scan")
     cancel_scan.add_argument("--scan-id", required=True)

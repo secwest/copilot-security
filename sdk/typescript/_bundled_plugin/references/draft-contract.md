@@ -91,6 +91,8 @@ The top level must contain:
 Each reviewed file or security surface belongs in `surfaces` with a stable
 `id`, human-readable `label`, one of `reported`, `no_issue_found`, `rejected`,
 `not_applicable`, or `needs_follow_up`, and `receiptRefs` (which may be empty).
+Each receipt reference is the plain repository-relative path of an existing
+file under `artifacts/`; do not append `#` record identifiers or line anchors.
 For every path in `artifacts/02_discovery/in_scope_files.txt`, include a
 surface whose `label` is that exact repository-relative path. The host
 reconciles this immutable inventory before sealing: omitted paths become

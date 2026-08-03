@@ -100,6 +100,27 @@ describe("Copilot port", () => {
         { sessionId: "session" },
       ),
     ).toEqual({ kind: "approve-once" });
+    expect(
+      await handler(
+        {
+          kind: "write",
+          fileName: join(
+            scanDirectory,
+            "artifacts",
+            "02_discovery",
+            "in_scope_files.txt",
+          ),
+          diff: "",
+          intention: "replace the host inventory",
+          canOfferSessionApproval: true,
+        },
+        { sessionId: "session" },
+      ),
+    ).toEqual({
+      kind: "reject",
+      feedback:
+        "Copilot Security permits only sandboxed, offline repository reads and scan-directory artifact operations; this request is outside that profile.",
+    });
     const tokenHandler = createScopedScannerPermissionHandler(
       scanDirectory,
       repository,

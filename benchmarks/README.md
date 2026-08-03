@@ -290,6 +290,42 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The Java WebClient lane uses the same three-file Spring topology but terminates
+at the first argument of reactive `WebClient.UriSpec.uri`. The host accepts
+injected clients, `create()` and `builder().build()` chains, fully qualified
+construction, and locally assigned request specifications only when the root
+receiver is typed. Later URI-template variables are not complete-destination
+control. The safe fixture maps the request key to one fixed complete `URI`,
+uses a `JdkClientHttpConnector` configured with `HttpClient.Redirect.NEVER`,
+releases the response body, and applies a short reactive timeout.
+
+The executable witnesses use the actual Spring WebClient against loopback-only
+HTTP servers:
+
+```powershell
+mvn --file benchmarks\witnesses\java-webclient-ssrf\pom.xml `
+  compile exec:java -Dexec.mainClass=example.VulnerableWebClientWitness
+
+mvn --file benchmarks\witnesses\java-webclient-safe-fetch\pom.xml `
+  compile exec:java -Dexec.mainClass=example.SafeWebClientWitness
+```
+
+Run the strict live pair with:
+
+```powershell
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/java-webclient-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-java-webclient-ssrf `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 The ASP.NET cross-file lane applies the same strict gates to constructor-
 injected controller/service flows. Its command positive reaches `cmd.exe /c`,
 while its control uses a fixed executable, disables shell execution, and adds

@@ -132,6 +132,7 @@ export interface CopilotInventoryTarget {
 export interface CopilotScanInventorySnapshot {
   fileCount: number;
   repositoryPaths: readonly string[];
+  inventorySha256: string;
   files: ReadonlyArray<{ path: string; sha256: string }>;
 }
 
@@ -661,6 +662,7 @@ export async function prepareCopilotScanInventory(options: {
   return {
     fileCount: rows.length,
     repositoryPaths: rows.map((row) => row.path),
+    inventorySha256: createHash("sha256").update(inventoryBytes).digest("hex"),
     files,
   };
 }

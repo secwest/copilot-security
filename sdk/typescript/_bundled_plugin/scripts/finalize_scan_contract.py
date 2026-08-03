@@ -91,6 +91,7 @@ SAFE_SCHEMA_PATTERNS = {
     r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))(?!.*\\).+$",
     r"^[a-f0-9]{64}$",
     r"^(?!.*(?:^|/)\.\.(?:/|$))(?!.*\\)artifacts/.+$",
+    r"^(?!.*#)(?!.*(?:^|/)\.\.(?:/|$))(?!.*\\)artifacts/.+$",
     r"^csf_[a-f0-9]{24}$",
     r"^occ_[a-f0-9]{24}$",
     r"^[a-z0-9][a-z0-9._/-]*$",
@@ -357,6 +358,30 @@ def _require_safe_relative_path(value: str, context: str, *, allow_dot: bool = F
     ):
         raise ContractError(f"{context}: expected a safe repository-relative POSIX path")
     return normalized
+
+
+def _require_coverage_receipt_path(
+    value: str, context: str, *, recover_record_fragment: bool = False
+) -> tuple[str, bool]:
+    """Return a canonical artifact path and whether a record fragment was removed.
+
+    Coverage receipts seal artifact files, not JSONL record identifiers. Models
+    sometimes append ``#record-id`` to point at one ledger row. During draft
+    recovery we safely retain that evidence by canonicalizing the reference to
+    its containing artifact. Sealed documents must already contain the plain
+    artifact path.
+    """
+
+    artifact_path, separator, record_id = value.partition("#")
+    if separator:
+        if not recover_record_fragment or not artifact_path or not record_id:
+            raise ContractError(
+                f"{context}: expected an artifact file path without a record fragment"
+            )
+    normalized = _require_safe_relative_path(artifact_path, context)
+    if not normalized.startswith("artifacts/"):
+        raise ContractError(f"{context}: expected a file under artifacts/")
+    return normalized, bool(separator)
 
 
 def _require_scan_directory(scan_dir: Path) -> Path:
@@ -1194,10 +1219,17 @@ def _recover_unsealed_coverage(
                         try:
                             if not isinstance(ref, str):
                                 raise ContractError(f"{ref_context}: expected a string")
-                            normalized_ref = _require_safe_relative_path(ref, ref_context)
-                            if not normalized_ref.startswith("artifacts/"):
-                                raise ContractError(
-                                    f"{ref_context}: expected a file under artifacts/"
+                            normalized_ref, removed_fragment = (
+                                _require_coverage_receipt_path(
+                                    ref,
+                                    ref_context,
+                                    recover_record_fragment=True,
+                                )
+                            )
+                            if removed_fragment:
+                                warnings.append(
+                                    f"Recovered coverage receipt {index + 1}.{ref_index + 1}: "
+                                    "removed a record fragment from the artifact path."
                                 )
                             try:
                                 _require_scan_local_file(scan_dir, normalized_ref, ref_context)
@@ -1579,11 +1611,9 @@ def _validate_coverage(manifest: dict[str, Any], coverage: dict[str, Any], scan_
         for ref_index, ref in enumerate(receipt_refs):
             if not isinstance(ref, str):
                 raise ContractError(f"{context}.receiptRefs[{ref_index}]: expected a string")
-            normalized_ref = _require_safe_relative_path(ref, f"{context}.receiptRefs[{ref_index}]")
-            if not normalized_ref.startswith("artifacts/"):
-                raise ContractError(
-                    f"{context}.receiptRefs[{ref_index}]: expected a file under artifacts/"
-                )
+            normalized_ref, _ = _require_coverage_receipt_path(
+                ref, f"{context}.receiptRefs[{ref_index}]"
+            )
             receipt_refs[ref_index] = normalized_ref
             _require_scan_local_file(
                 scan_dir, normalized_ref, f"{context}.receiptRefs[{ref_index}]"

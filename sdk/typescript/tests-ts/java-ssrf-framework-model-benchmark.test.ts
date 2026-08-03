@@ -538,7 +538,7 @@ public final class SecondArgumentController {
       JSON.stringify({ frameworkModel: { id: "spring-http-ssrf" } }),
     );
     expect(prompt).toContain(
-      "HttpClient.Redirect.NEVER constrains only responses after the initial request",
+      "HttpClient.Redirect.NEVER or Reactor Netty followRedirect(false) constrains only responses after the initial request",
     );
     expect(prompt).toContain(
       "exact request-key selection from fixed server-owned complete destinations",
@@ -547,7 +547,7 @@ public final class SecondArgumentController {
       "every DNS A/AAAA answer, connection-time resolution and reuse",
     );
     expect(prompt).toContain(
-      "locally shadowed HttpClient or RestTemplate types",
+      "locally shadowed HttpClient, RestTemplate, or WebClient types",
     );
   });
 });

@@ -1074,6 +1074,8 @@ export class CopilotSecurity {
             "prepare-scan-completion",
             "--scan-id",
             scanId,
+            "--inventory-sha256",
+            `sha256:${inventorySnapshot.inventorySha256}`,
           ]);
           return snapshot.usage;
         },
@@ -1103,6 +1105,8 @@ export class CopilotSecurity {
         "complete-scan",
         "--scan-id",
         scanId,
+        "--inventory-sha256",
+        `sha256:${inventorySnapshot.inventorySha256}`,
         ...(completionCost === null
           ? []
           : ["--cost-json", JSON.stringify(completionCost)]),

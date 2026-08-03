@@ -14,9 +14,9 @@ concurrency:
 
 jobs:
   spring-security-fixtures:
-    name: Spring fixtures and JDK witnesses
+    name: Spring fixtures and outbound witnesses
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -37,6 +37,10 @@ jobs:
             benchmarks/fixtures/java-multi-hop-safe-path/pom.xml
             benchmarks/fixtures/java-multi-hop-ssrf/pom.xml
             benchmarks/fixtures/java-multi-hop-safe-fetch/pom.xml
+            benchmarks/fixtures/java-webclient-multi-hop-ssrf/pom.xml
+            benchmarks/fixtures/java-webclient-multi-hop-safe-fetch/pom.xml
+            benchmarks/witnesses/java-webclient-ssrf/pom.xml
+            benchmarks/witnesses/java-webclient-safe-fetch/pom.xml
 
       - name: Compile Spring benchmark fixtures
         shell: bash
@@ -48,6 +52,8 @@ jobs:
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-safe-path/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-ssrf/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-safe-fetch/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-webclient-multi-hop-ssrf/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-webclient-multi-hop-safe-fetch/pom.xml verify
 
       - name: Prove vulnerable and safe path behavior
         shell: bash
@@ -68,3 +74,10 @@ jobs:
           java --add-modules jdk.httpserver -cp "$RUNNER_TEMP/java-ssrf-vulnerable" VulnerableSsrfWitness
           javac --add-modules jdk.httpserver -d "$RUNNER_TEMP/java-ssrf-safe" benchmarks/witnesses/java-multi-hop-safe-fetch/SafeFetchWitness.java
           java --add-modules jdk.httpserver -cp "$RUNNER_TEMP/java-ssrf-safe" SafeFetchWitness
+
+      - name: Prove vulnerable and safe reactive outbound-request behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress --file benchmarks/witnesses/java-webclient-ssrf/pom.xml compile exec:java -Dexec.mainClass=example.VulnerableWebClientWitness
+          mvn --batch-mode --no-transfer-progress --file benchmarks/witnesses/java-webclient-safe-fetch/pom.xml compile exec:java -Dexec.mainClass=example.SafeWebClientWitness
