@@ -1130,6 +1130,47 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "aspnet-http-template-injection",
+    language: "dotnet",
+    extensions: DOTNET_EXTENSIONS,
+    activation: [
+      /^\s*(?:global\s+)?using\s+Scriban\s*;/mu,
+      /\b(?:global\s*::\s*)?Scriban\s*\.\s*Template\s*\.\s*Parse\s*\(/iu,
+    ],
+    sources: [
+      {
+        kind: "aspnet-bound-parameter",
+        expression:
+          /\[(?:FromBody|FromForm|FromHeader|FromQuery|FromRoute)\b/iu,
+      },
+      {
+        kind: "aspnet-request-field",
+        expression:
+          /\bRequest\.(?:Body|Form|Headers|Query|RouteValues)\b|\bHttpRequest\b/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "dynamic-template-source",
+        expression:
+          /\b(?:(?:global\s*::\s*)?Scriban\s*\.\s*)?Template\s*\.\s*Parse\s*\(/iu,
+        cweIds: ["CWE-1336"],
+      },
+    ],
+    controls: [
+      {
+        kind: "bounded-template-source-map",
+        expression:
+          /\b(?:Allowed|Known|Trusted)(?:Templates?|TemplateSources?)\b|\.TryGetValue\s*\(/iu,
+      },
+      {
+        kind: "restricted-template-context",
+        expression:
+          /\b(?:MemberFilter|MemberRenamer|TemplateContext|ScriptObject)\b/iu,
+      },
+    ],
+  },
+  {
     id: "aspnet-http-ssrf",
     language: "dotnet",
     extensions: DOTNET_EXTENSIONS,
@@ -1592,6 +1633,12 @@ function frameworkDataflowRecords(
         continue;
       }
       if (
+        model.id === "aspnet-http-template-injection" &&
+        dotnetScribanTemplateSourceArgument(lines, sink.line) === undefined
+      ) {
+        continue;
+      }
+      if (
         model.id === "spring-http-ssrf" &&
         !javaOutboundHttpSinkHasTypedReceiver(lines, sink.line)
       ) {
@@ -1607,7 +1654,13 @@ function frameworkDataflowRecords(
         extension === ".java" &&
         (model.id === "spring-http-ssrf" || model.id === "spring-http-path")
           ? modeledSameFileJavaSource(lines, sink.line, model.id, model.sources)
-          : nearestModeledSource(sources, sink.line);
+          : extension === ".cs" && model.id === "aspnet-http-template-injection"
+            ? modeledSameFileDotnetTemplateSource(
+                lines,
+                sink.line,
+                model.sources,
+              )
+            : nearestModeledSource(sources, sink.line);
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -3813,12 +3866,36 @@ function dotnetFrameworkWrapperSummaries(
           ) {
             continue;
           }
-          const parameterIndexes = method.parameters.flatMap(
-            (parameter, parameterIndex) =>
-              cFamilyLineReferencesIdentifier(sinkExpression, parameter.name)
-                ? [parameterIndex]
-                : [],
-          );
+          const templateSourceArgument =
+            model.id === "aspnet-http-template-injection"
+              ? dotnetScribanTemplateSourceArgument(
+                  file.lines,
+                  sink.line,
+                  method.endLine,
+                )
+              : undefined;
+          if (
+            model.id === "aspnet-http-template-injection" &&
+            templateSourceArgument === undefined
+          ) {
+            continue;
+          }
+          const parameterIndexes =
+            model.id === "aspnet-http-template-injection"
+              ? dotnetMethodParameterIndexesReachingExpression(
+                  file.lines,
+                  method,
+                  sink.line,
+                  templateSourceArgument!,
+                )
+              : method.parameters.flatMap((parameter, parameterIndex) =>
+                  cFamilyLineReferencesIdentifier(
+                    sinkExpression,
+                    parameter.name,
+                  )
+                    ? [parameterIndex]
+                    : [],
+                );
           if (parameterIndexes.length === 0) continue;
           const sinkPattern = model.sinks.find(
             (pattern) => pattern.kind === sink.kind,
@@ -4916,6 +4993,166 @@ function modeledDotnetCallSource(
     }
   }
   return undefined;
+}
+
+function dotnetScribanTemplateSourceArgument(
+  lines: readonly string[],
+  sinkLine: number,
+  methodEndLine = lines.length,
+): string | undefined {
+  const callLines = lines.slice(
+    sinkLine - 1,
+    Math.min(methodEndLine, sinkLine + 12),
+  );
+  const original = callLines.join("\n");
+  const structural = cFamilyStructuralLines(callLines).join("\n");
+  const parseCall =
+    /\b(?:(?:global\s*::\s*)?Scriban\s*\.\s*)?Template\s*\.\s*Parse\s*\(/u.exec(
+      structural,
+    );
+  if (parseCall?.index === undefined) return undefined;
+
+  const structuralFile = cFamilyStructuralLines(lines).join("\n");
+  const callPrefix = structural.slice(parseCall.index, parseCall.index + 96);
+  const fullyQualified =
+    /^(?:global\s*::\s*)?Scriban\s*\.\s*Template\s*\.\s*Parse\s*\(/u.test(
+      callPrefix,
+    );
+  const imported = /^\s*(?:global\s+)?using\s+Scriban\s*;/mu.test(
+    structuralFile,
+  );
+  const shadowsTemplate = /\b(?:class|record|struct)\s+Template\b/u.test(
+    structuralFile,
+  );
+  const shadowsQualifiedTemplate =
+    /\bnamespace\s+Scriban\b[\s\S]*\b(?:class|record|struct)\s+Template\b/u.test(
+      structuralFile,
+    );
+  if (
+    (fullyQualified && shadowsQualifiedTemplate) ||
+    (!fullyQualified && (!imported || shadowsTemplate))
+  ) {
+    return undefined;
+  }
+
+  const open = structural.indexOf("(", parseCall.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  const source = splitJavascriptArguments(original.slice(open + 1, close))[0];
+  if (source === undefined || source.trim() === "") return undefined;
+
+  const afterParse = structural.slice(close + 1);
+  if (/^\s*\.\s*Render(?:Async)?\s*\(/u.test(afterParse)) {
+    return source.trim();
+  }
+
+  const beforeParse = structural.slice(0, parseCall.index);
+  const statementBoundary = Math.max(
+    beforeParse.lastIndexOf(";"),
+    beforeParse.lastIndexOf("{"),
+    beforeParse.lastIndexOf("}"),
+    beforeParse.lastIndexOf("\n"),
+  );
+  const assignment =
+    /^\s*(?:(?:var|(?:(?:global\s*::\s*)?Scriban\s*\.\s*)?Template)\s+)?([A-Za-z_]\w*)\s*=\s*$/u.exec(
+      beforeParse.slice(statementBoundary + 1),
+    );
+  const parsedTemplate = assignment?.[1];
+  if (parsedTemplate === undefined) return undefined;
+  const escapedTemplate = escapeRegularExpression(parsedTemplate);
+  const render = new RegExp(
+    `\\b${escapedTemplate}\\s*\\.\\s*Render(?:Async)?\\s*\\(`,
+    "u",
+  ).exec(afterParse);
+  if (render?.index === undefined) return undefined;
+  const beforeRender = afterParse.slice(0, render.index);
+  if (new RegExp(`\\b${escapedTemplate}\\s*=(?!=)`, "u").test(beforeRender)) {
+    return undefined;
+  }
+  return source.trim();
+}
+
+function dotnetMethodParameterIndexesReachingExpression(
+  lines: readonly string[],
+  method: ExportedDotnetMethod,
+  sinkLine: number,
+  expression: string,
+): number[] {
+  const structuralBody = cFamilyStructuralLines(
+    lines.slice(method.startLine - 1, sinkLine),
+  ).join("\n");
+  const assignments = [
+    ...structuralBody.matchAll(/\b([A-Za-z_]\w*)\s*=(?!=)\s*([^;]+);/gu),
+  ];
+  return method.parameters.flatMap((parameter, parameterIndex) => {
+    const reachingIdentifiers = new Set([parameter.name]);
+    for (const assignment of assignments) {
+      const target = assignment[1];
+      const value = assignment[2];
+      if (target === undefined || value === undefined) continue;
+      const valueReaches = [...reachingIdentifiers].some((identifier) =>
+        cFamilyLineReferencesIdentifier(value, identifier),
+      );
+      if (valueReaches) reachingIdentifiers.add(target);
+      else reachingIdentifiers.delete(target);
+    }
+    return [...reachingIdentifiers].some((identifier) =>
+      cFamilyLineReferencesIdentifier(expression, identifier),
+    )
+      ? [parameterIndex]
+      : [];
+  });
+}
+
+function modeledSameFileDotnetTemplateSource(
+  lines: readonly string[],
+  sinkLine: number,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const method = exportedDotnetMethods(lines).find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  if (method === undefined) return undefined;
+  const templateSource = dotnetScribanTemplateSourceArgument(
+    lines,
+    sinkLine,
+    method.endLine,
+  );
+  if (templateSource === undefined) return undefined;
+
+  for (const parameterIndex of dotnetMethodParameterIndexesReachingExpression(
+    lines,
+    method,
+    sinkLine,
+    templateSource,
+  )) {
+    const parameter = method.parameters[parameterIndex];
+    if (parameter === undefined) continue;
+    const source = modeledDotnetCallSource(
+      lines,
+      method,
+      sinkLine,
+      parameter.name,
+      sourcePatterns,
+    );
+    if (source !== undefined) return source;
+  }
+
+  if (
+    method.parameters.some(
+      (parameter) => parameter.name === templateSource.trim(),
+    )
+  ) {
+    return undefined;
+  }
+  return modeledDotnetCallSource(
+    lines,
+    method,
+    sinkLine,
+    templateSource,
+    sourcePatterns,
+  );
 }
 
 function dotnetHttpClientSinkHasTypedReceiver(

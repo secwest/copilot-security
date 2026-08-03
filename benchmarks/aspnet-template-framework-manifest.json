@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "aspnet-cross-file-template-injection",
+      "description": "An ASP.NET request body crosses a constructor-injected service boundary into Scriban template-source parsing with a server-owned secret in render scope.",
+      "fixture": "fixtures/aspnet-cross-file-template-injection",
+      "findingsPaths": [
+        "aspnet-cross-file-template-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "aspnet-controller-service-scriban-template-injection",
+          "cwe": ["CWE-1336"],
+          "locations": [
+            {
+              "path": "Services/TemplateRenderer.cs",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "aspnet-cross-file-safe-template",
+      "description": "The same ASP.NET topology parses fixed server-owned Scriban source and passes request data only as a non-recursive render-model field.",
+      "fixture": "fixtures/aspnet-cross-file-safe-template",
+      "findingsPaths": ["aspnet-cross-file-safe-template/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

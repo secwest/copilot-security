@@ -326,6 +326,30 @@ interpreter that consumes the value.
   counterevidence, not raw SQL flow; values still cannot parameterize
   identifiers or clauses.
 
+### ASP.NET server-side template injection — CWE-1336
+
+- Sources: ASP.NET-bound parameters and request fields.
+- Sink: the first template-source argument to the real Scriban
+  `Template.Parse` API when that parsed template reaches `Render` or
+  `RenderAsync`. Parsing without rendering is inert. Require a `Scriban` import
+  or fully qualified type and reject local `Template` lookalikes.
+- Preserve the uniquely resolved C# service type, controller argument,
+  wrapper parameter, bounded local aliases, and exact first parse argument.
+  The optional second source-file-name argument and parser options are not
+  template source.
+- Strong counterevidence is fixed server-owned template source parsed once,
+  with attacker-controlled values supplied only through the resulting
+  template's render model. Render-model strings are data and are not
+  recursively parsed merely because they contain Scriban delimiters.
+- `TemplateContext`, `ScriptObject`, syntax validation, output encoding, and
+  source-file metadata do not make attacker-controlled template source safe.
+  A restricted member filter or isolated context is a candidate control only
+  after proving it dominates the same parsed template and removes the
+  demonstrated capability.
+- Classify a proven path as CWE-1336. Validate the actual exposed objects,
+  callable members, secret disclosure, code-like behavior, or resource impact
+  instead of assuming that every template grammar has identical power.
+
 ### ASP.NET server-side request forgery — CWE-918
 
 - Sources: ASP.NET-bound parameters and request fields.

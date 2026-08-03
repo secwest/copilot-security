@@ -2,6 +2,18 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-03 — Model ASP.NET template injection at the parsed source argument
+
+**Decision.** Add a typed ASP.NET-to-Scriban CWE-1336 model at the first argument of the real `Scriban.Template.Parse` API only when the parsed template reaches `Render` or `RenderAsync`. Preserve the controller source, uniquely resolved service receiver, call argument, wrapper parameter, bounded aliases, exact parse argument, and evaluation dispatch. Require a real Scriban import or fully qualified type, reject local `Template` shadows, and reject inert or reassigned parsed templates.
+
+**Why.** Template engines expose a critical semantic distinction: attacker-controlled template grammar is executable input, while attacker-controlled values passed to a fixed template are data. API-name matching or treating every render-model value as template source would inflate false positives. Conversely, generic lexical discovery can miss a request value after it crosses an injected ASP.NET service boundary. CodeQL's high-precision Java template query makes the same source-versus-fixed-template distinction, but the documented C# query set does not provide this Scriban boundary.
+
+**Argument and execution boundary.** Only `Template.Parse`'s first argument is template source, and parsing without rendering is inert. Its optional source-file-name metadata and parser options do not become template grammar. A fixed server-owned template parsed once remains strong counterevidence when request data is supplied only to `Render`, even if sensitive server values share the same render model. `TemplateContext`, `ScriptObject`, syntax validation, or output encoding is not automatically a sandbox for attacker-controlled source; an actual restricted context must be proven against the demonstrated capability.
+
+**Evidence.** Four focused regressions with 20 assertions prove exact cross-file flow, imported and fully qualified Scriban types, one bounded alias, and rejection of inert same-file and cross-file parsing, parsed-template reassignment, render-only data, source-name metadata, source reassignment, shadows, absent imports, and text-only lookalikes. Both Web SDK fixtures compile on .NET 8 with Scriban 7.2.5. The vulnerable witness evaluates `{{ api_key }}` and discloses the server-owned model secret; the matched control supplies the same delimiter text as a render-model name under fixed template source and does not disclose the secret. The official NuGet advisory query reports no vulnerable package in the direct or transitive fixture graph. The complete scanner suite passes 674 tests and 5,969 assertions across 90 files, with 19 environment-specific skips and no failures; the 199-entry release archive passes isolated installation, public-import, CLI, and all 79 bundled-plugin file checks.
+
+**Consequence.** Reviewers receive a concrete high-priority hypothesis with CWE-1336 and exact provenance instead of a broad template keyword. They must still validate the exposed objects, callable members, secret disclosure, resource effect, and deployment reachability before reporting severity. Future engine additions must encode their real template-source argument positions and pair each exploit fixture with a same-topology fixed-template or sandbox control.
+
 ## 2026-08-03 — Keep the URI implementation on its patched security floor
 
 **Decision.** Pin `fast-uri` to 3.1.5 as both the scanner's direct URI implementation and AJV's resolved URI dependency. Keep the high-severity production advisory audit as a blocking CI gate rather than suppressing the advisory or permitting the vulnerable transitive edge.

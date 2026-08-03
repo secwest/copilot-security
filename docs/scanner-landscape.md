@@ -308,12 +308,31 @@ to discard earlier components. Lexical containment is recorded as
 counterevidence only under a server-owned content-root assumption; writable
 links, junctions, reparse points, and rename races remain a separate boundary.
 
+`benchmarks/aspnet-template-framework-manifest.json` adds a typed ASP.NET
+Scriban lane where the positive carries `[FromBody]` data through a uniquely
+resolved constructor-injected service into the first `Template.Parse`
+argument and subsequent `Render` dispatch. Inert parsing is rejected. The
+executable witness renders `{{ api_key }}` and proves disclosure
+of a server-owned model value. The matching control preserves the controller,
+service, secret-bearing render model, and attacker delimiter text, but parses
+only fixed server-owned source; the delimiter remains ordinary render data and
+the secret is not disclosed. The model rejects the optional source-file-name
+argument, reassignment, local `Template` shadows, missing Scriban imports, and
+comment or string examples. This extends CodeQL's high-precision
+[Java template-injection distinction](https://codeql.github.com/codeql-query-help/java/java-server-side-template-injection/)
+between attacker-controlled template code and a fixed template to a C# engine
+boundary that the documented C# query set does not presently list. The sink
+shape and render semantics follow Scriban's
+[official package and API documentation](https://www.nuget.org/packages/Scriban/),
+with fixtures pinned to non-vulnerable Scriban 7.2.5.
+
 ## Prioritized next improvements
 
 1. **Expand typed framework security models.** Extend bounded summaries beyond
    two Node/TypeScript or Python relative-import hops; extend Java and ASP.NET
    beyond two uniquely typed service boundaries;
-   add framework-specific authorization models, ASP.NET template models,
+   add framework-specific authorization models, ASP.NET template engines
+   beyond the typed Scriban lane,
    outbound-client APIs beyond JDK `HttpClient`, Spring `RestTemplate`,
    Spring `WebClient`, OkHttp, and .NET `HttpClient`, partial-URL SSRF models,
    manifest-derived activation evidence,
