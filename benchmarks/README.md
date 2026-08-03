@@ -209,6 +209,37 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The ASP.NET cross-file lane applies the same strict gates to constructor-
+injected controller/service flows. Its command positive reaches `cmd.exe /c`,
+while its control uses a fixed executable, disables shell execution, and adds
+the request value as one `ArgumentList` entry. Its SQL positive reaches the
+query-text argument of `SqlCommand`, while its control binds the same value
+through a typed `SqlParameter`. Dependency-free witness executables prove that
+the SQL payload selects a different in-memory user in the vulnerable fixture
+and remains ordinary data in the control:
+
+```powershell
+dotnet run --project benchmarks/witnesses/aspnet-cross-file-sql-injection/AspNetCrossFileSqlInjectionWitness.csproj --configuration Release
+dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-sql/AspNetCrossFileSafeSqlWitness.csproj --configuration Release
+```
+
+Run the live scanner lane with an inner model-turn deadline below the outer
+process deadline:
+
+```powershell
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '360000'
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/aspnet-cross-file-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-aspnet-cross-file `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 The Python cross-file lane applies the same gates to explicit relative
 from-imports and includes multiline parameter-binding counterevidence:
 

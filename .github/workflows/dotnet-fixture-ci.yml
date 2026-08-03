@@ -1,0 +1,42 @@
+name: dotnet-fixture-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  aspnet-benchmarks:
+    name: ASP.NET fixture exploit and controls
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build ASP.NET fixtures
+        run: |
+          dotnet build benchmarks/fixtures/aspnet-cross-file-command-injection/AspnetCrossFileCommandInjection.csproj --configuration Release --nologo
+          dotnet build benchmarks/fixtures/aspnet-cross-file-safe-command/AspnetCrossFileSafeCommand.csproj --configuration Release --nologo
+          dotnet build benchmarks/fixtures/aspnet-cross-file-sql-injection/AspnetCrossFileSqlInjection.csproj --configuration Release --nologo
+          dotnet build benchmarks/fixtures/aspnet-cross-file-safe-sql/AspnetCrossFileSafeSql.csproj --configuration Release --nologo
+
+      - name: Prove SQL exploit and parameterized control
+        run: |
+          dotnet run --project benchmarks/witnesses/aspnet-cross-file-sql-injection/AspNetCrossFileSqlInjectionWitness.csproj --configuration Release
+          dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-sql/AspNetCrossFileSafeSqlWitness.csproj --configuration Release

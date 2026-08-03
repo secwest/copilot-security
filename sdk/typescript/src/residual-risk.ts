@@ -1081,6 +1081,14 @@ interface ExportedJavaMethod {
   endLine: number;
 }
 
+interface ExportedDotnetMethod {
+  ownerType: string;
+  symbol: string;
+  parameters: Array<{ name: string; declaration: string }>;
+  startLine: number;
+  endLine: number;
+}
+
 interface FrameworkWrapperSummary {
   model: FrameworkDataflowModel;
   file: SourceFileSnapshot;
@@ -1268,7 +1276,9 @@ function frameworkDataflowRecords(
   const text = lines.join("\n");
   const activationText = PYTHON_EXTENSIONS.has(extension)
     ? pythonStructuralLines(lines).join("\n")
-    : text;
+    : extension === ".java" || extension === ".cs"
+      ? cFamilyStructuralLines(lines).join("\n")
+      : text;
   const records: ResidualRiskRecord[] = [];
   for (const model of FRAMEWORK_DATAFLOW_MODELS) {
     if (
@@ -1281,16 +1291,22 @@ function frameworkDataflowRecords(
       ? matchingJavascriptModelLines(lines, model.sources, 16)
       : PYTHON_EXTENSIONS.has(extension)
         ? matchingPythonModelLines(lines, model.sources, 16)
-        : matchingModelLines(lines, model.sources, 16);
+        : extension === ".java" || extension === ".cs"
+          ? matchingJavaModelLines(lines, model.sources, 16)
+          : matchingModelLines(lines, model.sources, 16);
     const sinks = JAVASCRIPT_EXTENSIONS.has(extension)
       ? matchingJavascriptModelLines(lines, model.sinks, 8)
       : PYTHON_EXTENSIONS.has(extension)
         ? matchingPythonModelLines(lines, model.sinks, 8)
-        : matchingModelLines(lines, model.sinks, 8);
+        : extension === ".java" || extension === ".cs"
+          ? matchingJavaModelLines(lines, model.sinks, 8)
+          : matchingModelLines(lines, model.sinks, 8);
     if (sources.length === 0 || sinks.length === 0) continue;
     const controls = PYTHON_EXTENSIONS.has(extension)
       ? matchingPythonModelLines(lines, model.controls, 24)
-      : matchingModelLines(lines, model.controls, 24);
+      : extension === ".java" || extension === ".cs"
+        ? matchingJavaModelLines(lines, model.controls, 24)
+        : matchingModelLines(lines, model.controls, 24);
     for (const sink of sinks) {
       const source = nearestModeledSource(sources, sink.line);
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
@@ -1374,6 +1390,7 @@ function frameworkCrossFileDataflowRecords(
     ...frameworkDirectCrossFileDataflowRecords(files),
     ...frameworkDirectPythonDataflowRecords(files),
     ...frameworkDirectJavaDataflowRecords(files),
+    ...frameworkDirectDotnetDataflowRecords(files),
     ...frameworkMultiHopDataflowRecords(files),
     ...frameworkPythonMultiHopDataflowRecords(files),
   ];
@@ -1808,6 +1825,179 @@ function frameworkDirectJavaDataflowRecords(
                 propagators: [
                   {
                     kind: "java-type-binding",
+                    path: caller.path,
+                    line: binding.line || call.line,
+                    symbol: `${binding.receiver}:${ownerType}`,
+                  },
+                  {
+                    kind: "wrapper-call-argument",
+                    path: caller.path,
+                    line: call.line,
+                    symbol: `${binding.receiver}.${method}[${summary.parameterIndex}]`,
+                  },
+                  {
+                    kind: "wrapper-parameter",
+                    path: summary.file.path,
+                    line: summary.declarationLine,
+                    symbol: summary.parameter,
+                  },
+                ],
+                candidateControls: summary.controls.map((control) => ({
+                  ...control,
+                  path: summary.file.path,
+                })),
+              },
+            });
+            if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
+              return records;
+            }
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+function frameworkDirectDotnetDataflowRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const summaries = dotnetFrameworkWrapperSummaries(files);
+  const summariesByOwnerAndMethod = new Map<
+    string,
+    FrameworkWrapperSummary[]
+  >();
+  for (const summary of summaries) {
+    if (summary.ownerType === undefined) continue;
+    const key = `${summary.ownerType}\0${summary.symbol}`;
+    const existing = summariesByOwnerAndMethod.get(key) ?? [];
+    existing.push(summary);
+    summariesByOwnerAndMethod.set(key, existing);
+  }
+
+  const ownerPaths = new Map<string, Set<string>>();
+  for (const file of files) {
+    if (file.extension !== ".cs") continue;
+    const ownerType = dotnetOwnerType(file.lines);
+    if (ownerType === undefined) continue;
+    const paths = ownerPaths.get(ownerType) ?? new Set<string>();
+    paths.add(file.path);
+    ownerPaths.set(ownerType, paths);
+  }
+
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const caller of files) {
+    if (caller.extension !== ".cs") continue;
+    const callerMethods = exportedDotnetMethods(caller.lines);
+    if (callerMethods.length === 0) continue;
+    const receiverBindings = javaReceiverBindings(caller.lines);
+    for (const [key, matchingSummaries] of summariesByOwnerAndMethod) {
+      const [ownerType, method] = key.split("\0") as [string, string];
+      if (ownerPaths.get(ownerType)?.size !== 1) continue;
+      const bindings = [
+        ...receiverBindings.filter(
+          (binding) => binding.ownerType === ownerType,
+        ),
+        { receiver: ownerType, ownerType, line: 0 },
+      ];
+      for (const binding of bindings) {
+        for (const call of javaMethodCallLines(
+          caller.lines,
+          binding.receiver,
+          method,
+        )) {
+          const callerMethod = callerMethods.find(
+            (candidate) =>
+              call.line >= candidate.startLine &&
+              call.line <= candidate.endLine,
+          );
+          if (callerMethod === undefined) continue;
+          for (const summary of matchingSummaries) {
+            if (summary.file.path === caller.path) continue;
+            if (
+              summary.parameterCount !== undefined &&
+              call.arguments.length !== summary.parameterCount
+            ) {
+              continue;
+            }
+            const argument = call.arguments[summary.parameterIndex];
+            if (argument === undefined) continue;
+            const source = modeledDotnetCallSource(
+              caller.lines,
+              callerMethod,
+              call.line,
+              argument,
+              summary.model.sources,
+            );
+            if (source === undefined) continue;
+            const recordKey = [
+              summary.model.id,
+              caller.path,
+              call.line,
+              summary.file.path,
+              summary.sink.line,
+              summary.parameterIndex,
+            ].join("\0");
+            if (emitted.has(recordKey)) continue;
+            emitted.add(recordKey);
+
+            const sinkStart = Math.max(
+              1,
+              summary.sink.line - CONTEXT_LINES_BEFORE,
+            );
+            const sinkEnd = Math.min(
+              summary.file.lines.length,
+              summary.sink.line + CONTEXT_LINES_AFTER,
+            );
+            const sourceStart = Math.max(
+              1,
+              Math.min(source.line, call.line) - 2,
+            );
+            const sourceEnd = Math.min(
+              caller.lines.length,
+              Math.max(source.line, call.line) + 2,
+            );
+            records.push({
+              path: summary.file.path,
+              line: summary.sink.line,
+              categories: [
+                `framework-dataflow:${summary.model.id}`,
+                "framework-cross-file-wrapper",
+                `modeled-source:${source.kind}`,
+                `modeled-sink:${summary.sink.kind}`,
+                ...summary.controls.map(
+                  (control) => `candidate-control:${control.kind}`,
+                ),
+              ],
+              priority: 121,
+              startLine: sinkStart,
+              endLine: sinkEnd,
+              excerpt: sourceExcerpt(summary.file.lines, sinkStart, sinkEnd),
+              sourceExcerpt: sourceExcerpt(
+                caller.lines,
+                sourceStart,
+                sourceEnd,
+              ),
+              frameworkModel: {
+                schemaVersion: "1.2",
+                id: summary.model.id,
+                language: summary.model.language,
+                scope: "cross-file-wrapper",
+                source: {
+                  kind: source.kind,
+                  path: caller.path,
+                  line: source.line,
+                },
+                sink: {
+                  kind: summary.sink.kind,
+                  path: summary.file.path,
+                  line: summary.sink.line,
+                  cweIds: summary.sink.cweIds,
+                },
+                propagators: [
+                  {
+                    kind: "dotnet-type-binding",
                     path: caller.path,
                     line: binding.line || call.line,
                     symbol: `${binding.receiver}:${ownerType}`,
@@ -2596,6 +2786,87 @@ function javaFrameworkWrapperSummaries(
   return summaries;
 }
 
+function dotnetFrameworkWrapperSummaries(
+  files: readonly SourceFileSnapshot[],
+): FrameworkWrapperSummary[] {
+  const summaries: FrameworkWrapperSummary[] = [];
+  for (const file of files) {
+    if (file.extension !== ".cs") continue;
+    const methods = exportedDotnetMethods(file.lines);
+    if (methods.length === 0) continue;
+    const structuralText = cFamilyStructuralLines(file.lines).join("\n");
+    for (const model of FRAMEWORK_DATAFLOW_MODELS) {
+      if (
+        !model.extensions.has(file.extension) ||
+        !model.activation.some((expression) => expression.test(structuralText))
+      ) {
+        continue;
+      }
+      const sinks = matchingJavaModelLines(file.lines, model.sinks, 32);
+      const controls = matchingJavaModelLines(file.lines, model.controls, 64);
+      for (const method of methods) {
+        for (const sink of sinks) {
+          if (sink.line < method.startLine || sink.line > method.endLine) {
+            continue;
+          }
+          const sinkExpression = javaCallExpression(
+            file.lines,
+            sink.line,
+            method.endLine,
+          );
+          const parameterIndexes = method.parameters.flatMap(
+            (parameter, parameterIndex) =>
+              cFamilyLineReferencesIdentifier(sinkExpression, parameter.name)
+                ? [parameterIndex]
+                : [],
+          );
+          if (parameterIndexes.length === 0) continue;
+          const sinkPattern = model.sinks.find(
+            (pattern) => pattern.kind === sink.kind,
+          );
+          if (sinkPattern === undefined) continue;
+          const sinkControls = model.controls
+            .filter((control) => control.expression.test(sinkExpression))
+            .map((control) => ({ kind: control.kind, line: sink.line }));
+          const methodControls = [
+            ...sinkControls,
+            ...controls.filter(
+              (control) =>
+                control.line >= method.startLine &&
+                control.line <= method.endLine,
+            ),
+          ].filter(
+            (control, index, all) =>
+              all.findIndex(
+                (candidate) =>
+                  candidate.kind === control.kind &&
+                  candidate.line === control.line,
+              ) === index,
+          );
+          for (const parameterIndex of parameterIndexes) {
+            summaries.push({
+              model,
+              file,
+              ownerType: method.ownerType,
+              symbol: method.symbol,
+              parameter: method.parameters[parameterIndex]!.name,
+              parameterIndex,
+              parameterCount: method.parameters.length,
+              declarationLine: method.startLine,
+              sink: { ...sink, cweIds: sinkPattern.cweIds },
+              controls: methodControls.slice(0, 8),
+            });
+            if (summaries.length >= MAX_FRAMEWORK_WRAPPER_SUMMARIES) {
+              return summaries;
+            }
+          }
+        }
+      }
+    }
+  }
+  return summaries;
+}
+
 function pythonCallExpression(
   lines: readonly string[],
   startLine: number,
@@ -2684,6 +2955,70 @@ function exportedJavaMethods(lines: readonly string[]): ExportedJavaMethod[] {
         : [{ name, declaration: declaration.trim() }];
     });
     if (parameters.length === 0) continue;
+    methods.push({
+      ownerType,
+      symbol: match[1]!,
+      parameters,
+      startLine: index + 1,
+      endLine: cFamilyFunctionEndLine(structuralLines, index),
+    });
+  }
+  return methods;
+}
+
+function dotnetOwnerType(lines: readonly string[]): string | undefined {
+  const structuralLines = cFamilyStructuralLines(lines);
+  for (const line of structuralLines) {
+    const match = /\b(?:class|record|struct)\s+([A-Z_][A-Za-z0-9_]*)\b/u.exec(
+      line,
+    );
+    if (match !== null) return match[1]!;
+  }
+  return undefined;
+}
+
+function exportedDotnetMethods(
+  lines: readonly string[],
+): ExportedDotnetMethod[] {
+  const ownerType = dotnetOwnerType(lines);
+  if (ownerType === undefined) return [];
+  const methods: ExportedDotnetMethod[] = [];
+  const structuralLines = cFamilyStructuralLines(lines);
+  const expression =
+    /^\s*(?:(?:\[[^\]]+\])\s*)*(?:public|protected|internal)\s+(?:(?:abstract|async|extern|new|override|sealed|static|unsafe|virtual)\s+)*(?:[A-Za-z_][\w.[\]<>?,]*\s+)+([A-Za-z_]\w*)\s*\(([\s\S]*?)\)\s*(?:where\s+[^{}]+)?\s*\{/u;
+  for (let index = 0; index < lines.length; index += 1) {
+    const firstLine = structuralLines[index] ?? "";
+    if (!/\b(?:public|protected|internal)\b/u.test(firstLine)) continue;
+    const declarationLines = lines.slice(
+      index,
+      Math.min(lines.length, index + 9),
+    );
+    const structuralDeclaration =
+      cFamilyStructuralLines(declarationLines).join(" ");
+    const match = expression.exec(structuralDeclaration);
+    if (match === null || match[1] === ownerType) continue;
+    const originalDeclaration = declarationLines.join(" ");
+    const methodCall = new RegExp(
+      `\\b${escapeRegularExpression(match[1]!)}\\s*\\(`,
+      "u",
+    ).exec(cFamilyStructuralLines([originalDeclaration])[0] ?? "");
+    const originalOpen =
+      methodCall === null
+        ? -1
+        : originalDeclaration.indexOf("(", methodCall.index);
+    const originalClose = matchingCallParenthesis(
+      originalDeclaration,
+      originalOpen,
+    );
+    if (originalOpen < 0 || originalClose < 0) continue;
+    const parameters = splitJavascriptArguments(
+      originalDeclaration.slice(originalOpen + 1, originalClose),
+    ).flatMap((declaration) => {
+      const name = /([A-Za-z_]\w*)\s*$/u.exec(declaration.trim())?.[1];
+      return name === undefined
+        ? []
+        : [{ name, declaration: declaration.trim() }];
+    });
     methods.push({
       ownerType,
       symbol: match[1]!,
@@ -3237,7 +3572,7 @@ function javaReceiverBindings(lines: readonly string[]): JavaReceiverBinding[] {
   const structuralLines = cFamilyStructuralLines(lines);
   const candidates: JavaReceiverBinding[] = [];
   const declaration =
-    /^\s*(?:(?:final|private|protected|public|static|transient|volatile)\s+)*([A-Z][A-Za-z0-9_$]*)\s+([A-Za-z_$][\w$]*)\s*(?:[;=,)])/u;
+    /^\s*(?:(?:final|internal|private|protected|public|readonly|static|transient|volatile)\s+)*([A-Z][A-Za-z0-9_$]*)\s+([A-Za-z_$][\w$]*)\s*(?:[;=,)])/u;
   for (let index = 0; index < structuralLines.length; index += 1) {
     const match = declaration.exec(structuralLines[index] ?? "");
     if (match === null) continue;
@@ -3438,6 +3773,49 @@ function modeledJavaCallSource(
   const structuralLines = cFamilyStructuralLines(lines);
   const assignment = new RegExp(
     `\\b(?:[A-Za-z_$][\\w$.[\\]<>?,]*\\s+)?${escapeRegularExpression(argument)}\\s*=`,
+    "u",
+  );
+  const earliest = Math.max(
+    method.startLine,
+    callLine - MAX_WRAPPER_CALL_DISTANCE,
+  );
+  for (let line = callLine - 1; line >= earliest; line -= 1) {
+    const source = sources.find((candidate) => candidate.line === line);
+    if (source === undefined) continue;
+    if (!assignment.test(structuralLines[line - 1] ?? "")) continue;
+    if (!javaIdentifierReassignedBetween(lines, argument, line, callLine)) {
+      return source;
+    }
+  }
+  return undefined;
+}
+
+function modeledDotnetCallSource(
+  lines: readonly string[],
+  method: ExportedDotnetMethod,
+  callLine: number,
+  argument: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const direct = sourcePatterns.find((pattern) =>
+    pattern.expression.test(argument),
+  );
+  if (direct !== undefined) return { kind: direct.kind, line: callLine };
+  if (!/^[A-Za-z_]\w*$/u.test(argument)) return undefined;
+  for (const parameter of method.parameters) {
+    if (parameter.name !== argument) continue;
+    const source = sourcePatterns.find((pattern) =>
+      pattern.expression.test(parameter.declaration),
+    );
+    if (source !== undefined) {
+      return { kind: source.kind, line: method.startLine };
+    }
+  }
+
+  const sources = matchingJavaModelLines(lines, sourcePatterns, 32);
+  const structuralLines = cFamilyStructuralLines(lines);
+  const assignment = new RegExp(
+    `\\b(?:[A-Za-z_][\\w.[\\]<>?,]*\\s+)?${escapeRegularExpression(argument)}\\s*=`,
     "u",
   );
   const earliest = Math.max(

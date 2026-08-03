@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import {
   chmod,
   lstat,
@@ -28,6 +29,13 @@ import {
   verifyCopilotAnalysisWorkspaceSnapshot,
   writeCopilotScannerSandboxSettings,
 } from "../src/runtime.js";
+
+function git(repository: string, ...args: string[]): string {
+  return execFileSync("git", args, {
+    cwd: repository,
+    encoding: "utf8",
+  }).trim();
+}
 
 describe("standalone Copilot runtime", () => {
   test("removes nested SDK temporary directories idempotently", async () => {
@@ -268,6 +276,66 @@ describe("standalone Copilot runtime", () => {
         "immutable host-generated scan inventory was modified",
       );
     } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("generates working-tree inventory from the authoritative Git repository", async () => {
+    const root = await mkdtemp(join(tmpdir(), "copilot-diff-inventory-"));
+    const repository = join(root, "repository");
+    const plugin = join(root, "plugin");
+    const scanDirectory = join(root, "scan");
+    let workspace: Awaited<
+      ReturnType<typeof prepareCopilotAnalysisWorkspace>
+    > | null = null;
+    try {
+      await Promise.all([
+        mkdir(join(repository, "src"), { recursive: true }),
+        mkdir(plugin, { recursive: true }),
+        mkdir(scanDirectory, { recursive: true }),
+      ]);
+      await Promise.all([
+        writeFile(join(repository, "src", "app.ts"), "export const v = 1;\n"),
+        writeFile(join(plugin, "plugin.json"), "{}\n"),
+      ]);
+      git(repository, "init");
+      git(repository, "config", "user.name", "Scanner Test");
+      git(repository, "config", "user.email", "scanner-test@example.invalid");
+      git(repository, "add", "src/app.ts");
+      git(repository, "commit", "-m", "base");
+      const base = git(repository, "rev-parse", "HEAD");
+      await Promise.all([
+        writeFile(join(repository, "src", "app.ts"), "export const v = 2;\n"),
+        writeFile(
+          join(repository, "src", "new.ts"),
+          "export const added = true;\n",
+        ),
+      ]);
+      git(repository, "add", "src/new.ts");
+
+      workspace = await prepareCopilotAnalysisWorkspace(repository, plugin);
+      const snapshot = await prepareCopilotScanInventory({
+        python: await resolvePluginPython({ environment: process.env }),
+        pluginRoot: await bundledPluginRoot(),
+        repository: workspace.repository,
+        diffRepository: repository,
+        scanDirectory,
+        target: { kind: "working_tree", paths: [], base, head: base },
+        environment: process.env,
+      });
+
+      expect(snapshot.repositoryPaths).toEqual(["src/app.ts", "src/new.ts"]);
+      await expect(
+        verifyCopilotAnalysisWorkspaceSnapshot(
+          repository,
+          workspace.repository,
+          snapshot.repositoryPaths,
+        ),
+      ).resolves.toBeUndefined();
+    } finally {
+      if (workspace !== null) {
+        await rm(workspace.root, { recursive: true, force: true });
+      }
       await rm(root, { recursive: true, force: true });
     }
   });

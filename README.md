@@ -41,7 +41,13 @@ row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
 bodies, and preserves annotated Spring or servlet-assigned request values
-through the exact call argument and wrapper parameter. For Node/TypeScript
+through the exact call argument and wrapper parameter. For C#, the host
+likewise resolves one uniquely named class, record, or struct from an ASP.NET
+controller field or static receiver, binds the exact service-call argument to
+the public, protected, or internal wrapper parameter, and preserves either an
+annotated bound parameter or an assigned `HttpRequest` field through
+`ProcessStartInfo`/`Process.Start` or the query-text argument of `SqlCommand`,
+`FromSqlRaw`, or `ExecuteSqlRaw`. For Node/TypeScript
 relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
@@ -150,6 +156,13 @@ wall-clock deadline; expiry aborts the Copilot session instead of waiting for
 the SDK's maximum process lifetime. Set
 `COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS` to a whole number from `60000` through
 `86400000` when a shorter benchmark bound or a longer deep-scan turn is needed.
+Keep this inner deadline below an outer benchmark or service process deadline
+so the scanner can perform its own bounded recovery first. If a deadline or
+recognized transport interruption occurs after all three draft artifacts
+exist, the scanner stops replaying the full scan and hands the drafts to the
+deterministic workbench. The workbench must normalize, validate, and seal them
+before the result can succeed; missing drafts still start a fresh isolated
+session.
 
 A hard model-turn deadline or recognized transport interruption starts a new,
 isolated Copilot CLI session over the same disposable analysis snapshot and
@@ -326,6 +339,18 @@ service topology using a fixed template plus explicitly HTML-encoded
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/java-cross-file-template-manifest.json `
   --results-dir C:\security-benchmarks\java-cross-file-template `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The ASP.NET lane pairs constructor-injected controller/service flows for
+command and SQL injection with the same topologies using a fixed shell-free
+executable plus `ArgumentList`, or fixed SQL plus a typed `SqlParameter`:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/aspnet-cross-file-framework-manifest.json `
+  --results-dir C:\security-benchmarks\aspnet-cross-file-framework `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

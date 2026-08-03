@@ -20,6 +20,7 @@ import {
   freshSessionRetryReason,
   isSafetyClassifierRefusal,
   MAX_FRESH_SESSION_ATTEMPTS,
+  modelFailureAfterCompleteDraftArtifacts,
   prepareCopilotRuntime,
   resolveCopilotCli,
   runWithFreshCopilotSessions,
@@ -424,6 +425,44 @@ describe("Copilot port", () => {
       [2, 3, "model_timeout"],
       [3, 3, "model_timeout"],
     ]);
+  });
+
+  test("hands complete timed-out drafts to deterministic host recovery", async () => {
+    const root = join(tmpdir(), `copilot-draft-recovery-${randomUUID()}`);
+    const scanDirectory = join(root, "scan");
+    temporaryPaths.push(root);
+    await mkdir(scanDirectory, { recursive: true });
+    const environment = { COPILOT_SECURITY_SCAN_DIR: scanDirectory };
+    const timeout = new ModelTurnDeadlineExceededError(60_000);
+
+    expect(
+      await modelFailureAfterCompleteDraftArtifacts(timeout, environment),
+    ).toBeNull();
+    for (const name of ["scan-manifest.json", "findings.json"]) {
+      await writeFile(join(scanDirectory, name), "{ draft: true }\n");
+    }
+    expect(
+      await modelFailureAfterCompleteDraftArtifacts(timeout, environment),
+    ).toBeNull();
+    await writeFile(join(scanDirectory, "coverage.json"), "{ draft: true }\n");
+
+    const recoverable = await modelFailureAfterCompleteDraftArtifacts(
+      timeout,
+      environment,
+    );
+    expect(recoverable).toBeInstanceOf(CopilotSecurityError);
+    expect(recoverable?.message).toBe(
+      "Copilot's model turn ended after producing all scan drafts; deterministic host validation will decide whether the scan can be recovered.",
+    );
+    expect(recoverable?.cause).toBe(timeout);
+    expect(freshSessionRetryReason(recoverable)).toBeNull();
+
+    expect(
+      await modelFailureAfterCompleteDraftArtifacts(
+        new Error("Safety classifier rejected the response"),
+        environment,
+      ),
+    ).toBeNull();
   });
 
   test("fails closed after the configured fresh-session budget", async () => {

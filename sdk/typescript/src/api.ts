@@ -816,6 +816,9 @@ export class CopilotSecurity {
         python,
         pluginRoot: runtime.plugin.pluginRoot,
         repository: modelRepository,
+        ...(normalized.kind === "refs" || normalized.kind === "working_tree"
+          ? { diffRepository: repo }
+          : {}),
         scanDirectory: scanDir,
         target: normalized,
         ...(targetPathsFile === null ? {} : { scopesFile: targetPathsFile }),

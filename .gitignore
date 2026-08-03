@@ -16,3 +16,5 @@ __pycache__/
 /artifacts/
 /apps/windows/**/bin/
 /apps/windows/**/obj/
+/benchmarks/**/bin/
+/benchmarks/**/obj/

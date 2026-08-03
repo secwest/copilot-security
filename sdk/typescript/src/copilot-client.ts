@@ -534,15 +534,20 @@ class CopilotThread implements CopilotScannerThread {
                   return result;
                 } catch (error) {
                   if (sandboxViolation !== null) throw sandboxViolation;
-                  if (
+                  const normalizedError =
                     freshSessionRetryReason(error) === "transport_interrupted"
-                  ) {
-                    throw (
-                      attemptTransportInterruption ??
-                      new ModelTransportInterruptedError()
+                      ? attemptTransportInterruption ??
+                        new ModelTransportInterruptedError()
+                      : error;
+                  const draftRecoveryFailure =
+                    await modelFailureAfterCompleteDraftArtifacts(
+                      normalizedError,
+                      this.#options.environment,
                     );
+                  if (draftRecoveryFailure !== null) {
+                    throw draftRecoveryFailure;
                   }
-                  throw error;
+                  throw normalizedError;
                 }
               };
               await sendCopilotPromptWithSafetyRecovery(
@@ -685,6 +690,18 @@ export async function sendCopilotTurnWithDeadline(
 }
 
 export type FreshSessionRetryReason = "model_timeout" | "transport_interrupted";
+
+export async function modelFailureAfterCompleteDraftArtifacts(
+  error: unknown,
+  environment: Record<string, string>,
+): Promise<CopilotSecurityError | null> {
+  if (freshSessionRetryReason(error) === null) return null;
+  if (!(await hasDraftArtifacts(environment))) return null;
+  return new CopilotSecurityError(
+    "Copilot's model turn ended after producing all scan drafts; deterministic host validation will decide whether the scan can be recovered.",
+    { cause: error },
+  );
+}
 
 export function freshSessionRetryReason(
   error: unknown,
@@ -1115,6 +1132,7 @@ export function scanQualityGatePrompt(
     "For spring-http-template-injection rows, preserve the Java call signature and prove the same request value reaches the engine's template-source argument. Apache Velocity.evaluate receives template source in its fourth argument after context, writer, and log tag; request data used only as a VelocityContext value is strong SSTI counterevidence. It is not XSS counterevidence unless the rendered output context has proven encoding or another dominating output control, because Velocity does not supply general HTML auto-escaping. Apply the same source-versus-data distinction to Jinjava.render, Handlebars.compile, and Pebble getLiteralTemplate. Reject duplicate simple class names, unresolved receiver types, text-only API examples, fixed caller arguments, and values reassigned before a cross-file service call. A type name and method name alone are not a flow.",
     "A directly reachable HTTP source flowing into unsandboxed general-purpose Pug or Jinja template-source compilation or rendering is high severity even when deployment privileges, secrets, or runtime exploitation are outside static scope. Do not lower it to medium solely for missing deployment evidence. Lower severity only when a proven sandbox, isolated renderer, constrained engine, or other dominating control materially limits impact on the same path.",
     "The same high-severity baseline applies to a directly reachable Spring or servlet source flowing into unsandboxed Apache Velocity template-source evaluation. Do not downgrade it merely because the service boundary, deployment privileges, or post-injection payload are outside the reported source excerpt.",
+    "For aspnet-http-command and aspnet-http-sql rows, preserve the exact C# receiver type, controller method, bound parameter or HttpRequest assignment, service-call argument position, wrapper parameter, and dangerous sink argument across the recorded propagators. For command execution, distinguish attacker data incorporated into a shell or command-line grammar from a fixed executable started with UseShellExecute=false and one ArgumentList entry per attacker-controlled value. For SQL, the first query-text argument of SqlCommand, FromSqlRaw, or ExecuteSqlRaw is the dangerous grammar boundary; a fixed query plus a typed DbParameter or SqlParameter bound to the same value is strong counterevidence. Reject duplicate simple service types, unresolved receivers, fixed caller arguments, values reassigned before the service call, sink names found only in comments or strings, and parameters unused by the sink.",
     "For Jinja HTML/XSS candidates, preserve the exact autoescape callback semantics. `select_autoescape` defaults `default_for_string` to true, so `select_autoescape(default=True)` returns true for unnamed `Environment.from_string` templates. A fixed HTML template compiled under `Environment(autoescape=True)` or `select_autoescape(default_for_string=True)`, with the attacker value supplied only as a named render field, is strong XSS counterevidence. Report only when the path disables autoescape, applies `|safe` or `Markup`, concatenates attacker data into HTML, enters an unsafe attribute/script/URL context, or otherwise proves an escaping bypass at the response sink.",
     "For proxy-derived client identity specifically, begin with the transport peer, trust forwarding metadata only from an exact configured ingress/proxy set, parse bounded canonical addresses, and peel only verified proxy hops from the right. Prove a security effect by rotating attacker-controlled prepended hops past an intended client/account/principal budget; header presence, a generic trust-proxy setting, or accepting multiple valid chain shapes alone is not a finding.",
     "For duplicate parameters specifically, preserve the exact raw request, decoded parameter sequence, and every component parser's first-value, last-value, array, merge, or rejection semantics. Report only when an attacker-controlled duplicate changes the security-relevant value between authorization/signature/validation and downstream use and reaches a protected effect. Parser presence or duplicate acceptance alone is not a finding; strict bounded decoding once, rejection of duplicate decoded security keys, authorization of the canonical object, and passing that same object downstream are strong counterevidence.",

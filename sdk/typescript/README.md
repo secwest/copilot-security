@@ -30,9 +30,10 @@ The package is ESM-only and provides:
 - typed host-generated Node HTTP, Python web, Spring/servlet, and ASP.NET
   command/SQL data-flow hypotheses with exact source/sink lines and nearby
   negative controls for the mandatory residual correction turn, plus bounded
-  one-hop and two-hop relative-import/call/parameter summaries for
-  Node/TypeScript wrappers, with JavaScript string/comment masking before
-  structural matching
+  one-hop C# controller/service and Java controller/service summaries and
+  one-hop or two-hop relative-import/call/parameter summaries for
+  Node/TypeScript and Python wrappers; language strings and comments are
+  masked before structural matching
 - bounded native Copilot model-call retries plus six concise, idempotent
   defensive recovery prompts for explicit safety-classifier refusals, without
   replaying the original blocked text, and cancellation-safe cleanup of

@@ -462,6 +462,7 @@ export async function prepareCopilotScanInventory(options: {
   python: string;
   pluginRoot: string;
   repository: string;
+  diffRepository?: string;
   scanDirectory: string;
   target: CopilotInventoryTarget;
   scopesFile?: string;
@@ -484,12 +485,16 @@ export async function prepareCopilotScanInventory(options: {
   );
   const script = join(options.pluginRoot, "scripts", "generate_rank_input.py");
   const target = options.target;
+  const rankRepository =
+    target.kind === "refs" || target.kind === "working_tree"
+      ? options.diffRepository ?? options.repository
+      : options.repository;
   const args =
     target.kind === "refs" || target.kind === "working_tree"
       ? [
           "make-diff-rank-input",
           "--repo",
-          options.repository,
+          rankRepository,
           "--base",
           target.base ?? "HEAD",
           "--mode",

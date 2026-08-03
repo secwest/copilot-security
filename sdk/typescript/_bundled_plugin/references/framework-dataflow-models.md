@@ -33,6 +33,18 @@ This is still a syntactic summary; decorators, monkey patching, re-exports,
 dynamic imports, keyword remapping, and arbitrary transformations require
 manual closure.
 
+For C#, the same scope is emitted only when the host resolves one unique
+class, record, or struct owner for a controller field or static receiver,
+parses public, protected, or internal controller and service methods, binds the
+call's exact positional argument to the wrapper parameter, and sees that
+parameter in the modeled sink expression. The ordered propagators preserve the
+declared receiver type, call argument, and wrapper parameter. ASP.NET bound
+parameter attributes and local assignments from `HttpRequest` fields are
+supported, including bounded multiline calls and zero-parameter controller
+methods. Reject duplicate simple type names, unresolved receivers, fixed or
+reassigned arguments, parameters unused by the sink, and C# comments or string
+examples that merely name an API.
+
 `scope: "cross-file-multi-hop-wrapper"` is the same bounded syntax extended by
 exactly one exported JavaScript/TypeScript or public module-level Python relay.
 Its propagators are ordered as caller import and argument, relay parameter,
@@ -225,6 +237,10 @@ interpreter that consumes the value.
 - Sinks: `Process.Start` and `ProcessStartInfo`.
 - Strong counterevidence: a fixed executable, `ArgumentList`,
   `UseShellExecute = false`, and operation-specific validation.
+- For cross-file rows, preserve the exact receiver type, service-call argument
+  position, wrapper parameter, executable, and command-line grammar. A request
+  value incorporated into `cmd.exe /c`, PowerShell `-Command`, or an equivalent
+  interpreter string is not made safe by passing through `ProcessStartInfo`.
 
 ### ASP.NET raw SQL — CWE-89
 
@@ -233,6 +249,10 @@ interpreter that consumes the value.
 - Strong counterevidence: interpolated APIs that bind values correctly,
   `DbParameter`/`SqlParameter`, or an exact server-owned mapping for dynamic
   identifiers.
+- For `SqlCommand`, preserve the first constructor argument as query text. A
+  request value referenced only by a typed parameter binding is
+  counterevidence, not raw SQL flow; values still cannot parameterize
+  identifiers or clauses.
 
 ## Closure Rules
 
