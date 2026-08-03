@@ -40,14 +40,16 @@ diff scope remains authoritative; ignored generated output cannot silently
 stand in for reviewed application source.
 
 The residual pass also applies typed framework data-flow models for Node HTTP,
-Python web, Spring/servlet, and ASP.NET command-execution, raw-SQL, and
-server-side request-forgery boundaries, plus Node and Python server-side
-request forgery and server-side template injection. Each applicable
+Python web, Spring/servlet, and ASP.NET command-execution, raw-SQL, filesystem
+path, and server-side request-forgery boundaries, plus Node and Python
+server-side request forgery and server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
 bodies, and preserves annotated Spring or servlet-assigned request values
-through the exact call argument and wrapper parameter. For C#, the host
+through the exact call argument and wrapper parameter. Java can follow either
+one direct service wrapper or exactly one additional uniquely typed service
+relay before a typed sink. For C#, the host
 likewise resolves one uniquely named class, record, or struct from an ASP.NET
 controller field or static receiver, binds the exact service-call argument to
 the public, protected, or internal wrapper parameter, and preserves either an
@@ -355,6 +357,22 @@ service topology using a fixed template plus explicitly HTML-encoded
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/java-cross-file-template-manifest.json `
   --results-dir C:\security-benchmarks\java-cross-file-template `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Spring path lane carries an annotated request parameter across two
+constructor-injected Java services into `Files.readString`. Its negative
+control rejects absolute input, proves component-aware lexical containment,
+resolves both the existing root and target through `toRealPath`, and rejects a
+real target outside the real root. Pure-JDK witnesses cover parent traversal,
+absolute reset, sibling-prefix confusion, symlink escape, and an allowed
+in-root document:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/java-multi-hop-path-manifest.json `
+  --results-dir C:\security-benchmarks\java-multi-hop-path `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

@@ -53,6 +53,16 @@ calls, and wrapper parameters in order. It does not infer interface dispatch,
 dependency-injection registrations, named arguments, callbacks, or a third
 service hop.
 
+For Java, `scope: "cross-file-multi-hop-wrapper"` now applies the same exact
+two-boundary contract to public or protected methods. Both simple owner types
+must resolve to one `.java` source file, each call must preserve the exact
+positional parameter without reassignment, and the final wrapper parameter
+must occur in the typed sink expression. The host records both Java receiver
+bindings, calls, and wrapper declarations in order. It rejects duplicate type
+names, local filesystem-type shadows, fixed arguments, text-only calls, and a
+third service hop; it does not infer interfaces, framework registrations,
+overload resolution, named Kotlin arguments, callbacks, or reflection.
+
 `scope: "cross-file-multi-hop-wrapper"` is the same bounded syntax extended by
 exactly one exported JavaScript/TypeScript or public module-level Python relay.
 Its propagators are ordered as caller import and argument, relay parameter,
@@ -237,6 +247,28 @@ interpreter that consumes the value.
   general-purpose Velocity template-source evaluation is high severity. Lower
   it only when a proven sandbox, isolated renderer, constrained engine, or
   other dominating control limits the same path.
+
+### Spring/servlet filesystem path injection — CWE-22
+
+- Sources: Spring-bound request parameters and servlet request accessors.
+- Sinks: typed `java.nio.file.Files` read, write, copy, move, delete, channel,
+  and stream operations, plus imported or fully qualified `java.io`
+  `FileInputStream`, `FileOutputStream`, `FileReader`, `FileWriter`, and
+  `RandomAccessFile` construction.
+- Preserve both uniquely resolved Java service types, exact call arguments,
+  wrapper parameters, and the final path argument. A local class that shadows
+  `Files` or a `java.io` sink type is not a JDK sink.
+- `Path.resolve` does not retain the trusted root when its later operand is
+  absolute. `Path.normalize` is syntactic and does not resolve filesystem
+  links. A bare `String.startsWith` check can admit a sibling directory prefix;
+  component-aware `Path.startsWith` avoids that specific confusion.
+- Strong counterevidence is an exact server-owned file map or a dominating
+  boundary that rejects absolute input, normalizes under the intended root,
+  checks component-aware lexical containment, resolves the existing root and
+  target through `toRealPath`, and proves the real target remains beneath the
+  real root before the operation. Reassess symbolic links, mount points,
+  attacker-writable directories, `SecureDirectoryStream` availability, and
+  rename races separately.
 
 ### ASP.NET process execution — CWE-78
 

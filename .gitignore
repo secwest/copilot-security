@@ -18,3 +18,4 @@ __pycache__/
 /apps/windows/**/obj/
 /benchmarks/**/bin/
 /benchmarks/**/obj/
+/benchmarks/**/target/

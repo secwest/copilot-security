@@ -209,6 +209,45 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The Java path lane carries an annotated Spring request parameter through two
+constructor-injected service boundaries into `Files.readString`. The vulnerable
+fixture passes the value directly to `Path.resolve`, which permits both parent
+traversal and an absolute later operand that discards the trusted root. The
+negative control rejects absolute input, normalizes and checks component-aware
+lexical containment, then resolves both the existing root and target with
+`toRealPath` and checks real containment before opening the file. This rejects
+sibling-prefix and symbolic-link pivots; a deployment where an attacker can
+rename filesystem objects concurrently still needs an OS-specific handle-based
+open boundary. Dependency-free JDK witnesses exercise both exploit forms,
+sibling-prefix rejection, symbolic-link rejection when the host permits links,
+and an allowed in-root document:
+
+```powershell
+javac -d C:\security-benchmarks\java-path-vulnerable `
+  benchmarks\witnesses\java-multi-hop-path-traversal\VulnerablePathWitness.java
+java -cp C:\security-benchmarks\java-path-vulnerable VulnerablePathWitness
+
+javac -d C:\security-benchmarks\java-path-safe `
+  benchmarks\witnesses\java-multi-hop-safe-path\SafePathWitness.java
+java -cp C:\security-benchmarks\java-path-safe SafePathWitness
+```
+
+Run the strict live pair with:
+
+```powershell
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/java-multi-hop-path-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-java-multi-hop-path `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 The ASP.NET cross-file lane applies the same strict gates to constructor-
 injected controller/service flows. Its command positive reaches `cmd.exe /c`,
 while its control uses a fixed executable, disables shell execution, and adds

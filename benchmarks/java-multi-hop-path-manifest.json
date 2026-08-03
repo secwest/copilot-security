@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "java-multi-hop-path-traversal",
+      "description": "A Spring request parameter crosses two constructor-injected Java services into a java.nio.file.Files read without a path boundary.",
+      "fixture": "fixtures/java-multi-hop-path-traversal",
+      "findingsPaths": ["java-multi-hop-path-traversal/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "spring-java-multi-hop-path-traversal",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/main/java/example/DocumentStore.java",
+              "startLine": 17,
+              "endLine": 17,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "java-multi-hop-safe-path",
+      "description": "The same Spring flow rejects absolute paths and proves both lexical and real filesystem containment before reading.",
+      "fixture": "fixtures/java-multi-hop-safe-path",
+      "findingsPaths": ["java-multi-hop-safe-path/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

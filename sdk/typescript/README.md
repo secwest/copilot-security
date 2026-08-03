@@ -32,7 +32,7 @@ The package is ESM-only and provides:
   command/SQL/SSRF/filesystem-path data-flow hypotheses with exact source/sink
   lines and nearby negative controls for the mandatory residual correction
   turn, plus bounded one-hop or two-hop C# controller/service summaries,
-  one-hop Java controller/service summaries, and one-hop or two-hop
+  one-hop or two-hop Java controller/service summaries, and one-hop or two-hop
   relative-import/call/parameter summaries for Node/TypeScript and Python
   wrappers; language strings and comments are masked before structural
   matching
