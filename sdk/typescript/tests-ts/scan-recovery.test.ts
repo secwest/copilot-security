@@ -1246,6 +1246,102 @@ describe("malformed scan artifact recovery", () => {
     ]);
   });
 
+  test("recovers an omitted coverage disposition from an exact canonical outcome", async () => {
+    const fixture = await startDraftScan();
+    await writeFile(join(fixture.repository, "pom.xml"), "<project />\n");
+    await writeFile(
+      join(fixture.scanDir, "artifacts", "02_discovery", "in_scope_files.txt"),
+      "pom.xml\n",
+    );
+    fixture.inventorySha256 = createHash("sha256")
+      .update("pom.xml\n")
+      .digest("hex");
+    const findingsPath = join(fixture.scanDir, "findings.json");
+    const findings = await readJson<FindingsDocument>(findingsPath);
+    findings.findings = [];
+    await writeJson(findingsPath, findings);
+    const coveragePath = join(fixture.scanDir, "coverage.json");
+    const coverage = await readJson<{
+      completeness: string;
+      deferred: unknown[];
+      surfaces: Array<Record<string, unknown>>;
+    }>(coveragePath);
+    coverage.completeness = "complete";
+    coverage.deferred = [];
+    coverage.surfaces = [
+      {
+        id: "pom",
+        label: "pom.xml",
+        status: "no_issue_found",
+        receiptRefs: [],
+      },
+    ];
+    await writeJson(coveragePath, coverage);
+
+    const scan = await completeScan(fixture);
+    const recovered = await readJson<{
+      completeness: string;
+      surfaces: CoverageSurface[];
+    }>(coveragePath);
+
+    expect(scan.progress.status).toBe("complete");
+    expect(recovered.completeness).toBe("complete");
+    expect(recovered.surfaces).toContainEqual(
+      expect.objectContaining({
+        id: "pom",
+        disposition: "no_issue_found",
+      }),
+    );
+  });
+
+  test("keeps an ambiguous coverage outcome fail-closed", async () => {
+    const fixture = await startDraftScan();
+    await writeFile(join(fixture.repository, "pom.xml"), "<project />\n");
+    await writeFile(
+      join(fixture.scanDir, "artifacts", "02_discovery", "in_scope_files.txt"),
+      "pom.xml\n",
+    );
+    fixture.inventorySha256 = createHash("sha256")
+      .update("pom.xml\n")
+      .digest("hex");
+    const findingsPath = join(fixture.scanDir, "findings.json");
+    const findings = await readJson<FindingsDocument>(findingsPath);
+    findings.findings = [];
+    await writeJson(findingsPath, findings);
+    const coveragePath = join(fixture.scanDir, "coverage.json");
+    const coverage = await readJson<{
+      completeness: string;
+      deferred: unknown[];
+      surfaces: Array<Record<string, unknown>>;
+    }>(coveragePath);
+    coverage.completeness = "complete";
+    coverage.deferred = [];
+    coverage.surfaces = [
+      {
+        id: "pom",
+        label: "pom.xml",
+        status: "looks clean",
+        receiptRefs: [],
+      },
+    ];
+    await writeJson(coveragePath, coverage);
+
+    const scan = await completeScan(fixture);
+    const recovered = await readJson<{
+      completeness: string;
+      surfaces: CoverageSurface[];
+    }>(coveragePath);
+
+    expect(scan.progress.status).toBe("complete");
+    expect(recovered.completeness).toBe("partial");
+    expect(recovered.surfaces).toContainEqual(
+      expect.objectContaining({
+        id: "pom",
+        disposition: "needs_follow_up",
+      }),
+    );
+  });
+
   test("downgrades a complete claim when immutable inventory paths lack closure", async () => {
     const fixture = await startDraftScan();
     await writeFile(

@@ -1197,12 +1197,27 @@ def _recover_unsealed_coverage(
                     disposition = item.get("disposition")
                     surface_recovered = False
                     if not isinstance(disposition, str) or disposition not in DISPOSITIONS:
-                        warnings.append(
-                            f"Recovered coverage surface {index + 1}: "
-                            "the review disposition could not be verified."
+                        canonical_alias = next(
+                            (
+                                alias
+                                for alias in (item.get("outcome"), item.get("status"))
+                                if isinstance(alias, str) and alias in DISPOSITIONS
+                            ),
+                            None,
                         )
-                        item["disposition"] = "needs_follow_up"
-                        surface_recovered = True
+                        if canonical_alias is None:
+                            warnings.append(
+                                f"Recovered coverage surface {index + 1}: "
+                                "the review disposition could not be verified."
+                            )
+                            item["disposition"] = "needs_follow_up"
+                            surface_recovered = True
+                        else:
+                            warnings.append(
+                                f"Recovered coverage surface {index + 1}: "
+                                f"used the canonical {canonical_alias!r} review outcome."
+                            )
+                            item["disposition"] = canonical_alias
 
                     receipt_refs = item.get("receiptRefs")
                     if not isinstance(receipt_refs, list):
