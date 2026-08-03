@@ -238,7 +238,7 @@ dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-fetch/AspNetCro
 Run the strict live pair with:
 
 ```powershell
-$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '360000'
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'
 node ../../benchmarks/run-benchmark.mjs `
   --manifest ../../benchmarks/aspnet-cross-file-ssrf-manifest.json `
   --results-dir C:\security-benchmarks\copilot-security-aspnet-cross-file-ssrf `
@@ -251,11 +251,51 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The ASP.NET path lane adds a second typed service hop between the controller
+and storage sink. The vulnerable fixture lets a later rooted `Path.Combine`
+argument discard the configured root and lets `..` escape it. The control
+rejects rooted input, resolves full root and candidate paths, and rejects any
+relative result that is `..`, begins with an exact parent-directory boundary,
+or remains rooted. The control assumes its content root is server-owned; a
+deployment with attacker-writable links or reparse points needs a link-safe
+open boundary as well. Dependency-free witnesses exercise parent traversal,
+absolute reset, sibling-prefix escape, and an allowed in-root document:
+
+```powershell
+dotnet run --project benchmarks/witnesses/aspnet-multi-hop-path-traversal/AspNetMultiHopPathTraversalWitness.csproj --configuration Release
+dotnet run --project benchmarks/witnesses/aspnet-multi-hop-safe-path/AspNetMultiHopSafePathWitness.csproj --configuration Release
+```
+
+Run the strict live pair with:
+
+```powershell
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/aspnet-multi-hop-path-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-aspnet-multi-hop-path `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 Run the live scanner lane with an inner model-turn deadline below the outer
 process deadline:
 
+The examples use twenty minutes per model turn, not per complete scan. A
+baseline deep ASP.NET path campaign took 12m05s for the positive and 15m16s for
+the safe control. The stricter endpoint-role closure campaign took 32m31s and
+22m13s in total while no individual turn exhausted the twenty-minute deadline.
+The former six-minute override forced three fresh-session timeouts per case
+without any allowance, authentication, rate-limit, or classifier failure. The
+scanner default remains one hour per turn, while the benchmark runner's
+independent outer deadline defaults to four hours.
+
 ```powershell
-$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '360000'
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'
 node ../../benchmarks/run-benchmark.mjs `
   --manifest ../../benchmarks/aspnet-cross-file-framework-manifest.json `
   --results-dir C:\security-benchmarks\copilot-security-aspnet-cross-file `

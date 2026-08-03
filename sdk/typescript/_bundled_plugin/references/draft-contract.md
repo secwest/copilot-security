@@ -53,7 +53,10 @@ Every finding must include:
   `dataflow.source`, `dataflow.sink`, `dataflow.outcome`,
   `reachability.attacker`, `reachability.entrypoint`,
   `reachability.outcome`, broken controls, and concise `evidenceRefs`
-- `codeEvidence` entries with stable ID, label, path, line, code, and explanation
+- `codeEvidence` entries with stable ID, label, path, line, code, explanation,
+  and an exact `source`, `propagator`, `sink`, `control`, `impact`, or `evidence`
+  role; evidence overlapping a canonical source or sink location must use that
+  same endpoint role
 - `provenance: {"source": "local_plugin"}`
 
 `findings` contains only validated, reachable security defects with a concrete

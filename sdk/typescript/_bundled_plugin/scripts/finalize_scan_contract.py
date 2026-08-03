@@ -3332,6 +3332,95 @@ def _standalone_source_evidence(
     }
 
 
+_CANONICAL_CODE_EVIDENCE_ROLES = {
+    "source",
+    "propagator",
+    "sink",
+    "control",
+    "impact",
+    "evidence",
+}
+
+
+def _grounded_evidence_roles(
+    finding: dict[str, Any],
+    evidence_rows: list[dict[str, Any]],
+) -> int:
+    """Align explicit source/sink evidence roles with the canonical attack path."""
+
+    expected_by_id: dict[str, str] = {}
+    attack_path = finding.get("attackPath")
+    if isinstance(attack_path, dict):
+        dataflow = attack_path.get("dataflow")
+        if isinstance(dataflow, dict):
+            for role in ("source", "sink"):
+                evidence_id = dataflow.get(role)
+                if isinstance(evidence_id, str) and evidence_id.strip():
+                    expected_by_id[evidence_id.strip()] = role
+
+    locations = finding.get("locations")
+    endpoint_locations: list[dict[str, Any]] = []
+    if isinstance(locations, list):
+        for raw in locations:
+            location = _standalone_location(raw)
+            if location is None:
+                continue
+            role = location.get("role")
+            if isinstance(role, str) and role.strip().lower() in {"source", "sink"}:
+                location["role"] = role.strip().lower()
+                endpoint_locations.append(location)
+
+    corrected = 0
+    for evidence in evidence_rows:
+        evidence_id = evidence.get("id")
+        expected = (
+            expected_by_id.get(evidence_id.strip())
+            if isinstance(evidence_id, str)
+            else None
+        )
+        if expected is None:
+            evidence_location = _standalone_location(evidence)
+            if evidence_location is not None:
+                matching_roles = {
+                    location["role"]
+                    for location in endpoint_locations
+                    if _standalone_locations_overlap(evidence_location, location)
+                }
+                if len(matching_roles) == 1:
+                    expected = next(iter(matching_roles))
+
+        current = evidence.get("role")
+        normalized_current = current.strip().lower() if isinstance(current, str) else None
+        if expected is None and current is None:
+            continue
+        normalized = expected or (
+            normalized_current
+            if normalized_current in _CANONICAL_CODE_EVIDENCE_ROLES
+            else "evidence"
+        )
+        if current != normalized:
+            evidence["role"] = normalized
+            corrected += 1
+    return corrected
+
+
+def _standalone_locations_overlap(
+    left: dict[str, Any],
+    right: dict[str, Any],
+) -> bool:
+    if left.get("path") != right.get("path"):
+        return False
+    left_start = left.get("startLine")
+    right_start = right.get("startLine")
+    if not isinstance(left_start, int) or not isinstance(right_start, int):
+        return False
+    left_end = left.get("endLine", left_start)
+    right_end = right.get("endLine", right_start)
+    return isinstance(left_end, int) and isinstance(right_end, int) and (
+        left_start <= right_end and right_start <= left_end
+    )
+
+
 def _ground_standalone_findings_evidence(
     findings: dict[str, Any],
     warnings: list[str] | None,
@@ -3407,6 +3496,7 @@ def _ground_standalone_findings_evidence(
             evidence["code"] = code
             grounded.append(evidence)
         finding["codeEvidence"] = grounded
+        corrected_roles = _grounded_evidence_roles(finding, grounded)
         if warnings is not None and reanchored:
             noun = "excerpt" if reanchored == 1 else "excerpts"
             warnings.append(
@@ -3418,6 +3508,12 @@ def _ground_standalone_findings_evidence(
             warnings.append(
                 f"Recovered finding {finding_index + 1}: removed "
                 f"{removed} ungrounded code-evidence {noun}."
+            )
+        if warnings is not None and corrected_roles:
+            noun = "role" if corrected_roles == 1 else "roles"
+            warnings.append(
+                f"Recovered finding {finding_index + 1}: aligned "
+                f"{corrected_roles} code-evidence {noun} with canonical endpoints."
             )
 
 

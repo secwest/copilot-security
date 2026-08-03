@@ -385,6 +385,21 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
+The ASP.NET path lane follows a request value across two uniquely typed
+service boundaries into `Path.Combine` and `File.ReadAllTextAsync`. Its
+negative control rejects rooted input, canonicalizes the configured root and
+candidate, and proves exact relative containment before the file operation.
+Executable witnesses cover parent traversal, absolute-path reset,
+sibling-prefix bypass, and a legitimate in-root read:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/aspnet-multi-hop-path-manifest.json `
+  --results-dir C:\security-benchmarks\aspnet-multi-hop-path `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
 Use `--model` and `--effort` to select a Copilot model and reasoning effort.
 The default is `gpt-5.6-sol` with `xhigh` effort.
 `--model auto` delegates model selection to Copilot and does not send a

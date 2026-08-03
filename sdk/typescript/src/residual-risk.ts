@@ -208,6 +208,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:copyfile|createWriteStream|extract|extractall|makedirs|mkdir|move|open|rename|sendFile|write_bytes|write_text|writeFile|writeFileSync)\b/iu,
   ],
   [
+    "filesystem-path-construction-or-access",
+    94,
+    /\bPath\.(?:Combine|GetFullPath|GetRelativePath|IsPathRooted|Join|TryJoin)\s*\(|\bFile\.(?:AppendAllLines|AppendAllText|AppendAllTextAsync|Copy|Create|CreateText|Delete|Move|Open|OpenHandle|OpenRead|OpenText|OpenWrite|ReadAllBytes|ReadAllBytesAsync|ReadAllLines|ReadAllLinesAsync|ReadAllText|ReadAllTextAsync|ReadLines|WriteAllBytes|WriteAllBytesAsync|WriteAllLines|WriteAllLinesAsync|WriteAllText|WriteAllTextAsync)\s*\(|\bnew\s+(?:System\.IO\.)?FileStream\s*\(/iu,
+  ],
+  [
     "untrusted-file-upload-or-content-placement",
     99,
     /\b(?:formidable|IFormFile|move_uploaded_file|MultipartFile|multipart|multer|originalname|uploadedFile|uploadPlugin)\b|\b(?:req|request)\.file\b/iu,
@@ -1060,6 +1065,67 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
       },
     ],
   },
+  {
+    id: "aspnet-http-path",
+    language: "dotnet",
+    extensions: DOTNET_EXTENSIONS,
+    activation: [
+      /\b(?:System\.IO|FileStream|Path\.(?:Combine|Join|GetFullPath|GetRelativePath)|File\.(?:Open|Read|Write|Delete|Move|Copy|Create|Append))\b/iu,
+    ],
+    sources: [
+      {
+        kind: "aspnet-bound-parameter",
+        expression:
+          /\[(?:FromBody|FromForm|FromHeader|FromQuery|FromRoute)\b/iu,
+      },
+      {
+        kind: "aspnet-request-field",
+        expression:
+          /\bRequest\.(?:Body|Form|Headers|Query|RouteValues)\b|\bHttpRequest\b/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "filesystem-path",
+        expression:
+          /\b(?:System\.IO\.)?File\.(?:AppendAllLines|AppendAllText|AppendAllTextAsync|Copy|Create|CreateText|Delete|Move|Open|OpenHandle|OpenRead|OpenText|OpenWrite|ReadAllBytes|ReadAllBytesAsync|ReadAllLines|ReadAllLinesAsync|ReadAllText|ReadAllTextAsync|ReadLines|WriteAllBytes|WriteAllBytesAsync|WriteAllLines|WriteAllLinesAsync|WriteAllText|WriteAllTextAsync)\s*\(|\bnew\s+(?:System\.IO\.)?FileStream\s*\(/iu,
+        cweIds: ["CWE-22"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-path-allowlist",
+        expression:
+          /\b(?:Allowed|Known|Trusted)(?:Files?|Paths?)\b|\.TryGetValue\s*\(/iu,
+      },
+      {
+        kind: "rooted-path-rejection",
+        expression: /\bPath\.IsPathRooted\s*\(/iu,
+      },
+      {
+        kind: "canonical-full-path",
+        expression: /\bPath\.GetFullPath\s*\(/iu,
+      },
+      {
+        kind: "canonical-relative-containment",
+        expression: /\bPath\.GetRelativePath\s*\(/iu,
+      },
+      {
+        kind: "relative-parent-boundary-rejection",
+        expression: /\b(?:relative|candidate)\w*\.StartsWith\s*\(/iu,
+      },
+      {
+        kind: "single-path-component-validation",
+        expression:
+          /\bPath\.GetFileName\s*\(|\b(?:DirectorySeparatorChar|AltDirectorySeparatorChar)\b/iu,
+      },
+      {
+        kind: "link-or-reparse-point-defense",
+        expression:
+          /\b(?:FileAttributes\.ReparsePoint|FileOptions\.OpenReparsePoint|LinkTarget|ResolveLinkTarget)\b/iu,
+      },
+    ],
+  },
 ];
 
 const IGNORED_DIRECTORIES = new Set([
@@ -1166,6 +1232,21 @@ interface FrameworkRelaySummary {
   parameterIndex: number;
   declarationLine: number;
   downstreamImport: ImportedJavascriptSymbol | ImportedPythonSymbol;
+  downstreamCallLine: number;
+  downstream: FrameworkWrapperSummary;
+  controls: Array<{ kind: string; line: number }>;
+}
+
+interface DotnetFrameworkRelaySummary {
+  model: FrameworkDataflowModel;
+  file: SourceFileSnapshot;
+  ownerType: string;
+  symbol: string;
+  parameter: string;
+  parameterIndex: number;
+  parameterCount: number;
+  declarationLine: number;
+  downstreamBinding: JavaReceiverBinding;
   downstreamCallLine: number;
   downstream: FrameworkWrapperSummary;
   controls: Array<{ kind: string; line: number }>;
@@ -1370,6 +1451,12 @@ function frameworkDataflowRecords(
       ) {
         continue;
       }
+      if (
+        model.id === "aspnet-http-path" &&
+        !dotnetFilesystemSinkHasTypedReceiver(lines, sink.line)
+      ) {
+        continue;
+      }
       const source = nearestModeledSource(sources, sink.line);
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -1455,6 +1542,7 @@ function frameworkCrossFileDataflowRecords(
     ...frameworkDirectDotnetDataflowRecords(files),
     ...frameworkMultiHopDataflowRecords(files),
     ...frameworkPythonMultiHopDataflowRecords(files),
+    ...frameworkDotnetMultiHopDataflowRecords(files),
   ];
 }
 
@@ -2442,6 +2530,341 @@ function frameworkPythonMultiHopDataflowRecords(
   return records;
 }
 
+function frameworkDotnetMultiHopDataflowRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const sinkSummaries = dotnetFrameworkWrapperSummaries(files);
+  const ownerPaths = dotnetOwnerPaths(files);
+  const relaySummaries = dotnetFrameworkRelaySummaries(
+    files,
+    sinkSummaries,
+    ownerPaths,
+  );
+  const summariesByOwnerAndMethod = new Map<
+    string,
+    DotnetFrameworkRelaySummary[]
+  >();
+  for (const summary of relaySummaries) {
+    const key = `${summary.ownerType}\0${summary.symbol}`;
+    const existing = summariesByOwnerAndMethod.get(key) ?? [];
+    existing.push(summary);
+    summariesByOwnerAndMethod.set(key, existing);
+  }
+
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const caller of files) {
+    if (caller.extension !== ".cs") continue;
+    const callerMethods = exportedDotnetMethods(caller.lines);
+    if (callerMethods.length === 0) continue;
+    const receiverBindings = javaReceiverBindings(caller.lines);
+    for (const [key, matchingSummaries] of summariesByOwnerAndMethod) {
+      const [ownerType, method] = key.split("\0") as [string, string];
+      if (ownerPaths.get(ownerType)?.size !== 1) continue;
+      const bindings = [
+        ...receiverBindings.filter(
+          (binding) => binding.ownerType === ownerType,
+        ),
+        { receiver: ownerType, ownerType, line: 0 },
+      ];
+      for (const binding of bindings) {
+        for (const call of javaMethodCallLines(
+          caller.lines,
+          binding.receiver,
+          method,
+        )) {
+          const callerMethod = callerMethods.find(
+            (candidate) =>
+              call.line >= candidate.startLine &&
+              call.line <= candidate.endLine,
+          );
+          if (callerMethod === undefined) continue;
+          for (const summary of matchingSummaries) {
+            if (summary.file.path === caller.path) continue;
+            if (call.arguments.length !== summary.parameterCount) continue;
+            const argument = call.arguments[summary.parameterIndex];
+            if (argument === undefined) continue;
+            const source = modeledDotnetCallSource(
+              caller.lines,
+              callerMethod,
+              call.line,
+              argument,
+              summary.model.sources,
+            );
+            if (source === undefined) continue;
+            const sinkSummary = summary.downstream;
+            const recordKey = [
+              summary.model.id,
+              caller.path,
+              call.line,
+              summary.file.path,
+              summary.downstreamCallLine,
+              sinkSummary.file.path,
+              sinkSummary.sink.line,
+              summary.parameterIndex,
+              sinkSummary.parameterIndex,
+            ].join("\0");
+            if (emitted.has(recordKey)) continue;
+            emitted.add(recordKey);
+
+            const sinkStart = Math.max(
+              1,
+              sinkSummary.sink.line - CONTEXT_LINES_BEFORE,
+            );
+            const sinkEnd = Math.min(
+              sinkSummary.file.lines.length,
+              sinkSummary.sink.line + CONTEXT_LINES_AFTER,
+            );
+            const sourceStart = Math.max(
+              1,
+              Math.min(source.line, call.line) - 2,
+            );
+            const sourceEnd = Math.min(
+              caller.lines.length,
+              Math.max(source.line, call.line) + 2,
+            );
+            const candidateControls = [
+              ...summary.controls.map((control) => ({
+                ...control,
+                path: summary.file.path,
+              })),
+              ...sinkSummary.controls.map((control) => ({
+                ...control,
+                path: sinkSummary.file.path,
+              })),
+            ].filter(
+              (control, index, all) =>
+                all.findIndex(
+                  (candidate) =>
+                    candidate.kind === control.kind &&
+                    candidate.path === control.path &&
+                    candidate.line === control.line,
+                ) === index,
+            );
+            records.push({
+              path: sinkSummary.file.path,
+              line: sinkSummary.sink.line,
+              categories: [
+                `framework-dataflow:${summary.model.id}`,
+                "framework-cross-file-multi-hop-wrapper",
+                `modeled-source:${source.kind}`,
+                `modeled-sink:${sinkSummary.sink.kind}`,
+                ...candidateControls.map(
+                  (control) => `candidate-control:${control.kind}`,
+                ),
+              ],
+              priority: 123,
+              startLine: sinkStart,
+              endLine: sinkEnd,
+              excerpt: sourceExcerpt(
+                sinkSummary.file.lines,
+                sinkStart,
+                sinkEnd,
+              ),
+              sourceExcerpt: sourceExcerpt(
+                caller.lines,
+                sourceStart,
+                sourceEnd,
+              ),
+              frameworkModel: {
+                schemaVersion: "1.2",
+                id: summary.model.id,
+                language: summary.model.language,
+                scope: "cross-file-multi-hop-wrapper",
+                source: {
+                  kind: source.kind,
+                  path: caller.path,
+                  line: source.line,
+                },
+                sink: {
+                  kind: sinkSummary.sink.kind,
+                  path: sinkSummary.file.path,
+                  line: sinkSummary.sink.line,
+                  cweIds: sinkSummary.sink.cweIds,
+                },
+                propagators: [
+                  {
+                    kind: "dotnet-type-binding",
+                    path: caller.path,
+                    line: binding.line || call.line,
+                    symbol: `${binding.receiver}:${ownerType}`,
+                  },
+                  {
+                    kind: "wrapper-call-argument",
+                    path: caller.path,
+                    line: call.line,
+                    symbol: `${binding.receiver}.${method}[${summary.parameterIndex}]`,
+                  },
+                  {
+                    kind: "wrapper-parameter",
+                    path: summary.file.path,
+                    line: summary.declarationLine,
+                    symbol: summary.parameter,
+                  },
+                  {
+                    kind: "dotnet-type-binding",
+                    path: summary.file.path,
+                    line:
+                      summary.downstreamBinding.line ||
+                      summary.downstreamCallLine,
+                    symbol: `${summary.downstreamBinding.receiver}:${summary.downstreamBinding.ownerType}`,
+                  },
+                  {
+                    kind: "wrapper-call-argument",
+                    path: summary.file.path,
+                    line: summary.downstreamCallLine,
+                    symbol: `${summary.downstreamBinding.receiver}.${sinkSummary.symbol}[${sinkSummary.parameterIndex}]`,
+                  },
+                  {
+                    kind: "wrapper-parameter",
+                    path: sinkSummary.file.path,
+                    line: sinkSummary.declarationLine,
+                    symbol: sinkSummary.parameter,
+                  },
+                ],
+                candidateControls,
+              },
+            });
+            if (records.length >= MAX_FRAMEWORK_MULTI_HOP_RECORDS) {
+              return records;
+            }
+          }
+        }
+      }
+    }
+  }
+  return records;
+}
+
+function dotnetFrameworkRelaySummaries(
+  files: readonly SourceFileSnapshot[],
+  sinkSummaries: readonly FrameworkWrapperSummary[],
+  ownerPaths: ReadonlyMap<string, ReadonlySet<string>>,
+): DotnetFrameworkRelaySummary[] {
+  const summariesByOwnerAndMethod = new Map<
+    string,
+    FrameworkWrapperSummary[]
+  >();
+  for (const summary of sinkSummaries) {
+    if (summary.ownerType === undefined) continue;
+    const key = `${summary.ownerType}\0${summary.symbol}`;
+    const existing = summariesByOwnerAndMethod.get(key) ?? [];
+    existing.push(summary);
+    summariesByOwnerAndMethod.set(key, existing);
+  }
+
+  const summaries: DotnetFrameworkRelaySummary[] = [];
+  for (const file of files) {
+    if (file.extension !== ".cs") continue;
+    const methods = exportedDotnetMethods(file.lines);
+    if (methods.length === 0) continue;
+    const receiverBindings = javaReceiverBindings(file.lines);
+    for (const [key, downstreamSummaries] of summariesByOwnerAndMethod) {
+      const [downstreamOwnerType, downstreamMethod] = key.split("\0") as [
+        string,
+        string,
+      ];
+      if (ownerPaths.get(downstreamOwnerType)?.size !== 1) continue;
+      const bindings = [
+        ...receiverBindings.filter(
+          (binding) => binding.ownerType === downstreamOwnerType,
+        ),
+        {
+          receiver: downstreamOwnerType,
+          ownerType: downstreamOwnerType,
+          line: 0,
+        },
+      ];
+      for (const binding of bindings) {
+        const calls = javaMethodCallLines(
+          file.lines,
+          binding.receiver,
+          downstreamMethod,
+        );
+        for (const method of methods) {
+          const methodCalls = calls.filter(
+            (call) =>
+              call.line >= method.startLine && call.line <= method.endLine,
+          );
+          for (const downstream of downstreamSummaries) {
+            if (downstream.file.path === file.path) continue;
+            const controls = matchingJavaModelLines(
+              file.lines,
+              downstream.model.controls,
+              64,
+            ).filter(
+              (control) =>
+                control.line >= method.startLine &&
+                control.line <= method.endLine,
+            );
+            for (const call of methodCalls) {
+              if (
+                downstream.parameterCount !== undefined &&
+                call.arguments.length !== downstream.parameterCount
+              ) {
+                continue;
+              }
+              const argument = call.arguments[downstream.parameterIndex];
+              if (argument === undefined) continue;
+              for (
+                let parameterIndex = 0;
+                parameterIndex < method.parameters.length;
+                parameterIndex += 1
+              ) {
+                const parameter = method.parameters[parameterIndex]!;
+                if (argument !== parameter.name) continue;
+                if (
+                  javaIdentifierReassignedBetween(
+                    file.lines,
+                    parameter.name,
+                    method.startLine,
+                    call.line,
+                  )
+                ) {
+                  continue;
+                }
+                summaries.push({
+                  model: downstream.model,
+                  file,
+                  ownerType: method.ownerType,
+                  symbol: method.symbol,
+                  parameter: parameter.name,
+                  parameterIndex,
+                  parameterCount: method.parameters.length,
+                  declarationLine: method.startLine,
+                  downstreamBinding: binding,
+                  downstreamCallLine: call.line,
+                  downstream,
+                  controls: controls.slice(0, 8),
+                });
+                if (summaries.length >= MAX_FRAMEWORK_RELAY_SUMMARIES) {
+                  return summaries;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return summaries;
+}
+
+function dotnetOwnerPaths(
+  files: readonly SourceFileSnapshot[],
+): Map<string, Set<string>> {
+  const ownerPaths = new Map<string, Set<string>>();
+  for (const file of files) {
+    if (file.extension !== ".cs") continue;
+    const ownerType = dotnetOwnerType(file.lines);
+    if (ownerType === undefined) continue;
+    const paths = ownerPaths.get(ownerType) ?? new Set<string>();
+    paths.add(file.path);
+    ownerPaths.set(ownerType, paths);
+  }
+  return ownerPaths;
+}
+
 function javascriptFrameworkRelaySummaries(
   files: readonly SourceFileSnapshot[],
   sinkSummaries: readonly FrameworkWrapperSummary[],
@@ -2790,12 +3213,6 @@ function javaFrameworkWrapperSummaries(
           if (sink.line < method.startLine || sink.line > method.endLine) {
             continue;
           }
-          if (
-            model.id === "aspnet-http-ssrf" &&
-            !dotnetHttpClientSinkHasTypedReceiver(file.lines, sink.line)
-          ) {
-            continue;
-          }
           const sinkExpression = javaCallExpression(
             file.lines,
             sink.line,
@@ -2882,6 +3299,18 @@ function dotnetFrameworkWrapperSummaries(
             sink.line,
             method.endLine,
           );
+          if (
+            model.id === "aspnet-http-ssrf" &&
+            !dotnetHttpClientSinkHasTypedReceiver(file.lines, sink.line)
+          ) {
+            continue;
+          }
+          if (
+            model.id === "aspnet-http-path" &&
+            !dotnetFilesystemSinkHasTypedReceiver(file.lines, sink.line)
+          ) {
+            continue;
+          }
           const parameterIndexes = method.parameters.flatMap(
             (parameter, parameterIndex) =>
               cFamilyLineReferencesIdentifier(sinkExpression, parameter.name)
@@ -3935,6 +4364,41 @@ function dotnetHttpClientSinkHasTypedReceiver(
   );
 }
 
+function dotnetFilesystemSinkHasTypedReceiver(
+  lines: readonly string[],
+  sinkLine: number,
+): boolean {
+  const sinkExpression = javaCallExpression(lines, sinkLine, lines.length);
+  if (
+    /\b(?:System\s*\.\s*IO\s*\.\s*)File\s*\.\s*(?:AppendAllLines|AppendAllText|AppendAllTextAsync|Copy|Create|CreateText|Delete|Move|Open|OpenHandle|OpenRead|OpenText|OpenWrite|ReadAllBytes|ReadAllBytesAsync|ReadAllLines|ReadAllLinesAsync|ReadAllText|ReadAllTextAsync|ReadLines|WriteAllBytes|WriteAllBytesAsync|WriteAllLines|WriteAllLinesAsync|WriteAllText|WriteAllTextAsync)\s*\(/u.test(
+      sinkExpression,
+    ) ||
+    /\bnew\s+System\s*\.\s*IO\s*\.\s*FileStream\s*\(/u.test(sinkExpression)
+  ) {
+    return true;
+  }
+
+  const structuralLines = cFamilyStructuralLines(lines);
+  const structuralText = structuralLines.join("\n");
+  if (!/^\s*(?:global\s+)?using\s+System\.IO\s*;/mu.test(structuralText)) {
+    return false;
+  }
+  const shadowsFileType = /\b(?:class|record|struct)\s+File\b/u.test(
+    structuralText,
+  );
+  const shadowsFileStreamType =
+    /\b(?:class|record|struct)\s+FileStream\b/u.test(structuralText);
+  const staticFileSink =
+    /\bFile\s*\.\s*(?:AppendAllLines|AppendAllText|AppendAllTextAsync|Copy|Create|CreateText|Delete|Move|Open|OpenHandle|OpenRead|OpenText|OpenWrite|ReadAllBytes|ReadAllBytesAsync|ReadAllLines|ReadAllLinesAsync|ReadAllText|ReadAllTextAsync|ReadLines|WriteAllBytes|WriteAllBytesAsync|WriteAllLines|WriteAllLinesAsync|WriteAllText|WriteAllTextAsync)\s*\(/u.test(
+      sinkExpression,
+    );
+  const fileStreamSink = /\bnew\s+FileStream\s*\(/u.test(sinkExpression);
+  return (
+    (staticFileSink && !shadowsFileType) ||
+    (fileStreamSink && !shadowsFileStreamType)
+  );
+}
+
 function pythonIdentifierReassignedBetween(
   lines: readonly string[],
   identifier: string,
@@ -4263,10 +4727,11 @@ export async function buildFindingQualityGapInventory(
             locations,
             repositoryFileCache,
           );
-    if (
-      !isSubstantiveCodeEvidence(finding["codeEvidence"], locations) &&
-      repositoryGrounding !== true
-    ) {
+    const substantiveCodeEvidence = isSubstantiveCodeEvidence(
+      canonicalDraftCodeEvidence(finding["codeEvidence"]),
+      locations,
+    );
+    if (!substantiveCodeEvidence || repositoryGrounding === false) {
       reasons.push("missing_or_unanchored_code_evidence");
     }
     if (repositoryGrounding === false) {
@@ -4603,6 +5068,25 @@ function draftEvidenceEndLine(
   );
 }
 
+function canonicalDraftCodeEvidence(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.map((entry) => {
+    if (!isRecord(entry)) return entry;
+    const path = draftEvidencePath(entry);
+    const startLine = draftEvidenceStartLine(entry);
+    const endLine = draftEvidenceEndLine(entry, startLine);
+    return {
+      ...entry,
+      ...(path === null ? {} : { path }),
+      ...(startLine === null ? {} : { startLine }),
+      ...(endLine === null ? {} : { endLine }),
+      ...(entry["code"] === undefined && entry["snippet"] !== undefined
+        ? { code: entry["snippet"] }
+        : {}),
+    };
+  });
+}
+
 function draftPositiveInteger(
   value: Record<string, unknown>,
   keys: readonly string[],
@@ -4656,6 +5140,9 @@ function parseFindingLocations(value: unknown): EvidenceLocation[] {
         path,
         startLine: Number(startLine),
         ...(endLine === undefined ? {} : { endLine: Number(endLine) }),
+        ...(location["role"] === "source" || location["role"] === "sink"
+          ? { role: location["role"] }
+          : {}),
       },
     ];
   });

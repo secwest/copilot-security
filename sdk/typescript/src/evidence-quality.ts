@@ -2,6 +2,7 @@ export interface EvidenceLocation {
   path: string;
   startLine: number;
   endLine?: number;
+  role?: "source" | "sink";
 }
 
 const DEFAULT_LINE_TOLERANCE = 3;
@@ -94,33 +95,58 @@ export function isSubstantiveCodeEvidence(
   value: unknown,
   findingLocations: readonly EvidenceLocation[],
 ): boolean {
-  return (
-    Array.isArray(value) &&
-    value.some((evidence) => {
-      if (!isRecord(evidence)) return false;
-      const path = optionalString(evidence["path"]);
-      const startLine = positiveInteger(evidence["startLine"]);
-      const endLine =
-        evidence["endLine"] === undefined
-          ? startLine
-          : positiveInteger(evidence["endLine"]);
-      return (
-        path !== undefined &&
-        startLine !== null &&
-        endLine !== null &&
-        endLine >= startLine &&
-        isSubstantiveText(evidence["code"], 3) &&
-        isSubstantiveText(evidence["explanation"]) &&
-        findingLocations.some((location) =>
-          locationsOverlap(
-            { path, startLine, endLine },
-            location,
-            DEFAULT_LINE_TOLERANCE,
-          ),
-        )
-      );
-    })
+  if (!Array.isArray(value)) return false;
+  const substantive = value.flatMap((evidence) => {
+    if (!isRecord(evidence)) return [];
+    const path = optionalString(evidence["path"]);
+    const startLine = positiveInteger(evidence["startLine"]);
+    const endLine =
+      evidence["endLine"] === undefined
+        ? startLine
+        : positiveInteger(evidence["endLine"]);
+    if (
+      path === undefined ||
+      startLine === null ||
+      endLine === null ||
+      endLine < startLine ||
+      !isSubstantiveText(evidence["code"], 3) ||
+      !isSubstantiveText(evidence["explanation"])
+    ) {
+      return [];
+    }
+    const role = endpointRole(evidence["role"]);
+    return [
+      { path, startLine, endLine, ...(role === undefined ? {} : { role }) },
+    ];
+  });
+  if (
+    !substantive.some((evidence) =>
+      findingLocations.some((location) =>
+        locationsOverlap(evidence, location, DEFAULT_LINE_TOLERANCE),
+      ),
+    )
+  ) {
+    return false;
+  }
+
+  const endpoints = findingLocations.filter(
+    (location) => location.role === "source" || location.role === "sink",
   );
+  return endpoints.every((location) =>
+    substantive.some(
+      (evidence) =>
+        evidence.role === location.role &&
+        locationsOverlap(evidence, location, DEFAULT_LINE_TOLERANCE),
+    ),
+  );
+}
+
+function endpointRole(value: unknown): "source" | "sink" | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "source" || normalized === "sink"
+    ? normalized
+    : undefined;
 }
 
 function locationsOverlap(

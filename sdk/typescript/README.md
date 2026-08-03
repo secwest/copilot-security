@@ -29,12 +29,13 @@ The package is ESM-only and provides:
   telemetry for every stored-credential shell completion; token-authenticated
   sessions remove public token aliases and expose no shell tools
 - typed host-generated Node HTTP, Python web, Spring/servlet, and ASP.NET
-  command/SQL/SSRF data-flow hypotheses with exact source/sink lines and nearby
-  negative controls for the mandatory residual correction turn, plus bounded
-  one-hop C# controller/service and Java controller/service summaries and
-  one-hop or two-hop relative-import/call/parameter summaries for
-  Node/TypeScript and Python wrappers; language strings and comments are
-  masked before structural matching
+  command/SQL/SSRF/filesystem-path data-flow hypotheses with exact source/sink
+  lines and nearby negative controls for the mandatory residual correction
+  turn, plus bounded one-hop or two-hop C# controller/service summaries,
+  one-hop Java controller/service summaries, and one-hop or two-hop
+  relative-import/call/parameter summaries for Node/TypeScript and Python
+  wrappers; language strings and comments are masked before structural
+  matching
 - bounded native Copilot model-call retries plus six concise, idempotent
   defensive recovery prompts for explicit safety-classifier refusals, without
   replaying the original blocked text, and cancellation-safe cleanup of

@@ -20,12 +20,19 @@ type Finding = Record<string, unknown> & {
   summary: string;
   severity: { level: string };
   confidence: { level: string };
-  locations: Array<{ path: string }>;
+  locations: Array<{
+    path: string;
+    startLine?: number;
+    endLine?: number;
+    role?: string;
+  }>;
   codeEvidence?: Array<{
     id: string;
     label: string;
     path: string;
     startLine: number;
+    endLine?: number;
+    role?: string;
     code: string;
     explanation: string;
   }>;
@@ -1615,6 +1622,63 @@ describe("malformed scan artifact recovery", () => {
       startLine: 1,
       code: "# fixture",
     });
+  });
+
+  test("aligns code-evidence endpoint roles with the canonical attack path", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "findings.json");
+    const document = await readJson<FindingsDocument>(path);
+    const finding = document.findings[0]!;
+    finding.locations = [
+      { path: "src/extract.py", startLine: 1, endLine: 1, role: "source" },
+      { path: "src/extract.py", startLine: 1, endLine: 1, role: "sink" },
+    ];
+    finding.codeEvidence = [
+      {
+        id: "request-source",
+        label: "Request source",
+        path: "src/extract.py",
+        startLine: 1,
+        endLine: 1,
+        role: "sink",
+        code: "# fixture",
+        explanation: "The caller controls the archive entry path.",
+      },
+      {
+        id: "filesystem-sink",
+        label: "Filesystem sink",
+        path: "src/extract.py",
+        startLine: 1,
+        endLine: 1,
+        role: "sink",
+        code: "# fixture",
+        explanation: "The path reaches the filesystem operation.",
+      },
+    ];
+    finding["attackPath"] = {
+      summary: "A remote source reaches the filesystem sink.",
+      dataflow: {
+        source: "request-source",
+        sink: "filesystem-sink",
+        outcome: "An out-of-root file can be overwritten.",
+      },
+      evidenceRefs: ["request-source", "filesystem-sink"],
+    };
+    await writeJson(path, document);
+
+    const completed = await completeScan(fixture);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.warnings).toContain(
+      "Recovered finding 1: aligned 1 code-evidence role with canonical endpoints.",
+    );
+    const recovered = (await readJson<FindingsDocument>(path)).findings[0]!;
+    expect(
+      recovered.codeEvidence?.map(({ id, role }) => ({ id, role })),
+    ).toEqual([
+      { id: "request-source", role: "source" },
+      { id: "filesystem-sink", role: "sink" },
+    ]);
   });
 
   test("keeps valid findings and skips malformed or duplicate findings", async () => {

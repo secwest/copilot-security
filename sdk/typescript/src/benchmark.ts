@@ -1,7 +1,17 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, readFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { lstat, readFile, realpath } from "node:fs/promises";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  posix,
+  relative,
+  resolve,
+  sep,
+  win32,
+} from "node:path";
 import { CopilotSecurityError } from "./errors.js";
 import {
   parseSuccessfulBenchmarkReceipt,
@@ -162,6 +172,7 @@ interface FindingLocation {
   path: string;
   startLine: number;
   endLine?: number;
+  role?: "source" | "sink";
 }
 
 interface BenchmarkFinding {
@@ -209,11 +220,14 @@ export async function evaluateBenchmark(options: {
     const paths = resultPaths(benchmarkCase, resultsDirectory);
     const runs: BenchmarkRunResult[] = [];
     for (let index = 0; index < paths.length; index += 1) {
-      const findingsPath = isAbsolute(paths[index]!)
-        ? resolve(paths[index]!)
-        : resolve(resultsDirectory, paths[index]!);
+      const unresolvedFindingsPath = resolve(resultsDirectory, paths[index]!);
       const runId = `${benchmarkCase.id}#${index + 1}`;
       try {
+        const findingsPath = await canonicalBenchmarkFindingsPath(
+          resultsDirectory,
+          unresolvedFindingsPath,
+          benchmarkCase.id,
+        );
         const receipt = await requireSuccessfulRunStatus(
           findingsPath,
           benchmarkCase.id,
@@ -242,7 +256,9 @@ export async function evaluateBenchmark(options: {
           evaluateRun(benchmarkCase, runId, findingsPath, findings.findings),
         );
       } catch (error) {
-        runs.push(failedRun(benchmarkCase, runId, findingsPath, error));
+        runs.push(
+          failedRun(benchmarkCase, runId, unresolvedFindingsPath, error),
+        );
       }
     }
     const stableExpectations = benchmarkCase.expected
@@ -763,6 +779,19 @@ function parseManifest(contents: string, path: string): BenchmarkManifest {
         `Benchmark case ${id} findingsPaths must not be empty.`,
       );
     }
+    const safeFindingsPath =
+      findingsPath === undefined
+        ? undefined
+        : requireBenchmarkResultPath(
+            findingsPath,
+            `Benchmark case ${id} findingsPath`,
+          );
+    const safeFindingsPaths = findingsPaths?.map((path, index) =>
+      requireBenchmarkResultPath(
+        path,
+        `Benchmark case ${id} findingsPaths[${index}]`,
+      ),
+    );
     const rawExpected = entry["expected"];
     if (
       !Array.isArray(rawExpected) ||
@@ -783,8 +812,12 @@ function parseManifest(contents: string, path: string): BenchmarkManifest {
         : { description: optionalString(entry["description"]) }),
       ...(fixture === undefined ? {} : { fixture }),
       ...(seedSarif === undefined ? {} : { seedSarif }),
-      ...(findingsPath === undefined ? {} : { findingsPath }),
-      ...(findingsPaths === undefined ? {} : { findingsPaths }),
+      ...(safeFindingsPath === undefined
+        ? {}
+        : { findingsPath: safeFindingsPath }),
+      ...(safeFindingsPaths === undefined
+        ? {}
+        : { findingsPaths: safeFindingsPaths }),
       expected,
     };
   });
@@ -949,6 +982,7 @@ function parseFindings(
               location["endLine"] === undefined
                 ? undefined
                 : positiveInteger(location["endLine"]);
+            const role = endpointLocationRole(location["role"]);
             if (
               locationPath === undefined ||
               startLine === null ||
@@ -961,6 +995,7 @@ function parseFindings(
                 path: locationPath,
                 startLine,
                 ...(endLine === undefined ? {} : { endLine }),
+                ...(role === undefined ? {} : { role }),
               },
             ];
           })
@@ -999,6 +1034,100 @@ function parseFindings(
       };
     }),
   };
+}
+
+function requireBenchmarkResultPath(value: string, label: string): string {
+  const normalized = value.replaceAll("\\", "/");
+  const segments = normalized.split("/");
+  if (
+    posix.isAbsolute(normalized) ||
+    win32.isAbsolute(value) ||
+    segments.some(
+      (segment) => segment === "" || segment === "." || segment === "..",
+    )
+  ) {
+    throw new CopilotSecurityError(
+      `${label} must be a normalized relative path beneath the benchmark results directory.`,
+    );
+  }
+  return normalized;
+}
+
+async function canonicalBenchmarkFindingsPath(
+  resultsDirectory: string,
+  findingsPath: string,
+  caseId: string,
+): Promise<string> {
+  const root = resolve(resultsDirectory);
+  requireBenchmarkPathContained(
+    root,
+    findingsPath,
+    `Benchmark case ${caseId} findings path`,
+  );
+
+  let canonicalRoot: string;
+  let canonicalParent: string;
+  try {
+    [canonicalRoot, canonicalParent] = await Promise.all([
+      realpath(root),
+      realpath(dirname(findingsPath)),
+    ]);
+  } catch (error) {
+    if (isMissingFile(error)) {
+      throw new CopilotSecurityError(
+        `Could not read findings for benchmark case ${caseId}: ${findingsPath}.`,
+        { cause: error },
+      );
+    }
+    throw new CopilotSecurityError(
+      `Could not resolve the benchmark results boundary for case ${caseId}: ${findingsPath}.`,
+      { cause: error },
+    );
+  }
+
+  requireBenchmarkPathContained(
+    canonicalRoot,
+    canonicalParent,
+    `Benchmark case ${caseId} findings parent`,
+  );
+  const canonicalFindingsPath = join(canonicalParent, basename(findingsPath));
+  requireBenchmarkPathContained(
+    canonicalRoot,
+    canonicalFindingsPath,
+    `Benchmark case ${caseId} findings path`,
+  );
+  requireBenchmarkPathContained(
+    canonicalRoot,
+    `${canonicalParent}.status.json`,
+    `Benchmark case ${caseId} status path`,
+  );
+  return canonicalFindingsPath;
+}
+
+function requireBenchmarkPathContained(
+  root: string,
+  path: string,
+  label: string,
+): void {
+  const child = relative(root, path);
+  if (
+    child === "" ||
+    child === ".." ||
+    child.startsWith(`..${sep}`) ||
+    isAbsolute(child)
+  ) {
+    throw new CopilotSecurityError(
+      `${label} escapes the benchmark results directory: ${path}.`,
+    );
+  }
+}
+
+function endpointLocationRole(value: unknown): "source" | "sink" | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "source" || normalized === "sink"
+    ? normalized
+    : undefined;
 }
 
 async function readBoundedFile(

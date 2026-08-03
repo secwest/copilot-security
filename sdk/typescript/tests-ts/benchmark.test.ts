@@ -4,6 +4,7 @@ import {
   readFile,
   readdir,
   rm,
+  symlink,
   truncate,
   writeFile,
 } from "node:fs/promises";
@@ -2162,6 +2163,82 @@ describe("effectiveness benchmark", () => {
     });
   });
 
+  test("does not credit code evidence whose endpoint roles contradict finding locations", async () => {
+    const root = await fixtureRoot();
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      thresholds: { minCodeEvidenceRate: 1 },
+      cases: [
+        {
+          id: "role-confused-evidence",
+          findingsPath: "role-confused-evidence/findings.json",
+          expected: [
+            {
+              id: "path-traversal",
+              cwe: ["CWE-22"],
+              locations: [{ path: "src/store.cs", startLine: 20 }],
+              requireCodeEvidence: true,
+            },
+          ],
+        },
+      ],
+    });
+    const confused = finding({
+      id: "role-confused-path",
+      cwe: ["CWE-22"],
+      path: "src/store.cs",
+      line: 20,
+      codeEvidence: [
+        {
+          id: "request-source",
+          label: "Request source",
+          path: "src/controller.cs",
+          startLine: 10,
+          role: "sink",
+          code: "[FromQuery] string path",
+          explanation: "The request controls the path value.",
+        },
+        {
+          id: "filesystem-sink",
+          label: "Filesystem sink",
+          path: "src/store.cs",
+          startLine: 20,
+          role: "sink",
+          code: "File.ReadAllText(path)",
+          explanation: "The path reaches the filesystem read.",
+        },
+      ],
+    });
+    confused["locations"] = [
+      {
+        path: "src/controller.cs",
+        startLine: 10,
+        role: "source",
+      },
+      { path: "src/store.cs", startLine: 20, role: "sink" },
+    ];
+    await writeFindings(
+      join(root, "results", "role-confused-evidence", "findings.json"),
+      [confused],
+    );
+
+    const report = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+      requireRunStatus: false,
+    });
+
+    expect(report.passed).toBe(false);
+    expect(report.metrics).toMatchObject({
+      truePositives: 1,
+      codeEvidenceRate: 0,
+    });
+    expect(report.cases[0]?.runs[0]?.matches[0]).toMatchObject({
+      codeEvidencePresent: true,
+      codeEvidenceSubstantive: false,
+    });
+  });
+
   test("credits canonical counterEvidence as substantive validation", async () => {
     const root = await fixtureRoot();
     await writeJson(join(root, "manifest.json"), {
@@ -2354,6 +2431,71 @@ describe("effectiveness benchmark", () => {
         resultsDirectory: join(root, "missing-results"),
       }),
     ).rejects.toThrow("Duplicate benchmark case id: duplicate");
+  });
+
+  test("rejects absolute, parent, sibling-prefix, and UNC result paths", async () => {
+    const root = await fixtureRoot();
+    const invalidPaths = [
+      resolve(root, "outside", "findings.json"),
+      "../outside/findings.json",
+      "..\\results-backup\\findings.json",
+      "case/../outside/findings.json",
+      "\\\\server\\share\\findings.json",
+    ];
+
+    for (const findingsPath of invalidPaths) {
+      await writeJson(join(root, "manifest.json"), {
+        schemaVersion: "1.0",
+        cases: [{ id: "escape", findingsPath, expected: [] }],
+      });
+      await expect(
+        evaluateBenchmark({
+          manifestPath: join(root, "manifest.json"),
+          resultsDirectory: join(root, "results"),
+          requireRunStatus: false,
+        }),
+      ).rejects.toThrow(
+        "must be a normalized relative path beneath the benchmark results directory",
+      );
+    }
+  });
+
+  test("rejects a result path whose parent junction escapes the results directory", async () => {
+    const root = await fixtureRoot();
+    const results = join(root, "results");
+    const outside = join(root, "outside-results");
+    await mkdir(results, { recursive: true });
+    await writeFindings(join(outside, "findings.json"), []);
+    await symlink(
+      outside,
+      join(results, "pivot"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      cases: [
+        {
+          id: "junction-escape",
+          findingsPath: "pivot/findings.json",
+          expected: [],
+        },
+      ],
+    });
+
+    const report = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: results,
+      requireRunStatus: false,
+    });
+
+    expect(report.passed).toBe(false);
+    expect(report.cases[0]?.runs[0]).toMatchObject({
+      completed: false,
+      passed: false,
+    });
+    expect(report.cases[0]?.runs[0]?.error).toContain(
+      "findings parent escapes the benchmark results directory",
+    );
   });
 
   test("rejects an oversized manifest before parsing it", async () => {

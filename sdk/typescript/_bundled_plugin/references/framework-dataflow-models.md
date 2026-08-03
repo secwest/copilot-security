@@ -45,6 +45,14 @@ methods. Reject duplicate simple type names, unresolved receivers, fixed or
 reassigned arguments, parameters unused by the sink, and C# comments or string
 examples that merely name an API.
 
+For C#, `scope: "cross-file-multi-hop-wrapper"` extends that same discipline by
+exactly one additional uniquely typed service relay. The host requires both
+owner types to resolve to one source file, matches both positional arguments,
+rejects reassignment before either call, and records both receiver bindings,
+calls, and wrapper parameters in order. It does not infer interface dispatch,
+dependency-injection registrations, named arguments, callbacks, or a third
+service hop.
+
 `scope: "cross-file-multi-hop-wrapper"` is the same bounded syntax extended by
 exactly one exported JavaScript/TypeScript or public module-level Python relay.
 Its propagators are ordered as caller import and argument, relay parameter,
@@ -271,6 +279,24 @@ interpreter that consumes the value.
   Redirect rejection closes only the redirect leg; it does not authorize the
   first destination.
 
+### ASP.NET filesystem path injection — CWE-22
+
+- Sources: ASP.NET-bound parameters and request fields.
+- Sinks: path arguments to typed `System.IO.File` operations and `FileStream`
+  construction, including reads, writes, creates, moves, copies, and deletes.
+- `Path.Combine` and `Path.Join` construct strings; they do not establish
+  containment. A rooted later `Path.Combine` operand can discard the trusted
+  prefix, parent components can escape it, and normalization alone does not
+  authorize the result.
+- Strong lexical counterevidence: exact selection from a server-owned file map,
+  or rooted-input rejection followed by canonical root/candidate resolution
+  and an exact relative-to-root boundary check that dominates the file
+  operation. A bare root string-prefix comparison can accept a sibling path.
+- Reopen platform separators, drive and UNC forms, alternate data or device
+  syntax where applicable, attacker-writable parent directories, symlinks,
+  junctions, reparse points, rename races, and the exact read/write/delete
+  effect. Lexical containment is not link-safe containment.
+
 ## Closure Rules
 
 - Trace across wrappers and files when the source and sink are separated.
@@ -293,6 +319,10 @@ interpreter that consumes the value.
   answer, connection-pool reuse, the actual socket destination, and Host/TLS
   identity. A hostname allowlist without address validation and connection
   pinning does not close DNS rebinding.
+- For filesystem paths, preserve the complete source-to-path chain and prove
+  containment at the operation that consumes it. Treat exact server-owned
+  selection or canonical relative containment as counterevidence only when it
+  dominates that operation; separately close link and rename boundaries.
 - For template injection, preserve the template engine's exact argument roles.
   Prove the attacker value becomes template source, grammar, or an evaluated
   expression. Classify that broken control as CWE-1336 rather than substituting
