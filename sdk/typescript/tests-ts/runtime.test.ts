@@ -263,6 +263,34 @@ describe("standalone Copilot runtime", () => {
 
       expect(snapshot.fileCount).toBe(2);
       const discovery = join(scanDirectory, "artifacts", "02_discovery");
+      for (const relativePath of [
+        "artifacts/01_context",
+        "artifacts/02_discovery/passes/pass-source-control-sink",
+        "artifacts/02_discovery/passes/pass-systems",
+        "artifacts/02_discovery/passes/pass-product-supply",
+        "artifacts/02_discovery/passes/pass-control-differential",
+        "artifacts/02_discovery/passes/pass-compositional-temporal",
+        "artifacts/02_discovery/passes/pass-language-framework",
+        "artifacts/03_coverage",
+        "artifacts/03_validation",
+        "artifacts/04_reconciliation",
+        "artifacts/04_attack_paths",
+        "artifacts/05_findings",
+      ]) {
+        expect(
+          (await lstat(join(scanDirectory, relativePath))).isDirectory(),
+        ).toBe(true);
+      }
+      for (const requiredDraft of [
+        "scan-manifest.json",
+        "findings.json",
+        "coverage.json",
+        "report.md",
+      ]) {
+        expect(
+          await lstat(join(scanDirectory, requiredDraft)).catch(() => null),
+        ).toBeNull();
+      }
       expect(
         await readFile(join(discovery, "in_scope_files.txt"), "utf8"),
       ).toBe("src/app.js\nsrc/main/java/example/Application.java\n");

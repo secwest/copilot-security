@@ -19,6 +19,12 @@ Use these shared path conventions for Copilot Security scan workflows unless the
 - `reconciliation_dir=<artifacts_dir>/04_reconciliation`
 - `findings_dir=<artifacts_dir>/05_findings`
 
+The trusted host creates the fixed scan-contract directory skeleton before
+model execution, including the context, discovery, stable deep-pass, coverage,
+validation, reconciliation, attack-path, and findings directories. It does not
+create any required draft, receipt, ledger, report, or finding file. Missing
+files therefore remain observable and still fail contract validation.
+
 The MCP app resolves the platform temporary directory automatically. For a manual workflow, use the active process temporary directory (for example, `%TEMP%` on Windows or `$TMPDIR` when configured on Unix-like hosts) instead of hardcoding `/tmp`.
 
 Resolve `<python_command>` to the configured Python interpreter (`$PYTHON` when one is provided), otherwise use `python` on Windows and `python3` on Unix-like hosts.

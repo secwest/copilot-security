@@ -76,24 +76,29 @@ PowerShell only for scan-directory draft artifacts.
    model, but no other pass's candidates.
 4. Apply these distinct lenses:
 
-   - **source/control/sink**: authentication, browser-ambient credential CSRF,
+   - **source/control/sink** (`pass-source-control-sink`): authentication,
+     browser-ambient credential CSRF,
      authorization, tenant selection, SQL and document-query selector/operator
      injection, traversal, SSRF, XSS, unsafe parsing or deserialization,
      filesystem, process, database, template, bulk object binding and mass
      assignment, native memory allocation/copy/index/lifetime boundaries, and
      network operations;
-   - **systems**: concurrency, check/use races, distributed state, replay and
+   - **systems** (`pass-systems`): concurrency, check/use races, distributed
+     state, replay and
      idempotency, security-sensitive randomness and token entropy,
      cryptography, secret lifecycle, failure modes, denial of service, integer
      and memory safety, and confused-deputy boundaries;
-   - **product and supply chain**: business-logic abuse, state-machine bypass,
+   - **product and supply chain** (`pass-product-supply`): business-logic abuse,
+     state-machine bypass,
      workflow invariants, build and release inputs, dependency trust,
      generated code, update mechanisms, configuration, and unsafe defaults;
-   - **control differential**: compare security-equivalent sibling routes,
+   - **control differential** (`pass-control-differential`): compare
+     security-equivalent sibling routes,
      operations, parsers, serializers, storage calls, and state transitions.
      Find paths that omit a control present on a safe sibling and explicitly
      retain that safe sibling as a negative control;
-   - **compositional and temporal attack paths**: correlate independently
+   - **compositional and temporal attack paths**
+     (`pass-compositional-temporal`): correlate independently
      reachable writers, readers, validators, queues, callbacks, redirects,
      retries, caches, and privileged workers. Look for stored values that cross
      a later trust boundary, values checked in one snapshot but consumed from
@@ -102,9 +107,11 @@ PowerShell only for scan-directory draft artifacts.
      path. Keep every chain step anchored to code and do not invent missing
      reachability.
 
-   Add a sixth language/framework-specialist pass when the repository warrants
-   it. Each pass writes its own candidate and completion ledger beneath
-   `artifacts/02_discovery/passes/<pass-id>/`.
+   Add a sixth language/framework-specialist pass with ID
+   `pass-language-framework` when the repository warrants it. Use these exact
+   stable pass IDs: the trusted host prepares only their authorized parent
+   directories before model execution. Each pass writes its own candidate and
+   completion ledger beneath `artifacts/02_discovery/passes/<pass-id>/`.
 
 5. Merge by root cause, independently reachable instance, and remediation
    boundary. Preserve discovering pass IDs, supporting evidence,

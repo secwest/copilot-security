@@ -471,12 +471,34 @@ export async function prepareCopilotScanInventory(options: {
   signal?: AbortSignal;
 }): Promise<CopilotScanInventorySnapshot> {
   options.signal?.throwIfAborted();
+  const preparedArtifactDirectories = [
+    "artifacts/01_context",
+    "artifacts/02_discovery",
+    "artifacts/02_discovery/passes/pass-source-control-sink",
+    "artifacts/02_discovery/passes/pass-systems",
+    "artifacts/02_discovery/passes/pass-product-supply",
+    "artifacts/02_discovery/passes/pass-control-differential",
+    "artifacts/02_discovery/passes/pass-compositional-temporal",
+    "artifacts/02_discovery/passes/pass-language-framework",
+    "artifacts/03_coverage",
+    "artifacts/03_validation",
+    "artifacts/04_reconciliation",
+    "artifacts/04_attack_paths",
+    "artifacts/05_findings",
+  ] as const;
+  await Promise.all(
+    preparedArtifactDirectories.map((relativePath) =>
+      mkdir(join(options.scanDirectory, relativePath), {
+        recursive: true,
+        mode: 0o700,
+      }),
+    ),
+  );
   const discoveryDirectory = join(
     options.scanDirectory,
     "artifacts",
     "02_discovery",
   );
-  await mkdir(discoveryDirectory, { recursive: true, mode: 0o700 });
   const rankInput = join(discoveryDirectory, "host_rank_input.jsonl");
   const inventory = join(discoveryDirectory, "in_scope_files.txt");
   const deepReviewInput = join(discoveryDirectory, "deep_review_input.jsonl");
