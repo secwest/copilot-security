@@ -86,6 +86,16 @@ The package is ESM-only and provides:
   assumptions, ordinary action inputs, lookalikes, and comment-only secret
   evidence are rejected; effective permissions and explicitly forwarded and
   consumed secrets remain explicit.
+  Same-workflow injection hypotheses couple each supported event to exact
+  attacker-controlled context fields and require the value to reach `run` or
+  an exact known action code-input. The bounded evaluator follows direct dot
+  and single-quoted bracket contexts, parentheses, `toJSON`, `fromJSON`,
+  `format`, `join`, reachable `&&`/`||` results, and workflow/job/step
+  `${{ env.NAME }}` re-expansion. It rejects predicates, fixed or unreachable
+  values, native shell and `process.env` consumption, unknown action inputs,
+  lookalikes, and dynamic revisions. Ordinary `pull_request` code execution
+  does not invent secret or write-token impact; other event rows retain exact
+  permission, secret, review, and environment evidence.
   Models include exact
   source/sink lines and nearby negative controls for the mandatory residual
   correction turn, plus bounded one-hop or

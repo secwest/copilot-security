@@ -140,6 +140,18 @@ cross-step environment assumptions, and secret evidence that exists only in a
 YAML comment. Effective caller permissions, explicitly forwarded and consumed
 secrets, OIDC, review/environment gates, and runner reachability remain separate
 impact and control evidence.
+Same-workflow script-injection rows bind each supported workflow trigger to
+its exact attacker-controlled event fields and require that value to reach a
+`run` script or a code-bearing input from the current exact CodeQL/zizmor
+action map. Bounded value flow includes direct dot or single-quoted bracket
+contexts, parentheses, `toJSON`, `fromJSON`, `format`, `join`, reachable
+short-circuit results, and workflow/job/step `${{ env.NAME }}` re-expansion.
+Comparisons, predicates, fixed or unreachable results, native shell or
+`process.env` consumption, unknown action inputs, lookalikes, and dynamic
+action revisions are rejected. Ordinary `pull_request` rows retain code
+execution without inventing secret or write-token impact; other triggers keep
+exact permissions, structurally available secrets, review gates, deployment
+environments, and runner reachability as separate evidence.
 For Node/TypeScript relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
@@ -581,6 +593,24 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 
 node benchmarks/witnesses/github-actions-composite-action-injection/CompositeActionInjectionWitness.mjs
+```
+
+The same-workflow injection lane places a pull-request title directly into an
+official GitHub Script program under write/OIDC permissions and an explicit
+mock release-token environment. The matched control transfers the identical
+title bytes into an intermediate environment entry and reads only
+`process.env.TITLE`. The witness proves that direct expression substitution
+creates a second JavaScript statement while the environment value remains one
+inert string:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/github-actions-workflow-script-injection-manifest.json `
+  --results-dir C:\security-benchmarks\github-actions-workflow-script-injection `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+node benchmarks/witnesses/github-actions-workflow-script-injection/WorkflowScriptInjectionWitness.mjs
 ```
 
 The SSRF framework lane pairs Node and Python cross-file absolute-URL flows

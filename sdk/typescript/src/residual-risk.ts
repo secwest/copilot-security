@@ -11,6 +11,7 @@ import {
   githubActionsCompositeActionInjectionRecords,
   githubActionsPrivilegeRecords,
   githubActionsReusableWorkflowInjectionRecords,
+  githubActionsWorkflowInjectionRecords,
 } from "./github-actions-risk.js";
 
 const MAX_FILES = 2_000;
@@ -1732,6 +1733,11 @@ export async function buildResidualRiskInventory(
     records.push(
       ...frameworkDataflowRecords(file.path, file.lines, sourceFiles),
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
+      ...githubActionsWorkflowInjectionRecords(
+        file.path,
+        file.lines,
+        file.text,
+      ),
     );
   }
   records.push(...githubActionsArtifactPoisoningRecords(sourceFiles));

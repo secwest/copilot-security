@@ -194,6 +194,46 @@ export interface GithubActionsCompositeActionInjectionRecord {
   };
 }
 
+export interface GithubActionsWorkflowInjectionRecord {
+  path: string;
+  line: number;
+  categories: string[];
+  priority: number;
+  startLine: number;
+  endLine: number;
+  excerpt: string;
+  frameworkModel: {
+    schemaVersion: "1.2";
+    id: "github-actions-workflow-script-injection";
+    language: "github-actions-yaml";
+    scope: "same-file";
+    source: {
+      kind: "attacker-controlled-event-script-expression";
+      path: string;
+      line: number;
+      symbol: string;
+    };
+    sink: {
+      kind:
+        | "workflow-run-script-interpolation"
+        | "workflow-action-code-input-interpolation";
+      path: string;
+      line: number;
+      symbol: string;
+      cweIds: readonly ["CWE-094", "CWE-095", "CWE-116"];
+    };
+    propagators: Array<{
+      kind:
+        | "attacker-influenced-workflow-trigger"
+        | "workflow-expression-env-alias";
+      path: string;
+      line: number;
+      symbol: string;
+    }>;
+    candidateControls: CandidateControl[];
+  };
+}
+
 interface ParsedWorkflow {
   root: unknown;
   counter: LineCounter;
@@ -255,6 +295,24 @@ interface ScriptInterpolationSink {
   line: number;
   kind: "run" | "github-script";
   envAlias?: { name: string; line: number };
+}
+
+interface AttackerWorkflowField {
+  eventName: string;
+  triggerLine: number;
+  expression: string;
+}
+
+interface WorkflowEnvironmentTaint {
+  line: number;
+  source: AttackerWorkflowField;
+}
+
+interface WorkflowScriptSink {
+  line: number;
+  kind: GithubActionsWorkflowInjectionRecord["frameworkModel"]["sink"]["kind"];
+  symbol: string;
+  script: string;
 }
 
 function mapPair(node: unknown, key: string): Pair | undefined {
@@ -751,6 +809,14 @@ function workflowRunProducerNames(
   return { line: pairLine(event, counter), names };
 }
 
+const PULL_REQUEST_ATTACKER_FIELDS = [
+  "github.event.pull_request.title",
+  "github.event.pull_request.body",
+  "github.event.pull_request.head.ref",
+  "github.event.pull_request.head.label",
+  "github.head_ref",
+] as const;
+
 const ATTACKER_EVENT_FIELDS: ReadonlyArray<{
   eventName: string;
   fields: readonly string[];
@@ -769,12 +835,7 @@ const ATTACKER_EVENT_FIELDS: ReadonlyArray<{
   },
   {
     eventName: "pull_request_target",
-    fields: [
-      "github.event.pull_request.title",
-      "github.event.pull_request.body",
-      "github.event.pull_request.head.ref",
-      "github.head_ref",
-    ],
+    fields: PULL_REQUEST_ATTACKER_FIELDS,
   },
   {
     eventName: "pull_request_review",
@@ -815,6 +876,68 @@ const ATTACKER_EVENT_FIELDS: ReadonlyArray<{
   },
 ];
 
+const WORKFLOW_ATTACKER_EVENT_FIELDS: ReadonlyArray<{
+  eventName: string;
+  fields: readonly string[];
+}> = [
+  ...ATTACKER_EVENT_FIELDS,
+  {
+    eventName: "pull_request",
+    fields: PULL_REQUEST_ATTACKER_FIELDS,
+  },
+];
+
+const ACTION_CODE_INPUTS: ReadonlyArray<{
+  identity: string;
+  inputs: readonly string[];
+}> = [
+  { identity: "8398a7/action-slack", inputs: ["custom_payload"] },
+  { identity: "actions/github-script", inputs: ["script"] },
+  { identity: "addnab/docker-run-action", inputs: ["options", "run"] },
+  { identity: "amadevus/pwsh-script", inputs: ["script"] },
+  { identity: "appleboy/ssh-action", inputs: ["script"] },
+  { identity: "azure/cli", inputs: ["inlineScript"] },
+  { identity: "azure/powershell", inputs: ["inlineScript"] },
+  { identity: "cardinalby/js-eval-action", inputs: ["expression"] },
+  { identity: "devorbitus/yq-action-output", inputs: ["cmd"] },
+  {
+    identity: "gautamkrishnar/blog-post-workflow",
+    inputs: ["item_exec"],
+  },
+  {
+    identity: "imjohnbo/issue-bot",
+    inputs: [
+      "body",
+      "linked-comments-previous-issue-text",
+      "linked-comments-new-issue-text",
+    ],
+  },
+  {
+    identity: "jannekem/run-python-script-action",
+    inputs: ["script"],
+  },
+  { identity: "lucasbento/auto-close-issues", inputs: ["issue-close-message"] },
+  { identity: "mikefarah/yq", inputs: ["cmd"] },
+  {
+    identity: "roots/issue-closer-action",
+    inputs: ["issue-close-message", "pr-close-message"],
+  },
+  { identity: "sergeysova/jq-action", inputs: ["cmd"] },
+  {
+    identity: "skitionek/notify-microsoft-teams",
+    inputs: ["overwrite"],
+  },
+  {
+    identity: "tibdex/backport",
+    inputs: [
+      "body_template",
+      "head_template",
+      "labels_template",
+      "title_template",
+    ],
+  },
+];
+
 function exactWorkflowExpression(
   value: string | undefined,
 ): string | undefined {
@@ -836,6 +959,322 @@ function attackerEventField(
     const triggerLine = eventTriggerLine(root, event.eventName, counter);
     if (triggerLine !== undefined) {
       return { eventName: event.eventName, triggerLine, expression };
+    }
+  }
+  return undefined;
+}
+
+function activeAttackerWorkflowFields(
+  root: unknown,
+  counter: LineCounter,
+): AttackerWorkflowField[] {
+  const sources: AttackerWorkflowField[] = [];
+  for (const event of WORKFLOW_ATTACKER_EVENT_FIELDS) {
+    const triggerLine = eventTriggerLine(root, event.eventName, counter);
+    if (triggerLine === undefined) continue;
+    for (const expression of event.fields) {
+      sources.push({
+        eventName: event.eventName,
+        triggerLine,
+        expression,
+      });
+    }
+  }
+  return sources;
+}
+
+function fencedWorkflowExpressions(value: string): string[] {
+  return [...value.matchAll(/\$\{\{([\s\S]*?)\}\}/gu)]
+    .slice(0, 64)
+    .map((match) => match[1]?.trim() ?? "")
+    .filter((expression) => expression !== "" && expression.length <= 4096);
+}
+
+function splitTopLevelExpression(value: string, separator: "," | "&&" | "||") {
+  const parts: string[] = [];
+  let start = 0;
+  let parentheses = 0;
+  let brackets = 0;
+  let quote: "'" | '"' | undefined;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]!;
+    if (quote !== undefined) {
+      if (character === quote) {
+        if (quote === "'" && value[index + 1] === "'") {
+          index += 1;
+        } else if (value[index - 1] !== "\\") {
+          quote = undefined;
+        }
+      }
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+    if (character === "(") parentheses += 1;
+    else if (character === ")") parentheses -= 1;
+    else if (character === "[") brackets += 1;
+    else if (character === "]") brackets -= 1;
+    if (parentheses < 0 || brackets < 0) return [value];
+    if (
+      parentheses === 0 &&
+      brackets === 0 &&
+      value.startsWith(separator, index)
+    ) {
+      parts.push(value.slice(start, index).trim());
+      index += separator.length - 1;
+      start = index + 1;
+    }
+  }
+  if (quote !== undefined || parentheses !== 0 || brackets !== 0)
+    return [value];
+  parts.push(value.slice(start).trim());
+  return parts;
+}
+
+function outerParenthesesWrap(value: string): boolean {
+  if (!value.startsWith("(") || !value.endsWith(")")) return false;
+  let depth = 0;
+  let quote: "'" | '"' | undefined;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]!;
+    if (quote !== undefined) {
+      if (character === quote) {
+        if (quote === "'" && value[index + 1] === "'") index += 1;
+        else if (value[index - 1] !== "\\") quote = undefined;
+      }
+      continue;
+    }
+    if (character === "'" || character === '"') quote = character;
+    else if (character === "(") depth += 1;
+    else if (character === ")") {
+      depth -= 1;
+      if (depth === 0 && index !== value.length - 1) return false;
+      if (depth < 0) return false;
+    }
+  }
+  return quote === undefined && depth === 0;
+}
+
+function definitelyTruthyWorkflowExpression(value: string): boolean {
+  const expression = value.trim();
+  if (/^true$/iu.test(expression)) return true;
+  if (/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(expression)) {
+    return Number(expression) !== 0;
+  }
+  const literal = /^'((?:[^']|'')*)'$/u.exec(expression)?.[1];
+  return literal !== undefined && literal.replaceAll("''", "'") !== "";
+}
+
+function canonicalWorkflowContext(value: string): string | undefined {
+  const normalized = value
+    .trim()
+    .replace(/\[\s*'([A-Za-z_][A-Za-z0-9_-]*)'\s*\]/gu, ".$1")
+    .replace(/\s*\.\s*/gu, ".");
+  return /^[A-Za-z_][A-Za-z0-9_-]*(?:\.(?:[A-Za-z_][A-Za-z0-9_-]*|\*))*$/u.test(
+    normalized,
+  )
+    ? normalized.toLowerCase()
+    : undefined;
+}
+
+function workflowExpressionCarriesContext(
+  rawExpression: string,
+  context: string,
+  depth = 0,
+): boolean {
+  if (depth > 8 || rawExpression.length > 4096) return false;
+  let expression = rawExpression.trim();
+  while (outerParenthesesWrap(expression)) {
+    expression = expression.slice(1, -1).trim();
+  }
+  const canonicalExpression = canonicalWorkflowContext(expression);
+  const canonicalTarget = canonicalWorkflowContext(context);
+  if (
+    canonicalExpression !== undefined &&
+    canonicalExpression === canonicalTarget
+  ) {
+    return true;
+  }
+
+  const alternatives = splitTopLevelExpression(expression, "||");
+  if (alternatives.length > 1) {
+    for (const alternative of alternatives) {
+      if (workflowExpressionCarriesContext(alternative, context, depth + 1)) {
+        return true;
+      }
+      if (definitelyTruthyWorkflowExpression(alternative)) return false;
+    }
+    return false;
+  }
+
+  const conjunction = splitTopLevelExpression(expression, "&&");
+  if (conjunction.length > 1) {
+    return workflowExpressionCarriesContext(
+      conjunction.at(-1) ?? "",
+      context,
+      depth + 1,
+    );
+  }
+
+  const call = /^([A-Za-z_][A-Za-z0-9_]*)\s*\(([\s\S]*)\)$/u.exec(expression);
+  if (call === null) return false;
+  const name = call[1]!.toLowerCase();
+  const argumentsList = splitTopLevelExpression(call[2]!, ",");
+  if (name === "format") {
+    return argumentsList.some((argument) =>
+      workflowExpressionCarriesContext(argument, context, depth + 1),
+    );
+  }
+  if (name === "join") {
+    return workflowExpressionCarriesContext(
+      argumentsList[0] ?? "",
+      context,
+      depth + 1,
+    );
+  }
+  if (name === "tojson" || name === "fromjson") {
+    return (
+      argumentsList.length === 1 &&
+      workflowExpressionCarriesContext(
+        argumentsList[0] ?? "",
+        context,
+        depth + 1,
+      )
+    );
+  }
+  return false;
+}
+
+function workflowScalarSource(
+  value: string | undefined,
+  sources: readonly AttackerWorkflowField[],
+): AttackerWorkflowField | undefined {
+  if (value === undefined) return undefined;
+  for (const expression of fencedWorkflowExpressions(value)) {
+    const source = sources.find((candidate) =>
+      workflowExpressionCarriesContext(expression, candidate.expression),
+    );
+    if (source !== undefined) return source;
+  }
+  return undefined;
+}
+
+function applyWorkflowEnvironment(
+  inherited: ReadonlyMap<string, WorkflowEnvironmentTaint>,
+  container: unknown,
+  sources: readonly AttackerWorkflowField[],
+  counter: LineCounter,
+): Map<string, WorkflowEnvironmentTaint> {
+  const effective = new Map(inherited);
+  const environment = mapPair(container, "env")?.value;
+  if (!isMap(environment)) return effective;
+  for (const pair of environment.items) {
+    const name = scalarText(pair.key)?.trim();
+    if (name === undefined || !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name)) {
+      continue;
+    }
+    const source = workflowScalarSource(scalarText(pair.value), sources);
+    if (source === undefined) effective.delete(name);
+    else effective.set(name, { line: pairLine(pair, counter), source });
+  }
+  return effective;
+}
+
+function applySecretEnvironment(
+  inherited: ReadonlyMap<string, number>,
+  container: unknown,
+  counter: LineCounter,
+): Map<string, number> {
+  const effective = new Map(inherited);
+  const environment = mapPair(container, "env")?.value;
+  if (!isMap(environment)) return effective;
+  for (const pair of environment.items) {
+    const name = scalarText(pair.key)?.trim();
+    if (name === undefined || name === "") continue;
+    if (
+      /^\s*\$\{\{\s*(?:secrets\.[A-Za-z_][A-Za-z0-9_]*|github\.token)\s*\}\}\s*$/iu.test(
+        scalarText(pair.value) ?? "",
+      )
+    ) {
+      effective.set(name, pairLine(pair, counter));
+    } else {
+      effective.delete(name);
+    }
+  }
+  return effective;
+}
+
+function repositoryAction(
+  value: string | undefined,
+  identity: string,
+): boolean {
+  if (value === undefined || value.includes("${{")) return false;
+  const prefix = `${identity}@`;
+  if (!value.toLowerCase().startsWith(prefix.toLowerCase())) return false;
+  const revision = value.slice(prefix.length);
+  return /^[A-Za-z0-9][A-Za-z0-9._/-]*$/u.test(revision);
+}
+
+function workflowScriptSinks(
+  step: unknown,
+  counter: LineCounter,
+): WorkflowScriptSink[] {
+  const runPair = mapPair(step, "run");
+  const run = scalarText(runPair?.value);
+  if (run !== undefined) {
+    return [
+      {
+        line: pairLine(runPair, counter),
+        kind: "workflow-run-script-interpolation",
+        symbol: "run",
+        script: run,
+      },
+    ];
+  }
+  const uses = scalarText(mapPair(step, "uses")?.value);
+  const action = ACTION_CODE_INPUTS.find((candidate) =>
+    repositoryAction(uses, candidate.identity),
+  );
+  if (action === undefined) return [];
+  const inputs = mapPair(step, "with")?.value;
+  if (!isMap(inputs)) return [];
+  const sinks: WorkflowScriptSink[] = [];
+  for (const inputName of action.inputs) {
+    const input = mapPair(inputs, inputName);
+    const script = scalarText(input?.value);
+    if (input === undefined || script === undefined) continue;
+    sinks.push({
+      line: pairLine(input, counter),
+      kind: "workflow-action-code-input-interpolation",
+      symbol: `${action.identity}:${inputName}`,
+      script,
+    });
+  }
+  return sinks;
+}
+
+function workflowSinkSource(
+  sink: WorkflowScriptSink,
+  sources: readonly AttackerWorkflowField[],
+  environment: ReadonlyMap<string, WorkflowEnvironmentTaint>,
+):
+  | {
+      source: AttackerWorkflowField;
+      envAlias?: { name: string; line: number };
+    }
+  | undefined {
+  const direct = workflowScalarSource(sink.script, sources);
+  if (direct !== undefined) return { source: direct };
+  for (const expression of fencedWorkflowExpressions(sink.script)) {
+    for (const [name, taint] of environment) {
+      if (workflowExpressionCarriesContext(expression, `env.${name}`)) {
+        return {
+          source: taint.source,
+          envAlias: { name, line: taint.line },
+        };
+      }
     }
   }
   return undefined;
@@ -1811,6 +2250,151 @@ export function githubActionsCompositeActionInjectionRecords(
           candidateControls: distinctControls(call.controls),
         },
       });
+    }
+  }
+  return records;
+}
+
+export function githubActionsWorkflowInjectionRecords(
+  path: string,
+  lines: readonly string[],
+  source: string,
+): GithubActionsWorkflowInjectionRecord[] {
+  if (!/^\.github\/workflows\/[^/]+\.ya?ml$/iu.test(path)) return [];
+  const parsed = parseWorkflow(source);
+  if (parsed === undefined) return [];
+  const sources = activeAttackerWorkflowFields(parsed.root, parsed.counter);
+  const jobs = mapPair(parsed.root, "jobs")?.value;
+  if (sources.length === 0 || !isMap(jobs)) return [];
+
+  const records: GithubActionsWorkflowInjectionRecord[] = [];
+  const workflowPermission = mapPair(parsed.root, "permissions");
+  const workflowEnvironment = applyWorkflowEnvironment(
+    new Map<string, WorkflowEnvironmentTaint>(),
+    parsed.root,
+    sources,
+    parsed.counter,
+  );
+  const workflowSecrets = applySecretEnvironment(
+    new Map<string, number>(),
+    parsed.root,
+    parsed.counter,
+  );
+
+  for (const jobPair of jobs.items) {
+    const job = jobPair.value;
+    const steps = mapPair(job, "steps")?.value;
+    if (!isMap(job) || !isSeq(steps)) continue;
+    const jobPermission = mapPair(job, "permissions");
+    const permission = jobPermission ?? workflowPermission;
+    const controls = jobReviewControls(job, path, parsed.counter);
+    const readOnly = permissionControl(
+      workflowPermission,
+      jobPermission,
+      path,
+      parsed.counter,
+    );
+    if (readOnly !== undefined) controls.push(readOnly);
+    const jobEnvironment = applyWorkflowEnvironment(
+      workflowEnvironment,
+      job,
+      sources,
+      parsed.counter,
+    );
+    const jobSecrets = applySecretEnvironment(
+      workflowSecrets,
+      job,
+      parsed.counter,
+    );
+
+    for (const step of steps.items) {
+      const stepEnvironment = applyWorkflowEnvironment(
+        jobEnvironment,
+        step,
+        sources,
+        parsed.counter,
+      );
+      const stepSecrets = applySecretEnvironment(
+        jobSecrets,
+        step,
+        parsed.counter,
+      );
+      const stepControls = [
+        ...controls,
+        ...stepReviewControls(step, path, parsed.counter),
+      ];
+      for (const sink of workflowScriptSinks(step, parsed.counter)) {
+        const match = workflowSinkSource(sink, sources, stepEnvironment);
+        if (match === undefined) continue;
+
+        const categories = ["github-actions-workflow-script-injection"];
+        if (
+          match.source.eventName !== "pull_request" &&
+          (stepSecrets.size > 0 ||
+            scalarTreeMatches(
+              step,
+              /\$\{\{\s*(?:secrets\.[A-Za-z_][A-Za-z0-9_]*|github\.token)\b/iu,
+            ))
+        ) {
+          categories.push("github-actions-explicit-secret-access");
+        }
+        if (
+          match.source.eventName !== "pull_request" &&
+          permissionAllowsWrite(permission)
+        ) {
+          categories.push("github-actions-write-token-permission");
+        }
+
+        const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
+        const endLine = Math.min(lines.length, sink.line + CONTEXT_LINES_AFTER);
+        const propagators: GithubActionsWorkflowInjectionRecord["frameworkModel"]["propagators"] =
+          [
+            {
+              kind: "attacker-influenced-workflow-trigger",
+              path,
+              line: match.source.triggerLine,
+              symbol: `event=${match.source.eventName}`,
+            },
+          ];
+        if (match.envAlias !== undefined) {
+          propagators.push({
+            kind: "workflow-expression-env-alias",
+            path,
+            line: match.envAlias.line,
+            symbol: `source=${match.source.expression};env=${match.envAlias.name}`,
+          });
+        }
+        records.push({
+          path,
+          line: sink.line,
+          categories,
+          priority: 136,
+          startLine,
+          endLine,
+          excerpt: lines.slice(startLine - 1, endLine).join("\n"),
+          frameworkModel: {
+            schemaVersion: "1.2",
+            id: "github-actions-workflow-script-injection",
+            language: "github-actions-yaml",
+            scope: "same-file",
+            source: {
+              kind: "attacker-controlled-event-script-expression",
+              path,
+              line: sink.line,
+              symbol: match.source.expression,
+            },
+            sink: {
+              kind: sink.kind,
+              path,
+              line: sink.line,
+              symbol: sink.symbol,
+              cweIds: ["CWE-094", "CWE-095", "CWE-116"],
+            },
+            propagators,
+            candidateControls: distinctControls(stepControls),
+          },
+        });
+      }
     }
   }
   return records;

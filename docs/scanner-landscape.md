@@ -451,6 +451,39 @@ fixed/boolean-transformed values, undeclared or non-string inputs, ordinary
 action arguments, lookalike script actions, native environment reads, and
 malformed/duplicate/aliased YAML.
 
+`benchmarks/github-actions-composite-action-injection-manifest.json` extends
+that expression-compilation boundary through an exact literal repository-local
+action call. The workflow must forward one supported attacker-controlled event
+field under one exact input name; exactly one `action.yml` or `action.yaml`
+must declare that input and `runs.using: composite`; and a runnable composite
+step must interpolate the value into `run` or official GitHub Script source.
+Same-step environment transfer followed by native shell or `process.env` use
+is the matched control, while later `${{ env.NAME }}` expansion remains code
+generation. Descriptor ambiguity, invalid metadata, parent traversal, remote
+or dynamic targets, shell-less commands, cross-step environment assumptions,
+ordinary action inputs, lookalikes, and comment-only secret evidence are
+rejected. The executable witness proves direct substitution observes only a
+mock forwarded token while the identical environment value stays inert.
+
+`benchmarks/github-actions-workflow-script-injection-manifest.json` adds the
+same-file CWE-094/CWE-095/CWE-116 boundary grounded in
+[GitHub's script-injection guidance](https://docs.github.com/en/actions/concepts/security/script-injections),
+the [CodeQL very-high-precision Actions code-injection query](https://codeql.github.com/codeql-query-help/actions/actions-code-injection-critical/),
+and zizmor's current CodeQL-derived action-input sink map. The host couples
+each supported trigger to exact attacker-controlled fields and follows direct
+dot or single-quoted bracket contexts, parentheses, value-preserving
+`toJSON`/`fromJSON`/`format`/`join`, reachable short-circuit results, and
+workflow/job/step environment aliases only when `${{ env.NAME }}` is later
+re-expanded into source. It rejects boolean predicates, comparisons, fixed or
+unreachable results, native environment reads, trigger/field mismatches,
+unknown action inputs, lookalikes, dynamic revisions, and invalid YAML.
+`pull_request` rows preserve code execution but deliberately omit secret and
+write-token impact normally removed from fork runs; other event rows require
+exact effective permissions and structural secret/token use. The paired
+GitHub Script witness proves the direct title substitution creates a second
+statement that observes a mock token, while the identical intermediate
+environment value logs as one inert string.
+
 Current GitHub cache rules informed the model boundary rather than becoming a
 new broad alert. GitHub now makes `pull_request_target`, `issue_comment`, and
 `workflow_run` cache access read-only in the default-branch scope, and keeps
@@ -552,10 +585,11 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
    own real-history exploit/control gate. Next extensions should add audited
    custom-rule packs and separately authorized issuer verification without
    weakening the no-plaintext persistence or no-implicit-network contracts.
-4. **Configuration and IaC model packs — four CI lanes shipped.** Deterministic
+4. **Configuration and IaC model packs — five CI lanes shipped.** Deterministic
    YAML models now prove both same-job privileged-trigger/untrusted-checkout
    execution, cross-workflow pull-request artifact poisoning, and reusable-
-   workflow and local composite-action script injection against paired
+   workflow, local composite-action, and direct same-workflow script injection
+   against paired
    witnesses, including Checkout v7 protection, triggering-run binding,
    extraction paths, cleanup, typed-data isolation, descriptor and input
    identity, step scope, and expression-compilation timing. Extend the same
