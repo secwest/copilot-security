@@ -7,10 +7,11 @@ import {
   goAssignment,
   goCalls,
   goFunctions,
+  goHttpRequestParameters,
   goImportAlias,
-  maskGoLines,
   referencedTaint,
   requestSource,
+  goTypedReceiverNames,
   type GoFunction,
   type GoHttpSourceFile,
   type GoPropagator,
@@ -74,85 +75,16 @@ function sqlAlias(function_: GoFunction): string | undefined {
 }
 
 function requestParameters(function_: GoFunction): string[] {
-  const alias = function_.httpAlias;
-  if (alias === undefined) return [];
-  return function_.parameters
-    .filter(
-      (parameter) =>
-        parameter.type.replace(/\s+/gu, "") === `*${alias}.Request`,
-    )
-    .map((parameter) => parameter.name);
+  return goHttpRequestParameters(function_);
 }
 
 function receiverDeclarationNames(
   function_: GoFunction,
   alias: string,
 ): Set<string> {
-  const result = new Set<string>();
-  for (const parameter of function_.parameters) {
-    if (
-      new RegExp(
-        `^\\*?${escapeRegularExpression(alias)}\\.(?:DB|Tx|Conn)$`,
-        "u",
-      ).test(parameter.type.replace(/\s+/gu, ""))
-    ) {
-      result.add(parameter.name);
-    }
-  }
-
-  const structuralLines = maskGoLines(function_.file.lines, true);
-  let braceDepth = 0;
-  for (let index = 0; index < structuralLines.length; index += 1) {
-    const line = structuralLines[index]!;
-    const lineNumber = index + 1;
-    const insideCurrentFunction =
-      lineNumber >= function_.startLine && lineNumber <= function_.endLine;
-    const declaration = new RegExp(
-      `^\\s*var\\s+([A-Za-z_]\\w*)\\s+\\*?${escapeRegularExpression(alias)}\\.(?:DB|Tx|Conn)\\b`,
-      "u",
-    ).exec(line);
-    if (declaration !== null && (braceDepth === 0 || insideCurrentFunction)) {
-      result.add(declaration[1]!);
-    }
-    for (const character of line) {
-      if (character === "{") braceDepth += 1;
-      else if (character === "}") braceDepth = Math.max(0, braceDepth - 1);
-    }
-  }
-
-  const receiver = /^\(\s*([A-Za-z_]\w*)\s+\*?([A-Za-z_]\w*)\s*\)$/u.exec(
-    function_.receiver ?? "",
-  );
-  if (receiver === null) return result;
-  const receiverName = receiver[1]!;
-  const receiverType = escapeRegularExpression(receiver[2]!);
-  const structural = structuralLines.join("\n");
-  const structs = [
-    ...structural.matchAll(
-      new RegExp(
-        `\\btype\\s+${receiverType}\\s+struct\\s*\\{([\\s\\S]*?)\\}`,
-        "gu",
-      ),
-    ),
-  ];
-  if (structs.length !== 1) return result;
-  const body = structs[0]![1]!;
-  const field = new RegExp(
-    `^\\s*([A-Za-z_]\\w*)\\s+\\*?${escapeRegularExpression(alias)}\\.(?:DB|Tx|Conn)\\b`,
-    "gmu",
-  );
-  for (const match of body.matchAll(field)) {
-    result.add(`${receiverName}.${match[1]!}`);
-  }
-  if (
-    new RegExp(
-      `^\\s*\\*?${escapeRegularExpression(alias)}\\.(?:DB|Tx|Conn)\\b`,
-      "mu",
-    ).test(body)
-  ) {
-    result.add(receiverName);
-  }
-  return result;
+  return goTypedReceiverNames(function_, [
+    { alias, typeNames: ["DB", "Tx", "Conn"] },
+  ]);
 }
 
 function functionControls(

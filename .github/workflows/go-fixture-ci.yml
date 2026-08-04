@@ -32,3 +32,9 @@ jobs:
       - name: Prove database placeholder binding
         run: go test ./...
         working-directory: benchmarks/fixtures/go-cross-file-safe-sql
+      - name: Prove request-derived pgx v5 query grammar
+        run: go test ./...
+        working-directory: benchmarks/fixtures/go-cross-file-pgx-sqli
+      - name: Prove pgx v5 placeholder binding
+        run: go test ./...
+        working-directory: benchmarks/fixtures/go-cross-file-safe-pgx

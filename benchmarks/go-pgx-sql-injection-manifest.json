@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "completionRate": 1,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "casePassRate": 1,
+    "negativeControlPassRate": 1,
+    "stableDetectionRate": 1,
+    "validationCoverage": 1,
+    "attackPathCoverage": 1,
+    "codeEvidenceCoverage": 1,
+    "severityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "go-cross-file-pgx-sqli",
+      "fixture": "fixtures/go-cross-file-pgx-sqli",
+      "expected": [
+        {
+          "title": "Go handler formats a request value into pgxpool query text",
+          "cwe": ["CWE-89"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "search.go",
+          "line": 12,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-file-safe-pgx",
+      "fixture": "fixtures/go-cross-file-safe-pgx",
+      "expected": []
+    }
+  ]
+}

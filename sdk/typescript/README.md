@@ -49,6 +49,12 @@ The package is ESM-only and provides:
   `sql.Named` values remain data; tainted `Prepare*` text requires later
   statement execution; and inferred handles, same-file receiver fields, one
   unique package wrapper, fixed query selection, and reassignment are explicit.
+  A separate pgx v5 model requires exact `pgx` or `pgxpool` imports and typed
+  Conn, Tx, or Pool receivers. It preserves the context/SQL/value split,
+  follows fixed prepared names on the same receiver, and reports queued SQL
+  only after the same typed batch reaches `SendBatch`. Pgx v4 and import
+  lookalikes, later bound values and named/struct rewriters, inert preparation,
+  and undispatched or reassigned batches are rejected.
   Node
   object-authorization hypotheses preserve the exact
   request-controlled record lookup and principal-bound owner filtering or

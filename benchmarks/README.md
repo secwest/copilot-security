@@ -500,6 +500,35 @@ go test ./...
 Pop-Location
 ```
 
+The pgx v5 lane adds exact `pgx` and `pgxpool` import and receiver identity,
+context/SQL/value argument roles, fixed prepared-name execution, and typed
+batch queue-to-`SendBatch` closure. It rejects later `$1` values, named and
+struct argument rewriters, inert preparation, undispatched or replaced
+batches, v4/fork/lookalike imports, and untyped methods. The paired fixtures
+use an offline module replacement under the exact public pgx v5 path and a
+minimal API-compatible witness. This preserves deterministic exploit/control
+behavior without claiming that the witness is the PostgreSQL wire protocol:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/go-pgx-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-go-pgx-sql-injection `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+Push-Location fixtures\go-cross-file-pgx-sqli
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-pgx
+go test ./...
+Pop-Location
+```
+
 The template-injection framework lane applies the same strict gates to Node
 and Python relative-import wrappers. Its positives compile caller-controlled
 Pug or Jinja template source. Its negative controls pass the same untrusted

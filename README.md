@@ -42,9 +42,9 @@ stand in for reviewed application source.
 The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
 paths, server-side request forgery, and object authorization; a separate Go
-`net/http` model covers server-side request forgery and request-to-`database/sql`
-query grammar; and Node, Python, and Spring models cover server-side template
-injection. Each applicable
+`net/http` model covers server-side request forgery, while typed
+`database/sql`, `pgx/v5`, and `pgxpool` models cover request-to-query grammar;
+and Node, Python, and Spring models cover server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
@@ -712,6 +712,30 @@ Push-Location benchmarks\fixtures\go-cross-file-sql-injection
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-sql
+go test ./...
+Pop-Location
+```
+
+The pgx lane separately requires exact `github.com/jackc/pgx/v5` or
+`pgxpool` imports and typed connection, transaction, or pool receivers. Its
+direct operations preserve context, SQL text, and later values/options at
+their documented positions. Manual preparation closes only through the same
+receiver and a fixed statement name; `Batch.Queue` closes only when the exact
+typed batch reaches `SendBatch`. The matched offline modules use the exact pgx
+v5 module path and an API-compatible deterministic witness so the exploit and
+`$1` control run without PostgreSQL or dependency downloads:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/go-pgx-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\go-pgx-sql-injection `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+Push-Location benchmarks\fixtures\go-cross-file-pgx-sqli
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-pgx
 go test ./...
 Pop-Location
 ```

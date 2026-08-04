@@ -66,9 +66,15 @@ export interface GoFunction {
 export interface GoCall {
   name: string;
   arguments: string[];
+  rawArguments: string[];
   line: number;
   offset: number;
   linePrefix: string;
+}
+
+export interface GoReceiverTypeSpecification {
+  alias: string;
+  typeNames: readonly string[];
 }
 
 export interface GoPropagator {
@@ -325,6 +331,9 @@ export function goCalls(function_: GoFunction): GoCall[] {
   const slice = function_.structuralLines
     .slice(function_.bodyStartLine - 1, function_.endLine)
     .join("\n");
+  const rawSlice = maskGoLines(function_.file.lines, false)
+    .slice(function_.bodyStartLine - 1, function_.endLine)
+    .join("\n");
   const starts = lineStarts(slice);
   const calls: GoCall[] = [];
   for (const match of slice.matchAll(
@@ -340,6 +349,7 @@ export function goCalls(function_: GoFunction): GoCall[] {
     calls.push({
       name: match[1]!.replace(/\s+/gu, ""),
       arguments: splitGoArguments(slice.slice(open + 1, close)),
+      rawArguments: splitGoArguments(rawSlice.slice(open + 1, close)),
       line: function_.bodyStartLine + lineAt(starts, offset) - 1,
       offset,
       linePrefix: slice.slice(previousNewline + 1, offset),
@@ -350,6 +360,91 @@ export function goCalls(function_: GoFunction): GoCall[] {
 
 export function escapeRegularExpression(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+export function goHttpRequestParameters(function_: GoFunction): string[] {
+  const alias = function_.httpAlias;
+  if (alias === undefined) return [];
+  return function_.parameters
+    .filter(
+      (parameter) =>
+        parameter.type.replace(/\s+/gu, "") === `*${alias}.Request`,
+    )
+    .map((parameter) => parameter.name);
+}
+
+export function goTypedReceiverNames(
+  function_: GoFunction,
+  specifications: readonly GoReceiverTypeSpecification[],
+): Set<string> {
+  if (specifications.length === 0) return new Set();
+  const qualifiedType = `(?:${specifications
+    .map(
+      ({ alias, typeNames }) =>
+        `${escapeRegularExpression(alias)}\\.(?:${typeNames
+          .map(escapeRegularExpression)
+          .join("|")})`,
+    )
+    .join("|")})`;
+  const result = new Set<string>();
+  for (const parameter of function_.parameters) {
+    if (
+      new RegExp(`^\\*?${qualifiedType}$`, "u").test(
+        parameter.type.replace(/\s+/gu, ""),
+      )
+    ) {
+      result.add(parameter.name);
+    }
+  }
+
+  const structuralLines = maskGoLines(function_.file.lines, true);
+  let braceDepth = 0;
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const line = structuralLines[index]!;
+    const lineNumber = index + 1;
+    const insideCurrentFunction =
+      lineNumber >= function_.startLine && lineNumber <= function_.endLine;
+    const declaration = new RegExp(
+      `^\\s*var\\s+([A-Za-z_]\\w*)\\s+\\*?${qualifiedType}\\b`,
+      "u",
+    ).exec(line);
+    if (declaration !== null && (braceDepth === 0 || insideCurrentFunction)) {
+      result.add(declaration[1]!);
+    }
+    for (const character of line) {
+      if (character === "{") braceDepth += 1;
+      else if (character === "}") braceDepth = Math.max(0, braceDepth - 1);
+    }
+  }
+
+  const receiver = /^\(\s*([A-Za-z_]\w*)\s+\*?([A-Za-z_]\w*)\s*\)$/u.exec(
+    function_.receiver ?? "",
+  );
+  if (receiver === null) return result;
+  const receiverName = receiver[1]!;
+  const receiverType = escapeRegularExpression(receiver[2]!);
+  const structural = structuralLines.join("\n");
+  const structs = [
+    ...structural.matchAll(
+      new RegExp(
+        `\\btype\\s+${receiverType}\\s+struct\\s*\\{([\\s\\S]*?)\\}`,
+        "gu",
+      ),
+    ),
+  ];
+  if (structs.length !== 1) return result;
+  const body = structs[0]![1]!;
+  const field = new RegExp(
+    `^\\s*([A-Za-z_]\\w*)\\s+\\*?${qualifiedType}\\b`,
+    "gmu",
+  );
+  for (const match of body.matchAll(field)) {
+    result.add(`${receiverName}.${match[1]!}`);
+  }
+  if (new RegExp(`^\\s*\\*?${qualifiedType}\\b`, "mu").test(body)) {
+    result.add(receiverName);
+  }
+  return result;
 }
 
 export function requestSource(
