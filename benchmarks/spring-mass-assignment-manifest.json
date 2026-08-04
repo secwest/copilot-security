@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "java-cross-file-mass-assignment",
+      "description": "A Spring MVC form binds an unintended privilege field onto a JPA entity that is persisted through a typed Spring Data service.",
+      "fixture": "fixtures/java-cross-file-mass-assignment",
+      "findingsPaths": ["java-cross-file-mass-assignment/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "spring-account-mass-assignment",
+          "cwe": ["CWE-915"],
+          "locations": [
+            {
+              "path": "src/main/java/example/AccountService.java",
+              "startLine": 14,
+              "endLine": 14,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "java-cross-file-safe-binding",
+      "description": "The same bound JPA entity and persistence topology uses an attribute-scoped WebDataBinder allowlist that excludes the privilege field.",
+      "fixture": "fixtures/java-cross-file-safe-binding",
+      "findingsPaths": ["java-cross-file-safe-binding/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

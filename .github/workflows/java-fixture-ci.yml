@@ -43,6 +43,8 @@ jobs:
             benchmarks/fixtures/java-okhttp-multi-hop-safe-fetch/pom.xml
             benchmarks/fixtures/java-cross-file-idor/pom.xml
             benchmarks/fixtures/java-cross-file-safe-authorization/pom.xml
+            benchmarks/fixtures/java-cross-file-mass-assignment/pom.xml
+            benchmarks/fixtures/java-cross-file-safe-binding/pom.xml
             benchmarks/witnesses/java-webclient-ssrf/pom.xml
             benchmarks/witnesses/java-webclient-safe-fetch/pom.xml
             benchmarks/witnesses/java-okhttp-ssrf/pom.xml
@@ -64,6 +66,8 @@ jobs:
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-okhttp-multi-hop-safe-fetch/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-cross-file-idor/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-cross-file-safe-authorization/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-cross-file-mass-assignment/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-cross-file-safe-binding/pom.xml verify
 
       - name: Prove vulnerable and safe path behavior
         shell: bash

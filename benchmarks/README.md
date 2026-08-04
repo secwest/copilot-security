@@ -249,6 +249,31 @@ wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users
 wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-cross-file-safe-authorization/pom.xml verify
 ```
 
+The Spring mass-assignment lane applies perfect gates to a matched Spring Boot
+4.1 MVC/JPA pair. The positive binds a submitted `administrator` property
+directly onto an `@Entity Account`, crosses a typed service, and calls
+`JpaRepository.save`; its real MockMvc/Hibernate/H2 witness proves the
+unintended privilege bit persisted. The control retains that topology and
+request but applies `@InitBinder("account")` with an exact allowed-field list;
+its witness proves the intended display name persists and the submitted
+privilege bit does not:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/spring-mass-assignment-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-spring-mass-assignment `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-cross-file-mass-assignment/pom.xml verify
+wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-cross-file-safe-binding/pom.xml verify
+```
+
 The SSRF framework lane applies the same strict gates to Node and Python
 relative-import wrappers. Its positives pass complete caller-controlled URLs
 to outbound HTTP sinks. Its negative controls select only complete

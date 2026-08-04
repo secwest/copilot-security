@@ -49,7 +49,14 @@ The package is ESM-only and provides:
   `findById` or declared owner-qualified derived queries. They retain only an
   exact typed-principal query binding or active `@PostAuthorize` ownership
   policy on a Spring-managed read method; authentication and role-only method
-  checks are not resource controls. Models include exact
+  checks are not resource controls. Spring MVC/JPA mass-assignment hypotheses
+  require an official state-changing controller, an official
+  `@ModelAttribute` whose type is the uniquely resolved persisted JPA entity,
+  and the exact same object reaching typed `CrudRepository` or
+  `JpaRepository.save`. Applicable official allowed-field and constructor-only
+  binders are control leads; `@Valid`, authentication, denylists, DTOs, fixed
+  entities, and shadow framework types do not silently satisfy that proof.
+  Models include exact
   source/sink lines and nearby negative controls for the mandatory residual
   correction turn, plus bounded one-hop or
   two-hop C# controller/service summaries,

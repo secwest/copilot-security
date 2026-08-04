@@ -86,6 +86,16 @@ owner-like dimension to a typed Spring Security `Authentication`, Java
 `@PostAuthorize` only for a Spring-managed read method when pre/post method
 security is active, the expression authorizes the returned object's owner
 against `authentication.name`, and no write occurs before the decision.
+Spring mass-assignment rows preserve an official `@ModelAttribute` JPA domain
+object from a state-changing controller through one or two uniquely typed
+service boundaries into the exact `CrudRepository` or `JpaRepository` `save`
+argument. The domain type must resolve to one unique official JPA entity.
+`@Valid`, authentication, role checks, denylisted fields, and repository use
+are not binding controls. An attribute-applicable official `@InitBinder` using
+`WebDataBinder.setAllowedFields`, or constructor-only
+`setDeclarativeBinding(true)`, is retained as a control lead; dedicated DTO
+projection remains reviewer counterevidence rather than being broadened into
+the entity flow.
 For Node/TypeScript relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
@@ -440,6 +450,24 @@ node benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\spring-object-authorization `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Spring mass-assignment lane uses the same Boot 4.1, Spring MVC, Spring
+Data JPA, Hibernate, and H2 stack. Its positive posts an unintended
+`administrator=true` form property onto an `@ModelAttribute Account` and
+persists the same entity through a typed service. Its matched control scopes a
+`WebDataBinder` allowlist to `account`; the runtime witness proves the display
+name persists while the administrative flag remains false:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/spring-mass-assignment-manifest.json `
+  --results-dir C:\security-benchmarks\spring-mass-assignment `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-cross-file-mass-assignment/pom.xml verify
+wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-cross-file-safe-binding/pom.xml verify
 ```
 
 The SSRF framework lane pairs Node and Python cross-file absolute-URL flows
