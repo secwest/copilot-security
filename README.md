@@ -793,7 +793,11 @@ A fifth pair covers the common DB-prepared-statement transfer path: exact
 `Tx.Stmt`/`Tx.StmtContext` source and returned statement identities retain the
 fixed SQL predicate, execution stays provisional, and only the destination
 transaction's commit closes the durable effect. Its control preserves that
-entire topology while adding only a context-principal account predicate:
+entire topology while adding only a context-principal account predicate. A
+sixth pair closes a direct transaction through a uniquely resolved typed
+same-package helper, retaining both the caller boundary and the helper's exact
+`Commit` path and line. Its control again changes only the authenticated
+account predicate:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -830,6 +834,12 @@ Push-Location benchmarks\fixtures\go-cross-file-transaction-stmt-delete-idor
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-transaction-stmt-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-helper-transaction-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-helper-transaction-delete-authorization
 go test ./...
 Pop-Location
 ```

@@ -590,9 +590,13 @@ and applies it only at `Commit`, proving durable victim impact and a committed
 principal-scoped control. A fifth pair prepares fixed SQL on the DB, transfers
 the exact statement into a transaction with `Tx.StmtContext`, executes the
 returned clone, and commits; its matched control adds only the authenticated
-account predicate. The suite proves all five blocked attacks and successful
+account predicate. A sixth pair finalizes a direct transaction mutation through
+a uniquely resolved typed same-package commit helper and preserves the helper's
+actual commit path; its control adds only the authenticated account predicate.
+The suite proves all six blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
-transferred-statement transaction behavior without a database service:
+transferred-statement and helper-finalized transaction behavior without a
+database service:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -634,6 +638,12 @@ Push-Location fixtures\go-cross-file-transaction-stmt-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-transaction-stmt-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-helper-transaction-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-helper-transaction-delete-authorization
 go test ./...
 Pop-Location
 ```

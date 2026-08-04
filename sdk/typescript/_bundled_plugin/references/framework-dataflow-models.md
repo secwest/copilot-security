@@ -421,6 +421,14 @@ interpreter that consumes the value.
   commit, nested or deferred commit, finalization before execution, ignored
   transfer results, closed or replaced statements, and cross-transaction
   transfer.
+- A transaction may close through one uniquely resolved same-package function
+  only when an exact typed `database/sql` transaction parameter reaches exactly
+  one non-deferred function-level `Commit` or `Rollback`. Preserve caller
+  argument identity, helper parameter position, helper path and finalizer line,
+  and outcome order. Reject ambiguous definitions, methods, untyped parameters,
+  unrelated or reassigned transactions, nested or deferred caller/helper
+  finalization, mixed top-level finalizers, and commit before mutation. An
+  error-branch rollback helper does not dominate a later success-path commit.
 - Authentication, middleware, opaque IDs, parameterized SQL, and a principal-
   named parameter do not authorize the selected object. Verify the exact
   placeholder-to-argument mapping, wrapper argument, object or collection,
@@ -441,6 +449,10 @@ interpreter that consumes the value.
   context controls preparation rather than execution; it is neither the source
   statement nor proof of authorization. Confirm commit success and driver or
   database behavior before claiming durable impact.
+- For helper-mediated finalization, inspect the helper body and call site as
+  separate evidence. A helper name such as `commit`, an `error` return, or a
+  transaction-shaped argument is not sufficient without exact type, unique
+  resolution, function-level finalizer, and matching caller transaction.
 
 ### Go HTTP server-side template injection — CWE-1336
 

@@ -74,6 +74,10 @@ interface Predicate {
   argumentName?: string;
 }
 
+interface EvidencePropagator extends GoPropagator {
+  path?: string;
+}
+
 interface CandidateQuery {
   mode: "row" | "rows";
   line: number;
@@ -82,7 +86,7 @@ interface CandidateQuery {
   result?: string;
   iterated: boolean;
   scannedNames: Set<string>;
-  propagators: GoPropagator[];
+  propagators: EvidencePropagator[];
   controls: Array<{ kind: string; line: number }>;
 }
 
@@ -107,7 +111,7 @@ interface ObjectSink {
     | "go-database-object-committed-mutation";
   line: number;
   source: GoTaint;
-  propagators: GoPropagator[];
+  propagators: EvidencePropagator[];
   controls: Array<{ kind: string; line: number }>;
 }
 
@@ -119,6 +123,16 @@ interface WrapperSummary {
   objectParameterName: string;
   principalParameterIndexes: number[];
   sink: ObjectSink;
+}
+
+interface TransactionFinalizerSummary {
+  file: GoHttpSourceFile;
+  packageName: string;
+  functionName: string;
+  transactionParameterIndex: number;
+  transactionParameterName: string;
+  method: "Commit" | "Rollback";
+  line: number;
 }
 
 function sqlAlias(function_: GoFunction): string | undefined {
@@ -256,6 +270,10 @@ function callNestingDepth(function_: GoFunction, call: GoCall): number {
     depth += braceDelta(function_.structuralLines[line - 1] ?? "");
   }
   return depth + braceDelta(call.linePrefix);
+}
+
+function hasNoCallArguments(call: GoCall): boolean {
+  return call.arguments.every((argument) => argument.trim() === "");
 }
 
 function sqlNamedValue(argument: string, alias: string): string {
@@ -410,6 +428,7 @@ function analyzeFunction(
   function_: GoFunction,
   initialObjects: ReadonlyMap<string, GoTaint> = new Map(),
   initialPrincipals: ReadonlyMap<string, GoTaint> = new Map(),
+  finalizers: readonly TransactionFinalizerSummary[] = [],
 ): ObjectSink[] {
   const alias = sqlAlias(function_);
   if (alias === undefined) return [];
@@ -505,6 +524,29 @@ function analyzeFunction(
     };
     if (statement.transaction === undefined) sinks.push(sink);
     else statement.transaction.pending.push(sink);
+  };
+  const finalizeTransaction = (
+    transaction: TransactionState,
+    method: "Commit" | "Rollback",
+    line: number,
+    evidence: readonly EvidencePropagator[],
+  ): void => {
+    if (!transaction.active) return;
+    if (method === "Rollback") {
+      transaction.pending.length = 0;
+      transaction.active = false;
+      return;
+    }
+    for (const pendingMutation of transaction.pending) {
+      sinks.push({
+        ...pendingMutation,
+        kind: "go-database-object-committed-mutation",
+        line,
+        propagators: [...pendingMutation.propagators, ...evidence],
+      });
+    }
+    transaction.pending.length = 0;
+    transaction.active = false;
   };
 
   for (
@@ -614,6 +656,47 @@ function analyzeFunction(
           continue;
         }
       }
+      const matchingFinalizers = finalizers.filter(
+        (summary) =>
+          summary.functionName === call.name &&
+          summary.packageName === function_.packageName &&
+          posix.dirname(summary.file.path) ===
+            posix.dirname(function_.file.path),
+      );
+      if (matchingFinalizers.length === 1) {
+        const summary = matchingFinalizers[0]!;
+        const transactionName =
+          call.rawArguments[summary.transactionParameterIndex]?.trim();
+        const transaction =
+          transactionName === undefined
+            ? undefined
+            : transactions.get(transactionName);
+        if (
+          transaction !== undefined &&
+          transaction.active &&
+          !/\bdefer\b/u.test(structural) &&
+          callNestingDepth(function_, call) === 1
+        ) {
+          finalizeTransaction(transaction, summary.method, line, [
+            {
+              kind: "go-sql-transaction-finalizer-helper",
+              line,
+              symbol: summary.functionName,
+            },
+            ...(summary.method === "Commit"
+              ? [
+                  {
+                    kind: "go-sql-transaction-commit",
+                    line: summary.line,
+                    symbol: summary.transactionParameterName,
+                    path: summary.file.path,
+                  },
+                ]
+              : []),
+          ]);
+          continue;
+        }
+      }
       const receiverCall =
         /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.([A-Za-z_]\w*)$/u.exec(call.name);
       if (receiverCall === null) continue;
@@ -638,7 +721,11 @@ function analyzeFunction(
       }
 
       const transaction = transactions.get(receiver);
-      if (transaction !== undefined && /^(?:Commit|Rollback)$/u.test(method)) {
+      if (
+        transaction !== undefined &&
+        /^(?:Commit|Rollback)$/u.test(method) &&
+        hasNoCallArguments(call)
+      ) {
         if (
           !transaction.active ||
           /\bdefer\b/u.test(structural) ||
@@ -646,28 +733,18 @@ function analyzeFunction(
         ) {
           continue;
         }
-        if (method === "Rollback") {
-          transaction.pending.length = 0;
-          transaction.active = false;
-          continue;
-        }
-        for (const pendingMutation of transaction.pending) {
-          sinks.push({
-            ...pendingMutation,
-            kind: "go-database-object-committed-mutation",
-            line,
-            propagators: [
-              ...pendingMutation.propagators,
-              {
-                kind: "go-sql-transaction-commit",
-                line,
-                symbol: receiver,
-              },
-            ],
-          });
-        }
-        transaction.pending.length = 0;
-        transaction.active = false;
+        finalizeTransaction(
+          transaction,
+          method === "Commit" ? "Commit" : "Rollback",
+          line,
+          [
+            {
+              kind: "go-sql-transaction-commit",
+              line,
+              symbol: receiver,
+            },
+          ],
+        );
         continue;
       }
 
@@ -980,7 +1057,7 @@ function record(
   scope: "same-file" | "cross-file-wrapper",
   source: GoTaint,
   sink: ObjectSink,
-  propagators: readonly GoPropagator[],
+  propagators: readonly EvidencePropagator[],
 ): GoObjectAuthorizationRecord {
   const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
   const endLine = Math.min(
@@ -1021,11 +1098,12 @@ function record(
       propagators: propagators.map((propagator, index) => ({
         ...propagator,
         path:
-          scope === "cross-file-wrapper" &&
+          propagator.path ??
+          (scope === "cross-file-wrapper" &&
           wrapperBoundary >= 0 &&
           index <= wrapperBoundary
             ? sourceFile.path
-            : sinkFile.path,
+            : sinkFile.path),
       })),
       candidateControls: sink.controls.map((control) => ({
         ...control,
@@ -1033,6 +1111,56 @@ function record(
       })),
     },
   };
+}
+
+function transactionFinalizerSummaries(
+  functions: readonly GoFunction[],
+  functionCounts: ReadonlyMap<string, number>,
+): TransactionFinalizerSummary[] {
+  const summaries: TransactionFinalizerSummary[] = [];
+  for (const function_ of functions) {
+    if (function_.receiver !== undefined) continue;
+    const alias = sqlAlias(function_);
+    if (alias === undefined) continue;
+    const key = `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${function_.name}`;
+    if (functionCounts.get(key) !== 1) continue;
+    const parameters = function_.parameters
+      .map((parameter, index) => ({ parameter, index }))
+      .filter(({ parameter }) =>
+        new RegExp(`^\\*?${escapeRegularExpression(alias)}\\.Tx$`, "u").test(
+          parameter.type.replace(/\s+/gu, ""),
+        ),
+      );
+    const candidates: TransactionFinalizerSummary[] = [];
+    for (const { parameter, index } of parameters) {
+      const finalizerCall = new RegExp(
+        `^${escapeRegularExpression(parameter.name)}\\.(Commit|Rollback)$`,
+        "u",
+      );
+      for (const call of goCalls(function_)) {
+        const match = finalizerCall.exec(call.name);
+        if (
+          match === null ||
+          !hasNoCallArguments(call) ||
+          /\bdefer\b/u.test(function_.structuralLines[call.line - 1] ?? "") ||
+          callNestingDepth(function_, call) !== 1
+        ) {
+          continue;
+        }
+        candidates.push({
+          file: function_.file,
+          packageName: function_.packageName,
+          functionName: function_.name,
+          transactionParameterIndex: index,
+          transactionParameterName: parameter.name,
+          method: match[1] as "Commit" | "Rollback",
+          line: call.line,
+        });
+      }
+    }
+    if (candidates.length === 1) summaries.push(candidates[0]!);
+  }
+  return summaries;
 }
 
 export function goObjectAuthorizationRecords(
@@ -1043,10 +1171,22 @@ export function goObjectAuthorizationRecords(
     .flatMap(goFunctions);
   const records: GoObjectAuthorizationRecord[] = [];
   const emitted = new Set<string>();
+  const functionCounts = new Map<string, number>();
+  for (const function_ of functions) {
+    if (function_.receiver !== undefined) continue;
+    const key = `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${function_.name}`;
+    functionCounts.set(key, (functionCounts.get(key) ?? 0) + 1);
+  }
+  const finalizers = transactionFinalizerSummaries(functions, functionCounts);
 
   for (const function_ of functions) {
     if (requestParameters(function_).length === 0) continue;
-    for (const sink of analyzeFunction(function_)) {
+    for (const sink of analyzeFunction(
+      function_,
+      new Map(),
+      new Map(),
+      finalizers,
+    )) {
       const identity = `${function_.file.path}:${sink.line}:${sink.kind}`;
       if (emitted.has(identity)) continue;
       emitted.add(identity);
@@ -1092,6 +1232,7 @@ export function goObjectAuthorizationRecords(
         function_,
         new Map([[parameter.name, objectTaint]]),
         allPrincipalParameters,
+        finalizers,
       )) {
         const principalParameterIndexes: number[] = [];
         if (
@@ -1118,6 +1259,7 @@ export function goObjectAuthorizationRecords(
                   },
                 ],
               ]),
+              finalizers,
             );
             if (
               isolated.some(
@@ -1146,12 +1288,6 @@ export function goObjectAuthorizationRecords(
     });
   }
 
-  const functionCounts = new Map<string, number>();
-  for (const function_ of functions) {
-    if (function_.receiver !== undefined) continue;
-    const key = `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${function_.name}`;
-    functionCounts.set(key, (functionCounts.get(key) ?? 0) + 1);
-  }
   for (const caller of functions) {
     if (requestParameters(caller).length === 0) continue;
     const calls = goCalls(caller);

@@ -414,7 +414,13 @@ commits. The original statement remains a separate identity; ignored results,
 context/source argument confusion, closed or replaced statements, transfers
 between distinct transactions, rollback, and missing durable closure are
 negative cases. A fifth executable pair proves both the unscoped committed
-deletion and the context-principal control with an offline driver. This directly
+deletion and the context-principal control with an offline driver. The host also
+summarizes one uniquely resolved same-package finalizer function only when an
+exact typed transaction parameter reaches exactly one function-level commit or
+rollback. Unlike a name heuristic, this keeps caller transaction identity,
+argument position, nesting, ordering, definition ambiguity, and the helper's
+actual evidence path. A sixth executable pair proves the helper-committed
+positive and principal-scoped control. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -424,6 +430,13 @@ as a dedicated query. Cross-package and multi-hop wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
 sqlc, ORMs, branch-
 sensitive dominance, and deployment authorization remain future work.
+
+This bounded application-function summary follows the same precision principle
+as CodeQL's distinction between local flow and explicitly modeled
+interprocedural flow summaries: the summary expands a proven semantic boundary,
+not every similarly named call. It remains deliberately narrower than whole-
+program call-graph and control-flow analysis; helper chains, interface dispatch,
+function values, recursion, and cross-package finalizers remain future work.
 
 `benchmarks/go-sqlx-sql-injection-manifest.json` adds a strict sqlx lane. The
 positive carries an HTTP query value through one unique same-package wrapper,
