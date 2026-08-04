@@ -43,7 +43,8 @@ The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
 paths, server-side request forgery, and object authorization; a separate Go
 `net/http` model covers server-side request forgery, while typed
-`database/sql`, `pgx/v5`, and `pgxpool` models cover request-to-query grammar;
+`database/sql`, `pgx/v5`, `pgxpool`, and low-level `pgconn` models cover
+request-to-query grammar and deferred database dispatch;
 and Node, Python, and Spring models cover server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
@@ -736,6 +737,31 @@ Push-Location benchmarks\fixtures\go-cross-file-pgx-sqli
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-pgx
+go test ./...
+Pop-Location
+```
+
+The low-level pgconn lane is separate because its execution semantics differ
+materially from high-level pgx. It recognizes exact `*pgconn.PgConn` receivers,
+including `pgx.Conn.PgConn()` escape hatches; preserves `Exec`, `ExecParams`,
+`CopyFrom`, and `CopyTo` SQL positions; closes prepared SQL through a fixed name
+or the exact returned `StatementDescription`; and requires queued `pgconn.Batch`
+and `Pipeline` commands to reach `ExecBatch`, `Flush`, or `Sync`. Parameter byte
+slices and COPY streams remain data. Unsynchronized pipeline sends and
+`Pipeline.Close` are not treated as execution. The matched fixtures prove
+simple-protocol grammar injection and extended-protocol parameter isolation:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/go-pgconn-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\go-pgconn-sql-injection `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+Push-Location benchmarks\fixtures\go-cross-file-pgconn-sqli
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-pgconn
 go test ./...
 Pop-Location
 ```

@@ -55,6 +55,11 @@ The package is ESM-only and provides:
   only after the same typed batch reaches `SendBatch`. Pgx v4 and import
   lookalikes, later bound values and named/struct rewriters, inert preparation,
   and undispatched or reassigned batches are rejected.
+  A separate low-level pgconn model proves exact `PgConn`, `Batch`, `Pipeline`,
+  and `StatementDescription` identities. It preserves raw, extended-protocol,
+  and COPY SQL positions; requires prepared execution, `ExecBatch`, `Flush`, or
+  `Sync` closure; excludes parameter bytes and COPY streams; and treats
+  unsynchronized sends plus `Pipeline.Close` as inert.
   Node
   object-authorization hypotheses preserve the exact
   request-controlled record lookup and principal-bound owner filtering or

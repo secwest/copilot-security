@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1.0",
+  "description": "Exact pgconn simple-protocol SQL injection versus extended-protocol parameter isolation",
+  "thresholds": {
+    "maxFalsePositiveRate": 0,
+    "maxFalseNegativeRate": 0,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1
+  },
+  "cases": [
+    {
+      "id": "go-cross-file-pgconn-sqli",
+      "fixture": "fixtures/go-cross-file-pgconn-sqli",
+      "expected": [
+        {
+          "path": "search.go",
+          "line": 12,
+          "lineTolerance": 2,
+          "cwe": ["CWE-89"],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-file-safe-pgconn",
+      "fixture": "fixtures/go-cross-file-safe-pgconn",
+      "expected": []
+    }
+  ]
+}

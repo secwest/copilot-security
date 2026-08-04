@@ -529,6 +529,36 @@ go test ./...
 Pop-Location
 ```
 
+The pgconn lane covers lower-level PostgreSQL APIs that high-level pgx and
+`database/sql` models do not reach. It distinguishes simple-protocol `Exec`
+from extended-protocol `ExecParams`, preserves the SQL position of `CopyFrom`
+and `CopyTo`, follows fixed prepared names and exact statement descriptions,
+and requires queued `pgconn.Batch` or `Pipeline` work to reach `ExecBatch`,
+`Flush`, or `Sync`. An unsynchronized pipeline, including one closed before a
+flush, is a negative control. The exact pgx v5 replacement supplies a
+deterministic signature-compatible execution witness without claiming to
+implement the PostgreSQL wire protocol:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/go-pgconn-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-go-pgconn-sql-injection `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+Push-Location fixtures\go-cross-file-pgconn-sqli
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-pgconn
+go test ./...
+Pop-Location
+```
+
 The template-injection framework lane applies the same strict gates to Node
 and Python relative-import wrappers. Its positives compile caller-controlled
 Pug or Jinja template source. Its negative controls pass the same untrusted

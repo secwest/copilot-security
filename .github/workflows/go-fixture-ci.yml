@@ -38,3 +38,9 @@ jobs:
       - name: Prove pgx v5 placeholder binding
         run: go test ./...
         working-directory: benchmarks/fixtures/go-cross-file-safe-pgx
+      - name: Prove pgconn simple-protocol query grammar
+        run: go test ./...
+        working-directory: benchmarks/fixtures/go-cross-file-pgconn-sqli
+      - name: Prove pgconn extended-protocol parameter isolation
+        run: go test ./...
+        working-directory: benchmarks/fixtures/go-cross-file-safe-pgconn
