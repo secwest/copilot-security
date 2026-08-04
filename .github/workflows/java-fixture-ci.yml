@@ -41,12 +41,14 @@ jobs:
             benchmarks/fixtures/java-webclient-multi-hop-safe-fetch/pom.xml
             benchmarks/fixtures/java-okhttp-multi-hop-ssrf/pom.xml
             benchmarks/fixtures/java-okhttp-multi-hop-safe-fetch/pom.xml
+            benchmarks/fixtures/java-cross-file-idor/pom.xml
+            benchmarks/fixtures/java-cross-file-safe-authorization/pom.xml
             benchmarks/witnesses/java-webclient-ssrf/pom.xml
             benchmarks/witnesses/java-webclient-safe-fetch/pom.xml
             benchmarks/witnesses/java-okhttp-ssrf/pom.xml
             benchmarks/witnesses/java-okhttp-safe-fetch/pom.xml
 
-      - name: Compile Spring benchmark fixtures
+      - name: Compile Spring fixtures and execute authorization witnesses
         shell: bash
         run: |
           set -euo pipefail
@@ -60,6 +62,8 @@ jobs:
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-webclient-multi-hop-safe-fetch/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-okhttp-multi-hop-ssrf/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-okhttp-multi-hop-safe-fetch/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-cross-file-idor/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-cross-file-safe-authorization/pom.xml verify
 
       - name: Prove vulnerable and safe path behavior
         shell: bash

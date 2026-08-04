@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "java-cross-file-idor",
+      "description": "An authenticated Spring endpoint passes an attacker-selected route key to a typed Spring Data primary-key lookup without authorizing the returned invoice.",
+      "fixture": "fixtures/java-cross-file-idor",
+      "findingsPaths": ["java-cross-file-idor/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "spring-invoice-owner-check-missing",
+          "cwe": ["CWE-639", "CWE-862"],
+          "locations": [
+            {
+              "path": "src/main/java/example/InvoiceService.java",
+              "startLine": 14,
+              "endLine": 14,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "java-cross-file-safe-authorization",
+      "description": "The same Spring route and typed repository topology binds the selected invoice to the authenticated principal in one derived query.",
+      "fixture": "fixtures/java-cross-file-safe-authorization",
+      "findingsPaths": [
+        "java-cross-file-safe-authorization/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

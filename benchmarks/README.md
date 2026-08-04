@@ -224,6 +224,31 @@ dotnet run --project benchmarks/witnesses/aspnet-cross-file-idor/AspnetCrossFile
 dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-authorization/AspnetCrossFileSafeAuthorizationWitness.csproj --configuration Release
 ```
 
+The Spring object-authorization lane applies the same perfect gates to real
+Spring Boot 4.1, Spring Data JPA, Spring Security, Hibernate, and H2 fixtures.
+The positive keeps endpoint authentication but sends the route invoice ID to
+typed `JpaRepository.findById`; an executable `@SpringBootTest` seeds two
+customers and proves cross-customer disclosure. The control declares
+`findByIdAndCustomerId`, binds its second argument to the typed
+`Authentication.getName()` value, and proves the same foreign invoice is
+rejected while the caller's own invoice remains available:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/spring-object-authorization-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-spring-object-authorization `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-cross-file-idor/pom.xml verify
+wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-cross-file-safe-authorization/pom.xml verify
+```
+
 The SSRF framework lane applies the same strict gates to Node and Python
 relative-import wrappers. Its positives pass complete caller-controlled URLs
 to outbound HTTP sinks. Its negative controls select only complete

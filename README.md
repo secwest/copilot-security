@@ -75,6 +75,17 @@ not object controls. The host retains a same-query owner, tenant, or customer
 predicate only when it is bound to an authenticated-principal-shaped value, or
 an `IAuthorizationService.AuthorizeAsync(User, returnedEntity, policy)` call
 only when its exact result is enforced fail-closed before the protected effect.
+Spring object-authorization rows preserve an annotated or servlet-derived
+identifier through one or two uniquely typed service boundaries into an
+official Spring Data `CrudRepository` or `JpaRepository` `findById` lookup or
+an explicitly declared owner-qualified derived query. Endpoint authentication,
+role-only `@PreAuthorize`, opaque IDs, and repository identity are not object
+controls. The host retains a query control only when the same lookup binds its
+owner-like dimension to a typed Spring Security `Authentication`, Java
+`Principal`, or official `SecurityContextHolder` value. It retains
+`@PostAuthorize` only for a Spring-managed read method when pre/post method
+security is active, the expression authorizes the returned object's owner
+against `authentication.name`, and no write occurs before the decision.
 For Node/TypeScript relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
@@ -411,6 +422,22 @@ principal:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/aspnet-object-authorization-manifest.json `
   --results-dir C:\security-benchmarks\aspnet-object-authorization `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Spring object-authorization lane uses real Spring Boot, Spring Data JPA,
+Spring Security, Hibernate, and H2 components. Its positive keeps an
+authenticated endpoint while passing a route-controlled primary key to
+`JpaRepository.findById`; its executable witness proves one customer can read
+another customer's invoice. The control binds that key and the typed
+`Authentication.getName()` value in one declared derived query and proves the
+cross-customer selection fails:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/spring-object-authorization-manifest.json `
+  --results-dir C:\security-benchmarks\spring-object-authorization `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

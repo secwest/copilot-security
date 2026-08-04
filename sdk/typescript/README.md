@@ -44,7 +44,12 @@ The package is ESM-only and provides:
   authorization. ASP.NET object-authorization hypotheses preserve bound route
   or query identifiers into typed EF Core single-record lookups and retain only
   exact principal-bound predicates or enforced resource-authorization leads;
-  `[Authorize]` alone is not a resource control. Models include exact
+  `[Authorize]` alone is not a resource control. Spring object-authorization
+  hypotheses preserve bound request identifiers into typed Spring Data
+  `findById` or declared owner-qualified derived queries. They retain only an
+  exact typed-principal query binding or active `@PostAuthorize` ownership
+  policy on a Spring-managed read method; authentication and role-only method
+  checks are not resource controls. Models include exact
   source/sink lines and nearby negative controls for the mandatory residual
   correction turn, plus bounded one-hop or
   two-hop C# controller/service summaries,

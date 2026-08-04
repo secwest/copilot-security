@@ -985,6 +985,45 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "spring-http-object-authorization",
+    language: "java-kotlin",
+    extensions: JAVA_EXTENSIONS,
+    activation: [
+      /\b(?:CrudRepository|JpaRepository|PagingAndSortingRepository)\b|\bfindById/iu,
+      /\borg\.springframework\.data\.(?:jpa\.)?repository\b/iu,
+    ],
+    sources: [
+      {
+        kind: "spring-object-reference",
+        expression:
+          /@(?:CookieValue|PathVariable|RequestBody|RequestHeader|RequestParam)\b/iu,
+      },
+      {
+        kind: "servlet-object-reference",
+        expression: /\b(?:getHeader|getParameter|getParameterValues)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "spring-data-object-record-lookup",
+        expression:
+          /\.\s*findById(?:And(?:Account|Customer|Organization|Owner|Principal|Tenant|User|Workspace)Id)?\s*\(/iu,
+        cweIds: ["CWE-639", "CWE-862"],
+      },
+    ],
+    controls: [
+      {
+        kind: "principal-bound-object-query",
+        expression:
+          /\bfindByIdAnd(?:Account|Customer|Organization|Owner|Principal|Tenant|User|Workspace)Id\s*\(/iu,
+      },
+      {
+        kind: "enabled-return-object-authorization",
+        expression: /@PostAuthorize\s*\(/iu,
+      },
+    ],
+  },
+  {
     id: "spring-http-ssrf",
     language: "java-kotlin",
     extensions: JAVA_EXTENSIONS,
@@ -1723,7 +1762,8 @@ function frameworkDataflowRecords(
       : PYTHON_EXTENSIONS.has(extension)
         ? matchingPythonModelLines(lines, model.controls, 24)
         : extension === ".java" || extension === ".cs"
-          ? model.id === "aspnet-http-object-authorization"
+          ? model.id === "aspnet-http-object-authorization" ||
+            model.id === "spring-http-object-authorization"
             ? []
             : matchingJavaModelLines(lines, model.controls, 24)
           : matchingModelLines(lines, model.controls, 24);
@@ -1740,6 +1780,10 @@ function frameworkDataflowRecords(
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
           : undefined;
+      const javaObjectSink =
+        model.id === "spring-http-object-authorization"
+          ? javaObjectAuthorizationSink(lines, sink.line)
+          : undefined;
       if (model.id === "node-http-ssrf" && nodeHttpSink === undefined) {
         continue;
       }
@@ -1753,6 +1797,18 @@ function frameworkDataflowRecords(
         model.id === "aspnet-http-object-authorization" &&
         (dotnetObjectSink === undefined ||
           !dotnetEfObjectLookupHasTypedReceiver(lines, dotnetObjectSink))
+      ) {
+        continue;
+      }
+      if (
+        model.id === "spring-http-object-authorization" &&
+        (javaObjectSink === undefined ||
+          !javaSpringDataLookupHasTypedReceiver(
+            files,
+            path,
+            lines,
+            javaObjectSink,
+          ))
       ) {
         continue;
       }
@@ -1820,31 +1876,40 @@ function frameworkDataflowRecords(
                 model.sources,
               )
             : extension === ".java" &&
-                (model.id === "spring-http-ssrf" ||
-                  model.id === "spring-http-path")
-              ? modeledSameFileJavaSource(
+                model.id === "spring-http-object-authorization" &&
+                javaObjectSink !== undefined
+              ? modeledSameFileJavaObjectSource(
                   lines,
                   sink.line,
-                  model.id,
+                  javaObjectSink.argument,
                   model.sources,
                 )
-              : extension === ".cs" &&
-                  model.id === "aspnet-http-template-injection"
-                ? modeledSameFileDotnetTemplateSource(
+              : extension === ".java" &&
+                  (model.id === "spring-http-ssrf" ||
+                    model.id === "spring-http-path")
+                ? modeledSameFileJavaSource(
                     lines,
                     sink.line,
+                    model.id,
                     model.sources,
                   )
                 : extension === ".cs" &&
-                    model.id === "aspnet-http-object-authorization" &&
-                    dotnetObjectSink !== undefined
-                  ? modeledSameFileDotnetObjectSource(
+                    model.id === "aspnet-http-template-injection"
+                  ? modeledSameFileDotnetTemplateSource(
                       lines,
                       sink.line,
-                      dotnetObjectSink.argument,
                       model.sources,
                     )
-                  : nearestModeledSource(sources, sink.line);
+                  : extension === ".cs" &&
+                      model.id === "aspnet-http-object-authorization" &&
+                      dotnetObjectSink !== undefined
+                    ? modeledSameFileDotnetObjectSource(
+                        lines,
+                        sink.line,
+                        dotnetObjectSink.argument,
+                        model.sources,
+                      )
+                    : nearestModeledSource(sources, sink.line);
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -1871,6 +1936,10 @@ function frameworkDataflowRecords(
               dotnetObjectSink,
               lines.length,
             )
+          : []),
+        ...(model.id === "spring-http-object-authorization" &&
+        javaObjectSink !== undefined
+          ? javaObjectAuthorizationControls(files, path, lines, javaObjectSink)
           : []),
         ...controls.filter(
           (control) =>
@@ -3985,7 +4054,10 @@ function javaFrameworkWrapperSummaries(
         continue;
       }
       const sinks = matchingJavaModelLines(file.lines, model.sinks, 32);
-      const controls = matchingJavaModelLines(file.lines, model.controls, 64);
+      const controls =
+        model.id === "spring-http-object-authorization"
+          ? []
+          : matchingJavaModelLines(file.lines, model.controls, 64);
       for (const method of methods) {
         for (const sink of sinks) {
           if (sink.line < method.startLine || sink.line > method.endLine) {
@@ -4018,32 +4090,73 @@ function javaFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          const objectAuthorizationSink =
+            model.id === "spring-http-object-authorization"
+              ? javaObjectAuthorizationSink(
+                  file.lines,
+                  sink.line,
+                  method.endLine,
+                )
+              : undefined;
+          if (
+            model.id === "spring-http-object-authorization" &&
+            (objectAuthorizationSink === undefined ||
+              !javaSpringDataLookupHasTypedReceiver(
+                files,
+                file.path,
+                file.lines,
+                objectAuthorizationSink,
+              ))
+          ) {
+            continue;
+          }
           const parameterIndexes =
-            model.id === "spring-http-path" || model.id === "spring-http-ssrf"
+            model.id === "spring-http-object-authorization"
               ? javaMethodParameterIndexesReachingSink(
                   file.lines,
                   method,
                   sink.line,
-                  parameterSinkExpression,
+                  objectAuthorizationSink!.argument,
                 )
-              : method.parameters.flatMap((parameter, parameterIndex) =>
-                  cFamilyLineReferencesIdentifier(
-                    sinkExpression,
-                    parameter.name,
+              : model.id === "spring-http-path" ||
+                  model.id === "spring-http-ssrf"
+                ? javaMethodParameterIndexesReachingSink(
+                    file.lines,
+                    method,
+                    sink.line,
+                    parameterSinkExpression,
                   )
-                    ? [parameterIndex]
-                    : [],
-                );
+                : method.parameters.flatMap((parameter, parameterIndex) =>
+                    cFamilyLineReferencesIdentifier(
+                      sinkExpression,
+                      parameter.name,
+                    )
+                      ? [parameterIndex]
+                      : [],
+                  );
           if (parameterIndexes.length === 0) continue;
           const sinkPattern = model.sinks.find(
             (pattern) => pattern.kind === sink.kind,
           );
           if (sinkPattern === undefined) continue;
-          const sinkControls = model.controls
-            .filter((control) => control.expression.test(sinkExpression))
-            .map((control) => ({ kind: control.kind, line: sink.line }));
+          const sinkControls =
+            model.id === "spring-http-object-authorization"
+              ? []
+              : model.controls
+                  .filter((control) => control.expression.test(sinkExpression))
+                  .map((control) => ({ kind: control.kind, line: sink.line }));
           const methodControls = [
             ...sinkControls,
+            ...(model.id === "spring-http-object-authorization" &&
+            objectAuthorizationSink !== undefined
+              ? javaObjectAuthorizationControls(
+                  files,
+                  file.path,
+                  file.lines,
+                  objectAuthorizationSink,
+                  method,
+                )
+              : []),
             ...controls.filter(
               (control) =>
                 control.line >= method.startLine &&
@@ -5259,7 +5372,7 @@ function modeledJavaCallSource(
     );
     if (
       source !== undefined &&
-      !javaIdentifierReassignedBetween(
+      !javaMethodParameterReassignedBeforeCall(
         lines,
         argument,
         method.startLine,
@@ -5289,6 +5402,25 @@ function modeledJavaCallSource(
     }
   }
   return undefined;
+}
+
+function javaMethodParameterReassignedBeforeCall(
+  lines: readonly string[],
+  identifier: string,
+  methodStartLine: number,
+  callLine: number,
+): boolean {
+  const structural = cFamilyStructuralLines(
+    lines.slice(methodStartLine - 1, callLine),
+  ).join("\n");
+  const bodyStart = structural.indexOf("{");
+  if (bodyStart < 0) return false;
+  const escapedIdentifier = escapeRegularExpression(identifier);
+  const reassignment = new RegExp(
+    `(?:\\b${escapedIdentifier}\\s*(?:[+\\-*/%&|^]?=|\\+\\+|--)|(?:\\+\\+|--)\\s*${escapedIdentifier}\\b|\\b(?:final\\s+)?[A-Za-z_$][\\w$.[\\]<>?,]*\\s+${escapedIdentifier}\\b)`,
+    "u",
+  );
+  return reassignment.test(structural.slice(bodyStart + 1));
 }
 
 function modeledSameFileJavaSource(
@@ -5335,6 +5467,411 @@ function modeledSameFileJavaSource(
     if (source !== undefined) return source;
   }
   return undefined;
+}
+
+interface JavaObjectAuthorizationSink {
+  argument: string;
+  arguments: string[];
+  receiver: string;
+  method: string;
+  callStartLine: number;
+  callEndLine: number;
+}
+
+const JAVA_OBJECT_OWNER_FIELD =
+  "(?:Account|Customer|Organization|Owner|Principal|Tenant|User|Workspace)Id";
+
+function javaObjectAuthorizationSink(
+  lines: readonly string[],
+  sinkLine: number,
+  methodEndLine = lines.length,
+): JavaObjectAuthorizationSink | undefined {
+  const baseLine = Math.max(1, sinkLine - 1);
+  const callLines = lines.slice(
+    baseLine - 1,
+    Math.min(methodEndLine, sinkLine + 12),
+  );
+  const original = callLines.join("\n");
+  const structural = cFamilyStructuralLines(callLines).join("\n");
+  const call = new RegExp(
+    `\\b([A-Za-z_$][\\w$]*)\\s*\\.\\s*(findById(?:And${JAVA_OBJECT_OWNER_FIELD})?)\\s*\\(`,
+    "u",
+  ).exec(structural);
+  if (call?.index === undefined) return undefined;
+  const methodIndex = structural.indexOf(call[2]!, call.index);
+  const methodLine =
+    baseLine + (structural.slice(0, methodIndex).match(/\n/gu)?.length ?? 0);
+  if (methodLine !== sinkLine) return undefined;
+  const open = structural.indexOf("(", call.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  const arguments_ = splitJavascriptArguments(
+    original.slice(open + 1, close),
+  ).map((argument) => argument.trim());
+  const argument = arguments_[0];
+  if (argument === undefined || argument === "") return undefined;
+  return {
+    argument,
+    arguments: arguments_,
+    receiver: call[1]!,
+    method: call[2]!,
+    callStartLine: sinkLine,
+    callEndLine:
+      baseLine + (structural.slice(0, close).match(/\n/gu)?.length ?? 0),
+  };
+}
+
+function javaSpringDataLookupHasTypedReceiver(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  sink: JavaObjectAuthorizationSink,
+): boolean {
+  const structuralText = cFamilyStructuralLines(lines).join("\n");
+  const receiver = escapeRegularExpression(sink.receiver);
+  const directRepository = new RegExp(
+    `\\b(?:org\\s*\\.\\s*springframework\\s*\\.\\s*data\\s*\\.(?:\\s*jpa\\s*\\.)?\\s*repository\\s*\\.\\s*)?(?:CrudRepository|JpaRepository|PagingAndSortingRepository|Repository)\\s*<[^;{}]+>\\s+${receiver}\\b`,
+    "u",
+  );
+  if (directRepository.test(structuralText)) {
+    return javaSourceUsesOfficialSpringDataRepository(lines);
+  }
+
+  const bindings = javaReceiverBindings(lines).filter(
+    (binding) => binding.receiver === sink.receiver,
+  );
+  if (bindings.length !== 1) return false;
+  const repositoryType = bindings[0]!.ownerType;
+  const declarations = files.filter((file) => {
+    if (file.extension !== ".java") return false;
+    const text = cFamilyStructuralLines(file.lines).join("\n");
+    return new RegExp(
+      `\\binterface\\s+${escapeRegularExpression(repositoryType)}\\b`,
+      "u",
+    ).test(text);
+  });
+  if (declarations.length !== 1) return false;
+  const declaration = declarations[0]!;
+  const declarationText = cFamilyStructuralLines(declaration.lines).join("\n");
+  const extendsSpringData = new RegExp(
+    `\\binterface\\s+${escapeRegularExpression(repositoryType)}(?:\\s*<[^>{}]+>)?\\s+extends\\s+(?:org\\s*\\.\\s*springframework\\s*\\.\\s*data\\s*\\.(?:\\s*jpa\\s*\\.)?\\s*repository\\s*\\.\\s*)?(?:CrudRepository|JpaRepository|PagingAndSortingRepository|Repository)\\s*<`,
+    "u",
+  ).test(declarationText);
+  if (
+    !extendsSpringData ||
+    !javaSourceUsesOfficialSpringDataRepository(declaration.lines)
+  ) {
+    return false;
+  }
+  if (sink.method !== "findById") {
+    const declaredMethod = new RegExp(
+      `\\b${escapeRegularExpression(sink.method)}\\s*\\([^;{}]*\\)\\s*;`,
+      "u",
+    );
+    if (!declaredMethod.test(declarationText)) return false;
+  }
+  return pathWithinDirectory(
+    declaration.path,
+    javaProjectRootForPath(files, sourcePath),
+  );
+}
+
+function javaSourceUsesOfficialSpringDataRepository(
+  lines: readonly string[],
+): boolean {
+  const text = cFamilyStructuralLines(lines).join("\n");
+  if (
+    /\b(?:class|interface|record)\s+(?:CrudRepository|JpaRepository|PagingAndSortingRepository|Repository)\b/u.test(
+      text,
+    )
+  ) {
+    return false;
+  }
+  return (
+    /^\s*import\s+org\.springframework\.data\.(?:jpa\.)?repository\.(?:CrudRepository|JpaRepository|PagingAndSortingRepository|Repository)\s*;/mu.test(
+      text,
+    ) ||
+    /\borg\s*\.\s*springframework\s*\.\s*data\s*\.(?:\s*jpa\s*\.)?\s*repository\s*\.\s*(?:CrudRepository|JpaRepository|PagingAndSortingRepository|Repository)\b/u.test(
+      text,
+    )
+  );
+}
+
+function modeledSameFileJavaObjectSource(
+  lines: readonly string[],
+  sinkLine: number,
+  lookupArgument: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const method = exportedJavaMethods(lines).find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  if (method === undefined) return undefined;
+  const direct = modeledJavaCallSource(
+    lines,
+    method,
+    sinkLine,
+    lookupArgument.trim(),
+    sourcePatterns,
+  );
+  if (direct !== undefined) return direct;
+  for (const parameterIndex of javaMethodParameterIndexesReachingSink(
+    lines,
+    method,
+    sinkLine,
+    lookupArgument,
+  )) {
+    const parameter = method.parameters[parameterIndex];
+    if (parameter === undefined) continue;
+    const source = modeledJavaCallSource(
+      lines,
+      method,
+      sinkLine,
+      parameter.name,
+      sourcePatterns,
+    );
+    if (source !== undefined) return source;
+  }
+  return undefined;
+}
+
+function javaObjectAuthorizationControls(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  sink: JavaObjectAuthorizationSink,
+  enclosingMethod?: ExportedJavaMethod,
+): Array<{ kind: string; line: number }> {
+  const controls: Array<{ kind: string; line: number }> = [];
+  const method =
+    enclosingMethod ??
+    exportedJavaMethods(lines).find(
+      (candidate) =>
+        sink.callStartLine >= candidate.startLine &&
+        sink.callStartLine <= candidate.endLine,
+    );
+  if (method === undefined) return controls;
+  if (
+    sink.method !== "findById" &&
+    sink.arguments[1] !== undefined &&
+    javaAuthenticatedPrincipalExpression(lines, sink.arguments[1]!)
+  ) {
+    controls.push({
+      kind: "principal-bound-object-query",
+      line: sink.callStartLine,
+    });
+  }
+
+  const postAuthorizeLine = javaEnforcedPostAuthorizeControl(
+    files,
+    sourcePath,
+    lines,
+    method,
+  );
+  if (postAuthorizeLine !== undefined) {
+    controls.push({
+      kind: "enabled-return-object-authorization",
+      line: postAuthorizeLine,
+    });
+  }
+  return controls;
+}
+
+function javaAuthenticatedPrincipalExpression(
+  lines: readonly string[],
+  expression: string,
+): boolean {
+  const text = cFamilyStructuralLines(lines).join("\n");
+  if (
+    /\b(?:class|interface|record)\s+(?:Authentication|Principal|SecurityContextHolder)\b/u.test(
+      text,
+    )
+  ) {
+    return false;
+  }
+  if (
+    /\bSecurityContextHolder\s*\.\s*getContext\s*\(\s*\)\s*\.\s*getAuthentication\s*\(\s*\)\s*\.\s*getName\s*\(\s*\)/u.test(
+      expression,
+    )
+  ) {
+    return (
+      /^\s*import\s+org\.springframework\.security\.core\.context\.SecurityContextHolder\s*;/mu.test(
+        text,
+      ) ||
+      /\borg\s*\.\s*springframework\s*\.\s*security\s*\.\s*core\s*\.\s*context\s*\.\s*SecurityContextHolder\b/u.test(
+        text,
+      )
+    );
+  }
+  const receiver = /\b([A-Za-z_$][\w$]*)\s*\.\s*getName\s*\(\s*\)/u.exec(
+    expression,
+  )?.[1];
+  if (receiver === undefined) return false;
+  const escaped = escapeRegularExpression(receiver);
+  const authenticationBinding = new RegExp(
+    `\\bAuthentication\\s+${escaped}\\b`,
+    "u",
+  ).test(text);
+  const principalBinding = new RegExp(
+    `\\bPrincipal\\s+${escaped}\\b`,
+    "u",
+  ).test(text);
+  return (
+    (authenticationBinding &&
+      /^\s*import\s+org\.springframework\.security\.core\.Authentication\s*;/mu.test(
+        text,
+      )) ||
+    (principalBinding &&
+      /^\s*import\s+java\.security\.Principal\s*;/mu.test(text))
+  );
+}
+
+function javaEnforcedPostAuthorizeControl(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  method: ExportedJavaMethod,
+): number | undefined {
+  if (!javaSpringMethodSecurityEnabled(files, sourcePath)) return undefined;
+  const text = cFamilyStructuralLines(lines).join("\n");
+  if (
+    !javaSpringManagedBean(lines) ||
+    /\b(?:save|saveAll|delete|deleteAll|deleteById|flush)\s*\(/u.test(
+      cFamilyStructuralLines(
+        lines.slice(method.startLine - 1, method.endLine),
+      ).join("\n"),
+    )
+  ) {
+    return undefined;
+  }
+  const hasOfficialPostAuthorize =
+    /^\s*import\s+org\.springframework\.security\.access\.prepost\.PostAuthorize\s*;/mu.test(
+      text,
+    ) ||
+    /@org\s*\.\s*springframework\s*\.\s*security\s*\.\s*access\s*\.\s*prepost\s*\.\s*PostAuthorize\b/u.test(
+      text,
+    );
+  if (
+    !hasOfficialPostAuthorize ||
+    /\b@interface\s+PostAuthorize\b/u.test(text)
+  ) {
+    return undefined;
+  }
+  const startLine = Math.max(1, method.startLine - 8);
+  const annotationLines = lines.slice(startLine - 1, method.startLine);
+  const structuralAnnotations = cFamilyStructuralLines(annotationLines);
+  const originalAnnotations = annotationLines.join("\n");
+  const annotation = structuralAnnotations.findIndex((line) =>
+    /@(?:org\.springframework\.security\.access\.prepost\.)?PostAuthorize\s*\(/u.test(
+      line,
+    ),
+  );
+  if (annotation < 0) return undefined;
+  const ownerCheck = new RegExp(
+    `returnObject\\s*\\.\\s*(?:get)?${JAVA_OBJECT_OWNER_FIELD}(?:\\s*\\(\\s*\\))?\\s*==\\s*authentication\\s*\\.\\s*(?:name|getName\\s*\\(\\s*\\))|authentication\\s*\\.\\s*(?:name|getName\\s*\\(\\s*\\))\\s*==\\s*returnObject\\s*\\.\\s*(?:get)?${JAVA_OBJECT_OWNER_FIELD}(?:\\s*\\(\\s*\\))?`,
+    "iu",
+  );
+  if (!ownerCheck.test(originalAnnotations)) return undefined;
+  return startLine + annotation;
+}
+
+function javaSpringManagedBean(lines: readonly string[]): boolean {
+  const text = cFamilyStructuralLines(lines).join("\n");
+  if (
+    /\b@interface\s+(?:Component|Controller|RestController|Service)\b/u.test(
+      text,
+    )
+  ) {
+    return false;
+  }
+  const officialAnnotations = [
+    {
+      name: "Component",
+      packageName: "org.springframework.stereotype.Component",
+    },
+    {
+      name: "Controller",
+      packageName: "org.springframework.stereotype.Controller",
+    },
+    {
+      name: "RestController",
+      packageName: "org.springframework.web.bind.annotation.RestController",
+    },
+    {
+      name: "Service",
+      packageName: "org.springframework.stereotype.Service",
+    },
+  ] as const;
+  return officialAnnotations.some(({ name, packageName }) => {
+    const escapedName = escapeRegularExpression(name);
+    const escapedPackage = escapeRegularExpression(packageName);
+    return (
+      (new RegExp(`@${escapedName}\\b`, "u").test(text) &&
+        new RegExp(`^\\s*import\\s+${escapedPackage}\\s*;`, "mu").test(text)) ||
+      new RegExp(
+        `@${escapedPackage.replaceAll("\\.", "\\s*\\.\\s*")}\\b`,
+        "u",
+      ).test(text)
+    );
+  });
+}
+
+function javaSpringMethodSecurityEnabled(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+): boolean {
+  const projectRoot = javaProjectRootForPath(files, sourcePath);
+  return files.some((file) => {
+    if (
+      file.extension !== ".java" ||
+      !pathWithinDirectory(file.path, projectRoot)
+    ) {
+      return false;
+    }
+    const text = cFamilyStructuralLines(file.lines).join("\n");
+    if (
+      /\b@interface\s+(?:EnableGlobalMethodSecurity|EnableMethodSecurity)\b/u.test(
+        text,
+      )
+    ) {
+      return false;
+    }
+    const modern =
+      (/^\s*import\s+org\.springframework\.security\.config\.annotation\.method\.configuration\.EnableMethodSecurity\s*;/mu.test(
+        text,
+      ) ||
+        /@org\s*\.\s*springframework\s*\.\s*security\s*\.\s*config\s*\.\s*annotation\s*\.\s*method\s*\.\s*configuration\s*\.\s*EnableMethodSecurity\b/u.test(
+          text,
+        )) &&
+      /@(?:org\.springframework\.security\.config\.annotation\.method\.configuration\.)?EnableMethodSecurity\b(?!\s*\([^)]*prePostEnabled\s*=\s*false)/u.test(
+        text,
+      );
+    const legacy =
+      /^\s*import\s+org\.springframework\.security\.config\.annotation\.method\.configuration\.EnableGlobalMethodSecurity\s*;/mu.test(
+        text,
+      ) &&
+      /@EnableGlobalMethodSecurity\s*\([^)]*prePostEnabled\s*=\s*true/u.test(
+        text,
+      );
+    return modern || legacy;
+  });
+}
+
+function javaProjectRootForPath(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+): string {
+  return (
+    files
+      .filter(
+        (file) =>
+          posix.basename(file.path).toLowerCase() === "pom.xml" &&
+          pathWithinDirectory(sourcePath, posix.dirname(file.path)),
+      )
+      .map((file) => posix.dirname(file.path))
+      .sort((left, right) => right.length - left.length)[0] ?? "."
+  );
 }
 
 function modeledDotnetCallSource(
