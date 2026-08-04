@@ -69,6 +69,13 @@ The package is ESM-only and provides:
   execution closure. Producer success and transport integrity are not trust;
   isolated extraction plus strict typed-data parsing is counterevidence only
   when artifact content is never executed.
+  Reusable-workflow injection hypotheses require an externally influenced
+  default-branch event field, exact local workflow call and forwarded name,
+  declared `workflow_call` string input, and direct interpolation into `run` or
+  official `actions/github-script` source. Input-derived `${{ env.NAME }}`
+  re-expansion remains unsafe; native shell or `process.env` use keeps the
+  intermediate environment value as data. Effective caller/callee permissions,
+  forwarded secrets, OIDC, and environment gates remain explicit.
   Models include exact
   source/sink lines and nearby negative controls for the mandatory residual
   correction turn, plus bounded one-hop or

@@ -83,6 +83,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.node == '22.13.0'
         run: node benchmarks/witnesses/github-actions-artifact-poisoning/ArtifactPoisoningWitness.mjs
 
+      - name: Prove reusable-workflow injection and native environment isolation
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.13.0'
+        run: node benchmarks/witnesses/github-actions-reusable-workflow-injection/ReusableWorkflowInjectionWitness.mjs
+
       - name: Check formatting
         run: pnpm --dir sdk/typescript run format
 

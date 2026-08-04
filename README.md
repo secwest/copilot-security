@@ -115,6 +115,17 @@ read-only producer permissions, and artifact transport digests do not make
 pull-request bytes trusted; extraction outside the workspace plus fail-closed
 typed-data parsing is strong counterevidence when artifact content is never
 executed.
+Reusable-workflow script-injection rows preserve an externally influenced
+default-branch trigger, exact caller event field, local workflow target,
+forwarded `with` name, declared `workflow_call` string input, and the called
+`run` or official `actions/github-script` source that recompiles the same value.
+Direct `${{ inputs.NAME }}` substitution and input-derived `${{ env.NAME }}`
+substitution are code generation even when quoted inside the generated script.
+Assigning the expression to an intermediate environment entry and reading it
+only through native shell syntax or `process.env` remains data-only
+counterevidence. Caller/callee permission intersection, forwarded secrets,
+OIDC, environment gates, and runner reachability remain separate impact and
+control evidence.
 For Node/TypeScript relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
@@ -522,6 +533,23 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 
 node benchmarks/witnesses/github-actions-artifact-poisoning/ArtifactPoisoningWitness.mjs
+```
+
+The reusable-workflow injection lane forwards the same issue-comment body into
+a declared local `workflow_call` string input. The positive substitutes it
+directly into `actions/github-script` source under inherited secrets and
+write/OIDC permissions. The control transfers it once into an environment
+entry and reads it only through `process.env`, so the identical injection
+payload remains inert:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/github-actions-reusable-workflow-injection-manifest.json `
+  --results-dir C:\security-benchmarks\github-actions-reusable-workflow-injection `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+node benchmarks/witnesses/github-actions-reusable-workflow-injection/ReusableWorkflowInjectionWitness.mjs
 ```
 
 The SSRF framework lane pairs Node and Python cross-file absolute-URL flows

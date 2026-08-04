@@ -1,0 +1,14 @@
+name: Comment release
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  publish:
+    if: github.event.issue.pull_request
+    uses: ./.github/workflows/reusable-release.yml
+    with:
+      release-name: ${{ github.event.comment.body }}
+    secrets: inherit

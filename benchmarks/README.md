@@ -325,6 +325,30 @@ node ../../benchmarks/run-benchmark.mjs `
 node ../../benchmarks/witnesses/github-actions-artifact-poisoning/ArtifactPoisoningWitness.mjs
 ```
 
+The reusable-workflow injection lane applies perfect gates to a cross-file
+CWE-094/CWE-095/CWE-116 pair. Both callers forward an attacker-controlled issue
+comment into the same declared local `workflow_call` string input. The positive
+compiles that input into official `actions/github-script` source with inherited
+secrets and write/OIDC permissions. The negative assigns the expression once to
+an intermediate environment entry and reads it only through `process.env`. The
+witness proves that direct substitution executes a harmless second JavaScript
+statement while the same payload remains one inert value in the control:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/github-actions-reusable-workflow-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-github-actions-reusable-workflow-injection `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+node ../../benchmarks/witnesses/github-actions-reusable-workflow-injection/ReusableWorkflowInjectionWitness.mjs
+```
+
 The SSRF framework lane applies the same strict gates to Node and Python
 relative-import wrappers. Its positives pass complete caller-controlled URLs
 to outbound HTTP sinks. Its negative controls select only complete

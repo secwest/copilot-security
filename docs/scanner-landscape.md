@@ -431,6 +431,34 @@ and execution closure. Regressions reject name and run mismatches, missing
 tokens, unrelated paths, non-PR producers, lookalike actions, data-only
 consumers, malformed/duplicate/aliased YAML, and non-workflow paths.
 
+`benchmarks/github-actions-reusable-workflow-injection-manifest.json` adds a
+strict cross-file CWE-094/CWE-095/CWE-116 pair grounded in
+[GitHub's script-injection guidance](https://docs.github.com/en/actions/concepts/security/script-injections),
+[reusable-workflow input contract](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows),
+and the [CodeQL very-high-precision Actions code-injection query](https://codeql.github.com/codeql-query-help/actions/actions-code-injection-critical/).
+The caller must run from an exact externally influenced default-branch event,
+forward one exact attacker-controlled event field to an exact local workflow
+path, and bind it to a matching declared `workflow_call` string input. The
+called workflow must then interpolate that input, or an input-derived workflow
+`env` expression, into a `run` script or official `actions/github-script`
+source. The host preserves trigger, call, input, declaration, environment
+alias, sink, permission, secret, OIDC, and control provenance across both YAML
+documents. The matched control follows GitHub's recommended intermediate-env
+boundary and consumes the value only through `process.env`; its executable
+witness proves the same payload stays inert. This adds exact cross-file closure
+beyond a same-document expression match while rejecting remote targets,
+fixed/boolean-transformed values, undeclared or non-string inputs, ordinary
+action arguments, lookalike script actions, native environment reads, and
+malformed/duplicate/aliased YAML.
+
+Current GitHub cache rules informed the model boundary rather than becoming a
+new broad alert. GitHub now makes `pull_request_target`, `issue_comment`, and
+`workflow_run` cache access read-only in the default-branch scope, and keeps
+`pull_request` writes in the merge-ref scope. A generic low-trust cache-save
+rule would therefore report platform-blocked flows. Future cache models must
+prove a presently writable cache scope, attacker-controlled cached bytes, a
+matching consumer key/version/path, and later trusted execution.
+
 `benchmarks/aspnet-cross-file-ssrf-manifest.json` adds a strict outbound-client
 pair. The positive sends an ASP.NET query parameter as the complete URI to
 `HttpClient.GetAsync`; its request deadline and response ceiling isolate SSRF
@@ -524,12 +552,14 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
    own real-history exploit/control gate. Next extensions should add audited
    custom-rule packs and separately authorized issuer verification without
    weakening the no-plaintext persistence or no-implicit-network contracts.
-4. **Configuration and IaC model packs — two CI lanes shipped.** Deterministic
+4. **Configuration and IaC model packs — three CI lanes shipped.** Deterministic
    YAML models now prove both same-job privileged-trigger/untrusted-checkout
-   execution and cross-workflow pull-request artifact poisoning against paired
-   witnesses, including Checkout v7 protection, triggering-run binding,
-   extraction paths, cleanup, and typed-data isolation. Extend the same
-   evidence discipline to cache poisoning, reusable/composite workflows,
+   execution, cross-workflow pull-request artifact poisoning, and reusable-
+   workflow script injection against paired witnesses, including Checkout v7
+   protection, triggering-run binding, extraction paths, cleanup, typed-data
+   isolation, input identity, and expression-compilation timing. Extend the
+   same evidence discipline to current-semantics cache poisoning, nested
+   reusable workflows, composite actions,
    Docker, Kubernetes, Terraform, and cloud policy surfaces, then ask Copilot
    to evaluate deployment reachability and compensating controls.
 5. **Seed-coverage receipts.** Make imported-candidate closure a workbench

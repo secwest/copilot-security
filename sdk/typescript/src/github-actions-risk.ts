@@ -116,6 +116,45 @@ export interface GithubActionsArtifactPoisoningRecord {
   };
 }
 
+export interface GithubActionsReusableWorkflowInjectionRecord {
+  path: string;
+  line: number;
+  categories: string[];
+  priority: number;
+  startLine: number;
+  endLine: number;
+  excerpt: string;
+  sourceExcerpt: string;
+  frameworkModel: {
+    schemaVersion: "1.2";
+    id: "github-actions-reusable-workflow-script-injection";
+    language: "github-actions-yaml";
+    scope: "cross-file";
+    source: {
+      kind: "attacker-controlled-event-field-forwarding";
+      path: string;
+      line: number;
+    };
+    sink: {
+      kind: "reusable-workflow-script-interpolation";
+      path: string;
+      line: number;
+      cweIds: readonly ["CWE-094", "CWE-095", "CWE-116"];
+    };
+    propagators: Array<{
+      kind:
+        | "attacker-influenced-workflow-trigger"
+        | "local-reusable-workflow-call"
+        | "workflow-call-string-input"
+        | "workflow-expression-env-alias";
+      path: string;
+      line: number;
+      symbol: string;
+    }>;
+    candidateControls: CandidateControl[];
+  };
+}
+
 interface ParsedWorkflow {
   root: unknown;
   counter: LineCounter;
@@ -141,6 +180,27 @@ interface ActiveArtifact {
   producer: ArtifactProducer;
   downloadLine: number;
   path: string;
+}
+
+interface ReusableWorkflowCall {
+  callerPath: string;
+  callerLines: readonly string[];
+  targetPath: string;
+  callLine: number;
+  triggerLine: number;
+  eventName: string;
+  inputLine: number;
+  inputName: string;
+  sourceExpression: string;
+  controls: CandidateControl[];
+  permission?: Pair;
+  forwardedSecrets: "inherit" | Set<string>;
+}
+
+interface ScriptInterpolationSink {
+  line: number;
+  kind: "run" | "github-script";
+  envAlias?: { name: string; line: number };
 }
 
 function mapPair(node: unknown, key: string): Pair | undefined {
@@ -378,22 +438,27 @@ function permissionControl(
 ): CandidateControl | undefined {
   const permission = jobPermission ?? workflowPermission;
   if (permission === undefined) return undefined;
-  const value = permission.value;
-  const scalar = scalarText(value)?.toLowerCase();
-  const readOnly =
-    scalar === "read-all" ||
-    (isMap(value) &&
-      value.items.every((pair) => {
-        const permissionValue = scalarText(pair.value)?.toLowerCase();
-        return permissionValue === "read" || permissionValue === "none";
-      }));
-  return readOnly
+  return permissionIsReadOnly(permission)
     ? {
         kind: "explicit-read-only-token",
         path,
         line: pairLine(permission, counter),
       }
     : undefined;
+}
+
+function permissionIsReadOnly(permission: Pair | undefined): boolean {
+  if (permission === undefined) return false;
+  const value = permission.value;
+  const scalar = scalarText(value)?.toLowerCase();
+  return (
+    scalar === "read-all" ||
+    (isMap(value) &&
+      value.items.every((pair) => {
+        const permissionValue = scalarText(pair.value)?.toLowerCase();
+        return permissionValue === "read" || permissionValue === "none";
+      }))
+  );
 }
 
 function permissionAllowsWrite(permission: Pair | undefined): boolean {
@@ -618,6 +683,286 @@ function workflowRunProducerNames(
     return undefined;
   }
   return { line: pairLine(event, counter), names };
+}
+
+const ATTACKER_EVENT_FIELDS: ReadonlyArray<{
+  eventName: string;
+  fields: readonly string[];
+}> = [
+  {
+    eventName: "issue_comment",
+    fields: [
+      "github.event.comment.body",
+      "github.event.issue.title",
+      "github.event.issue.body",
+    ],
+  },
+  {
+    eventName: "issues",
+    fields: ["github.event.issue.title", "github.event.issue.body"],
+  },
+  {
+    eventName: "pull_request_target",
+    fields: [
+      "github.event.pull_request.title",
+      "github.event.pull_request.body",
+      "github.event.pull_request.head.ref",
+      "github.head_ref",
+    ],
+  },
+  {
+    eventName: "pull_request_review",
+    fields: [
+      "github.event.review.body",
+      "github.event.pull_request.title",
+      "github.event.pull_request.body",
+      "github.event.pull_request.head.ref",
+    ],
+  },
+  {
+    eventName: "pull_request_review_comment",
+    fields: [
+      "github.event.comment.body",
+      "github.event.pull_request.title",
+      "github.event.pull_request.body",
+      "github.event.pull_request.head.ref",
+    ],
+  },
+  {
+    eventName: "discussion",
+    fields: ["github.event.discussion.title", "github.event.discussion.body"],
+  },
+  {
+    eventName: "discussion_comment",
+    fields: [
+      "github.event.comment.body",
+      "github.event.discussion.title",
+      "github.event.discussion.body",
+    ],
+  },
+  {
+    eventName: "workflow_run",
+    fields: [
+      "github.event.workflow_run.head_branch",
+      "github.event.workflow_run.display_title",
+    ],
+  },
+];
+
+function exactWorkflowExpression(
+  value: string | undefined,
+): string | undefined {
+  if (value === undefined) return undefined;
+  return /^\s*\$\{\{\s*([A-Za-z0-9_.*-]+(?:\.[A-Za-z0-9_.*-]+)*)\s*\}\}\s*$/u.exec(
+    value,
+  )?.[1];
+}
+
+function attackerEventField(
+  root: unknown,
+  value: string | undefined,
+  counter: LineCounter,
+): { eventName: string; triggerLine: number; expression: string } | undefined {
+  const expression = exactWorkflowExpression(value)?.toLowerCase();
+  if (expression === undefined) return undefined;
+  for (const event of ATTACKER_EVENT_FIELDS) {
+    if (!event.fields.includes(expression)) continue;
+    const triggerLine = eventTriggerLine(root, event.eventName, counter);
+    if (triggerLine !== undefined) {
+      return { eventName: event.eventName, triggerLine, expression };
+    }
+  }
+  return undefined;
+}
+
+function localReusableWorkflowPath(
+  value: string | undefined,
+): string | undefined {
+  if (value === undefined || value.includes("${{")) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("./") || trimmed.includes("\\")) return undefined;
+  const normalized = trimmed.slice(2);
+  return /^\.github\/workflows\/[^/]+\.ya?ml$/iu.test(normalized)
+    ? normalized
+    : undefined;
+}
+
+function forwardedSecretNames(node: unknown): "inherit" | Set<string> {
+  if (scalarText(node)?.trim().toLowerCase() === "inherit") return "inherit";
+  const names = new Set<string>();
+  if (!isMap(node)) return names;
+  for (const pair of node.items) {
+    const name = scalarText(pair.key)?.trim();
+    const value = scalarText(pair.value);
+    if (
+      name !== undefined &&
+      name !== "" &&
+      /^\s*\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}\s*$/iu.test(
+        value ?? "",
+      )
+    ) {
+      names.add(name.toLowerCase());
+    }
+  }
+  return names;
+}
+
+function reusableWorkflowCalls(
+  files: readonly GithubActionsSourceFile[],
+): ReusableWorkflowCall[] {
+  const calls: ReusableWorkflowCall[] = [];
+  for (const file of files) {
+    if (!/^\.github\/workflows\/[^/]+\.ya?ml$/iu.test(file.path)) continue;
+    const parsed = parseWorkflow(file.text);
+    if (parsed === undefined) continue;
+    const jobs = mapPair(parsed.root, "jobs")?.value;
+    if (!isMap(jobs)) continue;
+    const workflowPermission = mapPair(parsed.root, "permissions");
+    for (const jobPair of jobs.items) {
+      const job = jobPair.value;
+      if (!isMap(job)) continue;
+      const usesPair = mapPair(job, "uses");
+      const targetPath = localReusableWorkflowPath(scalarText(usesPair?.value));
+      if (targetPath === undefined || targetPath === file.path) continue;
+      const inputs = mapPair(job, "with")?.value;
+      if (!isMap(inputs)) continue;
+      const jobPermission = mapPair(job, "permissions");
+      const controls = jobReviewControls(job, file.path, parsed.counter);
+      const readOnly = permissionControl(
+        workflowPermission,
+        jobPermission,
+        file.path,
+        parsed.counter,
+      );
+      if (readOnly !== undefined) controls.push(readOnly);
+      const forwardedSecrets = forwardedSecretNames(
+        mapPair(job, "secrets")?.value,
+      );
+      for (const input of inputs.items) {
+        const inputName = scalarText(input.key)?.trim();
+        if (inputName === undefined || inputName === "") continue;
+        const source = attackerEventField(
+          parsed.root,
+          scalarText(input.value),
+          parsed.counter,
+        );
+        if (source === undefined) continue;
+        calls.push({
+          callerPath: file.path,
+          callerLines: file.lines,
+          targetPath,
+          callLine: pairLine(usesPair, parsed.counter),
+          triggerLine: source.triggerLine,
+          eventName: source.eventName,
+          inputLine: pairLine(input, parsed.counter),
+          inputName,
+          sourceExpression: source.expression,
+          controls,
+          permission: jobPermission ?? workflowPermission,
+          forwardedSecrets,
+        });
+      }
+    }
+  }
+  return calls;
+}
+
+function workflowCallStringInput(
+  root: unknown,
+  inputName: string,
+  counter: LineCounter,
+): { line: number } | undefined {
+  const trigger = mapPair(root, "on");
+  const workflowCall = mapPair(trigger?.value, "workflow_call");
+  const inputs = mapPair(workflowCall?.value, "inputs")?.value;
+  const input = mapPair(inputs, inputName);
+  if (input === undefined || !isMap(input.value)) return undefined;
+  const type = scalarText(mapPair(input.value, "type")?.value)?.toLowerCase();
+  return type === "string" ? { line: pairLine(input, counter) } : undefined;
+}
+
+function inputExpressionPattern(inputName: string): RegExp {
+  const escaped = inputName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(
+    `\\$\\{\\{[^}]*\\binputs(?:\\.${escaped}(?![A-Za-z0-9_-])|\\[['\"]${escaped}['\"]\\])[^}]*\\}\\}`,
+    "iu",
+  );
+}
+
+function envExpressionPattern(name: string): RegExp {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(
+    `\\$\\{\\{[^}]*\\benv(?:\\.${escaped}(?![A-Za-z0-9_-])|\\[['\"]${escaped}['\"]\\])[^}]*\\}\\}`,
+    "iu",
+  );
+}
+
+function applyInputEnvironment(
+  inherited: ReadonlyMap<string, number>,
+  container: unknown,
+  inputName: string,
+  counter: LineCounter,
+): Map<string, number> {
+  const effective = new Map(inherited);
+  const environment = mapPair(container, "env")?.value;
+  if (!isMap(environment)) return effective;
+  const inputPattern = inputExpressionPattern(inputName);
+  for (const pair of environment.items) {
+    const name = scalarText(pair.key)?.trim();
+    if (name === undefined || name === "") continue;
+    if (inputPattern.test(scalarText(pair.value) ?? "")) {
+      effective.set(name, pairLine(pair, counter));
+    } else {
+      effective.delete(name);
+    }
+  }
+  return effective;
+}
+
+function interpolationSink(
+  step: unknown,
+  inputName: string,
+  environment: ReadonlyMap<string, number>,
+  counter: LineCounter,
+): ScriptInterpolationSink | undefined {
+  const runPair = mapPair(step, "run");
+  let scriptPair = runPair;
+  let kind: ScriptInterpolationSink["kind"] = "run";
+  if (scriptPair === undefined) {
+    const uses = scalarText(mapPair(step, "uses")?.value);
+    if (!officialAction(uses, "actions/github-script")) return undefined;
+    scriptPair = mapPair(mapPair(step, "with")?.value, "script");
+    kind = "github-script";
+  }
+  const script = scalarText(scriptPair?.value);
+  if (script === undefined) return undefined;
+  if (inputExpressionPattern(inputName).test(script)) {
+    return { line: pairLine(scriptPair, counter), kind };
+  }
+  for (const [name, line] of environment) {
+    if (envExpressionPattern(name).test(script)) {
+      return {
+        line: pairLine(scriptPair, counter),
+        kind,
+        envAlias: { name, line },
+      };
+    }
+  }
+  return undefined;
+}
+
+function forwardedSecretIsUsed(
+  forwarded: ReusableWorkflowCall["forwardedSecrets"],
+  source: string,
+): boolean {
+  if (forwarded === "inherit") return /\$\{\{\s*secrets\./iu.test(source);
+  for (const name of forwarded) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    if (new RegExp(`\\$\\{\\{\\s*secrets\\.${escaped}\\b`, "iu").test(source)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function pullRequestCheckout(
@@ -953,6 +1298,170 @@ export function githubActionsArtifactPoisoningRecords(
             },
           });
         }
+      }
+    }
+  }
+  return records;
+}
+
+export function githubActionsReusableWorkflowInjectionRecords(
+  files: readonly GithubActionsSourceFile[],
+): GithubActionsReusableWorkflowInjectionRecord[] {
+  const calls = reusableWorkflowCalls(files);
+  if (calls.length === 0) return [];
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const records: GithubActionsReusableWorkflowInjectionRecord[] = [];
+
+  for (const call of calls) {
+    const calledFile = filesByPath.get(call.targetPath);
+    if (calledFile === undefined) continue;
+    const parsed = parseWorkflow(calledFile.text);
+    if (parsed === undefined) continue;
+    const input = workflowCallStringInput(
+      parsed.root,
+      call.inputName,
+      parsed.counter,
+    );
+    const jobs = mapPair(parsed.root, "jobs")?.value;
+    if (input === undefined || !isMap(jobs)) continue;
+
+    const workflowPermission = mapPair(parsed.root, "permissions");
+    const workflowEnvironment = applyInputEnvironment(
+      new Map<string, number>(),
+      parsed.root,
+      call.inputName,
+      parsed.counter,
+    );
+    const workflowEnvironmentText = nodeText(
+      mapPair(parsed.root, "env")?.value,
+      calledFile.text,
+    );
+
+    for (const jobPair of jobs.items) {
+      const job = jobPair.value;
+      const steps = mapPair(job, "steps")?.value;
+      if (!isMap(job) || !isSeq(steps)) continue;
+      const jobPermission = mapPair(job, "permissions");
+      const calledPermission = jobPermission ?? workflowPermission;
+      const controls = [
+        ...call.controls,
+        ...jobReviewControls(job, calledFile.path, parsed.counter),
+      ];
+      const calledReadOnly = permissionControl(
+        workflowPermission,
+        jobPermission,
+        calledFile.path,
+        parsed.counter,
+      );
+      if (calledReadOnly !== undefined) controls.push(calledReadOnly);
+
+      const rawJob = nodeText(job, calledFile.text);
+      const categories = ["github-actions-reusable-workflow-script-injection"];
+      if (
+        forwardedSecretIsUsed(
+          call.forwardedSecrets,
+          `${workflowEnvironmentText}\n${rawJob}`,
+        )
+      ) {
+        categories.push("github-actions-explicit-secret-access");
+      }
+      if (
+        !permissionIsReadOnly(call.permission) &&
+        !permissionIsReadOnly(calledPermission) &&
+        (permissionAllowsWrite(call.permission) ||
+          permissionAllowsWrite(calledPermission))
+      ) {
+        categories.push("github-actions-write-token-permission");
+      }
+
+      const jobEnvironment = applyInputEnvironment(
+        workflowEnvironment,
+        job,
+        call.inputName,
+        parsed.counter,
+      );
+      for (const step of steps.items) {
+        const stepEnvironment = applyInputEnvironment(
+          jobEnvironment,
+          step,
+          call.inputName,
+          parsed.counter,
+        );
+        const sink = interpolationSink(
+          step,
+          call.inputName,
+          stepEnvironment,
+          parsed.counter,
+        );
+        if (sink === undefined) continue;
+
+        const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
+        const endLine = Math.min(
+          calledFile.lines.length,
+          sink.line + CONTEXT_LINES_AFTER,
+        );
+        const sourceStart = Math.max(1, call.inputLine - 4);
+        const sourceEnd = Math.min(call.callerLines.length, call.inputLine + 3);
+        const propagators: GithubActionsReusableWorkflowInjectionRecord["frameworkModel"]["propagators"] =
+          [
+            {
+              kind: "attacker-influenced-workflow-trigger",
+              path: call.callerPath,
+              line: call.triggerLine,
+              symbol: `event=${call.eventName}`,
+            },
+            {
+              kind: "local-reusable-workflow-call",
+              path: call.callerPath,
+              line: call.callLine,
+              symbol: `workflow=${call.targetPath}`,
+            },
+            {
+              kind: "workflow-call-string-input",
+              path: calledFile.path,
+              line: input.line,
+              symbol: `input=${call.inputName}`,
+            },
+          ];
+        if (sink.envAlias !== undefined) {
+          propagators.push({
+            kind: "workflow-expression-env-alias",
+            path: calledFile.path,
+            line: sink.envAlias.line,
+            symbol: `input=${call.inputName};env=${sink.envAlias.name}`,
+          });
+        }
+        records.push({
+          path: calledFile.path,
+          line: sink.line,
+          categories: [...categories],
+          priority: 135,
+          startLine,
+          endLine,
+          excerpt: calledFile.lines.slice(startLine - 1, endLine).join("\n"),
+          sourceExcerpt: call.callerLines
+            .slice(sourceStart - 1, sourceEnd)
+            .join("\n"),
+          frameworkModel: {
+            schemaVersion: "1.2",
+            id: "github-actions-reusable-workflow-script-injection",
+            language: "github-actions-yaml",
+            scope: "cross-file",
+            source: {
+              kind: "attacker-controlled-event-field-forwarding",
+              path: call.callerPath,
+              line: call.inputLine,
+            },
+            sink: {
+              kind: "reusable-workflow-script-interpolation",
+              path: calledFile.path,
+              line: sink.line,
+              cweIds: ["CWE-094", "CWE-095", "CWE-116"],
+            },
+            propagators,
+            candidateControls: distinctControls(controls),
+          },
+        });
       }
     }
   }
