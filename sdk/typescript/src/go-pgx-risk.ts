@@ -13,6 +13,7 @@ import {
   maskGoLines,
   referencedTaint,
   requestSource,
+  splitGoArguments,
   type GoCall,
   type GoFunction,
   type GoHttpSourceFile,
@@ -46,7 +47,8 @@ export interface GoPgxSqlInjectionRecord {
       kind:
         | "go-pgx-query-text"
         | "go-pgx-prepared-query-execution"
-        | "go-pgx-batch-query-dispatch";
+        | "go-pgx-batch-query-dispatch"
+        | "go-pgx-query-rewriter-dispatch";
       path: string;
       line: number;
       cweIds: readonly ["CWE-89"];
@@ -70,10 +72,12 @@ interface PgxSink {
   kind:
     | "go-pgx-query-text"
     | "go-pgx-prepared-query-execution"
-    | "go-pgx-batch-query-dispatch";
+    | "go-pgx-batch-query-dispatch"
+    | "go-pgx-query-rewriter-dispatch";
   line: number;
   source: GoTaint;
   controls: Array<{ kind: string; line: number }>;
+  supportingPath?: string;
 }
 
 interface PgxPropagator extends GoPropagator {
@@ -88,6 +92,7 @@ interface PreparedQuery {
 interface PendingBatchQuery {
   source?: GoTaint;
   preparedName?: string;
+  supportingPath?: string;
   line: number;
   controls: Array<{ kind: string; line: number }>;
 }
@@ -100,6 +105,33 @@ interface WrapperSummary {
   parameterIndex: number;
   parameterLine: number;
   sink: PgxSink;
+}
+
+interface QueryRewriterReturnFlow {
+  fieldName: string;
+  line: number;
+  propagators: PgxPropagator[];
+}
+
+interface QueryRewriterSummary {
+  directory: string;
+  packageName: string;
+  typeName: string;
+  pointerReceiver: boolean;
+  methodFile: GoHttpSourceFile;
+  inputSqlFlow?: { line: number; propagators: PgxPropagator[] };
+  returnFlows: ReadonlyMap<string, QueryRewriterReturnFlow>;
+}
+
+interface QueryRewriterInstance {
+  summary: QueryRewriterSummary;
+  isPointer: boolean;
+  fieldSources: Map<string, { source: GoTaint; line: number }>;
+}
+
+interface ResolvedQueryRewriter {
+  instance: QueryRewriterInstance;
+  source?: GoTaint;
 }
 
 function pgxAliases(function_: GoFunction): PgxAliases {
@@ -279,14 +311,471 @@ function normalizeBatchArgument(
   )?.[1];
 }
 
+function normalizedGoType(value: string): string {
+  return value.replace(/\s+/gu, "");
+}
+
+function exactQueryRewriterSignature(
+  function_: GoFunction,
+  pgxAlias: string,
+  contextAlias: string,
+): boolean {
+  if (function_.parameters.length !== 4) return false;
+  const actual = function_.parameters.map((parameter) =>
+    normalizedGoType(parameter.type),
+  );
+  const expected = [`${contextAlias}.Context`, `*${pgxAlias}.Conn`, "string"];
+  if (
+    actual.slice(0, 3).some((type, index) => type !== expected[index]) ||
+    !/^(?:\[\]any|\[\]interface\{\})$/u.test(actual[3] ?? "")
+  ) {
+    return false;
+  }
+  return /^\(\s*(?:[A-Za-z_]\w*\s+)?string\s*,\s*(?:[A-Za-z_]\w*\s+)?\[\s*\](?:any|interface\s*\{\s*\})\s*,\s*(?:[A-Za-z_]\w*\s+)?error\s*\)$/u.test(
+    function_.returnSignature,
+  );
+}
+
+function structFieldsByType(
+  files: readonly GoHttpSourceFile[],
+): Map<string, { count: number; fields: Set<string> }> {
+  const result = new Map<string, { count: number; fields: Set<string> }>();
+  for (const file of files.filter(
+    (candidate) => candidate.extension === ".go",
+  )) {
+    const structural = maskGoLines(file.lines, true).join("\n");
+    const package_ = /^\s*package\s+([A-Za-z_]\w*)\b/mu.exec(structural)?.[1];
+    if (package_ === undefined) continue;
+    for (const match of structural.matchAll(
+      /\btype\s+([A-Za-z_]\w*)\s+struct\s*\{([\s\S]*?)\}/gu,
+    )) {
+      const key = `${posix.dirname(file.path)}\0${package_}\0${match[1]!}`;
+      const fields = new Set<string>();
+      for (const line of match[2]!.split("\n")) {
+        const field = /^\s*([A-Za-z_]\w*)\s+[^\s}]/u.exec(line)?.[1];
+        if (field !== undefined) fields.add(field);
+      }
+      const existing = result.get(key);
+      result.set(key, {
+        count: (existing?.count ?? 0) + 1,
+        fields: new Set([...(existing?.fields ?? []), ...fields]),
+      });
+    }
+  }
+  return result;
+}
+
+function returnValues(
+  lines: readonly string[],
+  startLine: number,
+  endLine: number,
+): string[] | undefined {
+  let value = "";
+  for (
+    let line = startLine;
+    line <= Math.min(endLine, startLine + 15);
+    line += 1
+  ) {
+    const current = lines[line - 1] ?? "";
+    if (line === startLine) {
+      const match = /\breturn\s+([\s\S]+)$/u.exec(current);
+      if (match === null) return undefined;
+      value = match[1]!;
+    } else {
+      value += `\n${current}`;
+    }
+    const normalized = value
+      .replace(/\s*;\s*$/u, "")
+      .replace(/\s*\}\s*$/u, "")
+      .trim();
+    const values = splitGoArguments(normalized);
+    if (values.length === 3) return values;
+  }
+  return undefined;
+}
+
+function firstReturnedSqlExpression(
+  function_: GoFunction,
+  line: number,
+): string | undefined {
+  const values = returnValues(
+    function_.structuralLines,
+    line,
+    function_.endLine,
+  );
+  if (values !== undefined) return values[0];
+  const structural = function_.structuralLines[line - 1] ?? "";
+  if (!/\breturn\s*(?:;|\}|$)/u.test(structural)) return undefined;
+  return /^\(\s*([A-Za-z_]\w*)\s+string\b/u.exec(
+    function_.returnSignature,
+  )?.[1];
+}
+
+function queryRewriterReturnFlows(
+  function_: GoFunction,
+  receiverName: string,
+  fields: ReadonlySet<string>,
+): Map<string, QueryRewriterReturnFlow> {
+  const flows = new Map<string, QueryRewriterReturnFlow>();
+  const rawLines = maskGoLines(function_.file.lines, false);
+  for (const fieldName of fields) {
+    const receiverField = `${receiverName}.${fieldName}`;
+    const taints = new Map<string, GoTaint>([
+      [
+        receiverField,
+        {
+          kind: "go-query-rewriter-field",
+          line: function_.startLine,
+          propagators: [
+            {
+              kind: "go-pgx-query-rewriter-receiver-field",
+              line: function_.startLine,
+              symbol: `${function_.receiver}.${fieldName}`,
+              path: function_.file.path,
+            } as PgxPropagator,
+          ],
+        },
+      ],
+    ]);
+    for (
+      let line = function_.bodyStartLine;
+      line <= function_.endLine;
+      line += 1
+    ) {
+      const structural = function_.structuralLines[line - 1] ?? "";
+      const raw = rawLines[line - 1] ?? "";
+      const assigned = goAssignment(structural) ?? goAssignment(raw);
+      if (assigned !== undefined) {
+        const prior = referencedTaint(assigned.value, taints);
+        for (const name of assigned.names) {
+          taints.delete(name);
+          if (name === receiverName) {
+            for (const key of [...taints.keys()]) {
+              if (key.startsWith(`${receiverName}.`)) taints.delete(key);
+            }
+          }
+        }
+        if (prior !== undefined) {
+          taints.set(assigned.names[0]!, {
+            ...prior.taint,
+            propagators: [
+              ...prior.taint.propagators,
+              {
+                kind: "go-string-assignment",
+                line,
+                symbol: assigned.names[0]!,
+                path: function_.file.path,
+              } as PgxPropagator,
+            ],
+          });
+        }
+      }
+      if (
+        new RegExp(
+          `^\\s*${escapeRegularExpression(receiverField)}\\s*=`,
+          "u",
+        ).test(structural)
+      ) {
+        taints.delete(receiverField);
+      }
+      const returnedSql = firstReturnedSqlExpression(function_, line);
+      if (returnedSql === undefined) continue;
+      const returned = referencedTaint(returnedSql, taints);
+      if (returned === undefined) continue;
+      flows.set(fieldName, {
+        fieldName,
+        line,
+        propagators: [
+          ...(returned.taint.propagators as PgxPropagator[]),
+          {
+            kind: "go-pgx-query-rewriter-returned-sql",
+            line,
+            symbol: returnedSql.trim(),
+            path: function_.file.path,
+          },
+        ],
+      });
+      break;
+    }
+  }
+  return flows;
+}
+
+function queryRewriterInputSqlFlow(
+  function_: GoFunction,
+): { line: number; propagators: PgxPropagator[] } | undefined {
+  const inputName = function_.parameters[2]?.name;
+  if (inputName === undefined || inputName === "_") return undefined;
+  const taints = new Map<string, GoTaint>([
+    [
+      inputName,
+      {
+        kind: "go-query-rewriter-input-sql",
+        line: function_.startLine,
+        propagators: [
+          {
+            kind: "go-pgx-query-rewriter-input-sql",
+            line: function_.startLine,
+            symbol: inputName,
+            path: function_.file.path,
+          } as PgxPropagator,
+        ],
+      },
+    ],
+  ]);
+  const rawLines = maskGoLines(function_.file.lines, false);
+  for (
+    let line = function_.bodyStartLine;
+    line <= function_.endLine;
+    line += 1
+  ) {
+    const structural = function_.structuralLines[line - 1] ?? "";
+    const raw = rawLines[line - 1] ?? "";
+    const assigned = goAssignment(structural) ?? goAssignment(raw);
+    if (assigned !== undefined) {
+      const prior = referencedTaint(assigned.value, taints);
+      for (const name of assigned.names) taints.delete(name);
+      if (prior !== undefined) {
+        taints.set(assigned.names[0]!, {
+          ...prior.taint,
+          propagators: [
+            ...prior.taint.propagators,
+            {
+              kind: "go-string-assignment",
+              line,
+              symbol: assigned.names[0]!,
+              path: function_.file.path,
+            } as PgxPropagator,
+          ],
+        });
+      }
+    }
+    const returnedSql = firstReturnedSqlExpression(function_, line);
+    if (returnedSql === undefined) continue;
+    const returned = referencedTaint(returnedSql, taints);
+    if (returned === undefined) continue;
+    return {
+      line,
+      propagators: [
+        ...(returned.taint.propagators as PgxPropagator[]),
+        {
+          kind: "go-pgx-query-rewriter-returned-sql",
+          line,
+          symbol: returnedSql.trim(),
+          path: function_.file.path,
+        },
+      ],
+    };
+  }
+  return undefined;
+}
+
+function queryRewriterSummaries(
+  files: readonly GoHttpSourceFile[],
+  functions: readonly GoFunction[],
+): QueryRewriterSummary[] {
+  const structs = structFieldsByType(files);
+  const candidates = new Map<string, QueryRewriterSummary[]>();
+  for (const function_ of functions) {
+    if (function_.name !== "RewriteQuery" || function_.receiver === undefined) {
+      continue;
+    }
+    const receiver =
+      /^\(\s*([A-Za-z_]\w*)\s+(\*)?\s*([A-Za-z_]\w*)\s*\)$/u.exec(
+        function_.receiver,
+      );
+    if (receiver === null) continue;
+    const pgxAlias = goImportAlias(function_.file.lines, PGX_IMPORT, "pgx");
+    const contextAlias = goImportAlias(
+      function_.file.lines,
+      "context",
+      "context",
+    );
+    if (
+      pgxAlias === undefined ||
+      contextAlias === undefined ||
+      !exactQueryRewriterSignature(function_, pgxAlias, contextAlias)
+    ) {
+      continue;
+    }
+    const directory = posix.dirname(function_.file.path);
+    const typeName = receiver[3]!;
+    const key = `${directory}\0${function_.packageName}\0${typeName}`;
+    const struct = structs.get(key);
+    if (struct?.count !== 1) continue;
+    const returnFlows = queryRewriterReturnFlows(
+      function_,
+      receiver[1]!,
+      struct.fields,
+    );
+    const inputSqlFlow = queryRewriterInputSqlFlow(function_);
+    const summary: QueryRewriterSummary = {
+      directory,
+      packageName: function_.packageName,
+      typeName,
+      pointerReceiver: receiver[2] === "*",
+      methodFile: function_.file,
+      ...(inputSqlFlow === undefined ? {} : { inputSqlFlow }),
+      returnFlows,
+    };
+    const existing = candidates.get(key) ?? [];
+    existing.push(summary);
+    candidates.set(key, existing);
+  }
+  return [...candidates.values()]
+    .filter((items) => items.length === 1)
+    .map((items) => items[0]!);
+}
+
+function localQueryRewriters(
+  function_: GoFunction,
+  summaries: readonly QueryRewriterSummary[],
+): Map<string, QueryRewriterSummary> {
+  const result = new Map<string, QueryRewriterSummary>();
+  for (const summary of summaries) {
+    if (
+      summary.directory === posix.dirname(function_.file.path) &&
+      summary.packageName === function_.packageName
+    ) {
+      result.set(summary.typeName, summary);
+    }
+  }
+  return result;
+}
+
+function cloneQueryRewriterInstance(
+  instance: QueryRewriterInstance,
+  isPointer = instance.isPointer,
+): QueryRewriterInstance {
+  return {
+    summary: instance.summary,
+    isPointer,
+    fieldSources: new Map(instance.fieldSources),
+  };
+}
+
+function queryRewriterComposite(
+  expression: string,
+  local: ReadonlyMap<string, QueryRewriterSummary>,
+  requests: readonly string[],
+  taints: ReadonlyMap<string, GoTaint>,
+  line: number,
+): QueryRewriterInstance | undefined {
+  const composite = /^\s*(&)?\s*([A-Za-z_]\w*)\s*\{([\s\S]*)\}\s*$/u.exec(
+    expression,
+  );
+  if (composite === null) return undefined;
+  const summary = local.get(composite[2]!);
+  if (summary === undefined) return undefined;
+  const instance: QueryRewriterInstance = {
+    summary,
+    isPointer: composite[1] === "&",
+    fieldSources: new Map(),
+  };
+  for (const entry of splitGoArguments(composite[3]!)) {
+    const field = /^\s*([A-Za-z_]\w*)\s*:\s*([\s\S]+)$/u.exec(entry);
+    if (field === null || !summary.returnFlows.has(field[1]!)) continue;
+    const source =
+      requestSource(field[2]!, requests, line) ??
+      referencedTaint(field[2]!, taints)?.taint;
+    if (source !== undefined) {
+      instance.fieldSources.set(field[1]!, { source, line });
+    }
+  }
+  return instance;
+}
+
+function queryRewriterVariable(
+  expression: string,
+  instances: ReadonlyMap<string, QueryRewriterInstance>,
+): QueryRewriterInstance | undefined {
+  const reference = /^\s*(&)?\s*([A-Za-z_]\w*)\s*$/u.exec(expression);
+  if (reference === null) return undefined;
+  const instance = instances.get(reference[2]!);
+  if (instance === undefined) return undefined;
+  return cloneQueryRewriterInstance(
+    instance,
+    reference[1] === "&" || instance.isPointer,
+  );
+}
+
+function resolvedQueryRewriter(
+  instance: QueryRewriterInstance,
+): ResolvedQueryRewriter | undefined {
+  if (instance.summary.pointerReceiver && !instance.isPointer) return undefined;
+  for (const [fieldName, fieldSource] of instance.fieldSources) {
+    const flow = instance.summary.returnFlows.get(fieldName);
+    if (flow === undefined) continue;
+    return {
+      instance,
+      source: {
+        ...fieldSource.source,
+        propagators: [
+          ...fieldSource.source.propagators,
+          {
+            kind: "go-pgx-query-rewriter-field-construction",
+            line: fieldSource.line,
+            symbol: `${instance.summary.typeName}.${fieldName}`,
+          },
+          ...flow.propagators,
+        ],
+      },
+    };
+  }
+  return { instance };
+}
+
+function rewrittenInputSqlSource(
+  rewriter: ResolvedQueryRewriter | undefined,
+  source: GoTaint | undefined,
+): GoTaint | undefined {
+  const flow = rewriter?.instance.summary.inputSqlFlow;
+  if (flow === undefined || source === undefined) return undefined;
+  return {
+    ...source,
+    propagators: [...source.propagators, ...flow.propagators],
+  };
+}
+
+function queryOptionArgument(expression: string, aliases: PgxAliases): boolean {
+  if (aliases.pgx === undefined) return false;
+  return new RegExp(
+    `^\\s*${escapeRegularExpression(aliases.pgx)}\\.(?:QueryExecMode[A-Za-z_]*|QueryResultFormats(?:ByOID)?)\\b`,
+    "u",
+  ).test(expression);
+}
+
+function queryRewriterAtCall(
+  call: GoCall,
+  start: number,
+  aliases: PgxAliases,
+  local: ReadonlyMap<string, QueryRewriterSummary>,
+  instances: ReadonlyMap<string, QueryRewriterInstance>,
+  requests: readonly string[],
+  taints: ReadonlyMap<string, GoTaint>,
+  allowOptions: boolean,
+): ResolvedQueryRewriter | undefined {
+  for (let index = start; index < call.arguments.length; index += 1) {
+    const expression = call.rawArguments[index] ?? call.arguments[index]!;
+    const instance =
+      queryRewriterComposite(expression, local, requests, taints, call.line) ??
+      queryRewriterVariable(expression, instances);
+    if (instance !== undefined) return resolvedQueryRewriter(instance);
+    if (!allowOptions || !queryOptionArgument(expression, aliases)) break;
+  }
+  return undefined;
+}
+
 function analyzeFunction(
   function_: GoFunction,
   initialTaints: ReadonlyMap<string, GoTaint> = new Map(),
+  rewriterSummaries: readonly QueryRewriterSummary[] = [],
 ): PgxSink[] {
   const aliases = pgxAliases(function_);
   const specifications = receiverSpecifications(aliases);
   if (specifications.length === 0) return [];
   const requests = goHttpRequestParameters(function_);
+  const localRewriters = localQueryRewriters(function_, rewriterSummaries);
   const staticReceivers = goTypedReceiverNames(function_, specifications);
   const batchSpecifications: GoReceiverTypeSpecification[] =
     aliases.pgx === undefined
@@ -299,6 +788,7 @@ function analyzeFunction(
   const fixedStrings = new Map<string, string>();
   const preparedQueries = new Map<string, PreparedQuery>();
   const pendingBatches = new Map<string, PendingBatchQuery[]>();
+  const rewriterInstances = new Map<string, QueryRewriterInstance>();
   const maps = fixedMapNames(function_);
   const controls = functionControls(function_, aliases);
   const rawLines = maskGoLines(function_.file.lines, false);
@@ -333,15 +823,25 @@ function analyzeFunction(
     if (assignedNames.length > 0) {
       const primary = assignedNames[0]!;
       const value = assigned?.value ?? rawAssigned?.value ?? "";
+      const rawValue = rawAssigned?.value ?? value;
       const source = requestSource(value, requests, line);
       const prior = referencedTaint(value, taints);
       const fixedSelection = fixedMapSelection(value, maps, taints);
+      const priorRewriter = queryRewriterVariable(rawValue, rewriterInstances);
+      const compositeRewriter = queryRewriterComposite(
+        rawValue,
+        localRewriters,
+        requests,
+        taints,
+        line,
+      );
       for (const name of assignedNames) {
         taints.delete(name);
         fixedStrings.delete(name);
         inferredReceivers.delete(name);
         inferredBatches.delete(name);
         pendingBatches.delete(name);
+        rewriterInstances.delete(name);
         clearPreparedReceiver(name);
       }
       if (!fixedSelection && source !== undefined) {
@@ -363,6 +863,43 @@ function analyzeFunction(
         ).test(value)
       ) {
         inferredBatches.add(primary);
+      }
+      const rewriter = compositeRewriter ?? priorRewriter;
+      if (rewriter !== undefined) {
+        rewriterInstances.set(primary, rewriter);
+      }
+    }
+    const rewriterDeclaration = new RegExp(
+      `^\\s*var\\s+([A-Za-z_]\\w*)\\s+(\\*)?(${[...localRewriters.keys()]
+        .map(escapeRegularExpression)
+        .join("|")})\\s*;?\\s*$`,
+      "u",
+    ).exec(structural);
+    if (localRewriters.size > 0 && rewriterDeclaration !== null) {
+      const summary = localRewriters.get(rewriterDeclaration[3]!);
+      if (summary !== undefined) {
+        rewriterInstances.set(rewriterDeclaration[1]!, {
+          summary,
+          isPointer: rewriterDeclaration[2] === "*",
+          fieldSources: new Map(),
+        });
+      }
+    }
+    const fieldAssignment =
+      /^\s*([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*=\s*([\s\S]+?)\s*;?\s*$/u.exec(raw);
+    if (fieldAssignment !== null) {
+      const instance = rewriterInstances.get(fieldAssignment[1]!);
+      if (
+        instance !== undefined &&
+        instance.summary.returnFlows.has(fieldAssignment[2]!)
+      ) {
+        instance.fieldSources.delete(fieldAssignment[2]!);
+        const source =
+          requestSource(fieldAssignment[3]!, requests, line) ??
+          referencedTaint(fieldAssignment[3]!, taints)?.taint;
+        if (source !== undefined) {
+          instance.fieldSources.set(fieldAssignment[2]!, { source, line });
+        }
       }
     }
     const fixed = fixedStringAssignment(raw);
@@ -395,19 +932,41 @@ function analyzeFunction(
 
       if (batchIsTyped(receiver) && method === "Queue") {
         const query = call.arguments[0];
-        const source =
+        const rewriter = queryRewriterAtCall(
+          call,
+          1,
+          aliases,
+          localRewriters,
+          rewriterInstances,
+          requests,
+          taints,
+          false,
+        );
+        const directSource =
           query === undefined
             ? undefined
             : requestSource(query, requests, line) ??
               referencedTaint(query, taints)?.taint;
+        const source =
+          rewriter?.source ??
+          rewrittenInputSqlSource(rewriter, directSource) ??
+          (rewriter === undefined ? directSource : undefined);
         const preparedName = fixedStringKey(call.rawArguments[0], fixedStrings);
         if (source !== undefined || preparedName !== undefined) {
           const queued = pendingBatches.get(receiver) ?? [];
           queued.push({
             ...(source === undefined ? {} : { source }),
             ...(preparedName === undefined ? {} : { preparedName }),
+            ...(rewriter?.instance.summary.methodFile.path === undefined
+              ? {}
+              : {
+                  supportingPath: rewriter.instance.summary.methodFile.path,
+                }),
             line,
-            controls: queryControls(controls, call, 0, aliases),
+            controls:
+              rewriter === undefined
+                ? queryControls(controls, call, 0, aliases)
+                : controls,
           });
           pendingBatches.set(receiver, queued);
         }
@@ -449,6 +1008,9 @@ function analyzeFunction(
                   ) === index,
               )
               .slice(0, 8),
+            ...(pending.supportingPath === undefined
+              ? {}
+              : { supportingPath: pending.supportingPath }),
           });
         }
         continue;
@@ -484,6 +1046,33 @@ function analyzeFunction(
       if (!/^(?:Exec|Query|QueryRow)$/u.test(method)) continue;
       const query = call.arguments[1];
       if (query === undefined) continue;
+      const rewriter = queryRewriterAtCall(
+        call,
+        2,
+        aliases,
+        localRewriters,
+        rewriterInstances,
+        requests,
+        taints,
+        true,
+      );
+      if (rewriter !== undefined) {
+        const inputSource =
+          requestSource(query, requests, line) ??
+          referencedTaint(query, taints)?.taint;
+        const rewrittenSource =
+          rewriter.source ?? rewrittenInputSqlSource(rewriter, inputSource);
+        if (rewrittenSource !== undefined) {
+          sinks.push({
+            kind: "go-pgx-query-rewriter-dispatch",
+            line,
+            source: rewrittenSource,
+            controls,
+            supportingPath: rewriter.instance.summary.methodFile.path,
+          });
+        }
+        continue;
+      }
       const directSource =
         requestSource(query, requests, line) ??
         referencedTaint(query, taints)?.taint;
@@ -625,12 +1214,17 @@ export function goPgxSqlInjectionRecords(
   const functions = files
     .filter((file) => file.extension === ".go")
     .flatMap(goFunctions);
+  const rewriterSummaries = queryRewriterSummaries(files, functions);
   const records: GoPgxSqlInjectionRecord[] = [];
   const emitted = new Set<string>();
 
   for (const function_ of functions) {
     if (goHttpRequestParameters(function_).length === 0) continue;
-    for (const sink of analyzeFunction(function_)) {
+    for (const sink of analyzeFunction(
+      function_,
+      new Map(),
+      rewriterSummaries,
+    )) {
       const identity = `${function_.file.path}:${sink.line}:${sink.kind}:${sink.source.line}:${sink.source.propagators
         .map((propagator) => `${propagator.kind}:${propagator.line}`)
         .join(",")}`;
@@ -640,7 +1234,10 @@ export function goPgxSqlInjectionRecords(
         record(
           function_.file,
           function_.file,
-          "same-file",
+          sink.supportingPath !== undefined &&
+            sink.supportingPath !== function_.file.path
+            ? "cross-file-wrapper"
+            : "same-file",
           sink.source,
           sink,
           sink.source.propagators,
@@ -665,7 +1262,11 @@ export function goPgxSqlInjectionRecords(
           },
         ],
       ]);
-      for (const sink of analyzeFunction(function_, initial)) {
+      for (const sink of analyzeFunction(
+        function_,
+        initial,
+        rewriterSummaries,
+      )) {
         summaries.push({
           file: function_.file,
           packageName: function_.packageName,

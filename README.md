@@ -722,9 +722,14 @@ The pgx lane separately requires exact `github.com/jackc/pgx/v5` or
 direct operations preserve context, SQL text, and later values/options at
 their documented positions. Manual preparation closes only through the same
 receiver and a fixed statement name; `Batch.Queue` closes only when the exact
-typed batch reaches `SendBatch`. The matched offline modules use the exact pgx
-v5 module path and an API-compatible deterministic witness so the exploit and
-`$1` control run without PostgreSQL or dependency downloads:
+typed batch reaches `SendBatch`. Custom `QueryRewriter` implementations are
+resolved only through the exact interface signature and one local struct type.
+The model follows request-derived receiver fields into the first returned SQL
+value across `Exec`, `Query`, `QueryRow`, and dispatched batches, while a fixed
+first return with the same data only in returned arguments is rejected. The
+matched offline modules use the exact pgx v5 module path and API-compatible
+deterministic witnesses so both direct and rewriter exploit/control pairs run
+without PostgreSQL or dependency downloads:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -737,6 +742,12 @@ Push-Location benchmarks\fixtures\go-cross-file-pgx-sqli
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-pgx
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-pgx-query-rewriter-sqli
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-pgx-query-rewriter
 go test ./...
 Pop-Location
 ```

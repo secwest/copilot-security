@@ -502,12 +502,16 @@ Pop-Location
 
 The pgx v5 lane adds exact `pgx` and `pgxpool` import and receiver identity,
 context/SQL/value argument roles, fixed prepared-name execution, and typed
-batch queue-to-`SendBatch` closure. It rejects later `$1` values, named and
-struct argument rewriters, inert preparation, undispatched or replaced
-batches, v4/fork/lookalike imports, and untyped methods. The paired fixtures
-use an offline module replacement under the exact public pgx v5 path and a
-minimal API-compatible witness. This preserves deterministic exploit/control
-behavior without claiming that the witness is the PostgreSQL wire protocol:
+batch queue-to-`SendBatch` closure. It separately resolves exact local custom
+`QueryRewriter` types, follows request-derived receiver fields and preserved
+input SQL into the first returned value, and preserves that rewrite through
+direct or batched dispatch. It rejects taint confined to returned arguments,
+later `$1` values, built-in named/struct value rewriters, inert preparation,
+undispatched or replaced batches, ambiguous methods, v4/fork/lookalike imports,
+and untyped methods. The four fixtures use offline module replacements under
+the exact public pgx v5 path and minimal API-compatible witnesses. This
+preserves deterministic direct-query and custom-rewriter exploit/control
+behavior without claiming that the witnesses are the PostgreSQL wire protocol:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -525,6 +529,12 @@ Push-Location fixtures\go-cross-file-pgx-sqli
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-pgx
+go test ./...
+Pop-Location
+Push-Location fixtures\go-pgx-query-rewriter-sqli
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-pgx-query-rewriter
 go test ./...
 Pop-Location
 ```

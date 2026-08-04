@@ -52,9 +52,12 @@ The package is ESM-only and provides:
   A separate pgx v5 model requires exact `pgx` or `pgxpool` imports and typed
   Conn, Tx, or Pool receivers. It preserves the context/SQL/value split,
   follows fixed prepared names on the same receiver, and reports queued SQL
-  only after the same typed batch reaches `SendBatch`. Pgx v4 and import
-  lookalikes, later bound values and named/struct rewriters, inert preparation,
-  and undispatched or reassigned batches are rejected.
+  only after the same typed batch reaches `SendBatch`. It also resolves one
+  exact local custom `QueryRewriter`, tracks receiver fields or preserved input
+  SQL into the first returned value, and carries queued rewrites through
+  `SendBatch`; taint confined to the returned argument slice stays data. Pgx v4
+  and import lookalikes, later bound values, ambiguous or inexact rewriters,
+  inert preparation, and undispatched or reassigned batches are rejected.
   A separate low-level pgconn model proves exact `PgConn`, `Batch`, `Pipeline`,
   and `StatementDescription` identities. It preserves raw, extended-protocol,
   and COPY SQL positions; requires prepared execution, `ExecBatch`, `Flush`, or

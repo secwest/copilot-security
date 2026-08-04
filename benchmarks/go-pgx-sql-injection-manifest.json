@@ -36,6 +36,28 @@
       "id": "go-cross-file-safe-pgx",
       "fixture": "fixtures/go-cross-file-safe-pgx",
       "expected": []
+    },
+    {
+      "id": "go-pgx-query-rewriter-sqli",
+      "fixture": "fixtures/go-pgx-query-rewriter-sqli",
+      "expected": [
+        {
+          "title": "Custom pgx QueryRewriter formats a request field into returned SQL",
+          "cwe": ["CWE-89"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "handler.go",
+          "line": 12,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-file-safe-pgx-query-rewriter",
+      "fixture": "fixtures/go-cross-file-safe-pgx-query-rewriter",
+      "expected": []
     }
   ]
 }

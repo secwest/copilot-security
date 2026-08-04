@@ -42,7 +42,12 @@ interface BenchmarkManifest {
 }
 
 const benchmarkRoot = resolve(process.cwd(), "..", "..", "benchmarks");
-const caseIds = ["go-cross-file-pgx-sqli", "go-cross-file-safe-pgx"] as const;
+const caseIds = [
+  "go-cross-file-pgx-sqli",
+  "go-cross-file-safe-pgx",
+  "go-pgx-query-rewriter-sqli",
+  "go-cross-file-safe-pgx-query-rewriter",
+] as const;
 const temporaryPaths: string[] = [];
 
 afterEach(async () => {
@@ -144,6 +149,46 @@ describe("Go pgx/v5 SQL-injection framework-model benchmark", () => {
       requireCodeEvidence: true,
     });
     expect(manifest.cases[1]?.expected).toEqual([]);
+    expect(manifest.cases[2]?.expected[0]).toMatchObject({
+      cwe: ["CWE-89"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[3]?.expected).toEqual([]);
+  });
+
+  test("preserves the exact custom-rewriter exploit and returned-argument control", async () => {
+    const vulnerable = models(await fixtureInventory(caseIds[2]));
+    const safe = models(await fixtureInventory(caseIds[3]));
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "handler.go",
+      line: 12,
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: {
+          kind: "go-http-form-value",
+          path: "handler.go",
+          line: 11,
+        },
+        sink: {
+          kind: "go-pgx-query-rewriter-dispatch",
+          path: "handler.go",
+          line: 12,
+          cweIds: ["CWE-89"],
+        },
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "go-pgx-query-rewriter-field-construction",
+      "go-pgx-query-rewriter-receiver-field",
+      "go-string-assignment",
+      "go-pgx-query-rewriter-returned-sql",
+    ]);
+    expect(safe).toEqual([]);
   });
 
   test("preserves the exact request-to-pgxpool query path", async () => {
@@ -665,7 +710,290 @@ func Search(pool *pgxpool.Pool, w http.ResponseWriter, r *http.Request) {
     ]);
   });
 
-  test("teaches pgx argument, preparation, batch, protocol, and impact boundaries", () => {
+  test("models custom QueryRewriter receiver fields into returned SQL only", async () => {
+    const caller = poolHandler(`\tstatus := r.FormValue("status")
+\tquery := SearchQuery{Status: status}
+\t_, _ = pool.Query(r.Context(), "", query)`);
+    const vulnerable = `package search
+import (
+\t"context"
+\t"fmt"
+\t"github.com/jackc/pgx/v5"
+)
+type SearchQuery struct { Status string }
+func (q SearchQuery) RewriteQuery(ctx context.Context, conn *pgx.Conn, sql string, args []any) (string, []any, error) {
+\tquery := fmt.Sprintf("SELECT secret FROM records WHERE status = '%s'", q.Status)
+\treturn query, nil, nil
+}`;
+    const rows = await repositoryInventory({
+      "handler.go": caller,
+      "query_rewriter.go": vulnerable,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      path: "handler.go",
+      categories: [
+        "framework-dataflow:go-pgx-sql-injection",
+        "modeled-source:go-http-form-value",
+        "modeled-sink:go-pgx-query-rewriter-dispatch",
+      ],
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        sink: {
+          kind: "go-pgx-query-rewriter-dispatch",
+          path: "handler.go",
+        },
+      },
+    });
+    expect(
+      rows[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "go-pgx-query-rewriter-field-construction",
+      "go-pgx-query-rewriter-receiver-field",
+      "go-string-assignment",
+      "go-pgx-query-rewriter-returned-sql",
+    ]);
+
+    const safe = vulnerable.replace(
+      `query := fmt.Sprintf("SELECT secret FROM records WHERE status = '%s'", q.Status)\n\treturn query, nil, nil`,
+      `query := "SELECT secret FROM records WHERE status = $1"\n\treturn query, []any{q.Status}, nil`,
+    );
+    expect(
+      await repositoryInventory({
+        "handler.go": caller,
+        "query_rewriter.go": safe,
+      }),
+    ).toEqual([]);
+  });
+
+  test("recognizes pointer rewriters, leading pgx options, direct composites, and all query methods", async () => {
+    const method = `package search
+import (
+\tctxpkg "context"
+\t"fmt"
+\tdriver "github.com/jackc/pgx/v5"
+)
+type SearchQuery struct { Status string }
+func (q *SearchQuery) RewriteQuery(ctx ctxpkg.Context, conn *driver.Conn, sql string, args []any) (newSQL string, newArgs []any, err error) {
+\tnewSQL = fmt.Sprintf("SELECT secret FROM records WHERE status = '%s'", q.Status)
+\treturn newSQL, nil, nil
+}`;
+    for (const queryMethod of ["Exec", "Query", "QueryRow"]) {
+      const caller = `package search
+import (
+\t"github.com/jackc/pgx/v5"
+\t"github.com/jackc/pgx/v5/pgxpool"
+\t"net/http"
+)
+func Search(pool *pgxpool.Pool, w http.ResponseWriter, r *http.Request) {
+\tquery := SearchQuery{Status: r.FormValue("status")}
+\t_, _ = pool.${queryMethod}(r.Context(), "", pgx.QueryExecModeSimpleProtocol, &query)
+}`;
+      expect(
+        await repositoryInventory({
+          "handler.go": caller,
+          "query_rewriter.go": method,
+        }),
+      ).toHaveLength(1);
+    }
+    expect(
+      await repositoryInventory({
+        "search.go": `package search
+import (
+\t"context"
+\t"fmt"
+\t"github.com/jackc/pgx/v5"
+\t"github.com/jackc/pgx/v5/pgxpool"
+\t"net/http"
+)
+type SearchQuery struct { Status string }
+func (q SearchQuery) RewriteQuery(ctx context.Context, conn *pgx.Conn, sql string, args []any) (string, []any, error) {
+\treturn fmt.Sprintf("SELECT secret FROM records WHERE status = '%s'", q.Status), nil, nil
+}
+func Search(pool *pgxpool.Pool, w http.ResponseWriter, r *http.Request) {
+\t_, _ = pool.Query(r.Context(), "", SearchQuery{Status: r.FormValue("status")})
+}`,
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "handler.go":
+          poolHandler(`\tquery := SearchQuery{Status: r.FormValue("status")}
+\t_, _ = pool.Query(r.Context(), "", &query)`),
+        "query_rewriter.go": method.replaceAll("[]any", "[]interface{}"),
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "handler.go":
+          poolHandler(`\tquery := SearchQuery{Status: r.FormValue("status")}
+\t_, _ = pool.Query(r.Context(), "", &query)`),
+        "query_rewriter.go": method.replace(
+          "return newSQL, nil, nil",
+          "return",
+        ),
+      }),
+    ).toHaveLength(1);
+  });
+
+  test("tracks or suppresses the original SQL according to the first rewriter return", async () => {
+    const caller = poolHandler(`\tquery := r.FormValue("query")
+\trewriter := SearchQuery{}
+\t_, _ = pool.Query(r.Context(), query, rewriter)`);
+    const method = (returnedSql: string): string => `package search
+import (
+\t"context"
+\t"github.com/jackc/pgx/v5"
+)
+type SearchQuery struct { Status string }
+func (q SearchQuery) RewriteQuery(ctx context.Context, conn *pgx.Conn, sql string, args []any) (string, []any, error) {
+\treturn ${returnedSql}, args, nil
+}`;
+    const preserved = await repositoryInventory({
+      "handler.go": caller,
+      "query_rewriter.go": method("sql"),
+    });
+    expect(preserved).toHaveLength(1);
+    expect(
+      preserved[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toContain("go-pgx-query-rewriter-input-sql");
+    expect(
+      await repositoryInventory({
+        "handler.go": caller,
+        "query_rewriter.go": method('"SELECT 1"').replace(
+          "struct { Status string }",
+          "struct{}",
+        ),
+      }),
+    ).toEqual([]);
+  });
+
+  test("closes QueryRewriter flow through Batch.Queue and SendBatch", async () => {
+    const rows = await repositoryInventory({
+      "search.go": `package search
+import (
+\t"context"
+\t"fmt"
+\t"github.com/jackc/pgx/v5"
+\t"net/http"
+)
+type SearchQuery struct { Status string }
+func (q SearchQuery) RewriteQuery(ctx context.Context, conn *pgx.Conn, sql string, args []any) (string, []any, error) {
+\treturn fmt.Sprintf("SELECT secret FROM records WHERE status = '%s'", q.Status), nil, nil
+}
+func Search(conn *pgx.Conn, w http.ResponseWriter, r *http.Request) {
+\tbatch := &pgx.Batch{}
+\tbatch.Queue("", SearchQuery{Status: r.FormValue("status")})
+\t_ = conn.SendBatch(r.Context(), batch)
+}`,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.frameworkModel?.sink.kind).toBe(
+      "go-pgx-batch-query-dispatch",
+    );
+    expect(
+      rows[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toContain("go-pgx-query-rewriter-returned-sql");
+    expect(
+      rows[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toContain("go-pgx-batch-queue");
+  });
+
+  test("requires exact unambiguous QueryRewriter identity and leading placement", async () => {
+    const caller =
+      poolHandler(`\tquery := SearchQuery{Status: r.FormValue("status")}
+\t_, _ = pool.Query(r.Context(), "SELECT 1", "ordinary-value", query)`);
+    const exact = `package search
+import (
+\t"context"
+\t"fmt"
+\t"github.com/jackc/pgx/v5"
+)
+type SearchQuery struct { Status string }
+func (q SearchQuery) RewriteQuery(ctx context.Context, conn *pgx.Conn, sql string, args []any) (string, []any, error) {
+\treturn fmt.Sprintf("SELECT secret FROM records WHERE status = '%s'", q.Status), nil, nil
+}`;
+    expect(
+      await repositoryInventory({
+        "handler.go":
+          poolHandler(`\tquery := SearchQuery{Status: r.FormValue("status")}
+\t_, _ = pool.Query(r.Context(), "", query)`),
+        "types.go": "package search\ntype SearchQuery struct { Status string }",
+        "query_rewriter.go": exact.replace(
+          "type SearchQuery struct { Status string }\n",
+          "",
+        ),
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "handler.go": caller,
+        "query_rewriter.go": exact,
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "handler.go":
+          poolHandler(`\tquery := SearchQuery{Status: r.FormValue("status")}
+\t_, _ = pool.Query(r.Context(), "", query)`),
+        "query_rewriter.go": exact.replace(
+          "github.com/jackc/pgx/v5",
+          "example.com/jackc/pgx/v5",
+        ),
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "handler.go":
+          poolHandler(`\tquery := SearchQuery{Status: r.FormValue("status")}
+\t_, _ = pool.Query(r.Context(), "", query)`),
+        "query_rewriter.go": exact.replace("args []any", "args any"),
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "handler.go":
+          poolHandler(`\tquery := SearchQuery{Status: r.FormValue("status")}
+\t_, _ = pool.Query(r.Context(), "", query)`),
+        "query_rewriter.go": exact,
+        "duplicate.go": exact,
+      }),
+    ).toEqual([]);
+  });
+
+  test("clears rewriter field and instance reassignment", async () => {
+    const method = `package search
+import (
+\t"context"
+\t"fmt"
+\t"github.com/jackc/pgx/v5"
+)
+type SearchQuery struct { Status string }
+func (q SearchQuery) RewriteQuery(ctx context.Context, conn *pgx.Conn, sql string, args []any) (string, []any, error) {
+\treturn fmt.Sprintf("SELECT secret FROM records WHERE status = '%s'", q.Status), nil, nil
+}`;
+    for (const body of [
+      `\tquery := SearchQuery{Status: r.FormValue("status")}\n\tquery.Status = "public"\n\t_, _ = pool.Query(r.Context(), "", query)`,
+      `\tquery := SearchQuery{Status: r.FormValue("status")}\n\tquery = SearchQuery{Status: "public"}\n\t_, _ = pool.Query(r.Context(), "", query)`,
+    ]) {
+      expect(
+        await repositoryInventory({
+          "handler.go": poolHandler(body),
+          "query_rewriter.go": method,
+        }),
+      ).toEqual([]);
+    }
+    expect(
+      await repositoryInventory({
+        "handler.go": poolHandler(`\tvar query SearchQuery
+\tquery.Status = r.FormValue("status")
+\t_, _ = pool.Query(r.Context(), "", query)`),
+        "query_rewriter.go": method,
+      }),
+    ).toHaveLength(1);
+  });
+
+  test("teaches pgx argument, preparation, batch, rewriter, protocol, and impact boundaries", () => {
     const prompt = scanQualityGatePrompt("inventory-row", "", "", "");
     expect(prompt).toContain("For go-pgx-sql-injection rows");
     expect(prompt).toContain("proven *pgx.Conn/pgx.Tx");
@@ -673,6 +1001,9 @@ func Search(pool *pgxpool.Pool, w http.ResponseWriter, r *http.Request) {
     expect(prompt).toContain("QueryExecModeSimpleProtocol");
     expect(prompt).toContain("require a fixed statement name");
     expect(prompt).toContain("require the exact non-reassigned *pgx.Batch");
+    expect(prompt).toContain("go-pgx-query-rewriter-dispatch");
+    expect(prompt).toContain("first returned expression");
+    expect(prompt).toContain("only in the returned []any");
     expect(prompt).toContain("extended versus simple protocol");
   });
 });

@@ -57,6 +57,7 @@ export interface GoFunction {
   name: string;
   receiver?: string;
   parameters: GoParameter[];
+  returnSignature: string;
   startLine: number;
   bodyStartLine: number;
   endLine: number;
@@ -202,7 +203,7 @@ function matchingDelimiter(
   return -1;
 }
 
-function splitGoArguments(value: string): string[] {
+export function splitGoArguments(value: string): string[] {
   const result: string[] = [];
   let start = 0;
   let depth = 0;
@@ -301,7 +302,17 @@ export function goFunctions(file: GoHttpSourceFile): GoFunction[] {
     if (open < 0) continue;
     const close = matchingDelimiter(structural, open, "(", ")");
     if (close < 0) continue;
-    const bodyOpen = structural.indexOf("{", close + 1);
+    let bodyOpen = structural.indexOf("{", close + 1);
+    while (
+      bodyOpen >= 0 &&
+      /(?:\binterface|\bstruct)\s*$/u.test(
+        structural.slice(close + 1, bodyOpen),
+      )
+    ) {
+      const typeClose = matchingDelimiter(structural, bodyOpen, "{", "}");
+      if (typeClose < 0) break;
+      bodyOpen = structural.indexOf("{", typeClose + 1);
+    }
     if (
       bodyOpen < 0 ||
       bodyOpen - matchOffset > MAX_FUNCTION_SIGNATURE_BYTES ||
@@ -318,6 +329,7 @@ export function goFunctions(file: GoHttpSourceFile): GoFunction[] {
       name: match[2]!,
       ...(match[1] === undefined ? {} : { receiver: match[1] }),
       parameters: goParameters(structural.slice(open + 1, close)),
+      returnSignature: structural.slice(close + 1, bodyOpen).trim(),
       startLine: lineAt(starts, matchOffset),
       bodyStartLine: lineAt(starts, bodyOpen),
       endLine: lineAt(starts, bodyClose),
