@@ -55,9 +55,17 @@ The package is ESM-only and provides:
   and local slice values while excluding `Args[0]` from executable selection.
   Direct ordinary argument vectors, immutable command selection,
   option-terminated values, inert construction, reassignment, and import
-  lookalikes are rejected. A typed Go
-  SQL model separately preserves request input into the exact query-text position
-  of standard-library `DB`, `Tx`, and `Conn` operations. Placeholder and
+  lookalikes are rejected. A separate Go filesystem-path model requires exact
+  `net/http`, `os`, legacy `io/ioutil`, `path/filepath`, or file-serving
+  imports and typed request sources. It preserves one unique same-package
+  wrapper plus path construction into exact read, open, write, delete,
+  metadata, link, move, root-selection, walk, and response-path arguments.
+  Normalization and resolution remain candidate evidence rather than universal sanitizers;
+  immutable file selection is a barrier. Request control of an `OpenRoot` or
+  `OpenInRoot` root is reported, while fixed-root `os` APIs require
+  platform, link/race, authorization, and patched-runtime validation. A typed
+  Go SQL model separately preserves request input into the exact query-text
+  position of standard-library `DB`, `Tx`, and `Conn` operations. Placeholder and
   `sql.Named` values remain data; tainted `Prepare*` text requires later
   statement execution; and inferred handles, same-file receiver fields, one
   unique package wrapper, fixed query selection, and reassignment are explicit.

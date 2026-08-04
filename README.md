@@ -42,7 +42,10 @@ stand in for reviewed application source.
 The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
 paths, server-side request forgery, and object authorization; a separate Go
-`net/http` model covers server-side request forgery, while typed
+`net/http` model covers server-side request forgery, a typed Go filesystem
+model covers request-controlled read, open, write, delete, metadata, link,
+move, root-selection, walk, and response-file paths through exact
+standard-library APIs, while typed
 `os/exec`, `execabs`, `os.StartProcess`, and `syscall` models cover executable,
 shell, interpreter, remote, and option-sensitive command paths through constructors,
 manual `Cmd` fields, and direct dispatch, and typed `database/sql`, `sqlx`, GORM v2,
@@ -693,6 +696,40 @@ Push-Location benchmarks\fixtures\go-cross-file-ssrf
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-fetch
+go test ./...
+Pop-Location
+```
+
+The Go filesystem-path lane requires exact `net/http`, `os`, legacy
+`io/ioutil`, `path/filepath`, or file-serving import identities and a typed
+`*http.Request` source. It preserves request values through one unique
+same-package string wrapper and path construction into exact read, open,
+write, delete, metadata, link, move, walk, and HTTP file-response arguments.
+Request control of an `OpenRoot` or `OpenInRoot` root argument is reported as
+filesystem-root selection; rooting does not help when the root is untrusted.
+`filepath.Join`, `Clean`, `Abs`, `Rel`, and `EvalSymlinks` remain visible
+evidence rather than universal sanitizers; lexical normalization is not
+containment or authorization. Immutable server-owned file selection is a
+deterministic barrier. Root-scoped `os.OpenInRoot`, `os.OpenRoot`, and
+`os.Root` operations are treated as strong control evidence, subject to the
+target platform, link/mount/race analysis, and a patched runtime. In
+particular, affected Unix deployments need Go 1.25.12 or 1.26.5 or newer for
+GO-2026-4970/CVE-2026-39822. A paired cross-platform witness proves that
+`filepath.Join` plus `os.ReadFile` discloses a sibling signing-key file while
+the same payload is rejected by `os.OpenInRoot` and an allowed document still
+loads:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/go-http-filesystem-path-manifest.json `
+  --results-dir C:\security-benchmarks\go-http-filesystem-path `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+Push-Location benchmarks\fixtures\go-cross-file-path-traversal
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-rooted-file
 go test ./...
 Pop-Location
 ```

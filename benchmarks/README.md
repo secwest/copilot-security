@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains forty-nine vulnerable/control pairs:
+The versioned corpus currently contains fifty vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -468,6 +468,40 @@ Push-Location fixtures\go-cross-file-ssrf
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-fetch
+go test ./...
+Pop-Location
+```
+
+The Go filesystem-path lane measures exact standard-library import identity,
+typed request accessors, path argument roles, one same-package wrapper, and
+the distinction between path construction and rooted filesystem access. The
+positive joins a query value beneath a public directory and passes the result
+to `os.ReadFile`; its executable witness reads a sibling signing-key file.
+The matched control keeps the request, wrapper, directory layout, attack
+bytes, and allowed-file behavior but uses `os.OpenInRoot`, which rejects the
+escape. `Join`, `Clean`, `Abs`, `Rel`, and `EvalSymlinks` do not erase the host
+hypothesis, and request control of an `OpenRoot` or `OpenInRoot` root is a
+separate root-selection finding. Review must separately prove lexical
+boundaries, links, mounts, races, authorization, and runtime patch level;
+affected Unix `os.Root` users
+need Go 1.25.12 or 1.26.5 or newer for GO-2026-4970/CVE-2026-39822:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/go-http-filesystem-path-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-go-http-filesystem-path `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+Push-Location fixtures\go-cross-file-path-traversal
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-rooted-file
 go test ./...
 Pop-Location
 ```
