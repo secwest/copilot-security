@@ -1,0 +1,30 @@
+name: Publish
+
+on:
+  workflow_run:
+    workflows: [PR Build]
+    types: [completed]
+
+permissions: read-all
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-input
+          path: ${{ runner.temp }}/artifacts
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const raw = fs.readFileSync(path.join('${{ runner.temp }}', 'artifacts', 'release.mjs'), 'utf8').trim();
+            const releaseNumber = Number(raw);
+            if (!Number.isInteger(releaseNumber)) {
+              throw new Error('Invalid release number');
+            }
+            core.info(`Validated release ${releaseNumber}`);

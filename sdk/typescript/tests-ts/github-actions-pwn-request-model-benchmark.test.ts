@@ -313,6 +313,22 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${untrustedSha}
+      - uses: actions/checkout@v7
+        with:
+          clean: false
+      - run: npm test
+`),
+    ).toHaveLength(1);
+    expect(
+      await workflowInventory(`
+on: pull_request_target
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
           repository: ${untrustedRepository}
           path: pr
       - uses: actions/checkout@v7

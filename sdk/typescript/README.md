@@ -63,6 +63,12 @@ The package is ESM-only and provides:
   selection, review/environment gates, and Checkout v7 fork protection remain
   separate review evidence; a trigger, checkout, or execution step alone does
   not create the hypothesis.
+  Cross-workflow artifact-poisoning hypotheses require a named pull-request
+  producer, untrusted checkout, official upload name/path, matching privileged
+  `workflow_run`, official triggering-run download, extraction path, and later
+  execution closure. Producer success and transport integrity are not trust;
+  isolated extraction plus strict typed-data parsing is counterevidence only
+  when artifact content is never executed.
   Models include exact
   source/sink lines and nearby negative controls for the mandatory residual
   correction turn, plus bounded one-hop or

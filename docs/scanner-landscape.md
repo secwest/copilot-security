@@ -411,6 +411,26 @@ working-directory and local-action paths, trusted overwrite, token and
 credential controls, review/environment leads, malformed YAML, aliases, and
 non-workflow paths.
 
+`benchmarks/github-actions-artifact-poisoning-manifest.json` adds a strict
+cross-workflow CWE-829 pair based on the
+[CodeQL very-high-precision artifact-poisoning query](https://codeql.github.com/codeql-query-help/actions/actions-artifact-poisoning-critical/)
+and [GitHub's current triggering-workflow artifact guidance](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#using-data-from-the-triggering-workflow).
+The producer must have an exact `pull_request` trigger, official untrusted
+checkout, and later official upload whose literal path remains inside that
+checkout. The consumer must name the producer under `workflow_run`, download
+the same artifact through the official action bound to
+`github.event.workflow_run.id`, and later execute from the extracted path. The
+host preserves workflow/artifact identity, action pins, step order,
+all-artifact subdirectories, effective working directories, permissions,
+secrets/OIDC, and cleanup state. A clean trusted checkout clears taint;
+`clean:false` does not. The paired witness proves workspace replacement and
+mock-token observation, while the control follows GitHub's current
+`runner.temp` plus fail-closed typed-data pattern. This improves on a generic
+`workflow_run` or download warning by requiring complete cross-file identity
+and execution closure. Regressions reject name and run mismatches, missing
+tokens, unrelated paths, non-PR producers, lookalike actions, data-only
+consumers, malformed/duplicate/aliased YAML, and non-workflow paths.
+
 `benchmarks/aspnet-cross-file-ssrf-manifest.json` adds a strict outbound-client
 pair. The positive sends an ASP.NET query parameter as the complete URI to
 `HttpClient.GetAsync`; its request deadline and response ceiling isolate SSRF
@@ -504,13 +524,14 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
    own real-history exploit/control gate. Next extensions should add audited
    custom-rule packs and separately authorized issuer verification without
    weakening the no-plaintext persistence or no-implicit-network contracts.
-4. **Configuration and IaC model packs — initial CI lane shipped.** The first
-   deterministic YAML model now proves GitHub Actions privileged-trigger,
-   untrusted-checkout, matching-path execution closure and Checkout v7
-   protection against a paired witness. Extend the same evidence discipline to
-   other workflow fetch/execution mechanisms, Docker, Kubernetes, Terraform,
-   and cloud policy surfaces, then ask Copilot to evaluate deployment
-   reachability and compensating controls.
+4. **Configuration and IaC model packs — two CI lanes shipped.** Deterministic
+   YAML models now prove both same-job privileged-trigger/untrusted-checkout
+   execution and cross-workflow pull-request artifact poisoning against paired
+   witnesses, including Checkout v7 protection, triggering-run binding,
+   extraction paths, cleanup, and typed-data isolation. Extend the same
+   evidence discipline to cache poisoning, reusable/composite workflows,
+   Docker, Kubernetes, Terraform, and cloud policy surfaces, then ask Copilot
+   to evaluate deployment reachability and compensating controls.
 5. **Seed-coverage receipts.** Make imported-candidate closure a workbench
    contract field, not only a ledger invariant, so a future host can prove the
    exact imported count that was reportable, rejected, deferred, or out of

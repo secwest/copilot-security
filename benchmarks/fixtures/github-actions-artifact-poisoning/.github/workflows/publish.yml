@@ -1,0 +1,29 @@
+name: Publish
+
+on:
+  workflow_run:
+    workflows: [PR Build]
+    types: [completed]
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-input
+          path: .
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: node release.mjs

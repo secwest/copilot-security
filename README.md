@@ -105,6 +105,16 @@ credentials, immutable commit selection, review/environment gates, and
 Checkout v7's default refusal of unsafe fork checkouts as distinct control and
 impact leads. Malformed workflows, trusted/base checkouts, overwritten or
 unrelated paths, and fixed non-loading commands are rejected before review.
+Cross-workflow artifact rows preserve an unprivileged `pull_request` checkout
+and official artifact upload into a named `workflow_run` consumer, require an
+official download bound to `github.event.workflow_run.id`, and emit only when
+the downloaded path is later executed under the privileged consumer. Workflow
+and artifact names, action identity, step order, extraction paths, trusted
+cleanup, permissions, secrets, and OIDC remain explicit. Producer success,
+read-only producer permissions, and artifact transport digests do not make
+pull-request bytes trusted; extraction outside the workspace plus fail-closed
+typed-data parsing is strong counterevidence when artifact content is never
+executed.
 For Node/TypeScript relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
@@ -495,6 +505,23 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 
 node benchmarks/witnesses/github-actions-pwn-request/PwnRequestWitness.mjs
+```
+
+The artifact-poisoning lane pairs an unprivileged pull-request producer with a
+privileged `workflow_run` consumer. The positive downloads the producer's
+`release-input` artifact from the exact triggering run into the trusted
+workspace and executes it with write/OIDC/secret access. The control follows
+GitHub's documented design: extract beneath `runner.temp`, parse a narrowly
+typed integer, and fail closed without executing artifact bytes:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/github-actions-artifact-poisoning-manifest.json `
+  --results-dir C:\security-benchmarks\github-actions-artifact-poisoning `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+node benchmarks/witnesses/github-actions-artifact-poisoning/ArtifactPoisoningWitness.mjs
 ```
 
 The SSRF framework lane pairs Node and Python cross-file absolute-URL flows

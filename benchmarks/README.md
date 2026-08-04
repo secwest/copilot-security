@@ -300,6 +300,31 @@ node ../../benchmarks/run-benchmark.mjs `
 node ../../benchmarks/witnesses/github-actions-pwn-request/PwnRequestWitness.mjs
 ```
 
+The GitHub Actions artifact-poisoning lane applies perfect gates to a
+cross-workflow CWE-829 pair. Both producers run on `pull_request`, check out
+untrusted code with read-only permissions, and upload the same named artifact.
+The positive consumer runs under `workflow_run`, binds the official download to
+the exact triggering run ID, extracts into the trusted workspace, and executes
+the artifact with write, OIDC, and secret access. The negative extracts beneath
+`runner.temp`, parses a narrowly typed integer, and fails closed without
+executing artifact content. The witness proves harmless attacker code observes
+a mock privileged token only in the positive branch:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/github-actions-artifact-poisoning-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-github-actions-artifact-poisoning `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+node ../../benchmarks/witnesses/github-actions-artifact-poisoning/ArtifactPoisoningWitness.mjs
+```
+
 The SSRF framework lane applies the same strict gates to Node and Python
 relative-import wrappers. Its positives pass complete caller-controlled URLs
 to outbound HTTP sinks. Its negative controls select only complete

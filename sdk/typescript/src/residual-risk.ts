@@ -6,7 +6,10 @@ import {
   isSubstantiveValidation,
   type EvidenceLocation,
 } from "./evidence-quality.js";
-import { githubActionsPrivilegeRecords } from "./github-actions-risk.js";
+import {
+  githubActionsArtifactPoisoningRecords,
+  githubActionsPrivilegeRecords,
+} from "./github-actions-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -1484,7 +1487,11 @@ interface ResidualRiskRecord {
     schemaVersion: "1.2";
     id: string;
     language: string;
-    scope: "same-file" | "cross-file-wrapper" | "cross-file-multi-hop-wrapper";
+    scope:
+      | "same-file"
+      | "cross-file"
+      | "cross-file-wrapper"
+      | "cross-file-multi-hop-wrapper";
     source: { kind: string; path: string; line: number };
     sink: {
       kind: string;
@@ -1725,6 +1732,7 @@ export async function buildResidualRiskInventory(
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
     );
   }
+  records.push(...githubActionsArtifactPoisoningRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
 
   return selectResidualRiskRecords(records, MAX_SIGNALS)
