@@ -56,6 +56,15 @@ The package is ESM-only and provides:
   with request data only in positional or named values remains a negative
   control; forks, arbitrary Queryer/Execer implementations, inert preparation,
   and reassigned statements are rejected.
+  A separate GORM v2 model requires the exact `gorm.io/gorm` import and proven
+  `*gorm.DB` identity. It preserves the first grammar argument of `Raw`,
+  `Where`, `Not`, `Or`, `Select`, `Distinct`, `Table`, `Group`, `Having`,
+  `Order`, `Joins`, and `InnerJoins`, but reports those deferred builders only
+  after a same-chain or assigned finisher. It separately models immediate
+  `Exec`, `Pluck` identifiers, inline finisher conditions, and the first
+  `gorm.Expr` argument while excluding later placeholder values. Unexecuted or
+  reassigned builders, forks and legacy imports, untyped methods, fixed fragment
+  maps, and ambiguous wrappers are rejected.
   A separate pgx v5 model requires exact `pgx` or `pgxpool` imports and typed
   Conn, Tx, or Pool receivers. It preserves the context/SQL/value split,
   follows fixed prepared names on the same receiver, and reports queued SQL

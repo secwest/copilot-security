@@ -529,6 +529,34 @@ go test ./...
 Pop-Location
 ```
 
+The GORM v2 lane measures exact `gorm.io/gorm` import and `*gorm.DB` identity,
+query-fragment argument roles, fluent and assigned builder propagation, and
+construction-to-finisher execution closure. The positive formats the request
+value into `Raw` query grammar and reaches `Scan`; the matched control retains
+the same handler, wrapper, adapter, and attack bytes but places them after a
+placeholder in a fixed query. Both fixtures use an offline
+signature-compatible GORM subset over a deterministic standard-library driver:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/go-gorm-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-go-gorm-sql-injection `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+Push-Location fixtures\go-cross-file-gorm-sqli
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-gorm
+go test ./...
+Pop-Location
+```
+
 The pgx v5 lane adds exact `pgx` and `pgxpool` import and receiver identity,
 context/SQL/value argument roles, fixed prepared-name execution, and typed
 batch queue-to-`SendBatch` closure. It separately resolves exact local custom

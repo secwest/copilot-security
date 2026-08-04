@@ -43,8 +43,8 @@ The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
 paths, server-side request forgery, and object authorization; a separate Go
 `net/http` model covers server-side request forgery, while typed
-`database/sql`, `sqlx`, `pgx/v5`, `pgxpool`, and low-level `pgconn` models cover
-request-to-query grammar and deferred database dispatch;
+`database/sql`, `sqlx`, GORM v2, `pgx/v5`, `pgxpool`, and low-level `pgconn`
+models cover request-to-query grammar and deferred database dispatch;
 and Node, Python, and Spring models cover server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
@@ -735,6 +735,32 @@ Push-Location benchmarks\fixtures\go-cross-file-sqlx-sqli
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-sqlx
+go test ./...
+Pop-Location
+```
+
+The GORM v2 lane requires the exact `gorm.io/gorm` import and a proven
+`*gorm.DB`. It distinguishes query construction from execution: request data
+in `Raw`, `Where`, `Order`, `Table`, `Joins`, and the other documented fragment
+positions is retained only when the same fluent or assigned builder reaches a
+finisher. `Exec` and `Pluck` execute their grammar positions immediately;
+inline `Find`/`First`/`Take`/`Delete` conditions and `gorm.Expr` query text are
+modeled separately. Fixed templates with request data only in later placeholder
+arguments remain controls. The paired offline modules prove both an injected
+`Raw(...).Scan(...)` predicate and its bound-value isolation without a database
+service or dependency download:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/go-gorm-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\go-gorm-sql-injection `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+Push-Location benchmarks\fixtures\go-cross-file-gorm-sqli
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-gorm
 go test ./...
 Pop-Location
 ```
