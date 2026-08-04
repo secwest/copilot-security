@@ -41,8 +41,12 @@ The package is ESM-only and provides:
   destination flow. Node object-authorization hypotheses preserve the exact
   request-controlled record lookup and principal-bound owner filtering or
   post-lookup policy leads without treating authentication or opaque IDs as
-  authorization. Models include exact source/sink lines and nearby negative
-  controls for the mandatory residual correction turn, plus bounded one-hop or
+  authorization. ASP.NET object-authorization hypotheses preserve bound route
+  or query identifiers into typed EF Core single-record lookups and retain only
+  exact principal-bound predicates or enforced resource-authorization leads;
+  `[Authorize]` alone is not a resource control. Models include exact
+  source/sink lines and nearby negative controls for the mandatory residual
+  correction turn, plus bounded one-hop or
   two-hop C# controller/service summaries,
   one-hop or two-hop Java controller/service summaries, and one-hop or two-hop
   relative-import/call/parameter summaries for Node/TypeScript and Python

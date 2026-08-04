@@ -200,6 +200,30 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The ASP.NET object-authorization lane applies the same perfect gates to a real
+EF Core controller/repository pair. The positive keeps `[Authorize]` but passes
+the route ID directly to `DbSet.FindAsync`; the executable witness proves that
+an attacker-selected key returns another customer's invoice. The control uses
+the same endpoint and entity topology while binding both invoice ID and the
+authenticated customer ID in one `SingleOrDefaultAsync` predicate. A second
+witness proves cross-customer selection returns no entity:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/aspnet-object-authorization-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-aspnet-object-authorization `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+dotnet run --project benchmarks/witnesses/aspnet-cross-file-idor/AspnetCrossFileIdorWitness.csproj --configuration Release
+dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-authorization/AspnetCrossFileSafeAuthorizationWitness.csproj --configuration Release
+```
+
 The SSRF framework lane applies the same strict gates to Node and Python
 relative-import wrappers. Its positives pass complete caller-controlled URLs
 to outbound HTTP sinks. Its negative controls select only complete

@@ -1180,6 +1180,46 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "aspnet-http-object-authorization",
+    language: "dotnet",
+    extensions: DOTNET_EXTENSIONS,
+    activation: [
+      /^\s*(?:global\s+)?using\s+Microsoft\.EntityFrameworkCore\s*;/mu,
+      /\b(?:DbContext|DbSet\s*<[^;{}]+>|FindAsync|SingleOrDefaultAsync)\b/iu,
+    ],
+    sources: [
+      {
+        kind: "aspnet-object-reference",
+        expression:
+          /\[(?:FromBody|FromForm|FromHeader|FromQuery|FromRoute)\b/iu,
+      },
+      {
+        kind: "aspnet-request-object-reference",
+        expression:
+          /\bRequest\.(?:Body|Form|Headers|Query|RouteValues)\b|\bHttpRequest\b/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "ef-core-object-record-lookup",
+        expression:
+          /\.\s*(?:Find|FindAsync|First|FirstAsync|FirstOrDefault|FirstOrDefaultAsync|Single|SingleAsync|SingleOrDefault|SingleOrDefaultAsync)\s*(?:<[^;(){}]+>)?\s*\(/iu,
+        cweIds: ["CWE-639", "CWE-862"],
+      },
+    ],
+    controls: [
+      {
+        kind: "principal-bound-object-filter",
+        expression:
+          /\b(?:account|customer|organization|owner|principal|tenant|user|workspace)Id\b/iu,
+      },
+      {
+        kind: "resource-based-object-authorization",
+        expression: /\bAuthorizeAsync\s*\(/iu,
+      },
+    ],
+  },
+  {
     id: "aspnet-http-template-injection",
     language: "dotnet",
     extensions: DOTNET_EXTENSIONS,
@@ -1683,7 +1723,9 @@ function frameworkDataflowRecords(
       : PYTHON_EXTENSIONS.has(extension)
         ? matchingPythonModelLines(lines, model.controls, 24)
         : extension === ".java" || extension === ".cs"
-          ? matchingJavaModelLines(lines, model.controls, 24)
+          ? model.id === "aspnet-http-object-authorization"
+            ? []
+            : matchingJavaModelLines(lines, model.controls, 24)
           : matchingModelLines(lines, model.controls, 24);
     for (const sink of sinks) {
       const nodeHttpSink =
@@ -1694,12 +1736,23 @@ function frameworkDataflowRecords(
         model.id === "node-http-object-authorization"
           ? nodeObjectAuthorizationSink(lines, sink.line)
           : undefined;
+      const dotnetObjectSink =
+        model.id === "aspnet-http-object-authorization"
+          ? dotnetObjectAuthorizationSink(lines, sink.line)
+          : undefined;
       if (model.id === "node-http-ssrf" && nodeHttpSink === undefined) {
         continue;
       }
       if (
         model.id === "node-http-object-authorization" &&
         nodeObjectSink === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "aspnet-http-object-authorization" &&
+        (dotnetObjectSink === undefined ||
+          !dotnetEfObjectLookupHasTypedReceiver(lines, dotnetObjectSink))
       ) {
         continue;
       }
@@ -1782,7 +1835,16 @@ function frameworkDataflowRecords(
                     sink.line,
                     model.sources,
                   )
-                : nearestModeledSource(sources, sink.line);
+                : extension === ".cs" &&
+                    model.id === "aspnet-http-object-authorization" &&
+                    dotnetObjectSink !== undefined
+                  ? modeledSameFileDotnetObjectSource(
+                      lines,
+                      sink.line,
+                      dotnetObjectSink.argument,
+                      model.sources,
+                    )
+                  : nearestModeledSource(sources, sink.line);
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -1801,6 +1863,14 @@ function frameworkDataflowRecords(
         ...(model.id === "node-http-object-authorization" &&
         nodeObjectSink !== undefined
           ? nodeObjectAuthorizationControls(lines, nodeObjectSink, lines.length)
+          : []),
+        ...(model.id === "aspnet-http-object-authorization" &&
+        dotnetObjectSink !== undefined
+          ? dotnetObjectAuthorizationControls(
+              lines,
+              dotnetObjectSink,
+              lines.length,
+            )
           : []),
         ...controls.filter(
           (control) =>
@@ -2414,6 +2484,7 @@ function frameworkDirectDotnetDataflowRecords(
               call.line,
               argument,
               summary.model.sources,
+              summary.model.id === "aspnet-http-object-authorization",
             );
             if (source === undefined) continue;
             const recordKey = [
@@ -3131,6 +3202,7 @@ function frameworkDotnetMultiHopDataflowRecords(
               call.line,
               argument,
               summary.model.sources,
+              summary.model.id === "aspnet-http-object-authorization",
             );
             if (source === undefined) continue;
             const sinkSummary = summary.downstream;
@@ -4023,7 +4095,10 @@ function dotnetFrameworkWrapperSummaries(
         continue;
       }
       const sinks = matchingJavaModelLines(file.lines, model.sinks, 32);
-      const controls = matchingJavaModelLines(file.lines, model.controls, 64);
+      const controls =
+        model.id === "aspnet-http-object-authorization"
+          ? []
+          : matchingJavaModelLines(file.lines, model.controls, 64);
       for (const method of methods) {
         for (const sink of sinks) {
           if (sink.line < method.startLine || sink.line > method.endLine) {
@@ -4050,6 +4125,24 @@ function dotnetFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          const objectAuthorizationSink =
+            model.id === "aspnet-http-object-authorization"
+              ? dotnetObjectAuthorizationSink(
+                  file.lines,
+                  sink.line,
+                  method.endLine,
+                )
+              : undefined;
+          if (
+            model.id === "aspnet-http-object-authorization" &&
+            (objectAuthorizationSink === undefined ||
+              !dotnetEfObjectLookupHasTypedReceiver(
+                file.lines,
+                objectAuthorizationSink,
+              ))
+          ) {
+            continue;
+          }
           const templateSourceArgument =
             model.id === "aspnet-http-template-injection"
               ? dotnetTemplateSourceArgument(
@@ -4072,24 +4165,42 @@ function dotnetFrameworkWrapperSummaries(
                   sink.line,
                   templateSourceArgument!,
                 )
-              : method.parameters.flatMap((parameter, parameterIndex) =>
-                  cFamilyLineReferencesIdentifier(
-                    sinkExpression,
-                    parameter.name,
+              : model.id === "aspnet-http-object-authorization"
+                ? dotnetMethodParameterIndexesReachingExpression(
+                    file.lines,
+                    method,
+                    sink.line,
+                    objectAuthorizationSink!.argument,
                   )
-                    ? [parameterIndex]
-                    : [],
-                );
+                : method.parameters.flatMap((parameter, parameterIndex) =>
+                    cFamilyLineReferencesIdentifier(
+                      sinkExpression,
+                      parameter.name,
+                    )
+                      ? [parameterIndex]
+                      : [],
+                  );
           if (parameterIndexes.length === 0) continue;
           const sinkPattern = model.sinks.find(
             (pattern) => pattern.kind === sink.kind,
           );
           if (sinkPattern === undefined) continue;
-          const sinkControls = model.controls
-            .filter((control) => control.expression.test(sinkExpression))
-            .map((control) => ({ kind: control.kind, line: sink.line }));
+          const sinkControls =
+            model.id === "aspnet-http-object-authorization"
+              ? []
+              : model.controls
+                  .filter((control) => control.expression.test(sinkExpression))
+                  .map((control) => ({ kind: control.kind, line: sink.line }));
           const methodControls = [
             ...sinkControls,
+            ...(model.id === "aspnet-http-object-authorization" &&
+            objectAuthorizationSink !== undefined
+              ? dotnetObjectAuthorizationControls(
+                  file.lines,
+                  objectAuthorizationSink,
+                  method.endLine,
+                )
+              : []),
             ...controls.filter(
               (control) =>
                 control.line >= method.startLine &&
@@ -5232,6 +5343,7 @@ function modeledDotnetCallSource(
   callLine: number,
   argument: string,
   sourcePatterns: readonly FrameworkModelPattern[],
+  rejectParameterReassignment = false,
 ): { kind: string; line: number } | undefined {
   const direct = sourcePatterns.find((pattern) =>
     pattern.expression.test(argument),
@@ -5243,7 +5355,16 @@ function modeledDotnetCallSource(
     const source = sourcePatterns.find((pattern) =>
       pattern.expression.test(parameter.declaration),
     );
-    if (source !== undefined) {
+    if (
+      source !== undefined &&
+      (!rejectParameterReassignment ||
+        !dotnetMethodParameterReassignedBeforeCall(
+          lines,
+          argument,
+          method.startLine,
+          callLine,
+        ))
+    ) {
       return { kind: source.kind, line: method.startLine };
     }
   }
@@ -5267,6 +5388,25 @@ function modeledDotnetCallSource(
     }
   }
   return undefined;
+}
+
+function dotnetMethodParameterReassignedBeforeCall(
+  lines: readonly string[],
+  identifier: string,
+  methodStartLine: number,
+  callLine: number,
+): boolean {
+  const structural = cFamilyStructuralLines(
+    lines.slice(methodStartLine - 1, callLine),
+  ).join("\n");
+  const bodyStart = structural.indexOf("{");
+  if (bodyStart < 0) return false;
+  const escapedIdentifier = escapeRegularExpression(identifier);
+  const reassignment = new RegExp(
+    `(?:\\b${escapedIdentifier}\\s*(?:[+\\-*/%&|^]?=|\\+\\+|--)|(?:\\+\\+|--)\\s*${escapedIdentifier}\\b|\\b(?:var|[A-Za-z_]\\w*(?:\\s*<[^;{}]+>)?\\??)\\s+${escapedIdentifier}\\b)`,
+    "u",
+  );
+  return reassignment.test(structural.slice(bodyStart + 1));
 }
 
 function dotnetScribanTemplateSourceArgument(
@@ -5511,6 +5651,243 @@ function modeledSameFileDotnetTemplateSource(
     templateSource,
     sourcePatterns,
   );
+}
+
+interface DotnetObjectAuthorizationSink {
+  argument: string;
+  receiver: string;
+  method: string;
+  callStartLine: number;
+  callEndLine: number;
+  resultIdentifier?: string;
+}
+
+const DOTNET_OBJECT_OWNER_FIELD =
+  "(?:Account|Customer|Organization|Owner|Principal|Tenant|User|Workspace)Id";
+const DOTNET_AUTHENTICATED_PRINCIPAL_VALUE =
+  "(?:User\\s*\\.\\s*(?:FindFirstValue|FindFirst)\\s*\\([^)]*\\)(?:\\s*\\.\\s*Value)?|HttpContext\\s*\\.\\s*User\\s*\\.\\s*(?:FindFirstValue|FindFirst)\\s*\\([^)]*\\)(?:\\s*\\.\\s*Value)?|(?:actor|authenticated|current|principal|session)[A-Za-z0-9_]*Id)";
+
+function dotnetObjectAuthorizationSink(
+  lines: readonly string[],
+  sinkLine: number,
+  methodEndLine = lines.length,
+): DotnetObjectAuthorizationSink | undefined {
+  const callLines = lines.slice(
+    sinkLine - 1,
+    Math.min(methodEndLine, sinkLine + 12),
+  );
+  const original = callLines.join("\n");
+  const structural = cFamilyStructuralLines(callLines).join("\n");
+  const call =
+    /\b([A-Za-z_]\w*)\s*\.\s*(Find|FindAsync|First|FirstAsync|FirstOrDefault|FirstOrDefaultAsync|Single|SingleAsync|SingleOrDefault|SingleOrDefaultAsync)\s*(?:<[^;(){}]+>)?\s*\(/u.exec(
+      structural,
+    );
+  if (call?.index === undefined) return undefined;
+  const open = structural.indexOf("(", call.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  const argument = splitJavascriptArguments(
+    original.slice(open + 1, close),
+  )[0]?.trim();
+  if (argument === undefined || argument === "") return undefined;
+  const resultIdentifier =
+    /\b(?:var|[A-Za-z_]\w*(?:\s*<[^;{}]+>)?\??)\s+([A-Za-z_]\w*)\s*=\s*(?:await\s+)?$/u.exec(
+      structural.slice(0, call.index),
+    )?.[1];
+  return {
+    argument,
+    receiver: call[1]!,
+    method: call[2]!,
+    callStartLine: sinkLine,
+    callEndLine:
+      sinkLine + (structural.slice(0, close).match(/\n/gu)?.length ?? 0),
+    ...(resultIdentifier === undefined ? {} : { resultIdentifier }),
+  };
+}
+
+function dotnetEfObjectLookupHasTypedReceiver(
+  lines: readonly string[],
+  sink: DotnetObjectAuthorizationSink,
+): boolean {
+  const structuralText = cFamilyStructuralLines(lines).join("\n");
+  const imported =
+    /^\s*(?:global\s+)?using\s+Microsoft\.EntityFrameworkCore\s*;/mu.test(
+      structuralText,
+    );
+  const fullyQualified =
+    /\bMicrosoft\s*\.\s*EntityFrameworkCore\s*\.\s*(?:DbContext|DbSet)\b/u.test(
+      structuralText,
+    );
+  const shadowsEf =
+    /\bnamespace\s+Microsoft\.EntityFrameworkCore\b/u.test(structuralText) ||
+    /\b(?:class|interface|record|struct)\s+(?:DbContext|DbSet)\b/u.test(
+      structuralText,
+    );
+  if ((!imported && !fullyQualified) || shadowsEf) return false;
+  const receiver = escapeRegularExpression(sink.receiver);
+  const typedSet = new RegExp(
+    `\\b(?:(?:Microsoft\\s*\\.\\s*EntityFrameworkCore\\s*\\.\\s*)?DbSet\\s*<[^;{}]+>)\\s+${receiver}\\b`,
+    "u",
+  );
+  const typedContext = new RegExp(
+    `\\b(?:[A-Za-z_]\\w*DbContext|(?:Microsoft\\s*\\.\\s*EntityFrameworkCore\\s*\\.\\s*)?DbContext)\\s+${receiver}\\b`,
+    "u",
+  );
+  return typedSet.test(structuralText) || typedContext.test(structuralText);
+}
+
+function modeledSameFileDotnetObjectSource(
+  lines: readonly string[],
+  sinkLine: number,
+  lookupArgument: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const method = exportedDotnetMethods(lines).find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  if (method === undefined) return undefined;
+  const direct = modeledDotnetCallSource(
+    lines,
+    method,
+    sinkLine,
+    lookupArgument.trim(),
+    sourcePatterns,
+    true,
+  );
+  if (direct !== undefined) return direct;
+  for (const parameterIndex of dotnetMethodParameterIndexesReachingExpression(
+    lines,
+    method,
+    sinkLine,
+    lookupArgument,
+  )) {
+    const parameter = method.parameters[parameterIndex];
+    if (parameter === undefined) continue;
+    const source = modeledDotnetCallSource(
+      lines,
+      method,
+      sinkLine,
+      parameter.name,
+      sourcePatterns,
+      true,
+    );
+    if (source !== undefined) return source;
+  }
+  return undefined;
+}
+
+function dotnetObjectAuthorizationControls(
+  lines: readonly string[],
+  sink: DotnetObjectAuthorizationSink,
+  functionEndLine: number,
+): Array<{ kind: string; line: number }> {
+  const controls: Array<{ kind: string; line: number }> = [];
+  const callLines = cFamilyStructuralLines(
+    lines.slice(sink.callStartLine - 1, sink.callEndLine),
+  );
+  const principalFilter = new RegExp(
+    `\\b${DOTNET_OBJECT_OWNER_FIELD}\\b\\s*(?:==|equals\\s*\\()\\s*${DOTNET_AUTHENTICATED_PRINCIPAL_VALUE}\\b|\\b${DOTNET_AUTHENTICATED_PRINCIPAL_VALUE}\\s*==\\s*[^;{}]*\\b${DOTNET_OBJECT_OWNER_FIELD}\\b`,
+    "iu",
+  );
+  const filterIndex = callLines.findIndex((line) => principalFilter.test(line));
+  if (filterIndex >= 0) {
+    controls.push({
+      kind: "principal-bound-object-filter",
+      line: sink.callStartLine + filterIndex,
+    });
+  }
+
+  if (sink.resultIdentifier === undefined) return controls;
+  const resourceControl = dotnetEnforcedResourceAuthorization(
+    lines,
+    sink.callEndLine + 1,
+    Math.min(lines.length, functionEndLine, sink.callEndLine + 48),
+    sink.resultIdentifier,
+  );
+  if (resourceControl !== undefined) {
+    controls.push({
+      kind: "resource-based-object-authorization",
+      line: resourceControl,
+    });
+  }
+  return controls;
+}
+
+function dotnetEnforcedResourceAuthorization(
+  lines: readonly string[],
+  startLine: number,
+  endLine: number,
+  resourceIdentifier: string,
+): number | undefined {
+  const structuralFile = cFamilyStructuralLines(lines).join("\n");
+  const escapedResource = escapeRegularExpression(resourceIdentifier);
+  const failClosed =
+    /\breturn\s+(?:Challenge|Forbid|StatusCode|Unauthorized)\s*\(|\bthrow\b/u;
+  for (let line = startLine; line <= endLine; line += 1) {
+    const callLines = lines.slice(line - 1, Math.min(endLine, line + 12));
+    const original = callLines.join("\n");
+    const structural = cFamilyStructuralLines(callLines).join("\n");
+    const call = /\b([A-Za-z_]\w*)\s*\.\s*AuthorizeAsync\s*\(/u.exec(
+      structural,
+    );
+    if (call?.index === undefined) continue;
+    const receiver = escapeRegularExpression(call[1]!);
+    const typedReceiver = new RegExp(
+      `\\b(?:Microsoft\\s*\\.\\s*AspNetCore\\s*\\.\\s*Authorization\\s*\\.\\s*)?IAuthorizationService\\s+${receiver}\\b`,
+      "u",
+    );
+    if (!typedReceiver.test(structuralFile)) continue;
+    const open = structural.indexOf("(", call.index);
+    const close = matchingCallParenthesis(structural, open);
+    if (open < 0 || close < 0) continue;
+    const arguments_ = splitJavascriptArguments(
+      original.slice(open + 1, close),
+    ).map((argument) =>
+      argument.replace(/^\s*[A-Za-z_]\w*\s*:\s*/u, "").trim(),
+    );
+    if (
+      !/^(?:User|HttpContext\s*\.\s*User)$/u.test(arguments_[0] ?? "") ||
+      !new RegExp(`^${escapedResource}$`, "u").test(arguments_[1] ?? "")
+    ) {
+      continue;
+    }
+
+    const beforeCall = structural.slice(0, call.index);
+    const afterCall = structural.slice(close + 1);
+    if (
+      /\bif\s*\([^;{}]*!\s*(?:\(?\s*await\s+)?$/u.test(beforeCall) &&
+      /^\s*\)?\s*\.\s*Succeeded\b/u.test(afterCall) &&
+      failClosed.test(afterCall)
+    ) {
+      return line;
+    }
+
+    const authorizationResult =
+      /\b(?:var|AuthorizationResult)\s+([A-Za-z_]\w*)\s*=\s*(?:await\s+)?$/u.exec(
+        beforeCall,
+      )?.[1];
+    if (authorizationResult === undefined) continue;
+    const escapedResult = escapeRegularExpression(authorizationResult);
+    const following = cFamilyStructuralLines(
+      lines.slice(
+        line + (structural.slice(0, close).match(/\n/gu)?.length ?? 0),
+        Math.min(endLine, line + 16),
+      ),
+    ).join("\n");
+    const negativeGuard = new RegExp(
+      `\\bif\\s*\\(\\s*!\\s*${escapedResult}\\s*\\.\\s*Succeeded\\s*\\)[^;{}]*(?:\\{[^{}]*)?`,
+      "u",
+    );
+    const guard = negativeGuard.exec(following);
+    if (
+      guard?.index !== undefined &&
+      failClosed.test(following.slice(guard.index))
+    ) {
+      return line;
+    }
+  }
+  return undefined;
 }
 
 interface NodeHttpUrlSink {

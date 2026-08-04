@@ -18,6 +18,7 @@ that dissimilar products can be reduced to one score.
 | [CodeQL JavaScript request forgery](https://codeql.github.com/codeql-query-help/javascript/js-request-forgery/) and [Axios request configuration](https://axios-http.com/docs/req_config)                                                                                                                                                                                                                  | JavaScript SSRF includes attacker control of outbound URLs. Axios prepends `baseURL` to relative URLs, permits absolute URLs to override it by default, and exposes separate absolute-override and redirect controls.                                                                                                           | Prove the `axios` package binding or non-reassigned created client, track only the URL argument/configuration property, and keep fixed selection, authority confinement, relative-path validation, redirects, and address pinning as separate proof obligations.                                 |
 | [CodeQL Java partial path traversal](https://codeql.github.com/codeql-query-help/java/java-partial-path-traversal/) and [Oracle path operations](https://docs.oracle.com/javase/tutorial/essential/io/pathOps.html)                                                                                                                                                                                        | Java path security depends on component-aware containment and real filesystem semantics: normalization is syntactic, absolute resolution can replace the base, and string prefixes admit sibling names.                                                                                                                         | Track Java web input into typed JDK filesystem APIs, retain absolute rejection, `Path.startsWith`, normalization, and `toRealPath` as separate proof leads, and require parent, absolute-reset, sibling, and link witnesses.                                                                     |
 | [CodeQL C# custom models](https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-csharp/)                                                                                                                                                                                                                                                                                    | C# model packs identify exact callable signatures and argument access paths for sources, summaries, sinks, barriers, and threat models; `SqlCommand` argument zero is a canonical SQL sink.                                                                                                                                     | Resolve exact ASP.NET controller/service argument positions into bounded host hypotheses, preserve type binding and query-text argument roles, and retain parameter binding as counterevidence.                                                                                                  |
+| [CodeQL missing function-level access control](https://codeql.github.com/codeql-query-help/csharp/cs-web-missing-function-level-access-control/), [ASP.NET Core resource authorization](https://learn.microsoft.com/en-us/aspnet/core/security/authorization/resource-based), and [EF Core `FindAsync`](https://learn.microsoft.com/en-us/ef/core/change-tracking/entity-entries#find-and-findasync)       | Function-level authorization is a useful medium-precision signal, but ASP.NET documents that declarative authorization occurs before resource loading and is insufficient for resource decisions. EF Core primary-key lookup selects one entity without an ownership predicate.                                                 | Keep endpoint authorization out of the object-control set; preserve a bound request ID into a typed EF lookup and retain only a principal-bound query predicate or enforced `AuthorizeAsync(User, exactEntity, policy)` result as resource-level control evidence.                               |
 | [CodeQL C# path injection](https://codeql.github.com/codeql-query-help/csharp/cs-path-injection/) and [.NET CA3003](https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/ca3003)                                                                                                                                                                                              | High-precision web-request-to-filesystem path analysis must preserve path construction and distinguish exact allowlists or canonical containment from normalization alone.                                                                                                                                                      | Track ASP.NET input across uniquely typed services into `System.IO` paths, retain rooted-input and canonical-relative controls, and require witnesses for parent, absolute-reset, and sibling-prefix cases.                                                                                      |
 | [Semgrep taint rules](https://semgrep.dev/docs/writing-rules/glossary)                                                                                                                                                                                                                                                                                                                                     | Explicit sources, sinks, propagators, and sanitizers make taint assumptions reviewable; cross-file and per-file analysis have distinct guarantees.                                                                                                                                                                              | Preserve model provenance and demand source/control/sink closure for imported candidates. Build regression fixtures for custom propagators and sanitizers.                                                                                                                                       |
 | [Sonar security rules](https://docs.sonarsource.com/sonarqube-server/user-guide/rules/security-related-rules)                                                                                                                                                                                                                                                                                              | Taint vulnerabilities and review-required security hotspots are different evidence classes. Sonar also supports custom sources, sanitizers, validators, and sinks.                                                                                                                                                              | Treat all imported results as candidates, not findings. Validation decides reportable, rejected, or deferred; a hotspot cannot inherit vulnerability status merely from its producer.                                                                                                            |
@@ -107,8 +108,9 @@ contract validation, and sealed outputs remain mandatory.
 
 The mandatory host residual pass now has an initial provider-neutral model pack
 for Node HTTP, Python web, Spring/servlet, and ASP.NET command execution, raw
-SQL, server-side request forgery, filesystem path injection, and Node object
-authorization, plus Node and Python server-side request forgery and server-side template injection. Same-file models activate
+SQL, server-side request forgery, filesystem path injection, and Node plus
+ASP.NET object authorization, plus Node and Python server-side request forgery
+and server-side template injection. Same-file models activate
 when their language, request-source syntax, and concrete runtime or sink API are
 present in one bounded source file. The bounded Java cross-file layer resolves
 unique service types from controller fields, parses public and protected method
@@ -346,6 +348,21 @@ wrapper-parameter propagators. This follows CodeQL's high-precision
 and its documented
 [C# `SqlCommand` sink model](https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-csharp/).
 
+`benchmarks/aspnet-object-authorization-manifest.json` adds a strict EF Core
+resource-authorization pair. The positive carries a `[FromRoute]` invoice ID
+through a uniquely resolved repository into a typed `DbSet.FindAsync` lookup;
+the controller's `[Authorize]` attribute deliberately remains common
+counterexample evidence rather than a resource control. The negative preserves
+the same route, repository, database entity, and runtime provider while adding
+the authenticated customer ID to the exact `SingleOrDefaultAsync` predicate.
+Real EF Core InMemory witnesses prove cross-customer disclosure in the positive
+and rejection in the control. Focused regressions also require an exact
+`IAuthorizationService` receiver, exact returned entity argument, a checked
+`Succeeded` result, and a fail-closed denial branch before retaining imperative
+resource authorization. Untyped lookalikes, local EF shadows, fixed or
+reassigned identifiers, attacker-owned customer filters, `[Authorize]`, wrong
+resources, ignored policy results, comments, and strings remain negative cases.
+
 `benchmarks/aspnet-cross-file-ssrf-manifest.json` adds a strict outbound-client
 pair. The positive sends an ASP.NET query parameter as the complete URI to
 `HttpClient.GetAsync`; its request deadline and response ceiling isolate SSRF
@@ -418,8 +435,8 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
 1. **Expand typed framework security models.** Extend bounded summaries beyond
    two Node/TypeScript or Python relative-import hops; extend Java and ASP.NET
    beyond two uniquely typed service boundaries;
-   extend framework-specific authorization models beyond the bounded Node
-   object-reference lane, add ASP.NET template engines
+   extend framework-specific authorization models beyond the bounded Node and
+   ASP.NET object-reference lanes, add ASP.NET template engines
    beyond the typed Scriban and RazorLight lanes,
    outbound-client APIs beyond JDK `HttpClient`, Spring `RestTemplate`,
    Spring `WebClient`, OkHttp, Axios, and .NET `HttpClient`, partial-URL SSRF models,

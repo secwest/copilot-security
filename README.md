@@ -41,8 +41,8 @@ stand in for reviewed application source.
 
 The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
-paths, and server-side request forgery, plus Node, Python, and Spring
-server-side template injection. Each applicable
+paths, server-side request forgery, and object authorization, plus Node, Python,
+and Spring server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
@@ -67,7 +67,15 @@ preserve a request-controlled record identifier into the exact single-record
 lookup argument and retain only same-query principal/owner filtering or a
 post-lookup check on that returned object as control leads. Authentication,
 UUID opacity, ORM use, or unrelated owner text is not classified as object
-authorization. For Node/TypeScript relative-module wrappers, the host can
+authorization. ASP.NET object-authorization rows preserve a `[FromRoute]`,
+`[FromQuery]`, or request-derived identifier through a uniquely typed
+repository boundary into a typed EF Core `DbSet` or `DbContext` single-record
+lookup. `[Authorize]`, authentication, EF tracking, and opaque primary keys are
+not object controls. The host retains a same-query owner, tenant, or customer
+predicate only when it is bound to an authenticated-principal-shaped value, or
+an `IAuthorizationService.AuthorizeAsync(User, returnedEntity, policy)` call
+only when its exact result is enforced fail-closed before the protected effect.
+For Node/TypeScript relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
 explicit relative from-imports, bind each exact positional argument, and
@@ -388,6 +396,21 @@ severity, and both negative cases at perfect selected-run thresholds:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/node-object-authorization-manifest.json `
   --results-dir C:\security-benchmarks\node-object-authorization `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The ASP.NET object-authorization lane uses real EF Core 8 fixtures and
+executable witnesses. The positive passes a route-controlled primary key to
+`DbSet.FindAsync` under `[Authorize]` and returns another customer's invoice;
+the control preserves the same topology but constrains one
+`SingleOrDefaultAsync` predicate by the customer ID derived from the current
+principal:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/aspnet-object-authorization-manifest.json `
+  --results-dir C:\security-benchmarks\aspnet-object-authorization `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

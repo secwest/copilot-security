@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "aspnet-cross-file-idor",
+      "description": "An authenticated ASP.NET endpoint passes an attacker-selected route key to a typed EF Core primary-key lookup without authorizing the returned invoice.",
+      "fixture": "fixtures/aspnet-cross-file-idor",
+      "findingsPaths": ["aspnet-cross-file-idor/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "aspnet-invoice-owner-check-missing",
+          "cwe": ["CWE-639", "CWE-862"],
+          "locations": [
+            {
+              "path": "Repositories/InvoiceRepository.cs",
+              "startLine": 18,
+              "endLine": 18,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "aspnet-cross-file-safe-authorization",
+      "description": "The same ASP.NET route and typed EF Core repository topology constrains the selected invoice by the authenticated customer in one query.",
+      "fixture": "fixtures/aspnet-cross-file-safe-authorization",
+      "findingsPaths": [
+        "aspnet-cross-file-safe-authorization/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}
