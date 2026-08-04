@@ -552,14 +552,15 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
    own real-history exploit/control gate. Next extensions should add audited
    custom-rule packs and separately authorized issuer verification without
    weakening the no-plaintext persistence or no-implicit-network contracts.
-4. **Configuration and IaC model packs — three CI lanes shipped.** Deterministic
+4. **Configuration and IaC model packs — four CI lanes shipped.** Deterministic
    YAML models now prove both same-job privileged-trigger/untrusted-checkout
    execution, cross-workflow pull-request artifact poisoning, and reusable-
-   workflow script injection against paired witnesses, including Checkout v7
-   protection, triggering-run binding, extraction paths, cleanup, typed-data
-   isolation, input identity, and expression-compilation timing. Extend the
-   same evidence discipline to current-semantics cache poisoning, nested
-   reusable workflows, composite actions,
+   workflow and local composite-action script injection against paired
+   witnesses, including Checkout v7 protection, triggering-run binding,
+   extraction paths, cleanup, typed-data isolation, descriptor and input
+   identity, step scope, and expression-compilation timing. Extend the same
+   evidence discipline to current-semantics cache poisoning, nested reusable-
+   workflow and composite-action chains,
    Docker, Kubernetes, Terraform, and cloud policy surfaces, then ask Copilot
    to evaluate deployment reachability and compensating controls.
 5. **Seed-coverage receipts.** Make imported-candidate closure a workbench

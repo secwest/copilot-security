@@ -349,6 +349,31 @@ node ../../benchmarks/run-benchmark.mjs `
 node ../../benchmarks/witnesses/github-actions-reusable-workflow-injection/ReusableWorkflowInjectionWitness.mjs
 ```
 
+The composite-action injection lane applies the same perfect gates to a
+workflow-to-action CWE-094/CWE-095/CWE-116 pair. Both callers forward an
+attacker-controlled issue comment and a mock release secret into the same
+literal repository-local action. Both action metadata files declare the same
+inputs and `runs.using: composite`. The positive compiles the release name into
+official GitHub Script source; the negative assigns the expression to that
+step's environment and reads it only through `process.env`. The witness proves
+that direct substitution executes a harmless second JavaScript statement while
+the same payload remains one inert value in the control:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/github-actions-composite-action-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-github-actions-composite-action-injection `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+node ../../benchmarks/witnesses/github-actions-composite-action-injection/CompositeActionInjectionWitness.mjs
+```
+
 The SSRF framework lane applies the same strict gates to Node and Python
 relative-import wrappers. Its positives pass complete caller-controlled URLs
 to outbound HTTP sinks. Its negative controls select only complete

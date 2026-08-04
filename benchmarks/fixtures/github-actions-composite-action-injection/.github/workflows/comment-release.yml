@@ -1,0 +1,16 @@
+name: Comment release
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  publish:
+    if: github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/publish-release
+        with:
+          release-name: ${{ github.event.comment.body }}
+          release-token: ${{ secrets.RELEASE_TOKEN }}

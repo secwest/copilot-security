@@ -8,6 +8,7 @@ import {
 } from "./evidence-quality.js";
 import {
   githubActionsArtifactPoisoningRecords,
+  githubActionsCompositeActionInjectionRecords,
   githubActionsPrivilegeRecords,
   githubActionsReusableWorkflowInjectionRecords,
 } from "./github-actions-risk.js";
@@ -1735,6 +1736,7 @@ export async function buildResidualRiskInventory(
   }
   records.push(...githubActionsArtifactPoisoningRecords(sourceFiles));
   records.push(...githubActionsReusableWorkflowInjectionRecords(sourceFiles));
+  records.push(...githubActionsCompositeActionInjectionRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
 
   return selectResidualRiskRecords(records, MAX_SIGNALS)

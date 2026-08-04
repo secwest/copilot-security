@@ -126,6 +126,20 @@ only through native shell syntax or `process.env` remains data-only
 counterevidence. Caller/callee permission intersection, forwarded secrets,
 OIDC, environment gates, and runner reachability remain separate impact and
 control evidence.
+Composite-action script-injection rows preserve the same externally influenced
+event-field identity through an exact workflow-step `with` entry, literal
+repository-local action directory, one unambiguous `action.yml` or
+`action.yaml`, declared metadata input, `runs.using: composite`, and a runnable
+`run` or official `actions/github-script` source. Direct input substitution and
+same-step input-derived `${{ env.NAME }}` re-expansion are code generation;
+assigning the input to that step's environment and reading it only through the
+shell's native variable syntax or `process.env` remains data-only. The model
+rejects parent traversal, remote or dynamic targets, ambiguous or invalid
+metadata, shell-less commands, ordinary action inputs, script-action lookalikes,
+cross-step environment assumptions, and secret evidence that exists only in a
+YAML comment. Effective caller permissions, explicitly forwarded and consumed
+secrets, OIDC, review/environment gates, and runner reachability remain separate
+impact and control evidence.
 For Node/TypeScript relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
@@ -550,6 +564,23 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 
 node benchmarks/witnesses/github-actions-reusable-workflow-injection/ReusableWorkflowInjectionWitness.mjs
+```
+
+The composite-action injection lane forwards the same issue-comment body into
+a declared input of one literal repository-local composite action. The positive
+substitutes it directly into official `actions/github-script` source while the
+caller grants write/OIDC permissions and explicitly forwards a release secret.
+The control maps the same input into the GitHub Script step's environment and
+reads it only through `process.env`, so the identical payload remains inert:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/github-actions-composite-action-injection-manifest.json `
+  --results-dir C:\security-benchmarks\github-actions-composite-action-injection `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+node benchmarks/witnesses/github-actions-composite-action-injection/CompositeActionInjectionWitness.mjs
 ```
 
 The SSRF framework lane pairs Node and Python cross-file absolute-URL flows

@@ -155,6 +155,45 @@ export interface GithubActionsReusableWorkflowInjectionRecord {
   };
 }
 
+export interface GithubActionsCompositeActionInjectionRecord {
+  path: string;
+  line: number;
+  categories: string[];
+  priority: number;
+  startLine: number;
+  endLine: number;
+  excerpt: string;
+  sourceExcerpt: string;
+  frameworkModel: {
+    schemaVersion: "1.2";
+    id: "github-actions-composite-action-script-injection";
+    language: "github-actions-yaml";
+    scope: "cross-file";
+    source: {
+      kind: "attacker-controlled-event-field-forwarding";
+      path: string;
+      line: number;
+    };
+    sink: {
+      kind: "composite-action-script-interpolation";
+      path: string;
+      line: number;
+      cweIds: readonly ["CWE-094", "CWE-095", "CWE-116"];
+    };
+    propagators: Array<{
+      kind:
+        | "attacker-influenced-workflow-trigger"
+        | "local-composite-action-call"
+        | "composite-action-input"
+        | "workflow-expression-env-alias";
+      path: string;
+      line: number;
+      symbol: string;
+    }>;
+    candidateControls: CandidateControl[];
+  };
+}
+
 interface ParsedWorkflow {
   root: unknown;
   counter: LineCounter;
@@ -195,6 +234,21 @@ interface ReusableWorkflowCall {
   controls: CandidateControl[];
   permission?: Pair;
   forwardedSecrets: "inherit" | Set<string>;
+}
+
+interface CompositeActionCall {
+  callerPath: string;
+  callerLines: readonly string[];
+  targetDirectory: string;
+  callLine: number;
+  triggerLine: number;
+  eventName: string;
+  inputLine: number;
+  inputName: string;
+  sourceExpression: string;
+  controls: CandidateControl[];
+  permission?: Pair;
+  forwardedSecretInputs: Set<string>;
 }
 
 interface ScriptInterpolationSink {
@@ -638,6 +692,18 @@ function nodeText(node: unknown, source: string): string {
   return source.slice(node.range[0], node.range[2]);
 }
 
+function scalarTreeMatches(node: unknown, expression: RegExp): boolean {
+  const scalar = scalarText(node);
+  if (scalar !== undefined) return expression.test(scalar);
+  if (isMap(node)) {
+    return node.items.some((pair) => scalarTreeMatches(pair.value, expression));
+  }
+  return (
+    isSeq(node) &&
+    node.items.some((item) => scalarTreeMatches(item, expression))
+  );
+}
+
 function officialAction(action: string | undefined, identity: string): boolean {
   if (action === undefined) return false;
   const prefix = `${identity}@`;
@@ -865,6 +931,163 @@ function reusableWorkflowCalls(
     }
   }
   return calls;
+}
+
+function localCompositeActionDirectory(
+  value: string | undefined,
+): string | undefined {
+  if (value === undefined || value.includes("${{")) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("./") || trimmed.includes("\\")) return undefined;
+  return normalizeWorkspacePath(trimmed.slice(2));
+}
+
+function stepReviewControls(
+  step: unknown,
+  path: string,
+  counter: LineCounter,
+): CandidateControl[] {
+  const condition = mapPair(step, "if");
+  const expression = scalarText(condition?.value) ?? "";
+  return /pull_request\.labels|labels\.\*\.name|safe[-_ ]to[-_ ]test/iu.test(
+    expression,
+  )
+    ? [
+        {
+          kind: "mutable-review-label-gate",
+          path,
+          line: pairLine(condition, counter),
+        },
+      ]
+    : [];
+}
+
+function compositeActionCalls(
+  files: readonly GithubActionsSourceFile[],
+): CompositeActionCall[] {
+  const calls: CompositeActionCall[] = [];
+  for (const file of files) {
+    if (!/^\.github\/workflows\/[^/]+\.ya?ml$/iu.test(file.path)) continue;
+    const parsed = parseWorkflow(file.text);
+    if (parsed === undefined) continue;
+    const jobs = mapPair(parsed.root, "jobs")?.value;
+    if (!isMap(jobs)) continue;
+    const workflowPermission = mapPair(parsed.root, "permissions");
+    for (const jobPair of jobs.items) {
+      const job = jobPair.value;
+      const steps = mapPair(job, "steps")?.value;
+      if (!isMap(job) || !isSeq(steps)) continue;
+      const jobPermission = mapPair(job, "permissions");
+      const jobControls = jobReviewControls(job, file.path, parsed.counter);
+      const readOnly = permissionControl(
+        workflowPermission,
+        jobPermission,
+        file.path,
+        parsed.counter,
+      );
+      if (readOnly !== undefined) jobControls.push(readOnly);
+      for (const step of steps.items) {
+        const usesPair = mapPair(step, "uses");
+        const targetDirectory = localCompositeActionDirectory(
+          scalarText(usesPair?.value),
+        );
+        if (targetDirectory === undefined) continue;
+        const inputs = mapPair(step, "with")?.value;
+        if (!isMap(inputs)) continue;
+        const forwardedSecretInputs = new Set<string>();
+        for (const input of inputs.items) {
+          const name = scalarText(input.key)?.trim().toLowerCase();
+          const value = scalarText(input.value);
+          if (
+            name !== undefined &&
+            name !== "" &&
+            /^\s*\$\{\{\s*(?:secrets\.[A-Za-z_][A-Za-z0-9_]*|github\.token)\s*\}\}\s*$/iu.test(
+              value ?? "",
+            )
+          ) {
+            forwardedSecretInputs.add(name);
+          }
+        }
+        const controls = [
+          ...jobControls,
+          ...stepReviewControls(step, file.path, parsed.counter),
+        ];
+        for (const input of inputs.items) {
+          const inputName = scalarText(input.key)?.trim();
+          if (
+            inputName === undefined ||
+            !/^[A-Za-z_][A-Za-z0-9_-]*$/u.test(inputName)
+          ) {
+            continue;
+          }
+          const source = attackerEventField(
+            parsed.root,
+            scalarText(input.value),
+            parsed.counter,
+          );
+          if (source === undefined) continue;
+          calls.push({
+            callerPath: file.path,
+            callerLines: file.lines,
+            targetDirectory,
+            callLine: pairLine(usesPair, parsed.counter),
+            triggerLine: source.triggerLine,
+            eventName: source.eventName,
+            inputLine: pairLine(input, parsed.counter),
+            inputName,
+            sourceExpression: source.expression,
+            controls,
+            permission: jobPermission ?? workflowPermission,
+            forwardedSecretInputs,
+          });
+        }
+      }
+    }
+  }
+  return calls;
+}
+
+function compositeActionInput(
+  root: unknown,
+  inputName: string,
+  counter: LineCounter,
+): { line: number; steps: unknown } | undefined {
+  const name = scalarText(mapPair(root, "name")?.value)?.trim();
+  const description = scalarText(mapPair(root, "description")?.value)?.trim();
+  const input = mapPair(mapPair(root, "inputs")?.value, inputName);
+  const inputDescription = scalarText(
+    mapPair(input?.value, "description")?.value,
+  )?.trim();
+  const runs = mapPair(root, "runs")?.value;
+  const using = scalarText(mapPair(runs, "using")?.value)?.trim().toLowerCase();
+  const steps = mapPair(runs, "steps")?.value;
+  if (
+    name === undefined ||
+    name === "" ||
+    description === undefined ||
+    description === "" ||
+    input === undefined ||
+    !isMap(input.value) ||
+    inputDescription === undefined ||
+    inputDescription === "" ||
+    using !== "composite" ||
+    !isSeq(steps)
+  ) {
+    return undefined;
+  }
+  return { line: pairLine(input, counter), steps };
+}
+
+function compositeInterpolationSink(
+  step: unknown,
+  inputName: string,
+  environment: ReadonlyMap<string, number>,
+  counter: LineCounter,
+): ScriptInterpolationSink | undefined {
+  const sink = interpolationSink(step, inputName, environment, counter);
+  if (sink?.kind !== "run") return sink;
+  const shell = scalarText(mapPair(step, "shell")?.value)?.trim();
+  return shell === undefined || shell === "" ? undefined : sink;
 }
 
 function workflowCallStringInput(
@@ -1463,6 +1686,131 @@ export function githubActionsReusableWorkflowInjectionRecords(
           },
         });
       }
+    }
+  }
+  return records;
+}
+
+export function githubActionsCompositeActionInjectionRecords(
+  files: readonly GithubActionsSourceFile[],
+): GithubActionsCompositeActionInjectionRecord[] {
+  const calls = compositeActionCalls(files);
+  if (calls.length === 0) return [];
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const records: GithubActionsCompositeActionInjectionRecord[] = [];
+
+  for (const call of calls) {
+    const prefix =
+      call.targetDirectory === "." ? "" : `${call.targetDirectory}/`;
+    const descriptors = [`${prefix}action.yml`, `${prefix}action.yaml`]
+      .map((path) => filesByPath.get(path))
+      .filter((file): file is GithubActionsSourceFile => file !== undefined);
+    if (descriptors.length !== 1) continue;
+    const descriptor = descriptors[0]!;
+    const parsed = parseWorkflow(descriptor.text);
+    if (parsed === undefined) continue;
+    const actionInput = compositeActionInput(
+      parsed.root,
+      call.inputName,
+      parsed.counter,
+    );
+    if (actionInput === undefined || !isSeq(actionInput.steps)) continue;
+
+    for (const step of actionInput.steps.items) {
+      const environment = applyInputEnvironment(
+        new Map<string, number>(),
+        step,
+        call.inputName,
+        parsed.counter,
+      );
+      const sink = compositeInterpolationSink(
+        step,
+        call.inputName,
+        environment,
+        parsed.counter,
+      );
+      if (sink === undefined) continue;
+
+      const categories = ["github-actions-composite-action-script-injection"];
+      if (
+        [...call.forwardedSecretInputs].some((name) =>
+          scalarTreeMatches(step, inputExpressionPattern(name)),
+        ) ||
+        scalarTreeMatches(step, /\$\{\{\s*github\.token\s*\}\}/iu)
+      ) {
+        categories.push("github-actions-explicit-secret-access");
+      }
+      if (permissionAllowsWrite(call.permission)) {
+        categories.push("github-actions-write-token-permission");
+      }
+
+      const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
+      const endLine = Math.min(
+        descriptor.lines.length,
+        sink.line + CONTEXT_LINES_AFTER,
+      );
+      const sourceStart = Math.max(1, call.inputLine - 4);
+      const sourceEnd = Math.min(call.callerLines.length, call.inputLine + 3);
+      const propagators: GithubActionsCompositeActionInjectionRecord["frameworkModel"]["propagators"] =
+        [
+          {
+            kind: "attacker-influenced-workflow-trigger",
+            path: call.callerPath,
+            line: call.triggerLine,
+            symbol: `event=${call.eventName}`,
+          },
+          {
+            kind: "local-composite-action-call",
+            path: call.callerPath,
+            line: call.callLine,
+            symbol: `action=${call.targetDirectory}`,
+          },
+          {
+            kind: "composite-action-input",
+            path: descriptor.path,
+            line: actionInput.line,
+            symbol: `input=${call.inputName}`,
+          },
+        ];
+      if (sink.envAlias !== undefined) {
+        propagators.push({
+          kind: "workflow-expression-env-alias",
+          path: descriptor.path,
+          line: sink.envAlias.line,
+          symbol: `input=${call.inputName};env=${sink.envAlias.name}`,
+        });
+      }
+      records.push({
+        path: descriptor.path,
+        line: sink.line,
+        categories: [...categories],
+        priority: 134,
+        startLine,
+        endLine,
+        excerpt: descriptor.lines.slice(startLine - 1, endLine).join("\n"),
+        sourceExcerpt: call.callerLines
+          .slice(sourceStart - 1, sourceEnd)
+          .join("\n"),
+        frameworkModel: {
+          schemaVersion: "1.2",
+          id: "github-actions-composite-action-script-injection",
+          language: "github-actions-yaml",
+          scope: "cross-file",
+          source: {
+            kind: "attacker-controlled-event-field-forwarding",
+            path: call.callerPath,
+            line: call.inputLine,
+          },
+          sink: {
+            kind: "composite-action-script-interpolation",
+            path: descriptor.path,
+            line: sink.line,
+            cweIds: ["CWE-094", "CWE-095", "CWE-116"],
+          },
+          propagators,
+          candidateControls: distinctControls(call.controls),
+        },
+      });
     }
   }
   return records;

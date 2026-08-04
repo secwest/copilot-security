@@ -1,0 +1,19 @@
+name: Publish release
+description: Publish a named release
+inputs:
+  release-name:
+    description: Release name supplied by the caller
+    required: true
+  release-token:
+    description: Token used by the release publisher
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@v8
+      env:
+        RELEASE_NAME: ${{ inputs.release-name }}
+        RELEASE_TOKEN: ${{ inputs.release-token }}
+      with:
+        script: |
+          core.info(`Publishing ${process.env.RELEASE_NAME}`);

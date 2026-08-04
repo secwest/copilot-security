@@ -87,6 +87,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.node == '22.13.0'
         run: node benchmarks/witnesses/github-actions-reusable-workflow-injection/ReusableWorkflowInjectionWitness.mjs
 
+      - name: Prove composite-action injection and step-environment isolation
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.13.0'
+        run: node benchmarks/witnesses/github-actions-composite-action-injection/CompositeActionInjectionWitness.mjs
+
       - name: Check formatting
         run: pnpm --dir sdk/typescript run format
 

@@ -76,6 +76,16 @@ The package is ESM-only and provides:
   re-expansion remains unsafe; native shell or `process.env` use keeps the
   intermediate environment value as data. Effective caller/callee permissions,
   forwarded secrets, OIDC, and environment gates remain explicit.
+  Composite-action injection hypotheses require the exact attacker-controlled
+  caller field, workflow-step input, literal local action directory, one valid
+  metadata descriptor, declared input, composite runtime, and generated shell
+  or official GitHub Script source. Same-step `${{ env.NAME }}` re-expansion
+  remains unsafe, while native shell or `process.env` consumption keeps an
+  intermediate environment value as data. Descriptor ambiguity, parent
+  traversal, invalid metadata, shell-less commands, cross-step environment
+  assumptions, ordinary action inputs, lookalikes, and comment-only secret
+  evidence are rejected; effective permissions and explicitly forwarded and
+  consumed secrets remain explicit.
   Models include exact
   source/sink lines and nearby negative controls for the mandatory residual
   correction turn, plus bounded one-hop or
