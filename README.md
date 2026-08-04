@@ -741,15 +741,18 @@ Pop-Location
 ```
 
 The GORM v2 lane requires the exact `gorm.io/gorm` import and a proven
-`*gorm.DB`. It distinguishes query construction from execution: request data
-in `Raw`, `Where`, `Order`, `Table`, `Joins`, and the other documented fragment
-positions is retained only when the same fluent or assigned builder reaches a
-finisher. `Exec` and `Pluck` execute their grammar positions immediately;
-inline `Find`/`First`/`Take`/`Delete` conditions and `gorm.Expr` query text are
-modeled separately. Fixed templates with request data only in later placeholder
-arguments remain controls. The paired offline modules prove both an injected
-`Raw(...).Scan(...)` predicate and its bound-value isolation without a database
-service or dependency download:
+`*gorm.DB`. It distinguishes query construction from execution across both the
+traditional API and `gorm.G[T](db)`: request data in `Raw`, `Where`, `Order`,
+`Table`, and other documented fragment positions is retained only when the same
+fluent or assigned builder reaches a real finisher. The generic model preserves
+context-first signatures, `Count` column grammar, exact typed interfaces,
+`JoinBuilder`/`PreloadBuilder` callback clauses, and `gorm.Expr` in constructor
+options or `Set` assignments. Generic join targets and preload associations are
+typed metadata, and `Build` only materializes a DryRun statement. Fixed
+templates with request data only in later placeholder arguments remain
+controls. Four offline modules prove traditional `Raw(...).Scan(...)` and
+generic `Where(...).Find(ctx)` exploits plus their matched bound-value controls
+without a database service or dependency download:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -762,6 +765,12 @@ Push-Location benchmarks\fixtures\go-cross-file-gorm-sqli
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-gorm
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-gorm-generics-sqli
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-gorm-generics
 go test ./...
 Pop-Location
 ```

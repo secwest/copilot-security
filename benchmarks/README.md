@@ -531,11 +531,13 @@ Pop-Location
 
 The GORM v2 lane measures exact `gorm.io/gorm` import and `*gorm.DB` identity,
 query-fragment argument roles, fluent and assigned builder propagation, and
-construction-to-finisher execution closure. The positive formats the request
-value into `Raw` query grammar and reaches `Scan`; the matched control retains
-the same handler, wrapper, adapter, and attack bytes but places them after a
-placeholder in a fixed query. Both fixtures use an offline
-signature-compatible GORM subset over a deterministic standard-library driver:
+construction-to-finisher execution closure. The traditional pair formats the
+request value into `Raw` query grammar and reaches `Scan`; the generic pair
+uses `gorm.G[string](db)`, retains a request-derived `Where` predicate, and
+reaches context-first `Find`. Each matched control retains its handler,
+wrapper, adapter, and attack bytes but places those bytes after a placeholder
+in a fixed query. All four fixtures use offline signature-compatible GORM
+subsets over deterministic standard-library drivers:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -553,6 +555,12 @@ Push-Location fixtures\go-cross-file-gorm-sqli
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-gorm
+go test ./...
+Pop-Location
+Push-Location fixtures\go-gorm-generics-sqli
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-gorm-generics
 go test ./...
 Pop-Location
 ```

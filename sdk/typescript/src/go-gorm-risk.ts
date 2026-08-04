@@ -92,7 +92,17 @@ interface FluentChain {
   endOffset: number;
   result?: string;
   risk?: GormRisk;
+  generic: boolean;
 }
+
+const GENERIC_RECEIVER_TYPE_NAMES = [
+  "Interface",
+  "CreateInterface",
+  "ChainInterface",
+  "ExecInterface",
+  "SetCreateOrUpdateInterface",
+  "SetUpdateOnlyInterface",
+];
 
 const CHAIN_GRAMMAR_METHODS = new Set([
   "Distinct",
@@ -185,6 +195,15 @@ function receiverDeclarationNames(
   alias: string,
 ): Set<string> {
   return goTypedReceiverNames(function_, [{ alias, typeNames: ["DB"] }]);
+}
+
+function genericReceiverDeclarationNames(
+  function_: GoFunction,
+  alias: string,
+): Set<string> {
+  return goTypedReceiverNames(function_, [
+    { alias, typeNames: GENERIC_RECEIVER_TYPE_NAMES, generic: true },
+  ]);
 }
 
 function addControl(
@@ -369,6 +388,77 @@ function chainRisk(
   );
 }
 
+function genericArgumentRisk(
+  call: ParsedCall,
+  method: string,
+  argumentIndex: number,
+  kind: GormSinkKind,
+  requests: readonly string[],
+  taints: ReadonlyMap<string, GoTaint>,
+  controls: Array<{ kind: string; line: number }>,
+): GormRisk | undefined {
+  const query = call.arguments[argumentIndex];
+  if (query === undefined) return undefined;
+  const source = querySource(query, requests, taints, call.line);
+  if (source === undefined) return undefined;
+  const queryControls = [...controls];
+  if (call.arguments.length > argumentIndex + 1) {
+    addControl(queryControls, "gorm-bound-arguments-present", call.line);
+  }
+  return risk(
+    kind,
+    source,
+    queryControls.slice(0, 8),
+    call.line,
+    `G.${method}`,
+  );
+}
+
+function genericCallbackRisk(
+  outer: ParsedCall,
+  method: "Joins" | "Preload",
+  calls: readonly ParsedCall[],
+  alias: string,
+  requests: readonly string[],
+  taints: ReadonlyMap<string, GoTaint>,
+  valueContainers: ReadonlySet<string>,
+  controls: Array<{ kind: string; line: number }>,
+): GormRisk | undefined {
+  const callback = outer.arguments[1];
+  if (callback === undefined) return undefined;
+  const interfaceName = method === "Joins" ? "JoinBuilder" : "PreloadBuilder";
+  const receiver = new RegExp(
+    `\\bfunc\\s*\\(\\s*([A-Za-z_]\\w*)\\s+${escapeRegularExpression(alias)}\\.${interfaceName}\\b`,
+    "u",
+  ).exec(callback)?.[1];
+  if (receiver === undefined) return undefined;
+  const allowed =
+    method === "Joins"
+      ? new Set(["Not", "Or", "Select", "Where"])
+      : new Set(["Not", "Or", "Order", "Select", "Where"]);
+  for (const nested of calls) {
+    if (nested.offset <= outer.offset || nested.offset >= outer.endOffset) {
+      continue;
+    }
+    const match = new RegExp(
+      `^${escapeRegularExpression(receiver)}\\.([A-Za-z_]\\w*)$`,
+      "u",
+    ).exec(nested.name);
+    const nestedMethod = match?.[1];
+    if (nestedMethod === undefined || !allowed.has(nestedMethod)) continue;
+    const nestedRisk = chainRisk(
+      nested,
+      nestedMethod,
+      requests,
+      taints,
+      valueContainers,
+      controls,
+    );
+    if (nestedRisk !== undefined) return nestedRisk;
+  }
+  return undefined;
+}
+
 function inlineConditionRisk(
   call: ParsedCall,
   method: string,
@@ -464,7 +554,12 @@ function analyzeFunction(
   if (alias === undefined) return [];
   const requests = requestParameters(function_);
   const staticReceivers = receiverDeclarationNames(function_, alias);
+  const staticGenericReceivers = genericReceiverDeclarationNames(
+    function_,
+    alias,
+  );
   const inferredReceivers = new Set<string>();
+  const genericReceivers = new Set<string>();
   const taints = new Map(initialTaints);
   const builders = new Map<string, GormRisk>();
   const expressions = new Map<string, GoTaint>();
@@ -488,12 +583,20 @@ function analyzeFunction(
   ) {
     const buildersBefore = new Map(builders);
     const receiversBefore = new Set(inferredReceivers);
+    const genericReceiversBefore = new Set(genericReceivers);
     const structuralLine = function_.structuralLines[line - 1] ?? "";
     const assigned = goAssignment(structuralLine);
     const lineCalls = callsByLine.get(line) ?? [];
     const exactExpr = lineCalls.find((call) => call.name === `${alias}.Expr`);
     if (assigned !== undefined) {
       const primary = assigned.names[0]!;
+      const exactAlias = /^([A-Za-z_]\w*)$/u.exec(assigned.value.trim())?.[1];
+      const builderAlias =
+        exactAlias === undefined ? undefined : buildersBefore.get(exactAlias);
+      const genericAlias =
+        exactAlias !== undefined &&
+        (staticGenericReceivers.has(exactAlias) ||
+          genericReceiversBefore.has(exactAlias));
       const transformedSource =
         exactExpr?.arguments[0] === undefined
           ? undefined
@@ -519,8 +622,11 @@ function analyzeFunction(
         expressions.delete(name);
         valueContainers.delete(name);
         inferredReceivers.delete(name);
+        genericReceivers.delete(name);
       }
       if (isValueContainer) valueContainers.add(primary);
+      if (builderAlias !== undefined) builders.set(primary, builderAlias);
+      if (genericAlias) genericReceivers.add(primary);
       if (!fixedSelection && source !== undefined) {
         taints.set(primary, source);
       } else if (!fixedSelection && prior !== undefined) {
@@ -538,6 +644,21 @@ function analyzeFunction(
       staticReceivers.has(receiver) ||
       inferredReceivers.has(receiver) ||
       receiversBefore.has(receiver);
+    const genericReceiverIsTyped = (receiver: string): boolean =>
+      staticGenericReceivers.has(receiver) ||
+      genericReceivers.has(receiver) ||
+      genericReceiversBefore.has(receiver);
+    const databaseReceiverProven = (expression: string): boolean => {
+      const direct = /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)$/u.exec(
+        expression.trim(),
+      )?.[1];
+      if (direct !== undefined && receiverIsTyped(direct)) return true;
+      const derived =
+        /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.(?:Debug|Session|Unscoped|WithContext)\s*\(/u.exec(
+          expression.trim(),
+        )?.[1];
+      return derived !== undefined && receiverIsTyped(derived);
+    };
     const builderFor = (receiver: string): GormRisk | undefined =>
       builders.get(receiver) ?? buildersBefore.get(receiver);
 
@@ -554,40 +675,89 @@ function analyzeFunction(
           const method = call.name;
           if (CHAIN_GRAMMAR_METHODS.has(method)) {
             pending.risk =
-              chainRisk(
-                call,
-                method,
-                requests,
-                taints,
-                valueContainers,
-                controls,
-              ) ?? pending.risk;
+              (pending.generic && method === "Joins"
+                ? genericCallbackRisk(
+                    call,
+                    method,
+                    parsed.calls,
+                    alias,
+                    requests,
+                    taints,
+                    valueContainers,
+                    controls,
+                  )
+                : chainRisk(
+                    call,
+                    method,
+                    requests,
+                    taints,
+                    valueContainers,
+                    controls,
+                  )) ?? pending.risk;
             pending.endOffset = call.endOffset;
             if (pending.result !== undefined) {
-              inferredReceivers.add(pending.result);
+              if (pending.generic) genericReceivers.add(pending.result);
+              else inferredReceivers.add(pending.result);
               if (pending.risk === undefined) builders.delete(pending.result);
               else builders.set(pending.result, pending.risk);
             }
             continue;
           }
           if (CHAIN_DERIVER_METHODS.has(method)) {
+            if (pending.generic && method === "Set") {
+              pending.risk =
+                expressionRisk(
+                  call,
+                  parsed.calls,
+                  alias,
+                  requests,
+                  taints,
+                  expressions,
+                  controls,
+                  0,
+                ) ?? pending.risk;
+            }
+            if (pending.generic && method === "Preload") {
+              pending.risk =
+                genericCallbackRisk(
+                  call,
+                  method,
+                  parsed.calls,
+                  alias,
+                  requests,
+                  taints,
+                  valueContainers,
+                  controls,
+                ) ?? pending.risk;
+            }
             pending.endOffset = call.endOffset;
             if (pending.result !== undefined) {
-              inferredReceivers.add(pending.result);
+              if (pending.generic) genericReceivers.add(pending.result);
+              else inferredReceivers.add(pending.result);
               if (pending.risk !== undefined)
                 builders.set(pending.result, pending.risk);
             }
             continue;
           }
           if (method === "Exec") {
-            const direct = chainRisk(
-              call,
-              method,
-              requests,
-              taints,
-              valueContainers,
-              controls,
-            );
+            const direct = pending.generic
+              ? genericArgumentRisk(
+                  call,
+                  method,
+                  1,
+                  "go-gorm-raw-sql-execution",
+                  requests,
+                  taints,
+                  controls,
+                )
+              : chainRisk(
+                  call,
+                  method,
+                  requests,
+                  taints,
+                  valueContainers,
+                  controls,
+                );
             if (direct !== undefined) {
               direct.kind = "go-gorm-raw-sql-execution";
               sinks.push(sinksForRisk(direct, call.line));
@@ -600,6 +770,7 @@ function analyzeFunction(
               taints,
               expressions,
               controls,
+              pending.generic ? 2 : 1,
             );
             if (expression !== undefined)
               sinks.push(sinksForRisk(expression, call.line));
@@ -611,7 +782,20 @@ function analyzeFunction(
             if (pending.risk !== undefined) {
               sinks.push(sinksForRisk(pending.risk, call.line));
             }
-            if (INLINE_CONDITION_METHODS.has(method)) {
+            if (pending.generic && method === "Count") {
+              const count = genericArgumentRisk(
+                call,
+                method,
+                1,
+                "go-gorm-query-clause-execution",
+                requests,
+                taints,
+                controls,
+              );
+              if (count !== undefined)
+                sinks.push(sinksForRisk(count, call.line));
+            }
+            if (!pending.generic && INLINE_CONDITION_METHODS.has(method)) {
               const inline = inlineConditionRisk(
                 call,
                 method,
@@ -623,7 +807,7 @@ function analyzeFunction(
               if (inline !== undefined)
                 sinks.push(sinksForRisk(inline, call.line));
             }
-            if (method === "Pluck") {
+            if (!pending.generic && method === "Pluck") {
               const pluck = chainRisk(
                 call,
                 method,
@@ -644,15 +828,16 @@ function analyzeFunction(
                 taints,
                 expressions,
                 controls,
-                0,
+                pending.generic ? 1 : 0,
               );
               if (expression !== undefined) {
                 sinks.push(sinksForRisk(expression, call.line));
               }
             }
             if (pending.result !== undefined) {
-              inferredReceivers.add(pending.result);
               builders.delete(pending.result);
+              if (pending.generic) genericReceivers.delete(pending.result);
+              else inferredReceivers.add(pending.result);
             }
             pending = undefined;
             continue;
@@ -662,6 +847,33 @@ function analyzeFunction(
       }
 
       const result = assignedCallResult(call);
+      if (call.name === `${alias}.G`) {
+        const database = call.arguments[0];
+        if (database === undefined || !databaseReceiverProven(database)) {
+          continue;
+        }
+        const optionRisk = expressionRisk(
+          call,
+          parsed.calls,
+          alias,
+          requests,
+          taints,
+          expressions,
+          controls,
+          1,
+        );
+        if (result !== undefined) {
+          genericReceivers.add(result);
+          if (optionRisk !== undefined) builders.set(result, optionRisk);
+        }
+        pending = {
+          endOffset: call.endOffset,
+          ...(result === undefined ? {} : { result }),
+          ...(optionRisk === undefined ? {} : { risk: optionRisk }),
+          generic: true,
+        };
+        continue;
+      }
       if (call.name === `${alias}.Open` && result !== undefined) {
         inferredReceivers.add(result);
         continue;
@@ -684,18 +896,29 @@ function analyzeFunction(
       if (receiverCall === null) continue;
       const receiver = receiverCall[1]!;
       const method = receiverCall[2]!;
-      if (!receiverIsTyped(receiver)) continue;
+      const genericReceiver = genericReceiverIsTyped(receiver);
+      if (!genericReceiver && !receiverIsTyped(receiver)) continue;
       const inherited = builderFor(receiver);
 
       if (method === "Exec") {
-        const direct = chainRisk(
-          call,
-          method,
-          requests,
-          taints,
-          valueContainers,
-          controls,
-        );
+        const direct = genericReceiver
+          ? genericArgumentRisk(
+              call,
+              method,
+              1,
+              "go-gorm-raw-sql-execution",
+              requests,
+              taints,
+              controls,
+            )
+          : chainRisk(
+              call,
+              method,
+              requests,
+              taints,
+              valueContainers,
+              controls,
+            );
         if (direct !== undefined) {
           direct.kind = "go-gorm-raw-sql-execution";
           sinks.push(sinksForRisk(direct, call.line));
@@ -708,17 +931,31 @@ function analyzeFunction(
           taints,
           expressions,
           controls,
+          genericReceiver ? 2 : 1,
         );
         if (expression !== undefined)
           sinks.push(sinksForRisk(expression, call.line));
-        if (result !== undefined) inferredReceivers.add(result);
+        if (result !== undefined && !genericReceiver)
+          inferredReceivers.add(result);
         continue;
       }
 
       if (FINISHER_METHODS.has(method)) {
         if (inherited !== undefined)
           sinks.push(sinksForRisk(inherited, call.line));
-        if (INLINE_CONDITION_METHODS.has(method)) {
+        if (genericReceiver && method === "Count") {
+          const count = genericArgumentRisk(
+            call,
+            method,
+            1,
+            "go-gorm-query-clause-execution",
+            requests,
+            taints,
+            controls,
+          );
+          if (count !== undefined) sinks.push(sinksForRisk(count, call.line));
+        }
+        if (!genericReceiver && INLINE_CONDITION_METHODS.has(method)) {
           const inline = inlineConditionRisk(
             call,
             method,
@@ -729,7 +966,7 @@ function analyzeFunction(
           );
           if (inline !== undefined) sinks.push(sinksForRisk(inline, call.line));
         }
-        if (method === "Pluck") {
+        if (!genericReceiver && method === "Pluck") {
           const pluck = chainRisk(
             call,
             method,
@@ -749,47 +986,89 @@ function analyzeFunction(
             taints,
             expressions,
             controls,
-            0,
+            genericReceiver ? 1 : 0,
           );
           if (expression !== undefined) {
             sinks.push(sinksForRisk(expression, call.line));
           }
         }
-        if (result !== undefined) inferredReceivers.add(result);
+        if (result !== undefined && !genericReceiver)
+          inferredReceivers.add(result);
         continue;
       }
 
       if (CHAIN_GRAMMAR_METHODS.has(method)) {
         const nextRisk =
-          chainRisk(
-            call,
-            method,
-            requests,
-            taints,
-            valueContainers,
-            controls,
-          ) ?? inherited;
+          (genericReceiver && method === "Joins"
+            ? genericCallbackRisk(
+                call,
+                method,
+                parsed.calls,
+                alias,
+                requests,
+                taints,
+                valueContainers,
+                controls,
+              )
+            : chainRisk(
+                call,
+                method,
+                requests,
+                taints,
+                valueContainers,
+                controls,
+              )) ?? inherited;
         if (result !== undefined) {
-          inferredReceivers.add(result);
+          if (genericReceiver) genericReceivers.add(result);
+          else inferredReceivers.add(result);
           if (nextRisk !== undefined) builders.set(result, nextRisk);
         }
         pending = {
           endOffset: call.endOffset,
           ...(result === undefined ? {} : { result }),
           ...(nextRisk === undefined ? {} : { risk: nextRisk }),
+          generic: genericReceiver,
         };
         continue;
       }
 
       if (CHAIN_DERIVER_METHODS.has(method) || method === "Begin") {
+        let nextRisk =
+          genericReceiver && method === "Set"
+            ? expressionRisk(
+                call,
+                parsed.calls,
+                alias,
+                requests,
+                taints,
+                expressions,
+                controls,
+                0,
+              ) ?? inherited
+            : inherited;
+        if (genericReceiver && method === "Preload") {
+          nextRisk =
+            genericCallbackRisk(
+              call,
+              method,
+              parsed.calls,
+              alias,
+              requests,
+              taints,
+              valueContainers,
+              controls,
+            ) ?? nextRisk;
+        }
         if (result !== undefined) {
-          inferredReceivers.add(result);
-          if (inherited !== undefined) builders.set(result, inherited);
+          if (genericReceiver) genericReceivers.add(result);
+          else inferredReceivers.add(result);
+          if (nextRisk !== undefined) builders.set(result, nextRisk);
         }
         pending = {
           endOffset: call.endOffset,
           ...(result === undefined ? {} : { result }),
-          ...(inherited === undefined ? {} : { risk: inherited }),
+          ...(nextRisk === undefined ? {} : { risk: nextRisk }),
+          generic: genericReceiver,
         };
       }
     }

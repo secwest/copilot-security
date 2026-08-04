@@ -36,6 +36,28 @@
       "id": "go-cross-file-safe-gorm",
       "fixture": "fixtures/go-cross-file-safe-gorm",
       "expected": []
+    },
+    {
+      "id": "go-gorm-generics-sqli",
+      "fixture": "fixtures/go-gorm-generics-sqli",
+      "expected": [
+        {
+          "title": "Go GORM generics executes request-derived Where grammar",
+          "cwe": ["CWE-89"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "search.go",
+          "line": 12,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-file-safe-gorm-generics",
+      "fixture": "fixtures/go-cross-file-safe-gorm-generics",
+      "expected": []
     }
   ]
 }

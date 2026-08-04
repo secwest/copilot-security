@@ -42,7 +42,12 @@ interface BenchmarkManifest {
 }
 
 const benchmarkRoot = resolve(process.cwd(), "..", "..", "benchmarks");
-const caseIds = ["go-cross-file-gorm-sqli", "go-cross-file-safe-gorm"] as const;
+const caseIds = [
+  "go-cross-file-gorm-sqli",
+  "go-cross-file-safe-gorm",
+  "go-gorm-generics-sqli",
+  "go-cross-file-safe-gorm-generics",
+] as const;
 const temporaryPaths: string[] = [];
 
 afterEach(async () => {
@@ -125,6 +130,14 @@ describe("Go GORM injection framework-model benchmark", () => {
       requireCodeEvidence: true,
     });
     expect(manifest.cases[1]?.expected).toEqual([]);
+    expect(manifest.cases[2]?.expected[0]).toMatchObject({
+      cwe: ["CWE-89"],
+      acceptableSeverities: ["critical", "high"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[3]?.expected).toEqual([]);
   });
 
   test("preserves the exact handler-to-Raw-and-Scan path", async () => {
@@ -145,6 +158,40 @@ describe("Go GORM injection framework-model benchmark", () => {
         source: { kind: "go-http-query-parameter", path: "handler.go" },
         sink: {
           kind: "go-gorm-raw-sql-execution",
+          path: "search.go",
+          cweIds: ["CWE-89"],
+        },
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "go-function-argument",
+      "go-string-parameter",
+      "go-string-assignment",
+      "go-gorm-query-construction",
+    ]);
+    expect(safe).toEqual([]);
+  });
+
+  test("preserves the exact handler-to-generic-Where-and-Find path", async () => {
+    const vulnerable = models(await fixtureInventory(caseIds[2]));
+    const safe = models(await fixtureInventory(caseIds[3]));
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "search.go",
+      categories: [
+        "framework-dataflow:go-gorm-sql-injection",
+        "modeled-source:go-http-query-parameter",
+        "modeled-sink:go-gorm-query-clause-execution",
+      ],
+      frameworkModel: {
+        schemaVersion: "1.2",
+        language: "go",
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-query-parameter", path: "handler.go" },
+        sink: {
+          kind: "go-gorm-query-clause-execution",
           path: "search.go",
           cweIds: ["CWE-89"],
         },
@@ -561,6 +608,234 @@ func Search(db localDB, w http.ResponseWriter, r *http.Request) {
     ).toEqual([]);
   });
 
+  test("models generic G constructors and context-before-SQL Exec", async () => {
+    expect(
+      await repositoryInventory({
+        "search.go": handler(`\tquery := r.FormValue("query")
+\tgorm.G[map[string]any](db).Exec(r.Context(), query)`),
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "search.go": handler(`\tvalue := r.FormValue("value")
+\tgorm.G[map[string]any](db).Exec(r.Context(), "UPDATE records SET status = ?", value)`),
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "search.go": handler(`\tquery := r.FormValue("query")
+\tgorm.G[map[string]any](db.Session(&gorm.Session{})).Exec(r.Context(), query)`),
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "search.go": `package search
+import (
+  "gorm.io/gorm"
+  "net/http"
+)
+func Search(db any, w http.ResponseWriter, r *http.Request) {
+  gorm.G[map[string]any](db).Exec(r.Context(), r.FormValue("query"))
+}`,
+      }),
+    ).toEqual([]);
+  });
+
+  test("closes generic Raw only through every real ExecInterface finisher", async () => {
+    expect(
+      await repositoryInventory({
+        "search.go": handler(`\tquery := r.FormValue("query")
+\tgorm.G[map[string]any](db).Raw(query)`),
+      }),
+    ).toEqual([]);
+    for (const finisher of [
+      "Scan(r.Context(), &[]map[string]any{})",
+      "First(r.Context())",
+      "Last(r.Context())",
+      "Take(r.Context())",
+      "Find(r.Context())",
+      "FindInBatches(r.Context(), 10, func([]map[string]any, int) error { return nil })",
+      "Row(r.Context())",
+      "Rows(r.Context())",
+    ]) {
+      expect(
+        await repositoryInventory({
+          "search.go": handler(`\tquery := r.FormValue("query")
+\tgorm.G[map[string]any](db).Raw(query).${finisher}`),
+        }),
+        finisher,
+      ).toHaveLength(1);
+    }
+  });
+
+  test("preserves every generic structural clause until execution", async () => {
+    for (const clause of [
+      "Where(fragment)",
+      "Not(fragment)",
+      "Or(fragment)",
+      "Select(fragment)",
+      "Distinct(fragment)",
+      "Group(fragment)",
+      "Having(fragment)",
+      "Order(fragment)",
+      "Table(fragment)",
+    ]) {
+      expect(
+        await repositoryInventory({
+          "search.go": handler(`\tfragment := r.FormValue("fragment")
+\tgorm.G[map[string]any](db).${clause}.Find(r.Context())`),
+        }),
+        clause,
+      ).toHaveLength(1);
+    }
+    expect(
+      await repositoryInventory({
+        "search.go": handler(`\tcolumn := r.FormValue("column")
+\tgorm.G[map[string]any](db).Count(r.Context(), column)`),
+      }),
+    ).toHaveLength(1);
+  });
+
+  test("keeps generic placeholder, map, and expression values out of grammar", async () => {
+    expect(
+      await repositoryInventory({
+        "search.go": handler(`\tvalue := r.FormValue("value")
+\tgorm.G[map[string]any](db).Where("status = ?", value).Find(r.Context())
+\tgorm.G[map[string]any](db).Where(map[string]any{"status": value}).Find(r.Context())
+\tgorm.G[map[string]any](db).Having("COUNT(*) > ?", value).Find(r.Context())
+\tgorm.G[map[string]any](db).Select("? AS status", value).Find(r.Context())
+\tgorm.G[map[string]any](db).Distinct("COALESCE(status, ?)", value).Find(r.Context())
+\tgorm.G[map[string]any](db).Raw("SELECT * FROM records WHERE status = ?", value).Find(r.Context())`),
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "search.go": `package search
+import (
+  "gorm.io/gorm"
+  "gorm.io/gorm/clause"
+  "net/http"
+)
+func Search(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
+  value := r.FormValue("value")
+  gorm.G[map[string]any](db).Joins(clause.Has("Owner"), func(join gorm.JoinBuilder, _ clause.Table, _ clause.Table) error {
+    join.Where("status = ?", value)
+    return nil
+  }).Find(r.Context())
+  gorm.G[map[string]any](db).Preload("Owner", func(preload gorm.PreloadBuilder) error {
+    preload.Where("status = ?", value).Order("created_at DESC")
+    return nil
+  }).Find(r.Context())
+}`,
+      }),
+    ).toEqual([]);
+  });
+
+  test("tracks assigned and typed generic interfaces but clears replacement", async () => {
+    expect(
+      await repositoryInventory({
+        "search.go": handler(`\tfragment := r.FormValue("fragment")
+\tquery := gorm.G[map[string]any](db).Where(fragment)
+\talias := query
+\talias.Find(r.Context())`),
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "search.go": handler(`\tfragment := r.FormValue("fragment")
+\tquery := gorm.G[map[string]any](db).Where(fragment)
+\tquery = gorm.G[map[string]any](db).Where("status = ?", "public")
+\tquery.Find(r.Context())`),
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "search.go": `package search
+import (
+  "gorm.io/gorm"
+  "net/http"
+)
+func Search(query gorm.ChainInterface[map[string]any], w http.ResponseWriter, r *http.Request) {
+  query.Where(r.FormValue("fragment")).Find(r.Context())
+}`,
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "search.go": `package search
+import (
+  "gorm.io/gorm"
+  "net/http"
+)
+type store struct { query gorm.ChainInterface[map[string]any] }
+func (local *store) Search(w http.ResponseWriter, r *http.Request) {
+  local.query.Where(r.FormValue("fragment")).Find(r.Context())
+}`,
+      }),
+    ).toHaveLength(1);
+  });
+
+  test("models generic options, Set expressions, and typed join callbacks", async () => {
+    const rows = await repositoryInventory({
+      "search.go": `package search
+import (
+  "gorm.io/gorm"
+  "gorm.io/gorm/clause"
+  "net/http"
+)
+func Search(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
+  fragment := r.FormValue("fragment")
+  gorm.G[map[string]any](db).Exec(r.Context(), "UPDATE records SET status = ?", gorm.Expr(fragment))
+  gorm.G[map[string]any](db, gorm.Expr(fragment)).Find(r.Context())
+  gorm.G[map[string]any](db).Set(clause.Assign("status", gorm.Expr(fragment))).Update(r.Context())
+  gorm.G[map[string]any](db).Joins(clause.Has("Owner"), func(join gorm.JoinBuilder, _ clause.Table, _ clause.Table) error {
+    join.Where(fragment)
+    return nil
+  }).Find(r.Context())
+  gorm.G[map[string]any](db).Preload("Owner", func(preload gorm.PreloadBuilder) error {
+    preload.Order(fragment)
+    return nil
+  }).Find(r.Context())
+}`,
+    });
+    expect(rows).toHaveLength(5);
+    expect(rows.map(({ frameworkModel }) => frameworkModel?.sink.kind)).toEqual(
+      [
+        "go-gorm-expression-sql-execution",
+        "go-gorm-expression-sql-execution",
+        "go-gorm-expression-sql-execution",
+        "go-gorm-query-clause-execution",
+        "go-gorm-query-clause-execution",
+      ],
+    );
+  });
+
+  test("rejects inert generic builders, Build materialization, and generic inline pseudo-conditions", async () => {
+    expect(
+      await repositoryInventory({
+        "search.go": handler(`\tfragment := r.FormValue("fragment")
+\tgorm.G[map[string]any](db).Where(fragment)
+\tgorm.G[map[string]any](db).Raw(fragment).Build(&gorm.Statement{})
+\tgorm.G[map[string]any](db).Find(r.Context(), fragment)`),
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "search.go": `package search
+import (
+  realgorm "gorm.io/gorm"
+  "net/http"
+)
+type fakeGeneric struct{}
+func (fakeGeneric) Where(any, ...any) fakeGeneric { return fakeGeneric{} }
+func (fakeGeneric) Find(any) {}
+func Search(db *realgorm.DB, fake fakeGeneric, w http.ResponseWriter, r *http.Request) {
+  fake.Where(r.FormValue("fragment")).Find(r.Context())
+}`,
+      }),
+    ).toEqual([]);
+  });
+
   test("retains candidate controls without treating them as sanitizers", async () => {
     const rows = await repositoryInventory({
       "search.go": `package search
@@ -601,6 +876,11 @@ func Search(db *gorm.DB, w http.ResponseWriter, r *http.Request) {
     expect(prompt).toContain("gorm.io/gorm");
     expect(prompt).toContain("Separate query construction from execution");
     expect(prompt).toContain("A gorm.Expr first argument");
+    expect(prompt).toContain("gorm.G[T](db)");
+    expect(prompt).toContain("context before SQL");
+    expect(prompt).toContain("Count column");
+    expect(prompt).toContain("JoinBuilder");
+    expect(prompt).toContain("Build only materializes");
     expect(prompt).toContain("DryRun is strong counterevidence only when");
     expect(prompt).toContain("identifier or table fragment allowlisting");
   });

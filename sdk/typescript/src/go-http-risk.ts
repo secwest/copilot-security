@@ -76,6 +76,7 @@ export interface GoCall {
 export interface GoReceiverTypeSpecification {
   alias: string;
   typeNames: readonly string[];
+  generic?: boolean;
 }
 
 export interface GoPropagator {
@@ -349,12 +350,19 @@ export function goCalls(function_: GoFunction): GoCall[] {
   const starts = lineStarts(slice);
   const calls: GoCall[] = [];
   for (const match of slice.matchAll(
-    /\b([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*\(/gu,
+    /\b([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)/gu,
   )) {
     if (calls.length >= MAX_CALLS_PER_FUNCTION) break;
     const offset = match.index ?? 0;
-    const open = slice.indexOf("(", offset + match[0].length - 1);
-    if (open < 0) continue;
+    let open = offset + match[0].length;
+    while (/\s/u.test(slice[open] ?? "")) open += 1;
+    if (slice[open] === "[") {
+      const typeArgumentsClose = matchingDelimiter(slice, open, "[", "]");
+      if (typeArgumentsClose < 0) continue;
+      open = typeArgumentsClose + 1;
+      while (/\s/u.test(slice[open] ?? "")) open += 1;
+    }
+    if (slice[open] !== "(") continue;
     const close = matchingDelimiter(slice, open, "(", ")");
     if (close < 0) continue;
     const previousNewline = slice.lastIndexOf("\n", offset - 1);
@@ -392,10 +400,10 @@ export function goTypedReceiverNames(
   if (specifications.length === 0) return new Set();
   const qualifiedType = `(?:${specifications
     .map(
-      ({ alias, typeNames }) =>
+      ({ alias, typeNames, generic }) =>
         `${escapeRegularExpression(alias)}\\.(?:${typeNames
           .map(escapeRegularExpression)
-          .join("|")})`,
+          .join("|")})${generic === true ? "\\[[^\\r\\n]+\\]" : ""}`,
     )
     .join("|")})`;
   const result = new Set<string>();

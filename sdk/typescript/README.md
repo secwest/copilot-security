@@ -64,7 +64,12 @@ The package is ESM-only and provides:
   `Exec`, `Pluck` identifiers, inline finisher conditions, and the first
   `gorm.Expr` argument while excluding later placeholder values. Unexecuted or
   reassigned builders, forks and legacy imports, untyped methods, fixed fragment
-  maps, and ambiguous wrappers are rejected.
+  maps, and ambiguous wrappers are rejected. The same model covers exact
+  `gorm.G[T](db)` constructors and typed generic interfaces, context-first
+  `Exec`, deferred generic `Raw`, clause chains and `Count`, exact
+  `JoinBuilder`/`PreloadBuilder` callbacks, and expression-bearing constructor
+  options or `Set` assignments. It rejects generic pseudo-signatures, raw-SQL
+  assumptions for join targets or preload associations, and inert `Build`.
   A separate Masterminds/Squirrel model requires the exact upstream import,
   typed builders or `Sqlizer` values, and proven Squirrel or `database/sql`
   runners. It preserves structural constructor and method arguments across
