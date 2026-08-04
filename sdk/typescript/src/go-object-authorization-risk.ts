@@ -22,6 +22,7 @@ import {
 const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
 const MAX_RECORDS = 64;
+const MAX_TRANSACTION_FINALIZER_HELPER_DEPTH = 32;
 const OBJECT_COLUMN = /^(?:id|key|uuid|[a-z][a-z0-9_]*_(?:id|key|uuid))$/iu;
 const SECURITY_COLUMN =
   /^(?:account|customer|organization|org|owner|principal|shop|tenant|user|workspace)_(?:id|key|uuid)$/iu;
@@ -133,6 +134,9 @@ interface TransactionFinalizerSummary {
   transactionParameterName: string;
   method: "Commit" | "Rollback";
   line: number;
+  finalizerFile: GoHttpSourceFile;
+  finalizerTransactionName: string;
+  delegations: EvidencePropagator[];
 }
 
 function sqlAlias(function_: GoFunction): string | undefined {
@@ -685,11 +689,12 @@ function analyzeFunction(
             },
             ...(summary.method === "Commit"
               ? [
+                  ...summary.delegations,
                   {
                     kind: "go-sql-transaction-commit",
                     line: summary.line,
-                    symbol: summary.transactionParameterName,
-                    path: summary.file.path,
+                    symbol: summary.finalizerTransactionName,
+                    path: summary.finalizerFile.path,
                   },
                 ]
               : []),
@@ -1117,12 +1122,26 @@ function transactionFinalizerSummaries(
   functions: readonly GoFunction[],
   functionCounts: ReadonlyMap<string, number>,
 ): TransactionFinalizerSummary[] {
-  const summaries: TransactionFinalizerSummary[] = [];
+  interface Descriptor {
+    function_: GoFunction;
+    parameters: Array<{
+      index: number;
+      name: string;
+    }>;
+  }
+  type Resolution =
+    | { kind: "none" }
+    | { kind: "ambiguous" }
+    | { kind: "exact"; summary: TransactionFinalizerSummary };
+
+  const functionKey = (function_: GoFunction): string =>
+    `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${function_.name}`;
+  const descriptors = new Map<string, Descriptor>();
   for (const function_ of functions) {
     if (function_.receiver !== undefined) continue;
     const alias = sqlAlias(function_);
     if (alias === undefined) continue;
-    const key = `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${function_.name}`;
+    const key = functionKey(function_);
     if (functionCounts.get(key) !== 1) continue;
     const parameters = function_.parameters
       .map((parameter, index) => ({ parameter, index }))
@@ -1130,35 +1149,156 @@ function transactionFinalizerSummaries(
         new RegExp(`^\\*?${escapeRegularExpression(alias)}\\.Tx$`, "u").test(
           parameter.type.replace(/\s+/gu, ""),
         ),
+      )
+      .map(({ parameter, index }) => ({
+        index,
+        name: parameter.name,
+      }));
+    if (parameters.length > 0) descriptors.set(key, { function_, parameters });
+  }
+
+  const aliasesAtLine = (
+    descriptor: Descriptor,
+    parameterName: string,
+    line: number,
+  ): Set<string> => {
+    const aliases = new Set([parameterName]);
+    for (
+      let candidateLine = descriptor.function_.bodyStartLine;
+      candidateLine < line;
+      candidateLine += 1
+    ) {
+      const assignment = goAssignment(
+        descriptor.function_.structuralLines[candidateLine - 1] ?? "",
       );
-    const candidates: TransactionFinalizerSummary[] = [];
-    for (const { parameter, index } of parameters) {
-      const finalizerCall = new RegExp(
-        `^${escapeRegularExpression(parameter.name)}\\.(Commit|Rollback)$`,
-        "u",
-      );
-      for (const call of goCalls(function_)) {
-        const match = finalizerCall.exec(call.name);
-        if (
-          match === null ||
-          !hasNoCallArguments(call) ||
-          /\bdefer\b/u.test(function_.structuralLines[call.line - 1] ?? "") ||
-          callNestingDepth(function_, call) !== 1
-        ) {
-          continue;
-        }
-        candidates.push({
-          file: function_.file,
-          packageName: function_.packageName,
-          functionName: function_.name,
-          transactionParameterIndex: index,
-          transactionParameterName: parameter.name,
-          method: match[1] as "Commit" | "Rollback",
-          line: call.line,
-        });
-      }
+      if (assignment === undefined) continue;
+      const preservesIdentity = aliases.has(assignment.value.trim());
+      for (const name of assignment.names) aliases.delete(name);
+      if (preservesIdentity && assignment.names[0] !== undefined)
+        aliases.add(assignment.names[0]);
     }
-    if (candidates.length === 1) summaries.push(candidates[0]!);
+    return aliases;
+  };
+  const parameterForName = (
+    descriptor: Descriptor,
+    name: string,
+    line: number,
+  ): { index: number; name: string } | undefined => {
+    const matching = descriptor.parameters.filter(({ name: parameterName }) =>
+      aliasesAtLine(descriptor, parameterName, line).has(name),
+    );
+    return matching.length === 1 ? matching[0] : undefined;
+  };
+  const memo = new Map<string, Resolution>();
+  const resolve = (
+    key: string,
+    visiting: ReadonlySet<string>,
+    depth: number,
+  ): Resolution => {
+    const cached = memo.get(key);
+    if (cached !== undefined) return cached;
+    if (depth >= MAX_TRANSACTION_FINALIZER_HELPER_DEPTH || visiting.has(key))
+      return { kind: "ambiguous" };
+    const descriptor = descriptors.get(key);
+    if (descriptor === undefined) return { kind: "none" };
+    const nextVisiting = new Set(visiting);
+    nextVisiting.add(key);
+    const candidates: TransactionFinalizerSummary[] = [];
+    for (const call of goCalls(descriptor.function_)) {
+      const structural =
+        descriptor.function_.structuralLines[call.line - 1] ?? "";
+      if (
+        /\bdefer\b/u.test(structural) ||
+        callNestingDepth(descriptor.function_, call) !== 1
+      )
+        continue;
+      const receiverCall = /^([A-Za-z_]\w*)\.(Commit|Rollback)$/u.exec(
+        call.name,
+      );
+      if (receiverCall !== null && hasNoCallArguments(call)) {
+        const parameter = parameterForName(
+          descriptor,
+          receiverCall[1]!,
+          call.line,
+        );
+        if (parameter !== undefined)
+          candidates.push({
+            file: descriptor.function_.file,
+            packageName: descriptor.function_.packageName,
+            functionName: descriptor.function_.name,
+            transactionParameterIndex: parameter.index,
+            transactionParameterName: parameter.name,
+            method: receiverCall[2] as "Commit" | "Rollback",
+            line: call.line,
+            finalizerFile: descriptor.function_.file,
+            finalizerTransactionName: receiverCall[1]!,
+            delegations: [],
+          });
+        continue;
+      }
+      if (!/^[A-Za-z_]\w*$/u.test(call.name)) continue;
+      const targetKey = `${posix.dirname(descriptor.function_.file.path)}\0${descriptor.function_.packageName}\0${call.name}`;
+      const targetDescriptor = descriptors.get(targetKey);
+      if (targetDescriptor === undefined) continue;
+      const passesTransactionParameter = targetDescriptor.parameters.some(
+        ({ index }) => {
+          const argument = call.rawArguments[index]?.trim();
+          return (
+            argument !== undefined &&
+            parameterForName(descriptor, argument, call.line) !== undefined
+          );
+        },
+      );
+      if (!passesTransactionParameter) continue;
+      const target = resolve(targetKey, nextVisiting, depth + 1);
+      if (target.kind === "ambiguous") {
+        const result: Resolution = { kind: "ambiguous" };
+        memo.set(key, result);
+        return result;
+      }
+      if (target.kind === "none") continue;
+      const argument =
+        call.rawArguments[target.summary.transactionParameterIndex]?.trim();
+      const parameter =
+        argument === undefined
+          ? undefined
+          : parameterForName(descriptor, argument, call.line);
+      if (parameter === undefined) continue;
+      candidates.push({
+        file: descriptor.function_.file,
+        packageName: descriptor.function_.packageName,
+        functionName: descriptor.function_.name,
+        transactionParameterIndex: parameter.index,
+        transactionParameterName: parameter.name,
+        method: target.summary.method,
+        line: target.summary.line,
+        finalizerFile: target.summary.finalizerFile,
+        finalizerTransactionName: target.summary.finalizerTransactionName,
+        delegations: [
+          {
+            kind: "go-sql-transaction-finalizer-helper",
+            line: call.line,
+            symbol: target.summary.functionName,
+            path: descriptor.function_.file.path,
+          },
+          ...target.summary.delegations,
+        ],
+      });
+    }
+    const result: Resolution =
+      candidates.length === 0
+        ? { kind: "none" }
+        : candidates.length === 1
+          ? { kind: "exact", summary: candidates[0]! }
+          : { kind: "ambiguous" };
+    memo.set(key, result);
+    return result;
+  };
+
+  const summaries: TransactionFinalizerSummary[] = [];
+  for (const key of descriptors.keys()) {
+    const resolution = resolve(key, new Set(), 0);
+    if (resolution.kind === "exact") summaries.push(resolution.summary);
   }
   return summaries;
 }

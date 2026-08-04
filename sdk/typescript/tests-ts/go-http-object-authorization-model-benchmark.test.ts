@@ -106,6 +106,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-file-safe-transaction-stmt-delete-authorization",
       "go-cross-file-helper-transaction-delete-idor",
       "go-cross-file-safe-helper-transaction-delete-authorization",
+      "go-cross-file-helper-chain-transaction-delete-idor",
+      "go-cross-file-safe-helper-chain-transaction-delete-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -119,6 +121,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[9]?.expected).toEqual([]);
     expect(manifest.cases[10]?.expected).toHaveLength(1);
     expect(manifest.cases[11]?.expected).toEqual([]);
+    expect(manifest.cases[12]?.expected).toHaveLength(1);
+    expect(manifest.cases[13]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -545,6 +549,66 @@ describe("Go HTTP object-authorization framework model", () => {
     ]);
   });
 
+  test("preserves the helper-chain exploit, control, and every finalizer boundary", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-file-helper-chain-transaction-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-file-safe-helper-chain-transaction-delete-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "store.go",
+      line: 18,
+      categories: [
+        "framework-dataflow:go-http-object-authorization",
+        "modeled-source:go-http-path-value",
+        "modeled-sink:go-database-object-committed-mutation",
+      ],
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 9 },
+        sink: {
+          kind: "go-database-object-committed-mutation",
+          path: "store.go",
+          line: 18,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) =>
+          kind === "go-sql-transaction-finalizer-helper" ||
+          kind === "go-sql-transaction-commit",
+      ),
+    ).toEqual([
+      {
+        kind: "go-sql-transaction-finalizer-helper",
+        line: 18,
+        symbol: "FinalizeTransaction",
+        path: "store.go",
+      },
+      {
+        kind: "go-sql-transaction-finalizer-helper",
+        line: 8,
+        symbol: "CommitTransaction",
+        path: "coordinator.go",
+      },
+      {
+        kind: "go-sql-transaction-commit",
+        line: 6,
+        symbol: "tx",
+        path: "transaction.go",
+      },
+    ]);
+    expect(safe).toHaveLength(1);
+    expect(safe[0]?.frameworkModel?.candidateControls).toEqual([
+      { kind: "principal-bound-object-query", path: "store.go", line: 15 },
+    ]);
+  });
+
   test("closes Prepare and PrepareContext through the exact Stmt execution", async () => {
     const bodies = [
       `  id := r.PathValue("invoiceID")
@@ -704,6 +768,241 @@ func finish(label string, tx *sql.Tx) error {
         )?.path,
       ).toBe("transaction.go");
     }
+  });
+
+  test("closes exact typed transaction finalizer helper chains", async () => {
+    const rows = await repositoryInventory({
+      "handler.go": handler(`  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  selected := tx
+  finish("invoice-delete", selected)`),
+      "coordinator.go": `package invoices
+import "database/sql"
+func finish(label string, tx *sql.Tx) error {
+  _ = label
+  alias := tx
+  return commit(alias)
+}`,
+      "transaction.go": `package invoices
+import "database/sql"
+func commit(tx *sql.Tx) error {
+  final := tx
+  return final.Commit()
+}`,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.frameworkModel?.sink.kind).toBe(
+      "go-database-object-committed-mutation",
+    );
+    const finalizers = rows[0]?.frameworkModel?.propagators.filter(
+      ({ kind }) =>
+        kind === "go-sql-transaction-finalizer-helper" ||
+        kind === "go-sql-transaction-commit",
+    );
+    expect(finalizers).toEqual([
+      {
+        kind: "go-sql-transaction-finalizer-helper",
+        path: "handler.go",
+        line: 12,
+        symbol: "finish",
+      },
+      {
+        kind: "go-sql-transaction-finalizer-helper",
+        path: "coordinator.go",
+        line: 6,
+        symbol: "commit",
+      },
+      {
+        kind: "go-sql-transaction-commit",
+        path: "transaction.go",
+        line: 5,
+        symbol: "final",
+      },
+    ]);
+  });
+
+  test("propagates exact rollback helper chains and ignores non-dominating branches", async () => {
+    const helperFiles = {
+      "coordinator.go": `package invoices
+import "database/sql"
+func finish(tx *sql.Tx) error { return rollback(tx) }`,
+      "transaction.go": `package invoices
+import "database/sql"
+func rollback(tx *sql.Tx) error { return tx.Rollback() }`,
+    };
+    const dominated = await repositoryInventory({
+      "handler.go": handler(`  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  finish(tx)
+  tx.Commit()`),
+      ...helperFiles,
+    });
+    expect(dominated).toEqual([]);
+
+    const branchOnly = await repositoryInventory({
+      "handler.go": handler(`  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  if id == "" {
+    finish(tx)
+    return
+  }
+  tx.Commit()`),
+      ...helperFiles,
+    });
+    expect(branchOnly).toHaveLength(1);
+    expect(branchOnly[0]?.frameworkModel?.sink.kind).toBe(
+      "go-database-object-committed-mutation",
+    );
+  });
+
+  test("accepts exactly the 32-helper resilience boundary", async () => {
+    const files: Record<string, string> = {};
+    for (let index = 0; index < 31; index += 1) {
+      const name = index === 0 ? "finish" : `finish${index}`;
+      const next = `finish${index + 1}`;
+      files[`transaction_${index}.go`] = `package invoices
+import "database/sql"
+func ${name}(tx *sql.Tx) error { return ${next}(tx) }`;
+    }
+    files["transaction_31.go"] = `package invoices
+import "database/sql"
+func finish31(tx *sql.Tx) error { return tx.Commit() }`;
+    const rows = await repositoryInventory({
+      "handler.go": handler(`  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  finish(tx)`),
+      ...files,
+    });
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) => kind === "go-sql-transaction-finalizer-helper",
+      ),
+    ).toHaveLength(32);
+  });
+
+  test("rejects ambiguous, cyclic, reassigned, nested, deferred, and over-depth helper chains", async () => {
+    const baseBody = `  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  finish(tx)`;
+    const cases: Array<Record<string, string>> = [
+      {
+        "coordinator.go": `package invoices
+import "database/sql"
+func finish(tx *sql.Tx) error {
+  commit(tx)
+  return rollback(tx)
+}`,
+        "transaction.go": `package invoices
+import "database/sql"
+func commit(tx *sql.Tx) error { return tx.Commit() }
+func rollback(tx *sql.Tx) error { return tx.Rollback() }`,
+      },
+      {
+        "coordinator.go": `package invoices
+import "database/sql"
+func finish(tx *sql.Tx) error { return forward(tx) }
+func forward(tx *sql.Tx) error { return finish(tx) }`,
+      },
+      {
+        "coordinator.go": `package invoices
+import "database/sql"
+func finish(tx *sql.Tx) error {
+  forward(tx)
+  return tx.Commit()
+}
+func forward(tx *sql.Tx) error { return finish(tx) }`,
+      },
+      {
+        "coordinator.go": `package invoices
+import "database/sql"
+func finish(tx *sql.Tx) error {
+  tx = nil
+  return commit(tx)
+}`,
+        "transaction.go": `package invoices
+import "database/sql"
+func commit(tx *sql.Tx) error { return tx.Commit() }`,
+      },
+      {
+        "coordinator.go": `package invoices
+import "database/sql"
+func finish(tx *sql.Tx) error { return commit(tx) }`,
+        "transaction.go": `package invoices
+import "database/sql"
+func commit(tx *sql.Tx) error {
+  tx = nil
+  return tx.Commit()
+}`,
+      },
+      {
+        "coordinator.go": `package invoices
+import "database/sql"
+func finish(tx *sql.Tx) error {
+  if tx != nil {
+    return commit(tx)
+  }
+  return nil
+}`,
+        "transaction.go": `package invoices
+import "database/sql"
+func commit(tx *sql.Tx) error { return tx.Commit() }`,
+      },
+      {
+        "coordinator.go": `package invoices
+import "database/sql"
+func finish(tx *sql.Tx) { defer commit(tx) }`,
+        "transaction.go": `package invoices
+import "database/sql"
+func commit(tx *sql.Tx) error { return tx.Commit() }`,
+      },
+    ];
+    const depthFiles: Record<string, string> = {};
+    for (let index = 0; index < 32; index += 1) {
+      const name = index === 0 ? "finish" : `finish${index}`;
+      const next = `finish${index + 1}`;
+      depthFiles[`transaction_${index}.go`] = `package invoices
+import "database/sql"
+func ${name}(tx *sql.Tx) error { return ${next}(tx) }`;
+    }
+    depthFiles["transaction_32.go"] = `package invoices
+import "database/sql"
+func finish32(tx *sql.Tx) error { return tx.Commit() }`;
+    cases.push(depthFiles);
+    for (const files of cases) {
+      expect(
+        await repositoryInventory({
+          "handler.go": handler(baseBody),
+          ...files,
+        }),
+        Object.values(files).join("\n"),
+      ).toEqual([]);
+    }
+  });
+
+  test("binds a helper chain to the exact forwarded transaction parameter", async () => {
+    const rows = await repositoryInventory({
+      "handler.go": handler(`  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  other, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  finish(tx, other)`),
+      "coordinator.go": `package invoices
+import "database/sql"
+func finish(selected *sql.Tx, finalized *sql.Tx) error {
+  _ = selected
+  return commit(finalized)
+}`,
+      "transaction.go": `package invoices
+import "database/sql"
+func commit(tx *sql.Tx) error { return tx.Commit() }`,
+    });
+    expect(rows).toEqual([]);
   });
 
   test("keeps error-branch helper rollback compatible with later commit", async () => {

@@ -420,7 +420,13 @@ exact typed transaction parameter reaches exactly one function-level commit or
 rollback. Unlike a name heuristic, this keeps caller transaction identity,
 argument position, nesting, ordering, definition ambiguity, and the helper's
 actual evidence path. A sixth executable pair proves the helper-committed
-positive and principal-scoped control. This directly
+positive and principal-scoped control. The summary now composes through up to 32
+exact same-package helper boundaries. Each edge must pass the same typed
+transaction parameter or a proven local alias into the uniquely resolved next
+function; cycles, reassignment, nesting, defer, multiple reachable outcomes, and
+over-depth graphs fail closed. Evidence retains each internal delegation and the
+real leaf `Commit`. A seventh executable pair proves this multi-helper positive
+and principal-scoped control. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -435,8 +441,8 @@ This bounded application-function summary follows the same precision principle
 as CodeQL's distinction between local flow and explicitly modeled
 interprocedural flow summaries: the summary expands a proven semantic boundary,
 not every similarly named call. It remains deliberately narrower than whole-
-program call-graph and control-flow analysis; helper chains, interface dispatch,
-function values, recursion, and cross-package finalizers remain future work.
+program call-graph and control-flow analysis; interface dispatch, function
+values, recursive finalization, and cross-package finalizers remain future work.
 
 `benchmarks/go-sqlx-sql-injection-manifest.json` adds a strict sqlx lane. The
 positive carries an HTTP query value through one unique same-package wrapper,

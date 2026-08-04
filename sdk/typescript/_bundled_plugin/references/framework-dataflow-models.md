@@ -449,10 +449,13 @@ interpreter that consumes the value.
   context controls preparation rather than execution; it is neither the source
   statement nor proof of authorization. Confirm commit success and driver or
   database behavior before claiming durable impact.
-- For helper-mediated finalization, inspect the helper body and call site as
-  separate evidence. A helper name such as `commit`, an `error` return, or a
-  transaction-shaped argument is not sufficient without exact type, unique
-  resolution, function-level finalizer, and matching caller transaction.
+- For helper-mediated finalization, inspect the caller, every forwarding helper,
+  and the leaf finalizer as separate evidence. A helper name such as `commit`,
+  an `error` return, or a transaction-shaped argument is not sufficient without
+  exact type, unique same-package resolution, matching parameter and alias
+  identity, function-level ordering, one unambiguous outcome, and the matching
+  caller transaction. Reject cycles, reassignment, nested or deferred forwarding,
+  mixed finalizers, and a chain beyond the recorded 32-bound resilience limit.
 
 ### Go HTTP server-side template injection — CWE-1336
 

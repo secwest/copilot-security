@@ -90,12 +90,14 @@ The package is ESM-only and provides:
   transfer. The original DB statement stays independent, the context argument is not
   mistaken for the source statement, and ignored, closed, replaced,
   cross-transaction, rolled-back, or uncommitted transfers are rejected.
-  Transaction outcome can also close through one uniquely resolved
-  same-package function whose exact typed `database/sql` transaction parameter
-  reaches exactly one non-deferred function-level `Commit` or `Rollback`.
-  Caller and helper nesting, argument identity, aliases, reassignment,
-  definition ambiguity, and finalizer order remain enforced; commit evidence
-  retains the helper file and line rather than being attributed to the caller.
+  Transaction outcome can also close through an exact chain of uniquely
+  resolved same-package functions whose typed `database/sql` transaction
+  parameter reaches exactly one non-deferred function-level `Commit` or
+  `Rollback`. Resolution is cycle-safe and bounded to 32 helper boundaries.
+  Caller and helper nesting, argument position, alias identity, reassignment,
+  definition and outcome ambiguity, depth, and finalizer order remain enforced;
+  commit evidence retains every forwarding call and the leaf file and line
+  rather than attributing the standard-library operation to the caller.
   Same-query security predicates count only
   when bound to a context-derived principal, and fail-closed returned-owner
   comparisons remain explicit control evidence. Fixed or reassigned IDs,

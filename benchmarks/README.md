@@ -593,10 +593,13 @@ returned clone, and commits; its matched control adds only the authenticated
 account predicate. A sixth pair finalizes a direct transaction mutation through
 a uniquely resolved typed same-package commit helper and preserves the helper's
 actual commit path; its control adds only the authenticated account predicate.
-The suite proves all six blocked attacks and successful
+The seventh pair adds a typed coordinator that aliases and forwards the exact
+transaction to a leaf commit helper, preserving both helper boundaries and the
+real commit location; its control changes only the account predicate. The suite
+proves all seven blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
-transferred-statement and helper-finalized transaction behavior without a
-database service:
+transferred-statement, direct-helper, and helper-chain transaction behavior
+without a database service:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -644,6 +647,12 @@ Push-Location fixtures\go-cross-file-helper-transaction-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-helper-transaction-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-helper-chain-transaction-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-helper-chain-transaction-delete-authorization
 go test ./...
 Pop-Location
 ```
