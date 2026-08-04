@@ -83,7 +83,13 @@ The package is ESM-only and provides:
   non-deferred function-level `Commit`; missing commit, dominating rollback,
   finalization before execution, and commit confined to a nested conditional
   are rejected, while the conventional deferred rollback and error-branch
-  rollback remain compatible with a later success-path commit.
+  rollback remain compatible with a later success-path commit. Exact
+  `Tx.Stmt` and `Tx.StmtContext` results inherit fixed predicates from the
+  source statement and the destination transaction's outcome boundary; the
+  assigned result or exact direct `tx.Stmt(...).Exec(...)` chain closes the
+  transfer. The original DB statement stays independent, the context argument is not
+  mistaken for the source statement, and ignored, closed, replaced,
+  cross-transaction, rolled-back, or uncommitted transfers are rejected.
   Same-query security predicates count only
   when bound to a context-derived principal, and fail-closed returned-owner
   comparisons remain explicit control evidence. Fixed or reassigned IDs,

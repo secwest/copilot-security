@@ -587,9 +587,12 @@ The third pair prepares a fixed DELETE and later executes the exact returned
 standard-library drivers prove both cross-account disclosures and the
 unauthorized prepared deletion. A fourth pair stages deletion on an exact `Tx`
 and applies it only at `Commit`, proving durable victim impact and a committed
-principal-scoped control. The suite proves all four blocked attacks and
-successful owned-object, owned-collection, prepared-mutation, and committed
-transaction behavior without a database service:
+principal-scoped control. A fifth pair prepares fixed SQL on the DB, transfers
+the exact statement into a transaction with `Tx.StmtContext`, executes the
+returned clone, and commits; its matched control adds only the authenticated
+account predicate. The suite proves all five blocked attacks and successful
+owned-object, owned-collection, prepared-mutation, direct-transaction, and
+transferred-statement transaction behavior without a database service:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -625,6 +628,12 @@ Push-Location fixtures\go-cross-file-transaction-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-transaction-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-transaction-stmt-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-transaction-stmt-delete-authorization
 go test ./...
 Pop-Location
 ```

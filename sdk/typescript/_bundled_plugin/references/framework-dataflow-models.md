@@ -411,7 +411,16 @@ interpreter that consumes the value.
   `QueryRow`, `Scan`, and disclosure of scanned data. A collection read
   requires exact `Query`/`QueryContext`, the same returned `Rows`, `Next`,
   `Scan`, and disclosure; `UPDATE` or `DELETE` through `Exec` is an immediate
-  mutation effect.
+  mutation effect. A mutation through a prepared statement requires the exact
+  `Prepare`/`PrepareContext` result and later `Stmt.Exec`/`Stmt.ExecContext`.
+  If that statement is prepared on a transaction, or an existing DB statement
+  is transferred by exact `Tx.Stmt`/`Tx.StmtContext` source and result
+  identities or an exact same-expression transfer/execution chain, keep the
+  effect provisional until the same transaction reaches
+  a non-deferred function-level `Commit`. Reject rollback, missing or premature
+  commit, nested or deferred commit, finalization before execution, ignored
+  transfer results, closed or replaced statements, and cross-transaction
+  transfer.
 - Authentication, middleware, opaque IDs, parameterized SQL, and a principal-
   named parameter do not authorize the selected object. Verify the exact
   placeholder-to-argument mapping, wrapper argument, object or collection,
@@ -426,6 +435,12 @@ interpreter that consumes the value.
   identifiers, immutable server-owned object selection, untyped database
   lookalikes, generic responses that do not expose selected data, and checks
   performed after disclosure or mutation.
+- For a transferred statement, preserve the original prepare line, exact
+  source statement, returned transaction statement, object predicate,
+  execution arguments, transaction identity, and commit line. `StmtContext`'s
+  context controls preparation rather than execution; it is neither the source
+  statement nor proof of authorization. Confirm commit success and driver or
+  database behavior before claiming durable impact.
 
 ### Go HTTP server-side template injection — CWE-1336
 

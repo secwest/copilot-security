@@ -91,6 +91,7 @@ interface PreparedStatement {
   predicates: Predicate[];
   active: boolean;
   transaction?: TransactionState;
+  transfer?: GoPropagator;
 }
 
 interface TransactionState {
@@ -423,6 +424,10 @@ function analyzeFunction(
   const rows = new Map<string, CandidateQuery>();
   const statements = new Map<string, PreparedStatement>();
   const transactions = new Map<string, TransactionState>();
+  const chainedStatements = new Map<
+    number,
+    Array<{ signature: string; statement: PreparedStatement }>
+  >();
   for (const receiver of typedTransactions) {
     transactions.set(receiver, { active: true, pending: [] });
   }
@@ -433,6 +438,74 @@ function analyzeFunction(
     receivers.has(receiver) ||
     inferredReceivers.has(receiver) ||
     transactions.has(receiver);
+  const recordStatementExecution = (
+    statement: PreparedStatement,
+    receiver: string,
+    method: string,
+    call: GoCall,
+  ): void => {
+    if (
+      !statement.active ||
+      statement.transaction?.active === false ||
+      !/^Exec(?:Context)?$/u.test(method)
+    )
+      return;
+    const argumentIndex = method === "ExecContext" ? 1 : 0;
+    const arguments_ = call.rawArguments.slice(argumentIndex);
+    const objectPredicate = statement.predicates.find((predicate) => {
+      if (!OBJECT_COLUMN.test(predicate.column)) return false;
+      const argument = predicateArgument(predicate, arguments_, alias);
+      return (
+        argument !== undefined &&
+        expressionTaint(argument, objects) !== undefined
+      );
+    });
+    if (objectPredicate === undefined) return;
+    const objectArgument = predicateArgument(
+      objectPredicate,
+      arguments_,
+      alias,
+    )!;
+    const source = expressionTaint(objectArgument, objects)!;
+    const controls: Array<{ kind: string; line: number }> = [];
+    const principalBound = statement.predicates.some((predicate) => {
+      if (!SECURITY_COLUMN.test(predicate.column)) return false;
+      const argument = predicateArgument(predicate, arguments_, alias);
+      return (
+        argument !== undefined &&
+        expressionTaint(argument, principals) !== undefined
+      );
+    });
+    if (principalBound)
+      controls.push({ kind: "principal-bound-object-query", line: call.line });
+    const sink: ObjectSink = {
+      kind: "go-database-object-mutation",
+      line: call.line,
+      source,
+      propagators: [
+        ...source.propagators,
+        {
+          kind: "go-sql-statement-prepare",
+          line: statement.line,
+          symbol: receiver,
+        },
+        ...(statement.transfer === undefined ? [] : [statement.transfer]),
+        {
+          kind: "go-sql-object-predicate",
+          line: statement.line,
+          symbol: objectPredicate.column,
+        },
+        {
+          kind: "go-sql-statement-execution",
+          line: call.line,
+          symbol: receiver,
+        },
+      ],
+      controls,
+    };
+    if (statement.transaction === undefined) sinks.push(sink);
+    else statement.transaction.pending.push(sink);
+  };
 
   for (
     let line = function_.bodyStartLine;
@@ -526,6 +599,21 @@ function analyzeFunction(
         }
         continue;
       }
+      if (/^Exec(?:Context)?$/u.test(call.name)) {
+        const compactPrefix = call.linePrefix.replace(/\s+/gu, "");
+        const chained = chainedStatements
+          .get(line)
+          ?.find(({ signature }) => compactPrefix.endsWith(signature));
+        if (chained !== undefined) {
+          recordStatementExecution(
+            chained.statement,
+            chained.statement.transfer?.symbol ?? "transaction-statement",
+            call.name,
+            call,
+          );
+          continue;
+        }
+      }
       const receiverCall =
         /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.([A-Za-z_]\w*)$/u.exec(call.name);
       if (receiverCall === null) continue;
@@ -583,6 +671,51 @@ function analyzeFunction(
         continue;
       }
 
+      if (
+        transaction?.active === true &&
+        /^(?:Stmt|StmtContext)$/u.test(method)
+      ) {
+        const sourceIndex = method === "StmtContext" ? 1 : 0;
+        const sourceName = call.rawArguments[sourceIndex]?.trim();
+        const sourceStatement =
+          sourceName === undefined ? undefined : statements.get(sourceName);
+        if (
+          sourceStatement !== undefined &&
+          sourceStatement.active &&
+          (sourceStatement.transaction === undefined ||
+            sourceStatement.transaction === transaction)
+        ) {
+          const transferred: PreparedStatement = {
+            line: sourceStatement.line,
+            predicates: sourceStatement.predicates,
+            active: true,
+            transaction,
+            transfer: {
+              kind: "go-sql-transaction-statement-transfer",
+              line,
+              symbol: result ?? `${receiver}.${method}`,
+            },
+          };
+          const signature = `${receiver}.${method}(${call.arguments
+            .map((argument) => argument.replace(/\s+/gu, ""))
+            .join(",")}).`;
+          const directExecution = (lineCalls.get(line) ?? []).some(
+            (candidate) =>
+              candidate.offset > call.offset &&
+              /^Exec(?:Context)?$/u.test(candidate.name) &&
+              candidate.linePrefix.replace(/\s+/gu, "").endsWith(signature),
+          );
+          if (result !== undefined && !directExecution)
+            statements.set(result, transferred);
+          else if (directExecution) {
+            const existing = chainedStatements.get(line) ?? [];
+            existing.push({ signature, statement: transferred });
+            chainedStatements.set(line, existing);
+          }
+        }
+        continue;
+      }
+
       const prepareIndex = receiverIsTyped(receiver)
         ? preparePosition(method)
         : undefined;
@@ -613,66 +746,7 @@ function analyzeFunction(
           if (!/\bdefer\b/u.test(structural)) statement.active = false;
           continue;
         }
-        if (
-          !statement.active ||
-          statement.transaction?.active === false ||
-          !/^Exec(?:Context)?$/u.test(method)
-        )
-          continue;
-        const argumentIndex = method === "ExecContext" ? 1 : 0;
-        const arguments_ = call.rawArguments.slice(argumentIndex);
-        const objectPredicate = statement.predicates.find((predicate) => {
-          if (!OBJECT_COLUMN.test(predicate.column)) return false;
-          const argument = predicateArgument(predicate, arguments_, alias);
-          return (
-            argument !== undefined &&
-            expressionTaint(argument, objects) !== undefined
-          );
-        });
-        if (objectPredicate === undefined) continue;
-        const objectArgument = predicateArgument(
-          objectPredicate,
-          arguments_,
-          alias,
-        )!;
-        const source = expressionTaint(objectArgument, objects)!;
-        const controls: Array<{ kind: string; line: number }> = [];
-        const principalBound = statement.predicates.some((predicate) => {
-          if (!SECURITY_COLUMN.test(predicate.column)) return false;
-          const argument = predicateArgument(predicate, arguments_, alias);
-          return (
-            argument !== undefined &&
-            expressionTaint(argument, principals) !== undefined
-          );
-        });
-        if (principalBound)
-          controls.push({ kind: "principal-bound-object-query", line });
-        const sink: ObjectSink = {
-          kind: "go-database-object-mutation",
-          line,
-          source,
-          propagators: [
-            ...source.propagators,
-            {
-              kind: "go-sql-statement-prepare",
-              line: statement.line,
-              symbol: receiver,
-            },
-            {
-              kind: "go-sql-object-predicate",
-              line: statement.line,
-              symbol: objectPredicate.column,
-            },
-            {
-              kind: "go-sql-statement-execution",
-              line,
-              symbol: receiver,
-            },
-          ],
-          controls,
-        };
-        if (statement.transaction === undefined) sinks.push(sink);
-        else statement.transaction.pending.push(sink);
+        recordStatementExecution(statement, receiver, method, call);
         continue;
       }
 

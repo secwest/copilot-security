@@ -407,7 +407,15 @@ DB/Tx/Conn receivers, and either `QueryRow` scan-to-response closure, exact
 update/delete. It records context-principal query binding and dominating
 post-lookup ownership checks as counterevidence without treating authentication,
 opaque IDs, parameterized SQL, principal-named parameters, or attacker-provided
-owner filters as authorization. This directly implements OWASP API1:2023's
+owner filters as authorization. Fixed mutations prepared on a DB and transferred
+through exact `Tx.Stmt` or `Tx.StmtContext` source/result identities retain the
+original predicate but become reportable only after the destination transaction
+commits. The original statement remains a separate identity; ignored results,
+context/source argument confusion, closed or replaced statements, transfers
+between distinct transactions, rollback, and missing durable closure are
+negative cases. A fifth executable pair proves both the unscoped committed
+deletion and the context-principal control with an offline driver. This directly
+implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
 index](https://codeql.github.com/codeql-query-help/go/) and published [gosec

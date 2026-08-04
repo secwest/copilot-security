@@ -788,7 +788,12 @@ owned-object read. A second pair proves the same boundary for a multi-row
 project invoice listing. A third pair proves that an unscoped prepared DELETE
 can remove a victim-owned invoice while a context-principal predicate blocks
 the same attack and still permits deletion of an owned invoice. A fourth pair
-proves the transaction boundary with a driver that stages changes until commit:
+proves the transaction boundary with a driver that stages changes until commit.
+A fifth pair covers the common DB-prepared-statement transfer path: exact
+`Tx.Stmt`/`Tx.StmtContext` source and returned statement identities retain the
+fixed SQL predicate, execution stays provisional, and only the destination
+transaction's commit closes the durable effect. Its control preserves that
+entire topology while adding only a context-principal account predicate:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -819,6 +824,12 @@ Push-Location benchmarks\fixtures\go-cross-file-transaction-delete-idor
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-transaction-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-transaction-stmt-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-transaction-stmt-delete-authorization
 go test ./...
 Pop-Location
 ```
