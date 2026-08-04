@@ -44,7 +44,10 @@ export interface GoObjectAuthorizationRecord {
     scope: "same-file" | "cross-file-wrapper";
     source: { kind: string; path: string; line: number };
     sink: {
-      kind: "go-database-object-read-response" | "go-database-object-mutation";
+      kind:
+        | "go-database-object-read-response"
+        | "go-database-object-collection-response"
+        | "go-database-object-mutation";
       path: string;
       line: number;
       cweIds: readonly ["CWE-639", "CWE-862"];
@@ -71,17 +74,22 @@ interface Predicate {
 }
 
 interface CandidateQuery {
+  mode: "row" | "rows";
   line: number;
   method: string;
   source: GoTaint;
   result?: string;
+  iterated: boolean;
   scannedNames: Set<string>;
   propagators: GoPropagator[];
   controls: Array<{ kind: string; line: number }>;
 }
 
 interface ObjectSink {
-  kind: "go-database-object-read-response" | "go-database-object-mutation";
+  kind:
+    | "go-database-object-read-response"
+    | "go-database-object-collection-response"
+    | "go-database-object-mutation";
   line: number;
   source: GoTaint;
   propagators: GoPropagator[];
@@ -196,8 +204,8 @@ function predicates(query: string): Predicate[] {
 }
 
 function queryPosition(method: string): number | undefined {
-  if (/^(?:Exec|QueryRow)$/u.test(method)) return 0;
-  if (/^(?:ExecContext|QueryRowContext)$/u.test(method)) return 1;
+  if (/^(?:Exec|Query|QueryRow)$/u.test(method)) return 0;
+  if (/^(?:ExecContext|QueryContext|QueryRowContext)$/u.test(method)) return 1;
   return undefined;
 }
 
@@ -379,6 +387,7 @@ function analyzeFunction(
     const assigned = goAssignment(structural);
     if (assigned !== undefined) {
       const primary = assigned.names[0]!;
+      const rowAlias = rows.get(assigned.value.trim());
       const objectSource =
         requestSource(assigned.value, requests, line) ??
         expressionTaint(assigned.value, objects);
@@ -392,6 +401,7 @@ function analyzeFunction(
         objects.delete(name);
         principals.delete(name);
         inferredReceivers.delete(name);
+        rows.delete(name);
       }
       if (objectSource !== undefined && !fixedObjectSelection) {
         objects.set(primary, {
@@ -411,6 +421,7 @@ function analyzeFunction(
           ],
         });
       }
+      if (rowAlias !== undefined) rows.set(primary, rowAlias);
       for (const candidate of pending) {
         if (
           [...candidate.scannedNames].some((name) =>
@@ -436,7 +447,11 @@ function analyzeFunction(
       }
       if (call.name === "Scan") {
         const candidate = pending.at(-1);
-        if (candidate !== undefined && line >= candidate.line) {
+        if (
+          candidate !== undefined &&
+          candidate.mode === "row" &&
+          line === candidate.line
+        ) {
           for (const name of scanNames(call)) candidate.scannedNames.add(name);
           candidate.propagators.push({
             kind: "go-sql-row-scan",
@@ -473,11 +488,7 @@ function analyzeFunction(
         const arguments_ = call.rawArguments.slice(queryIndex + 1);
         const parsed = predicates(query);
         const objectPredicate = parsed.find((predicate) => {
-          if (
-            !OBJECT_COLUMN.test(predicate.column) ||
-            SECURITY_COLUMN.test(predicate.column)
-          )
-            return false;
+          if (!OBJECT_COLUMN.test(predicate.column)) return false;
           const argument = predicateArgument(predicate, arguments_, alias);
           return (
             argument !== undefined &&
@@ -524,15 +535,17 @@ function analyzeFunction(
           continue;
         }
         if (
-          !/^QueryRow(?:Context)?$/u.test(method) ||
+          !/^Query(?:Row)?(?:Context)?$/u.test(method) ||
           !/^\s*SELECT\b/iu.test(query)
         )
           continue;
         const candidate: CandidateQuery = {
+          mode: /^QueryRow/u.test(method) ? "row" : "rows",
           line,
           method,
           source,
           result,
+          iterated: false,
           scannedNames: new Set(),
           propagators,
           controls,
@@ -542,12 +555,41 @@ function analyzeFunction(
         continue;
       }
 
+      if (method === "Next") {
+        const candidate = rows.get(receiver);
+        if (candidate === undefined || candidate.mode !== "rows") continue;
+        if (
+          !new RegExp(
+            `\\b(?:for|if)\\b[^\\r\\n]*\\b${escapeRegularExpression(receiver)}\\.Next\\s*\\(`,
+            "u",
+          ).test(structural)
+        )
+          continue;
+        candidate.iterated = true;
+        if (
+          !candidate.propagators.some(
+            (propagator) =>
+              propagator.kind === "go-sql-rows-iteration" &&
+              propagator.line === line,
+          )
+        ) {
+          candidate.propagators.push({
+            kind: "go-sql-rows-iteration",
+            line,
+            symbol: receiver,
+          });
+        }
+        continue;
+      }
+
       if (method === "Scan") {
-        const candidate = rows.get(receiver) ?? pending.at(-1);
+        const candidate = rows.get(receiver);
         if (candidate === undefined || line < candidate.line) continue;
+        if (candidate.mode === "rows" && !candidate.iterated) continue;
         for (const name of scanNames(call)) candidate.scannedNames.add(name);
         candidate.propagators.push({
-          kind: "go-sql-row-scan",
+          kind:
+            candidate.mode === "rows" ? "go-sql-rows-scan" : "go-sql-row-scan",
           line,
           symbol: [...candidate.scannedNames].join(","),
         });
@@ -577,7 +619,10 @@ function analyzeFunction(
       }
       if (!responseUsesData(structural, candidate.scannedNames)) continue;
       sinks.push({
-        kind: "go-database-object-read-response",
+        kind:
+          candidate.mode === "rows"
+            ? "go-database-object-collection-response"
+            : "go-database-object-read-response",
         line,
         source: candidate.source,
         propagators: [
@@ -869,7 +914,7 @@ export function goObjectAuthorizationRecords(
           });
         });
         const sink = { ...summary.sink, controls };
-        const identity = `${caller.file.path}:${call.line}:${summary.file.path}:${sink.line}:${sink.kind}:${summary.objectParameterIndex}`;
+        const identity = `${caller.file.path}:${call.line}:${summary.file.path}:${sink.line}:${sink.kind}`;
         if (emitted.has(identity)) continue;
         emitted.add(identity);
         records.push(

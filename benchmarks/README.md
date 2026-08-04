@@ -576,12 +576,15 @@ Pop-Location
 
 The Go HTTP object-authorization lane measures a different boundary from SQL
 injection: the SQL remains fixed and parameterized, but an attacker-controlled
-object ID can select another principal's record. The positive fixture carries
-a path value through one same-package wrapper into an ID-only `QueryRow`, then
-scans and returns the victim secret. The matched control adds an account
-predicate bound to a principal obtained from the request context. Deterministic
-standard-library drivers prove the cross-account disclosure, the blocked
-attack, and a successful owned-object read without a database service:
+object ID can select another principal's record or collection. The first
+positive fixture carries a path value through one same-package wrapper into an
+ID-only `QueryRow`, then scans and returns the victim secret. Its control adds
+an account predicate bound to a principal obtained from the request context.
+The second pair uses `QueryContext`, the returned `Rows`, `Next`, `Scan`, and
+response disclosure to prove and block a victim-project invoice listing.
+Deterministic standard-library drivers prove both cross-account disclosures,
+both blocked attacks, and successful owned-object and owned-collection reads
+without a database service:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -599,6 +602,12 @@ Push-Location fixtures\go-cross-file-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-list-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-list-authorization
 go test ./...
 Pop-Location
 ```

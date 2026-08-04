@@ -73,8 +73,10 @@ The package is ESM-only and provides:
   evidence. A typed Go object-authorization model requires exact `net/http`
   and `database/sql` identities and preserves a request object key through one
   unique wrapper into a fixed SQL equality predicate on a typed DB, Tx, or
-  Conn. Reads require `QueryRow`, `Scan`, and disclosure; updates and deletes
-  require exact `Exec` dispatch. Same-query security predicates count only
+  Conn. Single-row reads require `QueryRow`, `Scan`, and disclosure;
+  collection reads require exact `Query`/`QueryContext`, the same returned
+  `Rows`, `Next`, `Scan`, and disclosure. Updates and deletes require exact
+  `Exec` dispatch. Same-query security predicates count only
   when bound to a context-derived principal, and fail-closed returned-owner
   comparisons remain explicit control evidence. Fixed or reassigned IDs,
   immutable selection maps, attacker-controlled owner filters, dynamic SQL,

@@ -766,16 +766,19 @@ Pop-Location
 
 The Go object-authorization lane requires exact `net/http` and
 `database/sql` identities, a typed request-derived object key, a fixed SQL
-object predicate, and a concrete protected effect. Reads close only after
-`QueryRow` data is scanned and disclosed; `UPDATE` and `DELETE` executions are
-immediate state effects. Authentication and bound parameters alone are not
+object predicate, and a concrete protected effect. Single-row reads close only
+after `QueryRow` data is scanned and disclosed. Collection reads require the
+same returned `Rows` to reach `Next`, `Scan`, and disclosure of scanned data;
+`UPDATE` and `DELETE` executions are immediate state effects. Authentication
+and bound parameters alone are not
 authorization. The host retains a same-query owner/tenant/account predicate
 only when its value is derived from the authenticated request context, and it
 retains a fail-closed post-lookup ownership comparison only when it dominates
 the response. The paired offline driver witnesses prove that an attacker can
 read a victim invoice through the unscoped lookup and that the context-bound
 account predicate blocks the same cross-account request while preserving an
-owned-object read:
+owned-object read. A second pair proves the same boundary for a multi-row
+project invoice listing:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -788,6 +791,12 @@ Push-Location benchmarks\fixtures\go-cross-file-idor
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-list-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-list-authorization
 go test ./...
 Pop-Location
 ```

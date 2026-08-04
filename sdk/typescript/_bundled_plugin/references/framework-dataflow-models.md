@@ -407,13 +407,15 @@ interpreter that consumes the value.
   wrapper.
 - Protected effect: the request-derived identifier occupies an object-key
   equality predicate in fixed SQL executed by an exact typed `*database/sql.DB`,
-  `*database/sql.Tx`, or `*database/sql.Conn`. A read requires `QueryRow`,
-  `Scan`, and disclosure of scanned data; `UPDATE` or `DELETE` through `Exec`
-  is an immediate mutation effect.
+  `*database/sql.Tx`, or `*database/sql.Conn`. A single-row read requires
+  `QueryRow`, `Scan`, and disclosure of scanned data. A collection read
+  requires exact `Query`/`QueryContext`, the same returned `Rows`, `Next`,
+  `Scan`, and disclosure; `UPDATE` or `DELETE` through `Exec` is an immediate
+  mutation effect.
 - Authentication, middleware, opaque IDs, parameterized SQL, and a principal-
   named parameter do not authorize the selected object. Verify the exact
-  placeholder-to-argument mapping, wrapper argument, object, action, and
-  denial path.
+  placeholder-to-argument mapping, wrapper argument, object or collection,
+  `Rows` identity, action, and denial path.
 - Strong counterevidence: the same query also binds an owner, tenant, account,
   organization, user, or workspace predicate to a principal derived from the
   request context, or a fail-closed comparison of returned ownership data to

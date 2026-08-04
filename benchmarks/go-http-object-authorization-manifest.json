@@ -36,6 +36,28 @@
       "id": "go-cross-file-safe-authorization",
       "fixture": "fixtures/go-cross-file-safe-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-file-list-idor",
+      "fixture": "fixtures/go-cross-file-list-idor",
+      "expected": [
+        {
+          "title": "Go project endpoint lists records selected without principal scope",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "store.go",
+          "line": 22,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-file-safe-list-authorization",
+      "fixture": "fixtures/go-cross-file-safe-list-authorization",
+      "expected": []
     }
   ]
 }

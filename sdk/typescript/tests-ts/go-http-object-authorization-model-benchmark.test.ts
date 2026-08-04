@@ -96,9 +96,13 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([
       "go-cross-file-idor",
       "go-cross-file-safe-authorization",
+      "go-cross-file-list-idor",
+      "go-cross-file-safe-list-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
+    expect(manifest.cases[2]?.expected).toHaveLength(1);
+    expect(manifest.cases[3]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -191,6 +195,114 @@ describe("Go HTTP object-authorization framework model", () => {
     }
   });
 
+  test("preserves the exact cross-file collection exploit and scoped control", async () => {
+    const vulnerable = await fixtureInventory("go-cross-file-list-idor");
+    const safe = await fixtureInventory(
+      "go-cross-file-safe-list-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "store.go",
+      line: 22,
+      categories: [
+        "framework-dataflow:go-http-object-authorization",
+        "modeled-source:go-http-path-value",
+        "modeled-sink:go-database-object-collection-response",
+      ],
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 9 },
+        sink: {
+          kind: "go-database-object-collection-response",
+          path: "store.go",
+          line: 22,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "go-object-identifier-assignment",
+      "go-function-argument",
+      "go-string-parameter",
+      "go-sql-object-predicate",
+      "go-sql-rows-iteration",
+      "go-sql-rows-scan",
+      "go-http-protected-response",
+    ]);
+    expect(safe).toHaveLength(1);
+    expect(safe[0]?.frameworkModel?.candidateControls).toEqual([
+      { kind: "principal-bound-object-query", path: "store.go", line: 11 },
+    ]);
+  });
+
+  test("requires Query rows to reach Next, Scan, and selected-data disclosure", async () => {
+    const vulnerableBodies = [
+      `  id := r.PathValue("projectID")
+  rows, _ := db.Query("SELECT secret FROM invoices WHERE project_id = ?", id)
+  for rows.Next() {
+    var secret string
+    rows.Scan(&secret)
+    fmt.Fprint(w, secret)
+  }`,
+      `  id := r.PathValue("projectID")
+  rows, _ := db.QueryContext(r.Context(), "SELECT secret FROM invoices WHERE project_id = ?", id)
+  alias := rows
+  for alias.Next() {
+    var secret string
+    alias.Scan(&secret)
+    fmt.Fprint(w, secret)
+  }`,
+    ];
+    for (const body of vulnerableBodies) {
+      const rows = await repositoryInventory({
+        "handler.go": handler(body),
+      });
+      expect(rows, body).toHaveLength(1);
+      expect(rows[0]?.frameworkModel?.sink.kind).toBe(
+        "go-database-object-collection-response",
+      );
+    }
+
+    for (const body of [
+      `  id := r.PathValue("projectID")
+  rows, _ := db.Query("SELECT secret FROM invoices WHERE project_id = ?", id)
+  var secret string
+  rows.Scan(&secret)
+  fmt.Fprint(w, secret)`,
+      `  id := r.PathValue("projectID")
+  rows, _ := db.Query("SELECT secret FROM invoices WHERE project_id = ?", id)
+  rows.Next()
+  var secret string
+  rows.Scan(&secret)
+  fmt.Fprint(w, secret)`,
+      `  id := r.PathValue("projectID")
+  rows, _ := db.Query("SELECT secret FROM invoices WHERE project_id = ?", id)
+  for rows.Next() {
+    fmt.Fprint(w, "done")
+  }`,
+      `  id := r.PathValue("projectID")
+  rows, _ := db.Query("SELECT secret FROM invoices WHERE project_id = ?", id)
+  for rows.Next() {
+    var secret string
+    rows.Scan(&secret)
+    fmt.Fprint(w, "done")
+  }`,
+      `  id := r.PathValue("invoiceID")
+  db.QueryRow("SELECT secret FROM invoices WHERE id = ?", id)
+  var secret string
+  other.Scan(&secret)
+  fmt.Fprint(w, secret)`,
+    ]) {
+      expect(
+        await repositoryInventory({ "handler.go": handler(body) }),
+        body,
+      ).toEqual([]);
+    }
+  });
+
   test("models UPDATE and DELETE as immediate protected effects", async () => {
     for (const query of [
       "UPDATE invoices SET status = 'paid' WHERE id = ?",
@@ -231,6 +343,17 @@ describe("Go HTTP object-authorization framework model", () => {
     });
     expect(attackerControlled).toHaveLength(1);
     expect(attackerControlled[0]?.frameworkModel?.candidateControls).toEqual(
+      [],
+    );
+
+    const securityNamedObject = await repositoryInventory({
+      "handler.go": handler(`  accountID := r.PathValue("accountID")
+  var secret string
+  db.QueryRow("SELECT secret FROM accounts WHERE account_id = ?", accountID).Scan(&secret)
+  fmt.Fprint(w, secret)`),
+    });
+    expect(securityNamedObject).toHaveLength(1);
+    expect(securityNamedObject[0]?.frameworkModel?.candidateControls).toEqual(
       [],
     );
   });
