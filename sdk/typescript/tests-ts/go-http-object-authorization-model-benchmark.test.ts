@@ -100,6 +100,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-file-safe-list-authorization",
       "go-cross-file-prepared-delete-idor",
       "go-cross-file-safe-prepared-delete-authorization",
+      "go-cross-file-transaction-delete-idor",
+      "go-cross-file-safe-transaction-delete-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -107,6 +109,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[3]?.expected).toEqual([]);
     expect(manifest.cases[4]?.expected).toHaveLength(1);
     expect(manifest.cases[5]?.expected).toEqual([]);
+    expect(manifest.cases[6]?.expected).toHaveLength(1);
+    expect(manifest.cases[7]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -365,6 +369,50 @@ describe("Go HTTP object-authorization framework model", () => {
     ]);
   });
 
+  test("preserves the exact committed transaction exploit and scoped control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-file-transaction-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-file-safe-transaction-delete-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "store.go",
+      line: 22,
+      categories: [
+        "framework-dataflow:go-http-object-authorization",
+        "modeled-source:go-http-path-value",
+        "modeled-sink:go-database-object-committed-mutation",
+      ],
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 9 },
+        sink: {
+          kind: "go-database-object-committed-mutation",
+          path: "store.go",
+          line: 22,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "go-object-identifier-assignment",
+      "go-function-argument",
+      "go-string-parameter",
+      "go-sql-object-predicate",
+      "go-sql-mutation-execution",
+      "go-sql-transaction-commit",
+    ]);
+    expect(safe).toHaveLength(1);
+    expect(safe[0]?.frameworkModel?.candidateControls).toEqual([
+      { kind: "principal-bound-object-query", path: "store.go", line: 19 },
+    ]);
+  });
+
   test("closes Prepare and PrepareContext through the exact Stmt execution", async () => {
     const bodies = [
       `  id := r.PathValue("invoiceID")
@@ -437,12 +485,139 @@ func Handler(db *sql.${receiverType}, w http.ResponseWriter, r *http.Request) {
   stmt, _ := db.Prepare("DELETE FROM invoices WHERE id = ?")
   defer stmt.Close()
   stmt.Exec(id)
+${receiverType === "Tx" ? "  db.Commit()" : ""}
 }`;
-      expect(
-        await repositoryInventory({ "handler.go": source }),
-        receiverType,
-      ).toHaveLength(1);
+      const rows = await repositoryInventory({ "handler.go": source });
+      expect(rows, receiverType).toHaveLength(1);
+      expect(rows[0]?.frameworkModel?.sink.kind).toBe(
+        receiverType === "Tx"
+          ? "go-database-object-committed-mutation"
+          : "go-database-object-mutation",
+      );
     }
+  });
+
+  test("requires transaction mutations to reach an exact top-level Commit", async () => {
+    const bodies = [
+      `  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  defer tx.Rollback()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()`,
+      `  id := r.PathValue("invoiceID")
+  tx, _ := db.BeginTx(r.Context(), nil)
+  alias := tx
+  alias.ExecContext(r.Context(), "DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()`,
+      `  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  _, err := tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  if err != nil {
+    tx.Rollback()
+    return
+  }
+  if err := tx.Commit(); err != nil {
+    return
+  }`,
+    ];
+    for (const body of bodies) {
+      const rows = await repositoryInventory({ "handler.go": handler(body) });
+      expect(rows, body).toHaveLength(1);
+      expect(rows[0]?.frameworkModel?.sink.kind).toBe(
+        "go-database-object-committed-mutation",
+      );
+      expect(
+        rows[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+      ).toContain("go-sql-transaction-commit");
+    }
+  });
+
+  test("rejects transaction mutations without durable commit closure", async () => {
+    for (const body of [
+      `  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)`,
+      `  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Rollback()`,
+      `  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Commit()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)`,
+      `  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  if id != "" {
+    tx.Commit()
+  }`,
+      `  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  defer tx.Commit()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)`,
+      `  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  alias := tx
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  alias.Rollback()
+  tx.Commit()`,
+    ]) {
+      expect(
+        await repositoryInventory({ "handler.go": handler(body) }),
+        body,
+      ).toEqual([]);
+    }
+  });
+
+  test("closes transaction-prepared mutations only through transaction commit", async () => {
+    const committed = await repositoryInventory({
+      "handler.go": handler(`  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  stmt, _ := tx.Prepare("DELETE FROM invoices WHERE id = ?")
+  defer stmt.Close()
+  stmt.Exec(id)
+  tx.Commit()`),
+    });
+    expect(committed).toHaveLength(1);
+    expect(committed[0]?.frameworkModel?.sink.kind).toBe(
+      "go-database-object-committed-mutation",
+    );
+    expect(
+      committed[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "go-object-identifier-assignment",
+      "go-sql-statement-prepare",
+      "go-sql-object-predicate",
+      "go-sql-statement-execution",
+      "go-sql-transaction-commit",
+    ]);
+
+    const rolledBack = await repositoryInventory({
+      "handler.go": handler(`  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  stmt, _ := tx.Prepare("DELETE FROM invoices WHERE id = ?")
+  stmt.Exec(id)
+  tx.Rollback()`),
+    });
+    expect(rolledBack).toEqual([]);
+  });
+
+  test("tracks typed transaction parameters through commit", async () => {
+    const source = `package invoices
+import (
+  "database/sql"
+  "net/http"
+)
+func Handler(tx *sql.Tx, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()
+}`;
+    const rows = await repositoryInventory({ "handler.go": source });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.frameworkModel?.sink.kind).toBe(
+      "go-database-object-committed-mutation",
+    );
   });
 
   test("maps prepared positional and named arguments and trusts only context principals", async () => {

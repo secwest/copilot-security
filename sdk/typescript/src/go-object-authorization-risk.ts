@@ -47,7 +47,8 @@ export interface GoObjectAuthorizationRecord {
       kind:
         | "go-database-object-read-response"
         | "go-database-object-collection-response"
-        | "go-database-object-mutation";
+        | "go-database-object-mutation"
+        | "go-database-object-committed-mutation";
       path: string;
       line: number;
       cweIds: readonly ["CWE-639", "CWE-862"];
@@ -89,13 +90,20 @@ interface PreparedStatement {
   line: number;
   predicates: Predicate[];
   active: boolean;
+  transaction?: TransactionState;
+}
+
+interface TransactionState {
+  active: boolean;
+  pending: ObjectSink[];
 }
 
 interface ObjectSink {
   kind:
     | "go-database-object-read-response"
     | "go-database-object-collection-response"
-    | "go-database-object-mutation";
+    | "go-database-object-mutation"
+    | "go-database-object-committed-mutation";
   line: number;
   source: GoTaint;
   propagators: GoPropagator[];
@@ -124,6 +132,13 @@ function typedReceivers(function_: GoFunction, alias: string): Set<string> {
   return goTypedReceiverNames(function_, [
     { alias, typeNames: ["DB", "Tx", "Conn"] },
   ]);
+}
+
+function typedTransactionReceivers(
+  function_: GoFunction,
+  alias: string,
+): Set<string> {
+  return goTypedReceiverNames(function_, [{ alias, typeNames: ["Tx"] }]);
 }
 
 function unquoteGo(value: string): string | undefined {
@@ -223,6 +238,23 @@ function preparePosition(method: string): number | undefined {
 
 function isMutationQuery(query: string): boolean {
   return /^\s*(?:UPDATE|DELETE)\b/iu.test(query);
+}
+
+function braceDelta(value: string): number {
+  let result = 0;
+  for (const character of value) {
+    if (character === "{") result += 1;
+    if (character === "}") result -= 1;
+  }
+  return result;
+}
+
+function callNestingDepth(function_: GoFunction, call: GoCall): number {
+  let depth = 0;
+  for (let line = function_.bodyStartLine; line < call.line; line += 1) {
+    depth += braceDelta(function_.structuralLines[line - 1] ?? "");
+  }
+  return depth + braceDelta(call.linePrefix);
 }
 
 function sqlNamedValue(argument: string, alias: string): string {
@@ -382,6 +414,7 @@ function analyzeFunction(
   if (alias === undefined) return [];
   const requests = requestParameters(function_);
   const receivers = typedReceivers(function_, alias);
+  const typedTransactions = typedTransactionReceivers(function_, alias);
   const inferredReceivers = new Set<string>();
   const objects = new Map(initialObjects);
   const principals = new Map(initialPrincipals);
@@ -389,11 +422,17 @@ function analyzeFunction(
   const fixedMaps = fixedMapNames(function_);
   const rows = new Map<string, CandidateQuery>();
   const statements = new Map<string, PreparedStatement>();
+  const transactions = new Map<string, TransactionState>();
+  for (const receiver of typedTransactions) {
+    transactions.set(receiver, { active: true, pending: [] });
+  }
   const pending: CandidateQuery[] = [];
   const sinks: ObjectSink[] = [];
   const lineCalls = callsByLine(function_);
   const receiverIsTyped = (receiver: string): boolean =>
-    receivers.has(receiver) || inferredReceivers.has(receiver);
+    receivers.has(receiver) ||
+    inferredReceivers.has(receiver) ||
+    transactions.has(receiver);
 
   for (
     let line = function_.bodyStartLine;
@@ -406,6 +445,7 @@ function analyzeFunction(
       const primary = assigned.names[0]!;
       const rowAlias = rows.get(assigned.value.trim());
       const statementAlias = statements.get(assigned.value.trim());
+      const transactionAlias = transactions.get(assigned.value.trim());
       const objectSource =
         requestSource(assigned.value, requests, line) ??
         expressionTaint(assigned.value, objects);
@@ -421,6 +461,7 @@ function analyzeFunction(
         inferredReceivers.delete(name);
         rows.delete(name);
         statements.delete(name);
+        transactions.delete(name);
       }
       if (objectSource !== undefined && !fixedObjectSelection) {
         objects.set(primary, {
@@ -442,6 +483,10 @@ function analyzeFunction(
       }
       if (rowAlias !== undefined) rows.set(primary, rowAlias);
       if (statementAlias !== undefined) statements.set(primary, statementAlias);
+      if (transactionAlias !== undefined) {
+        transactions.set(primary, transactionAlias);
+        inferredReceivers.add(primary);
+      }
       for (const candidate of pending) {
         if (
           [...candidate.scannedNames].some((name) =>
@@ -489,9 +534,52 @@ function analyzeFunction(
       if (
         result !== undefined &&
         receiverIsTyped(receiver) &&
-        /^(?:Begin|BeginTx|Conn)$/u.test(method)
+        /^(?:Begin|BeginTx)$/u.test(method)
       ) {
         inferredReceivers.add(result);
+        transactions.set(result, { active: true, pending: [] });
+        continue;
+      }
+      if (
+        result !== undefined &&
+        receiverIsTyped(receiver) &&
+        method === "Conn"
+      ) {
+        inferredReceivers.add(result);
+        continue;
+      }
+
+      const transaction = transactions.get(receiver);
+      if (transaction !== undefined && /^(?:Commit|Rollback)$/u.test(method)) {
+        if (
+          !transaction.active ||
+          /\bdefer\b/u.test(structural) ||
+          callNestingDepth(function_, call) !== 1
+        ) {
+          continue;
+        }
+        if (method === "Rollback") {
+          transaction.pending.length = 0;
+          transaction.active = false;
+          continue;
+        }
+        for (const pendingMutation of transaction.pending) {
+          sinks.push({
+            ...pendingMutation,
+            kind: "go-database-object-committed-mutation",
+            line,
+            propagators: [
+              ...pendingMutation.propagators,
+              {
+                kind: "go-sql-transaction-commit",
+                line,
+                symbol: receiver,
+              },
+            ],
+          });
+        }
+        transaction.pending.length = 0;
+        transaction.active = false;
         continue;
       }
 
@@ -513,6 +601,7 @@ function analyzeFunction(
             line,
             predicates: predicates(query),
             active: true,
+            ...(transaction === undefined ? {} : { transaction }),
           });
         }
         continue;
@@ -524,7 +613,12 @@ function analyzeFunction(
           if (!/\bdefer\b/u.test(structural)) statement.active = false;
           continue;
         }
-        if (!statement.active || !/^Exec(?:Context)?$/u.test(method)) continue;
+        if (
+          !statement.active ||
+          statement.transaction?.active === false ||
+          !/^Exec(?:Context)?$/u.test(method)
+        )
+          continue;
         const argumentIndex = method === "ExecContext" ? 1 : 0;
         const arguments_ = call.rawArguments.slice(argumentIndex);
         const objectPredicate = statement.predicates.find((predicate) => {
@@ -553,7 +647,7 @@ function analyzeFunction(
         });
         if (principalBound)
           controls.push({ kind: "principal-bound-object-query", line });
-        sinks.push({
+        const sink: ObjectSink = {
           kind: "go-database-object-mutation",
           line,
           source,
@@ -576,7 +670,9 @@ function analyzeFunction(
             },
           ],
           controls,
-        });
+        };
+        if (statement.transaction === undefined) sinks.push(sink);
+        else statement.transaction.pending.push(sink);
         continue;
       }
 
@@ -627,7 +723,7 @@ function analyzeFunction(
           },
         ];
         if (/^Exec(?:Context)?$/u.test(method) && isMutationQuery(query)) {
-          sinks.push({
+          const sink: ObjectSink = {
             kind: "go-database-object-mutation",
             line,
             source,
@@ -636,7 +732,9 @@ function analyzeFunction(
               { kind: "go-sql-mutation-execution", line, symbol: receiver },
             ],
             controls,
-          });
+          };
+          if (transaction === undefined) sinks.push(sink);
+          else if (transaction.active) transaction.pending.push(sink);
           continue;
         }
         if (

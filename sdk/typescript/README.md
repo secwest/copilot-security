@@ -79,6 +79,11 @@ The package is ESM-only and provides:
   direct `Exec` dispatch or exact `Prepare`/`PrepareContext` statement identity
   followed by `Stmt.Exec`/`Stmt.ExecContext`; preparation alone, unrelated or
   replaced statements, and statements closed before dispatch are rejected.
+  Mutations on an exact `Tx` are queued until the same transaction reaches a
+  non-deferred function-level `Commit`; missing commit, dominating rollback,
+  finalization before execution, and commit confined to a nested conditional
+  are rejected, while the conventional deferred rollback and error-branch
+  rollback remain compatible with a later success-path commit.
   Same-query security predicates count only
   when bound to a context-derived principal, and fail-closed returned-owner
   comparisons remain explicit control evidence. Fixed or reassigned IDs,

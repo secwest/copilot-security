@@ -80,6 +80,28 @@
       "id": "go-cross-file-safe-prepared-delete-authorization",
       "fixture": "fixtures/go-cross-file-safe-prepared-delete-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-file-transaction-delete-idor",
+      "fixture": "fixtures/go-cross-file-transaction-delete-idor",
+      "expected": [
+        {
+          "title": "Go invoice transaction commits deletion selected only by request ID",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "store.go",
+          "line": 22,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-file-safe-transaction-delete-authorization",
+      "fixture": "fixtures/go-cross-file-safe-transaction-delete-authorization",
+      "expected": []
     }
   ]
 }

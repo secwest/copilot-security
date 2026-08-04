@@ -772,7 +772,11 @@ same returned `Rows` to reach `Next`, `Scan`, and disclosure of scanned data;
 direct `UPDATE` and `DELETE` executions are immediate state effects. Prepared
 mutations require a fixed statement created by `Prepare` or `PrepareContext`
 to reach `Stmt.Exec` or `Stmt.ExecContext` through the exact non-reassigned,
-not-yet-closed statement or its proven alias. Authentication and bound
+not-yet-closed statement or its proven alias. Mutations on an exact `Tx` remain
+provisional until that same transaction reaches a non-deferred top-level
+`Commit`; a dominating `Rollback`, missing commit, commit before execution,
+or commit confined to a nested conditional does not prove durable state change.
+Authentication and bound
 parameters alone are not
 authorization. The host retains a same-query owner/tenant/account predicate
 only when its value is derived from the authenticated request context, and it
@@ -783,7 +787,8 @@ account predicate blocks the same cross-account request while preserving an
 owned-object read. A second pair proves the same boundary for a multi-row
 project invoice listing. A third pair proves that an unscoped prepared DELETE
 can remove a victim-owned invoice while a context-principal predicate blocks
-the same attack and still permits deletion of an owned invoice:
+the same attack and still permits deletion of an owned invoice. A fourth pair
+proves the transaction boundary with a driver that stages changes until commit:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -808,6 +813,12 @@ Push-Location benchmarks\fixtures\go-cross-file-prepared-delete-idor
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-prepared-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-transaction-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-transaction-delete-authorization
 go test ./...
 Pop-Location
 ```

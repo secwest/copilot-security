@@ -584,9 +584,12 @@ The second pair uses `QueryContext`, the returned `Rows`, `Next`, `Scan`, and
 response disclosure to prove and block a victim-project invoice listing.
 The third pair prepares a fixed DELETE and later executes the exact returned
 `Stmt`; its control adds a context-principal account predicate. Deterministic
-standard-library drivers prove both cross-account disclosures, the unauthorized
-victim deletion, all three blocked attacks, and successful owned-object,
-owned-collection, and owned-mutation behavior without a database service:
+standard-library drivers prove both cross-account disclosures and the
+unauthorized prepared deletion. A fourth pair stages deletion on an exact `Tx`
+and applies it only at `Commit`, proving durable victim impact and a committed
+principal-scoped control. The suite proves all four blocked attacks and
+successful owned-object, owned-collection, prepared-mutation, and committed
+transaction behavior without a database service:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -616,6 +619,12 @@ Push-Location fixtures\go-cross-file-prepared-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-prepared-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-transaction-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-transaction-delete-authorization
 go test ./...
 Pop-Location
 ```
