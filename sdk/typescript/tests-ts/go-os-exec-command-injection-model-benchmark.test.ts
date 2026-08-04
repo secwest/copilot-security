@@ -45,6 +45,8 @@ const benchmarkRoot = resolve(process.cwd(), "..", "..", "benchmarks");
 const caseIds = [
   "go-cross-file-shell-command-injection",
   "go-cross-file-safe-shell-command",
+  "go-cross-file-manual-cmd-shell-injection",
+  "go-cross-file-safe-manual-cmd-shell-command",
 ] as const;
 const temporaryPaths: string[] = [];
 
@@ -130,6 +132,14 @@ describe("Go os/exec command-injection framework-model benchmark", () => {
       requireCodeEvidence: true,
     });
     expect(manifest.cases[1]?.expected).toEqual([]);
+    expect(manifest.cases[2]?.expected[0]).toMatchObject({
+      cwe: ["CWE-78"],
+      acceptableSeverities: ["critical", "high"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[3]?.expected).toEqual([]);
   });
 
   test("preserves the exact handler-to-shell-construction-and-execution path", async () => {
@@ -162,6 +172,46 @@ describe("Go os/exec command-injection framework-model benchmark", () => {
       "go-string-parameter",
       "go-string-assignment",
       "go-process-command-construction",
+    ]);
+    expect(safe).toEqual([]);
+  });
+
+  test("preserves the exact handler-to-manual-Args-mutation-and-execution path", async () => {
+    const vulnerable = models(await fixtureInventory(caseIds[2]));
+    const safe = models(await fixtureInventory(caseIds[3]));
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "render.go",
+      line: 14,
+      categories: [
+        "framework-dataflow:go-os-exec-command-injection",
+        "modeled-source:go-http-query-parameter",
+        "modeled-sink:go-process-shell-command-execution",
+      ],
+      frameworkModel: {
+        schemaVersion: "1.2",
+        language: "go",
+        scope: "cross-file-wrapper",
+        source: {
+          kind: "go-http-query-parameter",
+          path: "handler.go",
+          line: 6,
+        },
+        sink: {
+          kind: "go-process-shell-command-execution",
+          path: "render.go",
+          line: 14,
+          cweIds: ["CWE-78"],
+        },
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "go-function-argument",
+      "go-string-parameter",
+      "go-string-assignment",
+      "go-process-args-field",
     ]);
     expect(safe).toEqual([]);
   });
@@ -222,6 +272,213 @@ func Other() {
 }
 func Render(w http.ResponseWriter, r *http.Request) {
   exec.Command(hiddenShell, "-c", r.FormValue("command")).Run()
+}`,
+      }),
+    ).toEqual([]);
+  });
+
+  test("closes manually constructed Cmd values only at process execution", async () => {
+    expect(
+      await repositoryInventory({
+        "render.go": handler(`  program := r.FormValue("program")
+  command := &exec.Cmd{Path: program}
+  _ = command`),
+      }),
+    ).toEqual([]);
+    const executable = await repositoryInventory({
+      "render.go": handler(`  program := r.FormValue("program")
+  command := &exec.Cmd{Path: program}
+  command.Run()`),
+    });
+    expect(executable).toHaveLength(1);
+    expect(executable[0]?.frameworkModel?.sink.kind).toBe(
+      "go-process-executable-selection",
+    );
+    expect(
+      executable[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toContain("go-process-path-field");
+
+    const shell = await repositoryInventory({
+      "render.go": handler(`  command := r.FormValue("command")
+  process := &exec.Cmd{
+    Path: "sh",
+    Args: []string{"display-name", "-c", command},
+  }
+  process.CombinedOutput()`),
+    });
+    expect(shell).toHaveLength(1);
+    expect(shell[0]?.frameworkModel?.sink.kind).toBe(
+      "go-process-shell-command-execution",
+    );
+    expect(
+      shell[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toContain("go-process-args-field");
+  });
+
+  test("tracks Path, Args, and exact Args element mutation without treating argv zero as executable", async () => {
+    expect(
+      await repositoryInventory({
+        "render.go": handler(`  command := r.FormValue("command")
+  var process exec.Cmd
+  process.Path = "sh"
+  process.Args = []string{"sh", "-c", "fixed"}
+  process.Args[2] = command
+  process.Run()`),
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "render.go": handler(`  value := r.FormValue("value")
+  process := new(exec.Cmd)
+  process.Path = "render"
+  process.Args = []string{value, "--format", value}
+  process.Start()`),
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "render.go": handler(`  command := r.FormValue("command")
+  arguments := []string{"sh", "-c", "fixed"}
+  arguments[2] = command
+  process := &exec.Cmd{Path: "sh"}
+  process.Args = arguments
+  process.Output()`),
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "render.go": handler(`  command := r.FormValue("command")
+  process := &exec.Cmd{Path: "sh", Args: []string{"sh", "-c", "fixed"}}
+  alias := process
+  process.Args[2] = command
+  alias.Run()`),
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "render.go": handler(`  program := r.FormValue("program")
+  process := exec.Cmd{Path: "render", Args: []string{"render"}}
+  alias := process
+  process.Path = program
+  alias.Run()`),
+      }),
+    ).toEqual([]);
+  });
+
+  test("clears manual command state on replacement and keeps ordinary manual argv safe", async () => {
+    expect(
+      await repositoryInventory({
+        "render.go": handler(`  command := r.FormValue("command")
+  process := &exec.Cmd{Path: "sh", Args: []string{"sh", "-c", command}}
+  process = exec.Command("render", "--format", "text")
+  process.Run()`),
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "render.go": handler(`  value := r.FormValue("value")
+  process := &exec.Cmd{Path: "render", Args: []string{"render", "--format", value}}
+  process.Run()`),
+      }),
+    ).toEqual([]);
+  });
+
+  test("models immediate os and syscall process dispatch with exact argv roles", async () => {
+    const osRows = await repositoryInventory({
+      "render.go": `package render
+import (
+  "net/http"
+  "os"
+)
+func Render(w http.ResponseWriter, r *http.Request) {
+  command := r.FormValue("command")
+  os.StartProcess("sh", []string{"sh", "-c", command}, nil)
+}`,
+    });
+    expect(osRows).toHaveLength(1);
+    expect(osRows[0]?.frameworkModel?.sink.kind).toBe(
+      "go-process-shell-command-execution",
+    );
+    expect(
+      osRows[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toContain("go-process-direct-dispatch");
+
+    for (const method of ["Exec", "ForkExec", "StartProcess"]) {
+      const rows = await repositoryInventory({
+        "render.go": `package render
+import (
+  "net/http"
+  "syscall"
+)
+func Render(w http.ResponseWriter, r *http.Request) {
+  command := r.FormValue("command")
+  argv := []string{"sh", "-c", command}
+  syscall.${method}("sh", argv, nil)
+}`,
+      });
+      expect(rows, method).toHaveLength(1);
+    }
+    expect(
+      await repositoryInventory({
+        "render.go": `package render
+import (
+  "net/http"
+  "os"
+)
+func Render(w http.ResponseWriter, r *http.Request) {
+  value := r.FormValue("value")
+  os.StartProcess("render", []string{value, "--format", value}, nil)
+}`,
+      }),
+    ).toEqual([]);
+  });
+
+  test("supports exact low-level aliases and one cross-file dispatcher wrapper", async () => {
+    expect(
+      await repositoryInventory({
+        "render.go": `package render
+import (
+  "net/http"
+  process "os"
+)
+func Render(w http.ResponseWriter, r *http.Request) {
+  process.StartProcess(r.FormValue("program"), nil, nil)
+}`,
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "handler.go": `package render
+import "net/http"
+func Handler(w http.ResponseWriter, r *http.Request) { Launch(r.FormValue("command")) }`,
+        "launch.go": `package render
+import "os"
+func Launch(command string) { os.StartProcess("sh", []string{"sh", "-c", command}, nil) }`,
+      }),
+    ).toHaveLength(1);
+    expect(
+      await repositoryInventory({
+        "render.go": `package render
+import (
+  "net/http"
+  "example.com/os"
+)
+func Render(w http.ResponseWriter, r *http.Request) {
+  os.StartProcess(r.FormValue("program"), nil, nil)
+}`,
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "render.go": `package render
+import (
+  "net/http"
+  first "os"
+  second "os"
+)
+func Render(w http.ResponseWriter, r *http.Request) {
+  first.StartProcess(r.FormValue("program"), nil, nil)
+  second.StartProcess(r.FormValue("program"), nil, nil)
 }`,
       }),
     ).toEqual([]);
@@ -505,6 +762,10 @@ func Render(w http.ResponseWriter, r *http.Request) {
     expect(prompt).toContain("For go-os-exec-command-injection rows");
     expect(prompt).toContain("os/exec");
     expect(prompt).toContain("Run, Start, Output, or CombinedOutput");
+    expect(prompt).toContain("manually populated Cmd");
+    expect(prompt).toContain("Args[0]");
+    expect(prompt).toContain("os.StartProcess");
+    expect(prompt).toContain("ForkExec");
     expect(prompt).toContain("argument vector");
     expect(prompt).toContain("shell or interpreter");
     expect(prompt).toContain("option terminator");

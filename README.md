@@ -43,8 +43,9 @@ The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
 paths, server-side request forgery, and object authorization; a separate Go
 `net/http` model covers server-side request forgery, while typed
-`os/exec` and `execabs` models cover executable, shell, interpreter, remote,
-and option-sensitive command paths, and typed `database/sql`, `sqlx`, GORM v2,
+`os/exec`, `execabs`, `os.StartProcess`, and `syscall` models cover executable,
+shell, interpreter, remote, and option-sensitive command paths through constructors,
+manual `Cmd` fields, and direct dispatch, and typed `database/sql`, `sqlx`, GORM v2,
 Masterminds/Squirrel, `pgx/v5`, `pgxpool`, and low-level `pgconn` models cover
 request-to-query grammar and deferred database dispatch;
 and Node, Python, and Spring models cover server-side template injection. Each applicable
@@ -696,18 +697,25 @@ go test ./...
 Pop-Location
 ```
 
-The Go process-execution lane requires the exact standard-library `os/exec` or
-`golang.org/x/sys/execabs` binding and a typed `*http.Request` source. It keeps
-construction separate from execution: a risky `Command` or `CommandContext`
-must reach `Run`, `Start`, `Output`, or `CombinedOutput` on the same
-non-reassigned command. The model distinguishes attacker-selected executables,
-shell or interpreter command grammar, Windows batch-file arguments,
-interpreter script paths, fixed-host SSH commands, and option-sensitive Git/rsync arguments from ordinary direct
-argument vectors. Immutable complete-command selection and a preceding `--`
-for supported tools are deterministic barriers. The paired cross-platform
-fixtures install their test executable as an isolated temporary shell witness,
-proving both grammar injection and fixed-command isolation without invoking the
-host shell:
+The Go process-execution lane requires exact standard-library `os/exec`, `os`,
+or `syscall` bindings, or the exact `golang.org/x/sys/execabs` binding, plus a
+typed `*http.Request` source. It keeps construction separate from execution: a
+risky `Command`, `CommandContext`, or manually populated `Cmd` must reach
+`Run`, `Start`, `Output`, or `CombinedOutput` on the same non-reassigned
+object. `os.StartProcess` and `syscall.Exec`, `ForkExec`, and `StartProcess`
+are instead immediate dispatchers with exact executable and argv positions.
+The model follows `Path`, complete `Args` replacement, exact `Args[index]`
+mutation, local slice literals and aliases, and zero-value or `new(exec.Cmd)`
+construction. It distinguishes attacker-selected executables, shell or
+interpreter command grammar, Windows batch-file arguments, interpreter script
+paths, fixed-host SSH commands, and option-sensitive Git/rsync arguments from
+ordinary direct argument vectors. `Args[0]` is process-visible argv data, not
+the executable selected by `Cmd.Path` or a low-level dispatcher's first
+argument. Immutable complete-command selection and a preceding `--` for
+supported tools are deterministic barriers. Two paired cross-platform fixture
+sets install their test executable as an isolated temporary shell witness,
+proving constructor and manual-field grammar injection plus fixed-command
+isolation without invoking the host shell:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -720,6 +728,12 @@ Push-Location benchmarks\fixtures\go-cross-file-shell-command-injection
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-shell-command
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-manual-cmd-shell-injection
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-manual-cmd-shell-command
 go test ./...
 Pop-Location
 ```

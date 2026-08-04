@@ -36,6 +36,28 @@
       "id": "go-cross-file-safe-shell-command",
       "fixture": "fixtures/go-cross-file-safe-shell-command",
       "expected": []
+    },
+    {
+      "id": "go-cross-file-manual-cmd-shell-injection",
+      "fixture": "fixtures/go-cross-file-manual-cmd-shell-injection",
+      "expected": [
+        {
+          "title": "Go manual exec.Cmd shell executes request-derived command grammar",
+          "cwe": ["CWE-78"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "render.go",
+          "line": 14,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-file-safe-manual-cmd-shell-command",
+      "fixture": "fixtures/go-cross-file-safe-manual-cmd-shell-command",
+      "expected": []
     }
   ]
 }

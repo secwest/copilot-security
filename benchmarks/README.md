@@ -472,15 +472,17 @@ go test ./...
 Pop-Location
 ```
 
-The Go process-execution lane measures exact `os/exec` import identity, typed
-request accessors, executable and argument roles, one same-package wrapper,
-immutable complete-command selection, and construction-to-execution closure.
-The positive formats the request value into the string interpreted by `sh -c`
-and reaches `CombinedOutput`; the control retains the request, wrapper, shell,
-flag, finisher, and attack bytes but only selects a complete server-owned
-command. Each module copies its running test executable into a temporary `sh`
-witness, making the exploit and control deterministic on Windows and Linux
-without invoking the host shell:
+The Go process-execution lane measures exact `os/exec`, `execabs`, `os`, and
+`syscall` import identity, typed request accessors, executable and argv roles,
+one same-package wrapper, immutable complete-command selection, and the
+difference between deferred `Cmd` execution and immediate low-level dispatch.
+One positive uses `CommandContext`; the other populates a manual `Cmd` through
+`Path` plus a complete `Args` field assignment. Both format the request value
+into the string interpreted after `sh -c` and reach `CombinedOutput`. Their
+controls retain the request, wrapper, shell, flag, finisher, and attack bytes
+but only select a complete server-owned command. Each module copies its running
+test executable into a temporary `sh` witness, making both exploit/control
+pairs deterministic on Windows and Linux without invoking the host shell:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -498,6 +500,12 @@ Push-Location fixtures\go-cross-file-shell-command-injection
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-shell-command
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-manual-cmd-shell-injection
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-manual-cmd-shell-command
 go test ./...
 Pop-Location
 ```
