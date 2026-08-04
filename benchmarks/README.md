@@ -472,6 +472,34 @@ go test ./...
 Pop-Location
 ```
 
+The Go `database/sql` injection lane measures exact package and receiver
+identity, query-text argument positions, placeholder-value exclusion, one
+same-package wrapper, and prepared-statement execution closure. The positive
+formats the request value into `DB.QueryContext` query grammar and exposes an
+internal record. The control passes identical metacharacters only as a bound
+value to a fixed query. Deterministic standard-library drivers prove both
+behaviors without a database service or third-party dependency:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/go-database-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-go-database-sql-injection `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+Push-Location fixtures\go-cross-file-sql-injection
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-sql
+go test ./...
+Pop-Location
+```
+
 The template-injection framework lane applies the same strict gates to Node
 and Python relative-import wrappers. Its positives compile caller-controlled
 Pug or Jinja template source. Its negative controls pass the same untrusted

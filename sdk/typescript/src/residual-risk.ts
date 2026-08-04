@@ -15,6 +15,7 @@ import {
   githubActionsWorkflowInjectionRecords,
 } from "./github-actions-risk.js";
 import { goHttpSsrfRecords } from "./go-http-risk.js";
+import { goSqlInjectionRecords } from "./go-sql-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -1747,6 +1748,7 @@ export async function buildResidualRiskInventory(
   records.push(...githubActionsReusableWorkflowInjectionRecords(sourceFiles));
   records.push(...githubActionsCompositeActionInjectionRecords(sourceFiles));
   records.push(...goHttpSsrfRecords(sourceFiles));
+  records.push(...goSqlInjectionRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
 
   return selectResidualRiskRecords(records, MAX_SIGNALS)

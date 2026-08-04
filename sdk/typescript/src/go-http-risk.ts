@@ -45,12 +45,12 @@ export interface GoHttpSsrfRecord {
   };
 }
 
-interface GoParameter {
+export interface GoParameter {
   name: string;
   type: string;
 }
 
-interface GoFunction {
+export interface GoFunction {
   file: GoHttpSourceFile;
   packageName: string;
   httpAlias?: string;
@@ -63,7 +63,7 @@ interface GoFunction {
   structuralLines: readonly string[];
 }
 
-interface GoCall {
+export interface GoCall {
   name: string;
   arguments: string[];
   line: number;
@@ -71,22 +71,22 @@ interface GoCall {
   linePrefix: string;
 }
 
-interface Propagator {
+export interface GoPropagator {
   kind: string;
   line: number;
   symbol?: string;
 }
 
-interface Taint {
+export interface GoTaint {
   kind: string;
   line: number;
-  propagators: Propagator[];
+  propagators: GoPropagator[];
 }
 
 interface FunctionSink {
   kind: "go-http-client-url" | "go-http-client-do";
   line: number;
-  source: Taint;
+  source: GoTaint;
   controls: Array<{ kind: string; line: number }>;
 }
 
@@ -106,7 +106,10 @@ interface MaskState {
   escaped: boolean;
 }
 
-function maskGoLines(lines: readonly string[], maskStrings: boolean): string[] {
+export function maskGoLines(
+  lines: readonly string[],
+  maskStrings: boolean,
+): string[] {
   const state: MaskState = {
     blockComment: false,
     quote: "",
@@ -242,30 +245,41 @@ function packageName(lines: readonly string[]): string | undefined {
   return undefined;
 }
 
-function netHttpAlias(lines: readonly string[]): string | undefined {
+export function goImportAlias(
+  lines: readonly string[],
+  importPath: string,
+  defaultAlias: string,
+): string | undefined {
   const source = maskGoLines(lines, false).join("\n");
   const aliases: string[] = [];
+  const path = escapeRegularExpression(importPath);
   for (const declaration of source.matchAll(
-    /\bimport\s*(?:\(([\s\S]*?)\)|(?:([A-Za-z_]\w*|[._])\s+)?("net\/http"))/gu,
+    new RegExp(
+      `\\bimport\\s*(?:\\(([\\s\\S]*?)\\)|(?:([A-Za-z_]\\w*|[._])\\s+)?("${path}"))`,
+      "gu",
+    ),
   )) {
     if (declaration[1] !== undefined) {
       for (const entry of declaration[1].matchAll(
-        /^\s*(?:([A-Za-z_]\w*|[._])\s+)?"net\/http"\s*$/gmu,
+        new RegExp(`^\\s*(?:([A-Za-z_]\\w*|[._])\\s+)?"${path}"\\s*$`, "gmu"),
       )) {
-        aliases.push(entry[1] ?? "http");
+        aliases.push(entry[1] ?? defaultAlias);
       }
     } else if (declaration[3] !== undefined) {
-      aliases.push(declaration[2] ?? "http");
+      aliases.push(declaration[2] ?? defaultAlias);
     }
   }
-  const distinct = [...new Set(aliases)];
-  if (distinct.length !== 1 || distinct[0] === "." || distinct[0] === "_") {
+  if (aliases.length !== 1 || aliases[0] === "." || aliases[0] === "_") {
     return undefined;
   }
-  return distinct[0];
+  return aliases[0];
 }
 
-function goFunctions(file: GoHttpSourceFile): GoFunction[] {
+function netHttpAlias(lines: readonly string[]): string | undefined {
+  return goImportAlias(lines, "net/http", "http");
+}
+
+export function goFunctions(file: GoHttpSourceFile): GoFunction[] {
   const package_ = packageName(file.lines);
   if (package_ === undefined) return [];
   const httpAlias = netHttpAlias(file.lines);
@@ -307,7 +321,7 @@ function goFunctions(file: GoHttpSourceFile): GoFunction[] {
   return functions;
 }
 
-function goCalls(function_: GoFunction): GoCall[] {
+export function goCalls(function_: GoFunction): GoCall[] {
   const slice = function_.structuralLines
     .slice(function_.bodyStartLine - 1, function_.endLine)
     .join("\n");
@@ -334,15 +348,15 @@ function goCalls(function_: GoFunction): GoCall[] {
   return calls;
 }
 
-function escapeRegularExpression(value: string): string {
+export function escapeRegularExpression(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
-function requestSource(
+export function requestSource(
   expression: string,
   requestParameters: readonly string[],
   line: number,
-): Taint | undefined {
+): GoTaint | undefined {
   for (const parameter of requestParameters) {
     const escaped = escapeRegularExpression(parameter);
     if (
@@ -354,8 +368,23 @@ function requestSource(
       return { kind: "go-http-query-parameter", line, propagators: [] };
     }
     if (
+      new RegExp(`\\b${escaped}\\.URL\\.Query\\s*\\(\\s*\\)\\s*\\[`, "u").test(
+        expression,
+      )
+    ) {
+      return { kind: "go-http-query-parameter", line, propagators: [] };
+    }
+    if (
       new RegExp(
         `\\b${escaped}\\.(?:FormValue|PostFormValue)\\s*\\(`,
+        "u",
+      ).test(expression)
+    ) {
+      return { kind: "go-http-form-value", line, propagators: [] };
+    }
+    if (
+      new RegExp(
+        `\\b${escaped}\\.(?:Form|PostForm)(?:\\.Get\\s*\\(|\\s*\\[)`,
         "u",
       ).test(expression)
     ) {
@@ -373,10 +402,10 @@ function requestSource(
   return undefined;
 }
 
-function referencedTaint(
+export function referencedTaint(
   expression: string,
-  taints: ReadonlyMap<string, Taint>,
-): { name: string; taint: Taint } | undefined {
+  taints: ReadonlyMap<string, GoTaint>,
+): { name: string; taint: GoTaint } | undefined {
   for (const [name, taint] of taints) {
     if (
       new RegExp(`\\b${escapeRegularExpression(name)}\\b`, "u").test(expression)
@@ -387,7 +416,7 @@ function referencedTaint(
   return undefined;
 }
 
-function fixedMapNames(function_: GoFunction): Set<string> {
+export function fixedMapNames(function_: GoFunction): Set<string> {
   const maps = new Set<string>();
   const declarationLines = new Map<string, number>();
   for (let line = 1; line <= function_.file.lines.length; line += 1) {
@@ -420,10 +449,10 @@ function fixedMapNames(function_: GoFunction): Set<string> {
   return maps;
 }
 
-function fixedMapSelection(
+export function fixedMapSelection(
   expression: string,
   maps: ReadonlySet<string>,
-  taints: ReadonlyMap<string, Taint>,
+  taints: ReadonlyMap<string, GoTaint>,
 ): boolean {
   const selection = /^\s*([A-Za-z_]\w*)\s*\[([\s\S]+)\]\s*$/u.exec(expression);
   return (
@@ -433,7 +462,7 @@ function fixedMapSelection(
   );
 }
 
-function assignment(
+export function goAssignment(
   line: string,
 ): { names: string[]; value: string } | undefined {
   const match =
@@ -447,7 +476,7 @@ function assignment(
   };
 }
 
-function assignedCallResult(call: GoCall): string | undefined {
+export function assignedCallResult(call: GoCall): string | undefined {
   const match =
     /(?:^|\s)([A-Za-z_]\w*)\s*(?:,\s*[A-Za-z_]\w*)*\s*(?::=|=)\s*$/u.exec(
       call.linePrefix,
@@ -504,7 +533,7 @@ function functionControls(
 
 function analyzeFunction(
   function_: GoFunction,
-  initialTaints: ReadonlyMap<string, Taint> = new Map(),
+  initialTaints: ReadonlyMap<string, GoTaint> = new Map(),
 ): FunctionSink[] {
   const alias = function_.httpAlias;
   if (alias === undefined) return [];
@@ -525,7 +554,7 @@ function analyzeFunction(
   );
   const clients = new Set(clientParameters);
   const taints = new Map(initialTaints);
-  const requestTaints = new Map<string, Taint>();
+  const requestTaints = new Map<string, GoTaint>();
   const maps = fixedMapNames(function_);
   const callsByLine = new Map<number, GoCall[]>();
   for (const call of goCalls(function_)) {
@@ -542,7 +571,7 @@ function analyzeFunction(
     line += 1
   ) {
     const structural = function_.structuralLines[line - 1] ?? "";
-    const assigned = assignment(structural);
+    const assigned = goAssignment(structural);
     if (assigned !== undefined) {
       const primary = assigned.names[0]!;
       const source = requestSource(assigned.value, requestParameters, line);
@@ -585,7 +614,7 @@ function analyzeFunction(
     }
 
     for (const call of callsByLine.get(line) ?? []) {
-      const sourceFor = (argument: string | undefined): Taint | undefined => {
+      const sourceFor = (argument: string | undefined): GoTaint | undefined => {
         if (argument === undefined) return undefined;
         return (
           requestSource(argument, requestParameters, line) ??
@@ -662,7 +691,7 @@ function callerSourceForArgument(
   function_: GoFunction,
   callLine: number,
   argument: string,
-): Taint | undefined {
+): GoTaint | undefined {
   const alias = function_.httpAlias;
   if (alias === undefined) return undefined;
   const requestParameters = function_.parameters
@@ -674,10 +703,10 @@ function callerSourceForArgument(
   if (requestParameters.length === 0) return undefined;
   const direct = requestSource(argument, requestParameters, callLine);
   if (direct !== undefined) return direct;
-  const taints = new Map<string, Taint>();
+  const taints = new Map<string, GoTaint>();
   const maps = fixedMapNames(function_);
   for (let line = function_.bodyStartLine; line < callLine; line += 1) {
-    const assigned = assignment(function_.structuralLines[line - 1] ?? "");
+    const assigned = goAssignment(function_.structuralLines[line - 1] ?? "");
     if (assigned === undefined) continue;
     const primary = assigned.names[0]!;
     const source = requestSource(assigned.value, requestParameters, line);
@@ -712,9 +741,9 @@ function record(
   sourceFile: GoHttpSourceFile,
   sinkFile: GoHttpSourceFile,
   scope: "same-file" | "cross-file-wrapper",
-  source: Taint,
+  source: GoTaint,
   sink: FunctionSink,
-  propagators: Propagator[],
+  propagators: GoPropagator[],
 ): GoHttpSsrfRecord {
   const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
   const endLine = Math.min(
@@ -805,7 +834,7 @@ export function goHttpSsrfRecords(
     }
     function_.parameters.forEach((parameter, parameterIndex) => {
       if (parameter.type.replace(/\s+/gu, "") !== "string") return;
-      const initial = new Map<string, Taint>([
+      const initial = new Map<string, GoTaint>([
         [
           parameter.name,
           {

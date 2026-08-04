@@ -26,3 +26,9 @@ jobs:
       - name: Prove fixed selection and redirect rejection
         run: go test ./...
         working-directory: benchmarks/fixtures/go-cross-file-safe-fetch
+      - name: Prove request-derived Go database query grammar
+        run: go test ./...
+        working-directory: benchmarks/fixtures/go-cross-file-sql-injection
+      - name: Prove database placeholder binding
+        run: go test ./...
+        working-directory: benchmarks/fixtures/go-cross-file-safe-sql

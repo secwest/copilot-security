@@ -43,7 +43,13 @@ The package is ESM-only and provides:
   URL arguments, and requires a request built by `NewRequest*` to reach a
   proven typed or constructed `Client.Do`. It follows at most one unique
   same-package string wrapper and rejects body-only flow, untyped receivers,
-  inert construction, reassignment, and import lookalikes. Node
+  inert construction, reassignment, and import lookalikes. A typed Go SQL
+  model separately preserves request input into the exact query-text position
+  of standard-library `DB`, `Tx`, and `Conn` operations. Placeholder and
+  `sql.Named` values remain data; tainted `Prepare*` text requires later
+  statement execution; and inferred handles, same-file receiver fields, one
+  unique package wrapper, fixed query selection, and reassignment are explicit.
+  Node
   object-authorization hypotheses preserve the exact
   request-controlled record lookup and principal-bound owner filtering or
   post-lookup policy leads without treating authentication or opaque IDs as

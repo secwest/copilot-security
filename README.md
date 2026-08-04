@@ -42,8 +42,9 @@ stand in for reviewed application source.
 The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
 paths, server-side request forgery, and object authorization; a separate Go
-`net/http` model covers server-side request forgery; and Node, Python, and
-Spring models cover server-side template injection. Each applicable
+`net/http` model covers server-side request forgery and request-to-`database/sql`
+query grammar; and Node, Python, and Spring models cover server-side template
+injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
@@ -688,6 +689,29 @@ Push-Location benchmarks\fixtures\go-cross-file-ssrf
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-fetch
+go test ./...
+Pop-Location
+```
+
+The Go SQL lane requires exact standard-library imports and a typed
+`*sql.DB`, `*sql.Tx`, or `*sql.Conn` query receiver. Its positive formats a
+request value into the query-text argument of `DB.QueryContext`; the matched
+control keeps query text fixed and passes the same bytes only as a placeholder
+value. A tainted `Prepare*` call is retained only when the resulting statement
+later executes. Standard-library driver witnesses prove both grammar injection
+and bound-value isolation without requiring a network database:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/go-database-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\go-database-sql-injection `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+Push-Location benchmarks\fixtures\go-cross-file-sql-injection
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-sql
 go test ./...
 Pop-Location
 ```
