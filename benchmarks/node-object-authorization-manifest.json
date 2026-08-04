@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "javascript-idor",
+      "description": "An authenticated customer can select another customer's invoice because the lookup uses only the request-controlled object identifier.",
+      "fixture": "fixtures/javascript-idor",
+      "findingsPaths": ["javascript-idor/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "invoice-owner-check-missing",
+          "cwe": ["CWE-639", "CWE-862"],
+          "locations": [
+            {
+              "path": "src/invoices.js",
+              "startLine": 2,
+              "endLine": 4,
+              "lineTolerance": 3
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-authorization",
+      "description": "The same object lookup is constrained by the authenticated customer's ownership field.",
+      "fixture": "fixtures/javascript-safe-authorization",
+      "findingsPaths": ["javascript-safe-authorization/run-1/findings.json"],
+      "expected": []
+    },
+    {
+      "id": "javascript-cross-file-idor",
+      "description": "A request-controlled invoice ID crosses a module boundary into a repository lookup that ignores the separately supplied authenticated customer.",
+      "fixture": "fixtures/javascript-cross-file-idor",
+      "findingsPaths": ["javascript-cross-file-idor/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "cross-file-invoice-owner-check-missing",
+          "cwe": ["CWE-639", "CWE-862"],
+          "locations": [
+            {
+              "path": "src/invoices.js",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-cross-file-safe-authorization",
+      "description": "The cross-file repository lookup binds the request object identifier to the authenticated customer in one query.",
+      "fixture": "fixtures/javascript-cross-file-safe-authorization",
+      "findingsPaths": [
+        "javascript-cross-file-safe-authorization/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

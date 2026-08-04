@@ -179,6 +179,27 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The Node object-authorization lane applies perfect selected-run gates to two
+same-file and two cross-file cases. Each positive carries a request-controlled
+invoice ID into a single-record lookup without constraining the record to the
+authenticated customer. Each negative binds the same object ID to the trusted
+customer identity in the lookup itself. UUID opacity, authentication, and ORM
+use are deliberately common to both sides and therefore cannot satisfy the
+authorization requirement:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/node-object-authorization-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-node-object-authorization `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 The SSRF framework lane applies the same strict gates to Node and Python
 relative-import wrappers. Its positives pass complete caller-controlled URLs
 to outbound HTTP sinks. Its negative controls select only complete

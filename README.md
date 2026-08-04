@@ -62,8 +62,12 @@ or request-config `url` property, never a POST/PUT/PATCH body. A fixed
 `baseURL` is not treated as confinement while Axios can still accept an
 attacker-controlled absolute URL; disabling absolute override, selecting a
 server-owned destination, rejecting redirects, and validating relative paths
-remain separate control leads. For Node/TypeScript
-relative-module wrappers, the host can
+remain separate control leads. Node/TypeScript object-authorization rows
+preserve a request-controlled record identifier into the exact single-record
+lookup argument and retain only same-query principal/owner filtering or a
+post-lookup check on that returned object as control leads. Authentication,
+UUID opacity, ORM use, or unrelated owner text is not classified as object
+authorization. For Node/TypeScript relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
 explicit relative from-imports, bind each exact positional argument, and
@@ -370,6 +374,20 @@ strict positive, safe, reassignment, fixed-argument, and text-only controls:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/python-multi-hop-framework-manifest.json `
   --results-dir C:\security-benchmarks\python-multi-hop `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Node object-authorization lane pairs same-file and cross-file invoice
+lookups that use only a request-controlled record ID with controls that bind
+the same ID to the authenticated customer in the repository query. It gates
+CWE-639/CWE-862 detection, validation, attack-path evidence, code evidence,
+severity, and both negative cases at perfect selected-run thresholds:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/node-object-authorization-manifest.json `
+  --results-dir C:\security-benchmarks\node-object-authorization `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

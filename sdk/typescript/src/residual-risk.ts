@@ -532,6 +532,47 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-object-authorization",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [
+      /\b(?:findById|findByPk|findFirst|findOne|findUnique|getById|loadById|selectById)\s*\(/iu,
+      /\b(?:database|db|prisma|repository|store)\b/iu,
+    ],
+    sources: [
+      {
+        kind: "http-object-reference",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-object-reference",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "object-record-lookup",
+        expression:
+          /\.\s*(?:findById|findByPk|findFirst|findOne|findUnique|getById|loadById|selectById)\s*(?:<[^;(){}]+>)?\s*\(/iu,
+        cweIds: ["CWE-639", "CWE-862"],
+      },
+    ],
+    controls: [
+      {
+        kind: "principal-bound-object-filter",
+        expression:
+          /\b(?:account|customer|organization|owner|principal|tenant|user|workspace)Id\b/iu,
+      },
+      {
+        kind: "post-lookup-object-authorization",
+        expression:
+          /\b(?:assertCanAccess|authorize|authorizeObject|canAccess|canRead|canWrite|checkAccess|enforceOwnership|owns)\s*\(/iu,
+      },
+    ],
+  },
+  {
     id: "node-http-ssrf",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -1622,7 +1663,10 @@ function frameworkDataflowRecords(
       ? matchingJavascriptModelLines(
           lines,
           model.sinks,
-          model.id === "node-http-ssrf" ? 64 : 8,
+          model.id === "node-http-ssrf" ||
+            model.id === "node-http-object-authorization"
+            ? 64
+            : 8,
         )
       : PYTHON_EXTENSIONS.has(extension)
         ? matchingPythonModelLines(lines, model.sinks, 8)
@@ -1631,9 +1675,11 @@ function frameworkDataflowRecords(
           : matchingModelLines(lines, model.sinks, 8);
     if (sources.length === 0 || sinks.length === 0) continue;
     const controls = JAVASCRIPT_EXTENSIONS.has(extension)
-      ? model.id === "node-http-ssrf"
-        ? matchingJavascriptControlLines(lines, model.controls, 24)
-        : matchingModelLines(lines, model.controls, 24)
+      ? model.id === "node-http-object-authorization"
+        ? []
+        : model.id === "node-http-ssrf"
+          ? matchingJavascriptControlLines(lines, model.controls, 24)
+          : matchingModelLines(lines, model.controls, 24)
       : PYTHON_EXTENSIONS.has(extension)
         ? matchingPythonModelLines(lines, model.controls, 24)
         : extension === ".java" || extension === ".cs"
@@ -1644,7 +1690,17 @@ function frameworkDataflowRecords(
         model.id === "node-http-ssrf"
           ? nodeHttpUrlSink(lines, sink.line)
           : undefined;
+      const nodeObjectSink =
+        model.id === "node-http-object-authorization"
+          ? nodeObjectAuthorizationSink(lines, sink.line)
+          : undefined;
       if (model.id === "node-http-ssrf" && nodeHttpSink === undefined) {
+        continue;
+      }
+      if (
+        model.id === "node-http-object-authorization" &&
+        nodeObjectSink === undefined
+      ) {
         continue;
       }
       if (
@@ -1692,32 +1748,41 @@ function frameworkDataflowRecords(
         continue;
       }
       const source =
-        model.id === "node-http-ssrf" &&
-        nodeHttpSink?.urlExpression !== undefined
-          ? modeledCallSource(
+        model.id === "node-http-object-authorization" &&
+        nodeObjectSink !== undefined
+          ? modeledObjectLookupSource(
               lines,
               sources,
               sink.line,
-              nodeHttpSink.urlExpression,
+              nodeObjectSink.argument,
               model.sources,
             )
-          : extension === ".java" &&
-              (model.id === "spring-http-ssrf" ||
-                model.id === "spring-http-path")
-            ? modeledSameFileJavaSource(
+          : model.id === "node-http-ssrf" &&
+              nodeHttpSink?.urlExpression !== undefined
+            ? modeledCallSource(
                 lines,
+                sources,
                 sink.line,
-                model.id,
+                nodeHttpSink.urlExpression,
                 model.sources,
               )
-            : extension === ".cs" &&
-                model.id === "aspnet-http-template-injection"
-              ? modeledSameFileDotnetTemplateSource(
+            : extension === ".java" &&
+                (model.id === "spring-http-ssrf" ||
+                  model.id === "spring-http-path")
+              ? modeledSameFileJavaSource(
                   lines,
                   sink.line,
+                  model.id,
                   model.sources,
                 )
-              : nearestModeledSource(sources, sink.line);
+              : extension === ".cs" &&
+                  model.id === "aspnet-http-template-injection"
+                ? modeledSameFileDotnetTemplateSource(
+                    lines,
+                    sink.line,
+                    model.sources,
+                  )
+                : nearestModeledSource(sources, sink.line);
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -1732,6 +1797,10 @@ function frameworkDataflowRecords(
         ...sinkExpressionControls,
         ...(model.id === "node-http-ssrf" && nodeHttpSink !== undefined
           ? nodeAxiosConfigurationControls(lines, nodeHttpSink, model.controls)
+          : []),
+        ...(model.id === "node-http-object-authorization" &&
+        nodeObjectSink !== undefined
+          ? nodeObjectAuthorizationControls(lines, nodeObjectSink, lines.length)
           : []),
         ...controls.filter(
           (control) =>
@@ -3653,9 +3722,11 @@ function javascriptFrameworkWrapperSummaries(
       }
       const sinks = matchingJavascriptModelLines(file.lines, model.sinks, 32);
       const controls =
-        model.id === "node-http-ssrf"
-          ? matchingJavascriptControlLines(file.lines, model.controls, 64)
-          : matchingModelLines(file.lines, model.controls, 64);
+        model.id === "node-http-object-authorization"
+          ? []
+          : model.id === "node-http-ssrf"
+            ? matchingJavascriptControlLines(file.lines, model.controls, 64)
+            : matchingModelLines(file.lines, model.controls, 64);
       for (const wrapper of exportedFunctions) {
         for (const sink of sinks) {
           if (sink.line < wrapper.startLine || sink.line > wrapper.endLine) {
@@ -3668,7 +3739,17 @@ function javascriptFrameworkWrapperSummaries(
             model.id === "node-http-ssrf"
               ? nodeHttpUrlSink(file.lines, sink.line)
               : undefined;
+          const nodeObjectSink =
+            model.id === "node-http-object-authorization"
+              ? nodeObjectAuthorizationSink(file.lines, sink.line)
+              : undefined;
           if (model.id === "node-http-ssrf" && nodeHttpSink === undefined) {
+            continue;
+          }
+          if (
+            model.id === "node-http-object-authorization" &&
+            nodeObjectSink === undefined
+          ) {
             continue;
           }
           if (
@@ -3677,7 +3758,8 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
-          const sinkValue = nodeHttpSink?.urlExpression ?? sinkLine;
+          const sinkValue =
+            nodeHttpSink?.urlExpression ?? nodeObjectSink?.argument ?? sinkLine;
           const parameterIndexes = wrapper.parameters.flatMap(
             (parameter, parameterIndex) =>
               lineReferencesIdentifier(sinkValue, parameter)
@@ -3701,6 +3783,14 @@ function javascriptFrameworkWrapperSummaries(
                   file.lines,
                   nodeHttpSink,
                   model.controls,
+                )
+              : []),
+            ...(model.id === "node-http-object-authorization" &&
+            nodeObjectSink !== undefined
+              ? nodeObjectAuthorizationControls(
+                  file.lines,
+                  nodeObjectSink,
+                  wrapper.endLine,
                 )
               : []),
           ].filter(
@@ -4313,15 +4403,19 @@ function exportedJavascriptFunctions(
 ): ExportedJavascriptFunction[] {
   const functions: ExportedJavascriptFunction[] = [];
   const patterns = [
-    /^\s*export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)/u,
+    /^\s*export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{/u,
     /^\s*export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>/u,
-    /^\s*(?:module\.)?exports\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?function\s*\(([^)]*)\)/u,
+    /^\s*(?:module\.)?exports\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(([^)]*)\)\s*\{/u,
     /^\s*export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?([A-Za-z_$][\w$]*)\s*=>/u,
   ];
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
+    const firstLine = javascriptStructuralLines([lines[index] ?? ""])[0] ?? "";
+    if (firstLine.trim() === "") continue;
+    const declaration = javascriptStructuralLines(
+      lines.slice(index, Math.min(lines.length, index + 13)),
+    ).join("\n");
     const match = patterns
-      .map((pattern) => pattern.exec(line))
+      .map((pattern) => pattern.exec(declaration))
       .find((candidate) => candidate !== null);
     if (match === undefined || match === null) continue;
     const parameters = (match[2] ?? "")
@@ -4777,16 +4871,21 @@ function javascriptCallLines(
     "u",
   );
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    const structuralLine = javascriptStructuralCode(line);
-    const match = expression.exec(structuralLine);
+    const firstLine = javascriptStructuralLines([lines[index] ?? ""])[0] ?? "";
+    const match = expression.exec(firstLine);
     if (match === null) continue;
-    const open = structuralLine.indexOf("(", match.index);
-    const close = matchingCallParenthesis(structuralLine, open);
+    const callLines = lines.slice(index, Math.min(lines.length, index + 13));
+    const originalCallText =
+      javascriptCodeLinesWithoutComments(callLines).join("\n");
+    const structuralCallText = javascriptStructuralLines(callLines).join("\n");
+    const open = structuralCallText.indexOf("(", match.index);
+    const close = matchingCallParenthesis(structuralCallText, open);
     if (open < 0 || close < 0) continue;
     calls.push({
       line: index + 1,
-      arguments: splitJavascriptArguments(line.slice(open + 1, close)),
+      arguments: splitJavascriptArguments(
+        originalCallText.slice(open + 1, close),
+      ),
     });
   }
   return calls;
@@ -4964,6 +5063,37 @@ function modeledCallSource(
     ) {
       return source;
     }
+  }
+  return undefined;
+}
+
+function modeledObjectLookupSource(
+  lines: readonly string[],
+  sources: readonly { kind: string; line: number }[],
+  callLine: number,
+  argument: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const direct = sourcePatterns.find((pattern) =>
+    pattern.expression.test(argument),
+  );
+  if (direct !== undefined) return { kind: direct.kind, line: callLine };
+  const earliest = Math.max(1, callLine - MAX_WRAPPER_CALL_DISTANCE);
+  for (let line = callLine - 1; line >= earliest; line -= 1) {
+    const source = sources.find((candidate) => candidate.line === line);
+    if (source === undefined) continue;
+    const assignment = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/u.exec(
+      javascriptStructuralCode(lines[line - 1] ?? ""),
+    );
+    const identifier = assignment?.[1];
+    if (
+      identifier === undefined ||
+      !lineReferencesIdentifier(argument, identifier) ||
+      javascriptIdentifierReassignedBetween(lines, identifier, line, callLine)
+    ) {
+      continue;
+    }
+    return source;
   }
   return undefined;
 }
@@ -5390,6 +5520,102 @@ interface NodeHttpUrlSink {
   axiosConfigurationEndLine?: number;
   callStartLine?: number;
   callEndLine?: number;
+}
+
+interface NodeObjectAuthorizationSink {
+  argument: string;
+  callStartLine: number;
+  callEndLine: number;
+  resultIdentifier?: string;
+}
+
+const NODE_OBJECT_OWNER_FIELD =
+  "(?:account|customer|organization|owner|principal|tenant|user|workspace)(?:Id|_id)";
+const NODE_AUTHENTICATED_PRINCIPAL_VALUE =
+  "(?:(?:req|request)\\.(?:auth|session|user)(?:\\.[A-Za-z_$][\\w$]*)+|ctx\\.(?:state\\.)?(?:auth|session|user)(?:\\.[A-Za-z_$][\\w$]*)+|(?:actor|authenticated|current|principal|session)[A-Za-z0-9_$]*(?:Id|_id))";
+
+function nodeObjectAuthorizationSink(
+  lines: readonly string[],
+  sinkLine: number,
+): NodeObjectAuthorizationSink | undefined {
+  const endLine = Math.min(lines.length, sinkLine + 12);
+  const callLines = lines.slice(sinkLine - 1, endLine);
+  const original = javascriptCodeLinesWithoutComments(callLines).join("\n");
+  const structural = javascriptStructuralLines(callLines).join("\n");
+  const call =
+    /\.\s*(?:findById|findByPk|findFirst|findOne|findUnique|getById|loadById|selectById)\s*(?:<[^;(){}]+>)?\s*\(/iu.exec(
+      structural,
+    );
+  if (call?.index === undefined) return undefined;
+  const open = structural.indexOf("(", call.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  const argument = splitJavascriptArguments(
+    original.slice(open + 1, close),
+  )[0]?.trim();
+  if (argument === undefined || argument === "") return undefined;
+  const resultIdentifier =
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?/u.exec(
+      structural.slice(0, call.index),
+    )?.[1];
+  return {
+    argument,
+    callStartLine: sinkLine,
+    callEndLine:
+      sinkLine + (structural.slice(0, close).match(/\n/gu)?.length ?? 0),
+    ...(resultIdentifier === undefined ? {} : { resultIdentifier }),
+  };
+}
+
+function nodeObjectAuthorizationControls(
+  lines: readonly string[],
+  sink: NodeObjectAuthorizationSink,
+  functionEndLine: number,
+): Array<{ kind: string; line: number }> {
+  const controls: Array<{ kind: string; line: number }> = [];
+  const callLines = javascriptStructuralLines(
+    lines.slice(sink.callStartLine - 1, sink.callEndLine),
+  );
+  const principalFilter = new RegExp(
+    `\\b${NODE_OBJECT_OWNER_FIELD}\\b\\s*:\\s*${NODE_AUTHENTICATED_PRINCIPAL_VALUE}\\b`,
+    "iu",
+  );
+  const filterIndex = callLines.findIndex((line) => principalFilter.test(line));
+  if (filterIndex >= 0) {
+    controls.push({
+      kind: "principal-bound-object-filter",
+      line: sink.callStartLine + filterIndex,
+    });
+  }
+
+  if (sink.resultIdentifier === undefined) return controls;
+  const escapedResult = escapeRegularExpression(sink.resultIdentifier);
+  const ownerAccess = `${escapedResult}\\s*\\.\\s*${NODE_OBJECT_OWNER_FIELD}`;
+  const principalComparison = new RegExp(
+    `(?:${ownerAccess}\\s*(?:===|==|!==|!=)\\s*${NODE_AUTHENTICATED_PRINCIPAL_VALUE}|${NODE_AUTHENTICATED_PRINCIPAL_VALUE}\\s*(?:===|==|!==|!=)\\s*${ownerAccess})\\b`,
+    "iu",
+  );
+  const explicitAuthorization = new RegExp(
+    `\\b(?:assertCanAccess|authorize|authorizeObject|canAccess|canRead|canWrite|checkAccess|enforceOwnership|owns)\\s*\\([^;{}]*\\b${escapedResult}\\b`,
+    "iu",
+  );
+  const postLookupLines = javascriptStructuralLines(
+    lines.slice(
+      sink.callEndLine,
+      Math.min(lines.length, functionEndLine, sink.callEndLine + 48),
+    ),
+  );
+  for (let index = 0; index < postLookupLines.length; index += 1) {
+    const line = postLookupLines[index] ?? "";
+    if (principalComparison.test(line) || explicitAuthorization.test(line)) {
+      controls.push({
+        kind: "post-lookup-object-authorization",
+        line: sink.callEndLine + index + 1,
+      });
+      break;
+    }
+  }
+  return controls;
 }
 
 interface JavascriptAxiosBinding {
