@@ -56,6 +56,13 @@ The package is ESM-only and provides:
   `JpaRepository.save`. Applicable official allowed-field and constructor-only
   binders are control leads; `@Valid`, authentication, denylists, DTOs, fixed
   entities, and shadow framework types do not silently satisfy that proof.
+  GitHub Actions hypotheses require the complete same-job chain from
+  `pull_request_target`, through an explicit pull-request head checkout, to a
+  later workspace command or local action on the matching path. Effective
+  token permissions, secret/OIDC exposure, persisted credentials, immutable
+  selection, review/environment gates, and Checkout v7 fork protection remain
+  separate review evidence; a trigger, checkout, or execution step alone does
+  not create the hypothesis.
   Models include exact
   source/sink lines and nearby negative controls for the mandatory residual
   correction turn, plus bounded one-hop or

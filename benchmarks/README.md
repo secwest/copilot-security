@@ -274,6 +274,32 @@ wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users
 wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-cross-file-safe-binding/pom.xml verify
 ```
 
+The GitHub Actions pwn-request lane applies perfect gates to a matched
+`pull_request_target` pair. Both workflows request the immutable pull-request
+head SHA and contain the same later `npm` execution. The positive explicitly
+sets Checkout v7's `allow-unsafe-pr-checkout: true`, retains write-capable
+permissions, and exposes a mock secret-bearing environment. The negative uses
+read-only permissions and leaves Checkout v7's default fork refusal active.
+The host model requires trigger, untrusted ref, checkout, path, and later
+execution closure rather than flagging trigger or checkout co-occurrence. The
+standalone witness executes harmless attacker-controlled code only in the
+positive branch and proves the protected branch stops before execution:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/github-actions-pwn-request-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-github-actions-pwn-request `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+node ../../benchmarks/witnesses/github-actions-pwn-request/PwnRequestWitness.mjs
+```
+
 The SSRF framework lane applies the same strict gates to Node and Python
 relative-import wrappers. Its positives pass complete caller-controlled URLs
 to outbound HTTP sinks. Its negative controls select only complete

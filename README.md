@@ -96,6 +96,15 @@ are not binding controls. An attribute-applicable official `@InitBinder` using
 `setDeclarativeBinding(true)`, is retained as a control lead; dedicated DTO
 projection remains reviewer counterevidence rather than being broadened into
 the entity flow.
+GitHub Actions rows preserve an exact `pull_request_target` trigger into an
+explicit fork pull-request checkout and then into a later command or local
+action that executes from the same workspace path. A privileged trigger,
+checkout step, or install command alone is insufficient. The host retains
+effective token permissions, secret or OIDC exposure, persisted checkout
+credentials, immutable commit selection, review/environment gates, and
+Checkout v7's default refusal of unsafe fork checkouts as distinct control and
+impact leads. Malformed workflows, trusted/base checkouts, overwritten or
+unrelated paths, and fixed non-loading commands are rejected before review.
 For Node/TypeScript relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
@@ -468,6 +477,24 @@ node benchmarks/run-benchmark.mjs `
 
 wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-cross-file-mass-assignment/pom.xml verify
 wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-cross-file-safe-binding/pom.xml verify
+```
+
+The GitHub Actions lane pairs two `pull_request_target` workflows that select
+the pull request's immutable head SHA and then execute `npm` in the checked-out
+workspace. The positive explicitly opts Checkout v7 back into unsafe fork
+checkout while retaining a write-capable token and secret-bearing environment;
+the control keeps Checkout v7's default fork protection and read-only token.
+The executable witness proves harmless attacker-controlled code can observe a
+mock secret only in the opted-out case:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/github-actions-pwn-request-manifest.json `
+  --results-dir C:\security-benchmarks\github-actions-pwn-request `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+node benchmarks/witnesses/github-actions-pwn-request/PwnRequestWitness.mjs
 ```
 
 The SSRF framework lane pairs Node and Python cross-file absolute-URL flows

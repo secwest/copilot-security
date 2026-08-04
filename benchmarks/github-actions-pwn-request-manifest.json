@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "github-actions-pwn-request",
+      "description": "A privileged pull_request_target job opts out of Checkout v7 fork protection and executes attacker-controlled package scripts with write permission and a repository secret.",
+      "fixture": "fixtures/github-actions-pwn-request",
+      "findingsPaths": ["github-actions-pwn-request/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "privileged-pr-code-execution",
+          "cwe": ["CWE-829"],
+          "locations": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "startLine": 22,
+              "endLine": 24,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "github-actions-safe-pr-checkout",
+      "description": "The matched job keeps Checkout v7 fork protection active, grants only read permissions, exposes no secret, and therefore refuses the requested untrusted checkout before execution.",
+      "fixture": "fixtures/github-actions-safe-pr-checkout",
+      "findingsPaths": ["github-actions-safe-pr-checkout/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

@@ -150,6 +150,7 @@ const distFiles = new Set(
     "cost",
     "errors",
     "evidence-quality",
+    "github-actions-risk",
     "index",
     "knowledge-base",
     "model-draft-recovery",

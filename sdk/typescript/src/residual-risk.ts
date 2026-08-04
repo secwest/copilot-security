@@ -6,6 +6,7 @@ import {
   isSubstantiveValidation,
   type EvidenceLocation,
 } from "./evidence-quality.js";
+import { githubActionsPrivilegeRecords } from "./github-actions-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -1721,6 +1722,7 @@ export async function buildResidualRiskInventory(
   for (const file of sourceFiles) {
     records.push(
       ...frameworkDataflowRecords(file.path, file.lines, sourceFiles),
+      ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
     );
   }
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
