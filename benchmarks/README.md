@@ -472,6 +472,36 @@ go test ./...
 Pop-Location
 ```
 
+The Go process-execution lane measures exact `os/exec` import identity, typed
+request accessors, executable and argument roles, one same-package wrapper,
+immutable complete-command selection, and construction-to-execution closure.
+The positive formats the request value into the string interpreted by `sh -c`
+and reaches `CombinedOutput`; the control retains the request, wrapper, shell,
+flag, finisher, and attack bytes but only selects a complete server-owned
+command. Each module copies its running test executable into a temporary `sh`
+witness, making the exploit and control deterministic on Windows and Linux
+without invoking the host shell:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/go-os-exec-command-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-go-os-exec-command-injection `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+Push-Location fixtures\go-cross-file-shell-command-injection
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-shell-command
+go test ./...
+Pop-Location
+```
+
 The Go `database/sql` injection lane measures exact package and receiver
 identity, query-text argument positions, placeholder-value exclusion, one
 same-package wrapper, and prepared-statement execution closure. The positive

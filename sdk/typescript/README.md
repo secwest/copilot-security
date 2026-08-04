@@ -43,8 +43,15 @@ The package is ESM-only and provides:
   URL arguments, and requires a request built by `NewRequest*` to reach a
   proven typed or constructed `Client.Do`. It follows at most one unique
   same-package string wrapper and rejects body-only flow, untyped receivers,
-  inert construction, reassignment, and import lookalikes. A typed Go SQL
-  model separately preserves request input into the exact query-text position
+  inert construction, reassignment, and import lookalikes. A separate Go
+  process model requires exact `os/exec` or `execabs` imports and
+  preserves attacker-controlled executable selection, explicit shell and
+  interpreter command grammar, Windows batch-file arguments, interpreter script
+  selection, fixed-host SSH commands, and option-sensitive Git/rsync arguments. A constructed command
+  must reach `Run`, `Start`, `Output`, or `CombinedOutput`; direct argument
+  vectors, immutable command selection, option-terminated values, inert
+  construction, reassignment, and import lookalikes are rejected. A typed Go
+  SQL model separately preserves request input into the exact query-text position
   of standard-library `DB`, `Tx`, and `Conn` operations. Placeholder and
   `sql.Named` values remain data; tainted `Prepare*` text requires later
   statement execution; and inferred handles, same-file receiver fields, one
