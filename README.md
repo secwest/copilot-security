@@ -105,6 +105,18 @@ credentials, immutable commit selection, review/environment gates, and
 Checkout v7's default refusal of unsafe fork checkouts as distinct control and
 impact leads. Malformed workflows, trusted/base checkouts, overwritten or
 unrelated paths, and fixed non-loading commands are rejected before review.
+Self-hosted pull-request rows require a pull-request-capable event, an explicit
+self-hosted label, statically classified custom label, or runner group, an
+official untrusted checkout, and later command or local-action execution from
+the same workspace. Current standard GitHub-hosted Ubuntu, macOS, and Windows
+labels plus recognized BuildJet and Warp hosted labels are excluded; fully
+dynamic runner expressions are deferred. Ordinary `pull_request` rows do not
+invent secret or write-token access. Other events retain exact authority and
+control evidence, but immutable refs, read-only tokens, disabled credential
+persistence, labels, and environments do not by themselves prevent persistence
+on the host. Review must prove actual customer-controlled scheduling and runner
+lifecycle; a proven freshly destroyed single-job JIT runner is strong
+counterevidence.
 Cross-workflow artifact rows preserve an unprivileged `pull_request` checkout
 and official artifact upload into a named `workflow_run` consumer, require an
 official download bound to `github.event.workflow_run.id`, and emit only when
@@ -542,6 +554,23 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 
 node benchmarks/witnesses/github-actions-pwn-request/PwnRequestWitness.mjs
+```
+
+The self-hosted pull-request lane pairs an ordinary pull-request job on a
+reusable self-hosted runner with the same job on `ubuntu-latest`. Both use
+read-only permissions, disable Checkout credential persistence, and execute
+the checked-out test command. The positive remains dangerous because the
+untrusted job can persist in user-writable runner state and affect a later
+privileged job; the hosted control starts that later job on a fresh machine:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/github-actions-self-hosted-pr-manifest.json `
+  --results-dir C:\security-benchmarks\github-actions-self-hosted-pr `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+node benchmarks/witnesses/github-actions-self-hosted-pr/SelfHostedPrWitness.mjs
 ```
 
 The artifact-poisoning lane pairs an unprivileged pull-request producer with a

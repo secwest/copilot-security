@@ -300,6 +300,32 @@ node ../../benchmarks/run-benchmark.mjs `
 node ../../benchmarks/witnesses/github-actions-pwn-request/PwnRequestWitness.mjs
 ```
 
+The self-hosted pull-request lane applies perfect gates to a same-file
+CWE-284/CWE-829 pair. Both workflows use an ordinary `pull_request` trigger,
+read-only permissions, official Checkout with credential persistence disabled,
+and later execute the checked-out test command. The positive selects
+`[self-hosted, linux, x64]`; the negative selects `ubuntu-latest`. The host
+requires exact trigger, static runner classification, checkout, workspace, and
+execution closure rather than reporting `runs-on` alone. The witness proves an
+untrusted job can replace a user-writable release helper seen by a later
+privileged job on the reused machine, while destruction and fresh hosted
+provisioning preserve the trusted helper:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/github-actions-self-hosted-pr-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-github-actions-self-hosted-pr `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+node ../../benchmarks/witnesses/github-actions-self-hosted-pr/SelfHostedPrWitness.mjs
+```
+
 The GitHub Actions artifact-poisoning lane applies perfect gates to a
 cross-workflow CWE-829 pair. Both producers run on `pull_request`, check out
 untrusted code with read-only permissions, and upload the same named artifact.

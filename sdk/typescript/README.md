@@ -63,6 +63,16 @@ The package is ESM-only and provides:
   selection, review/environment gates, and Checkout v7 fork protection remain
   separate review evidence; a trigger, checkout, or execution step alone does
   not create the hypothesis.
+  Self-hosted pull-request hypotheses require a pull-request-capable trigger,
+  a literal self-hosted label, static custom label, or runner group, an
+  official untrusted checkout, and later execution from the matching workspace.
+  Current standard GitHub-hosted and recognized BuildJet/Warp labels are
+  excluded, while fully dynamic runner selection is deferred. Ordinary
+  `pull_request` rows do not invent secret or write-token authority. Review
+  must confirm the runner is customer controlled and whether its workspace,
+  service identity, network access, Docker socket, tool caches, or later jobs
+  survive the untrusted job; a proven freshly destroyed single-job JIT runner
+  is strong persistence counterevidence.
   Cross-workflow artifact-poisoning hypotheses require a named pull-request
   producer, untrusted checkout, official upload name/path, matching privileged
   `workflow_run`, official triggering-run download, extraction path, and later

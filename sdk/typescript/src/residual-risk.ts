@@ -11,6 +11,7 @@ import {
   githubActionsCompositeActionInjectionRecords,
   githubActionsPrivilegeRecords,
   githubActionsReusableWorkflowInjectionRecords,
+  githubActionsSelfHostedPrRecords,
   githubActionsWorkflowInjectionRecords,
 } from "./github-actions-risk.js";
 
@@ -1733,6 +1734,7 @@ export async function buildResidualRiskInventory(
     records.push(
       ...frameworkDataflowRecords(file.path, file.lines, sourceFiles),
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
+      ...githubActionsSelfHostedPrRecords(file.path, file.lines, file.text),
       ...githubActionsWorkflowInjectionRecords(
         file.path,
         file.lines,

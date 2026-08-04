@@ -411,6 +411,24 @@ working-directory and local-action paths, trusted overwrite, token and
 credential controls, review/environment leads, malformed YAML, aliases, and
 non-workflow paths.
 
+`benchmarks/github-actions-self-hosted-pr-manifest.json` adds a strict
+CWE-284/CWE-829 persistent-runner pair grounded in
+[GitHub's secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use),
+the [CodeQL self-hosted pull-request query](https://codeql.github.com/codeql-query-help/actions/actions-pr-on-self-hosted-runner/),
+and [CodeQL 2.26.0's hosted-label update](https://codeql.github.com/docs/codeql-overview/codeql-changelog/codeql-cli-2.26.0/).
+GitHub warns that self-hosted runners do not have the ephemeral clean-machine
+guarantee of GitHub-hosted runners and can be persistently compromised by
+untrusted workflow code. The host model goes beyond a `runs-on` report: it
+requires a pull-request-capable event, statically classified self-hosted or
+custom runner selection, official untrusted checkout, matching workspace, and
+later command or local-action execution. It excludes CodeQL's current standard
+GitHub-hosted label patterns plus BuildJet and Warp hosted labels, rejects fully
+dynamic scheduling, and does not infer upstream pull-request provenance for a
+`workflow_run` checkout. Ordinary `pull_request` rows remain free of invented
+secret and write-token categories. The paired witness proves persistence into
+a later privileged job on a reused machine and proves isolation when the
+pull-request machine is destroyed before a fresh hosted job.
+
 `benchmarks/github-actions-artifact-poisoning-manifest.json` adds a strict
 cross-workflow CWE-829 pair based on the
 [CodeQL very-high-precision artifact-poisoning query](https://codeql.github.com/codeql-query-help/actions/actions-artifact-poisoning-critical/)
@@ -585,16 +603,19 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
    own real-history exploit/control gate. Next extensions should add audited
    custom-rule packs and separately authorized issuer verification without
    weakening the no-plaintext persistence or no-implicit-network contracts.
-4. **Configuration and IaC model packs — five CI lanes shipped.** Deterministic
+4. **Configuration and IaC model packs — six CI lanes shipped.** Deterministic
    YAML models now prove both same-job privileged-trigger/untrusted-checkout
-   execution, cross-workflow pull-request artifact poisoning, and reusable-
+   execution, ordinary pull-request execution on a persistent self-hosted
+   runner, cross-workflow pull-request artifact poisoning, and reusable-
    workflow, local composite-action, and direct same-workflow script injection
    against paired
    witnesses, including Checkout v7 protection, triggering-run binding,
-   extraction paths, cleanup, typed-data isolation, descriptor and input
-   identity, step scope, and expression-compilation timing. Extend the same
-   evidence discipline to current-semantics cache poisoning, nested reusable-
-   workflow and composite-action chains,
+   extraction paths, cleanup, runner classification and lifecycle, typed-data
+   isolation, descriptor and input identity, step scope, and
+   expression-compilation timing. Extend the same evidence discipline to
+   cross-file runner-group policy and `workflow_run` provenance,
+   current-semantics cache poisoning, nested reusable-workflow and
+   composite-action chains,
    Docker, Kubernetes, Terraform, and cloud policy surfaces, then ask Copilot
    to evaluate deployment reachability and compensating controls.
 5. **Seed-coverage receipts.** Make imported-candidate closure a workbench

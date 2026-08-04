@@ -53,6 +53,43 @@ export interface GithubActionsPrivilegeRecord {
   };
 }
 
+export interface GithubActionsSelfHostedPrRecord {
+  path: string;
+  line: number;
+  categories: string[];
+  priority: number;
+  startLine: number;
+  endLine: number;
+  excerpt: string;
+  sourceExcerpt: string;
+  frameworkModel: {
+    schemaVersion: "1.2";
+    id: "github-actions-self-hosted-pr-code-execution";
+    language: "github-actions-yaml";
+    scope: "same-file";
+    source: {
+      kind: "pull-request-capable-workflow-trigger";
+      path: string;
+      line: number;
+      symbol: string;
+    };
+    sink: {
+      kind: "untrusted-workspace-code-execution-on-self-hosted-runner";
+      path: string;
+      line: number;
+      symbol: string;
+      cweIds: readonly ["CWE-284", "CWE-829"];
+    };
+    propagators: Array<{
+      kind: "self-hosted-runner-selection" | "untrusted-checkout-request";
+      path: string;
+      line: number;
+      symbol: string;
+    }>;
+    candidateControls: CandidateControl[];
+  };
+}
+
 interface RequestedCheckout {
   line: number;
   path: string;
@@ -71,6 +108,17 @@ interface ExecutionStep {
   workingDirectory?: string;
   run?: string;
   localAction?: string;
+}
+
+interface RunnerSelection {
+  line: number;
+  kind: "explicit-self-hosted-label" | "custom-runner-label" | "runner-group";
+  symbol: string;
+}
+
+interface UntrustedExecutionClosure {
+  checkout: RequestedCheckout;
+  execution: ExecutionStep;
 }
 
 export interface GithubActionsSourceFile {
@@ -400,6 +448,92 @@ function privilegedPullRequestTriggerLine(
   return eventTriggerLine(root, "pull_request_target", counter);
 }
 
+const SELF_HOSTED_PULL_REQUEST_EVENTS = [
+  "pull_request_target",
+  "issue_comment",
+  "pull_request_review",
+  "pull_request_review_comment",
+  "pull_request",
+  "workflow_run",
+] as const;
+
+function githubHostedRunnerLabel(label: string): boolean {
+  const normalized = label.toLowerCase();
+  return (
+    /^ubuntu-(?:[0-9.]+|latest|slim)(?:-arm)?$/u.test(normalized) ||
+    /^macos-(?:[0-9]+|latest)(?:-x?large|-intel)?$/u.test(normalized) ||
+    /^windows-(?:[0-9.]+|latest)(?:-vs[0-9.]+)?(?:-arm)?$/u.test(normalized)
+  );
+}
+
+function thirdPartyHostedRunnerLabel(label: string): boolean {
+  return /^(?:buildjet|warp)-[a-z0-9-]+$/iu.test(label);
+}
+
+function runnerSelection(
+  job: unknown,
+  counter: LineCounter,
+): RunnerSelection | undefined {
+  const runsOn = mapPair(job, "runs-on");
+  if (runsOn === undefined) return undefined;
+  const labels: string[] = [];
+  let group: string | undefined;
+  let dynamic = false;
+  const addLabel = (node: unknown): void => {
+    const label = scalarText(node)?.trim();
+    if (label === undefined || label === "") return;
+    if (label.includes("${{")) dynamic = true;
+    else labels.push(label);
+  };
+  if (isSeq(runsOn.value)) {
+    for (const item of runsOn.value.items) addLabel(item);
+  } else if (isMap(runsOn.value)) {
+    const labelsNode = mapPair(runsOn.value, "labels")?.value;
+    if (isSeq(labelsNode)) {
+      for (const item of labelsNode.items) addLabel(item);
+    } else {
+      addLabel(labelsNode);
+    }
+    group = scalarText(mapPair(runsOn.value, "group")?.value)?.trim();
+    if (group?.includes("${{") === true) dynamic = true;
+  } else {
+    addLabel(runsOn.value);
+  }
+
+  const explicit = labels.find(
+    (label) => label.toLowerCase() === "self-hosted",
+  );
+  if (explicit !== undefined) {
+    return {
+      line: pairLine(runsOn, counter),
+      kind: "explicit-self-hosted-label",
+      symbol: labels.join(","),
+    };
+  }
+  if (dynamic) return undefined;
+  if (
+    labels.some(
+      (label) =>
+        githubHostedRunnerLabel(label) || thirdPartyHostedRunnerLabel(label),
+    )
+  ) {
+    return undefined;
+  }
+  if (group !== undefined && group !== "") {
+    return {
+      line: pairLine(runsOn, counter),
+      kind: "runner-group",
+      symbol: `group=${group}${labels.length === 0 ? "" : `;labels=${labels.join(",")}`}`,
+    };
+  }
+  if (labels.length === 0) return undefined;
+  return {
+    line: pairLine(runsOn, counter),
+    kind: "custom-runner-label",
+    symbol: labels.join(","),
+  };
+}
+
 function normalizeWorkspacePath(value: string | undefined): string | undefined {
   if (value === undefined || value.trim() === "") return ".";
   const normalized = value
@@ -440,11 +574,17 @@ function untrustedPullRequestRef(
       repository.replace(/\s+/gu, ""),
     );
   if (forkRepository) return true;
+  if (
+    repository !== undefined &&
+    !/^\s*\$\{\{\s*github\.repository\s*\}\}\s*$/iu.test(repository)
+  ) {
+    return false;
+  }
   if (reference === undefined) return false;
   const normalized = reference.replace(/\s+/gu, "");
   if (
     /github\.event\.pull_request\.head\.sha/iu.test(normalized) ||
-    /refs\/pull\/\$\{\{github\.event\.pull_request\.(?:number|id)\}\}\/(?:head|merge)/iu.test(
+    /refs\/pull\/\$\{\{github\.event\.(?:number|pull_request\.(?:number|id)|issue\.number)\}\}\/(?:head|merge)/iu.test(
       normalized,
     ) ||
     /refs\/pull\/[^/]+\/(?:head|merge)/iu.test(normalized)
@@ -480,6 +620,7 @@ function checkoutRequest(
   step: unknown,
   path: string,
   counter: LineCounter,
+  pullRequestEvent = false,
 ): RequestedCheckout | TrustedCheckout | undefined {
   const uses = mapPair(step, "uses");
   const action = scalarText(uses?.value);
@@ -502,7 +643,21 @@ function checkoutRequest(
     scalarText(checkoutPathPair?.value),
   );
   if (workspacePath === undefined) return undefined;
-  if (!untrustedPullRequestRef(reference, repository)) {
+  const eventDefaultRepository =
+    repository === undefined ||
+    /^\s*\$\{\{\s*github\.repository\s*\}\}\s*$/iu.test(repository);
+  const normalizedReference = reference?.replace(/\s+/gu, "");
+  const untrustedPullRequestEventCheckout =
+    pullRequestEvent &&
+    eventDefaultRepository &&
+    (reference === undefined ||
+      /^\$\{\{(?:github\.(?:sha|ref)|github\.event\.pull_request\.merge_commit_sha)\}\}$/iu.test(
+        normalizedReference ?? "",
+      ));
+  if (
+    !untrustedPullRequestEventCheckout &&
+    !untrustedPullRequestRef(reference, repository)
+  ) {
     return {
       trusted: true,
       line: pairLine(uses, counter),
@@ -514,7 +669,12 @@ function checkoutRequest(
   const controls: CandidateControl[] = [];
   const major = version === null ? undefined : Number.parseInt(version[1]!, 10);
   const explicitlyUnsafe = booleanScalar(unsafePair?.value);
-  if (major !== undefined && major >= 7 && explicitlyUnsafe !== true) {
+  if (
+    !pullRequestEvent &&
+    major !== undefined &&
+    major >= 7 &&
+    explicitlyUnsafe !== true
+  ) {
     controls.push({
       kind: "checkout-v7-fork-protection",
       path,
@@ -729,6 +889,54 @@ function pathApplies(checkoutPath: string, execution: ExecutionStep): boolean {
     `(?:\\bcd\\s+|--(?:prefix|project|workdir(?:ectory)?)\\s+|\\./)${escaped}(?:/|\\b)`,
     "iu",
   ).test(execution.run);
+}
+
+function untrustedExecutionClosures(
+  steps: unknown,
+  path: string,
+  counter: LineCounter,
+  effectiveWorkingDirectory: string | undefined,
+  pullRequestEvent = false,
+): UntrustedExecutionClosure[] {
+  if (!isSeq(steps)) return [];
+  const activeCheckouts: RequestedCheckout[] = [];
+  const closures: UntrustedExecutionClosure[] = [];
+  for (const step of steps.items) {
+    const checkout = checkoutRequest(step, path, counter, pullRequestEvent);
+    if (checkout !== undefined && "trusted" in checkout) {
+      if (checkout.cleans) {
+        const trustedPath = checkout.path;
+        for (let index = activeCheckouts.length - 1; index >= 0; index -= 1) {
+          const activePath = activeCheckouts[index]?.path;
+          if (
+            activePath === trustedPath ||
+            trustedPath === "." ||
+            activePath?.startsWith(`${trustedPath}/`) === true
+          ) {
+            activeCheckouts.splice(index, 1);
+          }
+        }
+      }
+      continue;
+    }
+    if (checkout !== undefined) {
+      for (let index = activeCheckouts.length - 1; index >= 0; index -= 1) {
+        if (activeCheckouts[index]?.path === checkout.path) {
+          activeCheckouts.splice(index, 1);
+        }
+      }
+      activeCheckouts.push(checkout);
+      continue;
+    }
+    const execution = executionStep(step, counter, effectiveWorkingDirectory);
+    if (execution === undefined) continue;
+    for (const requested of activeCheckouts) {
+      if (pathApplies(requested.path, execution)) {
+        closures.push({ checkout: requested, execution });
+      }
+    }
+  }
+  return closures;
 }
 
 function distinctControls(controls: CandidateControl[]): CandidateControl[] {
@@ -2400,6 +2608,141 @@ export function githubActionsWorkflowInjectionRecords(
   return records;
 }
 
+export function githubActionsSelfHostedPrRecords(
+  path: string,
+  lines: readonly string[],
+  source: string,
+): GithubActionsSelfHostedPrRecord[] {
+  if (!/^\.github\/workflows\/[^/]+\.ya?ml$/iu.test(path)) return [];
+  const parsed = parseWorkflow(source);
+  if (parsed === undefined) return [];
+  const { root, counter } = parsed;
+  const jobs = mapPair(root, "jobs")?.value;
+  if (!isMap(jobs)) return [];
+  const workflowPermission = mapPair(root, "permissions");
+  const workflowWorkingDirectory = defaultRunWorkingDirectory(root);
+  const workflowSecrets = scalarTreeMatches(
+    mapPair(root, "env")?.value,
+    /\$\{\{\s*(?:secrets\.[A-Za-z_][A-Za-z0-9_]*|github\.token)\b/iu,
+  );
+  const records: GithubActionsSelfHostedPrRecord[] = [];
+
+  for (const jobPair of jobs.items) {
+    const job = jobPair.value;
+    if (!isMap(job)) continue;
+    const runner = runnerSelection(job, counter);
+    const steps = mapPair(job, "steps")?.value;
+    if (runner === undefined || !isSeq(steps)) continue;
+    const jobWorkingDirectory = defaultRunWorkingDirectory(job);
+    const effectiveWorkingDirectory = jobWorkingDirectory.defined
+      ? jobWorkingDirectory.value
+      : workflowWorkingDirectory.value;
+    const jobPermission = mapPair(job, "permissions");
+    const effectivePermission = jobPermission ?? workflowPermission;
+    const controls = jobReviewControls(job, path, counter);
+    const readOnly = permissionControl(
+      workflowPermission,
+      jobPermission,
+      path,
+      counter,
+    );
+    if (readOnly !== undefined) controls.push(readOnly);
+    const jobSecrets =
+      workflowSecrets ||
+      scalarTreeMatches(
+        job,
+        /\$\{\{\s*(?:secrets\.[A-Za-z_][A-Za-z0-9_]*|github\.token)\b/iu,
+      );
+    const emittedClosures = new Set<string>();
+
+    for (const eventName of SELF_HOSTED_PULL_REQUEST_EVENTS) {
+      const triggerLine = eventTriggerLine(root, eventName, counter);
+      if (triggerLine === undefined) continue;
+      const closures = untrustedExecutionClosures(
+        steps,
+        path,
+        counter,
+        effectiveWorkingDirectory,
+        eventName === "pull_request",
+      );
+      for (const { checkout, execution } of closures) {
+        const closureIdentity = `${checkout.line}:${execution.line}`;
+        if (emittedClosures.has(closureIdentity)) continue;
+        emittedClosures.add(closureIdentity);
+
+        const categories = ["github-actions-self-hosted-pr-code-execution"];
+        if (eventName !== "pull_request" && jobSecrets) {
+          categories.push("github-actions-explicit-secret-access");
+        }
+        if (
+          eventName !== "pull_request" &&
+          permissionAllowsWrite(effectivePermission)
+        ) {
+          categories.push("github-actions-write-token-permission");
+        }
+        const startLine = Math.max(1, execution.line - CONTEXT_LINES_BEFORE);
+        const endLine = Math.min(
+          lines.length,
+          execution.line + CONTEXT_LINES_AFTER,
+        );
+        const sourceStart = Math.max(1, triggerLine - 2);
+        const sourceEnd = Math.min(lines.length, triggerLine + 2);
+        records.push({
+          path,
+          line: execution.line,
+          categories,
+          priority: 138,
+          startLine,
+          endLine,
+          excerpt: lines.slice(startLine - 1, endLine).join("\n"),
+          sourceExcerpt: lines.slice(sourceStart - 1, sourceEnd).join("\n"),
+          frameworkModel: {
+            schemaVersion: "1.2",
+            id: "github-actions-self-hosted-pr-code-execution",
+            language: "github-actions-yaml",
+            scope: "same-file",
+            source: {
+              kind: "pull-request-capable-workflow-trigger",
+              path,
+              line: triggerLine,
+              symbol: `event=${eventName}`,
+            },
+            sink: {
+              kind: "untrusted-workspace-code-execution-on-self-hosted-runner",
+              path,
+              line: execution.line,
+              symbol:
+                execution.localAction === undefined
+                  ? "run"
+                  : `uses=./${execution.localAction}`,
+              cweIds: ["CWE-284", "CWE-829"],
+            },
+            propagators: [
+              {
+                kind: "self-hosted-runner-selection",
+                path,
+                line: runner.line,
+                symbol: `kind=${runner.kind};selection=${runner.symbol}`,
+              },
+              {
+                kind: "untrusted-checkout-request",
+                path,
+                line: checkout.line,
+                symbol: `workspace=${checkout.path}`,
+              },
+            ],
+            candidateControls: distinctControls([
+              ...controls,
+              ...checkout.controls,
+            ]),
+          },
+        });
+      }
+    }
+  }
+  return records;
+}
+
 export function githubActionsPrivilegeRecords(
   path: string,
   lines: readonly string[],
@@ -2445,85 +2788,58 @@ export function githubActionsPrivilegeRecords(
       baseCategories.push("github-actions-write-token-permission");
     }
 
-    const activeCheckouts: RequestedCheckout[] = [];
-    for (const step of steps.items) {
-      const checkout = checkoutRequest(step, path, counter);
-      if (checkout !== undefined && "trusted" in checkout) {
-        if (checkout.cleans) {
-          const trustedPath = checkout.path;
-          for (let index = activeCheckouts.length - 1; index >= 0; index -= 1) {
-            const activePath = activeCheckouts[index]?.path;
-            if (
-              activePath === trustedPath ||
-              trustedPath === "." ||
-              activePath?.startsWith(`${trustedPath}/`) === true
-            ) {
-              activeCheckouts.splice(index, 1);
-            }
-          }
-        }
-        continue;
-      }
-      if (checkout !== undefined) {
-        for (let index = activeCheckouts.length - 1; index >= 0; index -= 1) {
-          if (activeCheckouts[index]?.path === checkout.path) {
-            activeCheckouts.splice(index, 1);
-          }
-        }
-        activeCheckouts.push(checkout);
-        continue;
-      }
-      const execution = executionStep(step, counter, effectiveWorkingDirectory);
-      if (execution === undefined) continue;
-      for (const requested of activeCheckouts) {
-        if (!pathApplies(requested.path, execution)) continue;
-        const startLine = Math.max(1, execution.line - CONTEXT_LINES_BEFORE);
-        const endLine = Math.min(
-          lines.length,
-          execution.line + CONTEXT_LINES_AFTER,
-        );
-        const sourceStart = Math.max(1, triggerLine - 2);
-        const sourceEnd = Math.min(lines.length, triggerLine + 2);
-        records.push({
-          path,
-          line: execution.line,
-          categories: [...baseCategories],
-          priority: 125,
-          startLine,
-          endLine,
-          excerpt: lines.slice(startLine - 1, endLine).join("\n"),
-          sourceExcerpt: lines.slice(sourceStart - 1, sourceEnd).join("\n"),
-          frameworkModel: {
-            schemaVersion: "1.2",
-            id: "github-actions-privileged-pr-code-execution",
-            language: "github-actions-yaml",
-            scope: "same-file",
-            source: {
-              kind: "privileged-pull-request-trigger",
-              path,
-              line: triggerLine,
-            },
-            sink: {
-              kind: "untrusted-workspace-code-execution",
-              path,
-              line: execution.line,
-              cweIds: ["CWE-829"],
-            },
-            propagators: [
-              {
-                kind: "untrusted-checkout-request",
-                path,
-                line: requested.line,
-                symbol: `workspace=${requested.path}`,
-              },
-            ],
-            candidateControls: distinctControls([
-              ...controls,
-              ...requested.controls,
-            ]),
+    for (const { checkout, execution } of untrustedExecutionClosures(
+      steps,
+      path,
+      counter,
+      effectiveWorkingDirectory,
+    )) {
+      const startLine = Math.max(1, execution.line - CONTEXT_LINES_BEFORE);
+      const endLine = Math.min(
+        lines.length,
+        execution.line + CONTEXT_LINES_AFTER,
+      );
+      const sourceStart = Math.max(1, triggerLine - 2);
+      const sourceEnd = Math.min(lines.length, triggerLine + 2);
+      records.push({
+        path,
+        line: execution.line,
+        categories: [...baseCategories],
+        priority: 125,
+        startLine,
+        endLine,
+        excerpt: lines.slice(startLine - 1, endLine).join("\n"),
+        sourceExcerpt: lines.slice(sourceStart - 1, sourceEnd).join("\n"),
+        frameworkModel: {
+          schemaVersion: "1.2",
+          id: "github-actions-privileged-pr-code-execution",
+          language: "github-actions-yaml",
+          scope: "same-file",
+          source: {
+            kind: "privileged-pull-request-trigger",
+            path,
+            line: triggerLine,
           },
-        });
-      }
+          sink: {
+            kind: "untrusted-workspace-code-execution",
+            path,
+            line: execution.line,
+            cweIds: ["CWE-829"],
+          },
+          propagators: [
+            {
+              kind: "untrusted-checkout-request",
+              path,
+              line: checkout.line,
+              symbol: `workspace=${checkout.path}`,
+            },
+          ],
+          candidateControls: distinctControls([
+            ...controls,
+            ...checkout.controls,
+          ]),
+        },
+      });
     }
   }
   return records;

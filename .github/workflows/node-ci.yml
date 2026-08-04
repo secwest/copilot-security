@@ -95,6 +95,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.node == '22.13.0'
         run: node benchmarks/witnesses/github-actions-workflow-script-injection/WorkflowScriptInjectionWitness.mjs
 
+      - name: Prove self-hosted runner persistence and hosted-runner isolation
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.13.0'
+        run: node benchmarks/witnesses/github-actions-self-hosted-pr/SelfHostedPrWitness.mjs
+
       - name: Check formatting
         run: pnpm --dir sdk/typescript run format
 

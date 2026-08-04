@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "completionRate": 1,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "casePassRate": 1,
+    "negativeControlPassRate": 1,
+    "stableDetectionRate": 1,
+    "validationCoverage": 1,
+    "attackPathCoverage": 1,
+    "codeEvidenceCoverage": 1,
+    "severityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "github-actions-self-hosted-pr-execution",
+      "fixture": "fixtures/github-actions-self-hosted-pr-execution",
+      "expected": [
+        {
+          "title": "Pull-request code executes on a reusable self-hosted runner",
+          "cwe": ["CWE-284", "CWE-829"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": ".github/workflows/test.yml",
+          "line": 12,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "github-actions-safe-hosted-pr-execution",
+      "fixture": "fixtures/github-actions-safe-hosted-pr-execution",
+      "expected": []
+    }
+  ]
+}
