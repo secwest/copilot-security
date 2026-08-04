@@ -123,7 +123,7 @@ describe("scan knowledge bases", () => {
 
     expect(documents).toContain("Payment service boundary");
     expect(documents).toContain("SSRF & IDOR\n");
-  }, 45_000);
+  }, 90_000);
 
   test("cleans up documents and rediscovers directory contents on later runs", async () => {
     const root = await temporaryDirectory();

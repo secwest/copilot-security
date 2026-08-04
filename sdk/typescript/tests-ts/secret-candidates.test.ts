@@ -14,6 +14,7 @@ import {
   buildSecretCandidateInventory,
   prepareSecretScanning,
   readSecretBaseline,
+  SecretScanningError,
   type SecretCandidateRecord,
 } from "../src/secret-candidates.js";
 
@@ -350,7 +351,7 @@ describe("local secret candidates", () => {
           credentialHome: linkedHome,
           repositoryScope: repository,
         }),
-      ).rejects.toThrow("Secret scanner state escaped its private home");
+      ).rejects.toBeInstanceOf(SecretScanningError);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EPERM") throw error;
     }

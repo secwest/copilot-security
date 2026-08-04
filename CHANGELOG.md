@@ -18,6 +18,7 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Resilience
 
+- Made the cross-platform state-link regression assert rejection at the first host safety gate instead of depending on a later canonical-containment diagnostic, and widened the PDF/DOCX extraction fixture's per-case ceiling for slow Windows CI cold starts without weakening its content checks.
 - Upgraded the direct and AJV-resolved `fast-uri` dependency from 3.1.4 to 3.1.5 after the production audit identified high-severity host confusion through a backslash authority introducer (`GHSA-7p8r-x3mc-p8w7`). The patched lock graph now passes the high-severity production advisory gate with no known vulnerabilities.
 - Replaced the single closure-repair turn with three bounded, host-re-audited repair attempts. Each attempt receives only the newest deterministic coverage and finding-quality gaps, exits immediately on verified closure, preserves transport failures as causal errors, and still fails closed after the finite budget.
 - Added explicit coverage-serialization invariants to both correction and repair prompts: one parseable JSON object, no trailing bytes, exact immutable inventory paths, and only canonical scalar dispositions. Broad repairs must use a real JSON serializer, validate the exact path set and count, and atomically replace the document; regex, `perl`, `sed`, `awk`, textual comma insertion, and concatenation are forbidden for JSON repair.
