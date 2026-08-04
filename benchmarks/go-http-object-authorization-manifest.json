@@ -58,6 +58,28 @@
       "id": "go-cross-file-safe-list-authorization",
       "fixture": "fixtures/go-cross-file-safe-list-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-file-prepared-delete-idor",
+      "fixture": "fixtures/go-cross-file-prepared-delete-idor",
+      "expected": [
+        {
+          "title": "Go invoice endpoint deletes an object selected only by request ID",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "store.go",
+          "line": 19,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-file-safe-prepared-delete-authorization",
+      "fixture": "fixtures/go-cross-file-safe-prepared-delete-authorization",
+      "expected": []
     }
   ]
 }

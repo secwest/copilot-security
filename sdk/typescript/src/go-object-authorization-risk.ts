@@ -85,6 +85,12 @@ interface CandidateQuery {
   controls: Array<{ kind: string; line: number }>;
 }
 
+interface PreparedStatement {
+  line: number;
+  predicates: Predicate[];
+  active: boolean;
+}
+
 interface ObjectSink {
   kind:
     | "go-database-object-read-response"
@@ -207,6 +213,16 @@ function queryPosition(method: string): number | undefined {
   if (/^(?:Exec|Query|QueryRow)$/u.test(method)) return 0;
   if (/^(?:ExecContext|QueryContext|QueryRowContext)$/u.test(method)) return 1;
   return undefined;
+}
+
+function preparePosition(method: string): number | undefined {
+  if (method === "Prepare") return 0;
+  if (method === "PrepareContext") return 1;
+  return undefined;
+}
+
+function isMutationQuery(query: string): boolean {
+  return /^\s*(?:UPDATE|DELETE)\b/iu.test(query);
 }
 
 function sqlNamedValue(argument: string, alias: string): string {
@@ -372,6 +388,7 @@ function analyzeFunction(
   const strings = fixedStrings(function_);
   const fixedMaps = fixedMapNames(function_);
   const rows = new Map<string, CandidateQuery>();
+  const statements = new Map<string, PreparedStatement>();
   const pending: CandidateQuery[] = [];
   const sinks: ObjectSink[] = [];
   const lineCalls = callsByLine(function_);
@@ -388,6 +405,7 @@ function analyzeFunction(
     if (assigned !== undefined) {
       const primary = assigned.names[0]!;
       const rowAlias = rows.get(assigned.value.trim());
+      const statementAlias = statements.get(assigned.value.trim());
       const objectSource =
         requestSource(assigned.value, requests, line) ??
         expressionTaint(assigned.value, objects);
@@ -402,6 +420,7 @@ function analyzeFunction(
         principals.delete(name);
         inferredReceivers.delete(name);
         rows.delete(name);
+        statements.delete(name);
       }
       if (objectSource !== undefined && !fixedObjectSelection) {
         objects.set(primary, {
@@ -422,6 +441,7 @@ function analyzeFunction(
         });
       }
       if (rowAlias !== undefined) rows.set(primary, rowAlias);
+      if (statementAlias !== undefined) statements.set(primary, statementAlias);
       for (const candidate of pending) {
         if (
           [...candidate.scannedNames].some((name) =>
@@ -475,6 +495,91 @@ function analyzeFunction(
         continue;
       }
 
+      const prepareIndex = receiverIsTyped(receiver)
+        ? preparePosition(method)
+        : undefined;
+      if (prepareIndex !== undefined) {
+        const queryExpression = call.rawArguments[prepareIndex];
+        const query =
+          queryExpression === undefined
+            ? undefined
+            : fixedString(queryExpression, strings)?.value;
+        if (
+          result !== undefined &&
+          query !== undefined &&
+          isMutationQuery(query)
+        ) {
+          statements.set(result, {
+            line,
+            predicates: predicates(query),
+            active: true,
+          });
+        }
+        continue;
+      }
+
+      const statement = statements.get(receiver);
+      if (statement !== undefined) {
+        if (method === "Close") {
+          if (!/\bdefer\b/u.test(structural)) statement.active = false;
+          continue;
+        }
+        if (!statement.active || !/^Exec(?:Context)?$/u.test(method)) continue;
+        const argumentIndex = method === "ExecContext" ? 1 : 0;
+        const arguments_ = call.rawArguments.slice(argumentIndex);
+        const objectPredicate = statement.predicates.find((predicate) => {
+          if (!OBJECT_COLUMN.test(predicate.column)) return false;
+          const argument = predicateArgument(predicate, arguments_, alias);
+          return (
+            argument !== undefined &&
+            expressionTaint(argument, objects) !== undefined
+          );
+        });
+        if (objectPredicate === undefined) continue;
+        const objectArgument = predicateArgument(
+          objectPredicate,
+          arguments_,
+          alias,
+        )!;
+        const source = expressionTaint(objectArgument, objects)!;
+        const controls: Array<{ kind: string; line: number }> = [];
+        const principalBound = statement.predicates.some((predicate) => {
+          if (!SECURITY_COLUMN.test(predicate.column)) return false;
+          const argument = predicateArgument(predicate, arguments_, alias);
+          return (
+            argument !== undefined &&
+            expressionTaint(argument, principals) !== undefined
+          );
+        });
+        if (principalBound)
+          controls.push({ kind: "principal-bound-object-query", line });
+        sinks.push({
+          kind: "go-database-object-mutation",
+          line,
+          source,
+          propagators: [
+            ...source.propagators,
+            {
+              kind: "go-sql-statement-prepare",
+              line: statement.line,
+              symbol: receiver,
+            },
+            {
+              kind: "go-sql-object-predicate",
+              line: statement.line,
+              symbol: objectPredicate.column,
+            },
+            {
+              kind: "go-sql-statement-execution",
+              line,
+              symbol: receiver,
+            },
+          ],
+          controls,
+        });
+        continue;
+      }
+
       const queryIndex = receiverIsTyped(receiver)
         ? queryPosition(method)
         : undefined;
@@ -521,15 +626,15 @@ function analyzeFunction(
             symbol: objectPredicate.column,
           },
         ];
-        if (
-          /^Exec(?:Context)?$/u.test(method) &&
-          /^\s*(?:UPDATE|DELETE\b)/iu.test(query)
-        ) {
+        if (/^Exec(?:Context)?$/u.test(method) && isMutationQuery(query)) {
           sinks.push({
             kind: "go-database-object-mutation",
             line,
             source,
-            propagators,
+            propagators: [
+              ...propagators,
+              { kind: "go-sql-mutation-execution", line, symbol: receiver },
+            ],
             controls,
           });
           continue;

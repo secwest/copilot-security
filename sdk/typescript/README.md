@@ -76,7 +76,10 @@ The package is ESM-only and provides:
   Conn. Single-row reads require `QueryRow`, `Scan`, and disclosure;
   collection reads require exact `Query`/`QueryContext`, the same returned
   `Rows`, `Next`, `Scan`, and disclosure. Updates and deletes require exact
-  `Exec` dispatch. Same-query security predicates count only
+  direct `Exec` dispatch or exact `Prepare`/`PrepareContext` statement identity
+  followed by `Stmt.Exec`/`Stmt.ExecContext`; preparation alone, unrelated or
+  replaced statements, and statements closed before dispatch are rejected.
+  Same-query security predicates count only
   when bound to a context-derived principal, and fail-closed returned-owner
   comparisons remain explicit control evidence. Fixed or reassigned IDs,
   immutable selection maps, attacker-controlled owner filters, dynamic SQL,

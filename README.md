@@ -769,8 +769,11 @@ The Go object-authorization lane requires exact `net/http` and
 object predicate, and a concrete protected effect. Single-row reads close only
 after `QueryRow` data is scanned and disclosed. Collection reads require the
 same returned `Rows` to reach `Next`, `Scan`, and disclosure of scanned data;
-`UPDATE` and `DELETE` executions are immediate state effects. Authentication
-and bound parameters alone are not
+direct `UPDATE` and `DELETE` executions are immediate state effects. Prepared
+mutations require a fixed statement created by `Prepare` or `PrepareContext`
+to reach `Stmt.Exec` or `Stmt.ExecContext` through the exact non-reassigned,
+not-yet-closed statement or its proven alias. Authentication and bound
+parameters alone are not
 authorization. The host retains a same-query owner/tenant/account predicate
 only when its value is derived from the authenticated request context, and it
 retains a fail-closed post-lookup ownership comparison only when it dominates
@@ -778,7 +781,9 @@ the response. The paired offline driver witnesses prove that an attacker can
 read a victim invoice through the unscoped lookup and that the context-bound
 account predicate blocks the same cross-account request while preserving an
 owned-object read. A second pair proves the same boundary for a multi-row
-project invoice listing:
+project invoice listing. A third pair proves that an unscoped prepared DELETE
+can remove a victim-owned invoice while a context-principal predicate blocks
+the same attack and still permits deletion of an owned invoice:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -797,6 +802,12 @@ Push-Location benchmarks\fixtures\go-cross-file-list-idor
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-list-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-prepared-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-prepared-delete-authorization
 go test ./...
 Pop-Location
 ```

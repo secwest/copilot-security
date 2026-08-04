@@ -98,11 +98,15 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-file-safe-authorization",
       "go-cross-file-list-idor",
       "go-cross-file-safe-list-authorization",
+      "go-cross-file-prepared-delete-idor",
+      "go-cross-file-safe-prepared-delete-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
     expect(manifest.cases[2]?.expected).toHaveLength(1);
     expect(manifest.cases[3]?.expected).toEqual([]);
+    expect(manifest.cases[4]?.expected).toHaveLength(1);
+    expect(manifest.cases[5]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -317,6 +321,152 @@ describe("Go HTTP object-authorization framework model", () => {
         "go-database-object-mutation",
       );
     }
+  });
+
+  test("preserves the exact prepared mutation exploit and scoped control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-file-prepared-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-file-safe-prepared-delete-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "store.go",
+      categories: [
+        "framework-dataflow:go-http-object-authorization",
+        "modeled-source:go-http-path-value",
+        "modeled-sink:go-database-object-mutation",
+      ],
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 9 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "store.go",
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "go-object-identifier-assignment",
+      "go-function-argument",
+      "go-string-parameter",
+      "go-sql-statement-prepare",
+      "go-sql-object-predicate",
+      "go-sql-statement-execution",
+    ]);
+    expect(safe).toHaveLength(1);
+    expect(safe[0]?.frameworkModel?.candidateControls).toEqual([
+      { kind: "principal-bound-object-query", path: "store.go", line: 19 },
+    ]);
+  });
+
+  test("closes Prepare and PrepareContext through the exact Stmt execution", async () => {
+    const bodies = [
+      `  id := r.PathValue("invoiceID")
+  stmt, _ := db.Prepare("DELETE FROM invoices WHERE id = ?")
+  defer stmt.Close()
+  stmt.Exec(id)`,
+      `  id := r.PathValue("invoiceID")
+  stmt, _ := db.PrepareContext(r.Context(), "UPDATE invoices SET status = 'void' WHERE id = $1")
+  alias := stmt
+  defer alias.Close()
+  alias.ExecContext(r.Context(), id)`,
+    ];
+    for (const body of bodies) {
+      const rows = await repositoryInventory({ "handler.go": handler(body) });
+      expect(rows, body).toHaveLength(1);
+      expect(rows[0]?.frameworkModel?.sink.kind).toBe(
+        "go-database-object-mutation",
+      );
+      expect(
+        rows[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+      ).toContain("go-sql-statement-execution");
+    }
+  });
+
+  test("rejects unexecuted, closed, replaced, unrelated, and non-mutation statements", async () => {
+    for (const body of [
+      `  id := r.PathValue("invoiceID")
+  stmt, _ := db.Prepare("DELETE FROM invoices WHERE id = ?")
+  _ = stmt
+  _ = id`,
+      `  id := r.PathValue("invoiceID")
+  stmt, _ := db.Prepare("DELETE FROM invoices WHERE id = ?")
+  stmt.Close()
+  stmt.Exec(id)`,
+      `  id := r.PathValue("invoiceID")
+  stmt, _ := db.Prepare("DELETE FROM invoices WHERE id = ?")
+  alias := stmt
+  alias.Close()
+  stmt.Exec(id)`,
+      `  id := r.PathValue("invoiceID")
+  stmt, _ := db.Prepare("DELETE FROM invoices WHERE id = ?")
+  stmt, _ = db.Prepare("INSERT INTO invoices(id) VALUES (?)")
+  stmt.Exec(id)`,
+      `  id := r.PathValue("invoiceID")
+  stmt, _ := db.Prepare("SELECT secret FROM invoices WHERE id = ?")
+  stmt.Exec(id)`,
+      `  id := r.PathValue("invoiceID")
+  db.Exec("UPDATELOG records SET value = 1 WHERE id = ?", id)`,
+      `  id := r.PathValue("invoiceID")
+  stmt, _ := db.Prepare("DELETE FROM invoices WHERE id = ?")
+  other.Exec(id)
+  _ = stmt`,
+    ]) {
+      expect(
+        await repositoryInventory({ "handler.go": handler(body) }),
+        body,
+      ).toEqual([]);
+    }
+  });
+
+  test("supports prepared mutations on exact DB, Tx, and Conn receivers", async () => {
+    for (const receiverType of ["DB", "Tx", "Conn"]) {
+      const source = `package invoices
+import (
+  "database/sql"
+  "net/http"
+)
+func Handler(db *sql.${receiverType}, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  stmt, _ := db.Prepare("DELETE FROM invoices WHERE id = ?")
+  defer stmt.Close()
+  stmt.Exec(id)
+}`;
+      expect(
+        await repositoryInventory({ "handler.go": source }),
+        receiverType,
+      ).toHaveLength(1);
+    }
+  });
+
+  test("maps prepared positional and named arguments and trusts only context principals", async () => {
+    const safe = await repositoryInventory({
+      "handler.go": handler(`  id := r.PathValue("invoiceID")
+  accountID := r.Context().Value(authenticatedAccountIDKey).(string)
+  stmt, _ := db.Prepare("DELETE FROM invoices WHERE id = :invoice AND account_id = :account")
+  defer stmt.Close()
+  stmt.Exec(sql.Named("invoice", id), sql.Named("account", accountID))`),
+    });
+    expect(safe).toHaveLength(1);
+    expect(safe[0]?.frameworkModel?.candidateControls).toHaveLength(1);
+
+    const attackerControlled = await repositoryInventory({
+      "handler.go": handler(`  id := r.PathValue("invoiceID")
+  accountID := r.Header.Get("X-Account-ID")
+  stmt, _ := db.Prepare("DELETE FROM invoices WHERE id = ? AND account_id = ?")
+  defer stmt.Close()
+  stmt.Exec(id, accountID)`),
+    });
+    expect(attackerControlled).toHaveLength(1);
+    expect(attackerControlled[0]?.frameworkModel?.candidateControls).toEqual(
+      [],
+    );
   });
 
   test("records only context-derived principal query controls", async () => {

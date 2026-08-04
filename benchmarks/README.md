@@ -582,9 +582,11 @@ ID-only `QueryRow`, then scans and returns the victim secret. Its control adds
 an account predicate bound to a principal obtained from the request context.
 The second pair uses `QueryContext`, the returned `Rows`, `Next`, `Scan`, and
 response disclosure to prove and block a victim-project invoice listing.
-Deterministic standard-library drivers prove both cross-account disclosures,
-both blocked attacks, and successful owned-object and owned-collection reads
-without a database service:
+The third pair prepares a fixed DELETE and later executes the exact returned
+`Stmt`; its control adds a context-principal account predicate. Deterministic
+standard-library drivers prove both cross-account disclosures, the unauthorized
+victim deletion, all three blocked attacks, and successful owned-object,
+owned-collection, and owned-mutation behavior without a database service:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -608,6 +610,12 @@ Push-Location fixtures\go-cross-file-list-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-list-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-prepared-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-prepared-delete-authorization
 go test ./...
 Pop-Location
 ```
