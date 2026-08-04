@@ -21,6 +21,9 @@ The package is ESM-only and provides:
   `SECURITY.md` path inventories; the model cannot choose, narrow, or rewrite
   scan scope, and conventional generated trees such as .NET `bin`/`obj` are
   omitted before ranking
+- deterministic pre-model typed and entropy secret candidates with no plaintext
+  in detector prompts or reports, repository-scoped keyed fingerprints, private
+  local audit JSONL, and exact expiring justified baselines
 - registered-target checks surrounding staged-file SHA-256 comparisons before
   model execution and final sealing, so checkout races fail closed
 - a disposable repository/plugin snapshot that omits links and special files,
@@ -66,6 +69,7 @@ const result = await scanner.run("/path/to/repository", {
   outputDir: "/path/outside/repository/results",
   seedSarifPaths: ["/path/to/codeql.sarif", "/path/to/trivy.sarif"],
   sarifSourceRoot: "/original/build/checkout",
+  secretBaselinePath: "/security/project-secret-baseline.json",
 });
 
 console.log(result.reportPath);
@@ -78,6 +82,14 @@ and requires Copilot to independently prove or reject each in-scope seed.
 `sarifSourceRoot` remaps absolute paths emitted from another checkout. Omit it
 when SARIF paths are repository-relative or were produced from the repository
 being scanned.
+
+`secretBaselinePath` selects an optional strict schema 1.0 file containing only
+opaque local HMAC fingerprints, exact rule/path identity, a justification, and
+a canonical UTC expiry. The host rejects malformed or linked baselines before
+Copilot starts. Without this option, it creates a per-repository empty baseline
+beneath `COPILOT_SECURITY_HOME/copilot-security-home/secret-scanner`; candidate
+bytes never enter the detector inventory, report, baseline, error, or
+diagnostic channel.
 
 Configuration:
 

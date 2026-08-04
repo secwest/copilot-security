@@ -65,6 +65,7 @@
                   <TextBox Text="{Binding KnowledgeBasePaths}" MinHeight="54" AcceptsReturn="True" PlaceholderText="Knowledge-base files, one per line" />
                   <TextBox Text="{Binding SarifSeedPaths}" MinHeight="54" AcceptsReturn="True" PlaceholderText="SARIF seed files, one per line" />
                   <TextBox Text="{Binding SarifSourceRoot}" PlaceholderText="Optional original SARIF checkout root" />
+                  <TextBox Text="{Binding SecretBaselinePath}" PlaceholderText="Optional expiring secret-fingerprint baseline JSON" />
                 </StackPanel>
               </GroupBox>
             </StackPanel>

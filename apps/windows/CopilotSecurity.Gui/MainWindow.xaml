@@ -70,6 +70,7 @@
                   <Grid.ColumnDefinitions><ColumnDefinition Width="135" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                   <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                   </Grid.RowDefinitions>
                   <TextBlock Text="Mode" VerticalAlignment="Center" />
@@ -90,6 +91,9 @@
                   <TextBlock Grid.Row="6" Text="SARIF source root" VerticalAlignment="Center" Margin="0,8,0,0" />
                   <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding SarifSourceRoot}" Margin="0,8,0,0"
                            ToolTip="Optional original checkout root for absolute paths in SARIF; defaults to this repository." />
+                  <TextBlock Grid.Row="7" Text="Secret baseline" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding SecretBaselinePath}" Margin="0,8,0,0"
+                           ToolTip="Optional schema 1.0 baseline containing only keyed fingerprints, exact paths, justifications, and UTC expirations." />
                 </Grid>
               </GroupBox>
             </StackPanel>

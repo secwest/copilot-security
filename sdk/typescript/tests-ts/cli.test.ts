@@ -980,6 +980,7 @@ describe("CLI", () => {
                 knowledgeBasePaths: ["/demo/threat-models"],
                 seedSarifPaths: ["/analysis/codeql.sarif"],
                 seedSarifCandidateCount: 12,
+                secretBaselinePath: "/security/project-secrets.json",
               },
             }),
           }),
@@ -998,6 +999,7 @@ describe("CLI", () => {
       expect(text).toContain("/demo/threat-models");
       expect(text).toContain("/analysis/codeql.sarif");
       expect(text).toContain("12 candidates");
+      expect(text).toContain("/security/project-secrets.json");
       expect(text).not.toContain("internal-finding-id");
       expect(text).not.toContain("internal-occurrence-id");
       if (showLinkedFindings) {
@@ -1613,6 +1615,8 @@ describe("CLI", () => {
           "--seed-sarif=/analysis/semgrep.sarif",
           "--sarif-source-root",
           "/build/checkout",
+          "--secret-baseline",
+          "/security/secret-baseline.json",
           "--mode",
           "deep",
           "--plugin-path",
@@ -1637,6 +1641,7 @@ describe("CLI", () => {
       knowledgeBasePaths: ["/shared/architecture.pdf", "/shared/threat-models"],
       seedSarifPaths: ["/analysis/codeql.sarif", "/analysis/semgrep.sarif"],
       sarifSourceRoot: "/build/checkout",
+      secretBaselinePath: "/security/secret-baseline.json",
     });
     expect(pathConfig).toMatchObject({
       pluginPath: "plugin.zip",

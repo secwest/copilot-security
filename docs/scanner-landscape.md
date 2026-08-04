@@ -359,10 +359,13 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
    extraction, accept OSV identifiers and fixed-version facts, and require a
    repository call/use path or explicit deployment exposure before escalating
    severity. Preserve uncalled/unknown rather than equating both with safe.
-3. **Local secret candidate engine.** Run deterministic pattern and entropy
-   checks without sending secret bytes to Copilot. Persist a keyed local
-   fingerprint, rule, path, line, and redacted shape only. Support expiring
-   justified baselines and negative-control fixtures.
+3. **Local secret candidate engine — shipped.** Deterministic typed-pattern and
+   entropy checks now run before Copilot, persist only repository-scoped keyed
+   fingerprints and redacted structural evidence, enforce exact expiring
+   justified baselines, and gate a fragment-materialized positive/negative
+   corpus at perfect precision and recall. Next extensions should add audited
+   custom-rule packs and Git-history scanning without weakening the no-plaintext
+   persistence contract.
 4. **Configuration and IaC model packs.** Add deterministic parsers and typed
    checks for high-value Docker, Kubernetes, Terraform, CI, and cloud policy
    surfaces, then ask Copilot to evaluate deployment reachability and

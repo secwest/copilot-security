@@ -553,6 +553,7 @@ describe("CLI workbench", () => {
                 "/analysis/trivy.sarif",
               ],
               sarifSourceRoot: "/original/repository",
+              secretBaselinePath: "/security/secret-baseline.json",
               maxSessionAttempts: 4,
               config: savedConfig,
             },
@@ -571,6 +572,7 @@ describe("CLI workbench", () => {
       knowledgeBasePaths: ["/original/security.md"],
       seedSarifPaths: ["/analysis/codeql.sarif", "/analysis/trivy.sarif"],
       sarifSourceRoot: "/original/repository",
+      secretBaselinePath: "/security/secret-baseline.json",
       maxSessionAttempts: 4,
     });
 

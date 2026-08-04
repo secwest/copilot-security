@@ -52,6 +52,7 @@ public sealed record ScanRequest
     public IReadOnlyList<string> KnowledgeBasePaths { get; init; } = [];
     public IReadOnlyList<string> SarifSeedPaths { get; init; } = [];
     public string? SarifSourceRoot { get; init; }
+    public string? SecretBaselinePath { get; init; }
 }
 
 public sealed record ScannerInvocation(

@@ -56,6 +56,11 @@ import {
   writePreparedSarifSeeds,
   type PreparedSarifSeeds,
 } from "./sarif-seeds.js";
+import {
+  prepareSecretScanning,
+  readSecretBaseline,
+  type PreparedSecretScanning,
+} from "./secret-candidates.js";
 import type { CoverageDocument, SeverityLevel } from "./models.js";
 import {
   workerStatusFromEvent,
@@ -152,6 +157,8 @@ export interface ScanOptions {
   seedSarifPaths?: string[];
   /** Original source root used by absolute paths in imported SARIF. Defaults to the repository. */
   sarifSourceRoot?: string;
+  /** Expiring, justified local secret-fingerprint baseline. */
+  secretBaselinePath?: string;
   outputDir?: string;
   archiveExisting?: boolean;
   parentScanId?: string;
@@ -219,6 +226,7 @@ export interface ScanPreflight {
   knowledgeBasePaths?: string[];
   seedSarifPaths?: string[];
   sarifSourceRoot?: string;
+  secretBaselinePath?: string;
   seedSarifCandidateCount?: number;
   outputDir: string | null;
   archiveDir?: string;
@@ -325,6 +333,13 @@ export class CopilotSecurity {
           options.signal,
         )
       : null;
+    const secretBaselinePath =
+      options.secretBaselinePath === undefined
+        ? undefined
+        : resolveRepositoryPath(options.secretBaselinePath);
+    if (secretBaselinePath !== undefined) {
+      await readSecretBaseline(secretBaselinePath);
+    }
     const configuration = await mergedCopilotConfig(this.config);
     const model = scanModelConfiguration(configuration);
     validateScanCostLimit(options.maxCostUsd, model.model);
@@ -349,6 +364,7 @@ export class CopilotSecurity {
               : { sarifSourceRoot: sarifSeeds.sourceRoot }),
             seedSarifCandidateCount: sarifSeeds.candidates.length,
           }),
+      ...(secretBaselinePath === undefined ? {} : { secretBaselinePath }),
       outputDir: inputs.outputDir,
       ...(archiveDir === null ? {} : { archiveDir }),
       authentication: scanAuthentication(
@@ -407,6 +423,21 @@ export class CopilotSecurity {
         this.#dependencies.environment,
       );
       requireOutputOutsideRepository(protectedRoot, stateDirectory);
+      const secretCredentialHome = await prepareCopilotSecurityCredentialHome(
+        this.#dependencies.environment,
+        (path) =>
+          requireOutputOutsideRepository(protectedRoot, path, "runtime"),
+      );
+      const secretScanning: PreparedSecretScanning =
+        await prepareSecretScanning({
+          credentialHome: secretCredentialHome,
+          repositoryScope: repo,
+          ...(options.secretBaselinePath === undefined
+            ? {}
+            : {
+                baselinePath: resolveRepositoryPath(options.secretBaselinePath),
+              }),
+        });
       checkOpen();
       let temporaryRoot: string | undefined;
       if (
@@ -733,6 +764,9 @@ export class CopilotSecurity {
         options.sarifSourceRoot === undefined
           ? undefined
           : sarifSeeds?.sourceRoot,
+        options.secretBaselinePath === undefined
+          ? undefined
+          : secretScanning.baselinePath,
         options.maxCostUsd,
         options.maxAiCredits,
         maxSessionAttempts,
@@ -1020,6 +1054,14 @@ export class CopilotSecurity {
           ? {}
           : { maxAiCredits: options.maxAiCredits }),
         maxSessionAttempts,
+        secretScanning: {
+          ...secretScanning,
+          repository: repo,
+          scanId,
+          ...(normalized.kind === "repository"
+            ? {}
+            : { includePaths: inventorySnapshot.repositoryPaths }),
+        },
       });
       const thread = copilot.startThread({
         workingDirectory: modelRepository,
@@ -1925,6 +1967,7 @@ function scanRecipe(
   knowledgeBasePaths?: string[],
   sarifSeeds?: PreparedSarifSeeds | null,
   sarifSourceRoot?: string,
+  secretBaselinePath?: string,
   maxCostUsd?: number,
   maxAiCredits?: number,
   maxSessionAttempts = DEFAULT_FRESH_SESSION_ATTEMPTS,
@@ -1955,6 +1998,7 @@ function scanRecipe(
           ),
           ...(sarifSourceRoot === undefined ? {} : { sarifSourceRoot }),
         }),
+    ...(secretBaselinePath === undefined ? {} : { secretBaselinePath }),
     ...(maxCostUsd === undefined ? {} : { maxCostUsd }),
     ...(maxAiCredits === undefined ? {} : { maxAiCredits }),
     maxSessionAttempts,

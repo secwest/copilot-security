@@ -25,6 +25,20 @@ repository, so benchmark evidence is derived from the claimed source range.
 Presence and substantive-quality flags are both retained in per-match
 diagnostics.
 
+## Local secret-candidate microbenchmark
+
+`secret-candidate-manifest.json` exercises the deterministic pre-model secret
+engine separately from the multi-run model benchmark. Its typed positives cover
+GitHub, GitLab, Slack, Stripe, npm, PyPI, SendGrid, Google, AWS, private-key
+material, and generic high-entropy credential assignment. Placeholder,
+low-entropy, environment-reference, and public-key controls must remain quiet.
+
+The manifest stores only disjoint construction fragments. The Bun regression
+materializes complete values inside a private temporary repository, requires
+1.0 precision and 1.0 recall, and proves no materialized value reaches the
+inventory. This keeps the public scanner repository self-scannable without
+embedding credential-shaped benchmark strings.
+
 The versioned corpus currently contains forty-nine vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable

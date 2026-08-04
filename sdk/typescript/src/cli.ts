@@ -156,6 +156,7 @@ const VALUE_OPTIONS = new Set([
   "--knowledge-base",
   "--seed-sarif",
   "--sarif-source-root",
+  "--secret-baseline",
   "--diff",
   "--head",
   "--base",
@@ -206,6 +207,7 @@ interface ScanArguments {
   knowledgeBasePaths: string[];
   seedSarifPaths: string[];
   sarifSourceRoot?: string;
+  secretBaselinePath?: string;
   diff?: string;
   workingTree: boolean;
   head?: string;
@@ -1018,6 +1020,11 @@ export async function main(
             .describe(
               "Original source root used to map absolute paths in imported SARIF.",
             ),
+          secretBaseline: optionValue("--secret-baseline")
+            .optional()
+            .describe(
+              "Use an expiring, justified local secret-fingerprint baseline JSON file.",
+            ),
           diff: optionValue("--diff")
             .optional()
             .describe("Scan committed Git changes from BASE to --head."),
@@ -1157,6 +1164,7 @@ export async function main(
             knowledgeBasePaths: options.knowledgeBase,
             seedSarifPaths: options.seedSarif,
             sarifSourceRoot: options.sarifSourceRoot,
+            secretBaselinePath: options.secretBaseline,
             diff: options.diff,
             workingTree: options.workingTree,
             head: options.head,
@@ -1788,6 +1796,15 @@ function scanArgumentsFromRecipe(
       "The saved scan recipe contains an invalid SARIF source root.",
     );
   }
+  const secretBaselinePath = recipe["secretBaselinePath"];
+  if (
+    secretBaselinePath !== undefined &&
+    (typeof secretBaselinePath !== "string" || secretBaselinePath.length === 0)
+  ) {
+    throw new CopilotSecurityError(
+      "The saved scan recipe contains an invalid secret baseline path.",
+    );
+  }
   const kind = target["kind"];
   if (
     kind !== "repository" &&
@@ -1876,6 +1893,7 @@ function scanArgumentsFromRecipe(
     knowledgeBasePaths,
     seedSarifPaths,
     sarifSourceRoot,
+    secretBaselinePath,
     diff: kind === "refs" ? reference : undefined,
     workingTree: kind === "working_tree",
     head: kind === "refs" ? head ?? "HEAD" : undefined,
@@ -2613,6 +2631,7 @@ async function runScan(
       knowledgeBasePaths: arguments_.knowledgeBasePaths,
       seedSarifPaths: arguments_.seedSarifPaths,
       sarifSourceRoot: arguments_.sarifSourceRoot,
+      secretBaselinePath: arguments_.secretBaselinePath,
       mode: arguments_.mode,
       outputDir: arguments_.outputDir,
       archiveExisting: arguments_.archiveExisting,

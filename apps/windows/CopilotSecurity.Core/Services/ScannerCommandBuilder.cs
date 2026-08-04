@@ -129,6 +129,11 @@ public sealed class ScannerCommandBuilder
             arguments.Add("--sarif-source-root");
             arguments.Add(PathPolicy.ExistingDirectory(request.SarifSourceRoot, "SARIF source root"));
         }
+        if (!string.IsNullOrWhiteSpace(request.SecretBaselinePath))
+        {
+            arguments.Add("--secret-baseline");
+            arguments.Add(PathPolicy.ExistingFile(request.SecretBaselinePath, "Secret baseline"));
+        }
 
         if (request.FailOnSeverity is not null)
         {

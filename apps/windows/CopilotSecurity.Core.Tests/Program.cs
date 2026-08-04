@@ -39,6 +39,9 @@ static Task TestScanCommandAsync()
     var repository = fixture.Directory("repository");
     var include = fixture.File(Path.Combine("repository", "scope & literal", "entry.ts"), "export {};\n");
     var sarif = fixture.File("analysis results.sarif", "{\"version\":\"2.1.0\",\"runs\":[]}");
+    var secretBaseline = fixture.File(
+        "secret baseline.json",
+        "{\"schemaVersion\":\"1.0\",\"entries\":[]}\n");
     var output = Path.Combine(fixture.Root, "results");
     var installation = fixture.Installation();
     var request = new ScanRequest
@@ -49,6 +52,7 @@ static Task TestScanCommandAsync()
         IncludePaths = [include],
         SarifSeedPaths = [sarif],
         SarifSourceRoot = repository,
+        SecretBaselinePath = secretBaseline,
         MaximumAiCredits = null,
     };
 
@@ -57,6 +61,8 @@ static Task TestScanCommandAsync()
     Assert.True(invocation.Arguments.Contains("scope & literal/entry.ts"), "Scoped path must remain one literal argument.");
     Assert.True(invocation.Arguments.Contains(Path.GetFullPath(sarif)), "SARIF seed must remain one literal argument.");
     Assert.True(invocation.Arguments.Contains("--sarif-source-root"), "SARIF source root must be explicit when supplied.");
+    Assert.True(invocation.Arguments.Contains("--secret-baseline"), "Secret baseline must be explicit when supplied.");
+    Assert.True(invocation.Arguments.Contains(Path.GetFullPath(secretBaseline)), "Secret baseline must remain one literal argument.");
     Assert.False(invocation.Arguments.Any(argument => argument.Contains("cmd.exe", StringComparison.OrdinalIgnoreCase)), "No shell may be introduced.");
     Assert.Equal(Path.GetFullPath(installation.StateRoot), invocation.Environment["COPILOT_SECURITY_HOME"]);
     Assert.Equal(Path.GetFullPath(installation.CopilotExecutable), invocation.Environment["COPILOT_CLI_PATH"]);

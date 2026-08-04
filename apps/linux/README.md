@@ -7,6 +7,7 @@ This directory contains the native Linux desktop application. It uses Avalonia o
 - standard and deep scans of a repository, committed diff, working tree, or explicit path scope;
 - model, reasoning-effort, authentication, cost, and optional AI-credit controls;
 - repeatable knowledge-base and SARIF candidate inputs;
+- optional expiring local secret-fingerprint baseline input;
 - live stage/progress output, elapsed time, cancellation, and process-tree termination;
 - validated findings with evidence, attack path, remediation, native report opening, and JSON/Markdown export;
 - durable sealed scan history and report reload;

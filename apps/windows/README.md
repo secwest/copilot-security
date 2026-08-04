@@ -14,6 +14,8 @@ them.
 - selectable Copilot model, reasoning effort, and authentication mode;
 - repeatable hardened SARIF 2.1.0 candidate imports with optional original
   checkout-root mapping;
+- optional expiring, justified local secret-fingerprint baselines using the
+  scanner's redacted pre-model candidate engine;
 - optional cost and AI-credit ceilings, with no ceiling inferred by default;
 - live progress, elapsed time, bounded output capture, cancellation, and
   process-tree termination;

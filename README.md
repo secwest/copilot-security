@@ -255,6 +255,10 @@ node ./bin/copilot-security.mjs scan C:\code\project `
 node ./bin/copilot-security.mjs scan C:\code\project `
   --seed-sarif C:\analysis\results.sarif `
   --sarif-source-root C:\build\original-checkout
+
+# Apply an expiring, justified local fingerprint baseline
+node ./bin/copilot-security.mjs scan C:\code\project `
+  --secret-baseline C:\security-policy\project-secrets.json
 ```
 
 ### Hybrid SARIF candidate review
@@ -280,6 +284,23 @@ reruns use the same inputs.
 
 See [`docs/scanner-landscape.md`](docs/scanner-landscape.md) for the design
 comparison and improvement backlog derived from other mature scanners.
+
+### Local secret candidates
+
+Before Copilot starts, the trusted host scans bounded plaintext files for typed
+credential forms and high-entropy credential assignments. Candidate bytes
+never enter the detector's prompt inventory, report, baseline, diagnostics, or
+errors. The model receives only an active rule, exact location, redacted shape,
+and repository-scoped keyed HMAC; justified unexpired exact-match baselines are
+removed locally, while expired entries become active automatically. Redacted
+reports, the random key, and per-repository default baselines live only beneath
+`COPILOT_SECURITY_HOME/copilot-security-home/secret-scanner`.
+
+Use `--secret-baseline PATH`, SDK `secretBaselinePath`, or the Windows/Linux GUI
+to select a strict schema 1.0 baseline. Invalid, linked, duplicate, missing, or
+unbounded baseline input fails before Copilot is invoked. See
+[`docs/secret-scanning.md`](docs/secret-scanning.md) for rule coverage, the
+baseline schema, key isolation, privacy limits, and benchmark procedure.
 
 The dedicated `benchmarks/sarif-seed-manifest.json` campaign pairs a real
 command-injection seed with a deliberately noisy safe-process-execution seed.
@@ -516,7 +537,9 @@ history, diagnostics, corpus evaluation, and baseline/candidate effectiveness
 comparison.
 The New scan tab also accepts repeatable SARIF seed files and an optional
 original SARIF source root, using the same hardened normalization and
-independent-review contract as the CLI and SDK.
+independent-review contract as the CLI and SDK. It also accepts the same
+expiring secret-fingerprint baseline as the CLI without placing credential
+bytes in GUI settings or command output.
 
 Both desktop applications remain clients of this standalone scanner. They do
 not duplicate prompts or model orchestration, invoke a command shell, share

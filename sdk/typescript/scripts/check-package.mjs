@@ -162,6 +162,7 @@ const distFiles = new Set(
     "sarif-seeds",
     "scan-comparison",
     "scan-history-renderer",
+    "secret-candidates",
     "targets",
     "trusted-executable",
     "version",

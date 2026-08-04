@@ -289,6 +289,12 @@ export function renderScanHistory(
         }`,
       );
     }
+    const secretBaseline = recipe?.["secretBaselinePath"];
+    if (typeof secretBaseline === "string" && secretBaseline.length > 0) {
+      lines.push(
+        `  ${strong("SECRET BASELINE")}  ${dim(clean(secretBaseline))}`,
+      );
+    }
     const artifacts = result["artifacts"] as JsonObject | undefined;
     if (artifacts && Object.keys(artifacts).length > 0) {
       lines.push(`  ${strong("ARTIFACTS")}`);

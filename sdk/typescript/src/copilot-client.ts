@@ -38,6 +38,11 @@ import {
   buildFindingQualityGapInventory,
   buildResidualRiskInventory,
 } from "./residual-risk.js";
+import {
+  buildSecretCandidateInventory,
+  SecretScanningError,
+  type PreparedSecretScanning,
+} from "./secret-candidates.js";
 
 export const DEFAULT_MODEL_TURN_TIMEOUT_MILLISECONDS = 60 * 60 * 1_000;
 export const DEFAULT_FRESH_SESSION_ATTEMPTS = 3;
@@ -322,6 +327,11 @@ export interface CopilotScannerOptions {
   analysisWorkspace?: string;
   maxAiCredits?: number;
   maxSessionAttempts?: number;
+  secretScanning?: PreparedSecretScanning & {
+    repository: string;
+    scanId: string;
+    includePaths?: readonly string[];
+  };
 }
 
 interface ScannerEvent {
@@ -490,6 +500,18 @@ class CopilotThread implements CopilotScannerThread {
     const completionGuard = setInterval(() => undefined, 60_000);
     void (async () => {
       try {
+        const secretCandidateInventory =
+          this.#options.secretScanning === undefined
+            ? ""
+            : (
+                await buildSecretCandidateInventory(
+                  this.#options.secretScanning.repository,
+                  this.#options.secretScanning,
+                  this.#options.secretScanning.scanId,
+                  new Date(),
+                  this.#options.secretScanning.includePaths,
+                )
+              ).inventory;
         await runWithFreshCopilotSessions({
           maxAttempts: maxSessionAttempts,
           signal: options.signal,
@@ -673,6 +695,7 @@ class CopilotThread implements CopilotScannerThread {
                 ]);
                 await runScanQualityCorrection({
                   residualRiskInventory,
+                  secretCandidateInventory,
                   coverageGapInventory,
                   findingQualityGapInventory,
                   sendPrompt: async (prompt) => {
@@ -705,6 +728,7 @@ class CopilotThread implements CopilotScannerThread {
               } catch (error) {
                 if (freshSessionRetryReason(error) !== null) throw error;
                 if (error instanceof ScanClosureIncompleteError) throw error;
+                if (error instanceof SecretScanningError) throw error;
                 if (!(await hasDraftArtifacts(this.#options.environment))) {
                   throw error;
                 }
@@ -1107,6 +1131,7 @@ export interface ScanClosureGapCounts {
 
 interface ScanQualityCorrectionOptions extends ScanClosureInventories {
   residualRiskInventory: string;
+  secretCandidateInventory?: string;
   sendPrompt(prompt: string): Promise<void>;
   readClosureInventories(): Promise<ScanClosureInventories>;
   maxRepairAttempts?: number;
@@ -1126,6 +1151,7 @@ export async function runScanQualityCorrection(
       options.residualRiskInventory,
       options.coverageGapInventory,
       options.findingQualityGapInventory,
+      options.secretCandidateInventory,
     ),
   );
 
@@ -1248,10 +1274,12 @@ export function scanQualityGatePrompt(
   residualRiskInventory: string,
   coverageGapInventory = "",
   findingQualityGapInventory = "",
+  secretCandidateInventory = "",
 ): string {
   const residualRiskData = promptSafeData(residualRiskInventory);
   const coverageGapData = promptSafeData(coverageGapInventory);
   const findingQualityGapData = promptSafeData(findingQualityGapInventory);
+  const secretCandidateData = promptSafeData(secretCandidateInventory);
   return [
     "Mandatory Copilot Security quality gate. Continue the same scan; do not summarize or stop early.",
     "Reopen the repository source and all three draft artifacts.",
@@ -1284,6 +1312,14 @@ export function scanQualityGatePrompt(
           "<residual-risk-inventory>",
           residualRiskData,
           "</residual-risk-inventory>",
+        ]),
+    ...(secretCandidateInventory === ""
+      ? []
+      : [
+          "The host also ran a deterministic local secret scan before this model turn. The JSONL below contains a summary followed only by active, unsuppressed candidates. The detector never placed secret bytes in this prompt: shape.redacted, length, character classes, and entropy band are structural metadata, while fingerprint is a local keyed HMAC that cannot recover the value. Treat an exact active row as a high-priority hardcoded-credential lead at its path and line. Do not reopen or view the candidate line or any source range containing it merely to validate the detector; inspect only separate surrounding or consuming code when repository context is needed. Never ask to reveal, print, copy, decode, reconstruct, or validate the secret value itself, and do not invent a value from its rule or shape. A missing row is not proof that a repository contains no secrets. If the summary says truncated=true, preserve that explicit incomplete secret-pass limitation rather than claiming repository-wide secret absence. Active expiring baselines are host-applied and omitted; expired entries remain active. Report a proven committed credential using the row's rule, path, line, redacted shape, and opaque fingerprint, and recommend revocation and history cleanup without reproducing the credential.",
+          "<secret-candidate-inventory>",
+          secretCandidateData,
+          "</secret-candidate-inventory>",
         ]),
     ...(coverageGapInventory === ""
       ? []

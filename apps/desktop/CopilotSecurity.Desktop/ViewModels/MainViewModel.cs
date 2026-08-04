@@ -38,6 +38,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string knowledgeBasePaths = string.Empty;
     private string sarifSeedPaths = string.Empty;
     private string sarifSourceRoot = string.Empty;
+    private string secretBaselinePath = string.Empty;
     private string maximumCost = string.Empty;
     private string maximumCredits = string.Empty;
     private string status = "Ready";
@@ -131,6 +132,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string KnowledgeBasePaths { get => knowledgeBasePaths; set => SetProperty(ref knowledgeBasePaths, value); }
     public string SarifSeedPaths { get => sarifSeedPaths; set => SetProperty(ref sarifSeedPaths, value); }
     public string SarifSourceRoot { get => sarifSourceRoot; set => SetProperty(ref sarifSourceRoot, value); }
+    public string SecretBaselinePath { get => secretBaselinePath; set => SetProperty(ref secretBaselinePath, value); }
     public string MaximumCost { get => maximumCost; set => SetProperty(ref maximumCost, value); }
     public string MaximumCredits { get => maximumCredits; set => SetProperty(ref maximumCredits, value); }
     public string Status { get => status; private set => SetProperty(ref status, value); }
@@ -230,6 +232,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     : Path.IsPathRooted(SarifSourceRoot)
                         ? SarifSourceRoot
                         : Path.Combine(RepositoryPath, SarifSourceRoot),
+                SecretBaselinePath = string.IsNullOrWhiteSpace(SecretBaselinePath)
+                    ? null
+                    : Path.IsPathRooted(SecretBaselinePath)
+                        ? SecretBaselinePath
+                        : Path.Combine(RepositoryPath, SecretBaselinePath),
                 MaximumCostUsd = ParseOptionalDecimal(MaximumCost, "Maximum cost"),
                 MaximumAiCredits = ParseOptionalInt(MaximumCredits, "Maximum credits"),
             };
