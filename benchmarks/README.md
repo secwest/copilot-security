@@ -500,6 +500,35 @@ go test ./...
 Pop-Location
 ```
 
+The sqlx lane measures exact upstream import and typed DB/Tx/Conn identity,
+receiver and package-helper query positions, destination-before-query
+`Select`/`Get`, named-value exclusion, placeholder rebinding, and extended
+statement execution closure. The positive formats the request value into a
+`DB.Select` query and exposes an internal record. The matched control preserves
+the same topology while passing identical bytes as one placeholder value. Both
+fixtures use an offline API-compatible sqlx adapter over a deterministic
+standard-library driver:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/go-sqlx-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-go-sqlx-sql-injection `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+Push-Location fixtures\go-cross-file-sqlx-sqli
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-sqlx
+go test ./...
+Pop-Location
+```
+
 The pgx v5 lane adds exact `pgx` and `pgxpool` import and receiver identity,
 context/SQL/value argument roles, fixed prepared-name execution, and typed
 batch queue-to-`SendBatch` closure. It separately resolves exact local custom

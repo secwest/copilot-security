@@ -43,7 +43,7 @@ The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
 paths, server-side request forgery, and object authorization; a separate Go
 `net/http` model covers server-side request forgery, while typed
-`database/sql`, `pgx/v5`, `pgxpool`, and low-level `pgconn` models cover
+`database/sql`, `sqlx`, `pgx/v5`, `pgxpool`, and low-level `pgconn` models cover
 request-to-query grammar and deferred database dispatch;
 and Node, Python, and Spring models cover server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
@@ -713,6 +713,28 @@ Push-Location benchmarks\fixtures\go-cross-file-sql-injection
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-sql
+go test ./...
+Pop-Location
+```
+
+The sqlx lane separately requires the exact `github.com/jmoiron/sqlx` import
+and a proven DB, Tx, or Conn handle. It preserves destination-before-query
+`Select`/`Get`, receiver and package helper signatures, named bindings,
+placeholder rebinding, and extended statement execution. The positive exposes
+an internal record through request-derived `DB.Select` grammar; the matched
+offline control keeps the same bytes in one bound value:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/go-sqlx-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\go-sqlx-sql-injection `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+Push-Location benchmarks\fixtures\go-cross-file-sqlx-sqli
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-sqlx
 go test ./...
 Pop-Location
 ```

@@ -155,6 +155,7 @@ const distFiles = new Set(
     "go-pgconn-risk",
     "go-pgx-risk",
     "go-sql-risk",
+    "go-sqlx-risk",
     "index",
     "knowledge-base",
     "model-draft-recovery",

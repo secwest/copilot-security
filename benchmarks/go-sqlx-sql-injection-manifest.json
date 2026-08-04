@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "completionRate": 1,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "casePassRate": 1,
+    "negativeControlPassRate": 1,
+    "stableDetectionRate": 1,
+    "validationCoverage": 1,
+    "attackPathCoverage": 1,
+    "codeEvidenceCoverage": 1,
+    "severityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "go-cross-file-sqlx-sqli",
+      "fixture": "fixtures/go-cross-file-sqlx-sqli",
+      "expected": [
+        {
+          "title": "Go sqlx Select receives request-derived query grammar",
+          "cwe": ["CWE-89"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "search.go",
+          "line": 12,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-file-safe-sqlx",
+      "fixture": "fixtures/go-cross-file-safe-sqlx",
+      "expected": []
+    }
+  ]
+}
