@@ -557,6 +557,35 @@ go test ./...
 Pop-Location
 ```
 
+The Masterminds/Squirrel lane measures exact upstream import, builder and
+runner identity, structural-versus-bound argument roles, immutable fluent and
+assigned propagation, helper dispatch, materialization, preparation, and
+execution closure. The positive formats the request value into a `Where`
+predicate and proves `RunWith(...).Query()` exposes an internal record. The
+matched control preserves the same topology and bytes but supplies them only
+after a placeholder. Both fixtures use an offline signature-compatible
+Squirrel subset over a deterministic standard-library driver:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/go-squirrel-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-go-squirrel-sql-injection `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+Push-Location fixtures\go-cross-file-squirrel-sqli
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-squirrel
+go test ./...
+Pop-Location
+```
+
 The pgx v5 lane adds exact `pgx` and `pgxpool` import and receiver identity,
 context/SQL/value argument roles, fixed prepared-name execution, and typed
 batch queue-to-`SendBatch` closure. It separately resolves exact local custom

@@ -43,8 +43,9 @@ The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
 paths, server-side request forgery, and object authorization; a separate Go
 `net/http` model covers server-side request forgery, while typed
-`database/sql`, `sqlx`, GORM v2, `pgx/v5`, `pgxpool`, and low-level `pgconn`
-models cover request-to-query grammar and deferred database dispatch;
+`database/sql`, `sqlx`, GORM v2, Masterminds/Squirrel, `pgx/v5`, `pgxpool`,
+and low-level `pgconn` models cover request-to-query grammar and deferred
+database dispatch;
 and Node, Python, and Spring models cover server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
@@ -761,6 +762,34 @@ Push-Location benchmarks\fixtures\go-cross-file-gorm-sqli
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-gorm
+go test ./...
+Pop-Location
+```
+
+The Squirrel lane requires the exact `github.com/Masterminds/squirrel` import,
+a typed immutable builder or `Sqlizer`, and a proven Squirrel or
+`database/sql` runner. It treats structural strings in constructors, joins,
+columns, grouping, ordering, prefixes, suffixes, `Expr`, `ConcatExpr`,
+`Alias`, and `Case` as query grammar while keeping placeholder arguments,
+`Values`, `Set` values, and `Where`/`Having` map or `Eq` values as data.
+`RunWith` alone is inert: the same builder must reach an execution method, an
+exact package helper, or materialized SQL that later reaches typed database or
+prepared-statement execution. `DebugSqlizer` output is retained only when it
+is actually executed. The matched offline modules prove both an injected
+`Where(...).RunWith(...).Query()` predicate and bound-value isolation without
+a database service or dependency download:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/go-squirrel-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\go-squirrel-sql-injection `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+Push-Location benchmarks\fixtures\go-cross-file-squirrel-sqli
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-squirrel
 go test ./...
 Pop-Location
 ```

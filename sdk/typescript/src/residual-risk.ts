@@ -20,6 +20,7 @@ import { goPgconnSqlInjectionRecords } from "./go-pgconn-risk.js";
 import { goPgxSqlInjectionRecords } from "./go-pgx-risk.js";
 import { goSqlInjectionRecords } from "./go-sql-risk.js";
 import { goSqlxSqlInjectionRecords } from "./go-sqlx-risk.js";
+import { goSquirrelSqlInjectionRecords } from "./go-squirrel-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -1755,6 +1756,7 @@ export async function buildResidualRiskInventory(
   records.push(...goGormSqlInjectionRecords(sourceFiles));
   records.push(...goSqlInjectionRecords(sourceFiles));
   records.push(...goSqlxSqlInjectionRecords(sourceFiles));
+  records.push(...goSquirrelSqlInjectionRecords(sourceFiles));
   records.push(...goPgxSqlInjectionRecords(sourceFiles));
   records.push(...goPgconnSqlInjectionRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));

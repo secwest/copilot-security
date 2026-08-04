@@ -65,6 +65,16 @@ The package is ESM-only and provides:
   `gorm.Expr` argument while excluding later placeholder values. Unexecuted or
   reassigned builders, forks and legacy imports, untyped methods, fixed fragment
   maps, and ambiguous wrappers are rejected.
+  A separate Masterminds/Squirrel model requires the exact upstream import,
+  typed builders or `Sqlizer` values, and proven Squirrel or `database/sql`
+  runners. It preserves structural constructor and method arguments across
+  immutable fluent and assigned builders, nested `Expr`/`ConcatExpr`/`Alias`/
+  `Case` values, exact package helpers, and `ToSql`/`MustSql` or
+  `DebugSqlizer` materialization. Deferred builders must reach a real execution
+  method, and materialized or prepared query text must later execute. Bound
+  placeholder, `Values`, `Set`, map, and `Eq` values; runnerless builders;
+  unrelated `Rows.Scan`; lookalikes; arbitrary runners; reassignment; and
+  ambiguous wrappers are rejected.
   A separate pgx v5 model requires exact `pgx` or `pgxpool` imports and typed
   Conn, Tx, or Pool receivers. It preserves the context/SQL/value split,
   follows fixed prepared names on the same receiver, and reports queued SQL
