@@ -154,6 +154,7 @@ const distFiles = new Set(
     "go-exec-risk",
     "go-gorm-risk",
     "go-http-risk",
+    "go-object-authorization-risk",
     "go-path-risk",
     "go-pgconn-risk",
     "go-pgx-risk",

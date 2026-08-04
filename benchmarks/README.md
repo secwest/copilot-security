@@ -574,6 +574,35 @@ go test ./...
 Pop-Location
 ```
 
+The Go HTTP object-authorization lane measures a different boundary from SQL
+injection: the SQL remains fixed and parameterized, but an attacker-controlled
+object ID can select another principal's record. The positive fixture carries
+a path value through one same-package wrapper into an ID-only `QueryRow`, then
+scans and returns the victim secret. The matched control adds an account
+predicate bound to a principal obtained from the request context. Deterministic
+standard-library drivers prove the cross-account disclosure, the blocked
+attack, and a successful owned-object read without a database service:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/go-http-object-authorization-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-go-http-object-authorization `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+Push-Location fixtures\go-cross-file-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-authorization
+go test ./...
+Pop-Location
+```
+
 The sqlx lane measures exact upstream import and typed DB/Tx/Conn identity,
 receiver and package-helper query positions, destination-before-query
 `Select`/`Get`, named-value exclusion, placeholder rebinding, and extended

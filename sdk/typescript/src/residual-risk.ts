@@ -16,6 +16,7 @@ import {
 } from "./github-actions-risk.js";
 import { goExecInjectionRecords } from "./go-exec-risk.js";
 import { goHttpSsrfRecords } from "./go-http-risk.js";
+import { goObjectAuthorizationRecords } from "./go-object-authorization-risk.js";
 import { goPathTraversalRecords } from "./go-path-risk.js";
 import { goTemplateInjectionRecords } from "./go-template-risk.js";
 import { goGormSqlInjectionRecords } from "./go-gorm-risk.js";
@@ -1759,6 +1760,7 @@ export async function buildResidualRiskInventory(
   records.push(...goHttpSsrfRecords(sourceFiles));
   records.push(...goPathTraversalRecords(sourceFiles));
   records.push(...goTemplateInjectionRecords(sourceFiles));
+  records.push(...goObjectAuthorizationRecords(sourceFiles));
   records.push(...goGormSqlInjectionRecords(sourceFiles));
   records.push(...goSqlInjectionRecords(sourceFiles));
   records.push(...goSqlxSqlInjectionRecords(sourceFiles));

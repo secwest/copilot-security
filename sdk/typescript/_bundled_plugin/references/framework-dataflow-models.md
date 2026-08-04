@@ -400,6 +400,31 @@ interpreter that consumes the value.
   junctions, reparse points, rename races, and the exact read/write/delete
   effect. Lexical containment is not link-safe containment.
 
+### Go HTTP object-level authorization — CWE-639 and CWE-862
+
+- Source: query, form, path, or header data from an exact typed
+  `*net/http.Request`, directly or through one unique same-package string
+  wrapper.
+- Protected effect: the request-derived identifier occupies an object-key
+  equality predicate in fixed SQL executed by an exact typed `*database/sql.DB`,
+  `*database/sql.Tx`, or `*database/sql.Conn`. A read requires `QueryRow`,
+  `Scan`, and disclosure of scanned data; `UPDATE` or `DELETE` through `Exec`
+  is an immediate mutation effect.
+- Authentication, middleware, opaque IDs, parameterized SQL, and a principal-
+  named parameter do not authorize the selected object. Verify the exact
+  placeholder-to-argument mapping, wrapper argument, object, action, and
+  denial path.
+- Strong counterevidence: the same query also binds an owner, tenant, account,
+  organization, user, or workspace predicate to a principal derived from the
+  request context, or a fail-closed comparison of returned ownership data to
+  that context principal dominates every disclosure. A request header or
+  query value used as the owner filter is attacker controlled and is not a
+  control.
+- Reject dynamic or ambiguous query construction, fixed or reassigned object
+  identifiers, immutable server-owned object selection, untyped database
+  lookalikes, generic responses that do not expose selected data, and checks
+  performed after disclosure or mutation.
+
 ### Go HTTP server-side template injection — CWE-1336
 
 - Source: query, form, path, or header data from an exact typed

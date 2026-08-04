@@ -764,6 +764,34 @@ go test ./...
 Pop-Location
 ```
 
+The Go object-authorization lane requires exact `net/http` and
+`database/sql` identities, a typed request-derived object key, a fixed SQL
+object predicate, and a concrete protected effect. Reads close only after
+`QueryRow` data is scanned and disclosed; `UPDATE` and `DELETE` executions are
+immediate state effects. Authentication and bound parameters alone are not
+authorization. The host retains a same-query owner/tenant/account predicate
+only when its value is derived from the authenticated request context, and it
+retains a fail-closed post-lookup ownership comparison only when it dominates
+the response. The paired offline driver witnesses prove that an attacker can
+read a victim invoice through the unscoped lookup and that the context-bound
+account predicate blocks the same cross-account request while preserving an
+owned-object read:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/go-http-object-authorization-manifest.json `
+  --results-dir C:\security-benchmarks\go-http-object-authorization `
+  --runs 1 --selection-only `
+  --auth github --model PROVIDER_MODEL --effort high --mode deep
+
+Push-Location benchmarks\fixtures\go-cross-file-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-authorization
+go test ./...
+Pop-Location
+```
+
 The Go process-execution lane requires exact standard-library `os/exec`, `os`,
 or `syscall` bindings, or the exact `golang.org/x/sys/execabs` binding, plus a
 typed `*http.Request` source. It keeps construction separate from execution: a

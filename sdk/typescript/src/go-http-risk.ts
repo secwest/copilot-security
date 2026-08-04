@@ -208,8 +208,27 @@ export function splitGoArguments(value: string): string[] {
   const result: string[] = [];
   let start = 0;
   let depth = 0;
+  let quote: '"' | "'" | "`" | "" = "";
+  let escaped = false;
   for (let index = 0; index < value.length; index += 1) {
     const character = value[index]!;
+    if (quote !== "") {
+      if (quote === "`") {
+        if (character === "`") quote = "";
+      } else if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === quote) {
+        quote = "";
+      }
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+      escaped = false;
+      continue;
+    }
     if (character === "(" || character === "[" || character === "{") {
       depth += 1;
     } else if (character === ")" || character === "]" || character === "}") {

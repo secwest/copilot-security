@@ -70,7 +70,15 @@ The package is ESM-only and provides:
   source with request-only execution data, `html/template`, reassignment,
   immutable source selection, package lookalikes, and ambiguous wrappers are
   rejected; `FuncMap` and execution-data capabilities remain explicit review
-  evidence. A typed
+  evidence. A typed Go object-authorization model requires exact `net/http`
+  and `database/sql` identities and preserves a request object key through one
+  unique wrapper into a fixed SQL equality predicate on a typed DB, Tx, or
+  Conn. Reads require `QueryRow`, `Scan`, and disclosure; updates and deletes
+  require exact `Exec` dispatch. Same-query security predicates count only
+  when bound to a context-derived principal, and fail-closed returned-owner
+  comparisons remain explicit control evidence. Fixed or reassigned IDs,
+  immutable selection maps, attacker-controlled owner filters, dynamic SQL,
+  generic responses, lookalikes, and ambiguous wrappers are rejected. A typed
   Go SQL model separately preserves request input into the exact query-text
   position of standard-library `DB`, `Tx`, and `Conn` operations. Placeholder and
   `sql.Named` values remain data; tainted `Prepare*` text requires later

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "completionRate": 1,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "casePassRate": 1,
+    "negativeControlPassRate": 1,
+    "stableDetectionRate": 1,
+    "validationCoverage": 1,
+    "attackPathCoverage": 1,
+    "codeEvidenceCoverage": 1,
+    "severityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "go-cross-file-idor",
+      "fixture": "fixtures/go-cross-file-idor",
+      "expected": [
+        {
+          "title": "Go invoice endpoint discloses an object selected only by request ID",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "store.go",
+          "line": 16,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-file-safe-authorization",
+      "fixture": "fixtures/go-cross-file-safe-authorization",
+      "expected": []
+    }
+  ]
+}
