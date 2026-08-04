@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "javascript-axios-instance-ssrf",
+      "description": "An HTTP query value crosses a relative module boundary into an Axios instance whose fixed baseURL is overridden by attacker-controlled absolute URLs.",
+      "fixture": "fixtures/javascript-axios-instance-ssrf",
+      "findingsPaths": ["javascript-axios-instance-ssrf/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "javascript-axios-instance-url-ssrf",
+          "cwe": ["CWE-918"],
+          "locations": [
+            {
+              "path": "src/upstream.js",
+              "startLine": 10,
+              "endLine": 10,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-axios-instance-safe-fetch",
+      "description": "The same wrapper accepts only exact keys into server-owned relative paths while Axios rejects absolute URL override and redirects.",
+      "fixture": "fixtures/javascript-axios-instance-safe-fetch",
+      "findingsPaths": [
+        "javascript-axios-instance-safe-fetch/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

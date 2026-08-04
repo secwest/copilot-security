@@ -56,7 +56,13 @@ the public, protected, or internal wrapper parameter, and preserves either an
 annotated bound parameter or an assigned `HttpRequest` field through
 `ProcessStartInfo`/`Process.Start`, the query-text argument of `SqlCommand`,
 `FromSqlRaw`, or `ExecuteSqlRaw`, or a complete outbound `HttpClient` request
-URI. For Node/TypeScript
+URI. For Node/TypeScript, Axios sinks require a real package binding or bounded
+non-reassigned `axios.create(...)` instance and preserve only the URL argument
+or request-config `url` property, never a POST/PUT/PATCH body. A fixed
+`baseURL` is not treated as confinement while Axios can still accept an
+attacker-controlled absolute URL; disabling absolute override, selecting a
+server-owned destination, rejecting redirects, and validating relative paths
+remain separate control leads. For Node/TypeScript
 relative-module wrappers, the host can
 emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
 either one direct wrapper or exactly one public module-level relay through
@@ -375,6 +381,21 @@ with fixed complete-URL selection and redirect-free negative controls:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/ssrf-framework-manifest.json `
   --results-dir C:\security-benchmarks\ssrf-framework `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Axios instance lane isolates client identity and destination-argument
+semantics. Its positive passes an absolute request value through a relative
+module wrapper into an `axios.create(...)` client whose nominal `baseURL` is
+overridden under Axios defaults. Its negative maps the same request shape to
+server-owned relative paths, sets `allowAbsoluteUrls: false`, and disables
+redirects:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/node-axios-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\node-axios-ssrf `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

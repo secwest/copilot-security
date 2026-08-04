@@ -555,7 +555,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
       {
         kind: "outbound-http-url",
         expression:
-          /\b(?:axios|fetch|got)\s*\(|\b(?:axios|got)\.(?:delete|get|head|options|patch|post|put|request)\s*\(|\b(?:https?|undici)\.(?:get|request)\s*\(/iu,
+          /\b(?:axios|fetch|got)\s*\(|\b[A-Za-z_$][\w$]*\s*\.\s*(?:delete|get|head|options|patch|post|put|request)\s*(?:<[^;(){}]+>)?\s*\(|\b(?:https?|undici)\.(?:get|request)\s*\(/iu,
         cweIds: ["CWE-918"],
       },
     ],
@@ -577,6 +577,15 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
       {
         kind: "redirects-disabled",
         expression: /\bmaxRedirects\s*:\s*0\b|\bredirect\s*:\s*["']error["']/iu,
+      },
+      {
+        kind: "axios-absolute-url-override-disabled",
+        expression: /\ballowAbsoluteUrls\s*:\s*false\b/iu,
+      },
+      {
+        kind: "relative-url-path-validation",
+        expression:
+          /\b(?:allowedPaths?|isSafeRelativePath|safeRelativePaths?|validateRelativePath)\b/iu,
       },
       {
         kind: "network-address-validation-or-pinning",
@@ -1610,19 +1619,44 @@ function frameworkDataflowRecords(
           ? matchingJavaModelLines(lines, model.sources, 16)
           : matchingModelLines(lines, model.sources, 16);
     const sinks = JAVASCRIPT_EXTENSIONS.has(extension)
-      ? matchingJavascriptModelLines(lines, model.sinks, 8)
+      ? matchingJavascriptModelLines(
+          lines,
+          model.sinks,
+          model.id === "node-http-ssrf" ? 64 : 8,
+        )
       : PYTHON_EXTENSIONS.has(extension)
         ? matchingPythonModelLines(lines, model.sinks, 8)
         : extension === ".java" || extension === ".cs"
           ? matchingJavaModelLines(lines, model.sinks, 8)
           : matchingModelLines(lines, model.sinks, 8);
     if (sources.length === 0 || sinks.length === 0) continue;
-    const controls = PYTHON_EXTENSIONS.has(extension)
-      ? matchingPythonModelLines(lines, model.controls, 24)
-      : extension === ".java" || extension === ".cs"
-        ? matchingJavaModelLines(lines, model.controls, 24)
-        : matchingModelLines(lines, model.controls, 24);
+    const controls = JAVASCRIPT_EXTENSIONS.has(extension)
+      ? model.id === "node-http-ssrf"
+        ? matchingJavascriptControlLines(lines, model.controls, 24)
+        : matchingModelLines(lines, model.controls, 24)
+      : PYTHON_EXTENSIONS.has(extension)
+        ? matchingPythonModelLines(lines, model.controls, 24)
+        : extension === ".java" || extension === ".cs"
+          ? matchingJavaModelLines(lines, model.controls, 24)
+          : matchingModelLines(lines, model.controls, 24);
     for (const sink of sinks) {
+      const nodeHttpSink =
+        model.id === "node-http-ssrf"
+          ? nodeHttpUrlSink(lines, sink.line)
+          : undefined;
+      if (model.id === "node-http-ssrf" && nodeHttpSink === undefined) {
+        continue;
+      }
+      if (
+        nodeHttpSink?.axiosReceiver !== undefined &&
+        javascriptAxiosReceiverShadowedInExport(
+          lines,
+          sink.line,
+          nodeHttpSink.axiosReceiver,
+        )
+      ) {
+        continue;
+      }
       if (
         model.id === "aspnet-http-ssrf" &&
         !dotnetHttpClientSinkHasTypedReceiver(lines, sink.line)
@@ -1658,16 +1692,32 @@ function frameworkDataflowRecords(
         continue;
       }
       const source =
-        extension === ".java" &&
-        (model.id === "spring-http-ssrf" || model.id === "spring-http-path")
-          ? modeledSameFileJavaSource(lines, sink.line, model.id, model.sources)
-          : extension === ".cs" && model.id === "aspnet-http-template-injection"
-            ? modeledSameFileDotnetTemplateSource(
+        model.id === "node-http-ssrf" &&
+        nodeHttpSink?.urlExpression !== undefined
+          ? modeledCallSource(
+              lines,
+              sources,
+              sink.line,
+              nodeHttpSink.urlExpression,
+              model.sources,
+            )
+          : extension === ".java" &&
+              (model.id === "spring-http-ssrf" ||
+                model.id === "spring-http-path")
+            ? modeledSameFileJavaSource(
                 lines,
                 sink.line,
+                model.id,
                 model.sources,
               )
-            : nearestModeledSource(sources, sink.line);
+            : extension === ".cs" &&
+                model.id === "aspnet-http-template-injection"
+              ? modeledSameFileDotnetTemplateSource(
+                  lines,
+                  sink.line,
+                  model.sources,
+                )
+              : nearestModeledSource(sources, sink.line);
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -1680,10 +1730,14 @@ function frameworkDataflowRecords(
         : [];
       const nearbyControls = [
         ...sinkExpressionControls,
+        ...(model.id === "node-http-ssrf" && nodeHttpSink !== undefined
+          ? nodeAxiosConfigurationControls(lines, nodeHttpSink, model.controls)
+          : []),
         ...controls.filter(
           (control) =>
             control.line >= Math.min(source.line, sink.line) - 8 &&
-            control.line <= Math.max(source.line, sink.line) + 8,
+            control.line <= Math.max(source.line, sink.line) + 8 &&
+            nodeHttpGeneralControlApplies(nodeHttpSink, control.kind),
         ),
       ]
         .filter(
@@ -3598,7 +3652,10 @@ function javascriptFrameworkWrapperSummaries(
         continue;
       }
       const sinks = matchingJavascriptModelLines(file.lines, model.sinks, 32);
-      const controls = matchingModelLines(file.lines, model.controls, 64);
+      const controls =
+        model.id === "node-http-ssrf"
+          ? matchingJavascriptControlLines(file.lines, model.controls, 64)
+          : matchingModelLines(file.lines, model.controls, 64);
       for (const wrapper of exportedFunctions) {
         for (const sink of sinks) {
           if (sink.line < wrapper.startLine || sink.line > wrapper.endLine) {
@@ -3607,9 +3664,23 @@ function javascriptFrameworkWrapperSummaries(
           const sinkLine = javascriptCodeBeforeComment(
             file.lines[sink.line - 1] ?? "",
           );
+          const nodeHttpSink =
+            model.id === "node-http-ssrf"
+              ? nodeHttpUrlSink(file.lines, sink.line)
+              : undefined;
+          if (model.id === "node-http-ssrf" && nodeHttpSink === undefined) {
+            continue;
+          }
+          if (
+            nodeHttpSink?.axiosReceiver !== undefined &&
+            wrapper.parameters.includes(nodeHttpSink.axiosReceiver)
+          ) {
+            continue;
+          }
+          const sinkValue = nodeHttpSink?.urlExpression ?? sinkLine;
           const parameterIndexes = wrapper.parameters.flatMap(
             (parameter, parameterIndex) =>
-              lineReferencesIdentifier(sinkLine, parameter)
+              lineReferencesIdentifier(sinkValue, parameter)
                 ? [parameterIndex]
                 : [],
           );
@@ -3618,6 +3689,28 @@ function javascriptFrameworkWrapperSummaries(
             (pattern) => pattern.kind === sink.kind,
           );
           if (sinkPattern === undefined) continue;
+          const wrapperControls = [
+            ...controls.filter(
+              (control) =>
+                control.line >= wrapper.startLine &&
+                control.line <= wrapper.endLine &&
+                nodeHttpGeneralControlApplies(nodeHttpSink, control.kind),
+            ),
+            ...(model.id === "node-http-ssrf" && nodeHttpSink !== undefined
+              ? nodeAxiosConfigurationControls(
+                  file.lines,
+                  nodeHttpSink,
+                  model.controls,
+                )
+              : []),
+          ].filter(
+            (control, index, all) =>
+              all.findIndex(
+                (candidate) =>
+                  candidate.kind === control.kind &&
+                  candidate.line === control.line,
+              ) === index,
+          );
           for (const parameterIndex of parameterIndexes) {
             summaries.push({
               model,
@@ -3627,13 +3720,7 @@ function javascriptFrameworkWrapperSummaries(
               parameterIndex,
               declarationLine: wrapper.startLine,
               sink: { ...sink, cweIds: sinkPattern.cweIds },
-              controls: controls
-                .filter(
-                  (control) =>
-                    control.line >= wrapper.startLine &&
-                    control.line <= wrapper.endLine,
-                )
-                .slice(0, 8),
+              controls: wrapperControls.slice(0, 8),
             });
           }
         }
@@ -4309,6 +4396,56 @@ function javascriptCodeBeforeComment(line: string): string {
     }
   }
   return line;
+}
+
+function javascriptCodeLinesWithoutComments(
+  lines: readonly string[],
+): string[] {
+  const result: string[] = [];
+  let blockComment = false;
+  for (const line of lines) {
+    const output = [...line];
+    let quote = "";
+    let escaped = false;
+    for (let index = 0; index < output.length; index += 1) {
+      const character = line[index]!;
+      const next = line[index + 1] ?? "";
+      if (blockComment) {
+        output[index] = " ";
+        if (character === "*" && next === "/") {
+          if (index + 1 < output.length) output[index + 1] = " ";
+          index += 1;
+          blockComment = false;
+        }
+        continue;
+      }
+      if (quote !== "") {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === quote) quote = "";
+        continue;
+      }
+      if (character === "/" && next === "*") {
+        output[index] = " ";
+        if (index + 1 < output.length) output[index + 1] = " ";
+        index += 1;
+        blockComment = true;
+      } else if (character === "/" && next === "/") {
+        output.fill(" ", index);
+        break;
+      } else if (character === '"' || character === "'" || character === "`") {
+        quote = character;
+      }
+    }
+    result.push(output.join(""));
+  }
+  return result;
+}
+
+function javascriptStructuralLines(lines: readonly string[]): string[] {
+  return javascriptCodeLinesWithoutComments(lines).map((line) =>
+    javascriptStructuralCode(line),
+  );
 }
 
 function javascriptStructuralCode(line: string): string {
@@ -5246,6 +5383,276 @@ function modeledSameFileDotnetTemplateSource(
   );
 }
 
+interface NodeHttpUrlSink {
+  urlExpression?: string;
+  axiosReceiver?: string;
+  axiosConfigurationLine?: number;
+  axiosConfigurationEndLine?: number;
+  callStartLine?: number;
+  callEndLine?: number;
+}
+
+interface JavascriptAxiosBinding {
+  declarationLine: number;
+  kind: "root" | "instance";
+  configurationEndLine?: number;
+}
+
+function nodeHttpGeneralControlApplies(
+  sink: NodeHttpUrlSink | undefined,
+  kind: string,
+): boolean {
+  return (
+    sink?.axiosReceiver === undefined ||
+    (kind !== "axios-absolute-url-override-disabled" &&
+      kind !== "redirects-disabled")
+  );
+}
+
+function javascriptAxiosReceiverShadowedInExport(
+  lines: readonly string[],
+  sinkLine: number,
+  receiver: string,
+): boolean {
+  return exportedJavascriptFunctions(lines).some(
+    (wrapper) =>
+      sinkLine >= wrapper.startLine &&
+      sinkLine <= wrapper.endLine &&
+      wrapper.parameters.includes(receiver),
+  );
+}
+
+function javascriptAxiosBindings(
+  lines: readonly string[],
+): Map<string, JavascriptAxiosBinding> {
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const bindings = new Map<string, JavascriptAxiosBinding>();
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const imported =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*(?:,\s*\{[^}]*\})?\s+from\s+["']axios["']\s*;?/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']axios["']\s*;?/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']axios["']\s*\)\s*;?/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']axios["']\s*\)(?:\s*\.\s*default)?\s*;?/u.exec(
+        code,
+      );
+    if (imported?.[1] !== undefined) {
+      bindings.set(imported[1], {
+        declarationLine: index + 1,
+        kind: "root",
+      });
+    }
+  }
+
+  const structuralLines = javascriptStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines
+      .slice(index, Math.min(structuralLines.length, index + 64))
+      .join("\n");
+    for (const [root, rootBinding] of [...bindings]) {
+      const instance = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:\\s*[^=;]+)?\\s*=\\s*${escapeRegularExpression(root)}\\s*\\.\\s*create\\s*\\(`,
+        "u",
+      ).exec(structural);
+      if (instance?.[1] !== undefined) {
+        if (
+          javascriptIdentifierReassignedBetween(
+            lines,
+            root,
+            rootBinding.declarationLine,
+            index + 1,
+          ) ||
+          javascriptAxiosReceiverShadowedInExport(lines, index + 1, root)
+        ) {
+          continue;
+        }
+        const open = structural.indexOf("(", instance.index);
+        const close = matchingCallParenthesis(structural, open);
+        if (open < 0 || close < 0) continue;
+        bindings.set(instance[1], {
+          declarationLine: index + 1,
+          kind: "instance",
+          configurationEndLine:
+            index + 1 + (structural.slice(0, close).match(/\n/gu)?.length ?? 0),
+        });
+      }
+    }
+  }
+  return bindings;
+}
+
+function javascriptObjectPropertyValue(
+  value: string,
+  property: string,
+): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return undefined;
+  const entries = splitJavascriptArguments(trimmed.slice(1, -1));
+  const escapedProperty = escapeRegularExpression(property);
+  for (const entry of entries) {
+    if (new RegExp(`^\\s*${escapedProperty}\\s*$`, "u").test(entry)) {
+      return property;
+    }
+    const match = new RegExp(
+      `^\\s*(?:${escapedProperty}|["']${escapedProperty}["'])\\s*:\\s*([\\s\\S]+)$`,
+      "u",
+    ).exec(entry);
+    if (match?.[1] !== undefined && match[1].trim() !== "") {
+      return match[1].trim();
+    }
+  }
+  return undefined;
+}
+
+function nodeAxiosUrlArgument(
+  lines: readonly string[],
+  sinkLine: number,
+): NodeHttpUrlSink | undefined {
+  const bindings = javascriptAxiosBindings(lines);
+  if (bindings.size === 0) return undefined;
+  const endLine = Math.min(lines.length, sinkLine + 12);
+  const original = javascriptCodeLinesWithoutComments(
+    lines.slice(sinkLine - 1, endLine),
+  ).join("\n");
+  const structural = javascriptStructuralLines(
+    lines.slice(sinkLine - 1, endLine),
+  ).join("\n");
+  const methodCall =
+    /\b([A-Za-z_$][\w$]*)\s*\.\s*(delete|get|head|options|patch|post|put|request)\s*(?:<[^;(){}]+>)?\s*\(/u.exec(
+      structural,
+    );
+  if (methodCall?.index !== undefined && methodCall[1] !== undefined) {
+    const binding = bindings.get(methodCall[1]);
+    if (
+      binding === undefined ||
+      binding.declarationLine > sinkLine ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        methodCall[1],
+        binding.declarationLine,
+        sinkLine,
+      )
+    ) {
+      return undefined;
+    }
+    const open = structural.indexOf("(", methodCall.index);
+    const close = matchingCallParenthesis(structural, open);
+    if (open < 0 || close < 0) return undefined;
+    const arguments_ = splitJavascriptArguments(
+      original.slice(open + 1, close),
+    );
+    const value =
+      methodCall[2] === "request"
+        ? javascriptObjectPropertyValue(arguments_[0] ?? "", "url")
+        : arguments_[0];
+    if (value === undefined || value.trim() === "") return undefined;
+    return {
+      urlExpression: value.trim(),
+      axiosReceiver: methodCall[1],
+      callStartLine: sinkLine,
+      callEndLine:
+        sinkLine + (structural.slice(0, close).match(/\n/gu)?.length ?? 0),
+      ...(binding.kind === "instance"
+        ? {
+            axiosConfigurationLine: binding.declarationLine,
+            axiosConfigurationEndLine: binding.configurationEndLine,
+          }
+        : {}),
+    };
+  }
+
+  const directCall = /\b([A-Za-z_$][\w$]*)\s*\(/u.exec(structural);
+  if (directCall?.index === undefined || directCall[1] === undefined) {
+    return undefined;
+  }
+  const binding = bindings.get(directCall[1]);
+  if (
+    binding === undefined ||
+    binding.declarationLine > sinkLine ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      directCall[1],
+      binding.declarationLine,
+      sinkLine,
+    )
+  ) {
+    return undefined;
+  }
+  const open = structural.indexOf("(", directCall.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  const first = splitJavascriptArguments(original.slice(open + 1, close))[0];
+  if (first === undefined || first.trim() === "") return undefined;
+  return {
+    urlExpression: javascriptObjectPropertyValue(first, "url") ?? first.trim(),
+    axiosReceiver: directCall[1],
+    callStartLine: sinkLine,
+    callEndLine:
+      sinkLine + (structural.slice(0, close).match(/\n/gu)?.length ?? 0),
+    ...(binding.kind === "instance"
+      ? {
+          axiosConfigurationLine: binding.declarationLine,
+          axiosConfigurationEndLine: binding.configurationEndLine,
+        }
+      : {}),
+  };
+}
+
+function nodeAxiosConfigurationControls(
+  lines: readonly string[],
+  sink: NodeHttpUrlSink,
+  patterns: readonly FrameworkModelPattern[],
+): Array<{ kind: string; line: number }> {
+  const ranges = [
+    ...(sink.axiosConfigurationLine !== undefined &&
+    sink.axiosConfigurationEndLine !== undefined
+      ? [[sink.axiosConfigurationLine, sink.axiosConfigurationEndLine] as const]
+      : []),
+    ...(sink.callStartLine !== undefined && sink.callEndLine !== undefined
+      ? [[sink.callStartLine, sink.callEndLine] as const]
+      : []),
+  ];
+  return ranges
+    .flatMap(([startLine, endLine]) =>
+      matchingJavascriptControlLines(
+        lines.slice(startLine - 1, endLine),
+        patterns,
+        8,
+      ).map((control) => ({
+        ...control,
+        line: control.line + startLine - 1,
+      })),
+    )
+    .filter(
+      (control, index, all) =>
+        all.findIndex(
+          (candidate) =>
+            candidate.kind === control.kind && candidate.line === control.line,
+        ) === index,
+    );
+}
+
+function nodeHttpUrlSink(
+  lines: readonly string[],
+  sinkLine: number,
+): NodeHttpUrlSink | undefined {
+  const structural = javascriptStructuralLines([lines[sinkLine - 1] ?? ""])[0]!;
+  if (
+    /\b(?:fetch|got)\s*\(|\bgot\s*\.\s*(?:delete|get|head|options|patch|post|put|request)\s*\(|\b(?:https?|undici)\s*\.\s*(?:get|request)\s*\(/u.test(
+      structural,
+    )
+  ) {
+    return {};
+  }
+  return nodeAxiosUrlArgument(lines, sinkLine);
+}
+
 function dotnetHttpClientSinkHasTypedReceiver(
   lines: readonly string[],
   sinkLine: number,
@@ -5985,6 +6392,37 @@ function matchingJavascriptModelLines(
     const structuralLine = javascriptStructuralCode(lines[index] ?? "");
     for (const pattern of patterns) {
       if (pattern.expression.test(structuralLine)) {
+        matches.push({ kind: pattern.kind, line: index + 1 });
+        break;
+      }
+    }
+  }
+  return matches;
+}
+
+function matchingJavascriptControlLines(
+  lines: readonly string[],
+  patterns: readonly FrameworkModelPattern[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const matches: Array<{ kind: string; line: number }> = [];
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  for (
+    let index = 0;
+    index < codeLines.length && matches.length < limit;
+    index++
+  ) {
+    for (const pattern of patterns) {
+      const code = codeLines[index] ?? "";
+      const structural = structuralLines[index] ?? "";
+      const matched =
+        pattern.kind === "redirects-disabled"
+          ? /\bmaxRedirects\s*:\s*0\b/iu.test(structural) ||
+            (/\bredirect\s*:/iu.test(structural) &&
+              /\bredirect\s*:\s*["']error["']/iu.test(code))
+          : pattern.expression.test(structural);
+      if (matched) {
         matches.push({ kind: pattern.kind, line: index + 1 });
         break;
       }

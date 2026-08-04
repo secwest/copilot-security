@@ -199,6 +199,28 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The Axios instance SSRF lane separately measures module and client identity,
+destination argument roles, and client configuration. The positive fixture
+passes a complete attacker-controlled URL to an `axios.create(...)` instance;
+Axios's default permits that absolute URL to override the configured
+`baseURL`. The paired control accepts only exact keys into server-owned
+relative paths, sets `allowAbsoluteUrls: false`, and disables redirects. The
+manifest requires perfect completion, precision, recall, validation,
+attack-path evidence, code evidence, severity, and negative-case performance:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/node-axios-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-node-axios-ssrf `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
 The template-injection framework lane applies the same strict gates to Node
 and Python relative-import wrappers. Its positives compile caller-controlled
 Pug or Jinja template source. Its negative controls pass the same untrusted

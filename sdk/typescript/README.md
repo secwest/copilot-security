@@ -35,9 +35,12 @@ The package is ESM-only and provides:
   sessions remove public token aliases and expose no shell tools
 - typed host-generated Node HTTP, Python web, Spring/servlet, and ASP.NET
   command/SQL/SSRF/filesystem-path data-flow hypotheses, including JDK
-  `HttpClient`, Spring `RestTemplate`, and reactive Spring `WebClient`, with exact source/sink
-  lines and nearby negative controls for the mandatory residual correction
-  turn, plus bounded one-hop or two-hop C# controller/service summaries,
+  `HttpClient`, Spring `RestTemplate`, reactive Spring `WebClient`, and
+  module-bound Axios clients and instances; Axios preserves only the URL
+  argument or request-config `url` property and keeps request bodies out of
+  destination flow. Models include exact source/sink lines and nearby negative
+  controls for the mandatory residual correction turn, plus bounded one-hop or
+  two-hop C# controller/service summaries,
   one-hop or two-hop Java controller/service summaries, and one-hop or two-hop
   relative-import/call/parameter summaries for Node/TypeScript and Python
   wrappers; language strings and comments are masked before structural
