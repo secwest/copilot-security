@@ -421,13 +421,16 @@ interpreter that consumes the value.
   commit, nested or deferred commit, finalization before execution, ignored
   transfer results, closed or replaced statements, and cross-transaction
   transfer.
-- A transaction may close through one uniquely resolved same-package function
-  only when an exact typed `database/sql` transaction parameter reaches exactly
-  one non-deferred function-level `Commit` or `Rollback`. Preserve caller
-  argument identity, helper parameter position, helper path and finalizer line,
-  and outcome order. Reject ambiguous definitions, methods, untyped parameters,
-  unrelated or reassigned transactions, nested or deferred caller/helper
-  finalization, mixed top-level finalizers, and commit before mutation. An
+- A transaction may close through a bounded exact chain of local functions only
+  when an exact typed `database/sql` transaction parameter reaches exactly one
+  non-deferred function-level `Commit` or `Rollback`. Cross-package edges require
+  an authoritative `go.mod` module path, exact ordinary import and alias,
+  exported unique target, unshadowed package binding, and matching transaction
+  argument. Preserve caller identity, every helper path and parameter position,
+  the leaf finalizer line, and outcome order. Reject missing or duplicate module
+  identity, external or lookalike imports, dot or blank imports, shadowing,
+  ambiguous definitions, methods, untyped or reassigned transactions, nested or
+  deferred finalization, mixed outcomes, and commit before mutation. An
   error-branch rollback helper does not dominate a later success-path commit.
 - Authentication, middleware, opaque IDs, parameterized SQL, and a principal-
   named parameter do not authorize the selected object. Verify the exact
@@ -452,10 +455,11 @@ interpreter that consumes the value.
 - For helper-mediated finalization, inspect the caller, every forwarding helper,
   and the leaf finalizer as separate evidence. A helper name such as `commit`,
   an `error` return, or a transaction-shaped argument is not sufficient without
-  exact type, unique same-package resolution, matching parameter and alias
-  identity, function-level ordering, one unambiguous outcome, and the matching
-  caller transaction. Reject cycles, reassignment, nested or deferred forwarding,
-  mixed finalizers, and a chain beyond the recorded 32-bound resilience limit.
+  exact type, unique local-package resolution, matching import, parameter and
+  alias identity, function-level ordering, one unambiguous outcome, and the
+  matching caller transaction. Reject cycles, reassignment, package shadowing,
+  nested or deferred forwarding, mixed finalizers, and a chain beyond the
+  recorded 32-bound resilience limit.
 
 ### Go HTTP server-side template injection — CWE-1336
 

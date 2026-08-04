@@ -9243,7 +9243,9 @@ function isSourcePath(path: string): boolean {
   const baseName = path.replaceAll("\\", "/").split("/").at(-1) ?? "";
   return (
     SOURCE_EXTENSIONS.has(extname(baseName).toLowerCase()) ||
-    /^(?:Dockerfile|Gemfile|Jenkinsfile|Makefile|Rakefile)$/u.test(baseName)
+    /^(?:Dockerfile|Gemfile|go\.mod|Jenkinsfile|Makefile|Rakefile)$/u.test(
+      baseName,
+    )
   );
 }
 

@@ -596,10 +596,14 @@ actual commit path; its control adds only the authenticated account predicate.
 The seventh pair adds a typed coordinator that aliases and forwards the exact
 transaction to a leaf commit helper, preserving both helper boundaries and the
 real commit location; its control changes only the account predicate. The suite
-proves all seven blocked attacks and successful
+adds an eighth pair whose application imports a typed coordinator from one
+internal package and reaches the real commit through a second internal package.
+The host derives both identities from `go.mod`, exact import aliases, and
+exported functions; the control again changes only the account predicate. The
+suite proves all eight blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
-transferred-statement, direct-helper, and helper-chain transaction behavior
-without a database service:
+transferred-statement, direct-helper, same-package-chain, and cross-package-chain
+transaction behavior without a database service:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -653,6 +657,12 @@ Push-Location fixtures\go-cross-file-helper-chain-transaction-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-helper-chain-transaction-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-helper-transaction-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-helper-transaction-delete-authorization
 go test ./...
 Pop-Location
 ```

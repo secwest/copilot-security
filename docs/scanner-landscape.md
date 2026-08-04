@@ -426,13 +426,20 @@ transaction parameter or a proven local alias into the uniquely resolved next
 function; cycles, reassignment, nesting, defer, multiple reachable outcomes, and
 over-depth graphs fail closed. Evidence retains each internal delegation and the
 real leaf `Commit`. A seventh executable pair proves this multi-helper positive
-and principal-scoped control. This directly
+and principal-scoped control. Finalizer edges may now cross local package and
+nested-module boundaries only when the deepest enclosing `go.mod`, exact module
+import path, ordinary import alias, exported function, unique local definition,
+and transaction argument all agree. Package alias shadowing, dot and blank
+imports, missing modules, external lookalikes, duplicate local module identities,
+and unexported targets fail closed. An eighth executable pair crosses two
+internal packages and proves both the unscoped durable deletion and matched
+principal control. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
 index](https://codeql.github.com/codeql-query-help/go/) and published [gosec
 rule list](https://github.com/securego/gosec/blob/master/RULES.md) do not expose
-as a dedicated query. Cross-package and multi-hop wrappers, nested and
+as a dedicated query. General cross-package object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
 sqlc, ORMs, branch-
 sensitive dominance, and deployment authorization remain future work.
@@ -442,7 +449,8 @@ as CodeQL's distinction between local flow and explicitly modeled
 interprocedural flow summaries: the summary expands a proven semantic boundary,
 not every similarly named call. It remains deliberately narrower than whole-
 program call-graph and control-flow analysis; interface dispatch, function
-values, recursive finalization, and cross-package finalizers remain future work.
+values, recursive finalization, replace-only packages without source inventory,
+and dynamically selected finalizers remain future work.
 
 `benchmarks/go-sqlx-sql-injection-manifest.json` adds a strict sqlx lane. The
 positive carries an HTTP query value through one unique same-package wrapper,

@@ -129,6 +129,7 @@ interface WrapperSummary {
 interface TransactionFinalizerSummary {
   file: GoHttpSourceFile;
   packageName: string;
+  packageImportPath?: string;
   functionName: string;
   transactionParameterIndex: number;
   transactionParameterName: string;
@@ -137,6 +138,125 @@ interface TransactionFinalizerSummary {
   finalizerFile: GoHttpSourceFile;
   finalizerTransactionName: string;
   delegations: EvidencePropagator[];
+}
+
+interface LocalGoModule {
+  root: string;
+  importPath: string;
+}
+
+function localGoModules(files: readonly GoHttpSourceFile[]): LocalGoModule[] {
+  const modules: LocalGoModule[] = [];
+  for (const file of files) {
+    if (posix.basename(file.path) !== "go.mod") continue;
+    const declarations = file.lines
+      .map((line) =>
+        /^\s*module\s+(?:"([^"\r\n]+)"|([^\s/][^\s]*))\s*(?:\/\/.*)?$/u.exec(
+          line,
+        ),
+      )
+      .filter((match) => match !== null)
+      .map((match) => (match[1] ?? match[2]!).trim())
+      .filter(
+        (importPath) =>
+          importPath !== "" &&
+          !importPath.includes("\\") &&
+          !importPath.startsWith("/") &&
+          !importPath.endsWith("/"),
+      );
+    if (declarations.length !== 1) continue;
+    modules.push({
+      root: posix.dirname(file.path),
+      importPath: declarations[0]!,
+    });
+  }
+  return modules.sort((left, right) => right.root.length - left.root.length);
+}
+
+function localPackageImportPath(
+  function_: GoFunction,
+  modules: readonly LocalGoModule[],
+): string | undefined {
+  const directory = posix.dirname(function_.file.path);
+  const module = modules.find(({ root }) =>
+    root === "."
+      ? true
+      : directory === root || directory.startsWith(`${root}/`),
+  );
+  if (module === undefined) return undefined;
+  const relative =
+    module.root === "."
+      ? directory === "."
+        ? ""
+        : directory
+      : directory === module.root
+        ? ""
+        : directory.slice(module.root.length + 1);
+  if (relative === "vendor" || relative.startsWith("vendor/")) return undefined;
+  return relative === ""
+    ? module.importPath
+    : `${module.importPath}/${relative}`;
+}
+
+function packageAliasIsAvailable(
+  function_: GoFunction,
+  alias: string,
+  line: number,
+): boolean {
+  if (function_.parameters.some((parameter) => parameter.name === alias))
+    return false;
+  if (
+    function_.receiver !== undefined &&
+    new RegExp(`\\(\\s*${escapeRegularExpression(alias)}\\b`, "u").test(
+      function_.receiver,
+    )
+  )
+    return false;
+  const declaration = new RegExp(
+    `\\b(?:var|const)\\s+${escapeRegularExpression(alias)}\\b`,
+    "u",
+  );
+  for (
+    let candidateLine = function_.bodyStartLine;
+    candidateLine < line;
+    candidateLine += 1
+  ) {
+    const structural = function_.structuralLines[candidateLine - 1] ?? "";
+    if (declaration.test(structural)) return false;
+    if (goAssignment(structural)?.names.includes(alias) === true) return false;
+  }
+  return true;
+}
+
+function transactionFinalizerCallMatches(
+  function_: GoFunction,
+  callName: string,
+  line: number,
+  summary: TransactionFinalizerSummary,
+): boolean {
+  if (
+    summary.functionName === callName &&
+    summary.packageName === function_.packageName &&
+    posix.dirname(summary.file.path) === posix.dirname(function_.file.path)
+  )
+    return true;
+  if (
+    summary.packageImportPath === undefined ||
+    !/^[A-Z]/u.test(summary.functionName)
+  )
+    return false;
+  const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(callName);
+  if (qualified?.[2] !== summary.functionName) return false;
+  const alias = goImportAlias(
+    function_.file.lines,
+    summary.packageImportPath,
+    summary.packageName,
+  );
+  return (
+    alias !== undefined &&
+    alias === qualified[1] &&
+    packageAliasIsAvailable(function_, alias, line)
+  );
 }
 
 function sqlAlias(function_: GoFunction): string | undefined {
@@ -660,12 +780,8 @@ function analyzeFunction(
           continue;
         }
       }
-      const matchingFinalizers = finalizers.filter(
-        (summary) =>
-          summary.functionName === call.name &&
-          summary.packageName === function_.packageName &&
-          posix.dirname(summary.file.path) ===
-            posix.dirname(function_.file.path),
+      const matchingFinalizers = finalizers.filter((summary) =>
+        transactionFinalizerCallMatches(function_, call.name, line, summary),
       );
       if (matchingFinalizers.length === 1) {
         const summary = matchingFinalizers[0]!;
@@ -1119,6 +1235,7 @@ function record(
 }
 
 function transactionFinalizerSummaries(
+  files: readonly GoHttpSourceFile[],
   functions: readonly GoFunction[],
   functionCounts: ReadonlyMap<string, number>,
 ): TransactionFinalizerSummary[] {
@@ -1128,6 +1245,7 @@ function transactionFinalizerSummaries(
       index: number;
       name: string;
     }>;
+    importPath?: string;
   }
   type Resolution =
     | { kind: "none" }
@@ -1136,6 +1254,7 @@ function transactionFinalizerSummaries(
 
   const functionKey = (function_: GoFunction): string =>
     `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${function_.name}`;
+  const modules = localGoModules(files);
   const descriptors = new Map<string, Descriptor>();
   for (const function_ of functions) {
     if (function_.receiver !== undefined) continue;
@@ -1154,7 +1273,14 @@ function transactionFinalizerSummaries(
         index,
         name: parameter.name,
       }));
-    if (parameters.length > 0) descriptors.set(key, { function_, parameters });
+    if (parameters.length > 0) {
+      const importPath = localPackageImportPath(function_, modules);
+      descriptors.set(key, {
+        function_,
+        parameters,
+        ...(importPath === undefined ? {} : { importPath }),
+      });
+    }
   }
 
   const aliasesAtLine = (
@@ -1225,6 +1351,9 @@ function transactionFinalizerSummaries(
           candidates.push({
             file: descriptor.function_.file,
             packageName: descriptor.function_.packageName,
+            ...(descriptor.importPath === undefined
+              ? {}
+              : { packageImportPath: descriptor.importPath }),
             functionName: descriptor.function_.name,
             transactionParameterIndex: parameter.index,
             transactionParameterName: parameter.name,
@@ -1236,20 +1365,56 @@ function transactionFinalizerSummaries(
           });
         continue;
       }
-      if (!/^[A-Za-z_]\w*$/u.test(call.name)) continue;
-      const targetKey = `${posix.dirname(descriptor.function_.file.path)}\0${descriptor.function_.packageName}\0${call.name}`;
-      const targetDescriptor = descriptors.get(targetKey);
-      if (targetDescriptor === undefined) continue;
-      const passesTransactionParameter = targetDescriptor.parameters.some(
-        ({ index }) => {
-          const argument = call.rawArguments[index]?.trim();
-          return (
-            argument !== undefined &&
-            parameterForName(descriptor, argument, call.line) !== undefined
+      const plainCall = /^([A-Za-z_]\w*)$/u.exec(call.name);
+      const qualifiedCall = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(call.name);
+      const targets: Array<{ key: string; descriptor: Descriptor }> = [];
+      if (plainCall !== null) {
+        const targetKey = `${posix.dirname(descriptor.function_.file.path)}\0${descriptor.function_.packageName}\0${plainCall[1]}`;
+        const target = descriptors.get(targetKey);
+        if (target !== undefined)
+          targets.push({ key: targetKey, descriptor: target });
+      } else if (
+        qualifiedCall !== null &&
+        /^[A-Z]/u.test(qualifiedCall[2]!) &&
+        packageAliasIsAvailable(
+          descriptor.function_,
+          qualifiedCall[1]!,
+          call.line,
+        )
+      ) {
+        for (const [targetKey, target] of descriptors) {
+          if (
+            target.importPath === undefined ||
+            target.function_.name !== qualifiedCall[2]
+          )
+            continue;
+          const importAlias = goImportAlias(
+            descriptor.function_.file.lines,
+            target.importPath,
+            target.function_.packageName,
           );
-        },
+          if (importAlias === qualifiedCall[1])
+            targets.push({ key: targetKey, descriptor: target });
+        }
+      }
+      if (targets.length === 0) continue;
+      const passesTransactionParameter = targets.some(
+        ({ descriptor: target }) =>
+          target.parameters.some(({ index }) => {
+            const argument = call.rawArguments[index]?.trim();
+            return (
+              argument !== undefined &&
+              parameterForName(descriptor, argument, call.line) !== undefined
+            );
+          }),
       );
       if (!passesTransactionParameter) continue;
+      if (targets.length !== 1) {
+        const result: Resolution = { kind: "ambiguous" };
+        memo.set(key, result);
+        return result;
+      }
+      const targetKey = targets[0]!.key;
       const target = resolve(targetKey, nextVisiting, depth + 1);
       if (target.kind === "ambiguous") {
         const result: Resolution = { kind: "ambiguous" };
@@ -1267,6 +1432,9 @@ function transactionFinalizerSummaries(
       candidates.push({
         file: descriptor.function_.file,
         packageName: descriptor.function_.packageName,
+        ...(descriptor.importPath === undefined
+          ? {}
+          : { packageImportPath: descriptor.importPath }),
         functionName: descriptor.function_.name,
         transactionParameterIndex: parameter.index,
         transactionParameterName: parameter.name,
@@ -1317,7 +1485,11 @@ export function goObjectAuthorizationRecords(
     const key = `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${function_.name}`;
     functionCounts.set(key, (functionCounts.get(key) ?? 0) + 1);
   }
-  const finalizers = transactionFinalizerSummaries(functions, functionCounts);
+  const finalizers = transactionFinalizerSummaries(
+    files,
+    functions,
+    functionCounts,
+  );
 
   for (const function_ of functions) {
     if (requestParameters(function_).length === 0) continue;

@@ -91,10 +91,13 @@ The package is ESM-only and provides:
   mistaken for the source statement, and ignored, closed, replaced,
   cross-transaction, rolled-back, or uncommitted transfers are rejected.
   Transaction outcome can also close through an exact chain of uniquely
-  resolved same-package functions whose typed `database/sql` transaction
-  parameter reaches exactly one non-deferred function-level `Commit` or
-  `Rollback`. Resolution is cycle-safe and bounded to 32 helper boundaries.
-  Caller and helper nesting, argument position, alias identity, reassignment,
+  resolved local functions whose typed `database/sql` transaction parameter
+  reaches exactly one non-deferred function-level `Commit` or `Rollback`.
+  Same-package calls resolve directly; cross-package calls require the deepest
+  enclosing `go.mod`, the exact local module import path, an ordinary unique
+  import or renamed alias, an exported target, and an unshadowed package alias.
+  Resolution is cycle-safe and bounded to 32 helper boundaries. Caller and
+  helper nesting, argument position, alias identity, reassignment, module,
   definition and outcome ambiguity, depth, and finalizer order remain enforced;
   commit evidence retains every forwarding call and the leaf file and line
   rather than attributing the standard-library operation to the caller.

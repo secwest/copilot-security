@@ -794,13 +794,16 @@ A fifth pair covers the common DB-prepared-statement transfer path: exact
 fixed SQL predicate, execution stays provisional, and only the destination
 transaction's commit closes the durable effect. Its control preserves that
 entire topology while adding only a context-principal account predicate. A
-  sixth pair closes a direct transaction through a uniquely resolved typed
-  same-package helper, retaining both the caller boundary and the helper's exact
-  `Commit` path and line. A seventh pair adds a typed coordinator that aliases
-  and forwards the transaction to a leaf helper. The host resolves up to 32
-  exact same-package helper boundaries, rejects cycles and ambiguous outcomes,
-  and records every forwarding call plus the real leaf finalizer. Both controls
-  change only the authenticated account predicate:
+sixth pair closes a direct transaction through a uniquely resolved typed
+same-package helper, retaining both the caller boundary and the helper's exact
+`Commit` path and line. A seventh pair adds a typed coordinator that aliases
+and forwards the transaction to a leaf helper. The host resolves up to 32 exact
+helper boundaries, rejects cycles and ambiguous outcomes, and records every
+forwarding call plus the real leaf finalizer. An eighth pair crosses two
+imported internal packages whose identities are derived from the repository's
+exact `go.mod` module path; renamed imports, exported targets, and transaction
+arguments must all agree. Each control changes only the authenticated account
+predicate:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -849,6 +852,12 @@ Push-Location benchmarks\fixtures\go-cross-file-helper-chain-transaction-delete-
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-helper-chain-transaction-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-helper-transaction-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-helper-transaction-delete-authorization
 go test ./...
 Pop-Location
 ```

@@ -58,6 +58,30 @@ async function repositoryInventory(
   return models(await buildResidualRiskInventory(repository));
 }
 
+async function scopedRepositoryInventory(
+  files: Record<string, string>,
+): Promise<ModelRecord[]> {
+  const repository = await mkdtemp(join(tmpdir(), "copilot-security-go-bola-"));
+  const scanDirectory = await mkdtemp(
+    join(tmpdir(), "copilot-security-go-bola-scan-"),
+  );
+  temporaryPaths.push(repository, scanDirectory);
+  for (const [path, source] of Object.entries(files)) {
+    const absolute = join(repository, path);
+    await mkdir(dirname(absolute), { recursive: true });
+    await writeFile(absolute, source);
+  }
+  const inventory = join(
+    scanDirectory,
+    "artifacts",
+    "02_discovery",
+    "in_scope_files.txt",
+  );
+  await mkdir(dirname(inventory), { recursive: true });
+  await writeFile(inventory, `${Object.keys(files).sort().join("\n")}\n`);
+  return models(await buildResidualRiskInventory(repository, scanDirectory));
+}
+
 async function fixtureInventory(id: string): Promise<ModelRecord[]> {
   return models(
     await buildResidualRiskInventory(join(benchmarkRoot, "fixtures", id)),
@@ -108,6 +132,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-file-safe-helper-transaction-delete-authorization",
       "go-cross-file-helper-chain-transaction-delete-idor",
       "go-cross-file-safe-helper-chain-transaction-delete-authorization",
+      "go-cross-package-helper-transaction-delete-idor",
+      "go-cross-package-safe-helper-transaction-delete-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -123,6 +149,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[11]?.expected).toEqual([]);
     expect(manifest.cases[12]?.expected).toHaveLength(1);
     expect(manifest.cases[13]?.expected).toEqual([]);
+    expect(manifest.cases[14]?.expected).toHaveLength(1);
+    expect(manifest.cases[15]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -609,6 +637,66 @@ describe("Go HTTP object-authorization framework model", () => {
     ]);
   });
 
+  test("preserves the cross-package helper-chain exploit and control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-helper-transaction-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-helper-transaction-delete-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "store.go",
+      line: 19,
+      categories: [
+        "framework-dataflow:go-http-object-authorization",
+        "modeled-source:go-http-path-value",
+        "modeled-sink:go-database-object-committed-mutation",
+      ],
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 9 },
+        sink: {
+          kind: "go-database-object-committed-mutation",
+          path: "store.go",
+          line: 19,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) =>
+          kind === "go-sql-transaction-finalizer-helper" ||
+          kind === "go-sql-transaction-commit",
+      ),
+    ).toEqual([
+      {
+        kind: "go-sql-transaction-finalizer-helper",
+        line: 19,
+        symbol: "FinalizeTransaction",
+        path: "store.go",
+      },
+      {
+        kind: "go-sql-transaction-finalizer-helper",
+        line: 11,
+        symbol: "CommitTransaction",
+        path: "internal/txguard/coordinator.go",
+      },
+      {
+        kind: "go-sql-transaction-commit",
+        line: 6,
+        symbol: "tx",
+        path: "internal/txleaf/transaction.go",
+      },
+    ]);
+    expect(safe).toHaveLength(1);
+    expect(safe[0]?.frameworkModel?.candidateControls).toEqual([
+      { kind: "principal-bound-object-query", path: "store.go", line: 16 },
+    ]);
+  });
+
   test("closes Prepare and PrepareContext through the exact Stmt execution", async () => {
     const bodies = [
       `  id := r.PathValue("invoiceID")
@@ -820,6 +908,201 @@ func commit(tx *sql.Tx) error {
         symbol: "final",
       },
     ]);
+  });
+
+  test("closes exact cross-package transaction finalizer helper chains", async () => {
+    const rows = await scopedRepositoryInventory({
+      "go.mod": `module example.com/billing
+go 1.26`,
+      "handler.go": `package invoices
+import (
+  "database/sql"
+  "net/http"
+  guard "example.com/billing/internal/dbtx"
+)
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  guard.Finalize(tx)
+}`,
+      "internal/dbtx/coordinator.go": `package dbtx
+import (
+  "database/sql"
+  outcome "example.com/billing/internal/txleaf"
+)
+func Finalize(tx *sql.Tx) error {
+  selected := tx
+  return outcome.Commit(selected)
+}`,
+      "internal/txleaf/transaction.go": `package txleaf
+import "database/sql"
+func Commit(tx *sql.Tx) error { return tx.Commit() }`,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.frameworkModel?.sink.kind).toBe(
+      "go-database-object-committed-mutation",
+    );
+    expect(
+      rows[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) =>
+          kind === "go-sql-transaction-finalizer-helper" ||
+          kind === "go-sql-transaction-commit",
+      ),
+    ).toEqual([
+      {
+        kind: "go-sql-transaction-finalizer-helper",
+        path: "handler.go",
+        line: 11,
+        symbol: "Finalize",
+      },
+      {
+        kind: "go-sql-transaction-finalizer-helper",
+        path: "internal/dbtx/coordinator.go",
+        line: 8,
+        symbol: "Commit",
+      },
+      {
+        kind: "go-sql-transaction-commit",
+        path: "internal/txleaf/transaction.go",
+        line: 3,
+        symbol: "tx",
+      },
+    ]);
+  });
+
+  test("resolves the deepest exact local Go module for finalization", async () => {
+    const rows = await repositoryInventory({
+      "go.mod": `module example.com/application
+go 1.26`,
+      "handler.go": `package invoices
+import (
+  "database/sql"
+  "net/http"
+  txguard "corp.example/transaction/finalizer"
+)
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  txguard.Finalize(tx)
+}`,
+      "components/transaction/go.mod": `module corp.example/transaction
+go 1.26`,
+      "components/transaction/finalizer/transaction.go": `package finalizer
+import "database/sql"
+func Finalize(tx *sql.Tx) error { return tx.Commit() }`,
+    });
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0]?.frameworkModel?.propagators.find(
+        ({ kind }) => kind === "go-sql-transaction-commit",
+      )?.path,
+    ).toBe("components/transaction/finalizer/transaction.go");
+  });
+
+  test("propagates an exact cross-package rollback helper", async () => {
+    const rows = await repositoryInventory({
+      "go.mod": `module example.com/billing
+go 1.26`,
+      "handler.go": `package invoices
+import (
+  "database/sql"
+  "net/http"
+  "example.com/billing/internal/dbtx"
+)
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  dbtx.Cancel(tx)
+  tx.Commit()
+}`,
+      "internal/dbtx/transaction.go": `package dbtx
+import "database/sql"
+func Cancel(tx *sql.Tx) error { return tx.Rollback() }`,
+    });
+    expect(rows).toEqual([]);
+  });
+
+  test("rejects inexact cross-package finalizer resolution", async () => {
+    const handlerSource = (
+      importDeclaration: string,
+      call = "dbtx.Finalize(tx)",
+    ) =>
+      `package invoices
+import (
+  "database/sql"
+  "net/http"
+  ${importDeclaration}
+)
+type localFinalizer struct{}
+func (localFinalizer) Finalize(*sql.Tx) error { return nil }
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  ${call}
+}`;
+    const exactTarget = `package dbtx
+import "database/sql"
+func Finalize(tx *sql.Tx) error { return tx.Commit() }`;
+    const cases: Array<Record<string, string>> = [
+      {
+        "handler.go": handlerSource('"example.com/billing/internal/dbtx"'),
+        "internal/dbtx/transaction.go": exactTarget,
+      },
+      {
+        "go.mod": "module example.com/billing",
+        "handler.go": handlerSource('dbtx "example.com/other/dbtx"'),
+        "internal/dbtx/transaction.go": exactTarget,
+      },
+      {
+        "go.mod": "module example.com/billing",
+        "handler.go": handlerSource(
+          'dbtx "example.com/billing/internal/dbtx"',
+          "dbtx.finalize(tx)",
+        ),
+        "internal/dbtx/transaction.go": `package dbtx
+import "database/sql"
+func finalize(tx *sql.Tx) error { return tx.Commit() }`,
+      },
+      {
+        "go.mod": "module example.com/billing",
+        "handler.go": handlerSource(
+          '. "example.com/billing/internal/dbtx"',
+          "Finalize(tx)",
+        ),
+        "internal/dbtx/transaction.go": exactTarget,
+      },
+      {
+        "go.mod": "module example.com/billing",
+        "handler.go": handlerSource(
+          '"example.com/billing/internal/dbtx"',
+          "_ = dbtx.Marker\n  dbtx := localFinalizer{}\n  dbtx.Finalize(tx)",
+        ),
+        "internal/dbtx/transaction.go": `package dbtx
+import "database/sql"
+var Marker = true
+func Finalize(tx *sql.Tx) error { return tx.Commit() }`,
+      },
+      {
+        "go.mod": "module example.com/application",
+        "handler.go": handlerSource('dbtx "corp.example/dbtx"'),
+        "one/go.mod": "module corp.example/dbtx",
+        "one/transaction.go": exactTarget,
+        "two/go.mod": "module corp.example/dbtx",
+        "two/transaction.go": exactTarget,
+      },
+    ];
+    for (const files of cases) {
+      expect(
+        await repositoryInventory(files),
+        Object.entries(files)
+          .map(([path, source]) => `${path}\n${source}`)
+          .join("\n"),
+      ).toEqual([]);
+    }
   });
 
   test("propagates exact rollback helper chains and ignores non-dominating branches", async () => {
