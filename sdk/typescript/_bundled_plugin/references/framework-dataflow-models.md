@@ -400,6 +400,30 @@ interpreter that consumes the value.
   junctions, reparse points, rename races, and the exact read/write/delete
   effect. Lexical containment is not link-safe containment.
 
+### Go HTTP server-side template injection — CWE-1336
+
+- Source: query, form, path, or header data from an exact typed
+  `*net/http.Request`, directly or through one unique same-package string
+  wrapper.
+- Grammar boundary: argument zero to `(*text/template.Template).Parse` on an
+  object created by the exact standard-library package. The parsed object must
+  subsequently reach `Execute` or `ExecuteTemplate`; parsing without execution
+  is inert.
+- Preserve object identity through builder and parsed-template aliases and
+  clear it on replacement. Require exact import identity; `html/template`,
+  package lookalikes, duplicate or dot imports, local shadows, ambiguous
+  wrappers, comments, and strings are not equivalent evidence.
+- Strong counterevidence: a fixed server-owned template or immutable map of
+  complete template sources with request data supplied only as execution data.
+  Autoescaping addresses output contexts, not attacker-controlled template
+  grammar. `html.EscapeString` leaves Go's brace-delimited directives active
+  and is not an SSTI sanitizer.
+- Inspect every registered `FuncMap` function and the exact value passed as
+  execution data. Prove which functions, exported methods, secrets, files,
+  network or process capabilities, state changes, recursion, or resource
+  effects are reachable rather than assuming all template environments have
+  identical impact.
+
 ## Closure Rules
 
 - Trace across wrappers and files when the source and sink are separated.

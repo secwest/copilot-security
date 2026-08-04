@@ -64,6 +64,13 @@ The package is ESM-only and provides:
   immutable file selection is a barrier. Request control of an `OpenRoot` or
   `OpenInRoot` root is reported, while fixed-root `os` APIs require
   platform, link/race, authorization, and patched-runtime validation. A typed
+  Go template-source model requires the exact `text/template` package and
+  closes request-derived `Parse` argument zero through `Execute` or
+  `ExecuteTemplate` on the same parsed object. Inert parsing, fixed template
+  source with request-only execution data, `html/template`, reassignment,
+  immutable source selection, package lookalikes, and ambiguous wrappers are
+  rejected; `FuncMap` and execution-data capabilities remain explicit review
+  evidence. A typed
   Go SQL model separately preserves request input into the exact query-text
   position of standard-library `DB`, `Tx`, and `Conn` operations. Placeholder and
   `sql.Named` values remain data; tainted `Prepare*` text requires later

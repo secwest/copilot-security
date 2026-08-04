@@ -45,7 +45,9 @@ paths, server-side request forgery, and object authorization; a separate Go
 `net/http` model covers server-side request forgery, a typed Go filesystem
 model covers request-controlled read, open, write, delete, metadata, link,
 move, root-selection, walk, and response-file paths through exact
-standard-library APIs, while typed
+standard-library APIs, an execution-aware Go `text/template` model covers
+request-controlled template source through `Parse` into `Execute` or
+`ExecuteTemplate`, while typed
 `os/exec`, `execabs`, `os.StartProcess`, and `syscall` models cover executable,
 shell, interpreter, remote, and option-sensitive command paths through constructors,
 manual `Cmd` fields, and direct dispatch, and typed `database/sql`, `sqlx`, GORM v2,
@@ -730,6 +732,34 @@ Push-Location benchmarks\fixtures\go-cross-file-path-traversal
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-file-safe-rooted-file
+go test ./...
+Pop-Location
+```
+
+The Go template-source lane requires exact `net/http` and `text/template`
+identity and preserves typed request data through one unique same-package
+string wrapper, `Template.Parse` argument zero, and the same non-reassigned
+parsed object into `Execute` or `ExecuteTemplate`. Parsing without execution is
+not reported. A fixed server-owned template with the request value supplied
+only as execution data is the negative boundary; HTML escaping is not a
+template-grammar sanitizer because brace-delimited directives remain active.
+The host records `FuncMap` and execution-data capability evidence so review can
+prove the reachable secret, method, filesystem, network, process, state, or
+resource effect. The paired fixtures prove a registered function discloses a
+signing key in the positive and that a fixed `html/template` renders the same
+payload as escaped inert data in the control:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/go-http-template-injection-manifest.json `
+  --results-dir C:\security-benchmarks\go-http-template-injection `
+  --runs 1 --selection-only `
+  --auth github --model PROVIDER_MODEL --effort high --mode deep
+
+Push-Location benchmarks\fixtures\go-cross-file-template-injection
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-template-data
 go test ./...
 Pop-Location
 ```

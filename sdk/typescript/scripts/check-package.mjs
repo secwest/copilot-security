@@ -160,6 +160,7 @@ const distFiles = new Set(
     "go-sql-risk",
     "go-sqlx-risk",
     "go-squirrel-risk",
+    "go-template-risk",
     "index",
     "knowledge-base",
     "model-draft-recovery",

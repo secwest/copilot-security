@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains fifty vulnerable/control pairs:
+The versioned corpus currently contains fifty-one vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -89,7 +89,9 @@ RSA-SHA256-verified SAML signed-versus-consumed assertion confusion with
 one-time request, issuer, destination, audience, recipient, lifetime, and
 signed-object-to-session binding as the control, prototype pollution, disabled
 TLS certificate verification,
-predictable security tokens, server-side template injection, check/use state
+predictable security tokens, server-side template injection including typed Go
+`text/template` source-to-execution closure with registered-function capability
+proof and fixed escaped execution-data control, check/use state
 races, unsafe mass assignment, cookie-authenticated cross-site request forgery,
 attacker-length native-memory corruption, asynchronous session use-after-free
 with deterministic fixed-pool reuse and a serialized retained-lifetime control,
