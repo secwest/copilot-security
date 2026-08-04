@@ -39,6 +39,23 @@ materializes complete values inside a private temporary repository, requires
 inventory. This keeps the public scanner repository self-scannable without
 embedding credential-shaped benchmark strings.
 
+## Reachable Git secret-history microbenchmark
+
+`secret-history-manifest.json` proves the separate history lane against a real
+temporary Git repository. The regression commits fragment-materialized GitHub,
+GitLab, and generic refresh credentials, creates a second blob containing the
+same GitLab value, deletes every candidate from the working tree, and then
+scans reachable objects through the trusted Git boundary. Placeholder and
+public-key history are negative controls.
+
+The gate requires 1.0 precision and recall, zero false positives and false
+negatives, a history-only source classification, exact path/rule identity,
+deduplication across multiple blob IDs, complete bounded execution, and absence
+of every materialized value from both the model inventory and private redacted
+report. Additional regressions prove commit-horizon behavior, immutable path
+scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
+depth validation.
+
 The versioned corpus currently contains forty-nine vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable

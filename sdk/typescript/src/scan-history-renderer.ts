@@ -295,6 +295,16 @@ export function renderScanHistory(
         `  ${strong("SECRET BASELINE")}  ${dim(clean(secretBaseline))}`,
       );
     }
+    const secretHistoryDepth = recipe?.["secretHistoryDepth"];
+    if (typeof secretHistoryDepth === "number") {
+      lines.push(
+        `  ${strong("SECRET HISTORY")}  ${
+          secretHistoryDepth === 0
+            ? dim("disabled")
+            : `${clean(secretHistoryDepth)} reachable commits`
+        }`,
+      );
+    }
     const artifacts = result["artifacts"] as JsonObject | undefined;
     if (artifacts && Object.keys(artifacts).length > 0) {
       lines.push(`  ${strong("ARTIFACTS")}`);

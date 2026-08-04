@@ -84,6 +84,10 @@ public sealed class ScannerCommandBuilder
         {
             throw new ArgumentException("Maximum AI credits must be at least 30 when supplied.", nameof(request));
         }
+        if (request.SecretHistoryDepth is < 0 or > 2048)
+        {
+            throw new ArgumentException("Secret history depth must be between 0 and 2048.", nameof(request));
+        }
         if (request.ModelTurnTimeout < TimeSpan.FromMinutes(1) ||
             request.ModelTurnTimeout > TimeSpan.FromHours(24))
         {
@@ -134,6 +138,8 @@ public sealed class ScannerCommandBuilder
             arguments.Add("--secret-baseline");
             arguments.Add(PathPolicy.ExistingFile(request.SecretBaselinePath, "Secret baseline"));
         }
+        arguments.Add("--secret-history-depth");
+        arguments.Add(request.SecretHistoryDepth.ToString(CultureInfo.InvariantCulture));
 
         if (request.FailOnSeverity is not null)
         {

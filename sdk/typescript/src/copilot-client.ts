@@ -42,6 +42,7 @@ import {
   buildSecretCandidateInventory,
   SecretScanningError,
   type PreparedSecretScanning,
+  type SecretHistoryOptions,
 } from "./secret-candidates.js";
 
 export const DEFAULT_MODEL_TURN_TIMEOUT_MILLISECONDS = 60 * 60 * 1_000;
@@ -330,6 +331,7 @@ export interface CopilotScannerOptions {
   secretScanning?: PreparedSecretScanning & {
     repository: string;
     scanId: string;
+    history: SecretHistoryOptions;
     includePaths?: readonly string[];
   };
 }
@@ -510,6 +512,7 @@ class CopilotThread implements CopilotScannerThread {
                   this.#options.secretScanning.scanId,
                   new Date(),
                   this.#options.secretScanning.includePaths,
+                  this.#options.secretScanning.history,
                 )
               ).inventory;
         await runWithFreshCopilotSessions({
@@ -1316,7 +1319,7 @@ export function scanQualityGatePrompt(
     ...(secretCandidateInventory === ""
       ? []
       : [
-          "The host also ran a deterministic local secret scan before this model turn. The JSONL below contains a summary followed only by active, unsuppressed candidates. The detector never placed secret bytes in this prompt: shape.redacted, length, character classes, and entropy band are structural metadata, while fingerprint is a local keyed HMAC that cannot recover the value. Treat an exact active row as a high-priority hardcoded-credential lead at its path and line. Do not reopen or view the candidate line or any source range containing it merely to validate the detector; inspect only separate surrounding or consuming code when repository context is needed. Never ask to reveal, print, copy, decode, reconstruct, or validate the secret value itself, and do not invent a value from its rule or shape. A missing row is not proof that a repository contains no secrets. If the summary says truncated=true, preserve that explicit incomplete secret-pass limitation rather than claiming repository-wide secret absence. Active expiring baselines are host-applied and omitted; expired entries remain active. Report a proven committed credential using the row's rule, path, line, redacted shape, and opaque fingerprint, and recommend revocation and history cleanup without reproducing the credential.",
+          "The host also ran a deterministic local secret scan before this model turn. The JSONL below contains a summary followed only by active, unsuppressed candidates. The detector never placed secret bytes in this prompt: shape.redacted, length, character classes, and entropy band are structural metadata, while fingerprint is a local keyed HMAC that cannot recover the value. Treat an exact active row as a high-priority hardcoded-credential lead at its path and line. source=working_tree identifies current content; source=git_history identifies a credential retained only or additionally in one or more reachable immutable Git blob objectIds. For a history row, do not run git show, cat-file, log -p, or another history command to recover the bytes; the object IDs are provenance, not permission to reveal the value. Do not reopen or view any candidate line or source range containing it merely to validate the detector; inspect only separate surrounding or consuming code when repository context is needed. Never ask to reveal, print, copy, decode, reconstruct, or validate the secret value itself, and do not invent a value from its rule or shape. A missing row is not proof that a repository contains no secrets. If the summary says truncated=true or history.truncated=true, preserve that explicit incomplete secret-pass limitation rather than claiming repository-wide or history-wide secret absence. Active expiring baselines are host-applied and omitted; expired entries remain active. Report a proven committed credential using the row's rule, source, path, line, redacted shape, opaque fingerprint, and bounded history object IDs. Recommend immediate revocation and reachable-history cleanup without reproducing the credential; do not claim it is still valid without independent safe verification.",
           "<secret-candidate-inventory>",
           secretCandidateData,
           "</secret-candidate-inventory>",

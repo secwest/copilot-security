@@ -83,6 +83,10 @@ import {
   renderScanHistory,
   type HistoryCommand,
 } from "./scan-history-renderer.js";
+import {
+  DEFAULT_SECRET_HISTORY_DEPTH,
+  MAX_SECRET_HISTORY_DEPTH,
+} from "./secret-candidates.js";
 import { resolveTrustedExecutable } from "./trusted-executable.js";
 import type { ScanWorkerPhase, ScanWorkerStatus } from "./worker-progress.js";
 import { DiffTarget, type ScanMode, type ScanTarget } from "./targets.js";
@@ -157,6 +161,7 @@ const VALUE_OPTIONS = new Set([
   "--seed-sarif",
   "--sarif-source-root",
   "--secret-baseline",
+  "--secret-history-depth",
   "--diff",
   "--head",
   "--base",
@@ -208,6 +213,7 @@ interface ScanArguments {
   seedSarifPaths: string[];
   sarifSourceRoot?: string;
   secretBaselinePath?: string;
+  secretHistoryDepth: number;
   diff?: string;
   workingTree: boolean;
   head?: string;
@@ -1025,6 +1031,15 @@ export async function main(
             .describe(
               "Use an expiring, justified local secret-fingerprint baseline JSON file.",
             ),
+          secretHistoryDepth: z
+            .number()
+            .int()
+            .min(0)
+            .max(MAX_SECRET_HISTORY_DEPTH)
+            .default(DEFAULT_SECRET_HISTORY_DEPTH)
+            .describe(
+              "Reachable Git commits to scan locally for historical credentials; zero disables history.",
+            ),
           diff: optionValue("--diff")
             .optional()
             .describe("Scan committed Git changes from BASE to --head."),
@@ -1165,6 +1180,7 @@ export async function main(
             seedSarifPaths: options.seedSarif,
             sarifSourceRoot: options.sarifSourceRoot,
             secretBaselinePath: options.secretBaseline,
+            secretHistoryDepth: options.secretHistoryDepth,
             diff: options.diff,
             workingTree: options.workingTree,
             head: options.head,
@@ -1805,6 +1821,18 @@ function scanArgumentsFromRecipe(
       "The saved scan recipe contains an invalid secret baseline path.",
     );
   }
+  const historyDepth =
+    recipe["secretHistoryDepth"] ?? DEFAULT_SECRET_HISTORY_DEPTH;
+  if (
+    typeof historyDepth !== "number" ||
+    !Number.isSafeInteger(historyDepth) ||
+    historyDepth < 0 ||
+    historyDepth > MAX_SECRET_HISTORY_DEPTH
+  ) {
+    throw new CopilotSecurityError(
+      "The saved scan recipe contains an invalid secret history depth.",
+    );
+  }
   const kind = target["kind"];
   if (
     kind !== "repository" &&
@@ -1894,6 +1922,7 @@ function scanArgumentsFromRecipe(
     seedSarifPaths,
     sarifSourceRoot,
     secretBaselinePath,
+    secretHistoryDepth: historyDepth,
     diff: kind === "refs" ? reference : undefined,
     workingTree: kind === "working_tree",
     head: kind === "refs" ? head ?? "HEAD" : undefined,
@@ -2632,6 +2661,7 @@ async function runScan(
       seedSarifPaths: arguments_.seedSarifPaths,
       sarifSourceRoot: arguments_.sarifSourceRoot,
       secretBaselinePath: arguments_.secretBaselinePath,
+      secretHistoryDepth: arguments_.secretHistoryDepth,
       mode: arguments_.mode,
       outputDir: arguments_.outputDir,
       archiveExisting: arguments_.archiveExisting,

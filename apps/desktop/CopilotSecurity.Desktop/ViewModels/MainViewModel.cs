@@ -39,6 +39,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string sarifSeedPaths = string.Empty;
     private string sarifSourceRoot = string.Empty;
     private string secretBaselinePath = string.Empty;
+    private string secretHistoryDepth = "128";
     private string maximumCost = string.Empty;
     private string maximumCredits = string.Empty;
     private string status = "Ready";
@@ -133,6 +134,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string SarifSeedPaths { get => sarifSeedPaths; set => SetProperty(ref sarifSeedPaths, value); }
     public string SarifSourceRoot { get => sarifSourceRoot; set => SetProperty(ref sarifSourceRoot, value); }
     public string SecretBaselinePath { get => secretBaselinePath; set => SetProperty(ref secretBaselinePath, value); }
+    public string SecretHistoryDepth { get => secretHistoryDepth; set => SetProperty(ref secretHistoryDepth, value); }
     public string MaximumCost { get => maximumCost; set => SetProperty(ref maximumCost, value); }
     public string MaximumCredits { get => maximumCredits; set => SetProperty(ref maximumCredits, value); }
     public string Status { get => status; private set => SetProperty(ref status, value); }
@@ -237,6 +239,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     : Path.IsPathRooted(SecretBaselinePath)
                         ? SecretBaselinePath
                         : Path.Combine(RepositoryPath, SecretBaselinePath),
+                SecretHistoryDepth = ParseBoundedInt(SecretHistoryDepth, "Secret history depth", 0, 2048),
                 MaximumCostUsd = ParseOptionalDecimal(MaximumCost, "Maximum cost"),
                 MaximumAiCredits = ParseOptionalInt(MaximumCredits, "Maximum credits"),
             };
@@ -475,6 +478,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             : throw new ArgumentException(label + " must be a whole number.");
     }
 
+    private static int ParseBoundedInt(string value, string label, int minimum, int maximum)
+    {
+        if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var result) ||
+            result < minimum || result > maximum)
+        {
+            throw new ArgumentException($"{label} must be a whole number from {minimum} through {maximum}.");
+        }
+        return result;
+    }
+
     private static string BuildFailureReport(ScannerProcessResult result, string outputDirectory)
     {
         var builder = new StringBuilder();
@@ -566,6 +579,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             targetKind = settings.TargetKind;
             baseRevision = Prefer(settings.BaseRevision, baseRevision);
             headRevision = Prefer(settings.HeadRevision, headRevision);
+            secretHistoryDepth = settings.SecretHistoryDepth.ToString(CultureInfo.InvariantCulture);
             benchmarkManifest = Prefer(settings.BenchmarkManifest, benchmarkManifest);
             benchmarkResultsDirectory = Prefer(
                 settings.BenchmarkResultsDirectory,
@@ -603,6 +617,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     TargetKind = TargetKind,
                     BaseRevision = BaseRevision,
                     HeadRevision = HeadRevision,
+                    SecretHistoryDepth = ParseBoundedInt(SecretHistoryDepth, "Secret history depth", 0, 2048),
                     BenchmarkManifest = BenchmarkManifest,
                     BenchmarkResultsDirectory = BenchmarkResultsDirectory,
                 });

@@ -150,6 +150,7 @@ export function fakePreflight(
     authentication: { method: "stored_credentials", verified: false },
     model: "gpt-5.6-sol",
     reasoningEffort: "xhigh",
+    secretHistoryDepth: 128,
     maxSessionAttempts: 3,
   };
 }

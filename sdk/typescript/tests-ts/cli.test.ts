@@ -981,6 +981,7 @@ describe("CLI", () => {
                 seedSarifPaths: ["/analysis/codeql.sarif"],
                 seedSarifCandidateCount: 12,
                 secretBaselinePath: "/security/project-secrets.json",
+                secretHistoryDepth: 256,
               },
             }),
           }),
@@ -1000,6 +1001,7 @@ describe("CLI", () => {
       expect(text).toContain("/analysis/codeql.sarif");
       expect(text).toContain("12 candidates");
       expect(text).toContain("/security/project-secrets.json");
+      expect(text).toContain("256 reachable commits");
       expect(text).not.toContain("internal-finding-id");
       expect(text).not.toContain("internal-occurrence-id");
       if (showLinkedFindings) {
@@ -1617,6 +1619,8 @@ describe("CLI", () => {
           "/build/checkout",
           "--secret-baseline",
           "/security/secret-baseline.json",
+          "--secret-history-depth",
+          "64",
           "--mode",
           "deep",
           "--plugin-path",
@@ -1642,6 +1646,7 @@ describe("CLI", () => {
       seedSarifPaths: ["/analysis/codeql.sarif", "/analysis/semgrep.sarif"],
       sarifSourceRoot: "/build/checkout",
       secretBaselinePath: "/security/secret-baseline.json",
+      secretHistoryDepth: 64,
     });
     expect(pathConfig).toMatchObject({
       pluginPath: "plugin.zip",

@@ -8,6 +8,8 @@ This directory contains the native Linux desktop application. It uses Avalonia o
 - model, reasoning-effort, authentication, cost, and optional AI-credit controls;
 - repeatable knowledge-base and SARIF candidate inputs;
 - optional expiring local secret-fingerprint baseline input;
+- bounded reachable-Git secret-history depth from 0 through 2048 commits,
+  defaulting to 128;
 - live stage/progress output, elapsed time, cancellation, and process-tree termination;
 - validated findings with evidence, attack path, remediation, native report opening, and JSON/Markdown export;
 - durable sealed scan history and report reload;

@@ -58,6 +58,9 @@ describe("residual risk inventory", () => {
 
     expect(prompt).toContain("<secret-candidate-inventory>");
     expect(prompt).toContain("Never ask to reveal, print, copy, decode");
+    expect(prompt).toContain("source=git_history");
+    expect(prompt).toContain("do not run git show, cat-file, log -p");
+    expect(prompt).toContain("do not claim it is still valid");
     expect(prompt).toContain("\\u003c/secret-candidate-inventory\\u003e");
     expect(prompt.split("</secret-candidate-inventory>")).toHaveLength(2);
   });

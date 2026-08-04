@@ -259,6 +259,14 @@ node ./bin/copilot-security.mjs scan C:\code\project `
 # Apply an expiring, justified local fingerprint baseline
 node ./bin/copilot-security.mjs scan C:\code\project `
   --secret-baseline C:\security-policy\project-secrets.json
+
+# Inspect more reachable Git history for credentials deleted from the tree
+node ./bin/copilot-security.mjs scan C:\code\project `
+  --secret-history-depth 512
+
+# Disable reachable-history inspection while retaining the current-tree pass
+node ./bin/copilot-security.mjs scan C:\code\project `
+  --secret-history-depth 0
 ```
 
 ### Hybrid SARIF candidate review
@@ -287,18 +295,28 @@ comparison and improvement backlog derived from other mature scanners.
 
 ### Local secret candidates
 
-Before Copilot starts, the trusted host scans bounded plaintext files for typed
-credential forms and high-entropy credential assignments. Candidate bytes
+Before Copilot starts, the trusted host scans bounded working-tree plaintext
+and, by default, unique plaintext blobs reachable from the newest 128 Git
+commits for typed credential forms and high-entropy credential assignments. A
+credential deleted from the current checkout therefore remains visible while
+it is retained in reachable history. Candidate bytes
 never enter the detector's prompt inventory, report, baseline, diagnostics, or
 errors. The model receives only an active rule, exact location, redacted shape,
-and repository-scoped keyed HMAC; justified unexpired exact-match baselines are
-removed locally, while expired entries become active automatically. Redacted
-reports, the random key, and per-repository default baselines live only beneath
+repository-scoped keyed HMAC, and bounded immutable blob IDs for historical
+provenance; repeated appearances of the same rule/path/value are deduplicated.
+Justified unexpired exact-match baselines are removed locally, while expired
+entries become active automatically. Redacted reports, the random key, and
+per-repository default baselines live only beneath
 `COPILOT_SECURITY_HOME/copilot-security-home/secret-scanner`.
 
 Use `--secret-baseline PATH`, SDK `secretBaselinePath`, or the Windows/Linux GUI
 to select a strict schema 1.0 baseline. Invalid, linked, duplicate, missing, or
-unbounded baseline input fails before Copilot is invoked. See
+unbounded baseline input fails before Copilot is invoked. Use
+`--secret-history-depth N`, SDK `secretHistoryDepth`, or the GUI history field
+to select `0` through `2048` commits. Git execution uses the host-resolved
+trusted executable, disables lazy object fetching, strips ambient `GIT_*`
+control variables, reads objects without checkout, and reports every resource
+or availability cutoff as incomplete rather than a clean history result. See
 [`docs/secret-scanning.md`](docs/secret-scanning.md) for rule coverage, the
 baseline schema, key isolation, privacy limits, and benchmark procedure.
 

@@ -53,6 +53,7 @@ public sealed record ScanRequest
     public IReadOnlyList<string> SarifSeedPaths { get; init; } = [];
     public string? SarifSourceRoot { get; init; }
     public string? SecretBaselinePath { get; init; }
+    public int SecretHistoryDepth { get; init; } = 128;
 }
 
 public sealed record ScannerInvocation(

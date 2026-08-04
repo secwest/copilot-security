@@ -21,9 +21,11 @@ The package is ESM-only and provides:
   `SECURITY.md` path inventories; the model cannot choose, narrow, or rewrite
   scan scope, and conventional generated trees such as .NET `bin`/`obj` are
   omitted before ranking
-- deterministic pre-model typed and entropy secret candidates with no plaintext
-  in detector prompts or reports, repository-scoped keyed fingerprints, private
-  local audit JSONL, and exact expiring justified baselines
+- deterministic pre-model typed and entropy secret candidates across bounded
+  working-tree plaintext and reachable Git blobs, with no plaintext in detector
+  prompts or reports, repository-scoped keyed fingerprints, revision
+  deduplication, private local audit JSONL, and exact expiring justified
+  baselines
 - registered-target checks surrounding staged-file SHA-256 comparisons before
   model execution and final sealing, so checkout races fail closed
 - a disposable repository/plugin snapshot that omits links and special files,
@@ -70,6 +72,7 @@ const result = await scanner.run("/path/to/repository", {
   seedSarifPaths: ["/path/to/codeql.sarif", "/path/to/trivy.sarif"],
   sarifSourceRoot: "/original/build/checkout",
   secretBaselinePath: "/security/project-secret-baseline.json",
+  secretHistoryDepth: 512,
 });
 
 console.log(result.reportPath);
@@ -90,6 +93,14 @@ Copilot starts. Without this option, it creates a per-repository empty baseline
 beneath `COPILOT_SECURITY_HOME/copilot-security-home/secret-scanner`; candidate
 bytes never enter the detector inventory, report, baseline, error, or
 diagnostic channel.
+
+`secretHistoryDepth` selects how many newest commits across reachable refs are
+examined for credentials absent from the current tree. It defaults to `128`,
+accepts `0` through `2048`, and uses `0` to disable history while preserving
+the current-tree pass. Historical rows expose only redacted metadata and a
+bounded list of immutable Git blob IDs. The scanner uses a host-resolved Git
+executable, strips ambient Git control variables, disables lazy fetching, and
+never checks historical content into the working tree.
 
 Configuration:
 

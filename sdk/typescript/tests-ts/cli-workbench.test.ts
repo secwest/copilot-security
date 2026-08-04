@@ -554,6 +554,7 @@ describe("CLI workbench", () => {
               ],
               sarifSourceRoot: "/original/repository",
               secretBaselinePath: "/security/secret-baseline.json",
+              secretHistoryDepth: 256,
               maxSessionAttempts: 4,
               config: savedConfig,
             },
@@ -573,6 +574,7 @@ describe("CLI workbench", () => {
       seedSarifPaths: ["/analysis/codeql.sarif", "/analysis/trivy.sarif"],
       sarifSourceRoot: "/original/repository",
       secretBaselinePath: "/security/secret-baseline.json",
+      secretHistoryDepth: 256,
       maxSessionAttempts: 4,
     });
 

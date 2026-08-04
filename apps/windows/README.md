@@ -16,6 +16,8 @@ them.
   checkout-root mapping;
 - optional expiring, justified local secret-fingerprint baselines using the
   scanner's redacted pre-model candidate engine;
+- bounded reachable-Git secret history from 0 through 2048 commits, defaulting
+  to 128, with host-only object reads and no credential bytes in GUI state;
 - optional cost and AI-credit ceilings, with no ceiling inferred by default;
 - live progress, elapsed time, bounded output capture, cancellation, and
   process-tree termination;

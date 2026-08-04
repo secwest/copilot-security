@@ -53,6 +53,7 @@ static Task TestScanCommandAsync()
         SarifSeedPaths = [sarif],
         SarifSourceRoot = repository,
         SecretBaselinePath = secretBaseline,
+        SecretHistoryDepth = 256,
         MaximumAiCredits = null,
     };
 
@@ -63,6 +64,9 @@ static Task TestScanCommandAsync()
     Assert.True(invocation.Arguments.Contains("--sarif-source-root"), "SARIF source root must be explicit when supplied.");
     Assert.True(invocation.Arguments.Contains("--secret-baseline"), "Secret baseline must be explicit when supplied.");
     Assert.True(invocation.Arguments.Contains(Path.GetFullPath(secretBaseline)), "Secret baseline must remain one literal argument.");
+    var historyDepthIndex = Array.IndexOf(invocation.Arguments.ToArray(), "--secret-history-depth");
+    Assert.True(historyDepthIndex >= 0, "Secret history depth must be explicit.");
+    Assert.Equal("256", invocation.Arguments[historyDepthIndex + 1]);
     Assert.False(invocation.Arguments.Any(argument => argument.Contains("cmd.exe", StringComparison.OrdinalIgnoreCase)), "No shell may be introduced.");
     Assert.Equal(Path.GetFullPath(installation.StateRoot), invocation.Environment["COPILOT_SECURITY_HOME"]);
     Assert.Equal(Path.GetFullPath(installation.CopilotExecutable), invocation.Environment["COPILOT_CLI_PATH"]);
@@ -287,9 +291,11 @@ static Task TestSettingsAsync()
             RepositoryPath = "C:\\work\\repo",
             Model = "gpt-5.6-terra",
             StateRoot = "C:\\state\\.copilot-security",
+            SecretHistoryDepth = 256,
         });
     var loaded = store.Load(path) ?? throw new InvalidOperationException("Settings were not loaded.");
     Assert.Equal("C:\\work\\repo", loaded.RepositoryPath);
+    Assert.Equal(256, loaded.SecretHistoryDepth);
     Assert.False(File.ReadAllText(path).Contains("token", StringComparison.OrdinalIgnoreCase), "Settings contract must contain no credential field.");
     Assert.Equal(0, Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.tmp").Count());
     return Task.CompletedTask;

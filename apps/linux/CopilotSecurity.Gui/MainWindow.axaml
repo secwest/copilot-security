@@ -66,6 +66,7 @@
                   <TextBox Text="{Binding SarifSeedPaths}" MinHeight="54" AcceptsReturn="True" PlaceholderText="SARIF seed files, one per line" />
                   <TextBox Text="{Binding SarifSourceRoot}" PlaceholderText="Optional original SARIF checkout root" />
                   <TextBox Text="{Binding SecretBaselinePath}" PlaceholderText="Optional expiring secret-fingerprint baseline JSON" />
+                  <TextBox Text="{Binding SecretHistoryDepth}" PlaceholderText="Git secret-history depth (0-2048; default 128)" />
                 </StackPanel>
               </GroupBox>
             </StackPanel>

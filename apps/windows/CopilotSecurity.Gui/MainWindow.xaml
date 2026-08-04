@@ -71,7 +71,7 @@
                   <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                   </Grid.RowDefinitions>
                   <TextBlock Text="Mode" VerticalAlignment="Center" />
                   <ComboBox Grid.Column="1" ItemsSource="{Binding Modes}" SelectedItem="{Binding Mode}" />
@@ -94,6 +94,9 @@
                   <TextBlock Grid.Row="7" Text="Secret baseline" VerticalAlignment="Center" Margin="0,8,0,0" />
                   <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding SecretBaselinePath}" Margin="0,8,0,0"
                            ToolTip="Optional schema 1.0 baseline containing only keyed fingerprints, exact paths, justifications, and UTC expirations." />
+                  <TextBlock Grid.Row="8" Text="Secret history" VerticalAlignment="Center" Margin="0,8,0,0" />
+                  <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding SecretHistoryDepth}" Margin="0,8,0,0"
+                           ToolTip="Reachable Git commits to inspect locally for deleted credentials; 0 disables, maximum 2048." />
                 </Grid>
               </GroupBox>
             </StackPanel>

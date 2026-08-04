@@ -14,6 +14,7 @@ public sealed record GuiSettings
     public ScanTargetKind TargetKind { get; init; } = ScanTargetKind.Repository;
     public string BaseRevision { get; init; } = "origin/main";
     public string HeadRevision { get; init; } = "HEAD";
+    public int SecretHistoryDepth { get; init; } = 128;
     public string BenchmarkManifest { get; init; } = string.Empty;
     public string BenchmarkResultsDirectory { get; init; } = string.Empty;
 }

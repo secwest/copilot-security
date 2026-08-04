@@ -377,6 +377,14 @@ describe("local secret candidates", () => {
       'token="example-placeholder-token"\n',
     );
     await writeFile(
+      join(repository, "environment-reference.env"),
+      [
+        'token="COPILOT_GITHUB_TOKEN"',
+        'client_secret="AZURE_CLIENT_SECRET"',
+        'api_key="SERVICE_SIGNING_KEY"',
+      ].join("\n"),
+    );
+    await writeFile(
       join(repository, "node_modules", "package", "secret.env"),
       `token="${["R4tY8uI2", "oP6aS9dF", "3gH7jK5l"].join("")}"\n`,
     );

@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
+import { spawn } from "node:child_process";
 import {
   chmod,
   lstat,
@@ -18,6 +19,7 @@ import {
   resolve,
 } from "node:path";
 import { ConfigurationError, CopilotSecurityError } from "./errors.js";
+import type { TrustedExecutable } from "./trusted-executable.js";
 
 const FINGERPRINT_KEY_BYTES = 32;
 const MAX_BASELINE_BYTES = 4 * 1024 * 1024;
@@ -26,8 +28,18 @@ const MAX_FILES = 4_000;
 const MAX_FILE_BYTES = 512 * 1024;
 const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
 const MAX_CANDIDATES = 2_000;
+const MAX_HISTORY_OBJECTS = 8_000;
+const MAX_HISTORY_OBJECT_LIST_BYTES = 8 * 1024 * 1024;
+const MAX_HISTORY_OBJECT_IDS_PER_CANDIDATE = 8;
+const MAX_HISTORY_OCCURRENCES = MAX_CANDIDATES * 4;
+const MAX_HISTORY_TOTAL_BYTES = 64 * 1024 * 1024;
+const MAX_HISTORY_COMMAND_BYTES = MAX_HISTORY_TOTAL_BYTES + 4 * 1024 * 1024;
+const MAX_HISTORY_COMMAND_MILLISECONDS = 60_000;
 const BASELINE_SCHEMA_VERSION = "1.0";
-const CANDIDATE_SCHEMA_VERSION = "1.0";
+const CANDIDATE_SCHEMA_VERSION = "1.1";
+
+export const DEFAULT_SECRET_HISTORY_DEPTH = 128;
+export const MAX_SECRET_HISTORY_DEPTH = 2_048;
 
 const IGNORED_DIRECTORIES = new Set([
   ".git",
@@ -174,6 +186,12 @@ const GENERIC_ASSIGNMENT =
 const PLACEHOLDER_EXPRESSION =
   /(?:attacker|benchmark|changeme|dummy|example|fake|fixture|must[-_]?(?:never|not)|not[-_]?a[-_]?secret|placeholder|redacted|sample|should[-_]?not|synthetic|test(?:ing)?|victim|your[-_]|xxx)/iu;
 
+// Quoted configuration often names the environment variable that supplies a
+// credential. Requiring a multi-segment constant and a credential-specific
+// suffix keeps this narrower than a general all-caps allowlist.
+const ENVIRONMENT_CREDENTIAL_REFERENCE =
+  /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+_(?:CREDENTIALS?|KEY|PASSW(?:OR)?D|SECRET|TOKEN)$/u;
+
 export interface SecretBaselineEntry {
   fingerprint: string;
   ruleId: string;
@@ -200,19 +218,59 @@ export interface SecretCandidateShape {
 
 export interface SecretCandidateRecord {
   type: "secret_candidate";
-  schemaVersion: "1.0";
+  schemaVersion: "1.1";
   ruleId: string;
   title: string;
   category: string;
   severity: "high" | "critical";
+  source: "working_tree" | "git_history";
   path: string;
   line: number;
   column: number;
   fingerprint: string;
   shape: SecretCandidateShape;
   disposition: "active" | "suppressed";
+  history?: {
+    objectIds: string[];
+    objectCount: number;
+    objectIdsTruncated: boolean;
+  };
   baseline?: {
     expiresAt: string;
+  };
+}
+
+export interface SecretHistoryOptions {
+  depth: number;
+  git: TrustedExecutable | null;
+  signal?: AbortSignal;
+}
+
+export interface SecretHistorySummary {
+  requestedDepth: number;
+  status:
+    | "disabled"
+    | "not_git_repository"
+    | "unavailable"
+    | "complete"
+    | "partial"
+    | "error";
+  enumeratedObjectCount: number;
+  scannedBlobCount: number;
+  scannedBytes: number;
+  candidateOccurrenceCount: number;
+  omittedPathCount: number;
+  truncated: boolean;
+  limits: {
+    maxDepth: number;
+    maxObjectListBytes: number;
+    maxObjects: number;
+    maxBlobs: number;
+    maxBlobBytes: number;
+    maxTotalBytes: number;
+    maxCandidateOccurrences: number;
+    maxObjectIdsPerCandidate: number;
+    maxCommandMilliseconds: number;
   };
 }
 
@@ -224,10 +282,25 @@ export interface SecretCandidateInventoryResult {
   suppressedCount: number;
   expiredBaselineCount: number;
   scannedFileCount: number;
+  history: SecretHistorySummary;
   truncated: boolean;
 }
 
 export class SecretScanningError extends CopilotSecurityError {}
+
+export function secretHistoryDepth(value: number | undefined): number {
+  const depth = value ?? DEFAULT_SECRET_HISTORY_DEPTH;
+  if (
+    !Number.isSafeInteger(depth) ||
+    depth < 0 ||
+    depth > MAX_SECRET_HISTORY_DEPTH
+  ) {
+    throw new SecretScanningError(
+      `Secret history depth must be between 0 and ${MAX_SECRET_HISTORY_DEPTH}.`,
+    );
+  }
+  return depth;
+}
 
 export async function prepareSecretScanning(options: {
   credentialHome: string;
@@ -297,6 +370,7 @@ export async function buildSecretCandidateInventory(
   scanId: string,
   now = new Date(),
   includePaths?: readonly string[],
+  historyOptions?: SecretHistoryOptions,
 ): Promise<SecretCandidateInventoryResult> {
   const canonicalRepository = await realpath(repository);
   const candidates: SecretCandidateRecord[] = [];
@@ -356,6 +430,35 @@ export async function buildSecretCandidateInventory(
     if (candidates.length >= MAX_CANDIDATES) truncated = true;
   }
 
+  const historyResult = await scanGitHistory(
+    canonicalRepository,
+    prepared,
+    now,
+    includePaths,
+    historyOptions,
+  );
+  const historyByIdentity = new Map(
+    historyResult.candidates.map((candidate) => [
+      candidateIdentity(candidate),
+      candidate,
+    ]),
+  );
+  for (let index = 0; index < candidates.length; index += 1) {
+    const candidate = candidates[index];
+    if (candidate === undefined) continue;
+    const historical = historyByIdentity.get(candidateIdentity(candidate));
+    if (historical === undefined) continue;
+    candidates[index] = { ...candidate, history: historical.history };
+    historyByIdentity.delete(candidateIdentity(candidate));
+  }
+  const historicalOnly = [...historyByIdentity.values()];
+  const remainingCandidateCapacity = MAX_CANDIDATES - candidates.length;
+  candidates.push(...historicalOnly.slice(0, remainingCandidateCapacity));
+  if (historicalOnly.length > remainingCandidateCapacity) {
+    historyResult.summary.truncated = true;
+    historyResult.summary.status = "partial";
+  }
+  truncated ||= historyResult.summary.truncated;
   candidates.sort(compareCandidateRecords);
   const active = candidates.filter(
     (candidate) => candidate.disposition === "active",
@@ -388,6 +491,7 @@ export async function buildSecretCandidateInventory(
       maxTotalBytes: MAX_TOTAL_BYTES,
       maxCandidates: MAX_CANDIDATES,
     },
+    history: historyResult.summary,
     baselinePath: prepared.baselinePath,
   };
   await writePrivateJsonLines(reportPath, [summary, ...candidates]);
@@ -406,8 +510,416 @@ export async function buildSecretCandidateInventory(
     suppressedCount: suppressed,
     expiredBaselineCount,
     scannedFileCount,
+    history: historyResult.summary,
     truncated,
   };
+}
+
+interface HistoryScanResult {
+  candidates: SecretCandidateRecord[];
+  summary: SecretHistorySummary;
+}
+
+interface GitCaptureResult {
+  bytes: Buffer;
+  success: boolean;
+  truncated: boolean;
+}
+
+interface HistoryCandidateAggregate {
+  record: SecretCandidateRecord;
+  objectIds: string[];
+  allObjectIds: Set<string>;
+}
+
+async function scanGitHistory(
+  repository: string,
+  prepared: PreparedSecretScanning,
+  now: Date,
+  includePaths: readonly string[] | undefined,
+  options: SecretHistoryOptions | undefined,
+): Promise<HistoryScanResult> {
+  const depth = secretHistoryDepth(options?.depth ?? 0);
+  const summary = emptyHistorySummary(
+    depth,
+    depth === 0 ? "disabled" : "complete",
+  );
+  if (depth === 0) return { candidates: [], summary };
+  options?.signal?.throwIfAborted();
+  const gitMarker = await lstat(join(repository, ".git")).catch(() => null);
+  if (gitMarker === null) {
+    summary.status = "not_git_repository";
+    return { candidates: [], summary };
+  }
+  if (options?.git === null || options?.git === undefined) {
+    summary.status = "unavailable";
+    summary.truncated = true;
+    return { candidates: [], summary };
+  }
+
+  const objectList = await runBoundedGitCommand(
+    options.git,
+    repository,
+    ["rev-list", "--objects", "--all", `--max-count=${depth}`],
+    undefined,
+    MAX_HISTORY_OBJECT_LIST_BYTES,
+    options.signal,
+  );
+  if (!objectList.success && !objectList.truncated) {
+    summary.status = "error";
+    summary.truncated = true;
+    return { candidates: [], summary };
+  }
+  summary.truncated ||= objectList.truncated;
+  const requestedPaths =
+    includePaths === undefined
+      ? undefined
+      : new Set(
+          includePaths
+            .filter(isContainedRelativePath)
+            .map((path) => path.replaceAll("\\", "/")),
+        );
+  const objectPaths = new Map<string, Set<string>>();
+  const objectLines = objectList.bytes.toString("utf8").split("\n");
+  if (objectList.truncated) objectLines.pop();
+  for (const line of objectLines) {
+    const separator = line.indexOf(" ");
+    if (separator < 0) continue;
+    const objectId = line.slice(0, separator);
+    const path = line.slice(separator + 1).replaceAll("\\", "/");
+    if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(objectId)) continue;
+    if (!isHistoryCandidatePath(path, requestedPaths)) {
+      summary.omittedPathCount += 1;
+      continue;
+    }
+    let paths = objectPaths.get(objectId);
+    if (paths === undefined) {
+      if (objectPaths.size >= MAX_HISTORY_OBJECTS) {
+        summary.truncated = true;
+        break;
+      }
+      paths = new Set<string>();
+      objectPaths.set(objectId, paths);
+    }
+    paths.add(path);
+  }
+  summary.enumeratedObjectCount = objectPaths.size;
+  if (objectPaths.size === 0) {
+    summary.status = summary.truncated ? "partial" : "complete";
+    return { candidates: [], summary };
+  }
+
+  const objectIds = [...objectPaths.keys()];
+  const batchInput = Buffer.from(`${objectIds.join("\n")}\n`, "ascii");
+  const batchCheck = await runBoundedGitCommand(
+    options.git,
+    repository,
+    ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+    batchInput,
+    Math.min(MAX_HISTORY_OBJECT_LIST_BYTES, objectIds.length * 160 + 1024),
+    options.signal,
+  );
+  if (!batchCheck.success && !batchCheck.truncated) {
+    summary.status = "error";
+    summary.truncated = true;
+    return { candidates: [], summary };
+  }
+  summary.truncated ||= batchCheck.truncated;
+  const selected: Array<{ objectId: string; size: number }> = [];
+  for (const line of batchCheck.bytes.toString("ascii").split("\n")) {
+    const match = /^([a-f0-9]{40}|[a-f0-9]{64}) blob ([0-9]{1,12})$/u.exec(
+      line,
+    );
+    if (match?.[1] === undefined || match[2] === undefined) continue;
+    const size = Number(match[2]);
+    if (!Number.isSafeInteger(size) || size < 0 || size > MAX_FILE_BYTES) {
+      continue;
+    }
+    if (
+      selected.length >= MAX_FILES ||
+      summary.scannedBytes + size > MAX_HISTORY_TOTAL_BYTES
+    ) {
+      summary.truncated = true;
+      break;
+    }
+    selected.push({ objectId: match[1], size });
+    summary.scannedBytes += size;
+  }
+  if (selected.length === 0) {
+    summary.status = summary.truncated ? "partial" : "complete";
+    return { candidates: [], summary };
+  }
+
+  const blobInput = Buffer.from(
+    `${selected.map(({ objectId }) => objectId).join("\n")}\n`,
+    "ascii",
+  );
+  const blobs = await runBoundedGitCommand(
+    options.git,
+    repository,
+    ["cat-file", "--batch=%(objectname) %(objecttype) %(objectsize)"],
+    blobInput,
+    Math.min(
+      MAX_HISTORY_COMMAND_BYTES,
+      summary.scannedBytes + selected.length * 160 + 1024,
+    ),
+    options.signal,
+  );
+  if (!blobs.success && !blobs.truncated) {
+    summary.status = "error";
+    summary.truncated = true;
+    summary.scannedBytes = 0;
+    return { candidates: [], summary };
+  }
+  summary.truncated ||= blobs.truncated;
+  summary.scannedBytes = 0;
+  const aggregates = new Map<string, HistoryCandidateAggregate>();
+  let offset = 0;
+  for (const selection of selected) {
+    if (summary.candidateOccurrenceCount >= MAX_HISTORY_OCCURRENCES) {
+      summary.truncated = true;
+      break;
+    }
+    const headerEnd = blobs.bytes.indexOf(0x0a, offset);
+    if (headerEnd < 0) {
+      summary.truncated = true;
+      break;
+    }
+    const header = blobs.bytes.subarray(offset, headerEnd).toString("ascii");
+    const match = /^([a-f0-9]{40}|[a-f0-9]{64}) blob ([0-9]{1,12})$/u.exec(
+      header,
+    );
+    if (
+      match?.[1] !== selection.objectId ||
+      match[2] === undefined ||
+      Number(match[2]) !== selection.size
+    ) {
+      summary.truncated = true;
+      break;
+    }
+    const contentStart = headerEnd + 1;
+    const contentEnd = contentStart + selection.size;
+    if (contentEnd >= blobs.bytes.length || blobs.bytes[contentEnd] !== 0x0a) {
+      summary.truncated = true;
+      break;
+    }
+    offset = contentEnd + 1;
+    const bytes = blobs.bytes.subarray(contentStart, contentEnd);
+    if (bytes.includes(0)) continue;
+    const text = bytes.toString("utf8");
+    if (replacementCharacterRatio(text) > 0.01) continue;
+    summary.scannedBlobCount += 1;
+    summary.scannedBytes += bytes.length;
+    for (const path of objectPaths.get(selection.objectId) ?? []) {
+      const remaining =
+        MAX_HISTORY_OCCURRENCES - summary.candidateOccurrenceCount;
+      const records = candidateRecordsForText(
+        text,
+        path,
+        prepared,
+        now,
+        remaining,
+        "git_history",
+        selection.objectId,
+      );
+      summary.candidateOccurrenceCount += records.length;
+      for (const record of records) {
+        mergeHistoryCandidate(aggregates, record, selection.objectId);
+      }
+      if (summary.candidateOccurrenceCount >= MAX_HISTORY_OCCURRENCES) {
+        summary.truncated = true;
+        break;
+      }
+    }
+  }
+  summary.status = summary.truncated ? "partial" : "complete";
+  return {
+    candidates: [...aggregates.values()].map((aggregate) => ({
+      ...aggregate.record,
+      history: {
+        objectIds: aggregate.objectIds,
+        objectCount: aggregate.allObjectIds.size,
+        objectIdsTruncated:
+          aggregate.allObjectIds.size > aggregate.objectIds.length,
+      },
+    })),
+    summary,
+  };
+}
+
+function emptyHistorySummary(
+  requestedDepth: number,
+  status: SecretHistorySummary["status"],
+): SecretHistorySummary {
+  return {
+    requestedDepth,
+    status,
+    enumeratedObjectCount: 0,
+    scannedBlobCount: 0,
+    scannedBytes: 0,
+    candidateOccurrenceCount: 0,
+    omittedPathCount: 0,
+    truncated: false,
+    limits: {
+      maxDepth: MAX_SECRET_HISTORY_DEPTH,
+      maxObjectListBytes: MAX_HISTORY_OBJECT_LIST_BYTES,
+      maxObjects: MAX_HISTORY_OBJECTS,
+      maxBlobs: MAX_FILES,
+      maxBlobBytes: MAX_FILE_BYTES,
+      maxTotalBytes: MAX_HISTORY_TOTAL_BYTES,
+      maxCandidateOccurrences: MAX_HISTORY_OCCURRENCES,
+      maxObjectIdsPerCandidate: MAX_HISTORY_OBJECT_IDS_PER_CANDIDATE,
+      maxCommandMilliseconds: MAX_HISTORY_COMMAND_MILLISECONDS,
+    },
+  };
+}
+
+function isHistoryCandidatePath(
+  path: string,
+  requestedPaths: ReadonlySet<string> | undefined,
+): boolean {
+  if (!isContainedRelativePath(path) || path.startsWith('"')) return false;
+  if (requestedPaths !== undefined && !requestedPaths.has(path)) return false;
+  const segments = path.toLowerCase().split("/");
+  if (segments.some((segment) => IGNORED_DIRECTORIES.has(segment))) {
+    return false;
+  }
+  return !BINARY_EXTENSIONS.has(extension(path));
+}
+
+function mergeHistoryCandidate(
+  aggregates: Map<string, HistoryCandidateAggregate>,
+  record: SecretCandidateRecord,
+  objectId: string,
+): void {
+  const identity = candidateIdentity(record);
+  const existing = aggregates.get(identity);
+  if (existing === undefined) {
+    aggregates.set(identity, {
+      record,
+      objectIds: [objectId],
+      allObjectIds: new Set([objectId]),
+    });
+    return;
+  }
+  if (existing.allObjectIds.has(objectId)) return;
+  existing.allObjectIds.add(objectId);
+  if (existing.objectIds.length < MAX_HISTORY_OBJECT_IDS_PER_CANDIDATE) {
+    existing.objectIds.push(objectId);
+  }
+}
+
+function candidateIdentity(candidate: SecretCandidateRecord): string {
+  return `${candidate.ruleId}\0${candidate.path}\0${candidate.fingerprint}`;
+}
+
+async function runBoundedGitCommand(
+  git: TrustedExecutable,
+  repository: string,
+  args: readonly string[],
+  input: Buffer | undefined,
+  maxBytes: number,
+  signal: AbortSignal | undefined,
+): Promise<GitCaptureResult> {
+  signal?.throwIfAborted();
+  return await new Promise<GitCaptureResult>((resolvePromise, reject) => {
+    const chunks: Buffer[] = [];
+    let byteCount = 0;
+    let truncated = false;
+    let timedOut = false;
+    let settled = false;
+    const environment = { ...git.environment };
+    for (const name of Object.keys(environment)) {
+      if (name.toUpperCase().startsWith("GIT_")) delete environment[name];
+    }
+    Object.assign(environment, {
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
+      GIT_NO_LAZY_FETCH: "1",
+      GIT_OPTIONAL_LOCKS: "0",
+      GIT_PAGER: "cat",
+      LC_ALL: "C",
+    });
+    const child = spawn(
+      git.executable,
+      [
+        "--no-pager",
+        "--no-replace-objects",
+        "-c",
+        "core.pager=cat",
+        "-c",
+        "color.ui=false",
+        "-c",
+        `safe.directory=${repository}`,
+        "-C",
+        repository,
+        ...args,
+      ],
+      {
+        cwd: repository,
+        env: environment,
+        shell: false,
+        windowsHide: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
+    const stop = (): void => {
+      if (!child.killed) child.kill();
+    };
+    const onAbort = (): void => stop();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      truncated = true;
+      stop();
+    }, MAX_HISTORY_COMMAND_MILLISECONDS);
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (truncated) return;
+      const remaining = maxBytes - byteCount;
+      if (chunk.length > remaining) {
+        if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
+        byteCount = maxBytes;
+        truncated = true;
+        stop();
+        return;
+      }
+      chunks.push(chunk);
+      byteCount += chunk.length;
+    });
+    child.stdin.on("error", () => undefined);
+    child.stderr.resume();
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      if (signal?.aborted === true) reject(signal.reason);
+      else
+        resolvePromise({
+          bytes: Buffer.concat(chunks),
+          success: false,
+          truncated,
+        });
+      void error;
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      if (signal?.aborted === true) {
+        reject(signal.reason);
+        return;
+      }
+      resolvePromise({
+        bytes: Buffer.concat(chunks),
+        success: code === 0 && !timedOut,
+        truncated,
+      });
+    });
+    if (input === undefined) child.stdin.end();
+    else child.stdin.end(input);
+  });
 }
 
 export async function readSecretBaseline(
@@ -521,6 +1033,8 @@ function candidateRecordsForText(
   prepared: PreparedSecretScanning,
   now: Date,
   limit: number,
+  source: SecretCandidateRecord["source"] = "working_tree",
+  historyObjectId?: string,
 ): SecretCandidateRecord[] {
   const matches: Array<{
     rule: SecretRule;
@@ -563,6 +1077,7 @@ function candidateRecordsForText(
     const end = index + secret.length;
     if (
       PLACEHOLDER_EXPRESSION.test(secret) ||
+      ENVIRONMENT_CREDENTIAL_REFERENCE.test(secret) ||
       /^\$\{[^}\r\n]+\}$/u.test(secret) ||
       shannonEntropy(secret) < 3.5 ||
       matches.some(
@@ -616,12 +1131,22 @@ function candidateRecordsForText(
       title: match.rule.title,
       category: match.rule.category,
       severity: match.rule.severity,
+      source,
       path,
       line: location.line,
       column: location.column,
       fingerprint,
       shape: secretShape(match.secret),
       disposition: baseline === undefined ? "active" : "suppressed",
+      ...(source !== "git_history" || historyObjectId === undefined
+        ? {}
+        : {
+            history: {
+              objectIds: [historyObjectId],
+              objectCount: 1,
+              objectIdsTruncated: false,
+            },
+          }),
       ...(baseline === undefined
         ? {}
         : {

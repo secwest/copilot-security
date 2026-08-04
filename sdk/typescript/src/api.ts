@@ -59,6 +59,7 @@ import {
 import {
   prepareSecretScanning,
   readSecretBaseline,
+  secretHistoryDepth,
   type PreparedSecretScanning,
 } from "./secret-candidates.js";
 import type { CoverageDocument, SeverityLevel } from "./models.js";
@@ -159,6 +160,8 @@ export interface ScanOptions {
   sarifSourceRoot?: string;
   /** Expiring, justified local secret-fingerprint baseline. */
   secretBaselinePath?: string;
+  /** Reachable Git commits examined locally for historical credentials; zero disables history. */
+  secretHistoryDepth?: number;
   outputDir?: string;
   archiveExisting?: boolean;
   parentScanId?: string;
@@ -227,6 +230,7 @@ export interface ScanPreflight {
   seedSarifPaths?: string[];
   sarifSourceRoot?: string;
   secretBaselinePath?: string;
+  secretHistoryDepth: number;
   seedSarifCandidateCount?: number;
   outputDir: string | null;
   archiveDir?: string;
@@ -365,6 +369,7 @@ export class CopilotSecurity {
             seedSarifCandidateCount: sarifSeeds.candidates.length,
           }),
       ...(secretBaselinePath === undefined ? {} : { secretBaselinePath }),
+      secretHistoryDepth: inputs.secretHistoryDepth,
       outputDir: inputs.outputDir,
       ...(archiveDir === null ? {} : { archiveDir }),
       authentication: scanAuthentication(
@@ -418,6 +423,7 @@ export class CopilotSecurity {
         mode,
         outputDir: requestedOutput,
         protectedRoot,
+        secretHistoryDepth: historyDepth,
       } = await this.#validateLocalInputs(repository, options, signal);
       const stateDirectory = copilotSecurityStateDirectory(
         this.#dependencies.environment,
@@ -767,6 +773,7 @@ export class CopilotSecurity {
         options.secretBaselinePath === undefined
           ? undefined
           : secretScanning.baselinePath,
+        historyDepth,
         options.maxCostUsd,
         options.maxAiCredits,
         maxSessionAttempts,
@@ -1058,6 +1065,11 @@ export class CopilotSecurity {
           ...secretScanning,
           repository: repo,
           scanId,
+          history: {
+            depth: historyDepth,
+            git: trustedGit,
+            signal,
+          },
           ...(normalized.kind === "repository"
             ? {}
             : { includePaths: inventorySnapshot.repositoryPaths }),
@@ -1466,6 +1478,7 @@ export class CopilotSecurity {
     throwIfAborted(signal);
     const mode = options.mode ?? "standard";
     validateMode(normalized, mode);
+    const historyDepth = secretHistoryDepth(options.secretHistoryDepth);
     const protectedRoot =
       (await enclosingGitWorktreeRoot(repo, signal)) ?? repo;
     const requestedOutput = await validateOutputDir(
@@ -1481,6 +1494,7 @@ export class CopilotSecurity {
       mode,
       outputDir: requestedOutput,
       maxSessionAttempts: scanSessionAttempts(options.maxSessionAttempts),
+      secretHistoryDepth: historyDepth,
       protectedRoot,
     };
   }
@@ -1968,6 +1982,7 @@ function scanRecipe(
   sarifSeeds?: PreparedSarifSeeds | null,
   sarifSourceRoot?: string,
   secretBaselinePath?: string,
+  historyDepth = secretHistoryDepth(undefined),
   maxCostUsd?: number,
   maxAiCredits?: number,
   maxSessionAttempts = DEFAULT_FRESH_SESSION_ATTEMPTS,
@@ -1999,6 +2014,7 @@ function scanRecipe(
           ...(sarifSourceRoot === undefined ? {} : { sarifSourceRoot }),
         }),
     ...(secretBaselinePath === undefined ? {} : { secretBaselinePath }),
+    secretHistoryDepth: historyDepth,
     ...(maxCostUsd === undefined ? {} : { maxCostUsd }),
     ...(maxAiCredits === undefined ? {} : { maxAiCredits }),
     maxSessionAttempts,

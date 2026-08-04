@@ -23,8 +23,48 @@ that dissimilar products can be reduced to one score.
 | [Trivy repository scanning](https://www.trivy.dev/docs/latest/guide/target/repository/)                                                                                                                                                                                                                                                                                                                    | One repository pass can cover vulnerable dependencies, misconfiguration, secrets, and licenses.                                                                                                                                                                                                                                 | Accept these result families through SARIF now; later add opt-in local adapters while keeping each family’s evidence and completion semantics distinct.                                                                                                                                          |
 | [Trivy SARIF reporting](https://trivy.dev/docs/latest/configuration/reporting/)                                                                                                                                                                                                                                                                                                                            | SARIF 2.1.0 is a practical interchange format across vulnerability, misconfiguration, secret, and license scanners.                                                                                                                                                                                                             | Implement repeatable `--seed-sarif` intake rather than tool-specific parsers. Preserve normalized provenance and never copy a producer’s conclusion into canonical findings.                                                                                                                     |
 | [Trivy secret scanning](https://www.trivy.dev/docs/latest/guide/scanner/secret/)                                                                                                                                                                                                                                                                                                                           | Built-in and custom rules, allow rules, path bounds, and explicit skip behavior reduce secret-scanning cost and noise.                                                                                                                                                                                                          | Future deterministic secret discovery must redact values before model access, preserve only local fingerprints, distinguish test fixtures, and make exclusions auditable.                                                                                                                        |
-| [Gitleaks](https://github.com/gitleaks/gitleaks)                                                                                                                                                                                                                                                                                                                                                           | Full redaction, stable fingerprints, baselines, and scoped allowlists make high-volume secret findings manageable.                                                                                                                                                                                                              | Extend false-positive feedback with expiring, justified fingerprint baselines; never persist or display raw secret material by default.                                                                                                                                                          |
+| [Gitleaks](https://github.com/gitleaks/gitleaks)                                                                                                                                                                                                                                                                                                                                                           | Git-patch history scanning, full redaction, stable fingerprints, baselines, and scoped allowlists make high-volume secret findings manageable.                                                                                                                                                                                  | Scan bounded reachable Git blobs locally through a trusted executable, deduplicate revision occurrences, use expiring justified keyed baselines, and never persist or display raw secret material.                                                                                               |
 | [GitHub SARIF support](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support)                                                                                                                                                                                                                                                                                         | Stable rule IDs, relative paths, locations, severity/precision metadata, and partial fingerprints support interoperable alert tracking.                                                                                                                                                                                         | Normalize relative paths and rule metadata, but hash source documents locally and omit imported fingerprints because they may contain arbitrary or sensitive producer data.                                                                                                                      |
+
+## Implemented: bounded reachable-Git secret history
+
+Gitleaks scans Git patches, GitHub scans all branches in repository history,
+and TruffleHog treats version history plus deduplication metadata as a distinct
+secret source. Copilot Security now covers the same deleted-credential class
+without installing or trusting another analyzer and without copying raw values
+into model context.
+
+The host resolves Git outside the protected repository, strips ambient
+`GIT_*` controls, disables global/system configuration, replacement objects,
+lazy object fetching, pagers, and optional locks, and never checks out a
+historical tree. It enumerates the newest bounded reachable commit set across
+refs, maps safe repository-relative object paths, batch-checks type and size,
+and then batch-reads only bounded nonbinary blobs. Unique blob contents are
+scanned once. Repeated rule/path/value identities aggregate up to eight opaque
+blob IDs while retaining the full bounded object count; the HMAC identity and
+expiring exact baseline remain shared with the working-tree lane.
+
+The default horizon is 128 commits, `0` disables history, and 2048 is the hard
+maximum. Independent caps cover enumeration bytes, objects, blobs, blob bytes,
+total content, candidate occurrences, command time, and retained provenance.
+Every cutoff, missing trusted Git executable, malformed object response, or
+unavailable reachable object produces an explicit partial/error history state
+and sets overall truncation, so it cannot support a clean history-wide claim.
+Non-Git directories remain a distinct complete `not_git_repository` state.
+
+Historical candidate rows contain `source=git_history`, exact path and line in
+the blob, redacted shape, repository-scoped keyed fingerprint, and bounded
+immutable object IDs. The quality prompt forbids `git show`, `cat-file`, patch
+logs, or source views merely to recover candidate bytes and forbids claiming
+the credential is live without separate safe validation. Operators receive
+revocation and reachable-history cleanup guidance instead of the value.
+
+`benchmarks/secret-history-manifest.json` commits and deletes three positive
+credential families and two controls in a private temporary repository. It
+requires perfect precision/recall, revision deduplication, history-only
+classification, and zero candidate-byte occurrence in both inventory and
+report. Separate regressions prove horizon, exact scoped-path, disabled,
+non-Git, unavailable-Git, and numeric-bound behavior.
 
 ## Implemented: hardened SARIF seed ingestion
 
@@ -363,9 +403,11 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
    entropy checks now run before Copilot, persist only repository-scoped keyed
    fingerprints and redacted structural evidence, enforce exact expiring
    justified baselines, and gate a fragment-materialized positive/negative
-   corpus at perfect precision and recall. Next extensions should add audited
-   custom-rule packs and Git-history scanning without weakening the no-plaintext
-   persistence contract.
+   corpus at perfect precision and recall. Bounded reachable-Git object scanning
+   now finds deleted credentials, deduplicates revision provenance, and has its
+   own real-history exploit/control gate. Next extensions should add audited
+   custom-rule packs and separately authorized issuer verification without
+   weakening the no-plaintext persistence or no-implicit-network contracts.
 4. **Configuration and IaC model packs.** Add deterministic parsers and typed
    checks for high-value Docker, Kubernetes, Terraform, CI, and cloud policy
    surfaces, then ask Copilot to evaluate deployment reachability and
