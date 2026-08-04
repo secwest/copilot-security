@@ -442,6 +442,36 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The Go `net/http` SSRF lane measures exact standard-library import identity,
+typed request accessors, URL argument roles, one same-package wrapper, request
+construction, and actual dispatch. The positive passes a query-controlled
+complete URL through `NewRequestWithContext` into a constructed
+`http.Client.Do`. The control maps the request value to a fixed server-owned
+complete URL, rejects unknown keys, and returns `http.ErrUseLastResponse` to
+stop redirects. Real `httptest` services prove the positive can reach a mock
+metadata endpoint and that neither a direct internal URL nor an allowed
+server's redirect reaches it in the control:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/go-net-http-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-go-net-http-ssrf `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+Push-Location fixtures\go-cross-file-ssrf
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-file-safe-fetch
+go test ./...
+Pop-Location
+```
+
 The template-injection framework lane applies the same strict gates to Node
 and Python relative-import wrappers. Its positives compile caller-controlled
 Pug or Jinja template source. Its negative controls pass the same untrusted

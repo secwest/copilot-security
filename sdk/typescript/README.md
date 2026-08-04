@@ -38,7 +38,13 @@ The package is ESM-only and provides:
   `HttpClient`, Spring `RestTemplate`, reactive Spring `WebClient`, and
   module-bound Axios clients and instances; Axios preserves only the URL
   argument or request-config `url` property and keeps request bodies out of
-  destination flow. Node object-authorization hypotheses preserve the exact
+  destination flow. A separate Go model requires the exact standard-library
+  `net/http` import and a typed `*http.Request` source, preserves only complete
+  URL arguments, and requires a request built by `NewRequest*` to reach a
+  proven typed or constructed `Client.Do`. It follows at most one unique
+  same-package string wrapper and rejects body-only flow, untyped receivers,
+  inert construction, reassignment, and import lookalikes. Node
+  object-authorization hypotheses preserve the exact
   request-controlled record lookup and principal-bound owner filtering or
   post-lookup policy leads without treating authentication or opaque IDs as
   authorization. ASP.NET object-authorization hypotheses preserve bound route

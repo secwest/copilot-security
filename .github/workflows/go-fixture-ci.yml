@@ -1,0 +1,28 @@
+name: go-fixture-ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache: false
+      - name: Prove caller-controlled Go net/http dispatch
+        run: go test ./...
+        working-directory: benchmarks/fixtures/go-cross-file-ssrf
+      - name: Prove fixed selection and redirect rejection
+        run: go test ./...
+        working-directory: benchmarks/fixtures/go-cross-file-safe-fetch

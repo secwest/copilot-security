@@ -41,8 +41,9 @@ stand in for reviewed application source.
 
 The residual pass also applies typed framework data-flow models for Node HTTP,
 Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
-paths, server-side request forgery, and object authorization, plus Node, Python,
-and Spring server-side template injection. Each applicable
+paths, server-side request forgery, and object authorization; a separate Go
+`net/http` model covers server-side request forgery; and Node, Python, and
+Spring models cover server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
@@ -666,6 +667,29 @@ node benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\node-axios-ssrf `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Go lane requires the exact standard-library `net/http` binding and a typed
+`*http.Request` source. Its positive carries a query-controlled complete URL
+through one same-package wrapper into `NewRequestWithContext` and a constructed
+`http.Client.Do`; request construction without dispatch is not a sink. The
+control accepts only an exact key into a fixed server-owned destination map and
+returns `http.ErrUseLastResponse` from `CheckRedirect`. Real `httptest`
+loopback tests prove both the initial-request exploit and redirect containment:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/go-net-http-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\go-net-http-ssrf `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+
+Push-Location benchmarks\fixtures\go-cross-file-ssrf
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-file-safe-fetch
+go test ./...
+Pop-Location
 ```
 
 The template-injection framework lane pairs Node/Pug and Python/Jinja

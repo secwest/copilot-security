@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "completionRate": 1,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "casePassRate": 1,
+    "negativeControlPassRate": 1,
+    "stableDetectionRate": 1,
+    "validationCoverage": 1,
+    "attackPathCoverage": 1,
+    "codeEvidenceCoverage": 1,
+    "severityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "go-cross-file-ssrf",
+      "fixture": "fixtures/go-cross-file-ssrf",
+      "expected": [
+        {
+          "title": "Go handler dispatches a caller-controlled complete URL",
+          "cwe": ["CWE-918"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "fetch.go",
+          "line": 15,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-file-safe-fetch",
+      "fixture": "fixtures/go-cross-file-safe-fetch",
+      "expected": []
+    }
+  ]
+}
