@@ -45,6 +45,8 @@ const benchmarkRoot = resolve(process.cwd(), "..", "..", "benchmarks");
 const caseIds = [
   "go-cross-file-path-traversal",
   "go-cross-file-safe-rooted-file",
+  "go-relative-path-traversal",
+  "go-relative-safe-containment",
 ] as const;
 const temporaryPaths: string[] = [];
 
@@ -130,6 +132,14 @@ describe("Go HTTP filesystem-path framework-model benchmark", () => {
       requireCodeEvidence: true,
     });
     expect(manifest.cases[1]?.expected).toEqual([]);
+    expect(manifest.cases[2]?.expected[0]).toMatchObject({
+      cwe: ["CWE-22"],
+      acceptableSeverities: ["critical", "high"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[3]?.expected).toEqual([]);
   });
 
   test("preserves the exact cross-file request-to-read path", async () => {
@@ -321,9 +331,112 @@ func Handler(w http.ResponseWriter, r *http.Request) {
       "path-component-allowlist",
       "path-normalization-only",
       "path-normalization-only",
-      "relative-path-containment-check",
       "symlink-resolution",
     ]);
+  });
+
+  test("keeps filepath.Rel tainted and requires an exact parent boundary rejection", async () => {
+    const vulnerable = models(await fixtureInventory(caseIds[2]));
+    const controlled = models(await fixtureInventory(caseIds[3]));
+    expect(vulnerable).toHaveLength(1);
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toContain("go-filesystem-path-construction");
+    expect(
+      vulnerable[0]?.frameworkModel?.candidateControls.map(({ kind }) => kind),
+    ).not.toContain("relative-parent-boundary-rejection");
+    expect(controlled).toHaveLength(1);
+    expect(
+      controlled[0]?.frameworkModel?.candidateControls.map(({ kind }) => kind),
+    ).toContain("relative-parent-boundary-rejection");
+  });
+
+  test("rejects partial, unrelated, and post-sink relative path checks", async () => {
+    for (const body of [
+      `  name := r.FormValue("name")
+  candidate := filepath.Join("public", name)
+  relative, _ := filepath.Rel("public", candidate)
+  if relative == ".." { return }
+  // strings.HasPrefix(relative, ".."+string(os.PathSeparator))
+  os.ReadFile(filepath.Join("public", relative))`,
+      `  name := r.FormValue("name")
+  candidate := filepath.Join("public", name)
+  relative, _ := filepath.Rel("public", candidate)
+  if strings.HasPrefix(relative, ".."+string(os.PathSeparator)) { return }
+  os.ReadFile(filepath.Join("public", relative))`,
+      `  name := r.FormValue("name")
+  candidate := filepath.Join("public", name)
+  relative, _ := filepath.Rel("public", candidate)
+  other := "report.txt"
+  if other == ".." || strings.HasPrefix(other, ".."+string(os.PathSeparator)) { return }
+  os.ReadFile(filepath.Join("public", relative))`,
+      `  name := r.FormValue("name")
+  candidate := filepath.Join("public", name)
+  relative, _ := filepath.Rel("public", candidate)
+  os.ReadFile(filepath.Join("public", relative))
+  if relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) { return }`,
+    ]) {
+      const rows = await repositoryInventory({
+        "document.go": `package documents
+import (
+  "net/http"
+  "os"
+  "path/filepath"
+  "strings"
+)
+func Handler(w http.ResponseWriter, r *http.Request) {
+${body}
+}`,
+      });
+      expect(rows).toHaveLength(1);
+      expect(
+        rows[0]?.frameworkModel?.candidateControls.map(({ kind }) => kind),
+      ).not.toContain("relative-parent-boundary-rejection");
+    }
+  });
+
+  test("requires exact standard-library identities and accepts their aliases", async () => {
+    const aliased = await repositoryInventory({
+      "document.go": `package documents
+import (
+  web "net/http"
+  disk "os"
+  paths "path/filepath"
+  text "strings"
+)
+func Handler(w web.ResponseWriter, r *web.Request) {
+  name := r.FormValue("name")
+  candidate := paths.Join("public", name)
+  relative, _ := paths.Rel("public", candidate)
+  if relative == ".." || text.HasPrefix(relative, ".."+string(disk.PathSeparator)) { return }
+  disk.ReadFile(paths.Join("public", relative))
+}`,
+    });
+    expect(aliased).toHaveLength(1);
+    expect(
+      aliased[0]?.frameworkModel?.candidateControls.map(({ kind }) => kind),
+    ).toContain("relative-parent-boundary-rejection");
+
+    const lookalike = await repositoryInventory({
+      "document.go": `package documents
+import (
+  "net/http"
+  "os"
+  filepath "example.com/path/filepath"
+  strings "example.com/strings"
+)
+func Handler(w http.ResponseWriter, r *http.Request) {
+  name := r.FormValue("name")
+  candidate := filepath.Join("public", name)
+  relative, _ := filepath.Rel("public", candidate)
+  if relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) { return }
+  os.ReadFile(filepath.Join("public", relative))
+}`,
+    });
+    expect(lookalike).toHaveLength(1);
+    expect(
+      lookalike[0]?.frameworkModel?.candidateControls.map(({ kind }) => kind),
+    ).not.toContain("relative-parent-boundary-rejection");
   });
 
   test("accepts fixed server-owned selection and root-scoped filesystem APIs", async () => {
@@ -445,6 +558,9 @@ func ReadDocument(name string) { os.ReadFile(name) }`,
     const prompt = scanQualityGatePrompt("inventory-row", "", "", "");
     expect(prompt).toContain("For go-http-filesystem-path rows");
     expect(prompt).toContain("filepath.Join");
+    expect(prompt).toContain("relative-parent-boundary-rejection");
+    expect(prompt).toContain("string(os.PathSeparator)");
+    expect(prompt).toContain("occur before and dominate the exact sink");
     expect(prompt).toContain("normalization");
     expect(prompt).toContain("filepath.IsLocal");
     expect(prompt).toContain("symbolic links");

@@ -352,12 +352,17 @@ mutation, working-directory and credential inheritance, Windows CreateProcess
 command-line APIs, and platform-specific deployment evidence.
 
 `benchmarks/go-http-filesystem-path-manifest.json` adds a strict Go
-request-to-filesystem lane. The positive carries an HTTP query value through
+request-to-filesystem lane. One positive carries an HTTP query value through
 one unique same-package wrapper, joins it beneath a public directory, and
 passes the result to `os.ReadFile`. Its cross-platform test proves a `..`
-payload reads a sibling signing-key witness. The matched control preserves the
+payload reads a sibling signing-key witness. Its matched control preserves the
 request, wrapper, payload, directory layout, and allowed-file behavior but
-opens through `os.OpenInRoot`, which rejects the escape.
+opens through `os.OpenInRoot`, which rejects the escape. A second pair captures
+the [CodeQL 2.26.2 correction that `filepath.Rel` is not a path-injection
+sanitizer](https://codeql.github.com/docs/codeql-overview/codeql-changelog/codeql-cli-2.26.2/).
+The exploit rejoins an unchecked `Rel` result and reads the same class of
+sibling secret. The control rejects an exact `..` and a `..` prefix followed by
+the platform `os.PathSeparator`, while preserving allowed-file behavior.
 
 The host model requires exact default or aliased standard-library imports and
 the documented argument position for `os`, legacy `io/ioutil`,
@@ -371,6 +376,12 @@ examples are rejected. Unlike the inspected gosec G703 implementation, the
 model does not treat `Clean`, `Abs`, `Rel`, or `EvalSymlinks` as universal
 sanitizers: Go documents lexical transformations separately from filesystem
 containment, and `IsLocal` explicitly does not account for symbolic links.
+`Rel` remains a tainted construction propagator. An exact
+`relative-parent-boundary-rejection` candidate requires equality with `..` and
+a `strings.HasPrefix` check against `".." + string(os.PathSeparator)` on the
+same derived variable; either half, another variable, or a post-sink check is
+rejected. It remains reviewer evidence until control flow proves that the check
+dominates the exact sink and fails closed.
 Root-scoped names under a fixed trusted root are retained as strong
 counterevidence, while request control of the root itself is reported.
 Reviewer guidance requires root identity, authorization, platform,

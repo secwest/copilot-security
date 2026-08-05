@@ -12,6 +12,14 @@ negatives instead of disappearing from the score. When a runner status receipt
 is present, a nonzero, malformed, or mismatched receipt also makes the run a
 reliability failure even if partial findings exist.
 
+The evaluator accepts both the current explicit `id`/`locations` expectation
+shape and the committed specialized manifests' original
+`title`/`path`/`line` shape. Legacy expectations receive deterministic
+per-case identities, and every original metric name maps to its current
+`min*` gate. A manifest may not define both names for one metric. This keeps
+sealed historical campaigns evaluable without weakening malformed-manifest or
+conflicting-policy rejection.
+
 Metrics include completion rate, precision, recall, F1, exact-case pass rate,
 negative-control pass rate, stable detection across repeated runs, validation
 coverage, attack-path coverage, code-evidence coverage, severity accuracy, and
@@ -522,13 +530,21 @@ Pop-Location
 The Go filesystem-path lane measures exact standard-library import identity,
 typed request accessors, path argument roles, one same-package wrapper, and
 the distinction between path construction and rooted filesystem access. The
-positive joins a query value beneath a public directory and passes the result
-to `os.ReadFile`; its executable witness reads a sibling signing-key file.
-The matched control keeps the request, wrapper, directory layout, attack
+first positive joins a query value beneath a public directory and passes the
+result to `os.ReadFile`; its executable witness reads a sibling signing-key
+file. Its matched control keeps the request, wrapper, directory layout, attack
 bytes, and allowed-file behavior but uses `os.OpenInRoot`, which rejects the
-escape. `Join`, `Clean`, `Abs`, `Rel`, and `EvalSymlinks` do not erase the host
-hypothesis, and request control of an `OpenRoot` or `OpenInRoot` root is a
-separate root-selection finding. Review must separately prove lexical
+escape. The second positive computes `filepath.Rel` and then rejoins its result
+without rejecting `..`; its witness proves the supposedly relative path still
+reads the sibling secret. The matched lexical control rejects both an exact
+`..` result and `..` followed by `os.PathSeparator`, then proves the public
+document remains readable. `Join`, `Clean`, `Abs`, `Rel`, and `EvalSymlinks` do
+not erase the host hypothesis. `Rel` remains tainted construction; the scanner
+records a `relative-parent-boundary-rejection` candidate only when the same
+result receives both separator-aware checks before the sink. The quality gate
+must still prove dominance and fail-closed behavior. Request control of an
+`OpenRoot` or `OpenInRoot` root is a separate root-selection finding. Review
+must separately prove lexical
 boundaries, links, mounts, races, authorization, and runtime patch level;
 affected Unix `os.Root` users
 need Go 1.25.12 or 1.26.5 or newer for GO-2026-4970/CVE-2026-39822:
@@ -549,6 +565,12 @@ Push-Location fixtures\go-cross-file-path-traversal
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-file-safe-rooted-file
+go test ./...
+Pop-Location
+Push-Location fixtures\go-relative-path-traversal
+go test ./...
+Pop-Location
+Push-Location fixtures\go-relative-safe-containment
 go test ./...
 Pop-Location
 ```

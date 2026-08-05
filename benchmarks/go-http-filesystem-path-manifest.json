@@ -36,6 +36,28 @@
       "id": "go-cross-file-safe-rooted-file",
       "fixture": "fixtures/go-cross-file-safe-rooted-file",
       "expected": []
+    },
+    {
+      "id": "go-relative-path-traversal",
+      "fixture": "fixtures/go-relative-path-traversal",
+      "expected": [
+        {
+          "title": "Go document handler trusts filepath.Rel without rejecting parent traversal",
+          "cwe": ["CWE-22"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "document.go",
+          "line": 14,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-relative-safe-containment",
+      "fixture": "fixtures/go-relative-safe-containment",
+      "expected": []
     }
   ]
 }

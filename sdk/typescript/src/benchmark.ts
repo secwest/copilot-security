@@ -837,10 +837,21 @@ function parseExpectation(
   ids: Set<string>,
 ): BenchmarkFindingExpectation {
   requireRecord(value, `Benchmark case ${caseId} expectation ${index + 1}`);
-  const id = requireIdentifier(
-    value["id"],
-    `Benchmark case ${caseId} expectation ${index + 1} id`,
-  );
+  const legacyTitle = optionalString(value["title"]);
+  const legacyPath = optionalString(value["path"]);
+  const legacyLine = positiveInteger(value["line"]);
+  const legacyExpectation =
+    value["id"] === undefined &&
+    value["locations"] === undefined &&
+    legacyTitle !== undefined &&
+    legacyPath !== undefined &&
+    legacyLine !== null;
+  const id = legacyExpectation
+    ? `legacy-expectation-${index + 1}`
+    : requireIdentifier(
+        value["id"],
+        `Benchmark case ${caseId} expectation ${index + 1} id`,
+      );
   if (ids.has(id)) {
     throw new CopilotSecurityError(
       `Duplicate expectation id ${id} in benchmark case ${caseId}.`,
@@ -857,7 +868,17 @@ function parseExpectation(
       `Benchmark expectation ${caseId}/${id} must contain valid CWE identifiers.`,
     );
   }
-  const locations = value["locations"];
+  const locations = legacyExpectation
+    ? [
+        {
+          path: legacyPath,
+          startLine: legacyLine,
+          ...(value["lineTolerance"] === undefined
+            ? {}
+            : { lineTolerance: value["lineTolerance"] }),
+        },
+      ]
+    : value["locations"];
   if (!Array.isArray(locations) || locations.length === 0) {
     throw new CopilotSecurityError(
       `Benchmark expectation ${caseId}/${id} must contain locations.`,
@@ -917,23 +938,33 @@ function parseExpectation(
 function parseThresholds(value: unknown): BenchmarkThresholds {
   requireRecord(value, "Benchmark thresholds");
   const thresholds: BenchmarkThresholds = {};
-  for (const name of [
-    "minCompletionRate",
-    "minPrecision",
-    "minRecall",
-    "minF1",
-    "minCasePassRate",
-    "minNegativeCasePassRate",
-    "minStableDetectionRate",
-    "minValidationRate",
-    "minAttackPathRate",
-    "minCodeEvidenceRate",
-    "minSeverityAccuracy",
-  ] as const) {
-    if (value[name] === undefined) continue;
-    const threshold = unitInterval(value[name]);
+  const rateNames = [
+    ["minCompletionRate", "completionRate"],
+    ["minPrecision", "precision"],
+    ["minRecall", "recall"],
+    ["minF1", "f1"],
+    ["minCasePassRate", "casePassRate"],
+    ["minNegativeCasePassRate", "negativeControlPassRate"],
+    ["minStableDetectionRate", "stableDetectionRate"],
+    ["minValidationRate", "validationCoverage"],
+    ["minAttackPathRate", "attackPathCoverage"],
+    ["minCodeEvidenceRate", "codeEvidenceCoverage"],
+    ["minSeverityAccuracy", "severityAccuracy"],
+  ] as const;
+  for (const [name, legacyName] of rateNames) {
+    if (value[name] !== undefined && value[legacyName] !== undefined) {
+      throw new CopilotSecurityError(
+        `Benchmark thresholds must not define both ${name} and legacy ${legacyName}.`,
+      );
+    }
+    const candidate =
+      value[name] !== undefined ? value[name] : value[legacyName];
+    if (candidate === undefined) continue;
+    const threshold = unitInterval(candidate);
     if (threshold === null)
-      throw new CopilotSecurityError(`${name} must be between 0 and 1.`);
+      throw new CopilotSecurityError(
+        `${name} (or legacy ${legacyName}) must be between 0 and 1.`,
+      );
     thresholds[name] = threshold;
   }
   if (value["maxFalsePositivesPerRun"] !== undefined) {

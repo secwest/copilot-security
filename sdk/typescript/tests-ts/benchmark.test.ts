@@ -2509,6 +2509,122 @@ describe("effectiveness benchmark", () => {
     );
   });
 
+  test("evaluates committed legacy specialized manifests under their exact gates", async () => {
+    const root = await fixtureRoot();
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      thresholds: {
+        completionRate: 1,
+        precision: 1,
+        recall: 1,
+        f1: 1,
+        casePassRate: 1,
+        negativeControlPassRate: 1,
+        stableDetectionRate: 1,
+        validationCoverage: 1,
+        attackPathCoverage: 1,
+        codeEvidenceCoverage: 1,
+        severityAccuracy: 1,
+        maxFalsePositivesPerRun: 0,
+      },
+      cases: [
+        {
+          id: "legacy-path",
+          findingsPath: "legacy-path/findings.json",
+          expected: [
+            {
+              title: "Legacy path traversal",
+              cwe: ["CWE-22"],
+              acceptableSeverities: ["critical", "high"],
+              path: "document.go",
+              line: 14,
+              lineTolerance: 2,
+              requireValidation: true,
+              requireAttackPath: true,
+              requireCodeEvidence: true,
+            },
+          ],
+        },
+        {
+          id: "legacy-safe-path",
+          findingsPath: "legacy-safe-path/findings.json",
+          expected: [],
+        },
+      ],
+    });
+    await writeFindings(join(root, "results", "legacy-path", "findings.json"), [
+      finding({
+        id: "legacy-path",
+        cwe: ["CWE-22"],
+        path: "document.go",
+        line: 14,
+        validation: {
+          method: "executable witness",
+          summary: "A parent path reads the sibling secret.",
+          assertions: ["The response contains the sibling secret."],
+        },
+        attackPath: {
+          summary: "A remote query value reaches the filesystem read.",
+          steps: ["Supply a parent path.", "Read the sibling file."],
+        },
+        codeEvidence: [
+          {
+            id: "filesystem-sink",
+            label: "Request-derived file read",
+            path: "document.go",
+            startLine: 14,
+            role: "sink",
+            code: "os.ReadFile(filepath.Join(base, relative))",
+            explanation: "The unchecked relative path reaches the read.",
+          },
+        ],
+      }),
+    ]);
+    await writeFindings(
+      join(root, "results", "legacy-safe-path", "findings.json"),
+      [],
+    );
+
+    const report = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+      requireRunStatus: false,
+    });
+    expect(report.passed).toBe(true);
+    expect(report.metrics).toMatchObject({
+      truePositives: 1,
+      falsePositives: 0,
+      falseNegatives: 0,
+      precision: 1,
+      recall: 1,
+      f1: 1,
+      negativeCasePassRate: 1,
+    });
+    expect(report.cases[0]?.stableExpectations).toEqual([
+      "legacy-expectation-1",
+    ]);
+    expect(report.thresholds).toHaveLength(12);
+    expect(report.thresholds.every(({ passed }) => passed)).toBe(true);
+
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      thresholds: { precision: 1, minPrecision: 1 },
+      cases: [],
+    });
+    await expect(
+      evaluateBenchmark({ manifestPath: join(root, "manifest.json") }),
+    ).rejects.toThrow("both minPrecision and legacy precision");
+
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      thresholds: { precision: null },
+      cases: [],
+    });
+    await expect(
+      evaluateBenchmark({ manifestPath: join(root, "manifest.json") }),
+    ).rejects.toThrow("must be between 0 and 1");
+  });
+
   test("records missing scan artifacts as reliability failures", async () => {
     const root = await fixtureRoot();
     await writeJson(join(root, "manifest.json"), {

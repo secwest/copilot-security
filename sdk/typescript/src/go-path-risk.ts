@@ -244,6 +244,28 @@ function functionControls(
     "strings",
     "strings",
   );
+  const relativePaths = new Map<string, number>();
+  if (filepathAlias !== undefined) {
+    const escapedFilepath = filepathAlias.replace(
+      /[.*+?^${}()|[\]\\]/gu,
+      "\\$&",
+    );
+    for (
+      let line = function_.bodyStartLine;
+      line <= function_.endLine;
+      line += 1
+    ) {
+      const assigned = goAssignment(function_.structuralLines[line - 1] ?? "");
+      if (
+        assigned !== undefined &&
+        new RegExp(`\\b${escapedFilepath}\\.Rel\\s*\\(`, "u").test(
+          assigned.value,
+        )
+      ) {
+        relativePaths.set(assigned.names[0]!, line);
+      }
+    }
+  }
   for (let line = function_.startLine; line <= function_.endLine; line += 1) {
     const structural = function_.structuralLines[line - 1] ?? "";
     if (filepathAlias !== undefined) {
@@ -259,9 +281,6 @@ function functionControls(
       }
       if (new RegExp(`${prefix}(?:Clean|Abs)\\s*\\(`, "u").test(structural)) {
         add("path-normalization-only", line);
-      }
-      if (new RegExp(`${prefix}Rel\\s*\\(`, "u").test(structural)) {
-        add("relative-path-containment-check", line);
       }
       if (new RegExp(`${prefix}EvalSymlinks\\s*\\(`, "u").test(structural)) {
         add("symlink-resolution", line);
@@ -305,6 +324,49 @@ function functionControls(
       ).test(structural)
     ) {
       add("path-string-validation", line);
+    }
+  }
+  if (stringsAlias !== undefined && osAlias !== undefined) {
+    const escapedStrings = stringsAlias.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    const escapedOs = osAlias.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    for (const [name, relativeLine] of relativePaths) {
+      const escapedName = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+      let parentEqualityLine: number | undefined;
+      let parentPrefixLine: number | undefined;
+      for (let line = relativeLine + 1; line <= function_.endLine; line += 1) {
+        const structural = function_.structuralLines[line - 1] ?? "";
+        const raw = function_.file.lines[line - 1] ?? "";
+        if (
+          new RegExp(
+            `(?:\\b${escapedName}\\s*==|==\\s*\\b${escapedName})`,
+            "u",
+          ).test(structural) &&
+          new RegExp(
+            `(?:\\b${escapedName}\\s*==\\s*["']\\.\\.["']|["']\\.\\.["']\\s*==\\s*\\b${escapedName})`,
+            "u",
+          ).test(raw)
+        ) {
+          parentEqualityLine ??= line;
+        }
+        if (
+          new RegExp(
+            `\\b${escapedStrings}\\.HasPrefix\\s*\\(\\s*${escapedName}\\s*,[\\s\\S]*?string\\s*\\(\\s*${escapedOs}\\.PathSeparator\\s*\\)`,
+            "u",
+          ).test(structural) &&
+          new RegExp(
+            `\\b${escapedStrings}\\.HasPrefix\\s*\\(\\s*${escapedName}\\s*,\\s*["']\\.\\.["']\\s*\\+\\s*string\\s*\\(\\s*${escapedOs}\\.PathSeparator\\s*\\)\\s*\\)`,
+            "u",
+          ).test(raw)
+        ) {
+          parentPrefixLine ??= line;
+        }
+      }
+      if (parentEqualityLine !== undefined && parentPrefixLine !== undefined) {
+        add(
+          "relative-parent-boundary-rejection",
+          Math.max(parentEqualityLine, parentPrefixLine),
+        );
+      }
     }
   }
   return controls.slice(0, 10);
@@ -442,12 +504,12 @@ function analyzeFunction(
               },
             ],
           },
-          controls:
-            specification.kind === "go-filesystem-root-selection"
-              ? controls.filter(
-                  (control) => control.kind !== "root-scoped-filesystem",
-                )
-              : controls,
+          controls: (specification.kind === "go-filesystem-root-selection"
+            ? controls.filter(
+                (control) => control.kind !== "root-scoped-filesystem",
+              )
+            : controls
+          ).filter((control) => control.line <= line),
         });
       }
     }
