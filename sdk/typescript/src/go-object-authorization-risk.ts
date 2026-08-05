@@ -2878,6 +2878,46 @@ function objectWrapperSummaries(
         ).length === 1
       );
     };
+    const interfaceParameterForSwitchSource = (
+      source: string,
+    ): string | undefined => {
+      const aliases = new Map<
+        string,
+        { parameterName: string; depth: number }
+      >();
+      for (const { name } of function_.parameters) {
+        if (isInterfaceParameter(name)) {
+          aliases.set(name, { parameterName: name, depth: 0 });
+        }
+      }
+      let structuralDepth = 0;
+      for (let line = function_.bodyStartLine; line < startLine; line += 1) {
+        const structural = function_.structuralLines[line - 1] ?? "";
+        const assignment = goAssignment(structural);
+        if (assignment !== undefined) {
+          const priorName = /^([A-Za-z_]\w*)$/u.exec(
+            assignment.value.trim(),
+          )?.[1];
+          const prior =
+            priorName === undefined ? undefined : aliases.get(priorName);
+          for (const name of assignment.names) aliases.delete(name);
+          if (
+            structuralDepth === 1 &&
+            assignment.names.length === 1 &&
+            prior !== undefined &&
+            prior.depth < MAX_OBJECT_CONSTRUCTOR_ALIAS_DEPTH
+          ) {
+            aliases.set(assignment.names[0]!, {
+              parameterName: prior.parameterName,
+              depth: prior.depth + 1,
+            });
+          }
+        }
+        structuralDepth += braceDelta(structural);
+      }
+      if (structuralDepth !== 1) return undefined;
+      return aliases.get(source)?.parameterName;
+    };
     let armForbiddenAlias: string | undefined;
     let armLeadingNoOpAlias: string | undefined;
     if (boundTypeSwitch !== null || unboundTypeSwitch !== null) {
@@ -2885,7 +2925,7 @@ function objectWrapperSummaries(
       const source = boundTypeSwitch?.[2] ?? unboundTypeSwitch?.[1];
       if (
         source === undefined ||
-        !isInterfaceParameter(source) ||
+        interfaceParameterForSwitchSource(source) === undefined ||
         (target !== undefined && !switchAliasIsFresh(target))
       )
         return undefined;

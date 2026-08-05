@@ -955,9 +955,13 @@ exercises both exact `switch repository.(type)` and
 `switch selected := repository.(type)` recognition through an imported helper.
 The source must be one uniquely resolved interface parameter. A named guard
 must be fresh and may only be consumed by a leading `_ = selected` no-op; every
-value-bearing use remains rejected. Selector, conversion, scalar, aliased, or
-shadowed sources, malformed guards, missing final defaults, and divergent arms
-fail closed under the existing complete-state, topology, and resource checks.
+value-bearing use remains rejected. A twenty-ninth pair carries the interface
+parameter through two exact local aliases before the switch. The scanner
+follows as many as eight top-level, single-name, value-preserving assignments
+while killing overwritten names. A ninth hop, transformation, selector,
+multiple assignment, nested or conditional binding, scalar, shadowed or
+ambiguous source, malformed guard, missing final default, or divergent arm
+fails closed under the existing complete-state, topology, and resource checks.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1132,6 +1136,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-helper-type-switch-w
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-type-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-helper-aliased-type-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-aliased-type-switch-write-authorization
 go test ./...
 Pop-Location
 ```

@@ -597,26 +597,32 @@ origins and requires identity-compatible convergence. A twenty-eighth pair
 covers exact type switches sourced directly from one uniquely resolved
 interface parameter. Both unbound and fresh guard-bound spellings are admitted;
 a named guard can be consumed only by an exact leading blank assignment and
-cannot affect the tracked graph. Scalar, alias, selector, conversion, shadowed,
-and ambiguous sources, or any value-bearing guard use, fail closed. The same
-complete-world and topology proof is retained. This directly
+cannot affect the tracked graph. Scalar, selector, conversion, shadowed, and
+ambiguous sources, or any value-bearing guard use, fail closed. A twenty-ninth
+pair carries the interface source through two exact local aliases. The host
+follows up to eight top-level, single-name, value-preserving assignments,
+invalidates overwritten names, and rejects a ninth hop, transformation,
+selector, multiple assignment, concrete replacement, or nested/conditional
+binding. The same complete-world and topology proof is retained. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
 index](https://codeql.github.com/codeql-query-help/go/) and published [gosec
 rule list](https://github.com/securego/gosec/blob/master/RULES.md) do not expose
 as a dedicated query. CodeQL's [official Go data-flow documentation](https://codeql.github.com/docs/codeql-language-guides/analyzing-data-flow-in-go/)
-distinguishes local flow from configurable global interprocedural flow, and its
+defines recursive `localFlow` over zero or more value-flow steps and distinguishes
+it from configurable global interprocedural flow, while its
 [Go library documentation](https://codeql.github.com/docs/codeql-language-guides/codeql-library-for-go/)
-describes call-graph target resolution; Semgrep documents [separate per-file
-and cross-file analysis modes](https://semgrep.dev/docs/writing-rules/glossary).
+describes call-graph target resolution; Semgrep documents explicit taint
+propagators plus [separate per-file and cross-file analysis modes](https://semgrep.dev/docs/writing-rules/glossary).
 This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
 failure semantics and executable object/principal controls. External-module
 and parameter-transforming helpers, nested helper branches, five-or-more-arm
 chains and switches, side-effecting or composite initializers, type switches
-over aliases, selectors, conversions, unconstrained `any`, or value-bearing
-guards, one-arm conditionals
+over selectors, conversions, unconstrained `any`, transformed, composite,
+field-held, package-held, or branch-joined aliases, or value-bearing guards,
+one-arm conditionals
 proven from pre-state, loop-sensitive writes,
 unbound interfaces, embedded promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
