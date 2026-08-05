@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains sixty vulnerable/control pairs:
+The versioned corpus currently contains sixty-one vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 360
+destination-pinned, redirect-free transport. Three runs per case produce 366
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -660,7 +660,16 @@ enforced. A twenty-second pair copies a value layer containing a pointer holder,
 writes the repository through the copy, and returns the original value. Exact
 shallow sharing survives deeper concrete value fields and nested helper results,
 while pointer overwrite detaches only the selected copy. Its control again
-changes only the account predicate. The suite proves all twenty-two blocked
+changes only the account predicate. A twenty-third pair writes the same shared
+holder through different value copies on the two explicit arms of a helper
+`if`/`else`. Each branch runs against an identity-preserving clone of the fully
+materialized helper graph, and only identical complete post-branch states with
+the same one-to-one node-sharing topology join.
+Evidence from both branch aliases and both write origins is retained. Concrete
+value isolation, pointer-slot replacement on different copies, divergent
+implementations, branch-local assignments, nested control flow, unequal write
+counts, a ninth write, and a seventeenth branch line fail closed. Its control
+again changes only the account predicate. The suite proves all twenty-three blocked
 attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
@@ -670,7 +679,8 @@ constructor/concrete-field, constructor-injected interface, and nested
 constructor-interface and constructor-field-write dispatch, including nested
 post-construction injection, exact all-path constructor joins, cross-file
 constructor parent helpers, imported local-module parent helpers, and imported
-constructor-helper field writes and shallow value-copy pointers,
+constructor-helper field writes, shallow value-copy pointers, and exact helper
+branch joins,
 without a database service:
 
 ```powershell
@@ -815,6 +825,12 @@ Push-Location fixtures\go-cross-package-imported-helper-value-copy-pointer-delet
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-imported-helper-value-copy-pointer-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-imported-helper-branch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-imported-helper-branch-write-authorization
 go test ./...
 Pop-Location
 ```

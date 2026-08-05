@@ -162,6 +162,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-imported-constructor-helper-write-authorization",
       "go-cross-package-imported-helper-value-copy-pointer-delete-idor",
       "go-cross-package-safe-imported-helper-value-copy-pointer-authorization",
+      "go-cross-package-imported-helper-branch-write-delete-idor",
+      "go-cross-package-safe-imported-helper-branch-write-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -207,6 +209,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[41]?.expected).toEqual([]);
     expect(manifest.cases[42]?.expected).toHaveLength(1);
     expect(manifest.cases[43]?.expected).toEqual([]);
+    expect(manifest.cases[44]?.expected).toHaveLength(1);
+    expect(manifest.cases[45]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -1702,6 +1706,86 @@ describe("Go HTTP object-authorization framework model", () => {
         }),
       ]),
     );
+    expect(propagators.map(({ path }) => path)).not.toContain(
+      "internal/archive/store.go",
+    );
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      frameworkModel: {
+        candidateControls: [
+          expect.objectContaining({ kind: "principal-bound-object-query" }),
+        ],
+      },
+    });
+  });
+
+  test("preserves imported helper all-path branch writes and their control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-imported-helper-branch-write-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-imported-helper-branch-write-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 11 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "internal/primary/store.go",
+          line: 11,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    const propagators = vulnerable[0]?.frameworkModel?.propagators ?? [];
+    expect(propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-call",
+          symbol: "parent.NewLayer",
+          path: "internal/service/service.go",
+          line: 16,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-alias",
+          symbol: "first",
+          path: "internal/parent/layer.go",
+          line: 23,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-alias",
+          symbol: "second",
+          path: "internal/parent/layer.go",
+          line: 24,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 26,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 28,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-return",
+          path: "internal/parent/layer.go",
+          line: 30,
+        }),
+      ]),
+    );
+    expect(
+      propagators.filter(
+        ({ kind }) => kind === "go-method-receiver-constructor-field-write",
+      ),
+    ).toHaveLength(2);
     expect(propagators.map(({ path }) => path)).not.toContain(
       "internal/archive/store.go",
     );
@@ -5437,6 +5521,227 @@ type Layer struct { config Config }`,
         initial: "Layer{}",
       }),
     ).toEqual([]);
+  });
+
+  test("joins exact helper writes across both branches", async () => {
+    const scan = async ({
+      types,
+      initial,
+      thenBody,
+      elseBody,
+      afterBody = "",
+      receiver,
+    }: {
+      types: string;
+      initial: string;
+      thenBody: string;
+      elseBody: string;
+      afterBody?: string;
+      receiver: string;
+    }): Promise<ModelRecord[]> =>
+      repositoryInventory({
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+)
+type InvoiceRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type Primary struct{}
+func (*Primary) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+type Archive struct{}
+func (*Archive) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM archived_invoices WHERE id = ?", invoiceID)
+  return err
+}
+${types}
+type Service struct { layer Layer }
+func newLayer(repository InvoiceRepository, alternative InvoiceRepository, enabled bool) Layer {
+  layer := ${initial}
+  first := layer
+  second := layer
+  if enabled {
+${thenBody}
+  } else {
+${elseBody}
+  }
+${afterBody}
+  return layer
+}
+func NewService(repository InvoiceRepository, alternative InvoiceRepository) *Service {
+  return &Service{layer: newLayer(repository, alternative, true)}
+}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.layer.${receiver}.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Primary{}, &Archive{})
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+      });
+
+    const shared = {
+      types: `type Holder struct { repository InvoiceRepository }
+type Layer struct { holder *Holder }`,
+      initial: "Layer{holder: &Holder{}}",
+      thenBody: "    first.holder.repository = repository",
+      elseBody: "    second.holder.repository = repository",
+      receiver: "holder.repository",
+    };
+    const joined = await scan(shared);
+    expect(joined).toHaveLength(1);
+    const branchWrites = joined[0]?.frameworkModel?.propagators.filter(
+      ({ kind }) => kind === "go-method-receiver-constructor-field-write",
+    );
+    expect(branchWrites).toHaveLength(2);
+    expect(new Set(branchWrites?.map(({ line }) => line)).size).toBe(2);
+    expect(
+      joined[0]?.frameworkModel?.propagators.map(({ symbol }) => symbol),
+    ).toEqual(expect.arrayContaining(["layer", "first", "second"]));
+    expect(
+      joined[0]?.frameworkModel?.propagators.map(({ path }) => path),
+    ).not.toContain("archive.go");
+
+    expect(
+      await scan({
+        ...shared,
+        thenBody: "    layer.holder.repository = repository",
+        elseBody: "    layer.holder.repository = repository",
+      }),
+    ).toHaveLength(1);
+    expect(
+      await scan({
+        ...shared,
+        elseBody: "    second.holder.repository = alternative",
+      }),
+    ).toEqual([]);
+    expect(
+      await scan({
+        ...shared,
+        types: `type Holder struct { repository InvoiceRepository }
+type Layer struct { holder Holder }`,
+        initial: "Layer{holder: Holder{}}",
+      }),
+    ).toEqual([]);
+    expect(
+      await scan({
+        ...shared,
+        thenBody: "    first.holder = &Holder{repository: repository}",
+        elseBody: "    second.holder = &Holder{repository: repository}",
+      }),
+    ).toEqual([]);
+    expect(
+      await scan({
+        ...shared,
+        thenBody: `    local := first
+    local.holder.repository = repository`,
+      }),
+    ).toEqual([]);
+    expect(
+      await scan({
+        ...shared,
+        thenBody: `    if enabled {
+      first.holder.repository = repository
+    }`,
+      }),
+    ).toEqual([]);
+    expect(
+      await scan({
+        ...shared,
+        thenBody: `    first.holder.repository = repository
+    first.holder.repository = repository`,
+      }),
+    ).toEqual([]);
+    expect(
+      await scan({
+        ...shared,
+        thenBody: `    first.holder = &Holder{}
+    first.holder.repository = repository
+    layer.holder.repository = repository`,
+        elseBody: `    second.holder = &Holder{}
+    second.holder.repository = repository
+    layer.holder.repository = repository`,
+        afterBody: "  first.holder.repository = alternative",
+      }),
+    ).toEqual([]);
+  });
+
+  test("bounds helper branch paths by writes and structural lines", async () => {
+    const scan = async (
+      count: number,
+      branchLines = count,
+    ): Promise<ModelRecord[]> => {
+      const fields = Array.from(
+        { length: count },
+        (_, index) => `holder${index + 1} *Holder`,
+      ).join("\n  ");
+      const initializers = Array.from(
+        { length: count },
+        (_, index) => `holder${index + 1}: &Holder{}`,
+      ).join(", ");
+      const writes = (alias: string): string[] =>
+        Array.from(
+          { length: count },
+          (_, index) =>
+            `    ${alias}.holder${index + 1}.repository = repository`,
+        );
+      const pad = (lines: string[]): string =>
+        [
+          ...lines,
+          ...Array.from({ length: branchLines - lines.length }, () => ""),
+        ]
+          .slice(0, branchLines)
+          .join("\n");
+      return repositoryInventory({
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+)
+type InvoiceRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type Store struct{}
+func (*Store) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+type Holder struct { repository InvoiceRepository }
+type Layer struct {
+  ${fields}
+}
+type Service struct { layer Layer }
+func newLayer(repository InvoiceRepository, enabled bool) Layer {
+  layer := Layer{${initializers}}
+  copied := layer
+  if enabled {
+${pad(writes("layer"))}
+  } else {
+${pad(writes("copied"))}
+  }
+  return layer
+}
+func NewService(repository InvoiceRepository) *Service {
+  return &Service{layer: newLayer(repository, true)}
+}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.layer.holder${count}.repository.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Store{})
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+      });
+    };
+
+    expect(await scan(8)).toHaveLength(1);
+    expect(await scan(9)).toEqual([]);
+    expect(await scan(8, 16)).toHaveLength(1);
+    expect(await scan(8, 17)).toEqual([]);
   });
 
   test("shares the eight-call helper bound across an imported package", async () => {

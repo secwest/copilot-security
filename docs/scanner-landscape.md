@@ -551,13 +551,24 @@ inside that imported helper. The host preserves pointer-alias sharing and
 direct value-field copying, requires exact top-level linear writes and every
 nested parent, checks field and pointer identity at each selector, and records
 the writer alias and field-write line independently. Conditional writes,
-invalid dereferences, missing parents or fields, transformed parameters, and
-ninth writes fail closed. A twenty-second pair exercises a shallow value copy:
+other than the exact all-path shape described below, invalid dereferences,
+missing parents or fields, transformed parameters, and ninth writes fail closed.
+A twenty-second pair exercises a shallow value copy:
 concrete fields copy recursively while a nested pointer holder preserves exact
 identity across copies and deeper value fields. Replacing that pointer detaches
 only the selected copy. Complete helper-boundary evidence follows the shared
 node. The positive reaches only the helper-copy-selected primary
-implementation; both controls again add only principal scope. This directly
+implementation; its control again adds only principal scope. A twenty-third
+pair places the same nested write on both explicit arms of a top-level helper
+`if`/`else`, using different value copies that share the holder. Each branch
+executes against a complete identity-preserving graph clone. The host joins only
+structurally identical post-branch states under a bidirectional node mapping and
+merges both alias chains and both write origins as evidence. Concrete-value
+isolation, asymmetric sharing, pointer-slot replacement, divergent
+implementations, branch-local assignments, nested control flow,
+unequal write counts, a ninth write, and a seventeenth arm line fail closed. The
+positive reaches only the all-path primary implementation; its control again
+adds only principal scope. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -570,9 +581,9 @@ describes call-graph target resolution; Semgrep documents [separate per-file
 and cross-file analysis modes](https://semgrep.dev/docs/writing-rules/glossary).
 This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
-failure semantics and executable object/principal controls. External-module,
-parameter-transforming, and branchy constructor helpers, one-arm
-conditionals, `else if` chains, loop-sensitive writes, unbound
+failure semantics and executable object/principal controls. External-module
+and parameter-transforming helpers, nested and multi-way helper branches,
+one-arm conditionals, `else if` chains, loop-sensitive writes, unbound
 interfaces, embedded promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
 sqlc, ORMs, general dominance and multi-branch joins, and deployment authorization remain

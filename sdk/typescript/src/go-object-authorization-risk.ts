@@ -2129,6 +2129,34 @@ function objectWrapperSummaries(
       }
     >;
   }
+  interface ConstructorValueHelperWriteStep {
+    kind: "write";
+    target: string;
+    fields: string[];
+    value: string;
+    valueLine: number;
+    line: number;
+    propagators: EvidencePropagator[];
+  }
+  type ConstructorValueHelperStep =
+    | {
+        kind: "bind";
+        name: string;
+        expression: string;
+        line: number;
+      }
+    | {
+        kind: "copy";
+        name: string;
+        source: string;
+        line: number;
+      }
+    | ConstructorValueHelperWriteStep
+    | {
+        kind: "branch";
+        thenSteps: ReadonlyArray<ConstructorValueHelperWriteStep>;
+        elseSteps: ReadonlyArray<ConstructorValueHelperWriteStep>;
+      };
   interface ConstructorValueHelperSummary {
     key: string;
     function_: GoFunction;
@@ -2138,29 +2166,7 @@ function objectWrapperSummaries(
     returnLine: number;
     aliases: EvidencePropagator[];
     returnAlias?: string;
-    steps: ReadonlyArray<
-      | {
-          kind: "bind";
-          name: string;
-          expression: string;
-          line: number;
-        }
-      | {
-          kind: "copy";
-          name: string;
-          source: string;
-          line: number;
-        }
-      | {
-          kind: "write";
-          target: string;
-          fields: string[];
-          value: string;
-          valueLine: number;
-          line: number;
-          propagators: EvidencePropagator[];
-        }
-    >;
+    steps: ReadonlyArray<ConstructorValueHelperStep>;
   }
   interface InterfaceDescriptor {
     directory: string;
@@ -2579,23 +2585,53 @@ function objectWrapperSummaries(
     left.resolvedPackageName === right.resolvedPackageName &&
     left.resolvedImportPath === right.resolvedImportPath;
 
+  const mergeEvidencePropagators = (
+    left: readonly EvidencePropagator[],
+    right: readonly EvidencePropagator[],
+  ): EvidencePropagator[] => {
+    const unique = new Map<string, EvidencePropagator>();
+    for (const propagator of [...left, ...right])
+      unique.set(
+        `${propagator.kind}\0${propagator.path}\0${propagator.line}\0${propagator.symbol ?? ""}`,
+        propagator,
+      );
+    return [...unique.values()];
+  };
+
+  interface ConstructorValueJoinMemo {
+    pairs: Map<
+      ConstructorValueState,
+      Map<ConstructorValueState, ConstructorValueState>
+    >;
+    leftToRight: Map<ConstructorValueState, ConstructorValueState>;
+    rightToLeft: Map<ConstructorValueState, ConstructorValueState>;
+  }
+
+  const constructorValueJoinMemo = (): ConstructorValueJoinMemo => ({
+    pairs: new Map(),
+    leftToRight: new Map(),
+    rightToLeft: new Map(),
+  });
+
   const joinConstructorValueState = (
     left: ConstructorValueState,
     right: ConstructorValueState,
-    memo: Map<
-      ConstructorValueState,
-      Map<ConstructorValueState, ConstructorValueState>
-    >,
+    memo: ConstructorValueJoinMemo,
   ): ConstructorValueState | undefined => {
-    const prior = memo.get(left)?.get(right);
+    const prior = memo.pairs.get(left)?.get(right);
     if (prior !== undefined) return prior;
+    const mappedRight = memo.leftToRight.get(left);
+    const mappedLeft = memo.rightToLeft.get(right);
+    if (
+      (mappedRight !== undefined && mappedRight !== right) ||
+      (mappedLeft !== undefined && mappedLeft !== left)
+    )
+      return undefined;
     if (
       left.write !== right.write ||
       left.path !== right.path ||
       left.bindingLine !== right.bindingLine ||
       left.useLine !== right.useLine ||
-      JSON.stringify(left.propagators ?? []) !==
-        JSON.stringify(right.propagators ?? []) ||
       (left.composite === undefined) !== (right.composite === undefined)
     )
       return undefined;
@@ -2620,6 +2656,10 @@ function objectWrapperSummaries(
         ...constructorValueOrigins(right),
       ]),
     ].sort((first, second) => first - second);
+    const propagators = mergeEvidencePropagators(
+      left.propagators ?? [],
+      right.propagators ?? [],
+    );
     const joined: ConstructorValueState = {
       expression: left.expression,
       line: origins[0]!,
@@ -2630,13 +2670,13 @@ function objectWrapperSummaries(
         : { bindingLine: left.bindingLine }),
       ...(left.useLine === undefined ? {} : { useLine: left.useLine }),
       ...(origins.length === 1 ? {} : { origins }),
-      ...(left.propagators === undefined
-        ? {}
-        : { propagators: [...left.propagators] }),
+      ...(propagators.length === 0 ? {} : { propagators }),
     };
-    const byRight = memo.get(left) ?? new Map();
+    const byRight = memo.pairs.get(left) ?? new Map();
     byRight.set(right, joined);
-    memo.set(left, byRight);
+    memo.pairs.set(left, byRight);
+    memo.leftToRight.set(left, right);
+    memo.rightToLeft.set(right, left);
     if (left.composite !== undefined && right.composite !== undefined) {
       const fields = new Map<string, ConstructorValueState>();
       for (const [field, leftValue] of left.composite.fields) {
@@ -2815,6 +2855,57 @@ function objectWrapperSummaries(
     )?.[1];
   };
 
+  const cloneConstructorValueHelperStep = (
+    step: ConstructorValueHelperStep,
+  ): ConstructorValueHelperStep => {
+    if (step.kind === "write")
+      return {
+        ...step,
+        fields: [...step.fields],
+        propagators: [...step.propagators],
+      };
+    if (step.kind === "branch")
+      return {
+        kind: "branch",
+        thenSteps: step.thenSteps.map((write) => ({
+          ...write,
+          fields: [...write.fields],
+          propagators: [...write.propagators],
+        })),
+        elseSteps: step.elseSteps.map((write) => ({
+          ...write,
+          fields: [...write.fields],
+          propagators: [...write.propagators],
+        })),
+      };
+    return { ...step };
+  };
+
+  const constructorValueHelperWriteSteps = (
+    steps: readonly ConstructorValueHelperStep[],
+  ): ConstructorValueHelperWriteStep[] =>
+    steps.flatMap((step) =>
+      step.kind === "write"
+        ? [step]
+        : step.kind === "branch"
+          ? [...step.thenSteps, ...step.elseSteps]
+          : [],
+    );
+
+  const constructorValueHelperPathWriteCount = (
+    steps: readonly ConstructorValueHelperStep[],
+  ): number =>
+    steps.reduce(
+      (count, step) =>
+        count +
+        (step.kind === "write"
+          ? 1
+          : step.kind === "branch"
+            ? Math.max(step.thenSteps.length, step.elseSteps.length)
+            : 0),
+      0,
+    );
+
   const constructorValueHelperCandidates: ConstructorValueHelperSummary[] = [];
   const constructorValueHelperCounts = new Map<string, number>();
   for (const function_ of functions) {
@@ -2853,6 +2944,48 @@ function objectWrapperSummaries(
     const steps: ConstructorValueHelperSummary["steps"][number][] = [];
     let invalid = false;
     let writeCount = 0;
+    const branchWrites = (
+      startLine: number,
+      endLine: number,
+    ): ConstructorValueHelperWriteStep[] | undefined => {
+      const writes: ConstructorValueHelperWriteStep[] = [];
+      for (let line = startLine; line <= endLine; line += 1) {
+        if ((function_.structuralLines[line - 1] ?? "").trim() === "") continue;
+        const statementLine = line;
+        const statement = constructorStatement(function_, line);
+        if (statement.endLine > endLine) return undefined;
+        line = statement.endLine;
+        const fieldWrite = constructorFieldAssignment(statement.structural);
+        const alias =
+          fieldWrite === undefined ? undefined : aliases.get(fieldWrite.target);
+        if (
+          fieldWrite === undefined ||
+          alias === undefined ||
+          lineNestingDepth(function_, statementLine) !== 2 ||
+          (fieldWrite.explicitDereference && !result.pointer) ||
+          fieldWrite.fields.length === 0 ||
+          fieldWrite.fields.length > MAX_OBJECT_RECEIVER_FIELD_DEPTH
+        )
+          return undefined;
+        const valueOffset = statement.structural.indexOf(fieldWrite.value);
+        const valueLine =
+          valueOffset < 0
+            ? statementLine
+            : statementLine +
+              statement.structural.slice(0, valueOffset).split("\n").length -
+              1;
+        writes.push({
+          kind: "write",
+          target: fieldWrite.target,
+          fields: [...fieldWrite.fields],
+          value: fieldWrite.value,
+          valueLine,
+          line: statementLine,
+          propagators: [...alias.propagators],
+        });
+      }
+      return writes;
+    };
     const singleLineReturn = singleLineConstructorHelperReturn(function_);
     if (singleLineReturn !== undefined) {
       const direct = localCompositeResult(singleLineReturn, result.typeName);
@@ -2880,6 +3013,34 @@ function objectWrapperSummaries(
       line += 1
     ) {
       const statementLine = line;
+      const conditional =
+        lineNestingDepth(function_, statementLine) === 1
+          ? constructorIfElseStatement(function_, statementLine)
+          : undefined;
+      if (conditional !== undefined) {
+        const thenSteps = branchWrites(
+          conditional.thenStartLine,
+          conditional.thenEndLine,
+        );
+        const elseSteps = branchWrites(
+          conditional.elseStartLine,
+          conditional.elseEndLine,
+        );
+        if (
+          thenSteps === undefined ||
+          elseSteps === undefined ||
+          thenSteps.length === 0 ||
+          thenSteps.length !== elseSteps.length ||
+          writeCount + thenSteps.length > MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES
+        ) {
+          invalid = true;
+          break;
+        }
+        steps.push({ kind: "branch", thenSteps, elseSteps });
+        writeCount += thenSteps.length;
+        line = conditional.endLine;
+        continue;
+      }
       const statement = constructorStatement(function_, line);
       const structural = statement.structural;
       line = statement.endLine;
@@ -2917,15 +3078,7 @@ function objectWrapperSummaries(
           returnLine: statementLine,
           propagators: alias?.propagators ?? [],
           ...(aliasName === undefined ? {} : { returnAlias: aliasName }),
-          steps: steps.map((step) =>
-            step.kind === "write"
-              ? {
-                  ...step,
-                  fields: [...step.fields],
-                  propagators: [...step.propagators],
-                }
-              : { ...step },
-          ),
+          steps: steps.map(cloneConstructorValueHelperStep),
         });
         continue;
       }
@@ -3051,7 +3204,7 @@ function objectWrapperSummaries(
     if (
       invalid ||
       returns.length !== 1 ||
-      returns[0]!.steps.filter((step) => step.kind === "write").length >
+      constructorValueHelperPathWriteCount(returns[0]!.steps) >
         MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES
     )
       continue;
@@ -3420,6 +3573,78 @@ function objectWrapperSummaries(
       }
       return false;
     };
+    const cloneHelperValueGraph = (
+      value: ConstructorValueState,
+      memo: Map<ConstructorValueState, ConstructorValueState>,
+    ): ConstructorValueState => {
+      const prior = memo.get(value);
+      if (prior !== undefined) return prior;
+      const clone: ConstructorValueState = {
+        expression: value.expression,
+        line: value.line,
+        write: value.write,
+        ...(value.path === undefined ? {} : { path: value.path }),
+        ...(value.bindingLine === undefined
+          ? {}
+          : { bindingLine: value.bindingLine }),
+        ...(value.useLine === undefined ? {} : { useLine: value.useLine }),
+        ...(value.origins === undefined ? {} : { origins: [...value.origins] }),
+        ...(value.propagators === undefined
+          ? {}
+          : { propagators: [...value.propagators] }),
+      };
+      memo.set(value, clone);
+      if (value.composite !== undefined)
+        clone.composite = {
+          reference: value.composite.reference,
+          fields: new Map(
+            [...value.composite.fields].map(
+              ([field, fieldValue]): [string, ConstructorValueState] => [
+                field,
+                cloneHelperValueGraph(fieldValue, memo),
+              ],
+            ),
+          ),
+        };
+      return clone;
+    };
+    const cloneHelperAliases = (
+      source: ReadonlyMap<string, ConstructorValueState>,
+    ): Map<string, ConstructorValueState> => {
+      const memo = new Map<ConstructorValueState, ConstructorValueState>();
+      return new Map(
+        [...source].map(([name, value]): [string, ConstructorValueState] => [
+          name,
+          cloneHelperValueGraph(value, memo),
+        ]),
+      );
+    };
+    const applyBranchWrites = (
+      targetAliases: ReadonlyMap<string, ConstructorValueState>,
+      writes: readonly ConstructorValueHelperWriteStep[],
+    ): boolean => {
+      for (const write of writes) {
+        const target = targetAliases.get(write.target);
+        if (target === undefined || !applyWrite(target, write)) return false;
+      }
+      return true;
+    };
+    const joinHelperAliases = (
+      left: ReadonlyMap<string, ConstructorValueState>,
+      right: ReadonlyMap<string, ConstructorValueState>,
+    ): Map<string, ConstructorValueState> | undefined => {
+      if (left.size !== right.size) return undefined;
+      const memo = constructorValueJoinMemo();
+      const joined = new Map<string, ConstructorValueState>();
+      for (const [name, leftValue] of left) {
+        const rightValue = right.get(name);
+        if (rightValue === undefined) return undefined;
+        const value = joinConstructorValueState(leftValue, rightValue, memo);
+        if (value === undefined) return undefined;
+        joined.set(name, value);
+      }
+      return joined;
+    };
     let state: ConstructorValueState | undefined;
     if (summary.returnAlias === undefined) {
       state = materializeConstructorHelperValue(
@@ -3471,6 +3696,20 @@ function objectWrapperSummaries(
           aliases.set(step.name, copied);
           continue;
         }
+        if (step.kind === "branch") {
+          const thenAliases = cloneHelperAliases(aliases);
+          const elseAliases = cloneHelperAliases(aliases);
+          if (
+            !applyBranchWrites(thenAliases, step.thenSteps) ||
+            !applyBranchWrites(elseAliases, step.elseSteps)
+          )
+            return undefined;
+          const joined = joinHelperAliases(thenAliases, elseAliases);
+          if (joined === undefined) return undefined;
+          aliases.clear();
+          for (const [name, value] of joined) aliases.set(name, value);
+          continue;
+        }
         const target = aliases.get(step.target);
         if (target === undefined || !applyWrite(target, step)) return undefined;
       }
@@ -3505,8 +3744,8 @@ function objectWrapperSummaries(
       },
       ...(state.propagators ?? []),
       ...summary.aliases,
-      ...summary.steps.flatMap((step) =>
-        step.kind === "write" ? step.propagators : [],
+      ...constructorValueHelperWriteSteps(summary.steps).flatMap(
+        (step) => step.propagators,
       ),
       {
         kind: "go-method-receiver-constructor-helper-return",
@@ -3883,10 +4122,7 @@ function objectWrapperSummaries(
     const joinConstructorStates = (
       left: ConstructorState,
       right: ConstructorState,
-      memo: Map<
-        ConstructorValueState,
-        Map<ConstructorValueState, ConstructorValueState>
-      >,
+      memo: ConstructorValueJoinMemo,
     ): ConstructorState | undefined => {
       if (left.fields.size !== right.fields.size) return undefined;
       const fields = new Map<string, ConstructorValueState>();
@@ -3953,10 +4189,7 @@ function objectWrapperSummaries(
           break;
         }
         const joinedStates = new Map<ConstructorState, ConstructorState>();
-        const valueMemo = new Map<
-          ConstructorValueState,
-          Map<ConstructorValueState, ConstructorValueState>
-        >();
+        const valueMemo = constructorValueJoinMemo();
         for (const alias of aliases.values()) {
           if (joinedStates.has(alias.state)) continue;
           const left = thenBranch.states.get(alias.state);

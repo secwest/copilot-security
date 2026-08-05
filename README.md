@@ -910,15 +910,27 @@ repository through the alias, and returns the original pointer. Helper writes
 must be top-level, linear, declared-field assignments on a live result alias;
 pointer aliases share state while direct fields on value aliases use independent
 snapshots. Nested writes require every exact materialized parent, and
-explicit dereference requires a pointer. Conditional writes, missing parents or
-fields, transformed parameters, invalid value dereferences, and ninth writes or
-selector fields fail closed.
+explicit dereference requires a pointer. Conditional writes outside the exact
+all-path shape described below, missing parents or fields, transformed
+parameters, invalid value dereferences, and ninth writes or selector fields fail
+closed.
 A twenty-second pair exercises Go's shallow value-copy rule inside the imported
 helper. The returned layer is a value containing a pointer holder. Writes
 through copied layer values share that exact holder, even across deeper concrete
 value fields or a parent returned by another helper; replacing the pointer on
 one copy detaches only that copy. The call, allocation, every copy alias, nested
 write, return, constructor field, and receiver retain separate evidence.
+A twenty-third pair places the shared-pointer repository write on both explicit
+arms of one top-level helper `if`/`else`, using a different value copy on each
+arm. The host clones the complete materialized helper graph for each path,
+preserves all alias and nested pointer identities inside that path, and joins
+only structurally identical states with the same one-to-one node-sharing
+topology. Evidence from both aliases and both write origins is retained. Each
+arm accepts only writes through aliases proven before the branch, with at most
+eight writes per path and sixteen structural lines.
+One-sided or divergent state, pointer-slot replacement on different copies,
+concrete-value isolation, branch-local assignments, nested control flow,
+`else if`, unequal write budgets, and over-budget paths fail closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1057,6 +1069,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-helper-value-copy-po
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-value-copy-pointer-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-helper-branch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-branch-write-authorization
 go test ./...
 Pop-Location
 ```
