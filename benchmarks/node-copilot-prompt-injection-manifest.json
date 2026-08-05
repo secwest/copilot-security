@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "javascript-copilot-system-prompt-injection",
+      "description": "An HTTP value crosses two modules into a GitHub Copilot SDK system message before the session receives an ordinary user message.",
+      "fixture": "fixtures/javascript-copilot-system-prompt-injection",
+      "findingsPaths": [
+        "javascript-copilot-system-prompt-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "copilot-system-prompt-injection",
+          "cwe": ["CWE-1427"],
+          "locations": [
+            {
+              "path": "src/session.js",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 4
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-copilot-user-message",
+      "description": "The system message is fixed and the same HTTP values are supplied only through the ordinary user-message channel.",
+      "fixture": "fixtures/javascript-safe-copilot-user-message",
+      "findingsPaths": [
+        "javascript-safe-copilot-user-message/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

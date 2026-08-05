@@ -39,7 +39,8 @@ coverage, fixture, example, test, and vendor directories. Explicit path and
 diff scope remains authoritative; ignored generated output cannot silently
 stand in for reviewed application source.
 
-The residual pass also applies typed framework data-flow models for Node HTTP,
+The residual pass also applies typed framework data-flow models for Node HTTP
+and exact GitHub Copilot SDK trusted-instruction boundaries,
 Python web, Spring/servlet, and ASP.NET command execution, raw SQL, filesystem
 paths, server-side request forgery, and object authorization; a separate Go
 `net/http` model covers server-side request forgery, a typed Go filesystem
@@ -78,7 +79,19 @@ preserve a request-controlled record identifier into the exact single-record
 lookup argument and retain only same-query principal/owner filtering or a
 post-lookup check on that returned object as control leads. Authentication,
 UUID opacity, ORM use, or unrelated owner text is not classified as object
-authorization. ASP.NET object-authorization rows preserve a `[FromRoute]`,
+authorization. GitHub Copilot SDK prompt-injection rows require an exact named
+`CopilotClient` import from `@github/copilot-sdk`, one constructed and
+non-reassigned client, and `createSession` or `resumeSession`. They preserve
+request data only when it reaches `systemMessage` content, customize-section
+content or a known-section transform, inference-visible custom-agent prompts or
+descriptions, or tool descriptions. Ordinary `session.send` and `sendAndWait`
+prompt data stays in the user-message channel and is a negative control.
+Content under an unknown customize-section name remains risky because the SDK
+falls back to appended instructions. The model follows up to two exact
+relative-module wrappers and eight local value aliases, then fails closed on
+ambiguous bindings, reassignment, content ignored by a section action,
+completion-UI-only command descriptions, or a ninth alias. ASP.NET
+object-authorization rows preserve a `[FromRoute]`,
 `[FromQuery]`, or request-derived identifier through a uniquely typed
 repository boundary into a typed EF Core `DbSet` or `DbContext` single-record
 lookup. `[Authorize]`, authentication, EF tracking, and opaque primary keys are
@@ -1766,6 +1779,18 @@ node ../../benchmarks/run-benchmark.mjs `
 node ../../benchmarks/run-benchmark.mjs `
   --manifest ../../benchmarks/multi-hop-framework-manifest.json `
   --results-dir C:\security-benchmarks\copilot-security-multi-hop `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+# Run the strict GitHub Copilot SDK trusted-instruction diagnostic
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/node-copilot-prompt-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-prompt-injection `
   --runs 1 `
   --selection-only `
   --auth github `

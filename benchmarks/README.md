@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains seventy-three vulnerable/control pairs:
+The versioned corpus currently contains seventy-four vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,8 +118,23 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 438
-scans in the complete corpus.
+destination-pinned, redirect-free transport, plus GitHub Copilot SDK
+trusted-instruction injection where request data crosses two relative-module
+wrappers into `systemMessage.content`, paired with the same data sent only as
+an ordinary `sendAndWait` prompt. Three runs per case produce 444 scans in the
+complete corpus.
+
+`node-copilot-prompt-injection-manifest.json` isolates that SDK boundary under
+perfect single-run gates. The positive must retain the HTTP source, all six
+ordered import/call/parameter propagators, exact trusted-content sink,
+CWE-1427, validation, attack-path analysis, and code evidence. The paired
+control keeps the same three-file topology and fixed system message but passes
+request values only through the user-message channel. Deterministic regressions
+cover all current trusted fields, ESM aliases, CommonJS destructuring,
+unknown-section fallback, `resumeSession`, exact acceptance through eight
+value aliases, and rejection of wrong/default/namespace imports, reassignment,
+a ninth alias, fixed or unrelated fields, comments, and string-only
+pseudo-flows.
 
 ## Comparing scanner versions or implementations
 

@@ -247,6 +247,11 @@ const RISK_SIGNALS: ReadonlyArray<
     /\b(?:compile|eval|execScript|Function|render|renderString|template)\s*\(/iu,
   ],
   [
+    "llm-trusted-prompt-or-tool-description",
+    105,
+    /\b(?:customAgents|systemMessage|systemPrompt)\b|\brole\s*:\s*["']system["']|\b(?:commands|tools)\s*:\s*\[/iu,
+  ],
+  [
     "dynamic-module-or-plugin-load",
     97,
     /\b(?:activatePlugins|extensionDirectory|loadPlugins|pluginDirectory)\b|\bimport\s*\(\s*(?!["'`])/iu,
@@ -651,6 +656,38 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         kind: "network-address-validation-or-pinning",
         expression:
           /\b(?:dns\.(?:lookup|resolve|resolve4|resolve6)|isPrivateAddress|isPublicAddress|lookupAndPin|pinnedAddress|connectAddress)\b/iu,
+      },
+    ],
+  },
+  {
+    id: "node-copilot-system-prompt-injection",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/["']@github\/copilot-sdk["']/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "copilot-sdk-trusted-instruction",
+        expression: /\.\s*(?:createSession|resumeSession)\s*\(/u,
+        cweIds: ["CWE-1427"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-trusted-prompt-allowlist",
+        expression:
+          /\b(?:allowedAgents?|allowedPersonas?|allowedPrompts?|trustedAgents?|trustedPrompts?)\b|\bObject\.hasOwn\s*\(/iu,
       },
     ],
   },
@@ -1619,6 +1656,29 @@ interface ImportedPythonSymbol {
   line: number;
 }
 
+interface NodeCopilotTrustedInput {
+  expression: string;
+  kind:
+    | "copilot-system-message-content"
+    | "copilot-system-message-section-content"
+    | "copilot-system-message-section-transform"
+    | "copilot-custom-agent-prompt"
+    | "copilot-custom-agent-description"
+    | "copilot-tool-description";
+  line: number;
+}
+
+interface NodeCopilotPromptSink {
+  callEndLine: number;
+  callLine: number;
+  inputs: NodeCopilotTrustedInput[];
+}
+
+interface NodeCopilotSourceResolution {
+  input: NodeCopilotTrustedInput;
+  source: { kind: string; line: number };
+}
+
 interface JavaReceiverBinding {
   receiver: string;
   ownerType: string;
@@ -1820,7 +1880,8 @@ function frameworkDataflowRecords(
           lines,
           model.sinks,
           model.id === "node-http-ssrf" ||
-            model.id === "node-http-object-authorization"
+            model.id === "node-http-object-authorization" ||
+            model.id === "node-copilot-system-prompt-injection"
             ? 64
             : 8,
         )
@@ -1854,6 +1915,10 @@ function frameworkDataflowRecords(
         model.id === "node-http-object-authorization"
           ? nodeObjectAuthorizationSink(lines, sink.line)
           : undefined;
+      const nodeCopilotSink =
+        model.id === "node-copilot-system-prompt-injection"
+          ? nodeCopilotPromptSink(lines, sink.line)
+          : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -1881,6 +1946,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-object-authorization" &&
         nodeObjectSink === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-copilot-system-prompt-injection" &&
+        nodeCopilotSink === undefined
       ) {
         continue;
       }
@@ -1955,6 +2026,11 @@ function frameworkDataflowRecords(
       ) {
         continue;
       }
+      const nodeCopilotResolution =
+        model.id === "node-copilot-system-prompt-injection" &&
+        nodeCopilotSink !== undefined
+          ? nodeCopilotPromptSource(lines, nodeCopilotSink, model.sources)
+          : undefined;
       const source =
         model.id === "node-http-object-authorization" &&
         nodeObjectSink !== undefined
@@ -1974,61 +2050,63 @@ function frameworkDataflowRecords(
                 nodeHttpSink.urlExpression,
                 model.sources,
               )
-            : extension === ".java" &&
-                model.id === "spring-http-object-authorization" &&
-                javaObjectSink !== undefined
-              ? modeledSameFileJavaObjectSource(
-                  lines,
-                  sink.line,
-                  javaObjectSink.argument,
-                  model.sources,
-                )
+            : model.id === "node-copilot-system-prompt-injection"
+              ? nodeCopilotResolution?.source
               : extension === ".java" &&
-                  model.id === "spring-mvc-jpa-mass-assignment" &&
-                  javaJpaSink !== undefined &&
-                  javaJpaDomainType !== undefined
-                ? (() => {
-                    const method = exportedJavaMethods(lines).find(
-                      (candidate) =>
-                        sink.line >= candidate.startLine &&
-                        sink.line <= candidate.endLine,
-                    );
-                    return method === undefined
-                      ? undefined
-                      : modeledJavaMassAssignmentSource(
-                          lines,
-                          method,
-                          sink.line,
-                          javaJpaSink.argument,
-                          javaJpaDomainType,
-                        );
-                  })()
+                  model.id === "spring-http-object-authorization" &&
+                  javaObjectSink !== undefined
+                ? modeledSameFileJavaObjectSource(
+                    lines,
+                    sink.line,
+                    javaObjectSink.argument,
+                    model.sources,
+                  )
                 : extension === ".java" &&
-                    (model.id === "spring-http-ssrf" ||
-                      model.id === "spring-http-path")
-                  ? modeledSameFileJavaSource(
-                      lines,
-                      sink.line,
-                      model.id,
-                      model.sources,
-                    )
-                  : extension === ".cs" &&
-                      model.id === "aspnet-http-template-injection"
-                    ? modeledSameFileDotnetTemplateSource(
+                    model.id === "spring-mvc-jpa-mass-assignment" &&
+                    javaJpaSink !== undefined &&
+                    javaJpaDomainType !== undefined
+                  ? (() => {
+                      const method = exportedJavaMethods(lines).find(
+                        (candidate) =>
+                          sink.line >= candidate.startLine &&
+                          sink.line <= candidate.endLine,
+                      );
+                      return method === undefined
+                        ? undefined
+                        : modeledJavaMassAssignmentSource(
+                            lines,
+                            method,
+                            sink.line,
+                            javaJpaSink.argument,
+                            javaJpaDomainType,
+                          );
+                    })()
+                  : extension === ".java" &&
+                      (model.id === "spring-http-ssrf" ||
+                        model.id === "spring-http-path")
+                    ? modeledSameFileJavaSource(
                         lines,
                         sink.line,
+                        model.id,
                         model.sources,
                       )
                     : extension === ".cs" &&
-                        model.id === "aspnet-http-object-authorization" &&
-                        dotnetObjectSink !== undefined
-                      ? modeledSameFileDotnetObjectSource(
+                        model.id === "aspnet-http-template-injection"
+                      ? modeledSameFileDotnetTemplateSource(
                           lines,
                           sink.line,
-                          dotnetObjectSink.argument,
                           model.sources,
                         )
-                      : nearestModeledSource(sources, sink.line);
+                      : extension === ".cs" &&
+                          model.id === "aspnet-http-object-authorization" &&
+                          dotnetObjectSink !== undefined
+                        ? modeledSameFileDotnetObjectSource(
+                            lines,
+                            sink.line,
+                            dotnetObjectSink.argument,
+                            model.sources,
+                          )
+                        : nearestModeledSource(sources, sink.line);
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -2099,17 +2177,22 @@ function frameworkDataflowRecords(
         (pattern) => pattern.kind === sink.kind,
       );
       if (sinkPattern === undefined) continue;
-      const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
-      const endLine = Math.min(lines.length, sink.line + CONTEXT_LINES_AFTER);
+      const effectiveSinkLine = nodeCopilotResolution?.input.line ?? sink.line;
+      const effectiveSinkKind = nodeCopilotResolution?.input.kind ?? sink.kind;
+      const startLine = Math.max(1, effectiveSinkLine - CONTEXT_LINES_BEFORE);
+      const endLine = Math.min(
+        lines.length,
+        effectiveSinkLine + CONTEXT_LINES_AFTER,
+      );
       const sourceStart = Math.max(1, source.line - 2);
       const sourceEnd = Math.min(lines.length, source.line + 2);
       records.push({
         path,
-        line: sink.line,
+        line: effectiveSinkLine,
         categories: [
           `framework-dataflow:${model.id}`,
           `modeled-source:${source.kind}`,
-          `modeled-sink:${sink.kind}`,
+          `modeled-sink:${effectiveSinkKind}`,
           ...nearbyControls.map(
             (control) => `candidate-control:${control.kind}`,
           ),
@@ -2126,9 +2209,9 @@ function frameworkDataflowRecords(
           scope: "same-file",
           source: { kind: source.kind, path, line: source.line },
           sink: {
-            kind: sink.kind,
+            kind: effectiveSinkKind,
             path,
-            line: sink.line,
+            line: effectiveSinkLine,
             cweIds: sinkPattern.cweIds,
           },
           propagators: [],
@@ -4085,6 +4168,10 @@ function javascriptFrameworkWrapperSummaries(
             model.id === "node-http-object-authorization"
               ? nodeObjectAuthorizationSink(file.lines, sink.line)
               : undefined;
+          const nodeCopilotSink =
+            model.id === "node-copilot-system-prompt-injection"
+              ? nodeCopilotPromptSink(file.lines, sink.line)
+              : undefined;
           if (model.id === "node-http-ssrf" && nodeHttpSink === undefined) {
             continue;
           }
@@ -4095,13 +4182,24 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-copilot-system-prompt-injection" &&
+            nodeCopilotSink === undefined
+          ) {
+            continue;
+          }
+          if (
             nodeHttpSink?.axiosReceiver !== undefined &&
             wrapper.parameters.includes(nodeHttpSink.axiosReceiver)
           ) {
             continue;
           }
           const sinkValue =
-            nodeHttpSink?.urlExpression ?? nodeObjectSink?.argument ?? sinkLine;
+            nodeHttpSink?.urlExpression ??
+            nodeObjectSink?.argument ??
+            nodeCopilotSink?.inputs
+              .map(({ expression }) => expression)
+              .join("\n") ??
+            sinkLine;
           const parameterIndexes = wrapper.parameters.flatMap(
             (parameter, parameterIndex) =>
               lineReferencesIdentifier(sinkValue, parameter)
@@ -4144,6 +4242,13 @@ function javascriptFrameworkWrapperSummaries(
               ) === index,
           );
           for (const parameterIndex of parameterIndexes) {
+            const copilotInput = nodeCopilotSink?.inputs.find(
+              ({ expression }) =>
+                lineReferencesIdentifier(
+                  expression,
+                  wrapper.parameters[parameterIndex]!,
+                ),
+            );
             summaries.push({
               model,
               file,
@@ -4151,7 +4256,13 @@ function javascriptFrameworkWrapperSummaries(
               parameter: wrapper.parameters[parameterIndex]!,
               parameterIndex,
               declarationLine: wrapper.startLine,
-              sink: { ...sink, cweIds: sinkPattern.cweIds },
+              sink: {
+                ...sink,
+                ...(copilotInput === undefined
+                  ? {}
+                  : { kind: copilotInput.kind, line: copilotInput.line }),
+                cweIds: sinkPattern.cweIds,
+              },
               controls: wrapperControls.slice(0, 8),
             });
           }
@@ -7279,6 +7390,545 @@ function javascriptObjectPropertyValue(
     if (match?.[1] !== undefined && match[1].trim() !== "") {
       return match[1].trim();
     }
+  }
+  return undefined;
+}
+
+interface JavascriptPropertyEntry {
+  key: string;
+  line: number;
+  value: string;
+}
+
+interface JavascriptResolvedExpression {
+  line: number;
+  value: string;
+}
+
+interface JavascriptCopilotClientBinding {
+  declarationLine: number;
+  importedClass: string;
+}
+
+const COPILOT_SYSTEM_MESSAGE_SECTIONS = [
+  "preamble",
+  "identity",
+  "tone",
+  "tool_efficiency",
+  "environment_context",
+  "code_change_rules",
+  "guidelines",
+  "safety",
+  "tool_instructions",
+  "custom_instructions",
+  "runtime_instructions",
+  "last_instructions",
+] as const;
+
+function javascriptDelimitedEntries(
+  value: string,
+): Array<{ offset: number; value: string }> {
+  const entries: Array<{ offset: number; value: string }> = [];
+  let start = 0;
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]!;
+    if (quote !== "") {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+    } else if (["(", "[", "{"].includes(character)) {
+      depth += 1;
+    } else if ([")", "]", "}"].includes(character)) {
+      depth -= 1;
+    } else if (character === "," && depth === 0) {
+      const raw = value.slice(start, index);
+      const leading = raw.length - raw.trimStart().length;
+      if (raw.trim() !== "") {
+        entries.push({ offset: start + leading, value: raw.trim() });
+      }
+      start = index + 1;
+    }
+  }
+  const raw = value.slice(start);
+  const leading = raw.length - raw.trimStart().length;
+  if (raw.trim() !== "") {
+    entries.push({ offset: start + leading, value: raw.trim() });
+  }
+  return entries;
+}
+
+function javascriptCompositePrefix(
+  value: string,
+  opener: "{" | "[",
+  closer: "}" | "]",
+): string | undefined {
+  const leading = value.length - value.trimStart().length;
+  if (value[leading] !== opener) return undefined;
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  for (let index = leading; index < value.length; index += 1) {
+    const character = value[index]!;
+    if (quote !== "") {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+    } else if (character === opener) {
+      depth += 1;
+    } else if (character === closer) {
+      depth -= 1;
+      if (depth === 0) return value.slice(leading, index + 1);
+    }
+  }
+  return undefined;
+}
+
+function javascriptExpressionEnd(value: string, start: number): number {
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index]!;
+    if (quote !== "") {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+    } else if (["(", "[", "{"].includes(character)) {
+      depth += 1;
+    } else if ([")", "]", "}"].includes(character)) {
+      depth -= 1;
+    } else if ((character === ";" || character === "\n") && depth === 0) {
+      return index;
+    }
+  }
+  return value.length;
+}
+
+function javascriptVariableInitializer(
+  lines: readonly string[],
+  identifier: string,
+  beforeLine: number,
+): JavascriptResolvedExpression | undefined {
+  const earliest = Math.max(1, beforeLine - 64);
+  const structuralLines = javascriptStructuralLines(lines);
+  const declaration = new RegExp(
+    `^\\s*(?:export\\s+)?(?:const|let|var)\\s+${escapeRegularExpression(identifier)}(?:\\s*:[^=;]+)?\\s*=\\s*`,
+    "u",
+  );
+  for (let line = beforeLine - 1; line >= earliest; line -= 1) {
+    const first = structuralLines[line - 1] ?? "";
+    if (!declaration.test(first)) continue;
+    if (
+      javascriptIdentifierReassignedBetween(lines, identifier, line, beforeLine)
+    ) {
+      return undefined;
+    }
+    const original = javascriptCodeLinesWithoutComments(
+      lines.slice(line - 1, Math.min(lines.length, line + 31)),
+    ).join("\n");
+    const structural = javascriptStructuralLines(
+      lines.slice(line - 1, Math.min(lines.length, line + 31)),
+    ).join("\n");
+    const match = declaration.exec(structural);
+    if (match === null) return undefined;
+    let start = match.index + match[0].lastIndexOf("=") + 1;
+    while (/\s/u.test(original[start] ?? "")) start += 1;
+    const end = javascriptExpressionEnd(original, start);
+    const expression = original.slice(start, end).trim();
+    if (expression === "") return undefined;
+    return { line, value: expression };
+  }
+  return undefined;
+}
+
+function resolveJavascriptExpression(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+): JavascriptResolvedExpression | undefined {
+  const value = expression.trim();
+  if (value === "" || depth > 8) return undefined;
+  if (!/^[A-Za-z_$][\w$]*$/u.test(value)) return { line, value };
+  if (seen.has(value)) return undefined;
+  const initializer = javascriptVariableInitializer(lines, value, line);
+  if (initializer === undefined) return { line, value };
+  return resolveJavascriptExpression(
+    lines,
+    initializer.value,
+    initializer.line,
+    depth + 1,
+    new Set([...seen, value]),
+  );
+}
+
+function javascriptObjectEntries(
+  value: JavascriptResolvedExpression,
+): JavascriptPropertyEntry[] {
+  const object = javascriptCompositePrefix(value.value, "{", "}");
+  if (object === undefined) return [];
+  return javascriptDelimitedEntries(object.slice(1, -1)).flatMap((entry) => {
+    const shorthand = /^([A-Za-z_$][\w$]*)$/u.exec(entry.value);
+    if (shorthand !== null) {
+      return [
+        {
+          key: shorthand[1]!,
+          line:
+            value.line +
+            (object.slice(0, entry.offset + 1).match(/\n/gu)?.length ?? 0),
+          value: shorthand[1]!,
+        },
+      ];
+    }
+    const property =
+      /^\s*(?:([A-Za-z_$][\w$]*)|["']([^"']+)["'])\s*:\s*([\s\S]+)$/u.exec(
+        entry.value,
+      );
+    if (property === null) return [];
+    return [
+      {
+        key: property[1] ?? property[2]!,
+        line:
+          value.line +
+          (object.slice(0, entry.offset + 1).match(/\n/gu)?.length ?? 0),
+        value: property[3]!.trim(),
+      },
+    ];
+  });
+}
+
+function javascriptArrayEntries(
+  value: JavascriptResolvedExpression,
+): JavascriptResolvedExpression[] {
+  const array = javascriptCompositePrefix(value.value, "[", "]");
+  if (array === undefined) return [];
+  return javascriptDelimitedEntries(array.slice(1, -1)).map((entry) => ({
+    line:
+      value.line +
+      (array.slice(0, entry.offset + 1).match(/\n/gu)?.length ?? 0),
+    value: entry.value,
+  }));
+}
+
+function javascriptCopilotClientBindings(
+  lines: readonly string[],
+): Map<string, JavascriptCopilotClientBinding> {
+  const importedClasses = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "@github/copilot-sdk" &&
+        binding.imported === "CopilotClient",
+    )
+    .map(({ local }) => local);
+  if (new Set(importedClasses).size !== importedClasses.length)
+    return new Map();
+  const bindings = new Map<string, JavascriptCopilotClientBinding>();
+  const structuralLines = javascriptStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    for (const importedClass of importedClasses) {
+      const declaration = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*new\\s+${escapeRegularExpression(importedClass)}\\s*\\(`,
+        "u",
+      ).exec(structuralLines[index] ?? "");
+      if (declaration?.[1] === undefined) continue;
+      if (bindings.has(declaration[1])) return new Map();
+      bindings.set(declaration[1], {
+        declarationLine: index + 1,
+        importedClass,
+      });
+    }
+  }
+  return bindings;
+}
+
+function nodeCopilotPromptSink(
+  lines: readonly string[],
+  sinkLine: number,
+): NodeCopilotPromptSink | undefined {
+  const bindings = javascriptCopilotClientBindings(lines);
+  const endLine = Math.min(lines.length, sinkLine + 63);
+  const original = javascriptCodeLinesWithoutComments(
+    lines.slice(sinkLine - 1, endLine),
+  ).join("\n");
+  const structural = javascriptStructuralLines(
+    lines.slice(sinkLine - 1, endLine),
+  ).join("\n");
+  const call =
+    /\b([A-Za-z_$][\w$]*)\s*\.\s*(createSession|resumeSession)\s*\(/u.exec(
+      structural,
+    );
+  if (
+    call?.index === undefined ||
+    call[1] === undefined ||
+    call[2] === undefined
+  ) {
+    return undefined;
+  }
+  const binding = bindings.get(call[1]);
+  if (
+    binding === undefined ||
+    binding.declarationLine > sinkLine ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      call[1],
+      binding.declarationLine,
+      sinkLine,
+    ) ||
+    exportedJavascriptFunctions(lines).some(
+      (wrapper) =>
+        sinkLine >= wrapper.startLine &&
+        sinkLine <= wrapper.endLine &&
+        (wrapper.parameters.includes(call[1]!) ||
+          wrapper.parameters.includes(binding.importedClass)),
+    )
+  ) {
+    return undefined;
+  }
+  const open = structural.indexOf("(", call.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  const arguments_ = splitJavascriptArguments(original.slice(open + 1, close));
+  const configIndex = call[2] === "resumeSession" ? 1 : 0;
+  const configExpression = arguments_[configIndex];
+  if (configExpression === undefined) return undefined;
+  const config = resolveJavascriptExpression(lines, configExpression, sinkLine);
+  if (config === undefined) return undefined;
+  const inputs = nodeCopilotTrustedInputs(lines, config);
+  if (inputs.length === 0) return undefined;
+  return {
+    callEndLine:
+      sinkLine + (structural.slice(0, close).match(/\n/gu)?.length ?? 0),
+    callLine: sinkLine,
+    inputs,
+  };
+}
+
+function nodeCopilotTrustedInputs(
+  lines: readonly string[],
+  config: JavascriptResolvedExpression,
+): NodeCopilotTrustedInput[] {
+  const inputs: NodeCopilotTrustedInput[] = [];
+  const properties = javascriptObjectEntries(config);
+  const property = (name: string): JavascriptPropertyEntry | undefined =>
+    properties.find((candidate) => candidate.key === name);
+  const add = (
+    candidate: JavascriptPropertyEntry | undefined,
+    kind: NodeCopilotTrustedInput["kind"],
+  ): void => {
+    if (candidate === undefined || candidate.value.trim() === "") return;
+    inputs.push({ expression: candidate.value, kind, line: candidate.line });
+  };
+
+  const systemMessageProperty = property("systemMessage");
+  if (systemMessageProperty !== undefined) {
+    const systemMessage = resolveJavascriptExpression(
+      lines,
+      systemMessageProperty.value,
+      systemMessageProperty.line,
+    );
+    if (systemMessage !== undefined) {
+      const systemProperties = javascriptObjectEntries(systemMessage);
+      add(
+        systemProperties.find(({ key }) => key === "content"),
+        "copilot-system-message-content",
+      );
+      const sectionsProperty = systemProperties.find(
+        ({ key }) => key === "sections",
+      );
+      if (sectionsProperty !== undefined) {
+        const sections = resolveJavascriptExpression(
+          lines,
+          sectionsProperty.value,
+          sectionsProperty.line,
+        );
+        if (sections !== undefined) {
+          for (const section of javascriptObjectEntries(sections)) {
+            const knownSection = COPILOT_SYSTEM_MESSAGE_SECTIONS.includes(
+              section.key as (typeof COPILOT_SYSTEM_MESSAGE_SECTIONS)[number],
+            );
+            const override = resolveJavascriptExpression(
+              lines,
+              section.value,
+              section.line,
+            );
+            if (override === undefined) continue;
+            const overrideProperties = javascriptObjectEntries(override);
+            const action = overrideProperties.find(
+              ({ key }) => key === "action",
+            );
+            const resolvedAction =
+              action === undefined
+                ? undefined
+                : resolveJavascriptExpression(lines, action.value, action.line);
+            const fixedAction =
+              /^\s*["'](append|prepend|preserve|remove|replace)["']\s*$/u.exec(
+                resolvedAction?.value ?? "",
+              )?.[1];
+            const contentIsConsumed = knownSection
+              ? fixedAction === undefined ||
+                fixedAction === "append" ||
+                fixedAction === "prepend" ||
+                fixedAction === "replace"
+              : fixedAction !== "remove";
+            if (contentIsConsumed) {
+              add(
+                overrideProperties.find(({ key }) => key === "content"),
+                "copilot-system-message-section-content",
+              );
+            }
+            if (
+              knownSection &&
+              action !== undefined &&
+              !/^\s*["'](?:append|prepend|preserve|remove|replace)["']\s*$/u.test(
+                resolvedAction?.value ?? action.value,
+              )
+            ) {
+              add(action, "copilot-system-message-section-transform");
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const addArrayProperties = (
+    propertyName: "commands" | "customAgents" | "tools",
+    names: ReadonlyArray<{
+      kind: NodeCopilotTrustedInput["kind"];
+      name: string;
+    }>,
+  ): void => {
+    const arrayProperty = property(propertyName);
+    if (arrayProperty === undefined) return;
+    const array = resolveJavascriptExpression(
+      lines,
+      arrayProperty.value,
+      arrayProperty.line,
+    );
+    if (array === undefined) return;
+    for (const element of javascriptArrayEntries(array)) {
+      const resolvedElement = resolveJavascriptExpression(
+        lines,
+        element.value,
+        element.line,
+      );
+      if (resolvedElement === undefined) continue;
+      const elementProperties = javascriptObjectEntries(resolvedElement);
+      const infer = elementProperties.find(({ key }) => key === "infer");
+      const resolvedInfer =
+        infer === undefined
+          ? undefined
+          : resolveJavascriptExpression(lines, infer.value, infer.line);
+      for (const name of names) {
+        if (
+          propertyName === "customAgents" &&
+          name.name === "description" &&
+          /^\s*false\s*$/u.test(resolvedInfer?.value ?? "")
+        ) {
+          continue;
+        }
+        add(
+          elementProperties.find(({ key }) => key === name.name),
+          name.kind,
+        );
+      }
+    }
+  };
+  addArrayProperties("customAgents", [
+    { name: "prompt", kind: "copilot-custom-agent-prompt" },
+    { name: "description", kind: "copilot-custom-agent-description" },
+  ]);
+  addArrayProperties("tools", [
+    { name: "description", kind: "copilot-tool-description" },
+  ]);
+
+  return inputs.filter(
+    (input, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.kind === input.kind &&
+          candidate.line === input.line &&
+          candidate.expression === input.expression,
+      ) === index,
+  );
+}
+
+function javascriptExpressionIdentifiers(expression: string): string[] {
+  const structural = javascriptStructuralLines(expression.split(/\r?\n/u)).join(
+    "\n",
+  );
+  const templates = expression
+    .split(/\r?\n/u)
+    .map((line) => javascriptTemplateExpressionCode(line))
+    .join("\n");
+  return [...`${structural}\n${templates}`.matchAll(/\b[A-Za-z_$][\w$]*\b/gu)]
+    .map((match) => match[0])
+    .filter((identifier, index, all) => all.indexOf(identifier) === index);
+}
+
+function javascriptTrustedExpressionSource(
+  lines: readonly string[],
+  expression: string,
+  expressionLine: number,
+  sourcePatterns: readonly FrameworkModelPattern[],
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+): { kind: string; line: number } | undefined {
+  const direct = sourcePatterns.find((pattern) =>
+    pattern.expression.test(expression),
+  );
+  if (direct !== undefined) return { kind: direct.kind, line: expressionLine };
+  if (depth > 8) return undefined;
+  for (const identifier of javascriptExpressionIdentifiers(expression)) {
+    if (seen.has(identifier)) continue;
+    const initializer = javascriptVariableInitializer(
+      lines,
+      identifier,
+      expressionLine,
+    );
+    if (initializer === undefined) continue;
+    const source = javascriptTrustedExpressionSource(
+      lines,
+      initializer.value,
+      initializer.line,
+      sourcePatterns,
+      depth + 1,
+      new Set([...seen, identifier]),
+    );
+    if (source !== undefined) return source;
+  }
+  return undefined;
+}
+
+function nodeCopilotPromptSource(
+  lines: readonly string[],
+  sink: NodeCopilotPromptSink,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): NodeCopilotSourceResolution | undefined {
+  for (const input of sink.inputs) {
+    const source = javascriptTrustedExpressionSource(
+      lines,
+      input.expression,
+      input.line,
+      sourcePatterns,
+    );
+    if (source !== undefined) return { input, source };
   }
   return undefined;
 }
