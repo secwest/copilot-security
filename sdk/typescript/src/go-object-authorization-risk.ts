@@ -29,6 +29,7 @@ const MAX_OBJECT_WRAPPER_CANDIDATES = 4_096;
 const MAX_OBJECT_RECEIVER_ALIAS_DEPTH = 8;
 const MAX_OBJECT_RECEIVER_FIELD_DEPTH = 8;
 const MAX_OBJECT_CONSTRUCTOR_ALIAS_DEPTH = 8;
+const MAX_OBJECT_CONSTRUCTOR_STATEMENT_LINES = 13;
 const MAX_TRANSACTION_HELPER_DEPTH = 32;
 const MAX_TRANSACTION_FUNCTION_VALUE_DEPTH = 8;
 const OBJECT_COLUMN = /^(?:id|key|uuid|[a-z][a-z0-9_]*_(?:id|key|uuid))$/iu;
@@ -2354,20 +2355,18 @@ function objectWrapperSummaries(
     );
   };
 
-  const localCompositeResult = (
+  const keyedCompositeResult = (
     expression: string,
-    typeName: string,
   ):
     | {
-        pointer: boolean;
+        reference: TypeReference;
         fields: ReadonlyMap<string, string>;
       }
     | undefined => {
     const trimmed = expression.trim().replace(/;\s*$/u, "");
-    const prefix = new RegExp(
-      `^(&)?\\s*${escapeRegularExpression(typeName)}\\s*`,
-      "u",
-    ).exec(trimmed);
+    const prefix = /^(&)?\s*((?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)\s*/u.exec(
+      trimmed,
+    );
     if (prefix === null) return undefined;
     const composite = trimmed.slice(prefix[0].length);
     if (!composite.startsWith("{") || !composite.endsWith("}"))
@@ -2383,13 +2382,63 @@ function objectWrapperSummaries(
     const fields = new Map<string, string>();
     const body = composite.slice(1, -1).trim();
     if (body !== "") {
-      for (const item of splitGoArguments(body)) {
+      const items = splitGoArguments(body);
+      if (items.at(-1)?.trim() === "") items.pop();
+      for (const item of items) {
         const field = /^([A-Za-z_]\w*)\s*:\s*([\s\S]+)$/u.exec(item.trim());
         if (field === null || fields.has(field[1]!)) return undefined;
         fields.set(field[1]!, field[2]!.trim());
       }
     }
-    return { pointer: prefix[1] !== undefined, fields };
+    const reference = typeReference(
+      `${prefix[1] === undefined ? "" : "*"}${prefix[2]!}`,
+    );
+    return reference === undefined ? undefined : { reference, fields };
+  };
+
+  const localCompositeResult = (
+    expression: string,
+    typeName: string,
+  ):
+    | {
+        pointer: boolean;
+        fields: ReadonlyMap<string, string>;
+      }
+    | undefined => {
+    const composite = keyedCompositeResult(expression);
+    return composite === undefined ||
+      composite.reference.qualifier !== undefined ||
+      composite.reference.typeName !== typeName
+      ? undefined
+      : { pointer: composite.reference.pointer, fields: composite.fields };
+  };
+
+  const constructorStatement = (
+    function_: GoFunction,
+    startLine: number,
+  ): { structural: string; endLine: number } => {
+    const first = function_.structuralLines[startLine - 1] ?? "";
+    if (!/^\s*return\b/u.test(first) && goAssignment(first) === undefined)
+      return { structural: first, endLine: startLine };
+    let depth = 0;
+    let structural = "";
+    const maximumLine = Math.min(
+      function_.endLine,
+      startLine + MAX_OBJECT_CONSTRUCTOR_STATEMENT_LINES - 1,
+    );
+    for (let line = startLine; line <= maximumLine; line += 1) {
+      const fragment = function_.structuralLines[line - 1] ?? "";
+      structural += `${structural === "" ? "" : " "}${fragment.trim()}`;
+      for (const character of fragment) {
+        if (character === "(" || character === "[" || character === "{")
+          depth += 1;
+        if (character === ")" || character === "]" || character === "}")
+          depth -= 1;
+        if (depth < 0) return { structural: first, endLine: startLine };
+      }
+      if (depth === 0) return { structural, endLine: line };
+    }
+    return { structural: first, endLine: startLine };
   };
 
   const constructorCandidates: ConstructorSummary[] = [];
@@ -2430,10 +2479,16 @@ function objectWrapperSummaries(
       line <= function_.endLine;
       line += 1
     ) {
-      const structural = function_.structuralLines[line - 1] ?? "";
+      const statementLine = line;
+      const statement = constructorStatement(function_, line);
+      const structural = statement.structural;
+      line = statement.endLine;
       const returnMatch = /^\s*return\s+(.+?)\s*;?\s*$/u.exec(structural);
       if (/\breturn\b/u.test(structural)) {
-        if (lineNestingDepth(function_, line) !== 1 || returnMatch === null) {
+        if (
+          lineNestingDepth(function_, statementLine) !== 1 ||
+          returnMatch === null
+        ) {
           invalid = true;
           break;
         }
@@ -2447,17 +2502,17 @@ function objectWrapperSummaries(
         }
         returns.push({
           pointer: direct?.pointer ?? alias!.pointer,
-          line,
+          line: statementLine,
           fields: direct?.fields ?? alias!.fields,
           constructionLine:
-            direct === undefined ? alias!.constructionLine : line,
+            direct === undefined ? alias!.constructionLine : statementLine,
           propagators: alias?.propagators ?? [],
         });
         continue;
       }
       const assignment = goAssignment(structural);
       if (assignment === undefined) continue;
-      if (lineNestingDepth(function_, line) !== 1) {
+      if (lineNestingDepth(function_, statementLine) !== 1) {
         if (assignment.names.some((name) => aliases.has(name))) {
           invalid = true;
           break;
@@ -2475,11 +2530,11 @@ function objectWrapperSummaries(
           pointer: direct.pointer,
           depth: 0,
           fields: direct.fields,
-          constructionLine: line,
+          constructionLine: statementLine,
           propagators: [
             {
               kind: "go-method-receiver-constructor-alias",
-              line,
+              line: statementLine,
               symbol: name,
               path: function_.file.path,
             },
@@ -2506,7 +2561,7 @@ function objectWrapperSummaries(
           ...prior.propagators,
           {
             kind: "go-method-receiver-constructor-alias",
-            line,
+            line: statementLine,
             symbol: name,
             path: function_.file.path,
           },
@@ -2538,7 +2593,13 @@ function objectWrapperSummaries(
       const parameterIndex = function_.parameters.findIndex(
         (parameter) => parameter.name === parameterName,
       );
-      if (parameterIndex >= 0) {
+      const referencedParameters = function_.parameters.filter((parameter) =>
+        new RegExp(
+          `\\b${escapeRegularExpression(parameter.name)}\\b`,
+          "u",
+        ).test(expression),
+      );
+      if (referencedParameters.length > 0) {
         const reassigned = Array.from(
           {
             length: Math.max(
@@ -2551,7 +2612,9 @@ function objectWrapperSummaries(
           const assignment = goAssignment(
             function_.structuralLines[line - 1] ?? "",
           );
-          return assignment?.names.includes(parameterName!) === true;
+          return referencedParameters.some(
+            (parameter) => assignment?.names.includes(parameter.name) === true,
+          );
         });
         if (reassigned) {
           invalid = true;
@@ -2667,6 +2730,24 @@ function objectWrapperSummaries(
     };
   };
 
+  const concreteSatisfiesInterface = (
+    concrete: TypeReference,
+    interface_: InterfaceDescriptor,
+  ): boolean =>
+    [...interface_.methods].every((method) => {
+      const matches = [...descriptors.values()].filter(
+        (descriptor) =>
+          descriptor.receiver !== undefined &&
+          descriptor.function_.name === method &&
+          descriptor.receiver.typeName === concrete.typeName &&
+          posix.dirname(descriptor.function_.file.path) ===
+            concrete.resolvedDirectory &&
+          descriptor.function_.packageName === concrete.resolvedPackageName &&
+          (!descriptor.receiver.pointer || concrete.pointer),
+      );
+      return matches.length === 1;
+    });
+
   const concreteExpression = (
     caller: GoFunction,
     expression: string,
@@ -2682,15 +2763,102 @@ function objectWrapperSummaries(
       }
     | undefined => {
     const trimmed = expression.trim().replace(/;\s*$/u, "");
-    const composite =
-      /^&?\s*((?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)\s*\{[\s\S]*\}$/u.exec(
-        trimmed,
+    const composite = keyedCompositeResult(trimmed);
+    if (composite !== undefined) {
+      if (
+        constructorDepth > MAX_OBJECT_CONSTRUCTOR_ALIAS_DEPTH &&
+        composite.fields.size > 0
+      )
+        return undefined;
+      const concrete = canonicalConcreteReference(
+        composite.reference,
+        caller.file,
+        caller.packageName,
+        caller,
+        line,
       );
-    if (composite !== null) {
-      const concrete = typeReference(
-        `${/^\s*&/u.test(trimmed) ? "*" : ""}${composite[1]!}`,
+      if (concrete === undefined) return undefined;
+      const owners = structs.filter(
+        (descriptor) =>
+          descriptor.directory === concrete.resolvedDirectory &&
+          descriptor.packageName === concrete.resolvedPackageName &&
+          descriptor.name === concrete.typeName,
       );
-      return concrete === undefined ? undefined : { concrete };
+      if (owners.length !== 1) return undefined;
+      const owner = owners[0]!;
+      const fields = new Map<string, ReceiverBinding>();
+      for (const [fieldName, fieldExpression] of composite.fields) {
+        const field = owner.fields.get(fieldName);
+        if (field === undefined) return undefined;
+        const fieldInterface = interfaceForReference(
+          field.type,
+          field.file,
+          field.packageName,
+        );
+        const expected = canonicalConcreteReference(
+          field.type,
+          field.file,
+          field.packageName,
+        );
+        if (fieldInterface === undefined && expected === undefined) continue;
+        const bare = /^([A-Za-z_]\w*)$/u.exec(fieldExpression.trim())?.[1];
+        const bound =
+          bare === undefined ? undefined : availableBindings.get(bare);
+        const value =
+          bound === undefined
+            ? concreteExpression(
+                caller,
+                fieldExpression,
+                line,
+                availableBindings,
+                constructorDepth + 1,
+              )
+            : {
+                concrete: bound.concrete,
+                ...(bound.interface_ === undefined
+                  ? {}
+                  : { interface_: bound.interface_ }),
+                fields: bound.fields,
+                propagators: bound.propagators,
+              };
+        if (value === undefined) return undefined;
+        const canonical = canonicalConcreteReference(
+          value.concrete,
+          caller.file,
+          caller.packageName,
+          caller,
+          line,
+        );
+        if (canonical === undefined) return undefined;
+        if (
+          fieldInterface === undefined
+            ? expected === undefined ||
+              expected.resolvedDirectory !== canonical.resolvedDirectory ||
+              expected.resolvedPackageName !== canonical.resolvedPackageName ||
+              expected.typeName !== canonical.typeName ||
+              expected.pointer !== canonical.pointer
+            : !concreteSatisfiesInterface(canonical, fieldInterface)
+        )
+          return undefined;
+        fields.set(fieldName, {
+          concrete: canonical,
+          ...(fieldInterface === undefined
+            ? {}
+            : { interface_: fieldInterface }),
+          fields: value.fields ?? new Map(),
+          aliasDepth: 0,
+          propagators: [
+            ...(value.propagators ?? []),
+            {
+              kind: "go-method-receiver-composite-field",
+              line,
+              symbol: `${owner.name}.${fieldName}:${canonical.resolvedPackageName}.${canonical.typeName}`,
+              path: caller.file.path,
+            },
+          ],
+        });
+      }
+      return { concrete: composite.reference, fields };
     }
     const allocation =
       /^new\s*\(\s*((?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)\s*\)$/u.exec(
@@ -2759,6 +2927,82 @@ function objectWrapperSummaries(
       if (matches.length === 1) {
         const summary = matches[0]!;
         const fields = new Map<string, ReceiverBinding>();
+        const parameterBindings = new Map<string, ReceiverBinding>();
+        for (const [
+          parameterIndex,
+          parameter,
+        ] of summary.function_.parameters.entries()) {
+          const parameterType = typeReference(parameter.type);
+          const argument = arguments_[parameterIndex];
+          if (parameterType === undefined || argument === undefined) continue;
+          const parameterInterface = interfaceForType(
+            summary.function_,
+            parameterType,
+            summary.function_.startLine,
+          );
+          const expectedParameter = canonicalConcreteReference(
+            parameterType,
+            summary.function_.file,
+            summary.function_.packageName,
+            summary.function_,
+            summary.function_.startLine,
+          );
+          if (
+            parameterInterface === undefined &&
+            expectedParameter === undefined
+          )
+            continue;
+          const bare = /^([A-Za-z_]\w*)$/u.exec(argument.trim())?.[1];
+          const bound =
+            bare === undefined ? undefined : availableBindings.get(bare);
+          const value =
+            bound === undefined
+              ? concreteExpression(
+                  caller,
+                  argument,
+                  line,
+                  availableBindings,
+                  constructorDepth + 1,
+                )
+              : {
+                  concrete: bound.concrete,
+                  ...(bound.interface_ === undefined
+                    ? {}
+                    : { interface_: bound.interface_ }),
+                  fields: bound.fields,
+                  propagators: bound.propagators,
+                };
+          if (value === undefined) continue;
+          const canonical = canonicalConcreteReference(
+            value.concrete,
+            caller.file,
+            caller.packageName,
+            caller,
+            line,
+          );
+          if (
+            canonical === undefined ||
+            (parameterInterface === undefined
+              ? expectedParameter === undefined ||
+                expectedParameter.resolvedDirectory !==
+                  canonical.resolvedDirectory ||
+                expectedParameter.resolvedPackageName !==
+                  canonical.resolvedPackageName ||
+                expectedParameter.typeName !== canonical.typeName ||
+                expectedParameter.pointer !== canonical.pointer
+              : !concreteSatisfiesInterface(canonical, parameterInterface))
+          )
+            continue;
+          parameterBindings.set(parameter.name, {
+            concrete: canonical,
+            ...(parameterInterface === undefined
+              ? {}
+              : { interface_: parameterInterface }),
+            fields: value.fields ?? new Map(),
+            aliasDepth: 0,
+            propagators: value.propagators ?? [],
+          });
+        }
         let validFields = true;
         for (const [fieldName, source] of summary.fieldSources) {
           const field = summary.resultStruct.fields.get(fieldName);
@@ -2771,6 +3015,13 @@ function objectWrapperSummaries(
             field.file,
             field.packageName,
           );
+          const fieldConcrete = canonicalConcreteReference(
+            field.type,
+            field.file,
+            field.packageName,
+          );
+          if (fieldInterface === undefined && fieldConcrete === undefined)
+            continue;
           let value:
             | {
                 concrete: TypeReference;
@@ -2812,11 +3063,7 @@ function objectWrapperSummaries(
                 break;
               }
             } else {
-              const expectedParameter = canonicalConcreteReference(
-                field.type,
-                field.file,
-                field.packageName,
-              );
+              const expectedParameter = fieldConcrete;
               const actualParameter = canonicalConcreteReference(
                 parameterType,
                 summary.function_.file,
@@ -2864,7 +3111,7 @@ function objectWrapperSummaries(
               summary.function_,
               source.expression,
               source.line,
-              new Map(),
+              parameterBindings,
               constructorDepth + 1,
             );
           }
@@ -2888,11 +3135,7 @@ function objectWrapperSummaries(
             break;
           }
           if (fieldInterface === undefined) {
-            const expected = canonicalConcreteReference(
-              field.type,
-              field.file,
-              field.packageName,
-            );
+            const expected = fieldConcrete;
             if (
               expected === undefined ||
               expected.resolvedDirectory !== canonical.resolvedDirectory ||
@@ -2903,6 +3146,9 @@ function objectWrapperSummaries(
               validFields = false;
               break;
             }
+          } else if (!concreteSatisfiesInterface(canonical, fieldInterface)) {
+            validFields = false;
+            break;
           }
           fields.set(fieldName, {
             concrete: canonical,

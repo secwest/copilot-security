@@ -846,6 +846,16 @@ pointer-method calls on interface-held values, embedded, anonymous, generic,
 duplicate, missing, or ambiguous fields; constructor parameters returned as the
 result; nested or multiple returns; shadowed constructor names; a ninth
 constructor alias; and a ninth field fail closed.
+A fifteenth pair carries the selected implementation through a nested pointer
+layer created inside the constructor composite while the same composite also
+initializes unrelated scalar fields. Keyed composites recurse only through
+exact repository-local struct or basic-interface fields, preserve every nested
+assignment as separate evidence, accept ordinary trailing commas, and share the
+eight-field selector bound. A constructor assignment or return may span at most
+thirteen structural lines; a fourteenth line, positional composite, unresolved
+nested receiver, wrong nested type, or reassigned referenced parameter fails
+closed. Scalar initialization is ignored because it neither proves nor
+invalidates receiver identity.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -936,6 +946,12 @@ Push-Location benchmarks\fixtures\go-cross-package-constructor-interface-field-d
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-interface-field-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-nested-constructor-interface-field-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-nested-constructor-interface-field-delete-authorization
 go test ./...
 Pop-Location
 ```

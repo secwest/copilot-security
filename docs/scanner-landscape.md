@@ -494,7 +494,16 @@ constructor-parameter reassignment, wrong concrete field types, and value
 instances lacking a required pointer method fail closed. The positive proves
 that only the selected repository sink is reached; the control preserves the
 multiple-implementation topology and adds only the authenticated account
-predicate. This directly
+predicate. A fifteenth pair places that selected implementation inside a nested
+pointer layer and initializes unrelated scalar fields in the same ordinary
+multiline composite. The host recursively materializes only exact local
+struct/interface instance fields, accepts trailing-comma formatting, retains
+each nested assignment, and stops at the existing eight-field selector and new
+thirteen-line statement bounds. A fourteenth statement line, unresolved nested
+receiver, wrong inner type, referenced-parameter reassignment, or unsatisfied
+method set fails closed; scalar fields do not erase an otherwise exact receiver
+path. The positive proves the nested selected sink deletes, and the control
+preserves the topology while adding only principal scope. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -507,10 +516,9 @@ describes call-graph target resolution; Semgrep documents [separate per-file
 and cross-file analysis modes](https://semgrep.dev/docs/writing-rules/glossary).
 This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
-failure semantics and executable object/principal controls. Pointer and
-interface receiver fields, constructor parameters and helper chains, unbound or
-multi-implementation interface dispatch, embedded promotion, function-value
-object wrappers, nested and
+failure semantics and executable object/principal controls. Constructor helper
+chains and post-construction field writes, unbound interfaces, embedded
+promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
 sqlc, ORMs, branch-sensitive dominance, and deployment authorization remain
 future work.

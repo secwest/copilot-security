@@ -322,6 +322,28 @@
       "id": "go-cross-package-safe-constructor-interface-field-delete-authorization",
       "fixture": "fixtures/go-cross-package-safe-constructor-interface-field-delete-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-package-nested-constructor-interface-field-delete-idor",
+      "fixture": "fixtures/go-cross-package-nested-constructor-interface-field-delete-idor",
+      "expected": [
+        {
+          "title": "Go nested constructor-interface chain deletes an object selected only by request ID",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "internal/primary/store.go",
+          "line": 11,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-package-safe-nested-constructor-interface-field-delete-authorization",
+      "fixture": "fixtures/go-cross-package-safe-nested-constructor-interface-field-delete-authorization",
+      "expected": []
     }
   ]
 }
