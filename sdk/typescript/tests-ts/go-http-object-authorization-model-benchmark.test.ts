@@ -176,6 +176,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-imported-helper-type-switch-write-authorization",
       "go-cross-package-imported-helper-aliased-type-switch-write-delete-idor",
       "go-cross-package-safe-imported-helper-aliased-type-switch-write-authorization",
+      "go-cross-package-imported-helper-empty-interface-type-switch-write-delete-idor",
+      "go-cross-package-safe-imported-helper-empty-interface-type-switch-write-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -235,6 +237,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[55]?.expected).toEqual([]);
     expect(manifest.cases[56]?.expected).toHaveLength(1);
     expect(manifest.cases[57]?.expected).toEqual([]);
+    expect(manifest.cases[58]?.expected).toHaveLength(1);
+    expect(manifest.cases[59]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -2195,6 +2199,79 @@ describe("Go HTTP object-authorization framework model", () => {
     );
     const safe = await fixtureInventory(
       "go-cross-package-safe-imported-helper-aliased-type-switch-write-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 11 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "internal/primary/store.go",
+          line: 11,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    const propagators = vulnerable[0]?.frameworkModel?.propagators ?? [];
+    expect(propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-call",
+          symbol: "parent.NewLayer",
+          path: "internal/service/service.go",
+          line: 16,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 31,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 33,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 35,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-return",
+          path: "internal/parent/layer.go",
+          line: 37,
+        }),
+      ]),
+    );
+    expect(
+      propagators.filter(
+        ({ kind }) => kind === "go-method-receiver-constructor-field-write",
+      ),
+    ).toHaveLength(3);
+    expect(propagators.map(({ path }) => path)).not.toContain(
+      "internal/archive/store.go",
+    );
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      frameworkModel: {
+        candidateControls: [
+          expect.objectContaining({ kind: "principal-bound-object-query" }),
+        ],
+      },
+    });
+  });
+
+  test("preserves imported helper empty-interface type switch writes and their control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-imported-helper-empty-interface-type-switch-write-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-imported-helper-empty-interface-type-switch-write-authorization",
     );
     expect(vulnerable).toHaveLength(1);
     expect(vulnerable[0]).toMatchObject({
@@ -4906,7 +4983,6 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
   return service
 }`),
     ).toHaveLength(1);
-
     for (const constructor of [
       `func NewService(repository InvoiceRepository, label string) *Service {
   service := &Service{}
@@ -4931,13 +5007,18 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
   });
 
   test("joins exact nested constructor writes across both branches", async () => {
-    const repository = async (constructor: string): Promise<ModelRecord[]> =>
+    const repository = async (
+      constructor: string,
+      additionalFiles: Record<string, string> = {},
+      additionalImport = "",
+    ): Promise<ModelRecord[]> =>
       repositoryInventory({
         "invoices.go": `package invoices
 import (
   "context"
   "database/sql"
   "net/http"
+  ${additionalImport}
 )
 type InvoiceRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
 type Store struct{}
@@ -4961,6 +5042,7 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
   service := NewService(&Store{}, "primary")
   service.DeleteInvoice(r.Context(), db, invoiceID)
 }`,
+        ...additionalFiles,
       });
 
     const joined =
@@ -5430,7 +5512,7 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
   return service
 }`),
     ).toEqual([]);
-    expect(
+    const convertedAliasTypeSwitched =
       await repository(`func NewService(repository InvoiceRepository, label string) *Service {
   service := &Service{layer: &Layer{label: label}}
   candidate := any(repository)
@@ -5441,8 +5523,8 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     service.layer.repository = repository
   }
   return service
-}`),
-    ).toEqual([]);
+}`);
+    expect(convertedAliasTypeSwitched).toHaveLength(1);
     expect(
       await repository(`func NewService(repository InvoiceRepository, label string) *Service {
   service := &Service{layer: &Layer{label: label}}
@@ -5576,7 +5658,7 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
   return service
 }`),
     ).toEqual([]);
-    expect(
+    const convertedTypeSwitched =
       await repository(`func NewService(repository InvoiceRepository, label string) *Service {
   service := &Service{layer: &Layer{label: label}}
   switch any(repository).(type) {
@@ -5586,7 +5668,259 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     service.layer.repository = repository
   }
   return service
+}`);
+    expect(convertedTypeSwitched).toHaveLength(1);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  candidate := repository
+  switch selected := interface { }(candidate).(type) {
+  case *Store:
+    _ = selected
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
 }`),
+    ).toHaveLength(1);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  candidate := interface{}(repository)
+  switch selected := candidate.(type) {
+  case *Store:
+    _ = selected
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toHaveLength(1);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  alias1 := repository
+  alias2 := alias1
+  alias3 := alias2
+  alias4 := alias3
+  alias5 := alias4
+  alias6 := alias5
+  alias7 := alias6
+  candidate := any(alias7)
+  switch candidate.(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toHaveLength(1);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  alias1 := repository
+  alias2 := alias1
+  alias3 := alias2
+  alias4 := alias3
+  alias5 := alias4
+  alias6 := alias5
+  alias7 := alias6
+  alias8 := alias7
+  candidate := interface{}(alias8)
+  switch candidate.(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toEqual([]);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch InvoiceRepository(repository).(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toEqual([]);
+    expect(
+      await repository(`func choose(repository InvoiceRepository) InvoiceRepository { return repository }
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch any(choose(repository)).(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toEqual([]);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  any := func(InvoiceRepository) interface{} { return &OtherStore{} }
+  switch any(repository).(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toEqual([]);
+    const packageAny = {
+      "shadow.go": `package invoices
+func any(InvoiceRepository) interface{} { return &OtherStore{} }`,
+    };
+    expect(
+      await repository(
+        `func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch any(repository).(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`,
+        packageAny,
+      ),
+    ).toEqual([]);
+    expect(
+      await repository(
+        `func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch any(repository).(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`,
+        {
+          "shadow.go": `package invoices
+var (placeholder int; any = placeholder)`,
+        },
+      ),
+    ).toEqual([]);
+    expect(
+      await repository(
+        `func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch any(repository).(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`,
+        {
+          "go.mod": "module example.com/invoices\n\ngo 1.26\n",
+          "helper/placeholder.go": "package helper",
+          "shadow/placeholder.go": "package shadow",
+        },
+        'helper "example.com/invoices/helper"; any "example.com/invoices/shadow"',
+      ),
+    ).toEqual([]);
+    expect(
+      await repository(
+        `func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch any(repository).(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`,
+        {
+          "go.mod": "module example.com/invoices\n\ngo 1.26\n",
+          "helper/placeholder.go": "package helper",
+          "helper/placeholder_test.go": "package helper_test",
+        },
+        '"example.com/invoices/helper"',
+      ),
+    ).toHaveLength(1);
+    expect(
+      await repository(
+        `func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch interface{}(repository).(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`,
+        packageAny,
+      ),
+    ).toHaveLength(1);
+    expect(
+      await repository(
+        `func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch any(repository).(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`,
+        { "go.mod": "module example.com/invoices\n\ngo 1.17\n" },
+      ),
+    ).toEqual([]);
+    expect(
+      await repository(
+        `func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch any(repository).(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`,
+        {
+          "go.mod": "module example.com/invoices\n\ngo 1.26\n",
+          "shadow/placeholder.go": "package shadow",
+        },
+        'any "example.com/invoices/shadow"',
+      ),
+    ).toEqual([]);
+    expect(
+      await repository(
+        `func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch any(repository).(type) {
+  case *Store:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`,
+        {
+          "go.mod": "module example.com/invoices\n\ngo 1.26\n",
+          "any/placeholder.go": "package any",
+        },
+        '"example.com/invoices/any"',
+      ),
     ).toEqual([]);
     expect(
       await repository(`func NewService(repository InvoiceRepository, label string) *Service {

@@ -603,7 +603,18 @@ pair carries the interface source through two exact local aliases. The host
 follows up to eight top-level, single-name, value-preserving assignments,
 invalidates overwritten names, and rejects a ninth hop, transformation,
 selector, multiple assignment, concrete replacement, or nested/conditional
-binding. The same complete-world and topology proof is retained. This directly
+binding. A thirtieth pair admits an exact empty-interface conversion either
+inline or through one of those bounded locals. Literal `interface{}` cannot be
+shadowed. The `any` spelling additionally requires a compatible module language
+version and proof that no same-package declaration, current-file import,
+parameter, receiver, named result, or preceding local declaration shadows the
+predeclared alias. Effective local import package names are resolved before the
+path basename fallback. Unqualified call-shaped constructor-helper expressions
+must now name an actual same-package function, so conversions and built-ins do
+not truncate helper call, alias, write, and return evidence. Named conversions,
+nested calls or conversions, selectors, composite arguments, shadowed `any`,
+pre-1.18 modules, and a ninth assignment edge remain rejected. The same
+complete-world and topology proof is retained. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -620,7 +631,7 @@ analysis, but a standalone deterministic proof path with explicit bounded
 failure semantics and executable object/principal controls. External-module
 and parameter-transforming helpers, nested helper branches, five-or-more-arm
 chains and switches, side-effecting or composite initializers, type switches
-over selectors, conversions, unconstrained `any`, transformed, composite,
+over selectors, named or nested conversions, transformed, composite,
 field-held, package-held, or branch-joined aliases, or value-bearing guards,
 one-arm conditionals
 proven from pre-state, loop-sensitive writes,

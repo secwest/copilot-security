@@ -962,6 +962,20 @@ while killing overwritten names. A ninth hop, transformation, selector,
 multiple assignment, nested or conditional binding, scalar, shadowed or
 ambiguous source, malformed guard, missing final default, or divergent arm
 fails closed under the existing complete-state, topology, and resource checks.
+A thirtieth pair converts the exact interface parameter to an empty interface
+before carrying it through a local alias and entering the same bounded type
+switch. Both `interface{}(repository)` and the predeclared
+`any(repository)` spelling preserve the dynamic value. The latter is admitted
+only when the enclosing module does not select a language version before Go
+1.18 and `any` is not shadowed by a package declaration in any same-package
+file, the current file's explicit or effective import name, a parameter,
+receiver, named result, or preceding local declaration. Conversion assignments
+consume the same eight-hop alias budget. Named-interface conversions, nested
+calls or conversions, selectors, composite arguments, shadowed `any`, and a
+ninth local edge remain fail closed. Constructor-helper discovery also ignores
+unqualified call-shaped expressions unless a same-package function is actually
+declared, preventing built-ins and type conversions from erasing otherwise
+complete helper-boundary evidence.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1142,6 +1156,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-helper-aliased-type-
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-aliased-type-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-helper-empty-interface-type-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-empty-interface-type-switch-write-authorization
 go test ./...
 Pop-Location
 ```

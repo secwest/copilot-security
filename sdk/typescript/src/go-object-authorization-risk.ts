@@ -2844,6 +2844,14 @@ function objectWrapperSummaries(
       /^\s*switch\s+([A-Za-z_]\w*)\s*:=\s*([A-Za-z_]\w*)\s*\.\s*\(\s*type\s*\)\s*\{\s*$/u.exec(
         opening,
       );
+    const unboundConvertedTypeSwitch =
+      /^\s*switch\s+(any|interface\s*\{\s*\})\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\.\s*\(\s*type\s*\)\s*\{\s*$/u.exec(
+        opening,
+      );
+    const boundConvertedTypeSwitch =
+      /^\s*switch\s+([A-Za-z_]\w*)\s*:=\s*(any|interface\s*\{\s*\})\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\.\s*\(\s*type\s*\)\s*\{\s*$/u.exec(
+        opening,
+      );
     const switchAliasIsFresh = (target: string): boolean =>
       target !== "_" &&
       packageAliasIsAvailable(function_, target, startLine) &&
@@ -2878,6 +2886,262 @@ function objectWrapperSummaries(
         ).length === 1
       );
     };
+    const parenthesisDelta = (value: string): number =>
+      [...value].reduce(
+        (delta, character) =>
+          delta + (character === "(" ? 1 : character === ")" ? -1 : 0),
+        0,
+      );
+    const declarationNamesAny = (value: string): boolean =>
+      /^(?:[A-Za-z_]\w*\s*,\s*)*any(?:\s*,|\s|=|$)/u.test(value.trim());
+    const declarationGroupNamesAny = (value: string): boolean =>
+      value.split(";").some(declarationNamesAny);
+    const packageDeclaresAny = (): boolean => {
+      const directory = posix.dirname(function_.file.path);
+      for (const file of files) {
+        if (file.extension !== ".go" || posix.dirname(file.path) !== directory)
+          continue;
+        const structuralLines = maskGoLines(file.lines, true);
+        const packageMatch = /^\s*package\s+([A-Za-z_]\w*)\b/mu.exec(
+          structuralLines.join("\n"),
+        );
+        if (packageMatch?.[1] !== function_.packageName) continue;
+        let structuralDepth = 0;
+        let declarationGroup:
+          | { kind: "const" | "type" | "var"; depth: number }
+          | undefined;
+        for (const structural of structuralLines) {
+          if (structuralDepth === 0) {
+            if (
+              /^\s*func\s+any\b/u.test(structural) ||
+              /^\s*type\s+any\b/u.test(structural) ||
+              /^\s*(?:const|var)\s+(?:[A-Za-z_]\w*\s*,\s*)*any(?:\s*,|\s|=|$)/u.test(
+                structural,
+              )
+            )
+              return true;
+            if (
+              declarationGroup !== undefined &&
+              declarationGroup.depth === 1 &&
+              declarationGroupNamesAny(structural)
+            )
+              return true;
+            if (declarationGroup === undefined) {
+              const group = /^\s*(const|type|var)\s*\(/u.exec(structural);
+              if (group !== null) {
+                const depth = parenthesisDelta(structural);
+                if (depth < 0) return true;
+                if (
+                  declarationGroupNamesAny(
+                    structural.slice(structural.indexOf("(") + 1),
+                  )
+                )
+                  return true;
+                if (depth > 0)
+                  declarationGroup = {
+                    kind: group[1]! as "const" | "type" | "var",
+                    depth,
+                  };
+              }
+            } else {
+              declarationGroup.depth += parenthesisDelta(structural);
+              if (declarationGroup.depth < 0) return true;
+              if (declarationGroup.depth === 0) declarationGroup = undefined;
+            }
+          }
+          structuralDepth += braceDelta(structural);
+          if (structuralDepth < 0) return true;
+        }
+        if (structuralDepth !== 0 || declarationGroup !== undefined)
+          return true;
+      }
+      return false;
+    };
+    const fileImportsAsAny = (): boolean => {
+      const structuralLines = maskGoLines(function_.file.lines, true);
+      const visibleLines = maskGoLines(function_.file.lines, false);
+      const importNameShadowsAny = (value: string): boolean => {
+        const entry =
+          /^\s*(?:([A-Za-z_]\w*|[._])\s+)?["`]([^"`\r\n]+)["`]\s*;?\s*$/u.exec(
+            value,
+          );
+        if (entry === null) return false;
+        if (entry[1] !== undefined) return entry[1] === "any";
+        const importPath = entry[2]!;
+        const localPackageNames = new Set(
+          files.flatMap((file): string[] => {
+            if (
+              file.extension !== ".go" ||
+              file.path.endsWith("_test.go") ||
+              localDirectoryImportPath(posix.dirname(file.path), modules) !==
+                importPath
+            )
+              return [];
+            const packageMatch = /^\s*package\s+([A-Za-z_]\w*)\b/mu.exec(
+              maskGoLines(file.lines, true).join("\n"),
+            );
+            return packageMatch === null ? [] : [packageMatch[1]!];
+          }),
+        );
+        if (localPackageNames.size > 1) return true;
+        return (
+          ([...localPackageNames][0] ?? posix.basename(importPath)) === "any"
+        );
+      };
+      const importGroupShadowsAny = (value: string): boolean =>
+        value.split(";").some(importNameShadowsAny);
+      let importGroupDepth = 0;
+      for (let line = 0; line < structuralLines.length; line += 1) {
+        const structural = structuralLines[line] ?? "";
+        const visible = visibleLines[line] ?? "";
+        const directImport = /^\s*import\s+(.+)$/u.exec(visible);
+        if (
+          directImport !== null &&
+          !directImport[1]!.trimStart().startsWith("(") &&
+          importNameShadowsAny(directImport[1]!)
+        )
+          return true;
+        if (importGroupDepth === 1 && importGroupShadowsAny(visible))
+          return true;
+        if (importGroupDepth === 0) {
+          if (/^\s*import\s*\(/u.test(structural)) {
+            importGroupDepth = parenthesisDelta(structural);
+            if (importGroupDepth < 0) return true;
+            if (
+              importGroupShadowsAny(
+                visible.slice(visible.indexOf("(") + 1).replace(/\)\s*$/u, ""),
+              )
+            )
+              return true;
+          }
+        } else {
+          importGroupDepth += parenthesisDelta(structural);
+          if (importGroupDepth < 0) return true;
+        }
+      }
+      return importGroupDepth !== 0;
+    };
+    const moduleSupportsPredeclaredAny = (): boolean => {
+      const directory = posix.dirname(function_.file.path);
+      const module = modules.find(
+        ({ root }) =>
+          root === "." ||
+          directory === root ||
+          directory.startsWith(`${root}/`),
+      );
+      if (module === undefined) return true;
+      const modulePath =
+        module.root === "." ? "go.mod" : `${module.root}/go.mod`;
+      const moduleFile = files.find(({ path }) => path === modulePath);
+      if (moduleFile === undefined) return false;
+      const directiveLines = moduleFile.lines.filter((line) =>
+        /^\s*go\b/u.test(line),
+      );
+      if (directiveLines.length === 0) return true;
+      if (directiveLines.length !== 1) return false;
+      const version = /^\s*go\s+(\d+)\.(\d+)(?:\.\d+)?\s*(?:\/\/.*)?$/u.exec(
+        directiveLines[0]!,
+      );
+      if (version === null) return false;
+      const major = Number.parseInt(version[1]!, 10);
+      const minor = Number.parseInt(version[2]!, 10);
+      return major > 1 || (major === 1 && minor >= 18);
+    };
+    const namedResultShadowsAny = (): boolean => {
+      const signature = function_.returnSignature.trim();
+      if (!signature.startsWith("(") || !signature.endsWith(")")) return false;
+      return splitGoArguments(signature.slice(1, -1)).some((result) =>
+        /^(?:[A-Za-z_]\w*\s*,\s*)*any(?:\s*,\s*[A-Za-z_]\w*)*\s+\S/u.test(
+          result.trim(),
+        ),
+      );
+    };
+    const localDeclaresAnyBefore = (line: number): boolean => {
+      let declarationGroup:
+        | { kind: "const" | "type" | "var"; depth: number }
+        | undefined;
+      for (
+        let candidateLine = function_.bodyStartLine;
+        candidateLine < line;
+        candidateLine += 1
+      ) {
+        const structural = function_.structuralLines[candidateLine - 1] ?? "";
+        if (
+          /\b(?:const|type|var)\s+(?:[A-Za-z_]\w*\s*,\s*)*any(?:\s*,|\s|=|$)/u.test(
+            structural,
+          ) ||
+          /\b(?:[A-Za-z_]\w*\s*,\s*)*any(?:\s*,\s*[A-Za-z_]\w*)*\s*:=/u.test(
+            structural,
+          )
+        )
+          return true;
+        if (
+          declarationGroup !== undefined &&
+          declarationGroup.depth === 1 &&
+          declarationGroupNamesAny(structural)
+        )
+          return true;
+        if (declarationGroup === undefined) {
+          const group = /\b(const|type|var)\s*\(/u.exec(structural);
+          if (group !== null) {
+            const groupText = structural.slice(group.index);
+            const depth = parenthesisDelta(groupText);
+            if (depth < 0) return true;
+            if (
+              declarationGroupNamesAny(
+                groupText.slice(groupText.indexOf("(") + 1),
+              )
+            )
+              return true;
+            if (depth > 0)
+              declarationGroup = {
+                kind: group[1]! as "const" | "type" | "var",
+                depth,
+              };
+          }
+        } else {
+          declarationGroup.depth += parenthesisDelta(structural);
+          if (declarationGroup.depth < 0) return true;
+          if (declarationGroup.depth === 0) declarationGroup = undefined;
+        }
+      }
+      return declarationGroup !== undefined;
+    };
+    let packageDeclaresAnyResult: boolean | undefined;
+    let fileImportsAsAnyResult: boolean | undefined;
+    let moduleSupportsPredeclaredAnyResult: boolean | undefined;
+    let namedResultShadowsAnyResult: boolean | undefined;
+    const predeclaredAnyAvailability = new Map<number, boolean>();
+    const predeclaredAnyIsAvailable = (line: number): boolean => {
+      const cached = predeclaredAnyAvailability.get(line);
+      if (cached !== undefined) return cached;
+      packageDeclaresAnyResult ??= packageDeclaresAny();
+      fileImportsAsAnyResult ??= fileImportsAsAny();
+      moduleSupportsPredeclaredAnyResult ??= moduleSupportsPredeclaredAny();
+      namedResultShadowsAnyResult ??= namedResultShadowsAny();
+      const available =
+        moduleSupportsPredeclaredAnyResult &&
+        !packageDeclaresAnyResult &&
+        !fileImportsAsAnyResult &&
+        !namedResultShadowsAnyResult &&
+        packageAliasIsAvailable(function_, "any", line) &&
+        !localDeclaresAnyBefore(line);
+      predeclaredAnyAvailability.set(line, available);
+      return available;
+    };
+    const exactEmptyInterfaceSource = (
+      value: string,
+      line: number,
+    ): string | undefined => {
+      const conversion =
+        /^\s*(any|interface\s*\{\s*\})\s*\(\s*([A-Za-z_]\w*)\s*\)\s*$/u.exec(
+          value,
+        );
+      if (conversion === null) return undefined;
+      return conversion[1] === "any" && !predeclaredAnyIsAvailable(line)
+        ? undefined
+        : conversion[2];
+    };
     const interfaceParameterForSwitchSource = (
       source: string,
     ): string | undefined => {
@@ -2895,9 +3159,9 @@ function objectWrapperSummaries(
         const structural = function_.structuralLines[line - 1] ?? "";
         const assignment = goAssignment(structural);
         if (assignment !== undefined) {
-          const priorName = /^([A-Za-z_]\w*)$/u.exec(
-            assignment.value.trim(),
-          )?.[1];
+          const priorName =
+            /^([A-Za-z_]\w*)$/u.exec(assignment.value.trim())?.[1] ??
+            exactEmptyInterfaceSource(assignment.value, line);
           const prior =
             priorName === undefined ? undefined : aliases.get(priorName);
           for (const name of assignment.names) aliases.delete(name);
@@ -2920,12 +3184,24 @@ function objectWrapperSummaries(
     };
     let armForbiddenAlias: string | undefined;
     let armLeadingNoOpAlias: string | undefined;
-    if (boundTypeSwitch !== null || unboundTypeSwitch !== null) {
-      const target = boundTypeSwitch?.[1];
-      const source = boundTypeSwitch?.[2] ?? unboundTypeSwitch?.[1];
+    if (
+      boundTypeSwitch !== null ||
+      unboundTypeSwitch !== null ||
+      boundConvertedTypeSwitch !== null ||
+      unboundConvertedTypeSwitch !== null
+    ) {
+      const target = boundTypeSwitch?.[1] ?? boundConvertedTypeSwitch?.[1];
+      const conversion =
+        boundConvertedTypeSwitch?.[2] ?? unboundConvertedTypeSwitch?.[1];
+      const source =
+        boundTypeSwitch?.[2] ??
+        unboundTypeSwitch?.[1] ??
+        boundConvertedTypeSwitch?.[3] ??
+        unboundConvertedTypeSwitch?.[2];
       if (
         source === undefined ||
         interfaceParameterForSwitchSource(source) === undefined ||
+        (conversion === "any" && !predeclaredAnyIsAvailable(startLine)) ||
         (target !== undefined && !switchAliasIsFresh(target))
       )
         return undefined;
@@ -3089,6 +3365,22 @@ function objectWrapperSummaries(
       match[2]!.trim() === "" ? [] : splitGoArguments(match[2]!);
     if (arguments_.some((argument) => argument.trim() === "")) return undefined;
     return { name: match[1]!.replace(/\s+/gu, ""), arguments: arguments_ };
+  };
+  const declaredConstructorValueHelperCall = (
+    expression: string,
+    context: GoFunction,
+  ): { name: string; arguments: string[] } | undefined => {
+    const call = constructorValueHelperCall(expression);
+    if (call === undefined || call.name.includes(".")) return call;
+    return functions.some(
+      (candidate) =>
+        candidate.receiver === undefined &&
+        candidate.name === call.name &&
+        candidate.packageName === context.packageName &&
+        posix.dirname(candidate.file.path) === posix.dirname(context.file.path),
+    )
+      ? call
+      : undefined;
   };
 
   const singleLineConstructorHelperReturn = (
@@ -3258,7 +3550,10 @@ function objectWrapperSummaries(
     const singleLineReturn = singleLineConstructorHelperReturn(function_);
     if (singleLineReturn !== undefined) {
       const direct = localCompositeResult(singleLineReturn, result.typeName);
-      const helperCall = constructorValueHelperCall(singleLineReturn);
+      const helperCall = declaredConstructorValueHelperCall(
+        singleLineReturn,
+        function_,
+      );
       if (
         (direct === undefined || direct.pointer !== result.pointer) &&
         helperCall === undefined
@@ -3333,7 +3628,10 @@ function objectWrapperSummaries(
         const aliasName = /^([A-Za-z_]\w*)$/u.exec(returnMatch[1]!.trim())?.[1];
         const alias =
           aliasName === undefined ? undefined : aliases.get(aliasName);
-        const helperCall = constructorValueHelperCall(returnMatch[1]!);
+        const helperCall = declaredConstructorValueHelperCall(
+          returnMatch[1]!,
+          function_,
+        );
         if (
           (direct === undefined || direct.pointer !== result.pointer) &&
           alias === undefined &&
@@ -3419,7 +3717,10 @@ function objectWrapperSummaries(
       }
       const name = assignment.names[0]!;
       const direct = localCompositeResult(assignment.value, result.typeName);
-      const helperCall = constructorValueHelperCall(assignment.value);
+      const helperCall = declaredConstructorValueHelperCall(
+        assignment.value,
+        function_,
+      );
       if (direct !== undefined && direct.pointer !== result.pointer) {
         aliases.delete(name);
         continue;
