@@ -616,11 +616,17 @@ the account predicate. A twelfth pair calls an imported concrete service method,
 which binds one imported repository implementation to a local interface before
 calling its method. Exact receiver construction and interface binding remain
 visible in the evidence; the control again changes only the account predicate.
-The suite proves all twelve blocked attacks and successful
+A thirteenth pair obtains the imported service from an exact constructor and
+traverses its named concrete repository value field before calling the sink
+method. Exact constructor call, internal return aliases, return location,
+receiver binding, field declaration, object aliases, and principal positions
+remain visible; the control again changes only the account predicate. The suite
+proves all thirteen blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
-function-value, object-wrapper, concrete-method, and exact interface dispatch,
+function-value, object-wrapper, concrete-method, exact interface dispatch, and
+constructor/concrete-field dispatch,
 without a database service:
 
 ```powershell
@@ -705,6 +711,12 @@ Push-Location fixtures\go-cross-package-method-interface-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-method-interface-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-constructor-field-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-constructor-field-delete-authorization
 go test ./...
 Pop-Location
 ```

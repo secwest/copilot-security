@@ -278,6 +278,28 @@
       "id": "go-cross-package-safe-method-interface-delete-authorization",
       "fixture": "fixtures/go-cross-package-safe-method-interface-delete-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-package-constructor-field-delete-idor",
+      "fixture": "fixtures/go-cross-package-constructor-field-delete-idor",
+      "expected": [
+        {
+          "title": "Go constructor and concrete-field chain deletes an object selected only by request ID",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "internal/invoicestore/store.go",
+          "line": 11,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-package-safe-constructor-field-delete-authorization",
+      "fixture": "fixtures/go-cross-package-safe-constructor-field-delete-authorization",
+      "expected": []
     }
   ]
 }

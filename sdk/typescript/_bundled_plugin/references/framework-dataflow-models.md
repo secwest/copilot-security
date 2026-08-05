@@ -417,10 +417,20 @@ interpreter that consumes the value.
   local value resolves from an exact concrete composite, allocation,
   assignment, or explicit interface conversion. Preserve receiver parameter,
   binding, alias, and interface-to-concrete evidence separately.
-- Reject unbound interface parameters, nil pointer variables, constructor-return
-  inference, promoted or embedded methods, method values, dynamic callbacks,
+- Accept one exact same-package or imported constructor when it declares one
+  matching local struct result and returns the exact composite directly or
+  through at most eight top-level aliases. Require the exact ordinary argument
+  count or minimum variadic arity. Follow at most eight named concrete
+  non-pointer value fields, resolving each field type in the declaring file's
+  exact package/import context. Preserve constructor call, internal aliases,
+  return, receiver binding, and every field declaration separately.
+- Reject unbound interface parameters, nil pointer variables, returned
+  constructor parameters, nested or multiple constructor returns, constructor
+  function values or shadowing, pointer/interface/embedded/anonymous/generic/
+  duplicate fields, promoted methods, method values, dynamic callbacks,
   nested or unknown reassignment, duplicate receiver methods, pointer methods
-  on interface-held concrete values, and a ninth receiver alias.
+  on interface-held concrete values, and a ninth receiver alias, constructor
+  alias, or field.
 - Protected effect: the request-derived identifier occupies an object-key
   equality predicate in fixed SQL executed by an exact typed `*database/sql.DB`,
   `*database/sql.Tx`, or `*database/sql.Conn`. A single-row read requires

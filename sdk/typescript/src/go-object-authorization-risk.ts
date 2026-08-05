@@ -13,6 +13,7 @@ import {
   maskGoLines,
   referencedTaint,
   requestSource,
+  splitGoArguments,
   type GoCall,
   type GoFunction,
   type GoHttpSourceFile,
@@ -26,6 +27,8 @@ const MAX_RECORDS = 64;
 const MAX_OBJECT_WRAPPER_DEPTH = 32;
 const MAX_OBJECT_WRAPPER_CANDIDATES = 4_096;
 const MAX_OBJECT_RECEIVER_ALIAS_DEPTH = 8;
+const MAX_OBJECT_RECEIVER_FIELD_DEPTH = 8;
+const MAX_OBJECT_CONSTRUCTOR_ALIAS_DEPTH = 8;
 const MAX_TRANSACTION_HELPER_DEPTH = 32;
 const MAX_TRANSACTION_FUNCTION_VALUE_DEPTH = 8;
 const OBJECT_COLUMN = /^(?:id|key|uuid|[a-z][a-z0-9_]*_(?:id|key|uuid))$/iu;
@@ -287,7 +290,7 @@ function resolvedTransactionHelperCall(
   visiting: ReadonlySet<string> = new Set(),
   depth = 0,
 ): ResolvedTransactionHelperCall | undefined {
-  if (/^[A-Za-z_]\w*\.[A-Za-z_]\w*$/u.test(callName))
+  if (/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$/u.test(callName))
     return { name: callName, targetLine: line, functionValues: [] };
   if (!/^[A-Za-z_]\w*$/u.test(callName)) return undefined;
   if (
@@ -2060,6 +2063,33 @@ function objectWrapperSummaries(
     qualifier?: string;
     typeName: string;
     pointer: boolean;
+    resolvedDirectory?: string;
+    resolvedPackageName?: string;
+    resolvedImportPath?: string;
+  }
+  interface StructFieldDescriptor {
+    file: GoHttpSourceFile;
+    packageName: string;
+    name: string;
+    type: TypeReference;
+    line: number;
+  }
+  interface StructDescriptor {
+    key: string;
+    file: GoHttpSourceFile;
+    directory: string;
+    packageName: string;
+    importPath?: string;
+    name: string;
+    fields: ReadonlyMap<string, StructFieldDescriptor>;
+  }
+  interface ConstructorSummary {
+    key: string;
+    function_: GoFunction;
+    importPath?: string;
+    result: TypeReference;
+    returnLine: number;
+    aliases: EvidencePropagator[];
   }
   interface InterfaceDescriptor {
     directory: string;
@@ -2199,6 +2229,262 @@ function objectWrapperSummaries(
         };
   };
 
+  const structCandidates: StructDescriptor[] = [];
+  const structCounts = new Map<string, number>();
+  for (const file of files) {
+    if (file.extension !== ".go") continue;
+    const structural = maskGoLines(file.lines, true).join("\n");
+    const packageMatch = /^\s*package\s+([A-Za-z_]\w*)\b/mu.exec(structural);
+    if (packageMatch === null) continue;
+    const packageName = packageMatch[1]!;
+    const directory = posix.dirname(file.path);
+    const importPath = localDirectoryImportPath(directory, modules);
+    for (const declaration of structural.matchAll(
+      /\btype\s+([A-Za-z_]\w*)\s+struct\s*\{([^{}]*)\}/gu,
+    )) {
+      const name = declaration[1]!;
+      const key = `${directory}\0${packageName}\0${name}`;
+      structCounts.set(key, (structCounts.get(key) ?? 0) + 1);
+      const open = declaration[0].indexOf("{");
+      const bodyOffset = (declaration.index ?? 0) + open + 1;
+      const bodyStartLine = structural.slice(0, bodyOffset).split("\n").length;
+      const fields = new Map<string, StructFieldDescriptor>();
+      let valid = true;
+      for (const [lineOffset, rawLine] of declaration[2]!
+        .split("\n")
+        .entries()) {
+        for (const rawField of rawLine.split(";")) {
+          const fieldText = rawField.trim();
+          if (fieldText === "") continue;
+          const fieldMatch =
+            /^([A-Za-z_]\w*)\s+(\*?\s*(?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)$/u.exec(
+              fieldText,
+            );
+          if (fieldMatch === null || fields.has(fieldMatch[1]!)) {
+            valid = false;
+            break;
+          }
+          const fieldType = typeReference(fieldMatch[2]!);
+          if (fieldType === undefined) {
+            valid = false;
+            break;
+          }
+          fields.set(fieldMatch[1]!, {
+            file,
+            packageName,
+            name: fieldMatch[1]!,
+            type: fieldType,
+            line: bodyStartLine + lineOffset,
+          });
+        }
+        if (!valid) break;
+      }
+      if (!valid) continue;
+      structCandidates.push({
+        key,
+        file,
+        directory,
+        packageName,
+        ...(importPath === undefined ? {} : { importPath }),
+        name,
+        fields,
+      });
+    }
+  }
+  const structs = structCandidates.filter(
+    (descriptor) => structCounts.get(descriptor.key) === 1,
+  );
+
+  const typeMatchesIdentity = (
+    reference: TypeReference,
+    contextFile: GoHttpSourceFile,
+    contextPackageName: string,
+    targetDirectory: string,
+    targetPackageName: string,
+    targetImportPath: string | undefined,
+    contextFunction?: GoFunction,
+    contextLine?: number,
+  ): boolean => {
+    if (reference.resolvedDirectory !== undefined) {
+      return (
+        reference.resolvedDirectory === targetDirectory &&
+        reference.resolvedPackageName === targetPackageName
+      );
+    }
+    if (reference.qualifier === undefined) {
+      return (
+        posix.dirname(contextFile.path) === targetDirectory &&
+        contextPackageName === targetPackageName
+      );
+    }
+    if (targetImportPath === undefined) return false;
+    if (
+      goImportAlias(contextFile.lines, targetImportPath, targetPackageName) !==
+      reference.qualifier
+    )
+      return false;
+    return (
+      contextFunction === undefined ||
+      contextLine === undefined ||
+      packageAliasIsAvailable(contextFunction, reference.qualifier, contextLine)
+    );
+  };
+
+  const localCompositeResult = (
+    expression: string,
+    typeName: string,
+  ): { pointer: boolean } | undefined => {
+    const trimmed = expression.trim().replace(/;\s*$/u, "");
+    const prefix = new RegExp(
+      `^(&)?\\s*${escapeRegularExpression(typeName)}\\s*`,
+      "u",
+    ).exec(trimmed);
+    if (prefix === null) return undefined;
+    const composite = trimmed.slice(prefix[0].length);
+    if (!composite.startsWith("{") || !composite.endsWith("}"))
+      return undefined;
+    let depth = 0;
+    for (let index = 0; index < composite.length; index += 1) {
+      if (composite[index] === "{") depth += 1;
+      if (composite[index] === "}") depth -= 1;
+      if (depth < 0 || (depth === 0 && index !== composite.length - 1))
+        return undefined;
+    }
+    return depth === 0 ? { pointer: prefix[1] !== undefined } : undefined;
+  };
+
+  const constructorCandidates: ConstructorSummary[] = [];
+  const constructorCounts = new Map<string, number>();
+  for (const function_ of functions) {
+    if (function_.receiver !== undefined) continue;
+    const key = `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${function_.name}`;
+    constructorCounts.set(key, (constructorCounts.get(key) ?? 0) + 1);
+    const result = typeReference(function_.returnSignature);
+    if (result === undefined || result.qualifier !== undefined) continue;
+    const matchingStructs = structs.filter(
+      (descriptor) =>
+        descriptor.directory === posix.dirname(function_.file.path) &&
+        descriptor.packageName === function_.packageName &&
+        descriptor.name === result.typeName,
+    );
+    if (matchingStructs.length !== 1) continue;
+    const aliases = new Map<
+      string,
+      { pointer: boolean; depth: number; propagators: EvidencePropagator[] }
+    >();
+    const returns: Array<{
+      pointer: boolean;
+      line: number;
+      propagators: EvidencePropagator[];
+    }> = [];
+    let invalid = false;
+    for (
+      let line = function_.bodyStartLine;
+      line <= function_.endLine;
+      line += 1
+    ) {
+      const structural = function_.structuralLines[line - 1] ?? "";
+      const returnMatch = /^\s*return\s+(.+?)\s*;?\s*$/u.exec(structural);
+      if (/\breturn\b/u.test(structural)) {
+        if (lineNestingDepth(function_, line) !== 1 || returnMatch === null) {
+          invalid = true;
+          break;
+        }
+        const direct = localCompositeResult(returnMatch[1]!, result.typeName);
+        const aliasName = /^([A-Za-z_]\w*)$/u.exec(returnMatch[1]!.trim())?.[1];
+        const alias =
+          aliasName === undefined ? undefined : aliases.get(aliasName);
+        if (direct === undefined && alias === undefined) {
+          invalid = true;
+          break;
+        }
+        returns.push({
+          pointer: direct?.pointer ?? alias!.pointer,
+          line,
+          propagators: alias?.propagators ?? [],
+        });
+        continue;
+      }
+      const assignment = goAssignment(structural);
+      if (assignment === undefined) continue;
+      if (lineNestingDepth(function_, line) !== 1) {
+        if (assignment.names.some((name) => aliases.has(name))) {
+          invalid = true;
+          break;
+        }
+        continue;
+      }
+      if (assignment.names.length !== 1) {
+        for (const name of assignment.names) aliases.delete(name);
+        continue;
+      }
+      const name = assignment.names[0]!;
+      const direct = localCompositeResult(assignment.value, result.typeName);
+      if (direct !== undefined) {
+        aliases.set(name, {
+          pointer: direct.pointer,
+          depth: 0,
+          propagators: [
+            {
+              kind: "go-method-receiver-constructor-alias",
+              line,
+              symbol: name,
+              path: function_.file.path,
+            },
+          ],
+        });
+        continue;
+      }
+      const priorName = /^([A-Za-z_]\w*)$/u.exec(assignment.value.trim())?.[1];
+      const prior =
+        priorName === undefined ? undefined : aliases.get(priorName);
+      if (
+        prior === undefined ||
+        prior.depth >= MAX_OBJECT_CONSTRUCTOR_ALIAS_DEPTH
+      ) {
+        aliases.delete(name);
+        continue;
+      }
+      aliases.set(name, {
+        pointer: prior.pointer,
+        depth: prior.depth + 1,
+        propagators: [
+          ...prior.propagators,
+          {
+            kind: "go-method-receiver-constructor-alias",
+            line,
+            symbol: name,
+            path: function_.file.path,
+          },
+        ],
+      });
+    }
+    if (
+      invalid ||
+      returns.length !== 1 ||
+      returns[0]!.pointer !== result.pointer
+    )
+      continue;
+    const importPath = localPackageImportPath(function_, modules);
+    constructorCandidates.push({
+      key,
+      function_,
+      ...(importPath === undefined ? {} : { importPath }),
+      result: {
+        typeName: result.typeName,
+        pointer: result.pointer,
+        resolvedDirectory: posix.dirname(function_.file.path),
+        resolvedPackageName: function_.packageName,
+        ...(importPath === undefined ? {} : { resolvedImportPath: importPath }),
+      },
+      returnLine: returns[0]!.line,
+      aliases: returns[0]!.propagators,
+    });
+  }
+  const constructors = constructorCandidates.filter(
+    (summary) => constructorCounts.get(summary.key) === 1,
+  );
+
   const interfaceForType = (
     caller: GoFunction,
     reference: TypeReference,
@@ -2231,7 +2517,11 @@ function objectWrapperSummaries(
     expression: string,
     line: number,
   ):
-    | { concrete: TypeReference; interface_?: InterfaceDescriptor }
+    | {
+        concrete: TypeReference;
+        interface_?: InterfaceDescriptor;
+        propagators?: EvidencePropagator[];
+      }
     | undefined => {
     const trimmed = expression.trim().replace(/;\s*$/u, "");
     const composite =
@@ -2252,6 +2542,82 @@ function objectWrapperSummaries(
       const concrete = typeReference(`*${allocation[1]!}`);
       return concrete === undefined ? undefined : { concrete };
     }
+    const constructorCall =
+      /^((?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)\s*\(([\s\S]*)\)$/u.exec(
+        trimmed,
+      );
+    if (constructorCall !== null) {
+      const segments = constructorCall[1]!
+        .split(".")
+        .map((segment) => segment.trim());
+      const arguments_ =
+        constructorCall[2]!.trim() === ""
+          ? []
+          : splitGoArguments(constructorCall[2]!);
+      const matches = constructors.filter((summary) => {
+        const variadic =
+          summary.function_.parameters.at(-1)?.type.trim().startsWith("...") ===
+          true;
+        if (
+          variadic
+            ? arguments_.length < summary.function_.parameters.length - 1
+            : arguments_.length !== summary.function_.parameters.length
+        )
+          return false;
+        if (segments.length === 1) {
+          const resolvedConstructor = resolvedTransactionHelperCall(
+            caller,
+            segments[0]!,
+            line,
+          );
+          return (
+            resolvedConstructor !== undefined &&
+            resolvedConstructor.name === segments[0] &&
+            resolvedConstructor.functionValues.length === 0 &&
+            summary.function_.name === segments[0] &&
+            posix.dirname(summary.function_.file.path) ===
+              posix.dirname(caller.file.path) &&
+            summary.function_.packageName === caller.packageName
+          );
+        }
+        if (
+          segments.length !== 2 ||
+          !/^[A-Z]/u.test(segments[1]!) ||
+          summary.importPath === undefined ||
+          summary.function_.name !== segments[1] ||
+          !packageAliasIsAvailable(caller, segments[0]!, line)
+        )
+          return false;
+        return (
+          goImportAlias(
+            caller.file.lines,
+            summary.importPath,
+            summary.function_.packageName,
+          ) === segments[0]
+        );
+      });
+      if (matches.length === 1) {
+        const summary = matches[0]!;
+        return {
+          concrete: summary.result,
+          propagators: [
+            {
+              kind: "go-method-receiver-constructor-call",
+              line,
+              symbol: summary.function_.name,
+              path: caller.file.path,
+            },
+            ...summary.aliases,
+            {
+              kind: "go-method-receiver-constructor-return",
+              line: summary.returnLine,
+              symbol: `${summary.result.pointer ? "*" : ""}${summary.function_.packageName}.${summary.result.typeName}`,
+              path: summary.function_.file.path,
+            },
+          ],
+        };
+      }
+    }
     const conversion =
       /^((?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)\s*\(\s*([\s\S]+)\s*\)$/u.exec(
         trimmed,
@@ -2264,7 +2630,13 @@ function objectWrapperSummaries(
     const inner = concreteExpression(caller, conversion[2]!, line);
     return inner === undefined
       ? undefined
-      : { concrete: inner.concrete, interface_ };
+      : {
+          concrete: inner.concrete,
+          interface_,
+          ...(inner.propagators === undefined
+            ? {}
+            : { propagators: inner.propagators }),
+        };
   };
 
   const typeMatchesDescriptor = (
@@ -2280,6 +2652,13 @@ function objectWrapperSummaries(
       (interfaceDispatch && descriptor.receiver.pointer && !reference.pointer)
     )
       return false;
+    if (reference.resolvedDirectory !== undefined) {
+      return (
+        reference.resolvedDirectory ===
+          posix.dirname(descriptor.function_.file.path) &&
+        reference.resolvedPackageName === descriptor.function_.packageName
+      );
+    }
     if (reference.qualifier === undefined) {
       return (
         posix.dirname(descriptor.function_.file.path) ===
@@ -2306,10 +2685,44 @@ function objectWrapperSummaries(
     const bindings = new Map<string, ReceiverBinding>();
     const declaredInterfaces = new Map<string, InterfaceDescriptor>();
     const declaredConcreteTypes = new Map<string, TypeReference>();
+    const resolvedMatches = (
+      syntactic: TypeReference,
+      resolved: TypeReference,
+    ): boolean => {
+      if (
+        resolved.resolvedDirectory === undefined ||
+        resolved.resolvedPackageName === undefined
+      )
+        return false;
+      if (syntactic.qualifier === undefined) {
+        return (
+          posix.dirname(caller.file.path) === resolved.resolvedDirectory &&
+          caller.packageName === resolved.resolvedPackageName
+        );
+      }
+      return (
+        resolved.resolvedImportPath !== undefined &&
+        goImportAlias(
+          caller.file.lines,
+          resolved.resolvedImportPath,
+          resolved.resolvedPackageName,
+        ) === syntactic.qualifier
+      );
+    };
     const sameType = (left: TypeReference, right: TypeReference): boolean =>
       left.typeName === right.typeName &&
-      left.qualifier === right.qualifier &&
-      left.pointer === right.pointer;
+      left.pointer === right.pointer &&
+      (left.qualifier === right.qualifier ||
+        resolvedMatches(left, right) ||
+        resolvedMatches(right, left));
+    const typeSymbol = (reference: TypeReference): string =>
+      `${
+        reference.qualifier === undefined
+          ? reference.resolvedPackageName === undefined
+            ? ""
+            : `${reference.resolvedPackageName}.`
+          : `${reference.qualifier}.`
+      }${reference.typeName}`;
     const addStaticBinding = (
       name: string,
       reference: TypeReference,
@@ -2325,7 +2738,7 @@ function objectWrapperSummaries(
           {
             kind,
             line: bindingLine,
-            symbol: `${name}:${reference.qualifier === undefined ? "" : `${reference.qualifier}.`}${reference.typeName}`,
+            symbol: `${name}:${typeSymbol(reference)}`,
             path: caller.file.path,
           },
         ],
@@ -2426,13 +2839,14 @@ function objectWrapperSummaries(
           ...(interface_ === undefined ? {} : { interface_ }),
           aliasDepth: 0,
           propagators: [
+            ...(concrete.propagators ?? []),
             {
               kind:
                 interface_ === undefined
                   ? "go-method-receiver-binding"
                   : "go-interface-receiver-binding",
               line: candidateLine,
-              symbol: `${typed[1]}:${concrete.concrete.qualifier === undefined ? "" : `${concrete.concrete.qualifier}.`}${concrete.concrete.typeName}`,
+              symbol: `${typed[1]}:${typeSymbol(concrete.concrete)}`,
               path: caller.file.path,
             },
           ],
@@ -2514,13 +2928,14 @@ function objectWrapperSummaries(
         ...(interface_ === undefined ? {} : { interface_ }),
         aliasDepth: 0,
         propagators: [
+          ...(concrete.propagators ?? []),
           {
             kind:
               interface_ === undefined
                 ? "go-method-receiver-binding"
                 : "go-interface-receiver-binding",
             line: candidateLine,
-            symbol: `${name}:${concrete.concrete.qualifier === undefined ? "" : `${concrete.concrete.qualifier}.`}${concrete.concrete.typeName}`,
+            symbol: `${name}:${typeSymbol(concrete.concrete)}`,
             path: caller.file.path,
           },
         ],
@@ -2716,6 +3131,78 @@ function objectWrapperSummaries(
       resolved.name !== call.name
     )
       return [];
+    const selector = resolved.name.split(".");
+    if (selector.length >= 3) {
+      const fieldNames = selector.slice(1, -1);
+      const methodName = selector.at(-1)!;
+      if (fieldNames.length > MAX_OBJECT_RECEIVER_FIELD_DEPTH) return [];
+      const binding = receiverBindings(
+        caller.function_,
+        call.line,
+        methodName,
+      ).get(selector[0]!);
+      if (binding === undefined || binding.interface_ !== undefined) return [];
+      let reference = binding.concrete;
+      let contextFile = caller.function_.file;
+      let contextPackageName = caller.function_.packageName;
+      let contextFunction: GoFunction | undefined = caller.function_;
+      let contextLine: number | undefined = resolved.targetLine;
+      const propagators = [...binding.propagators];
+      for (const fieldName of fieldNames) {
+        const matchingStructs = structs.filter(
+          (descriptor) =>
+            descriptor.name === reference.typeName &&
+            typeMatchesIdentity(
+              reference,
+              contextFile,
+              contextPackageName,
+              descriptor.directory,
+              descriptor.packageName,
+              descriptor.importPath,
+              contextFunction,
+              contextLine,
+            ),
+        );
+        if (matchingStructs.length !== 1) return [];
+        const owner = matchingStructs[0]!;
+        const field = owner.fields.get(fieldName);
+        if (field === undefined || field.type.pointer) return [];
+        propagators.push({
+          kind: "go-method-receiver-field",
+          line: field.line,
+          symbol: `${owner.name}.${field.name}:${
+            field.type.qualifier === undefined ? "" : `${field.type.qualifier}.`
+          }${field.type.typeName}`,
+          path: field.file.path,
+        });
+        reference = field.type;
+        contextFile = field.file;
+        contextPackageName = field.packageName;
+        contextFunction = undefined;
+        contextLine = undefined;
+      }
+      return [...descriptors.values()]
+        .filter(
+          (target) =>
+            target.receiver !== undefined &&
+            target.function_.name === methodName &&
+            target.receiver.typeName === reference.typeName &&
+            typeMatchesIdentity(
+              reference,
+              contextFile,
+              contextPackageName,
+              posix.dirname(target.function_.file.path),
+              target.function_.packageName,
+              target.importPath,
+              contextFunction,
+              contextLine,
+            ),
+        )
+        .map((descriptor) => ({
+          descriptor,
+          receiverPropagators: propagators,
+        }));
+    }
     const plain = /^([A-Za-z_]\w*)$/u.exec(resolved.name);
     if (plain !== null) {
       const targets = [...descriptors.values()].filter(

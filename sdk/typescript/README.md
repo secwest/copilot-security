@@ -95,10 +95,18 @@ The package is ESM-only and provides:
   or explicit interface conversion. Evidence distinguishes
   concrete receiver parameters, constructions, aliases, and interface bindings.
   Pointer method sets remain ineligible for an interface containing a concrete
-  value. Unbound interface parameters, nil pointer variables, constructors,
-  embedded promotion, method values, dynamic callbacks, nested or unknown
-  reassignment, duplicate method definitions, and a ninth receiver alias are
-  rejected rather than guessed.
+  value. A receiver may also originate from one exact local constructor whose
+  single declared result is a matching local struct composite returned directly
+  or through at most eight top-level aliases, and whose call satisfies the exact
+  ordinary or minimum variadic arity. A method selector may traverse at
+  most eight named non-pointer concrete value fields; each field type resolves
+  in its declaring file's exact package/import context and remains explicit
+  evidence. Unbound interface parameters, nil pointer variables, returned
+  constructor parameters, nested or multiple constructor returns, constructor
+  function values or shadowing, pointer/interface/embedded/anonymous/generic/
+  duplicate fields, promoted methods, method values, dynamic callbacks,
+  nested or unknown reassignment, duplicate method definitions, and a ninth
+  receiver alias, constructor alias, or field are rejected rather than guessed.
   Single-row reads require `QueryRow`, `Scan`, and disclosure;
   collection reads require exact `Query`/`QueryContext`, the same returned
   `Rows`, `Next`, `Scan`, and disclosure. Updates and deletes require exact

@@ -828,8 +828,18 @@ the service binds one imported repository implementation to an explicitly
 declared local interface. Exact `T` versus `*T` method sets, receiver type and
 module identity, interface method membership, and at most eight receiver aliases
 are preserved as evidence. Unbound interface parameters, nil pointer variables,
-constructor-return guesses, promoted methods, method values, nested or unknown
+inexact constructor returns, promoted methods, method values, nested or unknown
 reassignment, duplicate receiver methods, and a ninth alias fail closed:
+A thirteenth pair obtains the service through an exact same-package or imported
+constructor and traverses a named concrete value field to the repository method.
+The constructor must return its single exact local struct result directly or
+through at most eight top-level aliases, and the call must satisfy its ordinary
+or variadic arity. Field chains retain each declaration's
+own package/import identity and stop after eight fields. Pointer, interface,
+embedded, anonymous, generic, duplicate, missing, or ambiguous fields;
+constructor parameters returned as the result; nested or multiple returns;
+shadowed constructor names; a ninth constructor alias; and a ninth field fail
+closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -908,6 +918,12 @@ Push-Location benchmarks\fixtures\go-cross-package-method-interface-delete-idor
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-method-interface-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-constructor-field-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-field-delete-authorization
 go test ./...
 Pop-Location
 ```
