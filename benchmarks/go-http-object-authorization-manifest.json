@@ -740,6 +740,28 @@
       "id": "go-cross-package-safe-embedded-interface-type-switch-authorization",
       "fixture": "fixtures/go-cross-package-safe-embedded-interface-type-switch-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-package-type-alias-interface-delete-idor",
+      "fixture": "fixtures/go-cross-package-type-alias-interface-delete-idor",
+      "expected": [
+        {
+          "title": "Go type-alias interface chain deletes an unscoped object",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "internal/primary/store.go",
+          "line": 11,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-package-safe-type-alias-interface-authorization",
+      "fixture": "fixtures/go-cross-package-safe-type-alias-interface-authorization",
+      "expected": []
     }
   ]
 }

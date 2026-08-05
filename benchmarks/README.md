@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains seventy-one vulnerable/control pairs:
+The versioned corpus currently contains seventy-two vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 426
+destination-pinned, redirect-free transport. Three runs per case produce 432
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -740,8 +740,18 @@ most 64 canonical methods, retains declaring-package identity for unexported
 methods, and permits identical diamond duplicates. Cycles, a ninth edge,
 signature conflicts, duplicate declarations, unresolved external or
 non-interface terms, and incomplete import identity fail closed. Its control
-again changes only the account predicate. The suite proves all thirty-three blocked attacks and
-successful owned-object, owned-collection, prepared-mutation, direct-transaction, and
+again changes only the account predicate. A thirty-fourth pair carries method
+signature types, embedded source and target contracts, constructor parameter
+and field types, and the conversion target through exact local Go aliases.
+Direct and grouped non-generic declarations resolve in their own file/import/
+package context through at most eight same-package or qualified local-module
+aliases. Defined types remain distinct. Cycles, a ninth edge, generic or
+duplicate aliases, alias/interface collisions, unexported qualified names,
+pointers, incomplete imports, unresolved or external endpoints, and
+non-interface targets fail closed. Its control preserves the complete alias
+topology and again changes only the account predicate. The suite proves all
+thirty-four blocked attacks and successful owned-object, owned-collection,
+prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
 function-value, object-wrapper, concrete-method, exact local-interface,
@@ -753,8 +763,9 @@ constructor-helper field writes, shallow value-copy pointers, and exact helper
 two-way, multi-way, expression-switch, expressionless-switch,
 initializer-bound-switch, direct interface-type-switch, and bounded aliased
 interface-type-switch, exact empty-interface-conversion, and exact named-basic-
-interface-conversion, canonical cross-package-interface-conversion, and
-same-package plus imported embedded-interface-conversion branch joins,
+interface-conversion, canonical cross-package-interface-conversion,
+same-package plus imported embedded-interface-conversion, and exact
+type-alias-interface branch joins,
 without a database service:
 
 ```powershell

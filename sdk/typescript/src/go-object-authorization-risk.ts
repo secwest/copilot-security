@@ -36,6 +36,7 @@ const MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES = 16;
 const MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS = 4;
 const MAX_INTERFACE_EMBEDDING_DEPTH = 8;
 const MAX_INTERFACE_METHODS = 64;
+const MAX_TYPE_ALIAS_DEPTH = 8;
 const MAX_TRANSACTION_HELPER_DEPTH = 32;
 const MAX_TRANSACTION_FUNCTION_VALUE_DEPTH = 8;
 const OBJECT_COLUMN = /^(?:id|key|uuid|[a-z][a-z0-9_]*_(?:id|key|uuid))$/iu;
@@ -2194,6 +2195,14 @@ function objectWrapperSummaries(
     directCanonicalMethods?: ReadonlyMap<string, CanonicalInterfaceMethod>;
     embeddings: ReadonlyArray<EmbeddedInterfaceReference>;
   }
+  interface TypeAliasDescriptor {
+    file: GoHttpSourceFile;
+    directory: string;
+    packageName: string;
+    importPath?: string;
+    name: string;
+    target?: string;
+  }
   interface ReceiverBinding {
     concrete: TypeReference;
     interface_?: InterfaceDescriptor;
@@ -2295,6 +2304,17 @@ function objectWrapperSummaries(
     `local:${directory}\0${packageName}`;
   const packageKey = (directory: string, packageName: string): string =>
     `${directory}\0${packageName}`;
+  const typeReference = (value: string): TypeReference | undefined => {
+    const match =
+      /^\s*(\*)?\s*(?:([A-Za-z_]\w*)\s*\.\s*)?([A-Za-z_]\w*)\s*$/u.exec(value);
+    return match === null
+      ? undefined
+      : {
+          ...(match[2] === undefined ? {} : { qualifier: match[2] }),
+          typeName: match[3]!,
+          pointer: match[1] !== undefined,
+        };
+  };
   for (const file of files) {
     if (file.extension !== ".go") continue;
     const structural = maskGoLines(file.lines, true).join("\n");
@@ -2320,6 +2340,7 @@ function objectWrapperSummaries(
   }
 
   interface CanonicalTypeContext {
+    file: GoHttpSourceFile;
     directory: string;
     packageName: string;
     packageIdentity: string;
@@ -2407,6 +2428,61 @@ function objectWrapperSummaries(
     if (file.extension === ".go")
       importAliases.set(file, importAliasesFor(file));
 
+  const typeAliases: TypeAliasDescriptor[] = [];
+  for (const file of files) {
+    if (file.extension !== ".go") continue;
+    const structural = maskGoLines(file.lines, true).join("\n");
+    const packageMatch = /^\s*package\s+([A-Za-z_]\w*)\b/mu.exec(structural);
+    if (packageMatch === null) continue;
+    const directory = posix.dirname(file.path);
+    const importPath = localDirectoryImportPath(directory, modules);
+    const add = (
+      name: string,
+      genericParameters: string | undefined,
+      target: string,
+    ) =>
+      typeAliases.push({
+        file,
+        directory,
+        packageName: packageMatch[1]!,
+        ...(importPath === undefined ? {} : { importPath }),
+        name,
+        ...(genericParameters === undefined ? { target: target.trim() } : {}),
+      });
+    for (const declaration of structural.matchAll(
+      /^\s*type\s+([A-Za-z_]\w*)(\s*\[[^\r\n;]*\])?\s*=\s*([^\r\n;]+?)\s*$/gmu,
+    ))
+      add(declaration[1]!, declaration[2], declaration[3]!);
+    for (const group of structural.matchAll(/^\s*type\s*\(([\s\S]*?)^\s*\)/gmu))
+      for (const declaration of group[1]!.matchAll(
+        /^\s*([A-Za-z_]\w*)(\s*\[[^\r\n;]*\])?\s*=\s*([^\r\n;]+?)\s*$/gmu,
+      ))
+        add(declaration[1]!, declaration[2], declaration[3]!);
+  }
+  const typeAliasCandidatesForReference = (
+    reference: TypeReference,
+    contextFile: GoHttpSourceFile,
+    contextPackageName: string,
+  ): TypeAliasDescriptor[] => {
+    if (reference.pointer) return [];
+    if (reference.qualifier === undefined)
+      return typeAliases.filter(
+        (alias) =>
+          alias.directory === posix.dirname(contextFile.path) &&
+          alias.packageName === contextPackageName &&
+          alias.name === reference.typeName,
+      );
+    if (!/^[A-Z]/u.test(reference.typeName)) return [];
+    const imports = importAliases.get(contextFile);
+    if (imports === undefined || !imports.complete) return [];
+    const importPath = imports.aliases.get(reference.qualifier);
+    if (importPath === undefined) return [];
+    return typeAliases.filter(
+      (alias) =>
+        alias.importPath === importPath && alias.name === reference.typeName,
+    );
+  };
+
   const matchingTypeDelimiter = (
     value: string,
     opening: string,
@@ -2451,6 +2527,36 @@ function objectWrapperSummaries(
     context: CanonicalTypeContext,
     depth?: number,
   ) => string | undefined;
+  const canonicalTypeAliases = new Map<TypeAliasDescriptor, string>();
+  const resolvingTypeAliases = new Set<TypeAliasDescriptor>();
+  const canonicalTypeAlias = (
+    alias: TypeAliasDescriptor,
+  ): string | undefined => {
+    const cached = canonicalTypeAliases.get(alias);
+    if (cached !== undefined) return cached;
+    if (
+      alias.target === undefined ||
+      resolvingTypeAliases.has(alias) ||
+      resolvingTypeAliases.size >= MAX_TYPE_ALIAS_DEPTH
+    )
+      return undefined;
+    const imports = importAliases.get(alias.file) ?? {
+      aliases: new Map<string, string>(),
+      complete: false,
+    };
+    resolvingTypeAliases.add(alias);
+    const identity = canonicalGoType(alias.target, {
+      file: alias.file,
+      directory: alias.directory,
+      packageName: alias.packageName,
+      packageIdentity: packageIdentity(alias.directory, alias.packageName),
+      importAliases: imports.aliases,
+      importAliasesComplete: imports.complete,
+    });
+    resolvingTypeAliases.delete(alias);
+    if (identity !== undefined) canonicalTypeAliases.set(alias, identity);
+    return identity;
+  };
   const canonicalParameterList = (
     value: string,
     context: CanonicalTypeContext,
@@ -2605,6 +2711,20 @@ function objectWrapperSummaries(
         type,
       );
     if (named === null) return undefined;
+    const aliasCandidates = typeAliasCandidatesForReference(
+      {
+        ...(named[1] === undefined ? {} : { qualifier: named[1] }),
+        typeName: named[2]!,
+        pointer: false,
+      },
+      context.file,
+      context.packageName,
+    );
+    if (aliasCandidates.length > 0) {
+      if (aliasCandidates.length !== 1 || named[3] !== undefined)
+        return undefined;
+      return canonicalTypeAlias(aliasCandidates[0]!);
+    }
     let identity: string;
     if (named[1] !== undefined) {
       if (!context.importAliasesComplete) return undefined;
@@ -2669,6 +2789,7 @@ function objectWrapperSummaries(
     const signature = canonicalMethodSignature(
       `(${function_.parameters.map(({ type }) => type).join(",")})${function_.returnSignature}`,
       {
+        file: function_.file,
         directory,
         packageName: function_.packageName,
         packageIdentity: packageIdentity(directory, function_.packageName),
@@ -2753,6 +2874,7 @@ function objectWrapperSummaries(
         methods.add(method[1]!);
         methodSignatures.set(method[1]!, method[2]!.replace(/\s+/gu, ""));
         const canonical = canonicalMethodSignature(method[2]!, {
+          file,
           directory,
           packageName: packageMatch[1]!,
           packageIdentity: identity,
@@ -2793,31 +2915,126 @@ function objectWrapperSummaries(
     }
   }
 
+  const directInterfaceCandidatesForReference = (
+    reference: TypeReference,
+    contextFile: GoHttpSourceFile,
+    contextPackageName: string,
+  ): InterfaceCandidate[] => {
+    if (reference.pointer) return [];
+    if (reference.qualifier === undefined) {
+      return interfaceCandidates.filter(
+        ({ descriptor }) =>
+          descriptor.directory === posix.dirname(contextFile.path) &&
+          descriptor.packageName === contextPackageName &&
+          descriptor.name === reference.typeName,
+      );
+    }
+    if (!/^[A-Z]/u.test(reference.typeName)) return [];
+    const imports = importAliases.get(contextFile);
+    if (imports === undefined || !imports.complete) return [];
+    const importPath = imports.aliases.get(reference.qualifier);
+    if (importPath === undefined) return [];
+    return interfaceCandidates.filter(
+      ({ descriptor }) =>
+        descriptor.importPath === importPath &&
+        descriptor.name === reference.typeName,
+    );
+  };
+  const emptyInterfaceAliasCandidates = new Map<
+    TypeAliasDescriptor,
+    InterfaceCandidate
+  >();
+  const resolvedInterfaceAliases = new Map<
+    TypeAliasDescriptor,
+    InterfaceCandidate
+  >();
+  const interfaceCandidateForReference = (
+    reference: TypeReference,
+    contextFile: GoHttpSourceFile,
+    contextPackageName: string,
+    resolvingAliases = new Set<TypeAliasDescriptor>(),
+    depth = 0,
+  ): InterfaceCandidate | undefined => {
+    if (reference.pointer) return undefined;
+    const direct = directInterfaceCandidatesForReference(
+      reference,
+      contextFile,
+      contextPackageName,
+    );
+    const aliases = typeAliasCandidatesForReference(
+      reference,
+      contextFile,
+      contextPackageName,
+    );
+    if (direct.length + aliases.length !== 1) return undefined;
+    if (direct.length === 1) return direct[0];
+    const alias = aliases[0]!;
+    const cached = resolvedInterfaceAliases.get(alias);
+    if (cached !== undefined) return cached;
+    if (
+      alias.target === undefined ||
+      resolvingAliases.has(alias) ||
+      depth >= MAX_TYPE_ALIAS_DEPTH
+    )
+      return undefined;
+    const canonical = canonicalTypeAlias(alias);
+    if (canonical === "interface{}" || canonical === "builtin:interface{}") {
+      let empty = emptyInterfaceAliasCandidates.get(alias);
+      if (empty === undefined) {
+        const methods = new Map<string, CanonicalInterfaceMethod>();
+        empty = {
+          descriptor: {
+            file: alias.file,
+            directory: alias.directory,
+            packageName: alias.packageName,
+            ...(alias.importPath === undefined
+              ? {}
+              : { importPath: alias.importPath }),
+            name: alias.name,
+            methods: new Set<string>(),
+            packageIdentity: packageIdentity(
+              alias.directory,
+              alias.packageName,
+            ),
+            canonicalMethods: methods,
+          },
+          directCanonicalMethods: methods,
+          embeddings: [],
+        };
+        emptyInterfaceAliasCandidates.set(alias, empty);
+      }
+      resolvedInterfaceAliases.set(alias, empty);
+      return empty;
+    }
+    const target = typeReference(alias.target);
+    if (target === undefined || target.pointer) return undefined;
+    const next = new Set(resolvingAliases);
+    next.add(alias);
+    const resolved = interfaceCandidateForReference(
+      target,
+      alias.file,
+      alias.packageName,
+      next,
+      depth + 1,
+    );
+    if (resolved !== undefined) resolvedInterfaceAliases.set(alias, resolved);
+    return resolved;
+  };
   const interfaceCandidateForEmbedding = (
     source: InterfaceCandidate,
     reference: EmbeddedInterfaceReference,
   ): InterfaceCandidate | undefined => {
-    let candidates: InterfaceCandidate[];
-    if (reference.qualifier === undefined) {
-      candidates = interfaceCandidates.filter(
-        ({ descriptor }) =>
-          descriptor.directory === source.descriptor.directory &&
-          descriptor.packageName === source.descriptor.packageName &&
-          descriptor.name === reference.name,
-      );
-    } else {
-      const imports = importAliases.get(source.descriptor.file);
-      if (imports === undefined || !imports.complete) return undefined;
-      const importPath = imports.aliases.get(reference.qualifier);
-      if (importPath === undefined) return undefined;
-      candidates = interfaceCandidates.filter(
-        ({ descriptor }) =>
-          descriptor.importPath === importPath &&
-          descriptor.name === reference.name &&
-          /^[A-Z]/u.test(reference.name),
-      );
-    }
-    return candidates.length === 1 ? candidates[0] : undefined;
+    return interfaceCandidateForReference(
+      {
+        ...(reference.qualifier === undefined
+          ? {}
+          : { qualifier: reference.qualifier }),
+        typeName: reference.name,
+        pointer: false,
+      },
+      source.descriptor.file,
+      source.descriptor.packageName,
+    );
   };
   interface ResolvedInterfaceMethods {
     methods: ReadonlyMap<string, CanonicalInterfaceMethod>;
@@ -2888,19 +3105,6 @@ function objectWrapperSummaries(
     }
     interfaces.push(candidate.descriptor);
   }
-
-  const typeReference = (value: string): TypeReference | undefined => {
-    const match =
-      /^\s*(\*)?\s*(?:([A-Za-z_]\w*)\s*\.\s*)?([A-Za-z_]\w*)\s*$/u.exec(value);
-    return match === null
-      ? undefined
-      : {
-          ...(match[2] === undefined ? {} : { qualifier: match[2] }),
-          typeName: match[3]!,
-          pointer: match[1] !== undefined,
-        };
-  };
-
   const structCandidates: StructDescriptor[] = [];
   const structCounts = new Map<string, number>();
   for (const file of files) {
@@ -3466,23 +3670,19 @@ function objectWrapperSummaries(
         return { parameterName: source, depth: 0 };
       const reference = typeReference(parameterType);
       if (reference === undefined || reference.pointer) return undefined;
-      const candidates = interfaces.filter(
-        (interface_) =>
-          interface_.name === reference.typeName &&
-          typeMatchesIdentity(
-            reference,
-            function_.file,
-            function_.packageName,
-            interface_.directory,
-            interface_.packageName,
-            interface_.importPath,
-            function_,
-            startLine,
-          ),
-      );
-      return candidates.length === 1
-        ? { parameterName: source, interface_: candidates[0]!, depth: 0 }
-        : undefined;
+      if (
+        reference.qualifier !== undefined &&
+        !packageAliasIsAvailable(function_, reference.qualifier, startLine)
+      )
+        return undefined;
+      const interface_ = interfaceCandidateForReference(
+        reference,
+        function_.file,
+        function_.packageName,
+      )?.descriptor;
+      return interface_ === undefined
+        ? undefined
+        : { parameterName: source, interface_, depth: 0 };
     };
     const parenthesisDelta = (value: string): number =>
       [...value].reduce(
@@ -3758,21 +3958,11 @@ function objectWrapperSummaries(
       if (reference === undefined || reference.pointer) return undefined;
       const lexicalName = reference.qualifier ?? reference.typeName;
       if (!lexicalIdentifierIsAvailable(lexicalName, line)) return undefined;
-      const candidates = interfaces.filter(
-        (interface_) =>
-          interface_.name === reference.typeName &&
-          typeMatchesIdentity(
-            reference,
-            function_.file,
-            function_.packageName,
-            interface_.directory,
-            interface_.packageName,
-            interface_.importPath,
-            function_,
-            line,
-          ),
-      );
-      return candidates.length === 1 ? candidates[0] : undefined;
+      return interfaceCandidateForReference(
+        reference,
+        function_.file,
+        function_.packageName,
+      )?.descriptor;
     };
     const namedInterfaceAccepts = (
       source: InterfaceValueAlias,
@@ -5704,7 +5894,6 @@ function objectWrapperSummaries(
   const constructors = constructorCandidates.filter(
     (summary) => constructorCounts.get(summary.key) === 1,
   );
-
   const interfaceForReference = (
     reference: TypeReference,
     contextFile: GoHttpSourceFile,
@@ -5713,31 +5902,22 @@ function objectWrapperSummaries(
     contextLine?: number,
   ): InterfaceDescriptor | undefined => {
     if (reference.pointer) return undefined;
-    const candidates = interfaces.filter((interface_) => {
-      if (interface_.name !== reference.typeName) return false;
-      if (reference.qualifier === undefined) {
-        return (
-          interface_.directory === posix.dirname(contextFile.path) &&
-          interface_.packageName === contextPackageName
-        );
-      }
-      if (interface_.importPath === undefined) return false;
-      return (
-        goImportAlias(
-          contextFile.lines,
-          interface_.importPath,
-          interface_.packageName,
-        ) === reference.qualifier &&
-        (contextFunction === undefined ||
-          contextLine === undefined ||
-          packageAliasIsAvailable(
-            contextFunction,
-            reference.qualifier,
-            contextLine,
-          ))
-      );
-    });
-    return candidates.length === 1 ? candidates[0] : undefined;
+    if (
+      reference.qualifier !== undefined &&
+      contextFunction !== undefined &&
+      contextLine !== undefined &&
+      !packageAliasIsAvailable(
+        contextFunction,
+        reference.qualifier,
+        contextLine,
+      )
+    )
+      return undefined;
+    return interfaceCandidateForReference(
+      reference,
+      contextFile,
+      contextPackageName,
+    )?.descriptor;
   };
 
   const interfaceForType = (

@@ -636,7 +636,16 @@ local-module declaration is resolved per edge, with eight edges and 64 merged
 canonical methods as hard limits. Diamond duplicates require identical
 signatures, and lower-case method identity retains its declaring package.
 Cycles, conflicts, ambiguity, a ninth edge, external or non-interface terms,
-and incomplete imports fail closed. This
+and incomplete imports fail closed. A thirty-fourth pair follows exact
+[Go alias declarations](https://go.dev/ref/spec#Alias_declarations) through
+the same proof. Direct and grouped non-generic aliases may identify method
+signature types, embedded contracts, constructor parameters and fields, type
+switch sources, and conversion targets. One shared eight-edge resolver uses
+each declaration's own package/import context and preserves the aliased type's
+identity. Defined types are not collapsed. Generic, cyclic, duplicate,
+ambiguous, unexported qualified, unresolved, external, pointer, over-depth, or
+non-interface endpoints fail closed. This closes a compatibility-package
+false negative without adopting a broad name-equivalence heuristic. It
 follows the [Go conversion and assignability rules](https://go.dev/ref/spec#Conversions),
 which preserve representation for this conversion family. It directly
 implements OWASP API1:2023's

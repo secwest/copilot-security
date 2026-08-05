@@ -1011,6 +1011,18 @@ oversized method sets fail closed. The executable pair composes the source
 within `parent`, composes the target through an aliased `capabilities` import,
 and proves the unscoped deletion and account-bound control through the same
 type-switch join.
+A thirty-fourth pair carries the same proof through exact Go type aliases.
+Direct and grouped non-generic aliases can name method-signature types,
+same-package embedded elements, imported capability contracts, constructor
+parameters and fields, and the final conversion target. Each alias is resolved
+in its declaration's own package/import context through at most eight local
+module declarations. Alias identity is substituted exactly, including proven
+empty-interface aliases, while defined types remain distinct. Cycles, a ninth
+edge, generic declarations, duplicate alias or alias/interface names, qualified
+unexported aliases, pointers, incomplete imports, unresolved or external
+targets, and aliases ending at non-interface types fail closed. The executable
+pair proves the unscoped deletion and the otherwise identical account-bound
+control across all of those alias-bearing proof paths.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `

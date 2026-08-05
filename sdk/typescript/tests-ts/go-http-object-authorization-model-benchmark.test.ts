@@ -184,6 +184,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-imported-helper-cross-package-interface-type-switch-write-authorization",
       "go-cross-package-embedded-interface-type-switch-delete-idor",
       "go-cross-package-safe-embedded-interface-type-switch-authorization",
+      "go-cross-package-type-alias-interface-delete-idor",
+      "go-cross-package-safe-type-alias-interface-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -251,6 +253,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[63]?.expected).toEqual([]);
     expect(manifest.cases[64]?.expected).toHaveLength(1);
     expect(manifest.cases[65]?.expected).toEqual([]);
+    expect(manifest.cases[66]?.expected).toHaveLength(1);
+    expect(manifest.cases[67]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -2509,6 +2513,58 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(propagators).toEqual(
       expect.arrayContaining(
         [36, 38, 40].map((line) =>
+          expect.objectContaining({
+            kind: "go-method-receiver-constructor-field-write",
+            path: "internal/parent/layer.go",
+            line,
+          }),
+        ),
+      ),
+    );
+    expect(
+      propagators.filter(
+        ({ kind }) => kind === "go-method-receiver-constructor-field-write",
+      ),
+    ).toHaveLength(3);
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
+      frameworkModel: {
+        candidateControls: [
+          expect.objectContaining({ kind: "principal-bound-object-query" }),
+        ],
+      },
+    });
+  });
+
+  test("preserves type-alias interface dispatch and its authorization control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-type-alias-interface-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-type-alias-interface-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 11 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "internal/primary/store.go",
+          line: 11,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    const propagators = vulnerable[0]?.frameworkModel?.propagators ?? [];
+    expect(propagators).toEqual(
+      expect.arrayContaining(
+        [42, 44, 46].map((line) =>
           expect.objectContaining({
             kind: "go-method-receiver-constructor-field-write",
             path: "internal/parent/layer.go",
@@ -6788,6 +6844,208 @@ type SelectedRepository interface { capability.DeleteRepository }`,
         "func (*Store) authorize(string) error { return nil }",
       ),
     ).toEqual([]);
+  });
+
+  test("resolves exact local Go type aliases across interface proof paths", async () => {
+    const scan = async (
+      contractFiles: Record<string, string>,
+      sourceIdentifierDeclaration = "type InvoiceID = string",
+      targetExpression = "contracts.SelectedAlias",
+    ): Promise<ModelRecord[]> =>
+      repositoryInventory({
+        "go.mod": "module example.com/interface-aliases\n\ngo 1.26\n",
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+  contracts "example.com/interface-aliases/contracts"
+)
+${sourceIdentifierDeclaration}
+type DeleteRepository interface {
+  DeleteInvoice(context.Context, *sql.DB, InvoiceID) error
+}
+type BaseRepository = DeleteRepository
+type InvoiceRepository interface { BaseRepository }
+type RepositoryAlias = InvoiceRepository
+type Store struct{}
+func (*Store) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+type Service struct { repository RepositoryAlias }
+func NewService(repository RepositoryAlias) *Service {
+  service := &Service{}
+  switch ${targetExpression}(repository).(type) {
+  case *Store:
+    service.repository = repository
+  default:
+    service.repository = repository
+  }
+  return service
+}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.repository.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Store{})
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+        ...contractFiles,
+      });
+
+    const capability = `package capability
+import (
+  "context"
+  "database/sql"
+)
+type InvoiceID = string
+type DeleteRepository interface {
+  DeleteInvoice(context.Context, *sql.DB, InvoiceID) error
+}`;
+    expect(
+      await scan({
+        "capability/repository.go": capability,
+        "contracts/repository.go": `package contracts
+import capability "example.com/interface-aliases/capability"
+type CapabilityAlias = capability.DeleteRepository
+type SelectedRepository interface { CapabilityAlias }
+type SelectedAlias = SelectedRepository`,
+      }),
+    ).toHaveLength(1);
+
+    expect(
+      await scan({
+        "capability/repository.go": capability,
+        "contracts/repository.go": `package contracts
+import capability "example.com/interface-aliases/capability"
+type (
+  CapabilityAlias = capability.DeleteRepository
+  SelectedAlias = CapabilityAlias
+)`,
+      }),
+    ).toHaveLength(1);
+
+    expect(
+      await scan({
+        "contracts/repository.go": `package contracts
+type SelectedAlias = any`,
+      }),
+    ).toHaveLength(1);
+
+    expect(
+      await scan(
+        {
+          "capability/repository.go": capability,
+          "contracts/repository.go": `package contracts
+import capability "example.com/interface-aliases/capability"
+type SelectedAlias = capability.DeleteRepository`,
+        },
+        "type InvoiceID string",
+      ),
+    ).toEqual([]);
+  });
+
+  test("bounds Go type alias resolution and rejects inexact declarations", async () => {
+    const scan = async (
+      declarations: string,
+      extraFiles: Record<string, string> = {},
+      targetExpression = "contracts.SelectedAlias",
+    ): Promise<ModelRecord[]> =>
+      repositoryInventory({
+        "go.mod": "module example.com/interface-alias-bounds\n\ngo 1.26\n",
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+  contracts "example.com/interface-alias-bounds/contracts"
+)
+type InvoiceRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type Store struct{}
+func (*Store) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+type Service struct { repository InvoiceRepository }
+func NewService(repository InvoiceRepository) *Service {
+  service := &Service{}
+  switch ${targetExpression}(repository).(type) {
+  case *Store:
+    service.repository = repository
+  default:
+    service.repository = repository
+  }
+  return service
+}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.repository.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Store{})
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+        "contracts/repository.go": `package contracts
+import capability "example.com/interface-alias-bounds/capability"
+${declarations}`,
+        "capability/repository.go": `package capability
+import (
+  "context"
+  "database/sql"
+)
+type DeleteRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }`,
+        ...extraFiles,
+      });
+    const chain = (depth: number): string =>
+      Array.from({ length: depth }, (_, index) => {
+        const name = index === 0 ? "SelectedAlias" : `Alias${index}`;
+        const target =
+          index === depth - 1
+            ? "capability.DeleteRepository"
+            : `Alias${index + 1}`;
+        return `type ${name} = ${target}`;
+      }).join("\n");
+
+    expect(await scan(chain(8))).toHaveLength(1);
+    expect(await scan(chain(9))).toEqual([]);
+    expect(
+      await scan(`type SelectedAlias = OtherAlias
+type OtherAlias = SelectedAlias`),
+    ).toEqual([]);
+    expect(
+      await scan("type SelectedAlias[T any] = capability.DeleteRepository"),
+    ).toEqual([]);
+    expect(
+      await scan("type SelectedAlias capability.DeleteRepository"),
+    ).toEqual([]);
+    expect(await scan("type SelectedAlias = string")).toEqual([]);
+    expect(
+      await scan("type SelectedAlias = capability.DeleteRepository", {
+        "contracts/duplicate.go": `package contracts
+import capability "example.com/interface-alias-bounds/capability"
+type SelectedAlias = capability.DeleteRepository`,
+      }),
+    ).toEqual([]);
+    expect(
+      await scan("type SelectedAlias = capability.DeleteRepository", {
+        "contracts/duplicate.go": `package contracts
+import (
+  "context"
+  "database/sql"
+)
+type SelectedAlias interface { DeleteInvoice(context.Context, *sql.DB, string) error }`,
+      }),
+    ).toEqual([]);
+    expect(
+      await scan(
+        "type selectedAlias = capability.DeleteRepository",
+        {},
+        "contracts.selectedAlias",
+      ),
+    ).toEqual([]);
+    expect(await scan(`type SelectedAlias = MissingAlias`)).toEqual([]);
   });
 
   test("accepts eight joined branch writes and rejects nine", async () => {
