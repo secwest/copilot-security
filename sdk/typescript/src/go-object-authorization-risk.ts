@@ -2832,11 +2832,27 @@ function objectWrapperSummaries(
       }
     | undefined => {
     const opening = function_.structuralLines[startLine - 1] ?? "";
-    if (!/^\s*switch\s+[^{};]+\s*\{\s*$/u.test(opening)) return undefined;
+    if (!/^\s*switch(?:\s+[^{};]+)?\s*\{\s*$/u.test(opening)) return undefined;
     if (/\.\s*\(\s*type\s*\)/u.test(opening)) return undefined;
     let relativeDepth = braceDelta(opening);
     if (relativeDepth !== 1) return undefined;
     const arms: Array<{ startLine: number; endLine: number }> = [];
+    const switchArm = (armStart: number, armEnd: number) => {
+      let contentEnd = armEnd;
+      while (
+        contentEnd >= armStart &&
+        (function_.structuralLines[contentEnd - 1] ?? "").trim() === ""
+      )
+        contentEnd -= 1;
+      if (
+        contentEnd >= armStart &&
+        /^\s*break\s*;?\s*$/u.test(
+          function_.structuralLines[contentEnd - 1] ?? "",
+        )
+      )
+        contentEnd -= 1;
+      return { startLine: armStart, endLine: contentEnd };
+    };
     let armStartLine: number | undefined;
     let finalDefault = false;
     const maximumLine = Math.min(
@@ -2860,7 +2876,7 @@ function objectWrapperSummaries(
             arms.length + 1 >= MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
           )
             return undefined;
-          arms.push({ startLine: armStartLine, endLine: line - 1 });
+          arms.push(switchArm(armStartLine, line - 1));
         }
         armStartLine = line + 1;
         continue;
@@ -2876,7 +2892,7 @@ function objectWrapperSummaries(
           arms.length + 1 >= MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
         )
           return undefined;
-        arms.push({ startLine: armStartLine, endLine: line - 1 });
+        arms.push(switchArm(armStartLine, line - 1));
         armStartLine = line + 1;
         finalDefault = true;
         continue;
@@ -2888,7 +2904,7 @@ function objectWrapperSummaries(
           arms.length + 1 > MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
         )
           return undefined;
-        arms.push({ startLine: armStartLine, endLine: line - 1 });
+        arms.push(switchArm(armStartLine, line - 1));
         return arms.length >= 2
           ? { arms, statementDepth: 2, endLine: line }
           : undefined;

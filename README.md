@@ -939,8 +939,13 @@ and require a final `else`; a fifth arm or incomplete chain fails closed. A
 twenty-fifth pair expresses the same all-path helper initialization as an exact
 `switch`. Each `case` and the mandatory final `default` reuses the bounded world
 replay and identity-topology join. Two through four arms are accepted;
-`fallthrough`, `break`, missing or non-final `default`, empty or divergent arms,
-nested control flow, and a fifth arm fail closed.
+`fallthrough`, labelled or non-terminal `break`, missing or non-final `default`,
+empty or divergent arms, nested control flow, and a fifth arm fail closed. A
+twenty-sixth pair uses the common expressionless `switch` form and ends each arm
+with an explicit unlabelled `break`. The scanner treats only that final statement
+as Go's redundant case terminator, preserves all three write origins, and applies
+the same complete-state, topology, and resource checks. Switch initializers, type
+switches, and any non-terminal or labelled `break` remain fail closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1097,6 +1102,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-helper-switch-write-
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-helper-expressionless-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-expressionless-switch-write-authorization
 go test ./...
 Pop-Location
 ```

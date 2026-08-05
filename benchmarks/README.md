@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains sixty-three vulnerable/control pairs:
+The versioned corpus currently contains sixty-four vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 378
+destination-pinned, redirect-free transport. Three runs per case produce 384
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -681,11 +681,17 @@ imported-helper all-path proof
 with an exact `switch`: two named cases and a mandatory final `default` write
 through three shallow copies sharing one pointer holder. The common bounded
 world replay retains all three origins and requires complete state and topology
-convergence. Missing or non-final `default`, `fallthrough`, `break`, empty or
-divergent arms, nested control, a fifth arm, and over-budget paths fail closed.
-Its control again changes only the account predicate. The suite proves all
-twenty-five blocked attacks and successful
-owned-object, owned-collection, prepared-mutation, direct-transaction, and
+convergence. Missing or non-final `default`, `fallthrough`, labelled or
+non-terminal `break`, empty or divergent arms, nested control, a fifth arm, and
+over-budget paths fail closed.
+Its control again changes only the account predicate. A twenty-sixth pair uses
+an expressionless `switch` whose three arms end with explicit unlabelled
+`break` statements. The scanner trims only that redundant terminal statement,
+then applies the same complete-world replay and identity-topology join. Switch
+initializers, type switches, labelled or non-terminal breaks, and all existing
+divergence and resource failures remain rejected. Its control again changes only
+the account predicate. The suite proves all twenty-six blocked attacks and
+successful owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
 function-value, object-wrapper, concrete-method, exact local-interface,
@@ -694,7 +700,7 @@ constructor-interface and constructor-field-write dispatch, including nested
 post-construction injection, exact all-path constructor joins, cross-file
 constructor parent helpers, imported local-module parent helpers, and imported
 constructor-helper field writes, shallow value-copy pointers, and exact helper
-two-way, multi-way, and switch branch joins,
+two-way, multi-way, expression-switch, and expressionless-switch branch joins,
 without a database service:
 
 ```powershell
@@ -857,6 +863,12 @@ Push-Location fixtures\go-cross-package-imported-helper-switch-write-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-imported-helper-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-imported-helper-expressionless-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-imported-helper-expressionless-switch-write-authorization
 go test ./...
 Pop-Location
 ```
