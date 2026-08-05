@@ -762,6 +762,28 @@
       "id": "go-cross-package-safe-type-alias-interface-authorization",
       "fixture": "fixtures/go-cross-package-safe-type-alias-interface-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-package-promoted-method-delete-idor",
+      "fixture": "fixtures/go-cross-package-promoted-method-delete-idor",
+      "expected": [
+        {
+          "title": "Go promoted repository method deletes an unscoped object",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "internal/store/store.go",
+          "line": 11,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-package-safe-promoted-method-authorization",
+      "fixture": "fixtures/go-cross-package-safe-promoted-method-authorization",
+      "expected": []
     }
   ]
 }

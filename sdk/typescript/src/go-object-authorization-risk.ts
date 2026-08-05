@@ -2090,6 +2090,7 @@ function objectWrapperSummaries(
     name: string;
     type: TypeReference;
     line: number;
+    embedded: boolean;
   }
   interface StructDescriptor {
     key: string;
@@ -3132,25 +3133,38 @@ function objectWrapperSummaries(
         for (const rawField of rawLine.split(";")) {
           const fieldText = rawField.trim();
           if (fieldText === "") continue;
-          const fieldMatch =
+          const namedField =
             /^([A-Za-z_]\w*)\s+(\*?\s*(?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)$/u.exec(
               fieldText,
             );
-          if (fieldMatch === null || fields.has(fieldMatch[1]!)) {
+          const embeddedField =
+            /^(\*?\s*(?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)$/u.exec(fieldText);
+          if (namedField === null && embeddedField === null) {
             valid = false;
             break;
           }
-          const fieldType = typeReference(fieldMatch[2]!);
-          if (fieldType === undefined) {
+          const embedded = namedField === null;
+          const fieldType = typeReference(
+            namedField?.[2] ?? embeddedField![1]!,
+          );
+          const fieldName =
+            namedField?.[1] ??
+            /^([A-Za-z_]\w*)$/u.exec(fieldType?.typeName ?? "")?.[1];
+          if (
+            fieldType === undefined ||
+            fieldName === undefined ||
+            fields.has(fieldName)
+          ) {
             valid = false;
             break;
           }
-          fields.set(fieldMatch[1]!, {
+          fields.set(fieldName, {
             file,
             packageName,
-            name: fieldMatch[1]!,
+            name: fieldName,
             type: fieldType,
             line: bodyStartLine + lineOffset,
+            embedded,
           });
         }
         if (!valid) break;
@@ -5967,6 +5981,162 @@ function objectWrapperSummaries(
     };
   };
 
+  interface LocalMethodDeclaration {
+    function_: GoFunction;
+    receiver: MethodReceiver;
+  }
+  interface PromotedMethodField {
+    owner: StructDescriptor;
+    field: StructFieldDescriptor;
+    concrete: TypeReference;
+  }
+  interface ConcreteMethodResolution {
+    method: LocalMethodDeclaration;
+    promotedFields: readonly PromotedMethodField[];
+  }
+  const localMethodDeclarations: LocalMethodDeclaration[] = [
+    ...callableReceivers,
+  ].flatMap(([function_, receiver]): LocalMethodDeclaration[] =>
+    receiver === undefined ? [] : [{ function_, receiver }],
+  );
+  const canonicalStruct = (
+    reference: TypeReference,
+  ): StructDescriptor | undefined => {
+    if (
+      reference.resolvedDirectory === undefined ||
+      reference.resolvedPackageName === undefined
+    )
+      return undefined;
+    const matches = structs.filter(
+      (descriptor) =>
+        descriptor.directory === reference.resolvedDirectory &&
+        descriptor.packageName === reference.resolvedPackageName &&
+        descriptor.name === reference.typeName,
+    );
+    return matches.length === 1 ? matches[0] : undefined;
+  };
+  const concreteMethod = (
+    concrete: TypeReference,
+    methodName: string,
+    includePointerMethods: boolean,
+  ): ConcreteMethodResolution | undefined => {
+    const root = canonicalStruct(concrete);
+    if (root === undefined) return undefined;
+    interface MethodFrontier {
+      owner: StructDescriptor;
+      pointerMethods: boolean;
+      path: PromotedMethodField[];
+      seen: ReadonlySet<string>;
+    }
+    let frontier: MethodFrontier[] = [
+      {
+        owner: root,
+        pointerMethods: includePointerMethods,
+        path: [],
+        seen: new Set([root.key]),
+      },
+    ];
+    for (let depth = 0; depth <= MAX_OBJECT_RECEIVER_FIELD_DEPTH; depth += 1) {
+      const methods: ConcreteMethodResolution[] = [];
+      let matchingFields = 0;
+      for (const node of frontier) {
+        if (node.owner.fields.has(methodName)) matchingFields += 1;
+        for (const declaration of localMethodDeclarations) {
+          if (
+            declaration.function_.name !== methodName ||
+            declaration.receiver.typeName !== node.owner.name ||
+            posix.dirname(declaration.function_.file.path) !==
+              node.owner.directory ||
+            declaration.function_.packageName !== node.owner.packageName ||
+            (declaration.receiver.pointer && !node.pointerMethods)
+          )
+            continue;
+          methods.push({
+            method: declaration,
+            promotedFields: node.path,
+          });
+        }
+      }
+      if (matchingFields + methods.length > 0)
+        return matchingFields === 0 && methods.length === 1
+          ? methods[0]
+          : undefined;
+      if (depth === MAX_OBJECT_RECEIVER_FIELD_DEPTH) return undefined;
+      const next: MethodFrontier[] = [];
+      for (const node of frontier) {
+        for (const field of node.owner.fields.values()) {
+          if (!field.embedded) continue;
+          if (
+            interfaceForReference(field.type, field.file, field.packageName) !==
+            undefined
+          )
+            return undefined;
+          const canonical = canonicalConcreteReference(
+            field.type,
+            field.file,
+            field.packageName,
+          );
+          const owner =
+            canonical === undefined ? undefined : canonicalStruct(canonical);
+          if (
+            canonical === undefined ||
+            owner === undefined ||
+            node.seen.has(owner.key)
+          )
+            return undefined;
+          next.push({
+            owner,
+            pointerMethods: field.type.pointer || node.pointerMethods,
+            path: [
+              ...node.path,
+              {
+                owner: node.owner,
+                field,
+                concrete: canonical,
+              },
+            ],
+            seen: new Set([...node.seen, owner.key]),
+          });
+        }
+      }
+      if (next.length === 0) return undefined;
+      frontier = next;
+    }
+    return undefined;
+  };
+  const promotedMethodEvidence = (
+    resolution: ConcreteMethodResolution,
+  ): EvidencePropagator[] =>
+    resolution.promotedFields.map(({ owner, field }) => ({
+      kind: "go-method-receiver-promoted-field",
+      line: field.line,
+      symbol: `${owner.name}.${field.name}:${field.type.pointer ? "*" : ""}${
+        field.type.qualifier === undefined
+          ? field.type.typeName
+          : `${field.type.qualifier}.${field.type.typeName}`
+      }`,
+      path: field.file.path,
+    }));
+  const promotedMethodRequirements = (
+    resolution: ConcreteMethodResolution,
+    prefix: readonly string[] = [],
+  ): ObjectReceiverRequirement[] => {
+    const path = [...prefix];
+    const requirements: ObjectReceiverRequirement[] = [];
+    for (const { field, concrete } of resolution.promotedFields) {
+      path.push(field.name);
+      if (!field.type.pointer) continue;
+      requirements.push({
+        fieldPath: [...path],
+        directory: concrete.resolvedDirectory!,
+        packageName: concrete.resolvedPackageName!,
+        typeName: concrete.typeName,
+        pointer: "pointer",
+      });
+    }
+    return requirements;
+  };
+
   const concreteSatisfiesInterface = (
     concrete: TypeReference,
     interface_: InterfaceDescriptor,
@@ -5987,19 +6157,12 @@ function objectWrapperSummaries(
         method.declaringPackageIdentity !== concretePackageIdentity
       )
         return false;
-      const matches = [...descriptors.values()].filter(
-        (descriptor) =>
-          descriptor.receiver !== undefined &&
-          descriptor.function_.name === method.name &&
-          descriptor.receiver.typeName === concrete.typeName &&
-          posix.dirname(descriptor.function_.file.path) ===
-            concrete.resolvedDirectory &&
-          descriptor.function_.packageName === concrete.resolvedPackageName &&
-          (!descriptor.receiver.pointer || concrete.pointer) &&
-          canonicalFunctionMethodSignature(descriptor.function_) ===
-            method.signature,
+      const resolved = concreteMethod(concrete, method.name, concrete.pointer);
+      return (
+        resolved !== undefined &&
+        canonicalFunctionMethodSignature(resolved.method.function_) ===
+          method.signature
       );
-      return matches.length === 1;
     });
   };
 
@@ -6501,44 +6664,6 @@ function objectWrapperSummaries(
             ? {}
             : { propagators: inner.propagators }),
         };
-  };
-
-  const typeMatchesDescriptor = (
-    caller: GoFunction,
-    reference: TypeReference,
-    descriptor: Descriptor,
-    line: number,
-    interfaceDispatch: boolean,
-  ): boolean => {
-    if (
-      descriptor.receiver === undefined ||
-      descriptor.receiver.typeName !== reference.typeName ||
-      (interfaceDispatch && descriptor.receiver.pointer && !reference.pointer)
-    )
-      return false;
-    if (reference.resolvedDirectory !== undefined) {
-      return (
-        reference.resolvedDirectory ===
-          posix.dirname(descriptor.function_.file.path) &&
-        reference.resolvedPackageName === descriptor.function_.packageName
-      );
-    }
-    if (reference.qualifier === undefined) {
-      return (
-        posix.dirname(descriptor.function_.file.path) ===
-          posix.dirname(caller.file.path) &&
-        descriptor.function_.packageName === caller.packageName
-      );
-    }
-    if (descriptor.importPath === undefined) return false;
-    return (
-      goImportAlias(
-        caller.file.lines,
-        descriptor.importPath,
-        descriptor.function_.packageName,
-      ) === reference.qualifier &&
-      packageAliasIsAvailable(caller, reference.qualifier, line)
-    );
   };
 
   const receiverBindings = (
@@ -7111,30 +7236,51 @@ function objectWrapperSummaries(
         contextFunction = undefined;
         contextLine = undefined;
       }
-      return [...descriptors.values()]
-        .filter(
-          (target) =>
-            target.receiver !== undefined &&
-            target.function_.name === methodName &&
-            target.receiver.typeName === reference.typeName &&
-            typeMatchesIdentity(
-              reference,
-              contextFile,
-              contextPackageName,
-              posix.dirname(target.function_.file.path),
-              target.function_.packageName,
-              target.importPath,
-              contextFunction,
-              contextLine,
-            ),
-        )
-        .map((descriptor) => ({
+      const canonical = canonicalConcreteReference(
+        reference,
+        contextFile,
+        contextPackageName,
+        contextFunction,
+        contextLine,
+      );
+      const method =
+        canonical === undefined
+          ? undefined
+          : concreteMethod(canonical, methodName, true);
+      const descriptor =
+        method === undefined
+          ? undefined
+          : descriptors.get(
+              callableKey(method.method.function_, method.method.receiver),
+            );
+      if (
+        method === undefined ||
+        descriptor === undefined ||
+        (!/^[A-Z]/u.test(methodName) &&
+          (posix.dirname(method.method.function_.file.path) !==
+            posix.dirname(caller.function_.file.path) ||
+            method.method.function_.packageName !==
+              caller.function_.packageName))
+      )
+        return [];
+      return [
+        {
           descriptor,
-          receiverPropagators: propagators,
-          receiverRequirements,
-          receiverFieldPath,
+          receiverPropagators: [
+            ...propagators,
+            ...promotedMethodEvidence(method),
+          ],
+          receiverRequirements: [
+            ...receiverRequirements,
+            ...promotedMethodRequirements(method, receiverFieldPath),
+          ],
+          receiverFieldPath: [
+            ...receiverFieldPath,
+            ...method.promotedFields.map(({ field }) => field.name),
+          ],
           receiverBinding: binding,
-        }));
+        },
+      ];
     }
     const plain = /^([A-Za-z_]\w*)$/u.exec(resolved.name);
     if (plain !== null) {
@@ -7195,26 +7341,48 @@ function objectWrapperSummaries(
       (binding.interface_ === undefined ||
         binding.interface_.methods.has(qualified[2]!))
     ) {
-      for (const target of descriptors.values()) {
-        if (
-          target.function_.name !== qualified[2] ||
-          !typeMatchesDescriptor(
-            caller.function_,
-            binding.concrete,
-            target,
-            resolved.targetLine,
-            binding.interface_ !== undefined,
-          )
-        )
-          continue;
+      const canonical = canonicalConcreteReference(
+        binding.concrete,
+        caller.function_.file,
+        caller.function_.packageName,
+        caller.function_,
+        resolved.targetLine,
+      );
+      const method =
+        canonical === undefined
+          ? undefined
+          : concreteMethod(
+              canonical,
+              qualified[2]!,
+              binding.interface_ === undefined || canonical.pointer,
+            );
+      const target =
+        method === undefined
+          ? undefined
+          : descriptors.get(
+              callableKey(method.method.function_, method.method.receiver),
+            );
+      if (
+        method !== undefined &&
+        target !== undefined &&
+        (/^[A-Z]/u.test(qualified[2]!) ||
+          (posix.dirname(method.method.function_.file.path) ===
+            posix.dirname(caller.function_.file.path) &&
+            method.method.function_.packageName ===
+              caller.function_.packageName))
+      )
         targets.push({
           descriptor: target,
-          receiverPropagators: binding.propagators,
-          receiverRequirements: [],
-          receiverFieldPath: [],
+          receiverPropagators: [
+            ...binding.propagators,
+            ...promotedMethodEvidence(method),
+          ],
+          receiverRequirements: promotedMethodRequirements(method),
+          receiverFieldPath: method.promotedFields.map(
+            ({ field }) => field.name,
+          ),
           receiverBinding: binding,
         });
-      }
     }
     const unique = new Map<string, ResolvedTarget>();
     for (const target of targets) {
@@ -7475,7 +7643,16 @@ function objectWrapperSummaries(
         if (summary.callableKey !== target.descriptor.key) continue;
         const requirementPropagators = satisfyReceiverRequirements(
           target.receiverBinding,
-          summary.receiverRequirements,
+          [
+            ...target.receiverRequirements,
+            ...summary.receiverRequirements.map((requirement) => ({
+              ...requirement,
+              fieldPath: [
+                ...target.receiverFieldPath,
+                ...requirement.fieldPath,
+              ],
+            })),
+          ],
         );
         if (requirementPropagators === undefined) continue;
         const identity = candidateIdentity(summary);

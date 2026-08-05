@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains seventy-two vulnerable/control pairs:
+The versioned corpus currently contains seventy-three vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 432
+destination-pinned, redirect-free transport. Three runs per case produce 438
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -749,8 +749,15 @@ aliases. Defined types remain distinct. Cycles, a ninth edge, generic or
 duplicate aliases, alias/interface collisions, unexported qualified names,
 pointers, incomplete imports, unresolved or external endpoints, and
 non-interface targets fail closed. Its control preserves the complete alias
-topology and again changes only the account predicate. The suite proves all
-thirty-four blocked attacks and successful owned-object, owned-collection,
+topology and again changes only the account predicate. A thirty-fifth pair
+crosses two local concrete embedded fields before invoking the repository's
+promoted deletion method. Exact breadth-first selector depth, same-depth
+uniqueness, package visibility, value-versus-pointer method sets, constructor
+state, and every promoted field are preserved. Cycles, a ninth edge, external,
+unresolved, interface, or generic embeddings, duplicate methods, pointer/value
+mismatches, and ambiguous shallow selectors fail closed. Its control preserves
+the promotion graph and again changes only the account predicate. The suite
+proves all thirty-five blocked attacks and successful owned-object, owned-collection,
 prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
@@ -765,7 +772,7 @@ initializer-bound-switch, direct interface-type-switch, and bounded aliased
 interface-type-switch, exact empty-interface-conversion, and exact named-basic-
 interface-conversion, canonical cross-package-interface-conversion,
 same-package plus imported embedded-interface-conversion, and exact
-type-alias-interface branch joins,
+type-alias-interface branch joins, plus exact concrete promoted-method dispatch,
 without a database service:
 
 ```powershell
@@ -976,6 +983,18 @@ Push-Location fixtures\go-cross-package-embedded-interface-type-switch-delete-id
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-embedded-interface-type-switch-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-type-alias-interface-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-type-alias-interface-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-promoted-method-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-promoted-method-authorization
 go test ./...
 Pop-Location
 ```

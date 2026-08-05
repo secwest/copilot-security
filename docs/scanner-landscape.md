@@ -467,8 +467,8 @@ repository method through a local interface value initialized from one exact
 imported implementation. The method graph preserves `T` versus `*T`, receiver
 parameters, direct construction, up to eight receiver aliases, interface method
 membership, the interface-to-concrete binding, and every object and principal
-position. Unbound interface parameters, nil pointer variables, constructor
-results, embedded promotion, method values, dynamic callbacks, nested or
+position. Unbound interface parameters, nil pointer variables, unresolved or
+ambiguous promotion, method values, dynamic callbacks, nested or
 unknown reassignment, duplicate receiver methods, pointer methods on an
 interface-held concrete value, and a ninth alias fail closed. Its executable
 positive proves victim deletion; the matched principal-scoped control proves
@@ -481,8 +481,8 @@ an exact ordinary or minimum variadic argument count, and one direct composite
 return or alias chain of at most eight bindings.
 Concrete field chains retain every declaration and its per-file import identity
 and stop after eight fields. Returned parameters, nested or multiple returns,
-constructor function values or shadowing, and embedded, anonymous, generic,
-duplicate, missing, or ambiguous fields fail closed. Its positive deletes the
+constructor function values or shadowing, and unresolved, interface-promoted,
+generic, duplicate, missing, or ambiguous fields fail closed. Its positive deletes the
 victim; its control keeps the complete constructor/field topology and proves the
 victim survives while an owned deletion succeeds. A fourteenth pair injects one
 of two valid repository implementations through a constructor parameter into an
@@ -648,6 +648,19 @@ non-interface endpoints fail closed. This closes a compatibility-package
 false negative without adopting a broad name-equivalence heuristic. It
 follows the [Go conversion and assignability rules](https://go.dev/ref/spec#Conversions),
 which preserve representation for this conversion family. It directly
+implements OWASP API1:2023's exact object check across aliased contracts. A
+thirty-fifth pair follows local concrete embedded fields using the official
+[selector depth rules](https://go.dev/ref/spec#Selectors) and
+[promoted method-set rules](https://go.dev/ref/spec#Struct_types). The host
+searches breadth-first, accepts exactly one method at the shallowest depth,
+distinguishes value and pointer method sets for interface satisfaction, applies
+addressability only to ordinary concrete calls, retains every promotion edge,
+and requires exact construction of embedded pointer fields. Direct fields or
+methods hide deeper names. Same-depth collisions, cycles, a ninth edge,
+unresolved or external types, embedded interfaces, generic forms, visibility
+violations, and duplicate methods fail closed. The exploit reaches an unscoped
+database deletion through two promoted fields; the control preserves that path
+and binds the same predicate to the authenticated account. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query

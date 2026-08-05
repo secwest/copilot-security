@@ -1023,6 +1023,19 @@ unexported aliases, pointers, incomplete imports, unresolved or external
 targets, and aliases ending at non-interface types fail closed. The executable
 pair proves the unscoped deletion and the otherwise identical account-bound
 control across all of those alias-bearing proof paths.
+A thirty-fifth pair resolves methods promoted through local embedded concrete
+structs. The selector search is breadth-first: a direct method or field hides
+deeper candidates, and more than one candidate at the shallowest depth is
+ambiguous. Embedding `T` versus `*T` preserves Go's distinct value and pointer
+method sets, while an addressable concrete call may use the language's implicit
+address operation. Every traversed embedded field is retained as evidence and
+embedded pointer fields must have exact constructor provenance. The resolver
+accepts at most eight promotion edges and rejects cycles, a ninth edge,
+unresolved or external embedded types, embedded interfaces, generic forms,
+visibility violations, duplicate methods, and ambiguous selectors. The
+executable exploit reaches an unscoped repository deletion through two promoted
+fields; its matched control keeps the same topology and adds only the
+authenticated account predicate.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1227,6 +1240,18 @@ Push-Location benchmarks\fixtures\go-cross-package-embedded-interface-type-switc
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-embedded-interface-type-switch-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-type-alias-interface-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-type-alias-interface-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-promoted-method-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-promoted-method-authorization
 go test ./...
 Pop-Location
 ```
