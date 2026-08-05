@@ -822,7 +822,14 @@ path and alias, exported unique target, top-level call shape, and exact string
 parameter flow must all agree. Duplicate routes or modules, cycles, package or
 function shadowing, nested, deferred, or goroutine calls, multi-name
 assignments, immutable map selection, reassignment to a fixed value, and a
-thirty-third boundary fail closed:
+thirty-third boundary fail closed. A twelfth pair replaces both outer function
+wrappers with methods. The handler binds one imported concrete service receiver;
+the service binds one imported repository implementation to an explicitly
+declared local interface. Exact `T` versus `*T` method sets, receiver type and
+module identity, interface method membership, and at most eight receiver aliases
+are preserved as evidence. Unbound interface parameters, nil pointer variables,
+constructor-return guesses, promoted methods, method values, nested or unknown
+reassignment, duplicate receiver methods, and a ninth alias fail closed:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -895,6 +902,12 @@ Push-Location benchmarks\fixtures\go-cross-package-wrapper-chain-delete-idor
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-wrapper-chain-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-method-interface-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-method-interface-delete-authorization
 go test ./...
 Pop-Location
 ```

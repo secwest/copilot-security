@@ -86,6 +86,19 @@ The package is ESM-only and provides:
   assignments, fixed immutable-map selection, reassignment to a fixed value,
   and the thirty-third boundary fail closed. The graph admits at most 4,096
   candidate paths; overflow retains direct summaries without guessing.
+  Wrapper edges may be exact concrete methods on a proven same-package or
+  imported `T` or `*T` receiver. A receiver can originate from a typed
+  parameter, a zero-value concrete variable, a direct composite or `new`
+  construction, or at most eight exact local aliases. Interface dispatch is
+  admitted only when a local basic interface declares the method and its live
+  value is resolved from one exact concrete composite, allocation, assignment,
+  or explicit interface conversion. Evidence distinguishes
+  concrete receiver parameters, constructions, aliases, and interface bindings.
+  Pointer method sets remain ineligible for an interface containing a concrete
+  value. Unbound interface parameters, nil pointer variables, constructors,
+  embedded promotion, method values, dynamic callbacks, nested or unknown
+  reassignment, duplicate method definitions, and a ninth receiver alias are
+  rejected rather than guessed.
   Single-row reads require `QueryRow`, `Scan`, and disclosure;
   collection reads require exact `Query`/`QueryContext`, the same returned
   `Rows`, `Next`, `Scan`, and disclosure. Updates and deletes require exact

@@ -256,6 +256,28 @@
       "id": "go-cross-package-safe-wrapper-chain-delete-authorization",
       "fixture": "fixtures/go-cross-package-safe-wrapper-chain-delete-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-package-method-interface-delete-idor",
+      "fixture": "fixtures/go-cross-package-method-interface-delete-idor",
+      "expected": [
+        {
+          "title": "Go method and interface chain deletes an object selected only by request ID",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "internal/invoicestore/store.go",
+          "line": 11,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-package-safe-method-interface-delete-authorization",
+      "fixture": "fixtures/go-cross-package-safe-method-interface-delete-authorization",
+      "expected": []
     }
   ]
 }

@@ -612,11 +612,16 @@ path-selected object ID and the context-derived account through an exact
 handler-to-service-to-repository chain spanning two imported local packages.
 The host preserves every call, string parameter, and object alias, and remaps
 the principal position across every boundary. Its control again changes only
-the account predicate. The suite proves all eleven blocked attacks and successful
+the account predicate. A twelfth pair calls an imported concrete service method,
+which binds one imported repository implementation to a local interface before
+calling its method. Exact receiver construction and interface binding remain
+visible in the evidence; the control again changes only the account predicate.
+The suite proves all twelve blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
-function-value and object-wrapper dispatch, without a database service:
+function-value, object-wrapper, concrete-method, and exact interface dispatch,
+without a database service:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -694,6 +699,12 @@ Push-Location fixtures\go-cross-package-wrapper-chain-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-wrapper-chain-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-method-interface-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-method-interface-delete-authorization
 go test ./...
 Pop-Location
 ```

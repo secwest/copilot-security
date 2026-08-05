@@ -405,11 +405,22 @@ interpreter that consumes the value.
 - Source: query, form, path, or header data from an exact typed
   `*net/http.Request`, directly or through an exact wrapper graph of at most 32
   same-package or cross-package boundaries. Each edge must uniquely resolve a
-  non-method function and forward an exact string parameter or live local alias
+  function or exact concrete method and forward an exact string parameter or live local alias
   at a top-level non-deferred, non-goroutine call. Cross-package edges require
   the deepest enclosing `go.mod`, exact local module import path and ordinary
   alias, exported target, and unshadowed package binding. Preserve each call,
   parameter, and object alias as evidence.
+- A method edge requires a unique same-package or exact local-module receiver
+  type. Accept `T` or `*T` parameters, concrete zero values, direct composites,
+  `new(T)`, and at most eight exact receiver aliases. Admit interface dispatch
+  only when a local basic interface directly declares the method and its live
+  local value resolves from an exact concrete composite, allocation,
+  assignment, or explicit interface conversion. Preserve receiver parameter,
+  binding, alias, and interface-to-concrete evidence separately.
+- Reject unbound interface parameters, nil pointer variables, constructor-return
+  inference, promoted or embedded methods, method values, dynamic callbacks,
+  nested or unknown reassignment, duplicate receiver methods, pointer methods
+  on interface-held concrete values, and a ninth receiver alias.
 - Protected effect: the request-derived identifier occupies an object-key
   equality predicate in fixed SQL executed by an exact typed `*database/sql.DB`,
   `*database/sql.Tx`, or `*database/sql.Conn`. A single-row read requires

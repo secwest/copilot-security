@@ -10,6 +10,7 @@ import {
   goHttpRequestParameters,
   goImportAlias,
   goTypedReceiverNames,
+  maskGoLines,
   referencedTaint,
   requestSource,
   type GoCall,
@@ -24,6 +25,7 @@ const CONTEXT_LINES_AFTER = 5;
 const MAX_RECORDS = 64;
 const MAX_OBJECT_WRAPPER_DEPTH = 32;
 const MAX_OBJECT_WRAPPER_CANDIDATES = 4_096;
+const MAX_OBJECT_RECEIVER_ALIAS_DEPTH = 8;
 const MAX_TRANSACTION_HELPER_DEPTH = 32;
 const MAX_TRANSACTION_FUNCTION_VALUE_DEPTH = 8;
 const OBJECT_COLUMN = /^(?:id|key|uuid|[a-z][a-z0-9_]*_(?:id|key|uuid))$/iu;
@@ -125,7 +127,10 @@ interface WrapperSummary {
   sinkFile: GoHttpSourceFile;
   packageName: string;
   packageImportPath?: string;
+  callableKey: string;
   functionName: string;
+  receiverTypeName?: string;
+  receiverPointer?: boolean;
   objectParameterIndex: number;
   objectParameterName: string;
   objectParameterLine: number;
@@ -134,6 +139,16 @@ interface WrapperSummary {
   delegations: EvidencePropagator[];
   wrapperDepth: number;
   wrapperKeys: readonly string[];
+}
+
+interface ObjectWrapperMatch {
+  summary: WrapperSummary;
+  receiverPropagators: EvidencePropagator[];
+}
+
+interface ObjectWrapperGraph {
+  summaries: WrapperSummary[];
+  matches(caller: GoFunction, call: GoCall): ObjectWrapperMatch[];
 }
 
 interface TransactionFinalizerSummary {
@@ -208,7 +223,13 @@ function localPackageImportPath(
   function_: GoFunction,
   modules: readonly LocalGoModule[],
 ): string | undefined {
-  const directory = posix.dirname(function_.file.path);
+  return localDirectoryImportPath(posix.dirname(function_.file.path), modules);
+}
+
+function localDirectoryImportPath(
+  directory: string,
+  modules: readonly LocalGoModule[],
+): string | undefined {
   const module = modules.find(({ root }) =>
     root === "."
       ? true
@@ -2016,18 +2037,46 @@ function transactionFinalizerSummaries(
 function objectWrapperSummaries(
   files: readonly GoHttpSourceFile[],
   functions: readonly GoFunction[],
-  functionCounts: ReadonlyMap<string, number>,
   finalizers: readonly TransactionFinalizerSummary[],
   creators: readonly TransactionCreatorSummary[],
-): WrapperSummary[] {
+): ObjectWrapperGraph {
   interface StringParameter {
     index: number;
     name: string;
   }
+  interface MethodReceiver {
+    name: string;
+    typeName: string;
+    pointer: boolean;
+  }
   interface Descriptor {
+    key: string;
     function_: GoFunction;
     parameters: StringParameter[];
     importPath?: string;
+    receiver?: MethodReceiver;
+  }
+  interface TypeReference {
+    qualifier?: string;
+    typeName: string;
+    pointer: boolean;
+  }
+  interface InterfaceDescriptor {
+    directory: string;
+    packageName: string;
+    importPath?: string;
+    name: string;
+    methods: ReadonlySet<string>;
+  }
+  interface ReceiverBinding {
+    concrete: TypeReference;
+    interface_?: InterfaceDescriptor;
+    aliasDepth: number;
+    propagators: EvidencePropagator[];
+  }
+  interface ResolvedTarget {
+    descriptor: Descriptor;
+    receiverPropagators: EvidencePropagator[];
   }
   interface Edge {
     sourceKey: string;
@@ -2036,6 +2085,7 @@ function objectWrapperSummaries(
     targetKey: string;
     target: Descriptor;
     call: GoCall;
+    receiverPropagators: EvidencePropagator[];
     objectPropagators: EvidencePropagator[];
   }
   interface ParameterFlow {
@@ -2043,18 +2093,51 @@ function objectWrapperSummaries(
     propagators: EvidencePropagator[];
   }
 
-  const functionKey = (function_: GoFunction): string =>
-    `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${function_.name}`;
-  const parameterKey = (function_: GoFunction, index: number): string =>
-    `${functionKey(function_)}\0${index}`;
+  const receiverOf = (function_: GoFunction): MethodReceiver | undefined => {
+    if (function_.receiver === undefined) return undefined;
+    const named = /^\(\s*([A-Za-z_]\w*)\s+(\*)?([A-Za-z_]\w*)\s*\)$/u.exec(
+      function_.receiver,
+    );
+    if (named !== null)
+      return {
+        name: named[1]!,
+        typeName: named[3]!,
+        pointer: named[2] !== undefined,
+      };
+    const unnamed = /^\(\s*(\*)?([A-Za-z_]\w*)\s*\)$/u.exec(function_.receiver);
+    return unnamed === null
+      ? undefined
+      : {
+          name: "",
+          typeName: unnamed[2]!,
+          pointer: unnamed[1] !== undefined,
+        };
+  };
+  const callableKey = (
+    function_: GoFunction,
+    receiver: MethodReceiver | undefined,
+  ): string =>
+    `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${receiver?.typeName ?? ""}\0${function_.name}`;
+  const parameterKey = (descriptor: Descriptor, index: number): string =>
+    `${descriptor.key}\0${index}`;
   const summaryParameterKey = (summary: WrapperSummary): string =>
-    `${posix.dirname(summary.file.path)}\0${summary.packageName}\0${summary.functionName}\0${summary.objectParameterIndex}`;
+    `${summary.callableKey}\0${summary.objectParameterIndex}`;
   const modules = localGoModules(files);
+  const callableCounts = new Map<string, number>();
+  const callableReceivers = new Map<GoFunction, MethodReceiver | undefined>();
+  for (const function_ of functions) {
+    const receiver = receiverOf(function_);
+    if (function_.receiver !== undefined && receiver === undefined) continue;
+    callableReceivers.set(function_, receiver);
+    const key = callableKey(function_, receiver);
+    callableCounts.set(key, (callableCounts.get(key) ?? 0) + 1);
+  }
   const descriptors = new Map<string, Descriptor>();
   for (const function_ of functions) {
-    if (function_.receiver !== undefined) continue;
-    const key = functionKey(function_);
-    if (functionCounts.get(key) !== 1) continue;
+    if (!callableReceivers.has(function_)) continue;
+    const receiver = callableReceivers.get(function_);
+    const key = callableKey(function_, receiver);
+    if (callableCounts.get(key) !== 1) continue;
     const parameters = function_.parameters.flatMap(
       (parameter, index): StringParameter[] =>
         parameter.type.replace(/\s+/gu, "") === "string"
@@ -2064,11 +2147,387 @@ function objectWrapperSummaries(
     if (parameters.length === 0) continue;
     const importPath = localPackageImportPath(function_, modules);
     descriptors.set(key, {
+      key,
       function_,
       parameters,
       ...(importPath === undefined ? {} : { importPath }),
+      ...(receiver === undefined ? {} : { receiver }),
     });
   }
+
+  const interfaces: InterfaceDescriptor[] = [];
+  for (const file of files) {
+    if (file.extension !== ".go") continue;
+    const structural = maskGoLines(file.lines, true).join("\n");
+    const packageMatch = /^\s*package\s+([A-Za-z_]\w*)\b/mu.exec(structural);
+    if (packageMatch === null) continue;
+    const directory = posix.dirname(file.path);
+    const importPath = localDirectoryImportPath(directory, modules);
+    for (const declaration of structural.matchAll(
+      /\btype\s+([A-Za-z_]\w*)\s+interface\s*\{([\s\S]*?)\}/gu,
+    )) {
+      const body = declaration[2]!;
+      if (
+        /[~|]/u.test(body) ||
+        /^\s*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?\s*;?\s*$/mu.test(body)
+      )
+        continue;
+      const methodNames = [...body.matchAll(/^\s*([A-Za-z_]\w*)\s*\(/gmu)].map(
+        (method) => method[1]!,
+      );
+      const methods = new Set(methodNames);
+      if (methods.size === 0 || methods.size !== methodNames.length) continue;
+      interfaces.push({
+        directory,
+        packageName: packageMatch[1]!,
+        ...(importPath === undefined ? {} : { importPath }),
+        name: declaration[1]!,
+        methods,
+      });
+    }
+  }
+
+  const typeReference = (value: string): TypeReference | undefined => {
+    const match =
+      /^\s*(\*)?\s*(?:([A-Za-z_]\w*)\s*\.\s*)?([A-Za-z_]\w*)\s*$/u.exec(value);
+    return match === null
+      ? undefined
+      : {
+          ...(match[2] === undefined ? {} : { qualifier: match[2] }),
+          typeName: match[3]!,
+          pointer: match[1] !== undefined,
+        };
+  };
+
+  const interfaceForType = (
+    caller: GoFunction,
+    reference: TypeReference,
+    line: number,
+  ): InterfaceDescriptor | undefined => {
+    if (reference.pointer) return undefined;
+    const candidates = interfaces.filter((interface_) => {
+      if (interface_.name !== reference.typeName) return false;
+      if (reference.qualifier === undefined) {
+        return (
+          interface_.directory === posix.dirname(caller.file.path) &&
+          interface_.packageName === caller.packageName
+        );
+      }
+      if (interface_.importPath === undefined) return false;
+      return (
+        goImportAlias(
+          caller.file.lines,
+          interface_.importPath,
+          interface_.packageName,
+        ) === reference.qualifier &&
+        packageAliasIsAvailable(caller, reference.qualifier, line)
+      );
+    });
+    return candidates.length === 1 ? candidates[0] : undefined;
+  };
+
+  const concreteExpression = (
+    caller: GoFunction,
+    expression: string,
+    line: number,
+  ):
+    | { concrete: TypeReference; interface_?: InterfaceDescriptor }
+    | undefined => {
+    const trimmed = expression.trim().replace(/;\s*$/u, "");
+    const composite =
+      /^&?\s*((?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)\s*\{[\s\S]*\}$/u.exec(
+        trimmed,
+      );
+    if (composite !== null) {
+      const concrete = typeReference(
+        `${/^\s*&/u.test(trimmed) ? "*" : ""}${composite[1]!}`,
+      );
+      return concrete === undefined ? undefined : { concrete };
+    }
+    const allocation =
+      /^new\s*\(\s*((?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)\s*\)$/u.exec(
+        trimmed,
+      );
+    if (allocation !== null) {
+      const concrete = typeReference(`*${allocation[1]!}`);
+      return concrete === undefined ? undefined : { concrete };
+    }
+    const conversion =
+      /^((?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)\s*\(\s*([\s\S]+)\s*\)$/u.exec(
+        trimmed,
+      );
+    if (conversion === null) return undefined;
+    const interfaceType = typeReference(conversion[1]!);
+    if (interfaceType === undefined) return undefined;
+    const interface_ = interfaceForType(caller, interfaceType, line);
+    if (interface_ === undefined) return undefined;
+    const inner = concreteExpression(caller, conversion[2]!, line);
+    return inner === undefined
+      ? undefined
+      : { concrete: inner.concrete, interface_ };
+  };
+
+  const typeMatchesDescriptor = (
+    caller: GoFunction,
+    reference: TypeReference,
+    descriptor: Descriptor,
+    line: number,
+    interfaceDispatch: boolean,
+  ): boolean => {
+    if (
+      descriptor.receiver === undefined ||
+      descriptor.receiver.typeName !== reference.typeName ||
+      (interfaceDispatch && descriptor.receiver.pointer && !reference.pointer)
+    )
+      return false;
+    if (reference.qualifier === undefined) {
+      return (
+        posix.dirname(descriptor.function_.file.path) ===
+          posix.dirname(caller.file.path) &&
+        descriptor.function_.packageName === caller.packageName
+      );
+    }
+    if (descriptor.importPath === undefined) return false;
+    return (
+      goImportAlias(
+        caller.file.lines,
+        descriptor.importPath,
+        descriptor.function_.packageName,
+      ) === reference.qualifier &&
+      packageAliasIsAvailable(caller, reference.qualifier, line)
+    );
+  };
+
+  const receiverBindings = (
+    caller: GoFunction,
+    line: number,
+    methodName: string,
+  ): ReadonlyMap<string, ReceiverBinding> => {
+    const bindings = new Map<string, ReceiverBinding>();
+    const declaredInterfaces = new Map<string, InterfaceDescriptor>();
+    const declaredConcreteTypes = new Map<string, TypeReference>();
+    const sameType = (left: TypeReference, right: TypeReference): boolean =>
+      left.typeName === right.typeName &&
+      left.qualifier === right.qualifier &&
+      left.pointer === right.pointer;
+    const addStaticBinding = (
+      name: string,
+      reference: TypeReference,
+      bindingLine: number,
+      kind: string,
+    ): void => {
+      const interface_ = interfaceForType(caller, reference, bindingLine);
+      if (interface_ !== undefined) return;
+      bindings.set(name, {
+        concrete: reference,
+        aliasDepth: 0,
+        propagators: [
+          {
+            kind,
+            line: bindingLine,
+            symbol: `${name}:${reference.qualifier === undefined ? "" : `${reference.qualifier}.`}${reference.typeName}`,
+            path: caller.file.path,
+          },
+        ],
+      });
+    };
+    for (const parameter of caller.parameters) {
+      const reference = typeReference(parameter.type);
+      if (reference !== undefined)
+        addStaticBinding(
+          parameter.name,
+          reference,
+          caller.startLine,
+          "go-method-receiver-parameter",
+        );
+    }
+    const callerReceiver = receiverOf(caller);
+    if (callerReceiver !== undefined && callerReceiver.name !== "") {
+      addStaticBinding(
+        callerReceiver.name,
+        {
+          typeName: callerReceiver.typeName,
+          pointer: callerReceiver.pointer,
+        },
+        caller.startLine,
+        "go-method-receiver-parameter",
+      );
+    }
+
+    const typedVariable =
+      /^\s*var\s+([A-Za-z_]\w*)\s+(\*?\s*(?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*)(?:\s*=\s*([\s\S]+?))?\s*;?\s*$/u;
+    for (
+      let candidateLine = caller.bodyStartLine;
+      candidateLine < line;
+      candidateLine += 1
+    ) {
+      const structural = caller.structuralLines[candidateLine - 1] ?? "";
+      const typed = typedVariable.exec(structural);
+      const assignment = goAssignment(structural);
+      const names =
+        typed !== null
+          ? [typed[1]!]
+          : assignment?.names ??
+            (/\b(?:const|type)\s+([A-Za-z_]\w*)\b/u.exec(structural)?.[1] ===
+            undefined
+              ? []
+              : [/\b(?:const|type)\s+([A-Za-z_]\w*)\b/u.exec(structural)![1]!]);
+      if (names.length === 0) continue;
+      if (lineNestingDepth(caller, candidateLine) !== 1) {
+        for (const name of names) bindings.delete(name);
+        continue;
+      }
+      if (typed !== null) {
+        const declared = typeReference(typed[2]!);
+        const initializer = typed[3];
+        if (declared === undefined) {
+          bindings.delete(typed[1]!);
+          declaredInterfaces.delete(typed[1]!);
+          continue;
+        }
+        const interface_ = interfaceForType(caller, declared, candidateLine);
+        if (interface_ === undefined) {
+          declaredInterfaces.delete(typed[1]!);
+          declaredConcreteTypes.set(typed[1]!, declared);
+        } else {
+          declaredInterfaces.set(typed[1]!, interface_);
+          declaredConcreteTypes.delete(typed[1]!);
+        }
+        if (initializer === undefined) {
+          if (interface_ !== undefined || declared.pointer) {
+            bindings.delete(typed[1]!);
+            continue;
+          }
+          addStaticBinding(
+            typed[1]!,
+            declared,
+            candidateLine,
+            "go-method-receiver-binding",
+          );
+          continue;
+        }
+        const concrete = concreteExpression(caller, initializer, candidateLine);
+        if (
+          concrete === undefined ||
+          (interface_ !== undefined && !interface_.methods.has(methodName))
+        ) {
+          bindings.delete(typed[1]!);
+          continue;
+        }
+        if (
+          interface_ === undefined &&
+          !sameType(declared, concrete.concrete)
+        ) {
+          bindings.delete(typed[1]!);
+          continue;
+        }
+        bindings.set(typed[1]!, {
+          concrete: concrete.concrete,
+          ...(interface_ === undefined ? {} : { interface_ }),
+          aliasDepth: 0,
+          propagators: [
+            {
+              kind:
+                interface_ === undefined
+                  ? "go-method-receiver-binding"
+                  : "go-interface-receiver-binding",
+              line: candidateLine,
+              symbol: `${typed[1]}:${concrete.concrete.qualifier === undefined ? "" : `${concrete.concrete.qualifier}.`}${concrete.concrete.typeName}`,
+              path: caller.file.path,
+            },
+          ],
+        });
+        continue;
+      }
+      if (assignment === undefined || assignment.names.length !== 1) {
+        for (const name of names) bindings.delete(name);
+        continue;
+      }
+      const name = assignment.names[0]!;
+      const shortDeclaration = new RegExp(
+        `^\\s*${escapeRegularExpression(name)}\\s*:=`,
+        "u",
+      ).test(structural);
+      if (shortDeclaration) {
+        declaredInterfaces.delete(name);
+        declaredConcreteTypes.delete(name);
+      }
+      const alias = /^([A-Za-z_]\w*)$/u.exec(assignment.value.trim())?.[1];
+      const previous = alias === undefined ? undefined : bindings.get(alias);
+      if (
+        previous !== undefined &&
+        previous.aliasDepth < MAX_OBJECT_RECEIVER_ALIAS_DEPTH
+      ) {
+        const interface_ = declaredInterfaces.get(name) ?? previous.interface_;
+        const concreteType = declaredConcreteTypes.get(name);
+        if (interface_ !== undefined && !interface_.methods.has(methodName)) {
+          bindings.delete(name);
+          continue;
+        }
+        if (
+          concreteType !== undefined &&
+          (previous.interface_ !== undefined ||
+            !sameType(concreteType, previous.concrete))
+        ) {
+          bindings.delete(name);
+          continue;
+        }
+        bindings.set(name, {
+          ...previous,
+          ...(interface_ === undefined ? {} : { interface_ }),
+          aliasDepth: previous.aliasDepth + 1,
+          propagators: [
+            ...previous.propagators,
+            {
+              kind: "go-method-receiver-alias",
+              line: candidateLine,
+              symbol: name,
+              path: caller.file.path,
+            },
+          ],
+        });
+        if (interface_ === undefined) declaredInterfaces.delete(name);
+        else declaredInterfaces.set(name, interface_);
+        continue;
+      }
+      const concrete = concreteExpression(
+        caller,
+        assignment.value,
+        candidateLine,
+      );
+      const interface_ = concrete?.interface_ ?? declaredInterfaces.get(name);
+      const concreteType = declaredConcreteTypes.get(name);
+      if (
+        concrete === undefined ||
+        (interface_ !== undefined && !interface_.methods.has(methodName)) ||
+        (concreteType !== undefined &&
+          (interface_ !== undefined ||
+            !sameType(concreteType, concrete.concrete)))
+      ) {
+        bindings.delete(name);
+        continue;
+      }
+      if (interface_ === undefined) declaredInterfaces.delete(name);
+      else declaredInterfaces.set(name, interface_);
+      bindings.set(name, {
+        concrete: concrete.concrete,
+        ...(interface_ === undefined ? {} : { interface_ }),
+        aliasDepth: 0,
+        propagators: [
+          {
+            kind:
+              interface_ === undefined
+                ? "go-method-receiver-binding"
+                : "go-interface-receiver-binding",
+            line: candidateLine,
+            symbol: `${name}:${concrete.concrete.qualifier === undefined ? "" : `${concrete.concrete.qualifier}.`}${concrete.concrete.typeName}`,
+            path: caller.file.path,
+          },
+        ],
+      });
+    }
+    return bindings;
+  };
 
   const parameterFlowsReachingExpression = (
     descriptor: Descriptor,
@@ -2221,7 +2680,14 @@ function objectWrapperSummaries(
           ...(descriptor.importPath === undefined
             ? {}
             : { packageImportPath: descriptor.importPath }),
+          callableKey: descriptor.key,
           functionName: descriptor.function_.name,
+          ...(descriptor.receiver === undefined
+            ? {}
+            : {
+                receiverTypeName: descriptor.receiver.typeName,
+                receiverPointer: descriptor.receiver.pointer,
+              }),
           objectParameterIndex: parameter.index,
           objectParameterName: parameter.name,
           objectParameterLine: descriptor.function_.startLine,
@@ -2229,7 +2695,7 @@ function objectWrapperSummaries(
           sink,
           delegations: [],
           wrapperDepth: 0,
-          wrapperKeys: [parameterKey(descriptor.function_, parameter.index)],
+          wrapperKeys: [parameterKey(descriptor, parameter.index)],
         });
       }
     }
@@ -2238,7 +2704,7 @@ function objectWrapperSummaries(
   const targetDescriptors = (
     caller: Descriptor,
     call: GoCall,
-  ): Descriptor[] => {
+  ): ResolvedTarget[] => {
     const resolved = resolvedTransactionHelperCall(
       caller.function_,
       call.name,
@@ -2252,37 +2718,83 @@ function objectWrapperSummaries(
       return [];
     const plain = /^([A-Za-z_]\w*)$/u.exec(resolved.name);
     if (plain !== null) {
-      const target = descriptors.get(
-        `${posix.dirname(caller.function_.file.path)}\0${caller.function_.packageName}\0${plain[1]}`,
+      const targets = [...descriptors.values()].filter(
+        (target) =>
+          target.receiver === undefined &&
+          target.function_.name === plain[1] &&
+          posix.dirname(target.function_.file.path) ===
+            posix.dirname(caller.function_.file.path) &&
+          target.function_.packageName === caller.function_.packageName,
       );
-      return target === undefined ? [] : [target];
+      return targets.map((descriptor) => ({
+        descriptor,
+        receiverPropagators: [],
+      }));
     }
     const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(resolved.name);
+    if (qualified === null) return [];
+    const targets: ResolvedTarget[] = [];
     if (
-      qualified === null ||
-      !/^[A-Z]/u.test(qualified[2]!) ||
-      !packageAliasIsAvailable(
+      /^[A-Z]/u.test(qualified[2]!) &&
+      packageAliasIsAvailable(
         caller.function_,
         qualified[1]!,
         resolved.targetLine,
       )
-    )
-      return [];
-    const targets: Descriptor[] = [];
-    for (const target of descriptors.values()) {
-      if (
-        target.importPath === undefined ||
-        target.function_.name !== qualified[2]
-      )
-        continue;
-      const alias = goImportAlias(
-        caller.function_.file.lines,
-        target.importPath,
-        target.function_.packageName,
-      );
-      if (alias === qualified[1]) targets.push(target);
+    ) {
+      for (const target of descriptors.values()) {
+        if (
+          target.receiver !== undefined ||
+          target.importPath === undefined ||
+          target.function_.name !== qualified[2]
+        )
+          continue;
+        const alias = goImportAlias(
+          caller.function_.file.lines,
+          target.importPath,
+          target.function_.packageName,
+        );
+        if (alias === qualified[1])
+          targets.push({ descriptor: target, receiverPropagators: [] });
+      }
     }
-    return targets;
+    const binding = receiverBindings(
+      caller.function_,
+      call.line,
+      qualified[2]!,
+    ).get(qualified[1]!);
+    if (
+      binding !== undefined &&
+      (binding.interface_ === undefined ||
+        binding.interface_.methods.has(qualified[2]!))
+    ) {
+      for (const target of descriptors.values()) {
+        if (
+          target.function_.name !== qualified[2] ||
+          !typeMatchesDescriptor(
+            caller.function_,
+            binding.concrete,
+            target,
+            resolved.targetLine,
+            binding.interface_ !== undefined,
+          )
+        )
+          continue;
+        targets.push({
+          descriptor: target,
+          receiverPropagators: binding.propagators,
+        });
+      }
+    }
+    const unique = new Map<string, ResolvedTarget>();
+    for (const target of targets) {
+      if (unique.has(target.descriptor.key)) {
+        unique.delete(target.descriptor.key);
+        continue;
+      }
+      unique.set(target.descriptor.key, target);
+    }
+    return [...unique.values()];
   };
 
   const edges: Edge[] = [];
@@ -2296,9 +2808,10 @@ function objectWrapperSummaries(
         continue;
       const targets = targetDescriptors(source, call);
       if (targets.length !== 1) continue;
-      const target = targets[0]!;
+      const resolvedTarget = targets[0]!;
+      const target = resolvedTarget.descriptor;
       for (const sourceParameter of source.parameters) {
-        const sourceKey = parameterKey(source.function_, sourceParameter.index);
+        const sourceKey = parameterKey(source, sourceParameter.index);
         for (const targetParameter of target.parameters) {
           const argument = call.rawArguments[targetParameter.index];
           if (argument === undefined) continue;
@@ -2317,9 +2830,10 @@ function objectWrapperSummaries(
             sourceKey,
             source,
             sourceParameter,
-            targetKey: parameterKey(target.function_, targetParameter.index),
+            targetKey: parameterKey(target, targetParameter.index),
             target,
             call,
+            receiverPropagators: resolvedTarget.receiverPropagators,
             objectPropagators: reaching[0]!.propagators,
           });
         }
@@ -2394,7 +2908,14 @@ function objectWrapperSummaries(
             ...(edge.source.importPath === undefined
               ? {}
               : { packageImportPath: edge.source.importPath }),
+            callableKey: edge.source.key,
             functionName: edge.source.function_.name,
+            ...(edge.source.receiver === undefined
+              ? {}
+              : {
+                  receiverTypeName: edge.source.receiver.typeName,
+                  receiverPointer: edge.source.receiver.pointer,
+                }),
             objectParameterIndex: edge.sourceParameter.index,
             objectParameterName: edge.sourceParameter.name,
             objectParameterLine: edge.source.function_.startLine,
@@ -2403,6 +2924,7 @@ function objectWrapperSummaries(
             ),
             sink: child.sink,
             delegations: [
+              ...edge.receiverPropagators,
               ...edge.objectPropagators,
               {
                 kind: "go-function-argument",
@@ -2428,72 +2950,44 @@ function objectWrapperSummaries(
     if (overflow || !changed) break;
   }
 
-  if (overflow) return direct;
-  return [...groups.values()]
-    .filter((group) => group.size === 1)
-    .map((group) => group.values().next().value!)
-    .sort(
-      (left, right) =>
-        left.file.path.localeCompare(right.file.path) ||
-        left.functionName.localeCompare(right.functionName) ||
-        left.objectParameterIndex - right.objectParameterIndex ||
-        left.sinkFile.path.localeCompare(right.sinkFile.path) ||
-        left.sink.line - right.sink.line,
-    );
-}
-
-function wrapperSummaryCallMatches(
-  caller: GoFunction,
-  call: GoCall,
-  summary: WrapperSummary,
-): boolean {
-  const resolved = resolvedTransactionHelperCall(caller, call.name, call.line);
-  if (
-    resolved === undefined ||
-    resolved.functionValues.length !== 0 ||
-    resolved.name !== call.name
-  )
-    return false;
-  if (
-    summary.functionName === resolved.name &&
-    summary.packageName === caller.packageName &&
-    posix.dirname(summary.file.path) === posix.dirname(caller.file.path)
-  )
-    return true;
-  if (
-    summary.packageImportPath === undefined ||
-    !/^[A-Z]/u.test(summary.functionName)
-  )
-    return false;
-  const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(resolved.name);
-  if (qualified?.[2] !== summary.functionName) return false;
-  const alias = goImportAlias(
-    caller.file.lines,
-    summary.packageImportPath,
-    summary.packageName,
-  );
-  return (
-    alias !== undefined &&
-    alias === qualified[1] &&
-    packageAliasIsAvailable(caller, alias, resolved.targetLine)
-  );
-}
-
-function uniqueWrapperSummaryMatches(
-  caller: GoFunction,
-  call: GoCall,
-  summaries: readonly WrapperSummary[],
-): WrapperSummary[] {
-  const matching = summaries.filter((summary) =>
-    wrapperSummaryCallMatches(caller, call, summary),
-  );
-  const targets = new Set(
-    matching.map(
-      (summary) =>
-        `${posix.dirname(summary.file.path)}\0${summary.packageName}\0${summary.functionName}`,
-    ),
-  );
-  return targets.size === 1 ? matching : [];
+  const summaries = overflow
+    ? direct
+    : [...groups.values()]
+        .filter((group) => group.size === 1)
+        .map((group) => group.values().next().value!)
+        .sort(
+          (left, right) =>
+            left.file.path.localeCompare(right.file.path) ||
+            left.functionName.localeCompare(right.functionName) ||
+            left.objectParameterIndex - right.objectParameterIndex ||
+            left.sinkFile.path.localeCompare(right.sinkFile.path) ||
+            left.sink.line - right.sink.line,
+        );
+  const matches = (caller: GoFunction, call: GoCall): ObjectWrapperMatch[] => {
+    const callerReceiver = receiverOf(caller);
+    const callerDescriptor: Descriptor = {
+      key: callableKey(caller, callerReceiver),
+      function_: caller,
+      parameters: [],
+      ...(localPackageImportPath(caller, modules) === undefined
+        ? {}
+        : { importPath: localPackageImportPath(caller, modules) }),
+      ...(callerReceiver === undefined ? {} : { receiver: callerReceiver }),
+    };
+    const targets = targetDescriptors(callerDescriptor, call);
+    const targetKeys = new Set(targets.map((target) => target.descriptor.key));
+    if (targetKeys.size !== 1) return [];
+    const target = targets.find((candidate) =>
+      targetKeys.has(candidate.descriptor.key),
+    )!;
+    return summaries
+      .filter((summary) => summary.callableKey === target.descriptor.key)
+      .map((summary) => ({
+        summary,
+        receiverPropagators: target.receiverPropagators,
+      }));
+  };
+  return { summaries, matches };
 }
 
 export function goObjectAuthorizationRecords(
@@ -2547,10 +3041,9 @@ export function goObjectAuthorizationRecords(
     }
   }
 
-  const summaries = objectWrapperSummaries(
+  const wrapperGraph = objectWrapperSummaries(
     files,
     functions,
-    functionCounts,
     finalizers,
     creators,
   );
@@ -2559,11 +3052,8 @@ export function goObjectAuthorizationRecords(
     if (requestParameters(caller).length === 0) continue;
     const calls = goCalls(caller);
     for (const call of calls) {
-      for (const summary of uniqueWrapperSummaryMatches(
-        caller,
-        call,
-        summaries,
-      )) {
+      for (const match of wrapperGraph.matches(caller, call)) {
+        const summary = match.summary;
         const argument = call.arguments[summary.objectParameterIndex];
         if (argument === undefined) continue;
         const taints = callerTaints(caller, call.line);
@@ -2602,6 +3092,7 @@ export function goObjectAuthorizationRecords(
             sink,
             [
               ...source.propagators,
+              ...match.receiverPropagators,
               {
                 kind: "go-function-argument",
                 line: call.line,
