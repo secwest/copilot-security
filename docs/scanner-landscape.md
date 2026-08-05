@@ -550,11 +550,14 @@ adds only principal scope. A twenty-first pair moves the repository injection
 inside that imported helper. The host preserves pointer-alias sharing and
 direct value-field copying, requires exact top-level linear writes and every
 nested parent, checks field and pointer identity at each selector, and records
-the writer alias and field-write line independently. Nested pointer sharing
-through a copied value remains unsupported. Conditional writes, invalid
-dereferences, missing parents or fields, transformed parameters, and ninth
-writes fail closed. The positive reaches only the helper-written primary
-implementation; the control again adds only principal scope. This directly
+the writer alias and field-write line independently. Conditional writes,
+invalid dereferences, missing parents or fields, transformed parameters, and
+ninth writes fail closed. A twenty-second pair exercises a shallow value copy:
+concrete fields copy recursively while a nested pointer holder preserves exact
+identity across copies and deeper value fields. Replacing that pointer detaches
+only the selected copy. Complete helper-boundary evidence follows the shared
+node. The positive reaches only the helper-copy-selected primary
+implementation; both controls again add only principal scope. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query

@@ -909,11 +909,16 @@ factory allocates an empty parent, aliases its pointer, writes the selected
 repository through the alias, and returns the original pointer. Helper writes
 must be top-level, linear, declared-field assignments on a live result alias;
 pointer aliases share state while direct fields on value aliases use independent
-snapshots. Nested pointer sharing through a copied value remains unsupported and
-fails closed. Nested writes require every exact materialized parent, and
+snapshots. Nested writes require every exact materialized parent, and
 explicit dereference requires a pointer. Conditional writes, missing parents or
 fields, transformed parameters, invalid value dereferences, and ninth writes or
 selector fields fail closed.
+A twenty-second pair exercises Go's shallow value-copy rule inside the imported
+helper. The returned layer is a value containing a pointer holder. Writes
+through copied layer values share that exact holder, even across deeper concrete
+value fields or a parent returned by another helper; replacing the pointer on
+one copy detaches only that copy. The call, allocation, every copy alias, nested
+write, return, constructor field, and receiver retain separate evidence.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1046,6 +1051,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-constructor-helper-w
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-constructor-helper-write-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-helper-value-copy-pointer-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-value-copy-pointer-authorization
 go test ./...
 Pop-Location
 ```

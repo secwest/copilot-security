@@ -476,6 +476,28 @@
       "id": "go-cross-package-safe-imported-constructor-helper-write-authorization",
       "fixture": "fixtures/go-cross-package-safe-imported-constructor-helper-write-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-package-imported-helper-value-copy-pointer-delete-idor",
+      "fixture": "fixtures/go-cross-package-imported-helper-value-copy-pointer-delete-idor",
+      "expected": [
+        {
+          "title": "Go imported helper value copy shares an unscoped repository pointer",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "internal/primary/store.go",
+          "line": 11,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-package-safe-imported-helper-value-copy-pointer-authorization",
+      "fixture": "fixtures/go-cross-package-safe-imported-helper-value-copy-pointer-authorization",
+      "expected": []
     }
   ]
 }

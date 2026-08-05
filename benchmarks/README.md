@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains fifty-nine vulnerable/control pairs:
+The versioned corpus currently contains sixty vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 354
+destination-pinned, redirect-free transport. Three runs per case produce 360
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -656,9 +656,12 @@ pair moves repository injection into the imported helper: it allocates an empty
 parent, aliases the pointer, writes the selected repository, and returns the
 original alias. Exact linear writes, nested parent existence, pointer sharing,
 direct value-field copying, explicit dereference, and the eight-write bound are
-enforced; nested pointer sharing through a copied value fails closed. Its
-control again changes only the account predicate. The suite proves all
-twenty-one blocked attacks and successful
+enforced. A twenty-second pair copies a value layer containing a pointer holder,
+writes the repository through the copy, and returns the original value. Exact
+shallow sharing survives deeper concrete value fields and nested helper results,
+while pointer overwrite detaches only the selected copy. Its control again
+changes only the account predicate. The suite proves all twenty-two blocked
+attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
@@ -667,7 +670,7 @@ constructor/concrete-field, constructor-injected interface, and nested
 constructor-interface and constructor-field-write dispatch, including nested
 post-construction injection, exact all-path constructor joins, cross-file
 constructor parent helpers, imported local-module parent helpers, and imported
-constructor-helper field writes,
+constructor-helper field writes and shallow value-copy pointers,
 without a database service:
 
 ```powershell
@@ -806,6 +809,12 @@ Push-Location fixtures\go-cross-package-imported-constructor-helper-write-delete
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-imported-constructor-helper-write-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-imported-helper-value-copy-pointer-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-imported-helper-value-copy-pointer-authorization
 go test ./...
 Pop-Location
 ```

@@ -160,6 +160,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-imported-constructor-helper-parent-delete-authorization",
       "go-cross-package-imported-constructor-helper-write-delete-idor",
       "go-cross-package-safe-imported-constructor-helper-write-authorization",
+      "go-cross-package-imported-helper-value-copy-pointer-delete-idor",
+      "go-cross-package-safe-imported-helper-value-copy-pointer-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -203,6 +205,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[39]?.expected).toEqual([]);
     expect(manifest.cases[40]?.expected).toHaveLength(1);
     expect(manifest.cases[41]?.expected).toEqual([]);
+    expect(manifest.cases[42]?.expected).toHaveLength(1);
+    expect(manifest.cases[43]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -1618,6 +1622,83 @@ describe("Go HTTP object-authorization framework model", () => {
           kind: "go-method-receiver-constructor-helper-return",
           path: "internal/parent/layer.go",
           line: 22,
+        }),
+      ]),
+    );
+    expect(propagators.map(({ path }) => path)).not.toContain(
+      "internal/archive/store.go",
+    );
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      frameworkModel: {
+        candidateControls: [
+          expect.objectContaining({ kind: "principal-bound-object-query" }),
+        ],
+      },
+    });
+  });
+
+  test("preserves an imported helper value-copy pointer and its control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-imported-helper-value-copy-pointer-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-imported-helper-value-copy-pointer-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 11 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "internal/primary/store.go",
+          line: 11,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    const propagators = vulnerable[0]?.frameworkModel?.propagators ?? [];
+    expect(propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-call",
+          symbol: "parent.NewLayer",
+          path: "internal/service/service.go",
+          line: 16,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-alias",
+          symbol: "layer",
+          path: "internal/parent/layer.go",
+          line: 22,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-alias",
+          symbol: "copied",
+          path: "internal/parent/layer.go",
+          line: 23,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-alias",
+          symbol: "selected",
+          path: "internal/parent/layer.go",
+          line: 24,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          symbol: "Holder.Repository:primary.Store",
+          path: "internal/parent/layer.go",
+          line: 25,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-return",
+          path: "internal/parent/layer.go",
+          line: 26,
         }),
       ]),
     );
@@ -5236,6 +5317,124 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
         pointer: false,
         returned: "copied",
         explicitDereference: true,
+      }),
+    ).toEqual([]);
+  });
+
+  test("preserves nested pointer identity through helper value copies", async () => {
+    const scan = async ({
+      types,
+      initial,
+      mutation,
+      returned = "layer",
+      receiver,
+      extraHelpers = "",
+    }: {
+      types: string;
+      initial: string;
+      mutation: string;
+      returned?: "layer" | "copied";
+      receiver: string;
+      extraHelpers?: string;
+    }): Promise<ModelRecord[]> =>
+      repositoryInventory({
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+)
+type InvoiceRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type Store struct{}
+func (*Store) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+${types}
+type Service struct { layer Layer }
+${extraHelpers}
+func newLayer(repository InvoiceRepository) Layer {
+  layer := ${initial}
+  copied := layer
+${mutation}
+  return ${returned}
+}
+func NewService(repository InvoiceRepository) *Service {
+  return &Service{layer: newLayer(repository)}
+}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.layer.${receiver}.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Store{})
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+      });
+
+    const pointerTypes = `type Holder struct { repository InvoiceRepository }
+type Layer struct { holder *Holder }`;
+    const shared = {
+      types: pointerTypes,
+      initial: "Layer{holder: &Holder{}}",
+      mutation: "  copied.holder.repository = repository",
+      receiver: "holder.repository",
+    };
+    expect(await scan(shared)).toHaveLength(1);
+    expect(await scan({ ...shared, returned: "copied" })).toHaveLength(1);
+    expect(
+      await scan({
+        ...shared,
+        extraHelpers:
+          "func allocateLayer() Layer { return Layer{holder: &Holder{}} }",
+        initial: "allocateLayer()",
+      }),
+    ).toHaveLength(1);
+
+    const replaced = {
+      ...shared,
+      mutation: `  copied.holder = &Holder{}
+  copied.holder.repository = repository`,
+    };
+    expect(await scan(replaced)).toEqual([]);
+    expect(await scan({ ...replaced, returned: "copied" })).toHaveLength(1);
+
+    const originalReplaced = {
+      ...shared,
+      mutation: `  layer.holder = &Holder{}
+  copied.holder.repository = repository`,
+    };
+    expect(await scan(originalReplaced)).toEqual([]);
+    expect(
+      await scan({ ...originalReplaced, returned: "copied" }),
+    ).toHaveLength(1);
+
+    expect(
+      await scan({
+        types: `type Holder struct { repository InvoiceRepository }
+type Config struct { holder *Holder }
+type Layer struct { config Config }`,
+        initial: "Layer{config: Config{holder: &Holder{}}}",
+        mutation: "  copied.config.holder.repository = repository",
+        receiver: "config.holder.repository",
+      }),
+    ).toHaveLength(1);
+
+    expect(
+      await scan({
+        types: `type Holder struct { repository InvoiceRepository }
+type Config struct { holder Holder }
+type Layer struct { config Config }`,
+        initial: "Layer{config: Config{holder: Holder{}}}",
+        mutation: "  copied.config.holder.repository = repository",
+        receiver: "config.holder.repository",
+      }),
+    ).toEqual([]);
+
+    expect(
+      await scan({
+        ...shared,
+        initial: "Layer{}",
       }),
     ).toEqual([]);
   });
