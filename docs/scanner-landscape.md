@@ -585,8 +585,15 @@ closed. A twenty-sixth pair uses an expressionless `switch` whose three arms end
 with explicit unlabelled `break` statements. Only an exact final break is treated
 as Go's redundant case terminator; the same bounded world replay retains all
 three write origins and requires complete-state and one-to-one identity
-convergence. Initialized and type switches, labelled or non-terminal breaks, and
-all existing divergence and resource failures remain fail closed. This directly
+convergence. General initializers and type switches, labelled or non-terminal
+breaks, and all existing divergence and resource failures remain fail closed. A
+twenty-seventh pair uses `switch selected := label; selected` to exercise one
+bounded initializer. The guard must be a fresh short-declared name sourced
+directly from an exact built-in scalar parameter, must be the switch expression,
+and cannot appear in an arm body. Call results, composite or non-scalar sources,
+mismatched guards, parameter or prior-local shadowing, and all other initializer
+forms remain rejected. The same complete-world replay retains all three write
+origins and requires identity-compatible convergence. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -601,7 +608,7 @@ This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
 failure semantics and executable object/principal controls. External-module
 and parameter-transforming helpers, nested helper branches, five-or-more-arm
-chains and switches, initialized and type switches, one-arm conditionals
+chains and switches, side-effecting or composite initializers and type switches, one-arm conditionals
 proven from pre-state, loop-sensitive writes,
 unbound interfaces, embedded promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,

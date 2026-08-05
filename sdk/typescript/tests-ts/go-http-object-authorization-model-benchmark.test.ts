@@ -170,6 +170,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-imported-helper-switch-write-authorization",
       "go-cross-package-imported-helper-expressionless-switch-write-delete-idor",
       "go-cross-package-safe-imported-helper-expressionless-switch-write-authorization",
+      "go-cross-package-imported-helper-initialized-switch-write-delete-idor",
+      "go-cross-package-safe-imported-helper-initialized-switch-write-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -223,6 +225,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[49]?.expected).toEqual([]);
     expect(manifest.cases[50]?.expected).toHaveLength(1);
     expect(manifest.cases[51]?.expected).toEqual([]);
+    expect(manifest.cases[52]?.expected).toHaveLength(1);
+    expect(manifest.cases[53]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -2009,6 +2013,79 @@ describe("Go HTTP object-authorization framework model", () => {
           kind: "go-method-receiver-constructor-helper-return",
           path: "internal/parent/layer.go",
           line: 37,
+        }),
+      ]),
+    );
+    expect(
+      propagators.filter(
+        ({ kind }) => kind === "go-method-receiver-constructor-field-write",
+      ),
+    ).toHaveLength(3);
+    expect(propagators.map(({ path }) => path)).not.toContain(
+      "internal/archive/store.go",
+    );
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      frameworkModel: {
+        candidateControls: [
+          expect.objectContaining({ kind: "principal-bound-object-query" }),
+        ],
+      },
+    });
+  });
+
+  test("preserves imported helper initialized switch writes and their control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-imported-helper-initialized-switch-write-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-imported-helper-initialized-switch-write-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 11 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "internal/primary/store.go",
+          line: 11,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    const propagators = vulnerable[0]?.frameworkModel?.propagators ?? [];
+    expect(propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-call",
+          symbol: "parent.NewLayer",
+          path: "internal/service/service.go",
+          line: 16,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 28,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 30,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 32,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-return",
+          path: "internal/parent/layer.go",
+          line: 34,
         }),
       ]),
     );
@@ -4989,10 +5066,100 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
   return service
 }`),
     ).toEqual([]);
+    const initializedSwitched =
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  primary := service
+  secondary := service
+  fallback := service
+  switch selected := label; selected {
+  case "primary":
+    primary.layer.repository = repository
+  case "secondary":
+    secondary.layer.repository = repository
+  default:
+    fallback.layer.repository = repository
+  }
+  return service
+}`);
+    expect(initializedSwitched).toHaveLength(1);
+    const initializedSwitchWrites =
+      initializedSwitched[0]?.frameworkModel?.propagators.filter(
+        ({ kind, symbol }) =>
+          kind === "go-method-receiver-constructor-field-write" &&
+          symbol === "Layer.repository:invoices.Store",
+      );
+    expect(initializedSwitchWrites).toHaveLength(3);
+    expect(new Set(initializedSwitchWrites?.map(({ line }) => line)).size).toBe(
+      3,
+    );
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch selected := choose(label); selected {
+  case "primary":
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toEqual([]);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch selected := repository; selected {
+  case nil:
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toEqual([]);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch selected := label; label {
+  case "primary":
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toEqual([]);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  selected := service
+  switch selected := label; selected {
+  case "primary":
+    service.layer.repository = repository
+  default:
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toEqual([]);
     expect(
       await repository(`func NewService(repository InvoiceRepository, label string) *Service {
   service := &Service{layer: &Layer{label: label}}
   switch selected := label; selected {
+  case "primary":
+    service.layer.repository = repository
+    service.layer.label = selected
+  default:
+    service.layer.repository = repository
+    service.layer.label = selected
+  }
+  return service
+}`),
+    ).toEqual([]);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  switch label := label; label {
   case "primary":
     service.layer.repository = repository
   default:
@@ -6297,6 +6464,24 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     expect(
       new Set(expressionlessSwitchWrites?.map(({ line }) => line)).size,
     ).toBe(3);
+    const initializedSwitched =
+      await scan(`  switch selected := label; selected {
+  case "primary":
+    first.holder.repository = repository
+  case "secondary":
+    second.holder.repository = repository
+  default:
+    third.holder.repository = repository
+  }`);
+    expect(initializedSwitched).toHaveLength(1);
+    const initializedSwitchWrites =
+      initializedSwitched[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) => kind === "go-method-receiver-constructor-field-write",
+      );
+    expect(initializedSwitchWrites).toHaveLength(3);
+    expect(new Set(initializedSwitchWrites?.map(({ line }) => line)).size).toBe(
+      3,
+    );
     expect(
       await scan(`  switch label {
   case "primary":
@@ -6322,6 +6507,22 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     first.holder.repository = repository
   default:
     second.holder.repository = repository
+}`),
+    ).toEqual([]);
+    expect(
+      await scan(`  switch selected := choose(label); selected {
+  case "primary":
+    first.holder.repository = repository
+  default:
+    second.holder.repository = repository
+  }`),
+    ).toEqual([]);
+    expect(
+      await scan(`  switch first := label; first {
+  case "primary":
+    second.holder.repository = repository
+  default:
+    third.holder.repository = repository
   }`),
     ).toEqual([]);
   });

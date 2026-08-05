@@ -944,7 +944,12 @@ empty or divergent arms, nested control flow, and a fifth arm fail closed. A
 twenty-sixth pair uses the common expressionless `switch` form and ends each arm
 with an explicit unlabelled `break`. The scanner treats only that final statement
 as Go's redundant case terminator, preserves all three write origins, and applies
-the same complete-state, topology, and resource checks. Switch initializers, type
+the same complete-state, topology, and resource checks. A twenty-seventh pair
+uses the common initializer-bound expression switch
+`switch selected := label; selected`. The initializer must short-declare one
+fresh guard from one exact built-in scalar parameter, and the guard must be the
+switch expression without appearing in any arm body. Calls, composite or
+non-scalar sources, mismatched guards, parameter or prior-local shadowing, type
 switches, and any non-terminal or labelled `break` remain fail closed.
 
 ```powershell
@@ -1108,6 +1113,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-helper-expressionles
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-expressionless-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-helper-initialized-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-initialized-switch-write-authorization
 go test ./...
 Pop-Location
 ```

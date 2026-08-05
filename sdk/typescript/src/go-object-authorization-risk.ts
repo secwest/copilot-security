@@ -2832,12 +2832,55 @@ function objectWrapperSummaries(
       }
     | undefined => {
     const opening = function_.structuralLines[startLine - 1] ?? "";
-    if (!/^\s*switch(?:\s+[^{};]+)?\s*\{\s*$/u.test(opening)) return undefined;
+    const initializer =
+      /^\s*switch\s+([A-Za-z_]\w*)\s*:=\s*([A-Za-z_]\w*)\s*;\s*([A-Za-z_]\w*)\s*\{\s*$/u.exec(
+        opening,
+      );
+    let initializerAlias: string | undefined;
+    if (!/^\s*switch(?:\s+[^{};]+)?\s*\{\s*$/u.test(opening)) {
+      if (initializer === null) return undefined;
+      const [, target, source, guard] = initializer;
+      const parameter = function_.parameters.find(
+        ({ name }) => name === source,
+      );
+      if (
+        target === "_" ||
+        target !== guard ||
+        parameter === undefined ||
+        !/^(?:bool|byte|complex(?:64|128)|float(?:32|64)|int(?:8|16|32|64)?|rune|string|uint(?:8|16|32|64)?|uintptr)$/u.test(
+          parameter.type.trim(),
+        ) ||
+        !packageAliasIsAvailable(function_, target!, startLine) ||
+        new RegExp(
+          `\\btype\\s+${escapeRegularExpression(target!)}\\b`,
+          "u",
+        ).test(
+          function_.structuralLines
+            .slice(function_.bodyStartLine - 1, startLine - 1)
+            .join("\n"),
+        )
+      )
+        return undefined;
+      initializerAlias = target;
+    }
     if (/\.\s*\(\s*type\s*\)/u.test(opening)) return undefined;
     let relativeDepth = braceDelta(opening);
     if (relativeDepth !== 1) return undefined;
     const arms: Array<{ startLine: number; endLine: number }> = [];
-    const switchArm = (armStart: number, armEnd: number) => {
+    const switchArm = (
+      armStart: number,
+      armEnd: number,
+    ): { startLine: number; endLine: number } | undefined => {
+      if (initializerAlias !== undefined) {
+        const guardUse = new RegExp(
+          `\\b${escapeRegularExpression(initializerAlias)}\\b`,
+          "u",
+        );
+        for (let line = armStart; line <= armEnd; line += 1) {
+          if (guardUse.test(function_.structuralLines[line - 1] ?? ""))
+            return undefined;
+        }
+      }
       let contentEnd = armEnd;
       while (
         contentEnd >= armStart &&
@@ -2876,7 +2919,9 @@ function objectWrapperSummaries(
             arms.length + 1 >= MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
           )
             return undefined;
-          arms.push(switchArm(armStartLine, line - 1));
+          const arm = switchArm(armStartLine, line - 1);
+          if (arm === undefined) return undefined;
+          arms.push(arm);
         }
         armStartLine = line + 1;
         continue;
@@ -2892,7 +2937,9 @@ function objectWrapperSummaries(
           arms.length + 1 >= MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
         )
           return undefined;
-        arms.push(switchArm(armStartLine, line - 1));
+        const arm = switchArm(armStartLine, line - 1);
+        if (arm === undefined) return undefined;
+        arms.push(arm);
         armStartLine = line + 1;
         finalDefault = true;
         continue;
@@ -2904,7 +2951,9 @@ function objectWrapperSummaries(
           arms.length + 1 > MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
         )
           return undefined;
-        arms.push(switchArm(armStartLine, line - 1));
+        const arm = switchArm(armStartLine, line - 1);
+        if (arm === undefined) return undefined;
+        arms.push(arm);
         return arms.length >= 2
           ? { arms, statementDepth: 2, endLine: line }
           : undefined;
