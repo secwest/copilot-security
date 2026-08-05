@@ -503,7 +503,14 @@ thirteen-line statement bounds. A fourteenth statement line, unresolved nested
 receiver, wrong inner type, referenced-parameter reassignment, or unsatisfied
 method set fails closed; scalar fields do not erase an otherwise exact receiver
 path. The positive proves the nested selected sink deletes, and the control
-preserves the topology while adding only principal scope. This directly
+preserves the topology while adding only principal scope. A sixteenth pair
+constructs an empty service and writes its nested pointer layer afterward
+through an alias. The host models exact top-level linear writes, shares pointer
+state, copies value state, records the real write line, accepts ordinary
+multiline composites, and bounds both aliases and writes at eight. Conditional,
+nested-path, invalid-dereference, unresolved, over-bound, and parameter-reassigned
+writes fail closed. The positive reaches only the selected implementation; the
+control adds only principal scope. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -517,7 +524,7 @@ and cross-file analysis modes](https://semgrep.dev/docs/writing-rules/glossary).
 This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
 failure semantics and executable object/principal controls. Constructor helper
-chains and post-construction field writes, unbound interfaces, embedded
+chains and nested-path or branch-sensitive field writes, unbound interfaces, embedded
 promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
 sqlc, ORMs, branch-sensitive dominance, and deployment authorization remain

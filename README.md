@@ -856,6 +856,15 @@ thirteen structural lines; a fourteenth line, positional composite, unresolved
 nested receiver, wrong nested type, or reassigned referenced parameter fails
 closed. Scalar initialization is ignored because it neither proves nor
 invalidates receiver identity.
+A sixteenth pair assembles the same nested receiver graph with exact top-level
+field writes after constructing an empty service. Constructor state follows
+direct selectors and explicit pointer dereferences through the existing bounded
+aliases: pointer aliases share field state, while value aliases copy it. Every
+accepted write records `go-method-receiver-constructor-field-write` at its real
+line, the latest linear overwrite wins, and only the returned instance is
+materialized. Eight writes and thirteen structural lines per write are accepted;
+a ninth write, fourteenth line, conditional write, nested selector path, invalid
+dereference, unresolved value, or parameter reassignment fails closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -952,6 +961,12 @@ Push-Location benchmarks\fixtures\go-cross-package-nested-constructor-interface-
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-nested-constructor-interface-field-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-constructor-field-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-field-write-delete-authorization
 go test ./...
 Pop-Location
 ```

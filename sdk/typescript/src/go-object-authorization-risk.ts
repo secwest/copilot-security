@@ -29,6 +29,7 @@ const MAX_OBJECT_WRAPPER_CANDIDATES = 4_096;
 const MAX_OBJECT_RECEIVER_ALIAS_DEPTH = 8;
 const MAX_OBJECT_RECEIVER_FIELD_DEPTH = 8;
 const MAX_OBJECT_CONSTRUCTOR_ALIAS_DEPTH = 8;
+const MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES = 8;
 const MAX_OBJECT_CONSTRUCTOR_STATEMENT_LINES = 13;
 const MAX_TRANSACTION_HELPER_DEPTH = 32;
 const MAX_TRANSACTION_FUNCTION_VALUE_DEPTH = 8;
@@ -2107,6 +2108,7 @@ function objectWrapperSummaries(
         parameterIndex?: number;
         expression?: string;
         line: number;
+        write?: boolean;
       }
     >;
   }
@@ -2413,12 +2415,39 @@ function objectWrapperSummaries(
       : { pointer: composite.reference.pointer, fields: composite.fields };
   };
 
+  const constructorFieldAssignment = (
+    statement: string,
+  ):
+    | {
+        target: string;
+        explicitDereference: boolean;
+        fields: string[];
+        value: string;
+      }
+    | undefined => {
+    const match =
+      /^\s*(?:([A-Za-z_]\w*)|\(\s*\*\s*([A-Za-z_]\w*)\s*\))((?:\s*\.\s*[A-Za-z_]\w*)+)\s*=\s*(?!=)([\s\S]+?)\s*;?\s*$/u.exec(
+        statement,
+      );
+    if (match === null) return undefined;
+    return {
+      target: (match[1] ?? match[2])!,
+      explicitDereference: match[2] !== undefined,
+      fields: [...match[3]!.matchAll(/[A-Za-z_]\w*/gu)].map(([field]) => field),
+      value: match[4]!,
+    };
+  };
+
   const constructorStatement = (
     function_: GoFunction,
     startLine: number,
   ): { structural: string; endLine: number } => {
     const first = function_.structuralLines[startLine - 1] ?? "";
-    if (!/^\s*return\b/u.test(first) && goAssignment(first) === undefined)
+    if (
+      !/^\s*return\b/u.test(first) &&
+      goAssignment(first) === undefined &&
+      constructorFieldAssignment(first) === undefined
+    )
       return { structural: first, endLine: startLine };
     let depth = 0;
     let structural = "";
@@ -2456,13 +2485,39 @@ function objectWrapperSummaries(
         descriptor.name === result.typeName,
     );
     if (matchingStructs.length !== 1) continue;
+    interface ConstructorFieldOrigin {
+      line: number;
+      write: boolean;
+    }
+    interface ConstructorState {
+      fields: Map<string, string>;
+      origins: Map<string, ConstructorFieldOrigin>;
+      fieldWrites: number;
+    }
+    const stateForComposite = (
+      fields: ReadonlyMap<string, string>,
+      line: number,
+    ): ConstructorState => ({
+      fields: new Map(fields),
+      origins: new Map(
+        [...fields.keys()].map((field): [string, ConstructorFieldOrigin] => [
+          field,
+          { line, write: false },
+        ]),
+      ),
+      fieldWrites: 0,
+    });
+    const copyState = (state: ConstructorState): ConstructorState => ({
+      fields: new Map(state.fields),
+      origins: new Map(state.origins),
+      fieldWrites: state.fieldWrites,
+    });
     const aliases = new Map<
       string,
       {
         pointer: boolean;
         depth: number;
-        fields: ReadonlyMap<string, string>;
-        constructionLine: number;
+        state: ConstructorState;
         propagators: EvidencePropagator[];
       }
     >();
@@ -2470,7 +2525,7 @@ function objectWrapperSummaries(
       pointer: boolean;
       line: number;
       fields: ReadonlyMap<string, string>;
-      constructionLine: number;
+      origins: ReadonlyMap<string, ConstructorFieldOrigin>;
       propagators: EvidencePropagator[];
     }> = [];
     let invalid = false;
@@ -2500,14 +2555,39 @@ function objectWrapperSummaries(
           invalid = true;
           break;
         }
+        const state =
+          direct === undefined
+            ? copyState(alias!.state)
+            : stateForComposite(direct.fields, statementLine);
         returns.push({
           pointer: direct?.pointer ?? alias!.pointer,
           line: statementLine,
-          fields: direct?.fields ?? alias!.fields,
-          constructionLine:
-            direct === undefined ? alias!.constructionLine : statementLine,
+          fields: state.fields,
+          origins: state.origins,
           propagators: alias?.propagators ?? [],
         });
+        continue;
+      }
+      const fieldWrite = constructorFieldAssignment(structural);
+      if (fieldWrite !== undefined) {
+        const alias = aliases.get(fieldWrite.target);
+        if (alias === undefined) continue;
+        if (
+          lineNestingDepth(function_, statementLine) !== 1 ||
+          fieldWrite.fields.length !== 1 ||
+          (fieldWrite.explicitDereference && !alias.pointer) ||
+          alias.state.fieldWrites >= MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES
+        ) {
+          invalid = true;
+          break;
+        }
+        const fieldName = fieldWrite.fields[0]!;
+        alias.state.fields.set(fieldName, fieldWrite.value);
+        alias.state.origins.set(fieldName, {
+          line: statementLine,
+          write: true,
+        });
+        alias.state.fieldWrites += 1;
         continue;
       }
       const assignment = goAssignment(structural);
@@ -2529,8 +2609,7 @@ function objectWrapperSummaries(
         aliases.set(name, {
           pointer: direct.pointer,
           depth: 0,
-          fields: direct.fields,
-          constructionLine: statementLine,
+          state: stateForComposite(direct.fields, statementLine),
           propagators: [
             {
               kind: "go-method-receiver-constructor-alias",
@@ -2555,8 +2634,7 @@ function objectWrapperSummaries(
       aliases.set(name, {
         pointer: prior.pointer,
         depth: prior.depth + 1,
-        fields: prior.fields,
-        constructionLine: prior.constructionLine,
+        state: prior.pointer ? prior.state : copyState(prior.state),
         propagators: [
           ...prior.propagators,
           {
@@ -2582,6 +2660,7 @@ function objectWrapperSummaries(
         parameterIndex?: number;
         expression?: string;
         line: number;
+        write?: boolean;
       }
     >();
     for (const [fieldName, expression] of returns[0]!.fields) {
@@ -2600,12 +2679,14 @@ function objectWrapperSummaries(
         ).test(expression),
       );
       if (referencedParameters.length > 0) {
+        const origin = returns[0]!.origins.get(fieldName);
+        if (origin === undefined) {
+          invalid = true;
+          break;
+        }
         const reassigned = Array.from(
           {
-            length: Math.max(
-              0,
-              returns[0]!.constructionLine - function_.bodyStartLine,
-            ),
+            length: Math.max(0, origin.line - function_.bodyStartLine),
           },
           (_, index) => function_.bodyStartLine + index,
         ).some((line) => {
@@ -2621,9 +2702,15 @@ function objectWrapperSummaries(
           break;
         }
       }
+      const origin = returns[0]!.origins.get(fieldName);
+      if (origin === undefined) {
+        invalid = true;
+        break;
+      }
       fieldSources.set(fieldName, {
         ...(parameterIndex < 0 ? { expression } : { parameterIndex }),
-        line: returns[0]!.constructionLine,
+        line: origin.line,
+        ...(origin.write ? { write: true } : {}),
       });
     }
     if (invalid) continue;
@@ -3160,7 +3247,10 @@ function objectWrapperSummaries(
             propagators: [
               ...(value.propagators ?? []),
               {
-                kind: "go-method-receiver-constructor-field",
+                kind:
+                  source.write === true
+                    ? "go-method-receiver-constructor-field-write"
+                    : "go-method-receiver-constructor-field",
                 line: source.line,
                 symbol: `${summary.resultStruct.name}.${fieldName}:${canonical.resolvedPackageName}.${canonical.typeName}`,
                 path: summary.function_.file.path,
