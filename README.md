@@ -812,7 +812,17 @@ the application factory and finalizer as local function values, while each
 imported helper captures its leaf function in turn. Resolution accepts at most
 eight exact, top-level, single-assignment aliases and retains every binding as
 evidence; shadowing, reassignment, nested assignment, cycles, ambiguity, and a
-ninth alias fail closed:
+ninth alias fail closed. An eleventh pair carries the object identifier and
+authenticated principal through an exact handler-to-service-to-repository
+chain spanning two imported local packages. Object-wrapper summaries compose
+through at most 32 uniquely resolved same-package or cross-package boundaries,
+retain every argument, parameter, and local alias as evidence, and remap the
+principal position at every edge. The deepest enclosing `go.mod`, exact import
+path and alias, exported unique target, top-level call shape, and exact string
+parameter flow must all agree. Duplicate routes or modules, cycles, package or
+function shadowing, nested, deferred, or goroutine calls, multi-name
+assignments, immutable map selection, reassignment to a fixed value, and a
+thirty-third boundary fail closed:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -879,6 +889,12 @@ Push-Location benchmarks\fixtures\go-cross-package-transaction-function-value-de
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-transaction-function-value-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-wrapper-chain-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-wrapper-chain-delete-authorization
 go test ./...
 Pop-Location
 ```

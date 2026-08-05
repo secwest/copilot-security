@@ -22,6 +22,8 @@ import {
 const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
 const MAX_RECORDS = 64;
+const MAX_OBJECT_WRAPPER_DEPTH = 32;
+const MAX_OBJECT_WRAPPER_CANDIDATES = 4_096;
 const MAX_TRANSACTION_HELPER_DEPTH = 32;
 const MAX_TRANSACTION_FUNCTION_VALUE_DEPTH = 8;
 const OBJECT_COLUMN = /^(?:id|key|uuid|[a-z][a-z0-9_]*_(?:id|key|uuid))$/iu;
@@ -120,12 +122,18 @@ interface ObjectSink {
 
 interface WrapperSummary {
   file: GoHttpSourceFile;
+  sinkFile: GoHttpSourceFile;
   packageName: string;
+  packageImportPath?: string;
   functionName: string;
   objectParameterIndex: number;
   objectParameterName: string;
+  objectParameterLine: number;
   principalParameterIndexes: number[];
   sink: ObjectSink;
+  delegations: EvidencePropagator[];
+  wrapperDepth: number;
+  wrapperKeys: readonly string[];
 }
 
 interface TransactionFinalizerSummary {
@@ -2005,6 +2013,489 @@ function transactionFinalizerSummaries(
   return summaries;
 }
 
+function objectWrapperSummaries(
+  files: readonly GoHttpSourceFile[],
+  functions: readonly GoFunction[],
+  functionCounts: ReadonlyMap<string, number>,
+  finalizers: readonly TransactionFinalizerSummary[],
+  creators: readonly TransactionCreatorSummary[],
+): WrapperSummary[] {
+  interface StringParameter {
+    index: number;
+    name: string;
+  }
+  interface Descriptor {
+    function_: GoFunction;
+    parameters: StringParameter[];
+    importPath?: string;
+  }
+  interface Edge {
+    sourceKey: string;
+    source: Descriptor;
+    sourceParameter: StringParameter;
+    targetKey: string;
+    target: Descriptor;
+    call: GoCall;
+    objectPropagators: EvidencePropagator[];
+  }
+  interface ParameterFlow {
+    index: number;
+    propagators: EvidencePropagator[];
+  }
+
+  const functionKey = (function_: GoFunction): string =>
+    `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${function_.name}`;
+  const parameterKey = (function_: GoFunction, index: number): string =>
+    `${functionKey(function_)}\0${index}`;
+  const summaryParameterKey = (summary: WrapperSummary): string =>
+    `${posix.dirname(summary.file.path)}\0${summary.packageName}\0${summary.functionName}\0${summary.objectParameterIndex}`;
+  const modules = localGoModules(files);
+  const descriptors = new Map<string, Descriptor>();
+  for (const function_ of functions) {
+    if (function_.receiver !== undefined) continue;
+    const key = functionKey(function_);
+    if (functionCounts.get(key) !== 1) continue;
+    const parameters = function_.parameters.flatMap(
+      (parameter, index): StringParameter[] =>
+        parameter.type.replace(/\s+/gu, "") === "string"
+          ? [{ index, name: parameter.name }]
+          : [],
+    );
+    if (parameters.length === 0) continue;
+    const importPath = localPackageImportPath(function_, modules);
+    descriptors.set(key, {
+      function_,
+      parameters,
+      ...(importPath === undefined ? {} : { importPath }),
+    });
+  }
+
+  const parameterFlowsReachingExpression = (
+    descriptor: Descriptor,
+    expression: string,
+    line: number,
+    assignmentKind:
+      | "go-object-identifier-assignment"
+      | "go-context-principal-assignment",
+  ): ParameterFlow[] => {
+    const fixedMaps = fixedMapNames(descriptor.function_);
+    const reaches = (parameter: StringParameter): GoTaint | undefined => {
+      const taints = new Map<string, GoTaint>([
+        [
+          parameter.name,
+          {
+            kind: "go-string-parameter",
+            line: descriptor.function_.startLine,
+            propagators: [],
+          },
+        ],
+      ]);
+      for (
+        let candidateLine = descriptor.function_.bodyStartLine;
+        candidateLine < line;
+        candidateLine += 1
+      ) {
+        const assignment = goAssignment(
+          descriptor.function_.structuralLines[candidateLine - 1] ?? "",
+        );
+        if (assignment === undefined) continue;
+        const source = expressionTaint(assignment.value, taints);
+        const touchesIdentity =
+          source !== undefined ||
+          assignment.names.some((name) => taints.has(name));
+        if (lineNestingDepth(descriptor.function_, candidateLine) !== 1) {
+          if (touchesIdentity) return undefined;
+          continue;
+        }
+        const fixedSelection = fixedMapSelection(
+          assignment.value,
+          fixedMaps,
+          taints,
+        );
+        for (const name of assignment.names) taints.delete(name);
+        if (source === undefined || fixedSelection) continue;
+        if (assignment.names.length !== 1) return undefined;
+        taints.set(assignment.names[0]!, {
+          ...source,
+          propagators: [
+            ...source.propagators,
+            {
+              kind: assignmentKind,
+              line: candidateLine,
+              symbol: assignment.names[0]!,
+            },
+          ],
+        });
+      }
+      return fixedMapSelection(expression, fixedMaps, taints)
+        ? undefined
+        : expressionTaint(expression, taints);
+    };
+    return descriptor.parameters.flatMap((parameter): ParameterFlow[] => {
+      const taint = reaches(parameter);
+      return taint === undefined
+        ? []
+        : [
+            {
+              index: parameter.index,
+              propagators: taint.propagators.map((propagator) => ({
+                ...propagator,
+                path: descriptor.function_.file.path,
+              })),
+            },
+          ];
+    });
+  };
+
+  const direct: WrapperSummary[] = [];
+  for (const descriptor of descriptors.values()) {
+    const alias = sqlAlias(descriptor.function_);
+    if (alias === undefined) continue;
+    for (const parameter of descriptor.parameters) {
+      const objectTaint: GoTaint = {
+        kind: "go-string-parameter",
+        line: descriptor.function_.startLine,
+        propagators: [],
+      };
+      const allPrincipalParameters = new Map<string, GoTaint>();
+      for (const candidate of descriptor.parameters) {
+        if (candidate.index === parameter.index) continue;
+        allPrincipalParameters.set(candidate.name, {
+          kind: "go-principal-parameter",
+          line: descriptor.function_.startLine,
+          propagators: [],
+        });
+      }
+      for (const sink of analyzeFunction(
+        descriptor.function_,
+        new Map([[parameter.name, objectTaint]]),
+        allPrincipalParameters,
+        finalizers,
+        creators,
+      )) {
+        const principalParameterIndexes: number[] = [];
+        if (
+          sink.controls.some(
+            (control) => control.kind === "principal-bound-object-query",
+          )
+        ) {
+          for (const candidate of descriptor.parameters) {
+            if (
+              candidate.index === parameter.index ||
+              !allPrincipalParameters.has(candidate.name)
+            )
+              continue;
+            const isolated = analyzeFunction(
+              descriptor.function_,
+              new Map([[parameter.name, objectTaint]]),
+              new Map([
+                [
+                  candidate.name,
+                  {
+                    kind: "go-principal-parameter",
+                    line: descriptor.function_.startLine,
+                    propagators: [],
+                  },
+                ],
+              ]),
+              finalizers,
+              creators,
+            );
+            if (
+              isolated.some(
+                (item) =>
+                  item.line === sink.line &&
+                  item.controls.some(
+                    (control) =>
+                      control.kind === "principal-bound-object-query",
+                  ),
+              )
+            )
+              principalParameterIndexes.push(candidate.index);
+          }
+        }
+        direct.push({
+          file: descriptor.function_.file,
+          sinkFile: descriptor.function_.file,
+          packageName: descriptor.function_.packageName,
+          ...(descriptor.importPath === undefined
+            ? {}
+            : { packageImportPath: descriptor.importPath }),
+          functionName: descriptor.function_.name,
+          objectParameterIndex: parameter.index,
+          objectParameterName: parameter.name,
+          objectParameterLine: descriptor.function_.startLine,
+          principalParameterIndexes,
+          sink,
+          delegations: [],
+          wrapperDepth: 0,
+          wrapperKeys: [parameterKey(descriptor.function_, parameter.index)],
+        });
+      }
+    }
+  }
+
+  const targetDescriptors = (
+    caller: Descriptor,
+    call: GoCall,
+  ): Descriptor[] => {
+    const resolved = resolvedTransactionHelperCall(
+      caller.function_,
+      call.name,
+      call.line,
+    );
+    if (
+      resolved === undefined ||
+      resolved.functionValues.length !== 0 ||
+      resolved.name !== call.name
+    )
+      return [];
+    const plain = /^([A-Za-z_]\w*)$/u.exec(resolved.name);
+    if (plain !== null) {
+      const target = descriptors.get(
+        `${posix.dirname(caller.function_.file.path)}\0${caller.function_.packageName}\0${plain[1]}`,
+      );
+      return target === undefined ? [] : [target];
+    }
+    const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(resolved.name);
+    if (
+      qualified === null ||
+      !/^[A-Z]/u.test(qualified[2]!) ||
+      !packageAliasIsAvailable(
+        caller.function_,
+        qualified[1]!,
+        resolved.targetLine,
+      )
+    )
+      return [];
+    const targets: Descriptor[] = [];
+    for (const target of descriptors.values()) {
+      if (
+        target.importPath === undefined ||
+        target.function_.name !== qualified[2]
+      )
+        continue;
+      const alias = goImportAlias(
+        caller.function_.file.lines,
+        target.importPath,
+        target.function_.packageName,
+      );
+      if (alias === qualified[1]) targets.push(target);
+    }
+    return targets;
+  };
+
+  const edges: Edge[] = [];
+  for (const source of descriptors.values()) {
+    for (const call of goCalls(source.function_)) {
+      const structural = source.function_.structuralLines[call.line - 1] ?? "";
+      if (
+        callNestingDepth(source.function_, call) !== 1 ||
+        /\b(?:defer|go)\s+[A-Za-z_]/u.test(structural)
+      )
+        continue;
+      const targets = targetDescriptors(source, call);
+      if (targets.length !== 1) continue;
+      const target = targets[0]!;
+      for (const sourceParameter of source.parameters) {
+        const sourceKey = parameterKey(source.function_, sourceParameter.index);
+        for (const targetParameter of target.parameters) {
+          const argument = call.rawArguments[targetParameter.index];
+          if (argument === undefined) continue;
+          const reaching = parameterFlowsReachingExpression(
+            source,
+            argument,
+            call.line,
+            "go-object-identifier-assignment",
+          );
+          if (
+            reaching.length !== 1 ||
+            reaching[0]!.index !== sourceParameter.index
+          )
+            continue;
+          edges.push({
+            sourceKey,
+            source,
+            sourceParameter,
+            targetKey: parameterKey(target.function_, targetParameter.index),
+            target,
+            call,
+            objectPropagators: reaching[0]!.propagators,
+          });
+        }
+      }
+    }
+  }
+
+  const groups = new Map<string, Map<string, WrapperSummary>>();
+  let candidateCount = 0;
+  let overflow = false;
+  const candidateIdentity = (summary: WrapperSummary): string =>
+    `${summaryParameterKey(summary)}\0${summary.sinkFile.path}\0${summary.sink.line}\0${summary.sink.kind}`;
+  const candidateSignature = (summary: WrapperSummary): string =>
+    JSON.stringify({
+      wrapperKeys: summary.wrapperKeys,
+      principalParameterIndexes: summary.principalParameterIndexes,
+      delegations: summary.delegations,
+    });
+  const addCandidate = (summary: WrapperSummary): boolean => {
+    const identity = candidateIdentity(summary);
+    const group = groups.get(identity) ?? new Map<string, WrapperSummary>();
+    const signature = candidateSignature(summary);
+    if (group.has(signature)) return false;
+    if (candidateCount >= MAX_OBJECT_WRAPPER_CANDIDATES) {
+      overflow = true;
+      return false;
+    }
+    group.set(signature, summary);
+    groups.set(identity, group);
+    candidateCount += 1;
+    return true;
+  };
+  for (const summary of direct) addCandidate(summary);
+
+  for (let depth = 1; depth <= MAX_OBJECT_WRAPPER_DEPTH; depth += 1) {
+    let changed = false;
+    const childrenByKey = new Map<string, WrapperSummary[]>();
+    for (const group of groups.values()) {
+      for (const summary of group.values()) {
+        if (summary.wrapperDepth !== depth - 1) continue;
+        const key = summaryParameterKey(summary);
+        const children = childrenByKey.get(key) ?? [];
+        children.push(summary);
+        childrenByKey.set(key, children);
+      }
+    }
+    for (const edge of edges) {
+      const children = childrenByKey.get(edge.targetKey) ?? [];
+      for (const child of children) {
+        if (child.wrapperKeys.includes(edge.sourceKey)) continue;
+        const principalParameterIndexes = new Set<number>();
+        for (const childIndex of child.principalParameterIndexes) {
+          const argument = edge.call.rawArguments[childIndex];
+          if (argument === undefined) continue;
+          const reaching = parameterFlowsReachingExpression(
+            edge.source,
+            argument,
+            edge.call.line,
+            "go-context-principal-assignment",
+          );
+          if (
+            reaching.length === 1 &&
+            reaching[0]!.index !== edge.sourceParameter.index
+          )
+            principalParameterIndexes.add(reaching[0]!.index);
+        }
+        changed =
+          addCandidate({
+            file: edge.source.function_.file,
+            sinkFile: child.sinkFile,
+            packageName: edge.source.function_.packageName,
+            ...(edge.source.importPath === undefined
+              ? {}
+              : { packageImportPath: edge.source.importPath }),
+            functionName: edge.source.function_.name,
+            objectParameterIndex: edge.sourceParameter.index,
+            objectParameterName: edge.sourceParameter.name,
+            objectParameterLine: edge.source.function_.startLine,
+            principalParameterIndexes: [...principalParameterIndexes].sort(
+              (left, right) => left - right,
+            ),
+            sink: child.sink,
+            delegations: [
+              ...edge.objectPropagators,
+              {
+                kind: "go-function-argument",
+                line: edge.call.line,
+                symbol: `${edge.target.function_.name}[${child.objectParameterIndex}]`,
+                path: edge.source.function_.file.path,
+              },
+              {
+                kind: "go-string-parameter",
+                line: edge.target.function_.startLine,
+                symbol: child.objectParameterName,
+                path: edge.target.function_.file.path,
+              },
+              ...child.delegations,
+            ],
+            wrapperDepth: depth,
+            wrapperKeys: [edge.sourceKey, ...child.wrapperKeys],
+          }) || changed;
+        if (overflow) break;
+      }
+      if (overflow) break;
+    }
+    if (overflow || !changed) break;
+  }
+
+  if (overflow) return direct;
+  return [...groups.values()]
+    .filter((group) => group.size === 1)
+    .map((group) => group.values().next().value!)
+    .sort(
+      (left, right) =>
+        left.file.path.localeCompare(right.file.path) ||
+        left.functionName.localeCompare(right.functionName) ||
+        left.objectParameterIndex - right.objectParameterIndex ||
+        left.sinkFile.path.localeCompare(right.sinkFile.path) ||
+        left.sink.line - right.sink.line,
+    );
+}
+
+function wrapperSummaryCallMatches(
+  caller: GoFunction,
+  call: GoCall,
+  summary: WrapperSummary,
+): boolean {
+  const resolved = resolvedTransactionHelperCall(caller, call.name, call.line);
+  if (
+    resolved === undefined ||
+    resolved.functionValues.length !== 0 ||
+    resolved.name !== call.name
+  )
+    return false;
+  if (
+    summary.functionName === resolved.name &&
+    summary.packageName === caller.packageName &&
+    posix.dirname(summary.file.path) === posix.dirname(caller.file.path)
+  )
+    return true;
+  if (
+    summary.packageImportPath === undefined ||
+    !/^[A-Z]/u.test(summary.functionName)
+  )
+    return false;
+  const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(resolved.name);
+  if (qualified?.[2] !== summary.functionName) return false;
+  const alias = goImportAlias(
+    caller.file.lines,
+    summary.packageImportPath,
+    summary.packageName,
+  );
+  return (
+    alias !== undefined &&
+    alias === qualified[1] &&
+    packageAliasIsAvailable(caller, alias, resolved.targetLine)
+  );
+}
+
+function uniqueWrapperSummaryMatches(
+  caller: GoFunction,
+  call: GoCall,
+  summaries: readonly WrapperSummary[],
+): WrapperSummary[] {
+  const matching = summaries.filter((summary) =>
+    wrapperSummaryCallMatches(caller, call, summary),
+  );
+  const targets = new Set(
+    matching.map(
+      (summary) =>
+        `${posix.dirname(summary.file.path)}\0${summary.packageName}\0${summary.functionName}`,
+    ),
+  );
+  return targets.size === 1 ? matching : [];
+}
+
 export function goObjectAuthorizationRecords(
   files: readonly GoHttpSourceFile[],
 ): GoObjectAuthorizationRecord[] {
@@ -2056,106 +2547,22 @@ export function goObjectAuthorizationRecords(
     }
   }
 
-  const summaries: WrapperSummary[] = [];
-  for (const function_ of functions) {
-    if (function_.receiver !== undefined || sqlAlias(function_) === undefined)
-      continue;
-    function_.parameters.forEach((parameter, objectParameterIndex) => {
-      if (parameter.type.replace(/\s+/gu, "") !== "string") return;
-      const objectTaint: GoTaint = {
-        kind: "go-string-parameter",
-        line: function_.startLine,
-        propagators: [],
-      };
-      const allPrincipalParameters = new Map<string, GoTaint>();
-      function_.parameters.forEach((candidate, index) => {
-        if (
-          index !== objectParameterIndex &&
-          candidate.type.replace(/\s+/gu, "") === "string"
-        ) {
-          allPrincipalParameters.set(candidate.name, {
-            kind: "go-principal-parameter",
-            line: function_.startLine,
-            propagators: [],
-          });
-        }
-      });
-      for (const sink of analyzeFunction(
-        function_,
-        new Map([[parameter.name, objectTaint]]),
-        allPrincipalParameters,
-        finalizers,
-        creators,
-      )) {
-        const principalParameterIndexes: number[] = [];
-        if (
-          sink.controls.some(
-            (control) => control.kind === "principal-bound-object-query",
-          )
-        ) {
-          function_.parameters.forEach((candidate, index) => {
-            if (
-              index === objectParameterIndex ||
-              !allPrincipalParameters.has(candidate.name)
-            )
-              return;
-            const isolated = analyzeFunction(
-              function_,
-              new Map([[parameter.name, objectTaint]]),
-              new Map([
-                [
-                  candidate.name,
-                  {
-                    kind: "go-principal-parameter",
-                    line: function_.startLine,
-                    propagators: [],
-                  },
-                ],
-              ]),
-              finalizers,
-              creators,
-            );
-            if (
-              isolated.some(
-                (item) =>
-                  item.line === sink.line &&
-                  item.controls.some(
-                    (control) =>
-                      control.kind === "principal-bound-object-query",
-                  ),
-              )
-            ) {
-              principalParameterIndexes.push(index);
-            }
-          });
-        }
-        summaries.push({
-          file: function_.file,
-          packageName: function_.packageName,
-          functionName: function_.name,
-          objectParameterIndex,
-          objectParameterName: parameter.name,
-          principalParameterIndexes,
-          sink,
-        });
-      }
-    });
-  }
+  const summaries = objectWrapperSummaries(
+    files,
+    functions,
+    functionCounts,
+    finalizers,
+    creators,
+  );
 
   for (const caller of functions) {
     if (requestParameters(caller).length === 0) continue;
     const calls = goCalls(caller);
-    for (const summary of summaries) {
-      if (
-        posix.dirname(summary.file.path) !== posix.dirname(caller.file.path) ||
-        summary.packageName !== caller.packageName
-      ) {
-        continue;
-      }
-      const key = `${posix.dirname(summary.file.path)}\0${summary.packageName}\0${summary.functionName}`;
-      if (functionCounts.get(key) !== 1) continue;
-      for (const call of calls.filter(
-        (candidate) => candidate.name === summary.functionName,
+    for (const call of calls) {
+      for (const summary of uniqueWrapperSummaryMatches(
+        caller,
+        call,
+        summaries,
       )) {
         const argument = call.arguments[summary.objectParameterIndex];
         if (argument === undefined) continue;
@@ -2181,14 +2588,14 @@ export function goObjectAuthorizationRecords(
           });
         });
         const sink = { ...summary.sink, controls };
-        const identity = `${caller.file.path}:${call.line}:${summary.file.path}:${sink.line}:${sink.kind}`;
+        const identity = `${caller.file.path}:${call.line}:${summary.sinkFile.path}:${sink.line}:${sink.kind}`;
         if (emitted.has(identity)) continue;
         emitted.add(identity);
         records.push(
           record(
             caller.file,
-            summary.file,
-            caller.file.path === summary.file.path
+            summary.sinkFile,
+            caller.file.path === summary.sinkFile.path
               ? "same-file"
               : "cross-file-wrapper",
             source,
@@ -2202,9 +2609,11 @@ export function goObjectAuthorizationRecords(
               },
               {
                 kind: "go-string-parameter",
-                line: summary.sink.source.line,
+                line: summary.objectParameterLine,
                 symbol: summary.objectParameterName,
+                path: summary.file.path,
               },
+              ...summary.delegations,
               ...summary.sink.propagators,
             ],
           ),

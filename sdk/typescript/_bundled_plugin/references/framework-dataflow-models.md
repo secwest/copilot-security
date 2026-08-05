@@ -403,8 +403,13 @@ interpreter that consumes the value.
 ### Go HTTP object-level authorization — CWE-639 and CWE-862
 
 - Source: query, form, path, or header data from an exact typed
-  `*net/http.Request`, directly or through one unique same-package string
-  wrapper.
+  `*net/http.Request`, directly or through an exact wrapper graph of at most 32
+  same-package or cross-package boundaries. Each edge must uniquely resolve a
+  non-method function and forward an exact string parameter or live local alias
+  at a top-level non-deferred, non-goroutine call. Cross-package edges require
+  the deepest enclosing `go.mod`, exact local module import path and ordinary
+  alias, exported target, and unshadowed package binding. Preserve each call,
+  parameter, and object alias as evidence.
 - Protected effect: the request-derived identifier occupies an object-key
   equality predicate in fixed SQL executed by an exact typed `*database/sql.DB`,
   `*database/sql.Tx`, or `*database/sql.Conn`. A single-row read requires
@@ -460,10 +465,20 @@ interpreter that consumes the value.
   that context principal dominates every disclosure. A request header or
   query value used as the owner filter is attacker controlled and is not a
   control.
+- Map authenticated-principal parameters through every wrapper edge. A
+  principal-named argument or attacker-controlled header is not a control;
+  retain `principal-bound-object-query` only when the exact context-derived
+  value reaches the leaf predicate position.
 - Reject dynamic or ambiguous query construction, fixed or reassigned object
   identifiers, immutable server-owned object selection, untyped database
   lookalikes, generic responses that do not expose selected data, and checks
   performed after disclosure or mutation.
+- Reject duplicate routes to the same sink, duplicate module identities,
+  ambiguous targets, cycles, package, function, parameter, or local shadowing,
+  nested, deferred, or goroutine forwarding, multi-name tainted assignments,
+  immutable-map object selection, reassignment to a fixed object, and a chain
+  beyond 32 boundaries. Limit composition to 4,096 candidate paths; on
+  overflow, keep only independently proven direct summaries.
 - For a transferred statement, preserve the original prepare line, exact
   source statement, returned transaction statement, object predicate,
   execution arguments, transaction identity, and commit line. `StmtContext`'s

@@ -71,9 +71,22 @@ The package is ESM-only and provides:
   immutable source selection, package lookalikes, and ambiguous wrappers are
   rejected; `FuncMap` and execution-data capabilities remain explicit review
   evidence. A typed Go object-authorization model requires exact `net/http`
-  and `database/sql` identities and preserves a request object key through one
-  unique wrapper into a fixed SQL equality predicate on a typed DB, Tx, or
-  Conn. Single-row reads require `QueryRow`, `Scan`, and disclosure;
+  and `database/sql` identities and preserves a request object key through up
+  to 32 exact, uniquely resolved same-package or cross-package wrapper
+  boundaries into a fixed SQL equality predicate on a typed DB, Tx, or Conn.
+  Cross-package edges require the deepest enclosing `go.mod`, exact local
+  module import path and ordinary alias, exported unique target, and unshadowed
+  binding. Each top-level call must forward an exact string parameter or live
+  local alias to the summarized position; every call, parameter, and object
+  alias remains explicit evidence. Context-derived principal parameters are
+  remapped through every edge, so a same-query security predicate remains a
+  control only when the exact principal reaches the leaf. Cycles, duplicate
+  paths or module identities, ambiguous definitions, local, package, or
+  function shadowing, nested, deferred, or goroutine calls, multi-name
+  assignments, fixed immutable-map selection, reassignment to a fixed value,
+  and the thirty-third boundary fail closed. The graph admits at most 4,096
+  candidate paths; overflow retains direct summaries without guessing.
+  Single-row reads require `QueryRow`, `Scan`, and disclosure;
   collection reads require exact `Query`/`QueryContext`, the same returned
   `Rows`, `Next`, `Scan`, and disclosure. Updates and deletes require exact
   direct `Exec` dispatch or exact `Prepare`/`PrepareContext` statement identity

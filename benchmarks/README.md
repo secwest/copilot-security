@@ -607,13 +607,16 @@ preserved; its control again changes only the account predicate. A tenth pair
 captures the imported factory and finalizer in application function values,
 and both helpers capture their leaf operations the same way. Each exact local
 binding and helper boundary remains visible in the evidence path; its control
-again changes only the account predicate. The suite proves all ten blocked
-attacks and successful
+again changes only the account predicate. An eleventh pair carries both the
+path-selected object ID and the context-derived account through an exact
+handler-to-service-to-repository chain spanning two imported local packages.
+The host preserves every call, string parameter, and object alias, and remaps
+the principal position across every boundary. Its control again changes only
+the account predicate. The suite proves all eleven blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
-function-value dispatch, without a
-database service:
+function-value and object-wrapper dispatch, without a database service:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -685,6 +688,12 @@ Push-Location fixtures\go-cross-package-transaction-function-value-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-transaction-function-value-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-wrapper-chain-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-wrapper-chain-delete-authorization
 go test ./...
 Pop-Location
 ```

@@ -138,6 +138,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-transaction-factory-delete-authorization",
       "go-cross-package-transaction-function-value-delete-idor",
       "go-cross-package-safe-transaction-function-value-delete-authorization",
+      "go-cross-package-wrapper-chain-delete-idor",
+      "go-cross-package-safe-wrapper-chain-delete-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -159,6 +161,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[17]?.expected).toEqual([]);
     expect(manifest.cases[18]?.expected).toHaveLength(1);
     expect(manifest.cases[19]?.expected).toEqual([]);
+    expect(manifest.cases[20]?.expected).toHaveLength(1);
+    expect(manifest.cases[21]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -873,6 +877,96 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(safe[0]?.frameworkModel?.candidateControls).toEqual([
       { kind: "principal-bound-object-query", path: "store.go", line: 18 },
     ]);
+  });
+
+  test("preserves the cross-package object-wrapper exploit and control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-wrapper-chain-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-wrapper-chain-delete-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "internal/invoicestore/store.go",
+      line: 9,
+      categories: [
+        "framework-dataflow:go-http-object-authorization",
+        "modeled-source:go-http-path-value",
+        "modeled-sink:go-database-object-mutation",
+      ],
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 10 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "internal/invoicestore/store.go",
+          line: 9,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) =>
+          kind === "go-object-identifier-assignment" ||
+          kind === "go-function-argument" ||
+          kind === "go-string-parameter",
+      ),
+    ).toEqual([
+      {
+        kind: "go-object-identifier-assignment",
+        line: 10,
+        symbol: "invoiceID",
+        path: "handler.go",
+      },
+      {
+        kind: "go-function-argument",
+        line: 11,
+        symbol: "DeleteInvoice[2]",
+        path: "handler.go",
+      },
+      {
+        kind: "go-string-parameter",
+        line: 9,
+        symbol: "invoiceID",
+        path: "internal/invoicesvc/service.go",
+      },
+      {
+        kind: "go-object-identifier-assignment",
+        line: 10,
+        symbol: "selected",
+        path: "internal/invoicesvc/service.go",
+      },
+      {
+        kind: "go-function-argument",
+        line: 11,
+        symbol: "DeleteInvoice[2]",
+        path: "internal/invoicesvc/service.go",
+      },
+      {
+        kind: "go-string-parameter",
+        line: 8,
+        symbol: "invoiceID",
+        path: "internal/invoicestore/store.go",
+      },
+    ]);
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "internal/invoicestore/store.go",
+      line: 9,
+      frameworkModel: {
+        source: { kind: "go-http-path-value", path: "handler.go", line: 14 },
+        candidateControls: [
+          {
+            kind: "principal-bound-object-query",
+            path: "internal/invoicestore/store.go",
+            line: 9,
+          },
+        ],
+      },
+    });
   });
 
   test("closes Prepare and PrepareContext through the exact Stmt execution", async () => {
@@ -2673,6 +2767,317 @@ func WriteInvoice(db *sql.DB, w http.ResponseWriter, id, accountID string) {
     });
     expect(unsafe).toHaveLength(1);
     expect(unsafe[0]?.frameworkModel?.candidateControls).toEqual([]);
+  });
+
+  test("follows exact multi-hop wrappers and preserves principal provenance", async () => {
+    const handlerSource = (principal: string) => `package invoices
+import (
+  "database/sql"
+  "net/http"
+)
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  accountID := ${principal}
+  DeleteInvoiceService(r.Context(), db, invoiceID, accountID)
+}`;
+    const files = {
+      "service.go": `package invoices
+import (
+  "context"
+  "database/sql"
+)
+func DeleteInvoiceService(ctx context.Context, db *sql.DB, invoiceID, accountID string) error {
+  selected := invoiceID
+  owner := accountID
+  return DeleteInvoiceRepository(ctx, db, selected, owner)
+}`,
+      "store.go": `package invoices
+import (
+  "context"
+  "database/sql"
+)
+func DeleteInvoiceRepository(ctx context.Context, db *sql.DB, invoiceID, accountID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ? AND account_id = ?", invoiceID, accountID)
+  return err
+}`,
+    };
+    const safe = await repositoryInventory({
+      "handler.go": handlerSource(
+        "r.Context().Value(authenticatedAccountIDKey).(string)",
+      ),
+      ...files,
+    });
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "store.go",
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        candidateControls: [
+          {
+            kind: "principal-bound-object-query",
+            path: "store.go",
+            line: 7,
+          },
+        ],
+      },
+    });
+    expect(
+      safe[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) =>
+          kind === "go-function-argument" || kind === "go-string-parameter",
+      ),
+    ).toEqual([
+      {
+        kind: "go-function-argument",
+        line: 9,
+        symbol: "DeleteInvoiceService[2]",
+        path: "handler.go",
+      },
+      {
+        kind: "go-string-parameter",
+        line: 6,
+        symbol: "invoiceID",
+        path: "service.go",
+      },
+      {
+        kind: "go-function-argument",
+        line: 9,
+        symbol: "DeleteInvoiceRepository[2]",
+        path: "service.go",
+      },
+      {
+        kind: "go-string-parameter",
+        line: 6,
+        symbol: "invoiceID",
+        path: "store.go",
+      },
+    ]);
+    const unsafe = await repositoryInventory({
+      "handler.go": handlerSource('r.Header.Get("X-Account-ID")'),
+      ...files,
+    });
+    expect(unsafe).toHaveLength(1);
+    expect(unsafe[0]?.frameworkModel?.candidateControls).toEqual([]);
+  });
+
+  test("follows exact cross-package object-wrapper chains", async () => {
+    const rows = await scopedRepositoryInventory({
+      "go.mod": `module example.com/billing
+go 1.26`,
+      "handler.go": `package invoices
+import (
+  "database/sql"
+  "net/http"
+  service "example.com/billing/internal/invoicesvc"
+)
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  accountID := r.Context().Value(authenticatedAccountIDKey).(string)
+  service.DeleteInvoice(r.Context(), db, invoiceID, accountID)
+}`,
+      "internal/invoicesvc/service.go": `package invoicesvc
+import (
+  "context"
+  "database/sql"
+  repository "example.com/billing/internal/invoicestore"
+)
+func DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID, accountID string) error {
+  selected := invoiceID
+  owner := accountID
+  return repository.DeleteInvoice(ctx, db, selected, owner)
+}`,
+      "internal/invoicestore/store.go": `package invoicestore
+import (
+  "context"
+  "database/sql"
+)
+func DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID, accountID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ? AND account_id = ?", invoiceID, accountID)
+  return err
+}`,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      path: "internal/invoicestore/store.go",
+      frameworkModel: {
+        source: { path: "handler.go", line: 8 },
+        sink: { path: "internal/invoicestore/store.go", line: 7 },
+        candidateControls: [
+          {
+            kind: "principal-bound-object-query",
+            path: "internal/invoicestore/store.go",
+            line: 7,
+          },
+        ],
+      },
+    });
+    expect(
+      rows[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) => kind === "go-function-argument",
+      ),
+    ).toEqual([
+      {
+        kind: "go-function-argument",
+        path: "handler.go",
+        line: 10,
+        symbol: "DeleteInvoice[2]",
+      },
+      {
+        kind: "go-function-argument",
+        path: "internal/invoicesvc/service.go",
+        line: 10,
+        symbol: "DeleteInvoice[2]",
+      },
+    ]);
+  });
+
+  test("rejects inexact cross-package object-wrapper resolution", async () => {
+    const handlerSource = (importPath: string, shadow = "") => `package invoices
+import (
+  "database/sql"
+  "net/http"
+  service "${importPath}"
+)
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  ${shadow}
+  service.DeleteInvoice(db, invoiceID)
+}`;
+    const service = `package service
+import (
+  "database/sql"
+  repository "example.com/billing/internal/repository"
+)
+func DeleteInvoice(db *sql.DB, invoiceID string) { repository.DeleteInvoice(db, invoiceID) }`;
+    const repository = `package repository
+import "database/sql"
+func DeleteInvoice(db *sql.DB, invoiceID string) { db.Exec("DELETE FROM invoices WHERE id = ?", invoiceID) }`;
+    const base = {
+      "handler.go": handlerSource("example.com/billing/internal/service"),
+      "internal/service/service.go": service,
+      "internal/repository/store.go": repository,
+    };
+    expect(await repositoryInventory(base)).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "go.mod": `module example.com/billing
+go 1.26`,
+        ...base,
+        "handler.go": handlerSource("example.com/lookalike/internal/service"),
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "go.mod": `module example.com/billing
+go 1.26`,
+        ...base,
+        "handler.go": handlerSource(
+          "example.com/billing/internal/service",
+          "service := localService{}",
+        ),
+        "lookalike.go": `package invoices
+import "database/sql"
+type localService struct{}
+func (localService) DeleteInvoice(*sql.DB, string) {}`,
+      }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "go.mod": `module example.com/billing
+go 1.26`,
+        ...base,
+        "nested/go.mod": `module example.com/billing/internal/service
+go 1.26`,
+        "nested/service.go": service.replace(
+          "package service",
+          "package duplicate",
+        ),
+      }),
+    ).toEqual([]);
+  });
+
+  test("accepts exactly 32 object-wrapper boundaries and rejects 33", async () => {
+    const source = (count: number) => {
+      const wrappers = Array.from({ length: count }, (_, index) => {
+        const next =
+          index === count - 1 ? "DeleteInvoiceStore" : `Layer${index + 1}`;
+        return `func Layer${index}(db *sql.DB, invoiceID string) { ${next}(db, invoiceID) }`;
+      }).join("\n");
+      return `package invoices
+import (
+  "database/sql"
+  "net/http"
+)
+func DeleteInvoiceStore(db *sql.DB, invoiceID string) { db.Exec("DELETE FROM invoices WHERE id = ?", invoiceID) }
+${wrappers}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) { Layer0(db, r.PathValue("invoiceID")) }`;
+    };
+    const accepted = await repositoryInventory({ "handler.go": source(32) });
+    expect(accepted).toHaveLength(1);
+    expect(
+      accepted[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) => kind === "go-function-argument",
+      ),
+    ).toHaveLength(33);
+    expect(await repositoryInventory({ "handler.go": source(33) })).toEqual([]);
+  });
+
+  test("rejects ambiguous, cyclic, nested, shadowed, and fixed wrapper paths", async () => {
+    const handlerSource = `package invoices
+import (
+  "database/sql"
+  "net/http"
+)
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  Service(db, r.PathValue("invoiceID"))
+}`;
+    const leaf = `package invoices
+import "database/sql"
+func Store(db *sql.DB, invoiceID string) { db.Exec("DELETE FROM invoices WHERE id = ?", invoiceID) }`;
+    const candidates = [
+      `package invoices
+import "database/sql"
+func Service(db *sql.DB, invoiceID string) {
+  Store(db, invoiceID)
+  Store(db, invoiceID)
+}`,
+      `package invoices
+import "database/sql"
+func Service(db *sql.DB, invoiceID string) { Cycle(db, invoiceID) }
+func Cycle(db *sql.DB, invoiceID string) { Service(db, invoiceID) }`,
+      `package invoices
+import "database/sql"
+func Service(db *sql.DB, invoiceID string) {
+  if invoiceID != "" { Store(db, invoiceID) }
+}`,
+      `package invoices
+import "database/sql"
+func Service(db *sql.DB, invoiceID string, Store func(*sql.DB, string)) {
+  Store(db, invoiceID)
+}`,
+      `package invoices
+import "database/sql"
+func Service(db *sql.DB, invoiceID string) {
+  allowed := map[string]string{"mine": "owned-invoice"}
+  Store(db, allowed[invoiceID])
+}`,
+      `package invoices
+import "database/sql"
+func Service(db *sql.DB, invoiceID string) {
+  invoiceID = "owned-invoice"
+  Store(db, invoiceID)
+}`,
+    ];
+    for (const service of candidates) {
+      expect(
+        await repositoryInventory({
+          "handler.go": handlerSource,
+          "service.go": service,
+          "store.go": leaf,
+        }),
+        service,
+      ).toEqual([]);
+    }
   });
 
   test("rejects fixed and reassigned identifiers, comments, and strings", async () => {
