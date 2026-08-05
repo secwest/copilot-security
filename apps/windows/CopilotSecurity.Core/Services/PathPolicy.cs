@@ -82,7 +82,7 @@ public static class PathPolicy
         var current = root;
         var remainder = canonical[root.Length..];
         foreach (var segment in remainder.Split(
-            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
             StringSplitOptions.RemoveEmptyEntries))
         {
             current = Path.Combine(current, segment);

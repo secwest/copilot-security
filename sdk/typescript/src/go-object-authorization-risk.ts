@@ -34,6 +34,8 @@ const MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES = 8;
 const MAX_OBJECT_CONSTRUCTOR_STATEMENT_LINES = 13;
 const MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES = 16;
 const MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS = 4;
+const MAX_INTERFACE_EMBEDDING_DEPTH = 8;
+const MAX_INTERFACE_METHODS = 64;
 const MAX_TRANSACTION_HELPER_DEPTH = 32;
 const MAX_TRANSACTION_FUNCTION_VALUE_DEPTH = 8;
 const OBJECT_COLUMN = /^(?:id|key|uuid|[a-z][a-z0-9_]*_(?:id|key|uuid))$/iu;
@@ -2168,6 +2170,11 @@ function objectWrapperSummaries(
     returnAlias?: string;
     steps: ReadonlyArray<ConstructorValueHelperStep>;
   }
+  interface CanonicalInterfaceMethod {
+    name: string;
+    signature: string;
+    declaringPackageIdentity: string;
+  }
   interface InterfaceDescriptor {
     file: GoHttpSourceFile;
     directory: string;
@@ -2176,7 +2183,16 @@ function objectWrapperSummaries(
     name: string;
     methods: ReadonlySet<string>;
     packageIdentity: string;
-    canonicalMethodSignatures?: ReadonlyMap<string, string>;
+    canonicalMethods?: ReadonlyMap<string, CanonicalInterfaceMethod>;
+  }
+  interface EmbeddedInterfaceReference {
+    qualifier?: string;
+    name: string;
+  }
+  interface InterfaceCandidate {
+    descriptor: InterfaceDescriptor;
+    directCanonicalMethods?: ReadonlyMap<string, CanonicalInterfaceMethod>;
+    embeddings: ReadonlyArray<EmbeddedInterfaceReference>;
   }
   interface ReceiverBinding {
     concrete: TypeReference;
@@ -2636,6 +2652,42 @@ function objectWrapperSummaries(
       ? undefined
       : `(${parameters.join(",")})->(${results.join(",")})`;
   };
+  const canonicalFunctionMethodSignatures = new Map<
+    GoFunction,
+    string | undefined
+  >();
+  const canonicalFunctionMethodSignature = (
+    function_: GoFunction,
+  ): string | undefined => {
+    if (canonicalFunctionMethodSignatures.has(function_))
+      return canonicalFunctionMethodSignatures.get(function_);
+    const directory = posix.dirname(function_.file.path);
+    const imports = importAliases.get(function_.file) ?? {
+      aliases: new Map<string, string>(),
+      complete: false,
+    };
+    const signature = canonicalMethodSignature(
+      `(${function_.parameters.map(({ type }) => type).join(",")})${function_.returnSignature}`,
+      {
+        directory,
+        packageName: function_.packageName,
+        packageIdentity: packageIdentity(directory, function_.packageName),
+        importAliases: imports.aliases,
+        importAliasesComplete: imports.complete,
+      },
+    );
+    canonicalFunctionMethodSignatures.set(function_, signature);
+    return signature;
+  };
+
+  const canonicalInterfaceMethodKey = (
+    name: string,
+    declaringPackageIdentity: string,
+  ): string =>
+    /^[A-Z]/u.test(name)
+      ? `exported:${name}`
+      : `unexported:${declaringPackageIdentity}:${name}`;
+  const interfaceCandidates: InterfaceCandidate[] = [];
 
   for (const file of files) {
     if (file.extension !== ".go") continue;
@@ -2653,23 +2705,31 @@ function objectWrapperSummaries(
       /\btype\s+([A-Za-z_]\w*)\s+interface\s*\{([\s\S]*?)\}/gu,
     )) {
       const body = declaration[2]!;
-      if (
-        /[~|]/u.test(body) ||
-        /^\s*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?\s*;?\s*$/mu.test(body)
-      )
-        continue;
-      const methodNames = [...body.matchAll(/^\s*([A-Za-z_]\w*)\s*\(/gmu)].map(
-        (method) => method[1]!,
-      );
-      const methods = new Set(methodNames);
+      if (/[~|]/u.test(body)) continue;
+      const methods = new Set<string>();
       const methodSignatures = new Map<string, string>();
-      const canonicalMethodSignatures = new Map<string, string>();
+      const canonicalMethods = new Map<string, CanonicalInterfaceMethod>();
+      const embeddings: EmbeddedInterfaceReference[] = [];
       let signaturesComplete = true;
       for (const fragment of body.split(/[;\r\n]+/u)) {
-        const declaration = fragment.trim();
-        if (declaration === "") continue;
-        const method = /^([A-Za-z_]\w*)\s*(\([\s\S]+)$/u.exec(declaration);
-        if (method === null || methodSignatures.has(method[1]!)) {
+        const element = fragment.trim();
+        if (element === "") continue;
+        const method = /^([A-Za-z_]\w*)\s*(\([\s\S]+)$/u.exec(element);
+        if (method === null) {
+          const embedded = /^(?:([A-Za-z_]\w*)\s*\.\s*)?([A-Za-z_]\w*)$/u.exec(
+            element,
+          );
+          if (embedded === null) {
+            signaturesComplete = false;
+            break;
+          }
+          embeddings.push({
+            ...(embedded[1] === undefined ? {} : { qualifier: embedded[1] }),
+            name: embedded[2]!,
+          });
+          continue;
+        }
+        if (methodSignatures.has(method[1]!)) {
           signaturesComplete = false;
           break;
         }
@@ -2690,6 +2750,7 @@ function objectWrapperSummaries(
           signaturesComplete = false;
           break;
         }
+        methods.add(method[1]!);
         methodSignatures.set(method[1]!, method[2]!.replace(/\s+/gu, ""));
         const canonical = canonicalMethodSignature(method[2]!, {
           directory,
@@ -2699,17 +2760,21 @@ function objectWrapperSummaries(
           importAliasesComplete: imports.complete,
         });
         if (canonical === undefined) signaturesComplete = false;
-        else canonicalMethodSignatures.set(method[1]!, canonical);
+        else {
+          const key = canonicalInterfaceMethodKey(method[1]!, identity);
+          canonicalMethods.set(key, {
+            name: method[1]!,
+            signature: canonical,
+            declaringPackageIdentity: identity,
+          });
+        }
       }
-      const empty = body.trim() === "";
-      if ((!empty && methods.size === 0) || methods.size !== methodNames.length)
-        continue;
       if (
         methodSignatures.size !== methods.size ||
         [...methodSignatures].some(([method]) => !methods.has(method))
       )
         signaturesComplete = false;
-      interfaces.push({
+      const descriptor: InterfaceDescriptor = {
         file,
         directory,
         packageName: packageMatch[1]!,
@@ -2717,9 +2782,111 @@ function objectWrapperSummaries(
         name: declaration[1]!,
         methods,
         packageIdentity: identity,
-        ...(signaturesComplete ? { canonicalMethodSignatures } : {}),
+      };
+      interfaceCandidates.push({
+        descriptor,
+        ...(signaturesComplete
+          ? { directCanonicalMethods: canonicalMethods }
+          : {}),
+        embeddings,
       });
     }
+  }
+
+  const interfaceCandidateForEmbedding = (
+    source: InterfaceCandidate,
+    reference: EmbeddedInterfaceReference,
+  ): InterfaceCandidate | undefined => {
+    let candidates: InterfaceCandidate[];
+    if (reference.qualifier === undefined) {
+      candidates = interfaceCandidates.filter(
+        ({ descriptor }) =>
+          descriptor.directory === source.descriptor.directory &&
+          descriptor.packageName === source.descriptor.packageName &&
+          descriptor.name === reference.name,
+      );
+    } else {
+      const imports = importAliases.get(source.descriptor.file);
+      if (imports === undefined || !imports.complete) return undefined;
+      const importPath = imports.aliases.get(reference.qualifier);
+      if (importPath === undefined) return undefined;
+      candidates = interfaceCandidates.filter(
+        ({ descriptor }) =>
+          descriptor.importPath === importPath &&
+          descriptor.name === reference.name &&
+          /^[A-Z]/u.test(reference.name),
+      );
+    }
+    return candidates.length === 1 ? candidates[0] : undefined;
+  };
+  interface ResolvedInterfaceMethods {
+    methods: ReadonlyMap<string, CanonicalInterfaceMethod>;
+    embeddingDepth: number;
+  }
+  const resolvedInterfaceMethods = new Map<
+    InterfaceCandidate,
+    ResolvedInterfaceMethods
+  >();
+  const resolvingInterfaces = new Set<InterfaceCandidate>();
+  const resolveInterfaceMethods = (
+    candidate: InterfaceCandidate,
+  ): ResolvedInterfaceMethods | undefined => {
+    const cached = resolvedInterfaceMethods.get(candidate);
+    if (cached !== undefined) return cached;
+    if (
+      resolvingInterfaces.has(candidate) ||
+      candidate.directCanonicalMethods === undefined ||
+      candidate.directCanonicalMethods.size > MAX_INTERFACE_METHODS ||
+      candidate.embeddings.length > MAX_INTERFACE_METHODS
+    )
+      return undefined;
+    resolvingInterfaces.add(candidate);
+    const methods = new Map(candidate.directCanonicalMethods);
+    let embeddingDepth = 0;
+    let complete = true;
+    for (const reference of candidate.embeddings) {
+      const embedded = interfaceCandidateForEmbedding(candidate, reference);
+      const embeddedMethods =
+        embedded === undefined ? undefined : resolveInterfaceMethods(embedded);
+      if (
+        embeddedMethods === undefined ||
+        embeddedMethods.embeddingDepth + 1 > MAX_INTERFACE_EMBEDDING_DEPTH
+      ) {
+        complete = false;
+        break;
+      }
+      embeddingDepth = Math.max(
+        embeddingDepth,
+        embeddedMethods.embeddingDepth + 1,
+      );
+      for (const [key, method] of embeddedMethods.methods) {
+        const existing = methods.get(key);
+        if (existing !== undefined && existing.signature !== method.signature) {
+          complete = false;
+          break;
+        }
+        methods.set(key, method);
+        if (methods.size > MAX_INTERFACE_METHODS) {
+          complete = false;
+          break;
+        }
+      }
+      if (!complete) break;
+    }
+    resolvingInterfaces.delete(candidate);
+    const result = complete ? { methods, embeddingDepth } : undefined;
+    if (result !== undefined) resolvedInterfaceMethods.set(candidate, result);
+    return result;
+  };
+  for (const candidate of interfaceCandidates) {
+    const resolved = resolveInterfaceMethods(candidate);
+    if (resolved !== undefined) {
+      candidate.descriptor.canonicalMethods = resolved.methods;
+      candidate.descriptor.methods = new Set(
+        [...resolved.methods.values()].map(({ name }) => name),
+      );
+    }
+    interfaces.push(candidate.descriptor);
   }
 
   const typeReference = (value: string): TypeReference | undefined => {
@@ -3611,22 +3778,18 @@ function objectWrapperSummaries(
       source: InterfaceValueAlias,
       target: InterfaceDescriptor,
     ): boolean => {
-      if (source.interface_ === target || target.methods.size === 0)
-        return true;
+      if (source.interface_ === target) return true;
       const sourceInterface = source.interface_;
       if (
         sourceInterface === undefined ||
-        sourceInterface.canonicalMethodSignatures === undefined ||
-        target.canonicalMethodSignatures === undefined
+        sourceInterface.canonicalMethods === undefined ||
+        target.canonicalMethods === undefined
       )
         return false;
-      return [...target.methods].every(
-        (method) =>
-          sourceInterface.methods.has(method) &&
-          (/^[A-Z]/u.test(method) ||
-            sourceInterface.packageIdentity === target.packageIdentity) &&
-          sourceInterface.canonicalMethodSignatures?.get(method) ===
-            target.canonicalMethodSignatures?.get(method),
+      return [...target.canonicalMethods].every(
+        ([key, method]) =>
+          sourceInterface.canonicalMethods?.get(key)?.signature ===
+          method.signature,
       );
     };
     const convertedInterfaceAlias = (
@@ -5627,20 +5790,38 @@ function objectWrapperSummaries(
   const concreteSatisfiesInterface = (
     concrete: TypeReference,
     interface_: InterfaceDescriptor,
-  ): boolean =>
-    [...interface_.methods].every((method) => {
+  ): boolean => {
+    if (
+      interface_.canonicalMethods === undefined ||
+      concrete.resolvedDirectory === undefined ||
+      concrete.resolvedPackageName === undefined
+    )
+      return false;
+    const concretePackageIdentity = packageIdentity(
+      concrete.resolvedDirectory,
+      concrete.resolvedPackageName,
+    );
+    return [...interface_.canonicalMethods.values()].every((method) => {
+      if (
+        !/^[A-Z]/u.test(method.name) &&
+        method.declaringPackageIdentity !== concretePackageIdentity
+      )
+        return false;
       const matches = [...descriptors.values()].filter(
         (descriptor) =>
           descriptor.receiver !== undefined &&
-          descriptor.function_.name === method &&
+          descriptor.function_.name === method.name &&
           descriptor.receiver.typeName === concrete.typeName &&
           posix.dirname(descriptor.function_.file.path) ===
             concrete.resolvedDirectory &&
           descriptor.function_.packageName === concrete.resolvedPackageName &&
-          (!descriptor.receiver.pointer || concrete.pointer),
+          (!descriptor.receiver.pointer || concrete.pointer) &&
+          canonicalFunctionMethodSignature(descriptor.function_) ===
+            method.signature,
       );
       return matches.length === 1;
     });
+  };
 
   const concreteExpression = (
     caller: GoFunction,

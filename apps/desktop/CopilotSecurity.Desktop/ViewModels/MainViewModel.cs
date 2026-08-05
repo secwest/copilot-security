@@ -451,7 +451,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     private IReadOnlyList<string> ParsePaths(string value, string repository) =>
-        value.Split([';', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        value.Split(new[] { ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(path => Path.IsPathRooted(path) ? path : Path.Combine(repository, path))
             .Distinct(platform.PathComparer)
             .ToArray();

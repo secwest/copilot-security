@@ -242,7 +242,7 @@ public sealed class ScanArtifactReader
         }
         var relative = Path.GetRelativePath(directory, path);
         var components = relative.Split(
-            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
             StringSplitOptions.RemoveEmptyEntries);
         var parent = directory;
         foreach (var component in components.Take(Math.Max(0, components.Length - 1)))

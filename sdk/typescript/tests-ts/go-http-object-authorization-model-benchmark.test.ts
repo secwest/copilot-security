@@ -182,6 +182,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-imported-helper-named-interface-type-switch-write-authorization",
       "go-cross-package-imported-helper-cross-package-interface-type-switch-write-delete-idor",
       "go-cross-package-safe-imported-helper-cross-package-interface-type-switch-write-authorization",
+      "go-cross-package-embedded-interface-type-switch-delete-idor",
+      "go-cross-package-safe-embedded-interface-type-switch-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -247,6 +249,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[61]?.expected).toEqual([]);
     expect(manifest.cases[62]?.expected).toHaveLength(1);
     expect(manifest.cases[63]?.expected).toEqual([]);
+    expect(manifest.cases[64]?.expected).toHaveLength(1);
+    expect(manifest.cases[65]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -2470,6 +2474,58 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(safe).toHaveLength(1);
     expect(safe[0]).toMatchObject({
       path: "internal/primary/store.go",
+      frameworkModel: {
+        candidateControls: [
+          expect.objectContaining({ kind: "principal-bound-object-query" }),
+        ],
+      },
+    });
+  });
+
+  test("preserves embedded interface type switch writes and their control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-embedded-interface-type-switch-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-embedded-interface-type-switch-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 11 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "internal/primary/store.go",
+          line: 11,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    const propagators = vulnerable[0]?.frameworkModel?.propagators ?? [];
+    expect(propagators).toEqual(
+      expect.arrayContaining(
+        [36, 38, 40].map((line) =>
+          expect.objectContaining({
+            kind: "go-method-receiver-constructor-field-write",
+            path: "internal/parent/layer.go",
+            line,
+          }),
+        ),
+      ),
+    );
+    expect(
+      propagators.filter(
+        ({ kind }) => kind === "go-method-receiver-constructor-field-write",
+      ),
+    ).toHaveLength(3);
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
       frameworkModel: {
         candidateControls: [
           expect.objectContaining({ kind: "principal-bound-object-query" }),
@@ -6549,6 +6605,188 @@ type SelectedRepository interface {
 }`,
         targetExpression: "contracts.SelectedRepository",
       }),
+    ).toEqual([]);
+  });
+
+  test("expands bounded embedded basic interfaces exactly", async () => {
+    const scan = async (
+      contractFiles: Record<string, string>,
+      sourcePrivateMethod = "",
+      storePrivateMethod = "",
+      storeIdentifierType = "string",
+    ): Promise<ModelRecord[]> =>
+      repositoryInventory({
+        "go.mod": "module example.com/embedded-interfaces\n\ngo 1.26\n",
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+  contracts "example.com/embedded-interfaces/contracts"
+)
+type DeleteRepository interface {
+  DeleteInvoice(context.Context, *sql.DB, string) error
+  ${sourcePrivateMethod}
+}
+type InvoiceRepository interface { DeleteRepository }
+type Store struct{}
+func (*Store) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID ${storeIdentifierType}) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+${storePrivateMethod}
+type Service struct { repository InvoiceRepository }
+func NewService(repository InvoiceRepository) *Service {
+  service := &Service{}
+  switch contracts.SelectedRepository(repository).(type) {
+  case *Store:
+    service.repository = repository
+  default:
+    service.repository = repository
+  }
+  return service
+}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.repository.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Store{})
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+        ...contractFiles,
+      });
+
+    expect(
+      await scan({
+        "capabilities/repository.go": `package capabilities
+import (
+  "context"
+  "database/sql"
+)
+type DeleteRepository interface {
+  DeleteInvoice(context.Context, *sql.DB, string) error
+}`,
+        "contracts/repository.go": `package contracts
+import capability "example.com/embedded-interfaces/capabilities"
+type SelectedRepository interface { capability.DeleteRepository }`,
+      }),
+    ).toHaveLength(1);
+
+    expect(
+      await scan(
+        {
+          "contracts/repository.go": `package contracts
+import (
+  "context"
+  "database/sql"
+)
+type DeleteRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type SelectedRepository interface { DeleteRepository }`,
+        },
+        "",
+        "",
+        "int",
+      ),
+    ).toEqual([]);
+
+    expect(
+      await scan({
+        "contracts/repository.go": `package contracts
+import (
+  "context"
+  "database/sql"
+)
+type DeleteRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type LeftRepository interface { DeleteRepository }
+type RightRepository interface { DeleteRepository }
+type SelectedRepository interface { LeftRepository; RightRepository }`,
+      }),
+    ).toHaveLength(1);
+
+    const nested = (depth: number): Record<string, string> => ({
+      "contracts/repository.go": `package contracts
+import (
+  "context"
+  "database/sql"
+)
+type DeleteRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+${Array.from({ length: depth }, (_, index) => {
+  const name = index === 0 ? "SelectedRepository" : `Repository${index}`;
+  const embedded =
+    index === depth - 1 ? "DeleteRepository" : `Repository${index + 1}`;
+  return `type ${name} interface { ${embedded} }`;
+}).join("\n")}`,
+    });
+    expect(await scan(nested(8))).toHaveLength(1);
+    expect(await scan(nested(9))).toEqual([]);
+
+    expect(
+      await scan({
+        "contracts/repository.go": `package contracts
+import (
+  "context"
+  "database/sql"
+)
+type StringDelete interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type NumericDelete interface { DeleteInvoice(context.Context, *sql.DB, int) error }
+type SelectedRepository interface { StringDelete; NumericDelete }`,
+      }),
+    ).toEqual([]);
+
+    expect(
+      await scan({
+        "contracts/repository.go": `package contracts
+type SelectedRepository interface { OtherRepository }
+type OtherRepository interface { SelectedRepository }`,
+      }),
+    ).toEqual([]);
+
+    expect(
+      await scan({
+        "contracts/first.go": `package contracts
+type SelectedRepository interface { MissingRepository }`,
+        "contracts/second.go": `package contracts
+type MissingRepository interface { UnknownRepository }`,
+        "contracts/duplicate.go": `package contracts
+type MissingRepository interface { AnotherUnknownRepository }`,
+      }),
+    ).toEqual([]);
+
+    expect(
+      await scan({
+        "contracts/repository.go": `package contracts
+import (
+  "context"
+  "database/sql"
+  "io"
+)
+type SelectedRepository interface {
+  io.Reader
+  DeleteInvoice(context.Context, *sql.DB, string) error
+}`,
+      }),
+    ).toEqual([]);
+
+    expect(
+      await scan(
+        {
+          "capabilities/repository.go": `package capabilities
+import (
+  "context"
+  "database/sql"
+)
+type DeleteRepository interface {
+  DeleteInvoice(context.Context, *sql.DB, string) error
+  authorize(string) error
+}`,
+          "contracts/repository.go": `package contracts
+import capability "example.com/embedded-interfaces/capabilities"
+type SelectedRepository interface { capability.DeleteRepository }`,
+        },
+        "authorize(string) error",
+        "func (*Store) authorize(string) error { return nil }",
+      ),
     ).toEqual([]);
   });
 

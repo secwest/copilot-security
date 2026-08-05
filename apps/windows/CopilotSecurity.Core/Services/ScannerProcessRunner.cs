@@ -200,7 +200,7 @@ public sealed partial class ScannerProcessRunner
     private static string SafeFailureSummary(string standardError)
     {
         var lines = standardError
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .TakeLast(8)
             .ToArray();
         return lines.Length == 0

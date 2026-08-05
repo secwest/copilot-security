@@ -999,6 +999,18 @@ result types, cross-package unexported methods, malformed or unsupported types,
 and every existing ambiguity and depth failure. The executable pair places the
 target interface in a separate `contracts` package and proves both the unscoped
 deletion and its principal-bound control.
+A thirty-third pair expands named embedded basic interfaces before comparing
+method sets. Same-package and qualified local-module embeddings resolve through
+unique interface declarations, may nest through eight edges, and merge at most
+64 canonical methods. Exported method identity follows its name; unexported
+method identity also retains the package which declared it. Repeated diamond
+methods are accepted only with identical signatures. Cycles, a ninth edge,
+conflicting signatures, duplicate declarations, unresolved or external
+embeddings, non-interface type terms, constraints, incomplete imports, and
+oversized method sets fail closed. The executable pair composes the source
+within `parent`, composes the target through an aliased `capabilities` import,
+and proves the unscoped deletion and account-bound control through the same
+type-switch join.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1197,6 +1209,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-helper-cross-package
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-cross-package-interface-type-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-embedded-interface-type-switch-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-embedded-interface-type-switch-authorization
 go test ./...
 Pop-Location
 ```

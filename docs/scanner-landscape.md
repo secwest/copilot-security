@@ -618,8 +618,8 @@ admitted; a distinct nonempty target requires a same-package basic interface
 whose every method and canonical signature is present in the source method
 set. The tracked alias changes static interface identity while preserving the
 original parameter and dynamic value. Nested calls or conversions, selectors,
-composite arguments, broader or signature-mismatched targets, embedded or
-constraint interfaces, unresolved or cross-package nonempty signatures,
+composite arguments, broader or signature-mismatched targets, constraint
+interfaces, unresolved or cross-package nonempty signatures,
 shadowed targets, shadowed `any`, pre-1.18 modules, and a ninth assignment edge
 remain rejected. A thirty-second pair closes that cross-package boundary with
 bounded canonical Go identities. Parameter and result names are discarded,
@@ -630,7 +630,13 @@ method sets can therefore match across files and local-module packages while
 different aliases, result types, package types, cross-package unexported
 methods, duplicate or unresolved imports, dot/blank imports, and unsupported
 type grammar fail closed. The same complete-world and topology proof is
-retained. This
+retained. A thirty-third pair expands named embedded basic interfaces before
+that comparison. One unqualified same-package declaration or one qualified
+local-module declaration is resolved per edge, with eight edges and 64 merged
+canonical methods as hard limits. Diamond duplicates require identical
+signatures, and lower-case method identity retains its declaring package.
+Cycles, conflicts, ambiguity, a ninth edge, external or non-interface terms,
+and incomplete imports fail closed. This
 follows the [Go conversion and assignability rules](https://go.dev/ref/spec#Conversions),
 which preserve representation for this conversion family. It directly
 implements OWASP API1:2023's
