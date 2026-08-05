@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "aspnet-razor-page-sql-injection",
+      "description": "An unannotated named Razor Page handler parameter crosses a typed service boundary into concatenated SqlCommand text.",
+      "fixture": "fixtures/aspnet-razor-page-sql-injection",
+      "findingsPaths": ["aspnet-razor-page-sql-injection/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "aspnet-razor-page-handler-sql-injection",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "Services/UserQueries.cs",
+              "startLine": 19,
+              "endLine": 22,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "aspnet-razor-page-safe-sql",
+      "description": "The same Razor Page handler and typed service topology keeps SQL text fixed and binds the handler value with a typed SqlParameter.",
+      "fixture": "fixtures/aspnet-razor-page-safe-sql",
+      "findingsPaths": ["aspnet-razor-page-safe-sql/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

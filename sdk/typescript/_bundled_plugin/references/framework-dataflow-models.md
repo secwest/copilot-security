@@ -45,7 +45,9 @@ parameter in the modeled sink expression. The ordered propagators preserve the
 declared receiver type, call argument, and wrapper parameter. ASP.NET bound
 parameter attributes and local assignments from `HttpRequest` fields are
 supported, including bounded multiline calls and zero-parameter controller
-methods. Reject duplicate simple type names, unresolved receivers, fixed or
+methods. Razor Pages additionally treats remotely bound handler parameters and
+explicitly bound `PageModel` properties as sources under the exact boundary
+below. Reject duplicate simple type names, unresolved receivers, fixed or
 reassigned arguments, parameters unused by the sink, and C# comments or string
 examples that merely name an API.
 
@@ -311,10 +313,34 @@ interpreter that consumes the value.
   attacker-writable directories, `SecureDirectoryStream` availability, and
   rename races separately.
 
+### ASP.NET Razor Pages remote-source boundary
+
+- A public, non-static `OnGet`/`OnPost`/HTTP-verb handler parameter on an exact
+  `Microsoft.AspNetCore.Mvc.RazorPages.PageModel` subclass is remotely model
+  bound even without `[FromQuery]` or another controller annotation. Named and
+  `Async` handlers retain the same boundary.
+- The host follows at most eight unique local base-class edges to the official
+  `PageModel`. A local `PageModel`, duplicate or unresolved base, external
+  intermediate base, cycle, ninth edge, protected/internal/static method,
+  official `[NonHandler]`, comment, string, or lookalike attribute fails closed.
+- `[FromServices]`, `[FromKeyedServices]`, `[BindNever]`, cancellation tokens,
+  loggers, request/response contexts, principals, and other framework service
+  parameters are not remote handler values.
+- Public writable properties require official `[BindProperty]` or class-level
+  `[BindProperties]`. GET/HEAD handlers additionally require
+  `SupportsGet = true`. A private setter, static property, `[BindNever]`, local
+  attribute shadow, local/parameter shadow, or reassignment before the sink
+  rejects the property path.
+- Preserve the exact handler parameter or bound-property declaration through
+  local aliases and uniquely typed service wrappers into the modeled sink.
+  Reopen custom binders and route conventions during validation; the host model
+  is intentionally bounded syntax rather than a substitute for runtime routing
+  proof.
+
 ### ASP.NET process execution — CWE-78
 
 - Sources: `[FromBody]`, `[FromForm]`, `[FromHeader]`, `[FromQuery]`,
-  `[FromRoute]`, and `HttpRequest` fields.
+  `[FromRoute]`, `HttpRequest` fields, and the exact Razor Pages boundary above.
 - Sinks: `Process.Start` and `ProcessStartInfo`.
 - Strong counterevidence: a fixed executable, `ArgumentList`,
   `UseShellExecute = false`, and operation-specific validation.
@@ -325,7 +351,8 @@ interpreter that consumes the value.
 
 ### ASP.NET raw SQL — CWE-89
 
-- Sources: ASP.NET-bound parameters and request fields.
+- Sources: ASP.NET-bound parameters, request fields, and the exact Razor Pages
+  boundary above.
 - Sinks: `FromSqlRaw`, `ExecuteSqlRaw`, and `SqlCommand` construction.
 - Strong counterevidence: interpolated APIs that bind values correctly,
   `DbParameter`/`SqlParameter`, or an exact server-owned mapping for dynamic
@@ -335,9 +362,25 @@ interpreter that consumes the value.
   counterevidence, not raw SQL flow; values still cannot parameterize
   identifiers or clauses.
 
+### ASP.NET object-level authorization — CWE-639 and CWE-862
+
+- Sources: ASP.NET-bound object references, request fields, and the exact Razor
+  Pages boundary above.
+- Sinks: typed EF Core primary-key and predicate lookups such as `FindAsync`,
+  `FirstOrDefaultAsync`, and `SingleOrDefaultAsync`.
+- Endpoint authorization is not object authorization. Preserve the exact
+  request-selected identifier and returned entity. Strong counterevidence is
+  either a principal-derived owner/tenant predicate inside the same query or a
+  checked, fail-closed `IAuthorizationService.AuthorizeAsync(User, exactEntity,
+  policy)` result before the entity is used or returned.
+- Reject a fixed or reassigned identifier, untyped/lookalike receiver, another
+  entity's authorization result, an ignored authorization result, or a generic
+  `[Authorize]` attribute as proof of resource ownership.
+
 ### ASP.NET server-side template injection — CWE-1336
 
-- Sources: ASP.NET-bound parameters and request fields.
+- Sources: ASP.NET-bound parameters, request fields, and the exact Razor Pages
+  boundary above.
 - Sinks: the first template-source argument to the real Scriban
   `Template.Parse` API when that parsed template reaches `Render` or
   `RenderAsync`, and the second `content` argument of a typed RazorLight
@@ -372,7 +415,8 @@ interpreter that consumes the value.
 
 ### ASP.NET server-side request forgery — CWE-918
 
-- Sources: ASP.NET-bound parameters and request fields.
+- Sources: ASP.NET-bound parameters, request fields, and the exact Razor Pages
+  boundary above.
 - Sinks: complete request-URI arguments to `HttpClient` convenience methods,
   including `GetAsync`, `GetStringAsync`, and the corresponding verb helpers.
 - Strong counterevidence: an exact request value used only as a key into a
@@ -389,7 +433,8 @@ interpreter that consumes the value.
 
 ### ASP.NET filesystem path injection — CWE-22
 
-- Sources: ASP.NET-bound parameters and request fields.
+- Sources: ASP.NET-bound parameters, request fields, and the exact Razor Pages
+  boundary above.
 - Sinks: path arguments to typed `System.IO.File` operations and `FileStream`
   construction, including reads, writes, creates, moves, copies, and deletes.
 - Unqualified `File` and `FileStream` calls may be typed by a file-local using,

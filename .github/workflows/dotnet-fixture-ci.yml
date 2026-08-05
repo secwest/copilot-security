@@ -45,6 +45,8 @@ jobs:
           dotnet build benchmarks/fixtures/aspnet-multi-hop-safe-path/AspnetMultiHopSafePath.csproj --configuration Release --nologo
           dotnet build benchmarks/fixtures/aspnet-cross-file-idor/AspnetCrossFileIdor.csproj --configuration Release --nologo
           dotnet build benchmarks/fixtures/aspnet-cross-file-safe-authorization/AspnetCrossFileSafeAuthorization.csproj --configuration Release --nologo
+          dotnet build benchmarks/fixtures/aspnet-razor-page-sql-injection/AspnetRazorPageSqlInjection.csproj --configuration Release --nologo
+          dotnet build benchmarks/fixtures/aspnet-razor-page-safe-sql/AspnetRazorPageSafeSql.csproj --configuration Release --nologo
 
       - name: Audit RazorLight fixture dependencies
         run: |
@@ -77,3 +79,5 @@ jobs:
           dotnet run --project benchmarks/witnesses/aspnet-multi-hop-safe-path/AspNetMultiHopSafePathWitness.csproj --configuration Release
           dotnet run --project benchmarks/witnesses/aspnet-cross-file-idor/AspnetCrossFileIdorWitness.csproj --configuration Release
           dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-authorization/AspnetCrossFileSafeAuthorizationWitness.csproj --configuration Release
+          dotnet run --project benchmarks/witnesses/aspnet-razor-page-sql-injection/AspnetRazorPageSqlInjectionWitness.csproj --configuration Release
+          dotnet run --project benchmarks/witnesses/aspnet-razor-page-safe-sql/AspnetRazorPageSafeSqlWitness.csproj --configuration Release

@@ -1593,6 +1593,8 @@ interface ExportedJavaMethod {
 interface ExportedDotnetMethod {
   ownerType: string;
   symbol: string;
+  access: "public" | "protected" | "internal";
+  isStatic: boolean;
   parameters: Array<{ name: string; declaration: string }>;
   startLine: number;
   endLine: number;
@@ -1871,13 +1873,26 @@ function frameworkDataflowRecords(
     ) {
       continue;
     }
-    const sources = JAVASCRIPT_EXTENSIONS.has(extension)
+    const matchedSources = JAVASCRIPT_EXTENSIONS.has(extension)
       ? matchingJavascriptModelLines(lines, model.sources, 16)
       : PYTHON_EXTENSIONS.has(extension)
         ? matchingPythonModelLines(lines, model.sources, 16)
         : extension === ".java" || extension === ".cs"
           ? matchingJavaModelLines(lines, model.sources, 16)
           : matchingModelLines(lines, model.sources, 16);
+    const sources =
+      extension === ".cs" && model.id.startsWith("aspnet-http-")
+        ? [...matchedSources, ...dotnetRazorPageSources(files, path, lines)]
+            .filter(
+              (source, index, all) =>
+                all.findIndex(
+                  (candidate) =>
+                    candidate.kind === source.kind &&
+                    candidate.line === source.line,
+                ) === index,
+            )
+            .slice(0, 16)
+        : matchedSources;
     const sinks = JAVASCRIPT_EXTENSIONS.has(extension)
       ? matchingJavascriptModelLines(
           lines,
@@ -2099,6 +2114,8 @@ function frameworkDataflowRecords(
                           lines,
                           sink.line,
                           model.sources,
+                          files,
+                          path,
                         )
                       : extension === ".cs" &&
                           model.id === "aspnet-http-object-authorization" &&
@@ -2108,8 +2125,19 @@ function frameworkDataflowRecords(
                             sink.line,
                             dotnetObjectSink.argument,
                             model.sources,
+                            files,
+                            path,
                           )
-                        : nearestModeledSource(sources, sink.line);
+                        : extension === ".cs" &&
+                            model.id.startsWith("aspnet-http-")
+                          ? modeledSameFileDotnetSource(
+                              lines,
+                              sink.line,
+                              model.sources,
+                              files,
+                              path,
+                            ) ?? nearestModeledSource(matchedSources, sink.line)
+                          : nearestModeledSource(sources, sink.line);
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -3020,6 +3048,8 @@ function frameworkDirectDotnetDataflowRecords(
               argument,
               summary.model.sources,
               summary.model.id === "aspnet-http-object-authorization",
+              files,
+              caller.path,
             );
             if (source === undefined) continue;
             const recordKey = [
@@ -3763,6 +3793,8 @@ function frameworkDotnetMultiHopDataflowRecords(
               argument,
               summary.model.sources,
               summary.model.id === "aspnet-http-object-authorization",
+              files,
+              caller.path,
             );
             if (source === undefined) continue;
             const sinkSummary = summary.downstream;
@@ -4942,7 +4974,21 @@ function javaCallExpression(
   const callLines = lines.slice(startLine - 1, endLine);
   const original = callLines.join("\n");
   const structural = cFamilyStructuralLines(callLines).join("\n");
-  const open = structural.indexOf("(");
+  let open = structural.indexOf("(");
+  const bodyStart = structural.indexOf("{");
+  const startsWithMethodDeclaration =
+    /^\s*(?:(?:\[[^\]]+\]|@[A-Za-z_$][\w$.]*(?:\([^)]*\))?)\s*)*(?:public|protected|private|internal)\b/u.test(
+      structural,
+    );
+  if (
+    startsWithMethodDeclaration &&
+    bodyStart >= 0 &&
+    open >= 0 &&
+    open < bodyStart
+  ) {
+    const bodyCall = structural.indexOf("(", bodyStart + 1);
+    if (bodyCall >= 0) open = bodyCall;
+  }
   if (open < 0) return original;
   const close = matchingCallParenthesis(structural, open);
   return (close < 0 ? original : original.slice(0, close + 1)).replace(
@@ -5080,6 +5126,10 @@ function exportedDotnetMethods(
       cFamilyStructuralLines(declarationLines).join(" ");
     const match = expression.exec(structuralDeclaration);
     if (match === null || match[1] === ownerType) continue;
+    const access = /\b(public|protected|internal)\b/u.exec(
+      structuralDeclaration,
+    )?.[1] as ExportedDotnetMethod["access"] | undefined;
+    if (access === undefined) continue;
     const originalDeclaration = declarationLines.join(" ");
     const methodCall = new RegExp(
       `\\b${escapeRegularExpression(match[1]!)}\\s*\\(`,
@@ -5105,6 +5155,8 @@ function exportedDotnetMethods(
     methods.push({
       ownerType,
       symbol: match[1]!,
+      access,
+      isStatic: /\bstatic\b/u.test(structuralDeclaration),
       parameters,
       startLine: index + 1,
       endLine: cFamilyFunctionEndLine(structuralLines, index),
@@ -6835,6 +6887,426 @@ function javaProjectRootForPath(
   );
 }
 
+interface DotnetRazorBoundProperty {
+  name: string;
+  line: number;
+  supportsGet: boolean;
+}
+
+function dotnetProjectDeclaresType(
+  files: readonly SourceFileSnapshot[],
+  names: readonly string[],
+  namespace?: string,
+): boolean {
+  const alternatives = names.map(escapeRegularExpression).join("|");
+  const type = new RegExp(
+    `\\b(?:class|interface|record|struct)\\s+(?:${alternatives})\\b`,
+    "u",
+  );
+  return files.some((file) => {
+    if (file.extension !== ".cs") return false;
+    const structural = cFamilyStructuralLines(file.lines).join("\n");
+    if (!type.test(structural)) return false;
+    return (
+      namespace === undefined ||
+      new RegExp(
+        `\\bnamespace\\s+${escapeRegularExpression(namespace).replaceAll("\\\\.", "\\\\s*\\\\.\\\\s*")}\\b`,
+        "u",
+      ).test(structural)
+    );
+  });
+}
+
+function dotnetUsesNamespace(
+  lines: readonly string[],
+  namespace: string,
+): boolean {
+  const dotted = escapeRegularExpression(namespace).replaceAll(
+    "\\\\.",
+    "\\\\s*\\\\.\\\\s*",
+  );
+  return new RegExp(`^\\s*(?:global\\s+)?using\\s+${dotted}\\s*;`, "mu").test(
+    cFamilyStructuralLines(lines).join("\n"),
+  );
+}
+
+function dotnetHasOfficialAttribute(
+  fragment: string,
+  shortName: string,
+  namespace: string,
+  files: readonly SourceFileSnapshot[],
+  declaringLines: readonly string[],
+): boolean {
+  const normalized = fragment.replace(/\s+/gu, "");
+  const qualified = `${namespace}.${shortName}`;
+  const fullyQualified =
+    normalized.includes(`[${qualified}`) ||
+    normalized.includes(`[${qualified}Attribute`) ||
+    normalized.includes(`[global::${qualified}`) ||
+    normalized.includes(`[global::${qualified}Attribute`);
+  if (fullyQualified) {
+    return !dotnetProjectDeclaresType(
+      files,
+      [shortName, `${shortName}Attribute`],
+      namespace,
+    );
+  }
+  const unqualified = new RegExp(
+    `\\[\\s*${escapeRegularExpression(shortName)}(?:Attribute)?\\b`,
+    "u",
+  ).test(fragment);
+  return (
+    unqualified &&
+    dotnetUsesNamespace(declaringLines, namespace) &&
+    !dotnetProjectDeclaresType(files, [shortName, `${shortName}Attribute`])
+  );
+}
+
+function dotnetDeclaredBaseType(
+  lines: readonly string[],
+  ownerType: string,
+): string | undefined {
+  const structural = cFamilyStructuralLines(lines).join("\n");
+  const declaration = new RegExp(
+    `\\b(?:class|record)\\s+${escapeRegularExpression(ownerType)}(?:\\s*<[^;{}]+>)?\\s*:\\s*([^{}]+)\\{`,
+    "u",
+  ).exec(structural)?.[1];
+  const base =
+    declaration === undefined
+      ? undefined
+      : splitJavascriptArguments(declaration)[0]?.trim();
+  if (base === undefined || base === "") return undefined;
+  return base.replace(/\s+/gu, "");
+}
+
+function dotnetIsRazorPageModel(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  ownerType: string,
+  depth = 0,
+  visited = new Set<string>(),
+): boolean {
+  if (depth > 8 || visited.has(ownerType)) return false;
+  visited.add(ownerType);
+  const base = dotnetDeclaredBaseType(lines, ownerType);
+  if (base === undefined) return false;
+  const official = "Microsoft.AspNetCore.Mvc.RazorPages.PageModel";
+  if (base === official || base === `global::${official}`) {
+    return !dotnetProjectDeclaresType(
+      files,
+      ["PageModel"],
+      official.slice(0, -10),
+    );
+  }
+  if (base === "PageModel") {
+    return (
+      dotnetUsesNamespace(lines, "Microsoft.AspNetCore.Mvc.RazorPages") &&
+      !dotnetProjectDeclaresType(files, ["PageModel"])
+    );
+  }
+  if (!/^[A-Za-z_]\w*$/u.test(base)) return false;
+  const candidates = files.filter(
+    (file) =>
+      file.extension === ".cs" &&
+      dotnetOwnerType(file.lines) === base &&
+      file.path !== path,
+  );
+  if (candidates.length !== 1) return false;
+  const candidate = candidates[0]!;
+  return dotnetIsRazorPageModel(
+    files,
+    candidate.path,
+    candidate.lines,
+    base,
+    depth + 1,
+    visited,
+  );
+}
+
+function dotnetRazorHandlerMethod(
+  files: readonly SourceFileSnapshot[],
+  lines: readonly string[],
+  method: ExportedDotnetMethod,
+): boolean {
+  if (
+    method.access !== "public" ||
+    method.isStatic ||
+    !/^On(?:Get|Post|Put|Delete|Patch|Head|Options|Trace|Connect)[A-Za-z0-9_]*(?:Async)?$/u.test(
+      method.symbol,
+    )
+  ) {
+    return false;
+  }
+  const structuralLines = cFamilyStructuralLines(lines);
+  let attributeStart = method.startLine - 1;
+  while (
+    attributeStart > 0 &&
+    /^\s*\[/u.test(structuralLines[attributeStart - 1] ?? "")
+  ) {
+    attributeStart -= 1;
+  }
+  const fragment = lines
+    .slice(attributeStart, Math.min(lines.length, method.startLine + 8))
+    .join("\n");
+  return !dotnetHasOfficialAttribute(
+    fragment,
+    "NonHandler",
+    "Microsoft.AspNetCore.Mvc.RazorPages",
+    files,
+    lines,
+  );
+}
+
+function dotnetRazorHandlerParameterAllowed(declaration: string): boolean {
+  if (
+    /\[\s*(?:FromServices|FromKeyedServices|BindNever)(?:Attribute)?\b/iu.test(
+      declaration,
+    )
+  ) {
+    return false;
+  }
+  return !/\b(?:CancellationToken|IServiceProvider|ILogger(?:\s*<[^;{}]+>)?|PageContext|ViewDataDictionary(?:\s*<[^;{}]+>)?|ModelStateDictionary|IUrlHelper|ClaimsPrincipal|HttpContext|HttpRequest|HttpResponse)\b/u.test(
+    declaration,
+  );
+}
+
+function dotnetRazorBoundProperties(
+  files: readonly SourceFileSnapshot[],
+  lines: readonly string[],
+  ownerType: string,
+): DotnetRazorBoundProperty[] {
+  const structuralLines = cFamilyStructuralLines(lines);
+  const ownerIndex = structuralLines.findIndex((line) =>
+    new RegExp(
+      `\\b(?:class|record)\\s+${escapeRegularExpression(ownerType)}\\b`,
+      "u",
+    ).test(line),
+  );
+  const ownerFragment = lines
+    .slice(Math.max(0, ownerIndex - 8), ownerIndex + 1)
+    .join("\n");
+  const classBound =
+    ownerIndex >= 0 &&
+    dotnetHasOfficialAttribute(
+      ownerFragment,
+      "BindProperties",
+      "Microsoft.AspNetCore.Mvc",
+      files,
+      lines,
+    );
+  const classSupportsGet =
+    classBound && /\bSupportsGet\s*=\s*true\b/iu.test(ownerFragment);
+  const properties: DotnetRazorBoundProperty[] = [];
+  for (
+    let index = Math.max(0, ownerIndex + 1);
+    index < lines.length;
+    index += 1
+  ) {
+    if (!/\bpublic\b/u.test(structuralLines[index] ?? "")) continue;
+    let start = index;
+    while (
+      start > ownerIndex + 1 &&
+      /^\s*\[/u.test(structuralLines[start - 1] ?? "")
+    ) {
+      start -= 1;
+    }
+    const fragment = lines
+      .slice(start, Math.min(lines.length, index + 6))
+      .join(" ");
+    const structural = cFamilyStructuralLines(
+      lines.slice(start, Math.min(lines.length, index + 6)),
+    ).join(" ");
+    const property =
+      /^(?:\s*\[[^\]]+\]\s*)*\s*public\s+(?!static\b)(?:required\s+)?[A-Za-z_][\w.<>?,\[\]]*\s+([A-Za-z_]\w*)\s*\{\s*(?:get\s*;\s*set\s*;|set\s*;\s*get\s*;)\s*\}/u.exec(
+        structural,
+      );
+    const name = property?.[1];
+    if (name === undefined) continue;
+    const directlyBound = dotnetHasOfficialAttribute(
+      fragment,
+      "BindProperty",
+      "Microsoft.AspNetCore.Mvc",
+      files,
+      lines,
+    );
+    if (!directlyBound && !classBound) continue;
+    if (
+      dotnetHasOfficialAttribute(
+        fragment,
+        "BindNever",
+        "Microsoft.AspNetCore.Mvc.ModelBinding",
+        files,
+        lines,
+      )
+    ) {
+      continue;
+    }
+    properties.push({
+      name,
+      line: index + 1,
+      supportsGet:
+        (directlyBound && /\bSupportsGet\s*=\s*true\b/iu.test(fragment)) ||
+        classSupportsGet,
+    });
+  }
+  return properties;
+}
+
+function dotnetRazorPropertiesForHandler(
+  properties: readonly DotnetRazorBoundProperty[],
+  method: ExportedDotnetMethod,
+): readonly DotnetRazorBoundProperty[] {
+  return /^On(?:Get|Head)/u.test(method.symbol)
+    ? properties.filter((property) => property.supportsGet)
+    : properties;
+}
+
+function dotnetRazorPageSources(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+): Array<{ kind: string; line: number }> {
+  const ownerType = dotnetOwnerType(lines);
+  if (
+    ownerType === undefined ||
+    !dotnetIsRazorPageModel(files, path, lines, ownerType)
+  ) {
+    return [];
+  }
+  const properties = dotnetRazorBoundProperties(files, lines, ownerType);
+  const sources: Array<{ kind: string; line: number }> = [];
+  for (const method of exportedDotnetMethods(lines)) {
+    if (!dotnetRazorHandlerMethod(files, lines, method)) continue;
+    for (const parameter of method.parameters) {
+      if (dotnetRazorHandlerParameterAllowed(parameter.declaration)) {
+        sources.push({
+          kind: "aspnet-razor-page-handler-parameter",
+          line: method.startLine,
+        });
+      }
+    }
+    for (const property of dotnetRazorPropertiesForHandler(
+      properties,
+      method,
+    )) {
+      sources.push({
+        kind: "aspnet-razor-page-bound-property",
+        line: property.line,
+      });
+    }
+  }
+  return sources;
+}
+
+function dotnetRazorBoundPropertySource(
+  lines: readonly string[],
+  method: ExportedDotnetMethod,
+  callLine: number,
+  expression: string,
+  properties: readonly DotnetRazorBoundProperty[],
+): { kind: string; line: number } | undefined {
+  const reaching = new Map<string, DotnetRazorBoundProperty>();
+  for (const property of properties) {
+    const shadowedByParameter = method.parameters.some(
+      (parameter) => parameter.name === property.name,
+    );
+    if (
+      !shadowedByParameter ||
+      new RegExp(
+        `\\bthis\\s*\\.\\s*${escapeRegularExpression(property.name)}\\b`,
+        "u",
+      ).test(expression)
+    ) {
+      reaching.set(property.name, property);
+    }
+  }
+  const structuralLines = cFamilyStructuralLines(lines);
+  for (let line = method.startLine + 1; line < callLine; line += 1) {
+    const structural = structuralLines[line - 1] ?? "";
+    const assignment =
+      /\b(?:(?:var|[A-Za-z_]\w*(?:\s*<[^;{}]+>)?\??)\s+)?((?:this\s*\.\s*)?[A-Za-z_]\w*)\s*=(?!=|>)([^;]+);/u.exec(
+        structural,
+      );
+    if (assignment !== null) {
+      const target = assignment[1]!
+        .replace(/\s+/gu, "")
+        .replace(/^this\./u, "");
+      const value = assignment[2]!;
+      const source = [...reaching.entries()].find(([identifier]) =>
+        cFamilyLineReferencesIdentifier(value, identifier),
+      )?.[1];
+      if (source === undefined) reaching.delete(target);
+      else reaching.set(target, source);
+    }
+    for (const [identifier] of reaching) {
+      const memberWrite = new RegExp(
+        `\\b(?:this\\s*\\.\\s*)?${escapeRegularExpression(identifier)}\\s*\\.\\s*[A-Za-z_]\\w*\\s*=(?!=|>)`,
+        "u",
+      );
+      if (memberWrite.test(structural)) reaching.delete(identifier);
+    }
+  }
+  const reached = [...reaching.entries()].find(([identifier]) =>
+    cFamilyLineReferencesIdentifier(expression, identifier),
+  )?.[1];
+  return reached === undefined
+    ? undefined
+    : { kind: "aspnet-razor-page-bound-property", line: reached.line };
+}
+
+function modeledRazorPageSource(
+  lines: readonly string[],
+  method: ExportedDotnetMethod,
+  callLine: number,
+  expression: string,
+  rejectParameterReassignment: boolean,
+  files: readonly SourceFileSnapshot[],
+  path: string,
+): { kind: string; line: number } | undefined {
+  if (
+    !dotnetRazorHandlerMethod(files, lines, method) ||
+    !dotnetIsRazorPageModel(files, path, lines, method.ownerType)
+  ) {
+    return undefined;
+  }
+  for (const parameterIndex of dotnetMethodParameterIndexesReachingExpression(
+    lines,
+    method,
+    callLine,
+    expression,
+  )) {
+    const parameter = method.parameters[parameterIndex];
+    if (
+      parameter !== undefined &&
+      dotnetRazorHandlerParameterAllowed(parameter.declaration) &&
+      (!rejectParameterReassignment ||
+        !dotnetMethodParameterReassignedBeforeCall(
+          lines,
+          parameter.name,
+          method.startLine,
+          callLine,
+        ))
+    ) {
+      return {
+        kind: "aspnet-razor-page-handler-parameter",
+        line: method.startLine,
+      };
+    }
+  }
+  const properties = dotnetRazorPropertiesForHandler(
+    dotnetRazorBoundProperties(files, lines, method.ownerType),
+    method,
+  );
+  return dotnetRazorBoundPropertySource(
+    lines,
+    method,
+    callLine,
+    expression,
+    properties,
+  );
+}
+
 function modeledDotnetCallSource(
   lines: readonly string[],
   method: ExportedDotnetMethod,
@@ -6842,11 +7314,23 @@ function modeledDotnetCallSource(
   argument: string,
   sourcePatterns: readonly FrameworkModelPattern[],
   rejectParameterReassignment = false,
+  files: readonly SourceFileSnapshot[] = [],
+  path = "",
 ): { kind: string; line: number } | undefined {
   const direct = sourcePatterns.find((pattern) =>
     pattern.expression.test(argument),
   );
   if (direct !== undefined) return { kind: direct.kind, line: callLine };
+  const razorSource = modeledRazorPageSource(
+    lines,
+    method,
+    callLine,
+    argument,
+    rejectParameterReassignment,
+    files,
+    path,
+  );
+  if (razorSource !== undefined) return razorSource;
   if (!/^[A-Za-z_]\w*$/u.test(argument)) return undefined;
   for (const parameter of method.parameters) {
     if (parameter.name !== argument) continue;
@@ -7104,6 +7588,8 @@ function modeledSameFileDotnetTemplateSource(
   lines: readonly string[],
   sinkLine: number,
   sourcePatterns: readonly FrameworkModelPattern[],
+  files: readonly SourceFileSnapshot[] = [],
+  path = "",
 ): { kind: string; line: number } | undefined {
   const method = exportedDotnetMethods(lines).find(
     (candidate) =>
@@ -7131,6 +7617,9 @@ function modeledSameFileDotnetTemplateSource(
       sinkLine,
       parameter.name,
       sourcePatterns,
+      false,
+      files,
+      path,
     );
     if (source !== undefined) return source;
   }
@@ -7148,7 +7637,57 @@ function modeledSameFileDotnetTemplateSource(
     sinkLine,
     templateSource,
     sourcePatterns,
+    false,
+    files,
+    path,
   );
+}
+
+function modeledSameFileDotnetSource(
+  lines: readonly string[],
+  sinkLine: number,
+  sourcePatterns: readonly FrameworkModelPattern[],
+  files: readonly SourceFileSnapshot[] = [],
+  path = "",
+): { kind: string; line: number } | undefined {
+  const method = exportedDotnetMethods(lines).find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  if (method === undefined) return undefined;
+  const expression = javaCallExpression(lines, sinkLine, method.endLine);
+  const direct = modeledDotnetCallSource(
+    lines,
+    method,
+    sinkLine,
+    expression,
+    sourcePatterns,
+    false,
+    files,
+    path,
+  );
+  if (direct !== undefined) return direct;
+  for (const parameterIndex of dotnetMethodParameterIndexesReachingExpression(
+    lines,
+    method,
+    sinkLine,
+    expression,
+  )) {
+    const parameter = method.parameters[parameterIndex];
+    if (parameter === undefined) continue;
+    const source = modeledDotnetCallSource(
+      lines,
+      method,
+      sinkLine,
+      parameter.name,
+      sourcePatterns,
+      false,
+      files,
+      path,
+    );
+    if (source !== undefined) return source;
+  }
+  return undefined;
 }
 
 interface DotnetObjectAuthorizationSink {
@@ -7239,6 +7778,8 @@ function modeledSameFileDotnetObjectSource(
   sinkLine: number,
   lookupArgument: string,
   sourcePatterns: readonly FrameworkModelPattern[],
+  files: readonly SourceFileSnapshot[] = [],
+  path = "",
 ): { kind: string; line: number } | undefined {
   const method = exportedDotnetMethods(lines).find(
     (candidate) =>
@@ -7252,6 +7793,8 @@ function modeledSameFileDotnetObjectSource(
     lookupArgument.trim(),
     sourcePatterns,
     true,
+    files,
+    path,
   );
   if (direct !== undefined) return direct;
   for (const parameterIndex of dotnetMethodParameterIndexesReachingExpression(
@@ -7269,6 +7812,8 @@ function modeledSameFileDotnetObjectSource(
       parameter.name,
       sourcePatterns,
       true,
+      files,
+      path,
     );
     if (source !== undefined) return source;
   }

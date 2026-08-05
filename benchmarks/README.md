@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains seventy-five vulnerable/control pairs:
+The versioned corpus currently contains seventy-six vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -123,8 +123,10 @@ IPv4-only private-address guard accepts IPv4-mapped IPv6, NAT64, and 6to4
 encodings with complete transition canonicalization as the control, plus GitHub Copilot SDK
 trusted-instruction injection where request data crosses two relative-module
 wrappers into `systemMessage.content`, paired with the same data sent only as
-an ordinary `sendAndWait` prompt. Three runs per case produce 450 scans in the
-complete corpus.
+an ordinary `sendAndWait` prompt, plus an unannotated Razor Page handler
+parameter that crosses a typed service boundary into SQL grammar, paired with
+the same handler topology and a typed `SqlParameter`. Three runs per case
+produce 456 scans in the complete corpus.
 
 `node-copilot-prompt-injection-manifest.json` isolates that SDK boundary under
 perfect single-run gates. The positive must retain the HTTP source, all six
@@ -1411,6 +1413,22 @@ and remains ordinary data in the control:
 dotnet run --project benchmarks/witnesses/aspnet-cross-file-sql-injection/AspNetCrossFileSqlInjectionWitness.csproj --configuration Release
 dotnet run --project benchmarks/witnesses/aspnet-cross-file-safe-sql/AspNetCrossFileSafeSqlWitness.csproj --configuration Release
 ```
+
+The Razor Pages SQL lane closes the separate model-binding boundary introduced
+by `PageModel` handlers. Its positive uses the unannotated `filter` parameter
+of named `OnGetLookupAsync`, crosses the same constructor-injected service
+boundary, and selects an unauthorized in-memory row through concatenated query
+grammar. The control preserves the handler, service, input bytes, and intended
+lookup but binds `filter` through a typed `SqlParameter`:
+
+```powershell
+dotnet run --project benchmarks/witnesses/aspnet-razor-page-sql-injection/AspnetRazorPageSqlInjectionWitness.csproj --configuration Release
+dotnet run --project benchmarks/witnesses/aspnet-razor-page-safe-sql/AspnetRazorPageSafeSqlWitness.csproj --configuration Release
+```
+
+Run the strict pair with `aspnet-razor-page-sql-manifest.json`. Its gates require
+perfect single-run completion, precision, recall, validation, attack-path,
+code-evidence, severity, stability, and negative-control results.
 
 The ASP.NET SSRF lane carries a complete `[FromQuery]` URI through the same
 constructor-injected topology into `HttpClient.GetAsync`. Its control uses the

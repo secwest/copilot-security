@@ -68,7 +68,12 @@ the public, protected, or internal wrapper parameter, and preserves either an
 annotated bound parameter or an assigned `HttpRequest` field through
 `ProcessStartInfo`/`Process.Start`, the query-text argument of `SqlCommand`,
 `FromSqlRaw`, or `ExecuteSqlRaw`, or a complete outbound `HttpClient` request
-URI. For Node/TypeScript, Axios sinks require a real package binding or bounded
+URI. Exact Razor Pages sources also include public HTTP-verb handler parameters
+on official `PageModel` subclasses and public writable `[BindProperty]` or
+`[BindProperties]` properties, with GET/HEAD property binding gated by
+`SupportsGet = true`; service parameters, `[NonHandler]`, `[BindNever]`, local
+framework shadows, reassignment, ambiguous or ninth inheritance edges, and
+unbound properties fail closed. For Node/TypeScript, Axios sinks require a real package binding or bounded
 non-reassigned `axios.create(...)` instance and preserve only the URL argument
 or request-config `url` property, never a POST/PUT/PATCH body. A fixed
 `baseURL` is not treated as confinement while Axios can still accept an
@@ -1573,6 +1578,19 @@ executable plus `ArgumentList`, or fixed SQL plus a typed `SqlParameter`:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/aspnet-cross-file-framework-manifest.json `
   --results-dir C:\security-benchmarks\aspnet-cross-file-framework `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The separate Razor Pages SQL lane proves that an unannotated named handler
+parameter is remotely model bound, preserves it through the typed service, and
+contrasts concatenated query grammar with the same value carried only by a
+typed parameter. Both halves are executable without an external database:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/aspnet-razor-page-sql-manifest.json `
+  --results-dir C:\security-benchmarks\aspnet-razor-page-sql `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
