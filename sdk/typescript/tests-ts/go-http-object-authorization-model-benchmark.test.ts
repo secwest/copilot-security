@@ -134,6 +134,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-file-safe-helper-chain-transaction-delete-authorization",
       "go-cross-package-helper-transaction-delete-idor",
       "go-cross-package-safe-helper-transaction-delete-authorization",
+      "go-cross-package-transaction-factory-delete-idor",
+      "go-cross-package-safe-transaction-factory-delete-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -151,6 +153,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[13]?.expected).toEqual([]);
     expect(manifest.cases[14]?.expected).toHaveLength(1);
     expect(manifest.cases[15]?.expected).toEqual([]);
+    expect(manifest.cases[16]?.expected).toHaveLength(1);
+    expect(manifest.cases[17]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -697,6 +701,72 @@ describe("Go HTTP object-authorization framework model", () => {
     ]);
   });
 
+  test("preserves the cross-package transaction-factory exploit and control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-transaction-factory-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-transaction-factory-delete-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "store.go",
+      line: 19,
+      categories: [
+        "framework-dataflow:go-http-object-authorization",
+        "modeled-source:go-http-path-value",
+        "modeled-sink:go-database-object-committed-mutation",
+      ],
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 9 },
+        sink: {
+          kind: "go-database-object-committed-mutation",
+          path: "store.go",
+          line: 19,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) =>
+          /^go-sql-transaction-begin/u.test(kind) ||
+          kind === "go-sql-transaction-commit",
+      ),
+    ).toEqual([
+      {
+        kind: "go-sql-transaction-begin-helper",
+        line: 10,
+        symbol: "StartTransaction",
+        path: "store.go",
+      },
+      {
+        kind: "go-sql-transaction-begin-helper",
+        line: 11,
+        symbol: "OpenTransaction",
+        path: "internal/txfactory/coordinator.go",
+      },
+      {
+        kind: "go-sql-transaction-begin",
+        line: 9,
+        symbol: "db",
+        path: "internal/txleaf/transaction.go",
+      },
+      {
+        kind: "go-sql-transaction-commit",
+        line: 19,
+        symbol: "tx",
+        path: "store.go",
+      },
+    ]);
+    expect(safe).toHaveLength(1);
+    expect(safe[0]?.frameworkModel?.candidateControls).toEqual([
+      { kind: "principal-bound-object-query", path: "store.go", line: 16 },
+    ]);
+  });
+
   test("closes Prepare and PrepareContext through the exact Stmt execution", async () => {
     const bodies = [
       `  id := r.PathValue("invoiceID")
@@ -813,6 +883,347 @@ ${receiverType === "Tx" ? "  db.Commit()" : ""}
       expect(
         rows[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
       ).toContain("go-sql-transaction-commit");
+    }
+  });
+
+  test("creates transactions through exact typed constructor helpers", async () => {
+    const helpers = [
+      `package invoices
+import "database/sql"
+func start(db *sql.DB) (*sql.Tx, error) {
+  selected := db
+  return selected.Begin()
+}`,
+      `package invoices
+import "database/sql"
+func start(db *sql.DB) (*sql.Tx, error) {
+  tx, err := db.Begin()
+  return tx, err
+}`,
+    ];
+    for (const [index, helper] of helpers.entries()) {
+      const invocation =
+        index === 0
+          ? "tx, _ := start(db)"
+          : "selected := db\n  tx, _ := start(selected)";
+      const rows = await repositoryInventory({
+        "handler.go": handler(`  id := r.PathValue("invoiceID")
+  ${invocation}
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()`),
+        "transaction.go": helper,
+      });
+      expect(rows, helper).toHaveLength(1);
+      expect(rows[0]?.frameworkModel?.sink.kind).toBe(
+        "go-database-object-committed-mutation",
+      );
+      expect(
+        rows[0]?.frameworkModel?.propagators.filter(({ kind }) =>
+          /^go-sql-transaction-begin/u.test(kind),
+        ),
+      ).toEqual([
+        {
+          kind: "go-sql-transaction-begin-helper",
+          path: "handler.go",
+          line: index === 0 ? 9 : 10,
+          symbol: "start",
+        },
+        {
+          kind: "go-sql-transaction-begin",
+          path: "transaction.go",
+          line: helper.includes("selected.Begin") ? 5 : 4,
+          symbol: helper.includes("selected.Begin") ? "selected" : "db",
+        },
+      ]);
+    }
+  });
+
+  test("creates a transaction through an exact sql Conn helper", async () => {
+    const rows = await repositoryInventory({
+      "handler.go": handler(`  id := r.PathValue("invoiceID")
+  conn, _ := db.Conn(r.Context())
+  tx, _ := start(r.Context(), conn)
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()`),
+      "transaction.go": `package invoices
+import (
+  "context"
+  "database/sql"
+)
+func start(ctx context.Context, conn *sql.Conn) (*sql.Tx, error) {
+  return conn.BeginTx(ctx, nil)
+}`,
+    });
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0]?.frameworkModel?.propagators.find(
+        ({ kind }) => kind === "go-sql-transaction-begin",
+      ),
+    ).toEqual({
+      kind: "go-sql-transaction-begin",
+      path: "transaction.go",
+      line: 7,
+      symbol: "conn",
+    });
+  });
+
+  test("composes exact cross-package transaction constructor chains", async () => {
+    const rows = await scopedRepositoryInventory({
+      "go.mod": `module example.com/billing
+go 1.26`,
+      "handler.go": `package invoices
+import (
+  "database/sql"
+  "net/http"
+  factory "example.com/billing/internal/txfactory"
+)
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := factory.Start(db)
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()
+}`,
+      "internal/txfactory/coordinator.go": `package txfactory
+import (
+  "database/sql"
+  leaf "example.com/billing/internal/txleaf"
+)
+func Start(db *sql.DB) (*sql.Tx, error) {
+  selected := db
+  return leaf.Open(selected)
+}`,
+      "internal/txleaf/transaction.go": `package txleaf
+import "database/sql"
+func Open(db *sql.DB) (*sql.Tx, error) { return db.Begin() }`,
+    });
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0]?.frameworkModel?.propagators.filter(({ kind }) =>
+        /^go-sql-transaction-begin/u.test(kind),
+      ),
+    ).toEqual([
+      {
+        kind: "go-sql-transaction-begin-helper",
+        path: "handler.go",
+        line: 9,
+        symbol: "Start",
+      },
+      {
+        kind: "go-sql-transaction-begin-helper",
+        path: "internal/txfactory/coordinator.go",
+        line: 8,
+        symbol: "Open",
+      },
+      {
+        kind: "go-sql-transaction-begin",
+        path: "internal/txleaf/transaction.go",
+        line: 3,
+        symbol: "db",
+      },
+    ]);
+  });
+
+  test("resolves the deepest exact local Go module for transaction creation", async () => {
+    const rows = await repositoryInventory({
+      "go.mod": `module example.com/application
+go 1.26`,
+      "handler.go": `package invoices
+import (
+  "database/sql"
+  "net/http"
+  factory "corp.example/transactions/factory"
+)
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := factory.Start(db)
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()
+}`,
+      "components/transactions/go.mod": `module corp.example/transactions
+go 1.26`,
+      "components/transactions/factory/transaction.go": `package factory
+import "database/sql"
+func Start(db *sql.DB) (*sql.Tx, error) { return db.Begin() }`,
+    });
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0]?.frameworkModel?.propagators.find(
+        ({ kind }) => kind === "go-sql-transaction-begin",
+      )?.path,
+    ).toBe("components/transactions/factory/transaction.go");
+  });
+
+  test("accepts exactly the 32-constructor-helper resilience boundary", async () => {
+    const files: Record<string, string> = {};
+    for (let index = 0; index < 31; index += 1) {
+      const name = index === 0 ? "start" : `start${index}`;
+      const next = `start${index + 1}`;
+      files[`factory_${index}.go`] = `package invoices
+import "database/sql"
+func ${name}(db *sql.DB) (*sql.Tx, error) { return ${next}(db) }`;
+    }
+    files["factory_31.go"] = `package invoices
+import "database/sql"
+func start31(db *sql.DB) (*sql.Tx, error) { return db.Begin() }`;
+    const rows = await repositoryInventory({
+      "handler.go": handler(`  id := r.PathValue("invoiceID")
+  tx, _ := start(db)
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()`),
+      ...files,
+    });
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) => kind === "go-sql-transaction-begin-helper",
+      ),
+    ).toHaveLength(32);
+  });
+
+  test("rejects cyclic and over-depth transaction constructor chains", async () => {
+    const overDepth: Record<string, string> = {};
+    for (let index = 0; index < 32; index += 1) {
+      const name = index === 0 ? "start" : `start${index}`;
+      const next = `start${index + 1}`;
+      overDepth[`factory_${index}.go`] = `package invoices
+import "database/sql"
+func ${name}(db *sql.DB) (*sql.Tx, error) { return ${next}(db) }`;
+    }
+    overDepth["factory_32.go"] = `package invoices
+import "database/sql"
+func start32(db *sql.DB) (*sql.Tx, error) { return db.Begin() }`;
+    const handlerFile = handler(`  id := r.PathValue("invoiceID")
+  tx, _ := start(db)
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()`);
+    expect(
+      await repositoryInventory({ "handler.go": handlerFile, ...overDepth }),
+    ).toEqual([]);
+    expect(
+      await repositoryInventory({
+        "handler.go": handlerFile,
+        "factory.go": `package invoices
+import "database/sql"
+func start(db *sql.DB) (*sql.Tx, error) { return again(db) }
+func again(db *sql.DB) (*sql.Tx, error) { return start(db) }`,
+      }),
+    ).toEqual([]);
+  });
+
+  test("rejects inexact transaction constructor helpers", async () => {
+    const handlerSource = (
+      importDeclaration: string,
+      call = "factory.Start(db)",
+    ) => `package invoices
+import (
+  "database/sql"
+  "net/http"
+  ${importDeclaration}
+)
+type localFactory struct{}
+func (localFactory) Start(*sql.DB) (*sql.Tx, error) { return nil, nil }
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := ${call}
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()
+}`;
+    const exactTarget = `package txfactory
+import "database/sql"
+func Start(db *sql.DB) (*sql.Tx, error) { return db.Begin() }`;
+    const cases: Array<Record<string, string>> = [
+      {
+        "handler.go": handlerSource(
+          'factory "example.com/billing/internal/txfactory"',
+        ),
+        "internal/txfactory/transaction.go": exactTarget,
+      },
+      {
+        "go.mod": "module example.com/billing",
+        "handler.go": handlerSource('factory "example.com/other/txfactory"'),
+        "internal/txfactory/transaction.go": exactTarget,
+      },
+      {
+        "go.mod": "module example.com/billing",
+        "handler.go": handlerSource(
+          '. "example.com/billing/internal/txfactory"',
+          "Start(db)",
+        ),
+        "internal/txfactory/transaction.go": exactTarget,
+      },
+      {
+        "go.mod": "module example.com/billing",
+        "handler.go": handlerSource(
+          'factory "example.com/billing/internal/txfactory"',
+          "factory := localFactory{}\n  factory.Start(db)",
+        ),
+        "internal/txfactory/transaction.go": exactTarget,
+      },
+      {
+        "go.mod": "module example.com/application",
+        "handler.go": handlerSource('factory "corp.example/txfactory"'),
+        "one/go.mod": "module corp.example/txfactory",
+        "one/transaction.go": exactTarget,
+        "two/go.mod": "module corp.example/txfactory",
+        "two/transaction.go": exactTarget,
+      },
+      {
+        "handler.go": handler(`  id := r.PathValue("invoiceID")
+  tx, _ := start(db)
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()`),
+        "transaction.go": `package invoices
+import "database/sql"
+func start(db *sql.DB) (any, error) { return db.Begin() }`,
+      },
+      {
+        "handler.go": handler(`  id := r.PathValue("invoiceID")
+  tx, _ := start(db)
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()`),
+        "transaction.go": `package invoices
+import "database/sql"
+func start(db *sql.DB) (*sql.Tx, error) {
+  tx, err := db.Begin()
+  tx, err = nil, err
+  return tx, err
+}`,
+      },
+      {
+        "handler.go": handler(`  id := r.PathValue("invoiceID")
+  tx, _ := start(db)
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()`),
+        "transaction.go": `package invoices
+import "database/sql"
+func start(db *sql.DB) (*sql.Tx, error) {
+  if db != nil {
+    return db.Begin()
+  }
+  return nil, nil
+}`,
+      },
+      {
+        "handler.go": `package invoices
+import (
+  "database/sql"
+  "net/http"
+)
+func Handler(db *sql.Tx, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()
+}`,
+      },
+    ];
+    for (const files of cases) {
+      expect(
+        await repositoryInventory(files),
+        Object.entries(files)
+          .map(([path, source]) => `${path}\n${source}`)
+          .join("\n"),
+      ).toEqual([]);
     }
   });
 

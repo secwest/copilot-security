@@ -421,6 +421,18 @@ interpreter that consumes the value.
   commit, nested or deferred commit, finalization before execution, ignored
   transfer results, closed or replaced statements, and cross-transaction
   transfer.
+- A transaction may originate through a bounded exact chain of local factory
+  functions only when an exact `*database/sql.DB` or `*database/sql.Conn`
+  parameter reaches a leaf `Begin`/`BeginTx`, the first return type is exactly
+  `*database/sql.Tx` with only an optional `error`, and the call result is
+  directly returned or assigned once and returned without replacement.
+  `Begin` requires DB; `BeginTx` requires DB or Conn. Cross-package edges use
+  the same authoritative module path, ordinary import alias, exported unique
+  target, unshadowed binding, exact argument, cycle, depth, and ambiguity
+  checks as finalizers. Preserve every factory edge and the actual leaf begin
+  path. Reject interfaces, methods, function values, transformed results,
+  nested creation, wrong return shapes, reassignment, cycles, and over-depth
+  chains rather than inferring a transaction.
 - A transaction may close through a bounded exact chain of local functions only
   when an exact typed `database/sql` transaction parameter reaches exactly one
   non-deferred function-level `Commit` or `Rollback`. Cross-package edges require

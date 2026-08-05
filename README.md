@@ -802,8 +802,12 @@ helper boundaries, rejects cycles and ambiguous outcomes, and records every
 forwarding call plus the real leaf finalizer. An eighth pair crosses two
 imported internal packages whose identities are derived from the repository's
 exact `go.mod` module path; renamed imports, exported targets, and transaction
-arguments must all agree. Each control changes only the authenticated account
-predicate:
+arguments must all agree. A ninth pair obtains the exact transaction through
+two imported factory packages before executing and committing the mutation.
+Factory summaries require a unique typed `*sql.DB` or `*sql.Conn` input, an
+exact first `*sql.Tx` return, a direct-return or assigned-then-return leaf
+`Begin`/`BeginTx`, and the same authoritative module/import rules. Each control
+changes only the authenticated account predicate:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -858,6 +862,12 @@ Push-Location benchmarks\fixtures\go-cross-package-helper-transaction-delete-ido
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-helper-transaction-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-transaction-factory-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-transaction-factory-delete-authorization
 go test ./...
 Pop-Location
 ```

@@ -90,6 +90,18 @@ The package is ESM-only and provides:
   transfer. The original DB statement stays independent, the context argument is not
   mistaken for the source statement, and ignored, closed, replaced,
   cross-transaction, rolled-back, or uncommitted transfers are rejected.
+  Transaction identity can begin through an exact bounded chain of uniquely
+  resolved local factory functions. Each factory must accept the exact
+  `*database/sql.DB` or `*database/sql.Conn` receiver that reaches the leaf,
+  return `*database/sql.Tx` first with only an optional `error`, and directly
+  return or assign-then-return the exact `Begin`/`BeginTx` result. `Begin` is
+  valid only on DB; `BeginTx` is valid on DB or Conn. Same-package and
+  cross-package chains use the same 32-bound, deepest-module, import-alias,
+  export, shadowing, uniqueness, cycle, reassignment, and nesting rules as
+  finalizer chains. Evidence retains every factory edge and the real leaf begin
+  path instead of attributing transaction creation to the caller. Interfaces,
+  methods, function values, arbitrary result transforms, and named-result-only
+  returns are rejected.
   Transaction outcome can also close through an exact chain of uniquely
   resolved local functions whose typed `database/sql` transaction parameter
   reaches exactly one non-deferred function-level `Commit` or `Rollback`.

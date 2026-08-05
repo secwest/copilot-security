@@ -433,7 +433,16 @@ and transaction argument all agree. Package alias shadowing, dot and blank
 imports, missing modules, external lookalikes, duplicate local module identities,
 and unexported targets fail closed. An eighth executable pair crosses two
 internal packages and proves both the unscoped durable deletion and matched
-principal control. This directly
+principal control. Transaction creation now receives the same exact treatment:
+a bounded local factory chain must carry a typed `*sql.DB` or `*sql.Conn` into
+the real `Begin`/`BeginTx`, return `*sql.Tx` first, and expose the unchanged
+result through a direct return or one assigned-then-return identity. Evidence
+retains every factory boundary and leaf begin path. DB/Conn method mismatch,
+wrong or transformed results, nesting, reassignment, cycles, alias shadowing,
+ambiguous modules or definitions, interfaces, methods, and function values fail
+closed. A ninth executable pair crosses two imported factory packages and
+proves both the durable unscoped deletion and its principal-bound control. This
+directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -449,8 +458,9 @@ as CodeQL's distinction between local flow and explicitly modeled
 interprocedural flow summaries: the summary expands a proven semantic boundary,
 not every similarly named call. It remains deliberately narrower than whole-
 program call-graph and control-flow analysis; interface dispatch, function
-values, recursive finalization, replace-only packages without source inventory,
-and dynamically selected finalizers remain future work.
+values, method factories, named-result-only returns, recursive transaction
+helpers, replace-only packages without source inventory, and dynamically
+selected creation or finalization remain future work.
 
 `benchmarks/go-sqlx-sql-injection-manifest.json` adds a strict sqlx lane. The
 positive carries an HTTP query value through one unique same-package wrapper,

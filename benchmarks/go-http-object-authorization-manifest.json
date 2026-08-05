@@ -190,6 +190,28 @@
       "id": "go-cross-package-safe-helper-transaction-delete-authorization",
       "fixture": "fixtures/go-cross-package-safe-helper-transaction-delete-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-package-transaction-factory-delete-idor",
+      "fixture": "fixtures/go-cross-package-transaction-factory-delete-idor",
+      "expected": [
+        {
+          "title": "Go cross-package transaction factory commits deletion selected only by request ID",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "store.go",
+          "line": 19,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-package-safe-transaction-factory-delete-authorization",
+      "fixture": "fixtures/go-cross-package-safe-transaction-factory-delete-authorization",
+      "expected": []
     }
   ]
 }

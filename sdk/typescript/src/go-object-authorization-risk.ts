@@ -22,7 +22,7 @@ import {
 const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
 const MAX_RECORDS = 64;
-const MAX_TRANSACTION_FINALIZER_HELPER_DEPTH = 32;
+const MAX_TRANSACTION_HELPER_DEPTH = 32;
 const OBJECT_COLUMN = /^(?:id|key|uuid|[a-z][a-z0-9_]*_(?:id|key|uuid))$/iu;
 const SECURITY_COLUMN =
   /^(?:account|customer|organization|org|owner|principal|shop|tenant|user|workspace)_(?:id|key|uuid)$/iu;
@@ -102,6 +102,7 @@ interface PreparedStatement {
 interface TransactionState {
   active: boolean;
   pending: ObjectSink[];
+  creationEvidence: EvidencePropagator[];
 }
 
 interface ObjectSink {
@@ -137,6 +138,21 @@ interface TransactionFinalizerSummary {
   line: number;
   finalizerFile: GoHttpSourceFile;
   finalizerTransactionName: string;
+  delegations: EvidencePropagator[];
+}
+
+interface TransactionCreatorSummary {
+  file: GoHttpSourceFile;
+  packageName: string;
+  packageImportPath?: string;
+  functionName: string;
+  databaseParameterIndex: number;
+  databaseParameterName: string;
+  receiverKind: "DB" | "Conn";
+  method: "Begin" | "BeginTx";
+  line: number;
+  creatorFile: GoHttpSourceFile;
+  creatorReceiverName: string;
   delegations: EvidencePropagator[];
 }
 
@@ -259,6 +275,37 @@ function transactionFinalizerCallMatches(
   );
 }
 
+function transactionCreatorCallMatches(
+  function_: GoFunction,
+  callName: string,
+  line: number,
+  summary: TransactionCreatorSummary,
+): boolean {
+  if (
+    summary.functionName === callName &&
+    summary.packageName === function_.packageName &&
+    posix.dirname(summary.file.path) === posix.dirname(function_.file.path)
+  )
+    return true;
+  if (
+    summary.packageImportPath === undefined ||
+    !/^[A-Z]/u.test(summary.functionName)
+  )
+    return false;
+  const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(callName);
+  if (qualified?.[2] !== summary.functionName) return false;
+  const alias = goImportAlias(
+    function_.file.lines,
+    summary.packageImportPath,
+    summary.packageName,
+  );
+  return (
+    alias !== undefined &&
+    alias === qualified[1] &&
+    packageAliasIsAvailable(function_, alias, line)
+  );
+}
+
 function sqlAlias(function_: GoFunction): string | undefined {
   return goImportAlias(function_.file.lines, "database/sql", "sql");
 }
@@ -278,6 +325,20 @@ function typedTransactionReceivers(
   alias: string,
 ): Set<string> {
   return goTypedReceiverNames(function_, [{ alias, typeNames: ["Tx"] }]);
+}
+
+function typedDatabaseReceivers(
+  function_: GoFunction,
+  alias: string,
+): Set<string> {
+  return goTypedReceiverNames(function_, [{ alias, typeNames: ["DB"] }]);
+}
+
+function typedConnectionReceivers(
+  function_: GoFunction,
+  alias: string,
+): Set<string> {
+  return goTypedReceiverNames(function_, [{ alias, typeNames: ["Conn"] }]);
 }
 
 function unquoteGo(value: string): string | undefined {
@@ -394,6 +455,53 @@ function callNestingDepth(function_: GoFunction, call: GoCall): number {
     depth += braceDelta(function_.structuralLines[line - 1] ?? "");
   }
   return depth + braceDelta(call.linePrefix);
+}
+
+function lineNestingDepth(function_: GoFunction, line: number): number {
+  let depth = 0;
+  for (
+    let candidateLine = function_.bodyStartLine;
+    candidateLine < line;
+    candidateLine += 1
+  ) {
+    depth += braceDelta(function_.structuralLines[candidateLine - 1] ?? "");
+  }
+  return depth;
+}
+
+function transactionCallResultIsReturned(
+  function_: GoFunction,
+  call: GoCall,
+): boolean {
+  if (/(?:^|[;{}])\s*return\s*$/u.test(call.linePrefix)) return true;
+  const result = assignedCallResult(call);
+  if (result === undefined) return false;
+  for (let line = call.line + 1; line <= function_.endLine; line += 1) {
+    const structural = function_.structuralLines[line - 1] ?? "";
+    const assignment = goAssignment(structural);
+    if (assignment?.names.includes(result) === true) return false;
+    if (lineNestingDepth(function_, line) !== 1) continue;
+    if (
+      new RegExp(
+        `^\\s*return\\s+${escapeRegularExpression(result)}(?:\\s*,|\\s*;|\\s*\\}|\\s*$)`,
+        "u",
+      ).test(structural)
+    )
+      return true;
+  }
+  return false;
+}
+
+function exactTransactionReturnSignature(
+  function_: GoFunction,
+  alias: string,
+): boolean {
+  const transaction = `(?:[A-Za-z_]\\w*\\s+)?\\*${escapeRegularExpression(alias)}\\.Tx`;
+  const error = "(?:[A-Za-z_]\\w*\\s+)?error";
+  return new RegExp(
+    `^(?:${transaction}|\\(\\s*${transaction}(?:\\s*,\\s*${error})?\\s*\\))$`,
+    "u",
+  ).test(function_.returnSignature);
 }
 
 function hasNoCallArguments(call: GoCall): boolean {
@@ -553,12 +661,15 @@ function analyzeFunction(
   initialObjects: ReadonlyMap<string, GoTaint> = new Map(),
   initialPrincipals: ReadonlyMap<string, GoTaint> = new Map(),
   finalizers: readonly TransactionFinalizerSummary[] = [],
+  creators: readonly TransactionCreatorSummary[] = [],
 ): ObjectSink[] {
   const alias = sqlAlias(function_);
   if (alias === undefined) return [];
   const requests = requestParameters(function_);
   const receivers = typedReceivers(function_, alias);
   const typedTransactions = typedTransactionReceivers(function_, alias);
+  const databaseReceivers = typedDatabaseReceivers(function_, alias);
+  const connectionReceivers = typedConnectionReceivers(function_, alias);
   const inferredReceivers = new Set<string>();
   const objects = new Map(initialObjects);
   const principals = new Map(initialPrincipals);
@@ -572,7 +683,11 @@ function analyzeFunction(
     Array<{ signature: string; statement: PreparedStatement }>
   >();
   for (const receiver of typedTransactions) {
-    transactions.set(receiver, { active: true, pending: [] });
+    transactions.set(receiver, {
+      active: true,
+      pending: [],
+      creationEvidence: [],
+    });
   }
   const pending: CandidateQuery[] = [];
   const sinks: ObjectSink[] = [];
@@ -627,6 +742,7 @@ function analyzeFunction(
       source,
       propagators: [
         ...source.propagators,
+        ...(statement.transaction?.creationEvidence ?? []),
         {
           kind: "go-sql-statement-prepare",
           line: statement.line,
@@ -685,6 +801,8 @@ function analyzeFunction(
       const rowAlias = rows.get(assigned.value.trim());
       const statementAlias = statements.get(assigned.value.trim());
       const transactionAlias = transactions.get(assigned.value.trim());
+      const databaseAlias = databaseReceivers.has(assigned.value.trim());
+      const connectionAlias = connectionReceivers.has(assigned.value.trim());
       const objectSource =
         requestSource(assigned.value, requests, line) ??
         expressionTaint(assigned.value, objects);
@@ -698,6 +816,8 @@ function analyzeFunction(
         objects.delete(name);
         principals.delete(name);
         inferredReceivers.delete(name);
+        databaseReceivers.delete(name);
+        connectionReceivers.delete(name);
         rows.delete(name);
         statements.delete(name);
         transactions.delete(name);
@@ -726,6 +846,14 @@ function analyzeFunction(
         transactions.set(primary, transactionAlias);
         inferredReceivers.add(primary);
       }
+      if (databaseAlias) {
+        databaseReceivers.add(primary);
+        inferredReceivers.add(primary);
+      }
+      if (connectionAlias) {
+        connectionReceivers.add(primary);
+        inferredReceivers.add(primary);
+      }
       for (const candidate of pending) {
         if (
           [...candidate.scannedNames].some((name) =>
@@ -747,6 +875,7 @@ function analyzeFunction(
       ).test(call.name);
       if (packageOpen && result !== undefined) {
         inferredReceivers.add(result);
+        databaseReceivers.add(result);
         continue;
       }
       if (call.name === "Scan") {
@@ -818,6 +947,45 @@ function analyzeFunction(
           continue;
         }
       }
+      const matchingCreators = creators.filter((summary) =>
+        transactionCreatorCallMatches(function_, call.name, line, summary),
+      );
+      if (matchingCreators.length === 1 && result !== undefined) {
+        const summary = matchingCreators[0]!;
+        const databaseName =
+          call.rawArguments[summary.databaseParameterIndex]?.trim();
+        const databaseMatches =
+          databaseName !== undefined &&
+          (summary.receiverKind === "DB"
+            ? databaseReceivers.has(databaseName)
+            : connectionReceivers.has(databaseName));
+        if (
+          databaseMatches &&
+          !/\bdefer\b/u.test(structural) &&
+          callNestingDepth(function_, call) === 1
+        ) {
+          inferredReceivers.add(result);
+          transactions.set(result, {
+            active: true,
+            pending: [],
+            creationEvidence: [
+              {
+                kind: "go-sql-transaction-begin-helper",
+                line,
+                symbol: summary.functionName,
+              },
+              ...summary.delegations,
+              {
+                kind: "go-sql-transaction-begin",
+                line: summary.line,
+                symbol: summary.creatorReceiverName,
+                path: summary.creatorFile.path,
+              },
+            ],
+          });
+          continue;
+        }
+      }
       const receiverCall =
         /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.([A-Za-z_]\w*)$/u.exec(call.name);
       if (receiverCall === null) continue;
@@ -825,11 +993,17 @@ function analyzeFunction(
       const method = receiverCall[2]!;
       if (
         result !== undefined &&
-        receiverIsTyped(receiver) &&
-        /^(?:Begin|BeginTx)$/u.test(method)
+        ((method === "Begin" && databaseReceivers.has(receiver)) ||
+          (method === "BeginTx" &&
+            (databaseReceivers.has(receiver) ||
+              connectionReceivers.has(receiver))))
       ) {
         inferredReceivers.add(result);
-        transactions.set(result, { active: true, pending: [] });
+        transactions.set(result, {
+          active: true,
+          pending: [],
+          creationEvidence: [],
+        });
         continue;
       }
       if (
@@ -838,6 +1012,7 @@ function analyzeFunction(
         method === "Conn"
       ) {
         inferredReceivers.add(result);
+        connectionReceivers.add(result);
         continue;
       }
 
@@ -1001,6 +1176,7 @@ function analyzeFunction(
             source,
             propagators: [
               ...propagators,
+              ...(transaction?.creationEvidence ?? []),
               { kind: "go-sql-mutation-execution", line, symbol: receiver },
             ],
             controls,
@@ -1234,6 +1410,266 @@ function record(
   };
 }
 
+function transactionCreatorSummaries(
+  files: readonly GoHttpSourceFile[],
+  functions: readonly GoFunction[],
+  functionCounts: ReadonlyMap<string, number>,
+): TransactionCreatorSummary[] {
+  interface DatabaseParameter {
+    index: number;
+    name: string;
+    kind: "DB" | "Conn";
+  }
+  interface Descriptor {
+    function_: GoFunction;
+    parameters: DatabaseParameter[];
+    importPath?: string;
+  }
+  type Resolution =
+    | { kind: "none" }
+    | { kind: "ambiguous" }
+    | { kind: "exact"; summary: TransactionCreatorSummary };
+
+  const functionKey = (function_: GoFunction): string =>
+    `${posix.dirname(function_.file.path)}\0${function_.packageName}\0${function_.name}`;
+  const modules = localGoModules(files);
+  const descriptors = new Map<string, Descriptor>();
+  for (const function_ of functions) {
+    if (function_.receiver !== undefined) continue;
+    const alias = sqlAlias(function_);
+    if (
+      alias === undefined ||
+      !exactTransactionReturnSignature(function_, alias)
+    )
+      continue;
+    const key = functionKey(function_);
+    if (functionCounts.get(key) !== 1) continue;
+    const parameters = function_.parameters.flatMap(
+      (parameter, index): DatabaseParameter[] => {
+        const type = parameter.type.replace(/\s+/gu, "");
+        if (type === `*${alias}.DB`)
+          return [{ index, name: parameter.name, kind: "DB" }];
+        if (type === `*${alias}.Conn`)
+          return [{ index, name: parameter.name, kind: "Conn" }];
+        return [];
+      },
+    );
+    if (parameters.length === 0) continue;
+    const importPath = localPackageImportPath(function_, modules);
+    descriptors.set(key, {
+      function_,
+      parameters,
+      ...(importPath === undefined ? {} : { importPath }),
+    });
+  }
+
+  const aliasesAtLine = (
+    descriptor: Descriptor,
+    parameterName: string,
+    line: number,
+  ): Set<string> => {
+    const aliases = new Set([parameterName]);
+    for (
+      let candidateLine = descriptor.function_.bodyStartLine;
+      candidateLine < line;
+      candidateLine += 1
+    ) {
+      const assignment = goAssignment(
+        descriptor.function_.structuralLines[candidateLine - 1] ?? "",
+      );
+      if (assignment === undefined) continue;
+      const preservesIdentity = aliases.has(assignment.value.trim());
+      for (const name of assignment.names) aliases.delete(name);
+      if (preservesIdentity && assignment.names[0] !== undefined)
+        aliases.add(assignment.names[0]);
+    }
+    return aliases;
+  };
+  const parameterForName = (
+    descriptor: Descriptor,
+    name: string,
+    line: number,
+  ): DatabaseParameter | undefined => {
+    const matching = descriptor.parameters.filter(({ name: parameterName }) =>
+      aliasesAtLine(descriptor, parameterName, line).has(name),
+    );
+    return matching.length === 1 ? matching[0] : undefined;
+  };
+  const memo = new Map<string, Resolution>();
+  const resolve = (
+    key: string,
+    visiting: ReadonlySet<string>,
+    depth: number,
+  ): Resolution => {
+    const cached = memo.get(key);
+    if (cached !== undefined) return cached;
+    if (depth >= MAX_TRANSACTION_HELPER_DEPTH || visiting.has(key))
+      return { kind: "ambiguous" };
+    const descriptor = descriptors.get(key);
+    if (descriptor === undefined) return { kind: "none" };
+    const nextVisiting = new Set(visiting);
+    nextVisiting.add(key);
+    const candidates: TransactionCreatorSummary[] = [];
+    for (const call of goCalls(descriptor.function_)) {
+      const structural =
+        descriptor.function_.structuralLines[call.line - 1] ?? "";
+      if (/\bdefer\b/u.test(structural)) continue;
+      const returnsTransaction = transactionCallResultIsReturned(
+        descriptor.function_,
+        call,
+      );
+      if (!returnsTransaction) continue;
+      if (callNestingDepth(descriptor.function_, call) !== 1) {
+        const result: Resolution = { kind: "ambiguous" };
+        memo.set(key, result);
+        return result;
+      }
+      const receiverCall = /^([A-Za-z_]\w*)\.(Begin|BeginTx)$/u.exec(call.name);
+      if (receiverCall !== null) {
+        const parameter = parameterForName(
+          descriptor,
+          receiverCall[1]!,
+          call.line,
+        );
+        const method = receiverCall[2] as "Begin" | "BeginTx";
+        const argumentShapeMatches =
+          (method === "Begin" &&
+            parameter?.kind === "DB" &&
+            hasNoCallArguments(call)) ||
+          (method === "BeginTx" &&
+            parameter !== undefined &&
+            call.rawArguments.length === 2 &&
+            call.rawArguments.every((argument) => argument.trim() !== ""));
+        if (parameter !== undefined && argumentShapeMatches) {
+          candidates.push({
+            file: descriptor.function_.file,
+            packageName: descriptor.function_.packageName,
+            ...(descriptor.importPath === undefined
+              ? {}
+              : { packageImportPath: descriptor.importPath }),
+            functionName: descriptor.function_.name,
+            databaseParameterIndex: parameter.index,
+            databaseParameterName: parameter.name,
+            receiverKind: parameter.kind,
+            method,
+            line: call.line,
+            creatorFile: descriptor.function_.file,
+            creatorReceiverName: receiverCall[1]!,
+            delegations: [],
+          });
+        }
+        continue;
+      }
+      const plainCall = /^([A-Za-z_]\w*)$/u.exec(call.name);
+      const qualifiedCall = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(call.name);
+      const targets: Array<{ key: string; descriptor: Descriptor }> = [];
+      if (plainCall !== null) {
+        const targetKey = `${posix.dirname(descriptor.function_.file.path)}\0${descriptor.function_.packageName}\0${plainCall[1]}`;
+        const target = descriptors.get(targetKey);
+        if (target !== undefined)
+          targets.push({ key: targetKey, descriptor: target });
+      } else if (
+        qualifiedCall !== null &&
+        /^[A-Z]/u.test(qualifiedCall[2]!) &&
+        packageAliasIsAvailable(
+          descriptor.function_,
+          qualifiedCall[1]!,
+          call.line,
+        )
+      ) {
+        for (const [targetKey, target] of descriptors) {
+          if (
+            target.importPath === undefined ||
+            target.function_.name !== qualifiedCall[2]
+          )
+            continue;
+          const importAlias = goImportAlias(
+            descriptor.function_.file.lines,
+            target.importPath,
+            target.function_.packageName,
+          );
+          if (importAlias === qualifiedCall[1])
+            targets.push({ key: targetKey, descriptor: target });
+        }
+      }
+      if (targets.length === 0) continue;
+      const passesDatabaseParameter = targets.some(({ descriptor: target }) =>
+        target.parameters.some(({ index, kind }) => {
+          const argument = call.rawArguments[index]?.trim();
+          const parameter =
+            argument === undefined
+              ? undefined
+              : parameterForName(descriptor, argument, call.line);
+          return parameter?.kind === kind;
+        }),
+      );
+      if (!passesDatabaseParameter) continue;
+      if (targets.length !== 1) {
+        const result: Resolution = { kind: "ambiguous" };
+        memo.set(key, result);
+        return result;
+      }
+      const target = resolve(targets[0]!.key, nextVisiting, depth + 1);
+      if (target.kind === "ambiguous") {
+        const result: Resolution = { kind: "ambiguous" };
+        memo.set(key, result);
+        return result;
+      }
+      if (target.kind === "none") continue;
+      const argument =
+        call.rawArguments[target.summary.databaseParameterIndex]?.trim();
+      const parameter =
+        argument === undefined
+          ? undefined
+          : parameterForName(descriptor, argument, call.line);
+      if (
+        parameter === undefined ||
+        parameter.kind !== target.summary.receiverKind
+      )
+        continue;
+      candidates.push({
+        file: descriptor.function_.file,
+        packageName: descriptor.function_.packageName,
+        ...(descriptor.importPath === undefined
+          ? {}
+          : { packageImportPath: descriptor.importPath }),
+        functionName: descriptor.function_.name,
+        databaseParameterIndex: parameter.index,
+        databaseParameterName: parameter.name,
+        receiverKind: parameter.kind,
+        method: target.summary.method,
+        line: target.summary.line,
+        creatorFile: target.summary.creatorFile,
+        creatorReceiverName: target.summary.creatorReceiverName,
+        delegations: [
+          {
+            kind: "go-sql-transaction-begin-helper",
+            line: call.line,
+            symbol: target.summary.functionName,
+            path: descriptor.function_.file.path,
+          },
+          ...target.summary.delegations,
+        ],
+      });
+    }
+    const result: Resolution =
+      candidates.length === 0
+        ? { kind: "none" }
+        : candidates.length === 1
+          ? { kind: "exact", summary: candidates[0]! }
+          : { kind: "ambiguous" };
+    memo.set(key, result);
+    return result;
+  };
+
+  const summaries: TransactionCreatorSummary[] = [];
+  for (const key of descriptors.keys()) {
+    const resolution = resolve(key, new Set(), 0);
+    if (resolution.kind === "exact") summaries.push(resolution.summary);
+  }
+  return summaries;
+}
+
 function transactionFinalizerSummaries(
   files: readonly GoHttpSourceFile[],
   functions: readonly GoFunction[],
@@ -1323,7 +1759,7 @@ function transactionFinalizerSummaries(
   ): Resolution => {
     const cached = memo.get(key);
     if (cached !== undefined) return cached;
-    if (depth >= MAX_TRANSACTION_FINALIZER_HELPER_DEPTH || visiting.has(key))
+    if (depth >= MAX_TRANSACTION_HELPER_DEPTH || visiting.has(key))
       return { kind: "ambiguous" };
     const descriptor = descriptors.get(key);
     if (descriptor === undefined) return { kind: "none" };
@@ -1490,6 +1926,11 @@ export function goObjectAuthorizationRecords(
     functions,
     functionCounts,
   );
+  const creators = transactionCreatorSummaries(
+    files,
+    functions,
+    functionCounts,
+  );
 
   for (const function_ of functions) {
     if (requestParameters(function_).length === 0) continue;
@@ -1498,6 +1939,7 @@ export function goObjectAuthorizationRecords(
       new Map(),
       new Map(),
       finalizers,
+      creators,
     )) {
       const identity = `${function_.file.path}:${sink.line}:${sink.kind}`;
       if (emitted.has(identity)) continue;
@@ -1545,6 +1987,7 @@ export function goObjectAuthorizationRecords(
         new Map([[parameter.name, objectTaint]]),
         allPrincipalParameters,
         finalizers,
+        creators,
       )) {
         const principalParameterIndexes: number[] = [];
         if (
@@ -1572,6 +2015,7 @@ export function goObjectAuthorizationRecords(
                 ],
               ]),
               finalizers,
+              creators,
             );
             if (
               isolated.some(

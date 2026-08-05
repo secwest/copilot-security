@@ -599,11 +599,16 @@ real commit location; its control changes only the account predicate. The suite
 adds an eighth pair whose application imports a typed coordinator from one
 internal package and reaches the real commit through a second internal package.
 The host derives both identities from `go.mod`, exact import aliases, and
-exported functions; the control again changes only the account predicate. The
-suite proves all eight blocked attacks and successful
+exported functions; the control again changes only the account predicate. A
+ninth pair obtains the transaction through an imported coordinator and leaf
+factory before mutation and commit. The exact typed DB/Conn input, first Tx
+return, module path, import aliases, helper chain, and leaf `BeginTx` are all
+preserved; its control again changes only the account predicate. The suite
+proves all nine blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
-transaction behavior without a database service:
+transaction behavior, plus cross-package transaction creation, without a
+database service:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -663,6 +668,12 @@ Push-Location fixtures\go-cross-package-helper-transaction-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-helper-transaction-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-transaction-factory-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-transaction-factory-delete-authorization
 go test ./...
 Pop-Location
 ```
