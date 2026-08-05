@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains seventy-four vulnerable/control pairs:
+The versioned corpus currently contains seventy-five vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,10 +118,12 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport, plus GitHub Copilot SDK
+destination-pinned, redirect-free transport, IPv6-transition SSRF where an
+IPv4-only private-address guard accepts IPv4-mapped IPv6, NAT64, and 6to4
+encodings with complete transition canonicalization as the control, plus GitHub Copilot SDK
 trusted-instruction injection where request data crosses two relative-module
 wrappers into `systemMessage.content`, paired with the same data sent only as
-an ordinary `sendAndWait` prompt. Three runs per case produce 444 scans in the
+an ordinary `sendAndWait` prompt. Three runs per case produce 450 scans in the
 complete corpus.
 
 `node-copilot-prompt-injection-manifest.json` isolates that SDK boundary under
@@ -457,6 +459,32 @@ node ../../benchmarks/run-benchmark.mjs `
   --effort high `
   --workers 2 `
   --mode deep
+```
+
+The IPv6-transition SSRF lane specializes an already proven Node
+request-to-outbound-URL path when the sink wrapper applies a fail-closed
+private-address guard that understands only dotted-quad IPv4. The positive
+retains the exact request, relative import, wrapper parameter, parsed host,
+guard, and `fetch` sink. The executable witness demonstrates independent
+bypasses through IPv4-mapped IPv6, NAT64, and 6to4 literals. The paired control
+preserves the topology but canonicalizes all three families before applying
+the private IPv4 policy. A mapped-only normalizer remains positive; unrelated
+host checks, log-only branches, comments, and non-dominating guards are
+rejected:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/node-ipv6-transition-ssrf-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-node-ipv6-transition-ssrf `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+node ../../benchmarks/witnesses/javascript-ipv6-transition-ssrf/Ipv6TransitionSsrfWitness.mjs
 ```
 
 The Go `net/http` SSRF lane measures exact standard-library import identity,

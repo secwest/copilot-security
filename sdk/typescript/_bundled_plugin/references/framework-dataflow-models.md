@@ -141,6 +141,15 @@ interpreter that consumes the value.
   sanitizer: an attacker-controlled absolute first argument overrides its
   base. URL or hostname substring checks are bypassable and never count as
   exact-host validation.
+- Specialized incomplete-guard rows retain the already-proven HTTP source and
+  outbound sink only when the sink wrapper fail-closes on an IPv4-only private
+  address test. Validate IPv4-mapped IPv6 (`::ffff:`), NAT64 (`64:ff9b::`),
+  and 6to4 (`2002:`) separately. A complete counterexample must canonicalize
+  every transition family accepted by the deployed stack before applying the
+  address policy; handling only one prefix is still incomplete. Continue to
+  prove DNS, redirects, proxies, connection pinning, Host/TLS identity, and the
+  concrete internal effect. These rows retain CWE-918 and record CWE-1389 as
+  the incomplete-special-case context.
 
 ### Node HTTP server-side template injection — CWE-1336
 

@@ -1,0 +1,5 @@
+{
+  "name": "javascript-ipv6-transition-ssrf",
+  "private": true,
+  "type": "module"
+}

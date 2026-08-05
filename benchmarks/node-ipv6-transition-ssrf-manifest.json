@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "javascript-ipv6-transition-ssrf",
+      "description": "An HTTP URL crosses a module boundary into an outbound request after an IPv4-only private-address guard that misses IPv4-mapped IPv6, NAT64, and 6to4 encodings.",
+      "fixture": "fixtures/javascript-ipv6-transition-ssrf",
+      "findingsPaths": ["javascript-ipv6-transition-ssrf/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "javascript-ipv6-transition-ssrf",
+          "cwe": ["CWE-918"],
+          "locations": [
+            {
+              "path": "src/upstream.js",
+              "startLine": 7,
+              "endLine": 8,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "javascript-safe-ipv6-transition-fetch",
+      "description": "The same outbound path canonicalizes IPv4-mapped IPv6, NAT64, and 6to4 addresses before applying the private-address guard.",
+      "fixture": "fixtures/javascript-safe-ipv6-transition-fetch",
+      "findingsPaths": [
+        "javascript-safe-ipv6-transition-fetch/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

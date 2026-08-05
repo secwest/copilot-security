@@ -1828,6 +1828,9 @@ export async function buildResidualRiskInventory(
   records.push(...goPgxSqlInjectionRecords(sourceFiles));
   records.push(...goPgconnSqlInjectionRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
+  records.push(
+    ...nodeIpv6TransitionIncompleteGuardRecords(sourceFiles, records),
+  );
 
   return selectResidualRiskRecords(records, MAX_SIGNALS)
     .map(({ priority: _priority, excerpt, sourceExcerpt, ...record }) =>
@@ -2224,6 +2227,220 @@ function frameworkDataflowRecords(
     }
   }
   return records;
+}
+
+function nodeIpv6TransitionIncompleteGuardRecords(
+  files: readonly SourceFileSnapshot[],
+  records: readonly ResidualRiskRecord[],
+): ResidualRiskRecord[] {
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const emitted = new Set<string>();
+  const specialized: ResidualRiskRecord[] = [];
+  for (const record of records) {
+    const framework = record.frameworkModel;
+    if (framework?.id !== "node-http-ssrf") continue;
+    const sinkFile = filesByPath.get(framework.sink.path);
+    if (
+      sinkFile === undefined ||
+      !JAVASCRIPT_EXTENSIONS.has(sinkFile.extension) ||
+      javascriptTestOrExamplePath(sinkFile.path)
+    ) {
+      continue;
+    }
+    const sink =
+      nodeNativeHttpUrlArgument(sinkFile.lines, framework.sink.line) ??
+      nodeHttpUrlSink(sinkFile.lines, framework.sink.line);
+    if (sink?.urlExpression === undefined) continue;
+    const wrapper = exportedJavascriptFunctions(sinkFile.lines).find(
+      (candidate) =>
+        framework.sink.line >= candidate.startLine &&
+        framework.sink.line <= candidate.endLine,
+    );
+    if (wrapper === undefined) continue;
+    const guard = nodeIpv4OnlyHostGuard(
+      sinkFile.lines,
+      wrapper,
+      framework.sink.line,
+      sink.urlExpression,
+    );
+    if (guard === undefined) continue;
+    const key = `${framework.source.path}\0${framework.source.line}\0${framework.sink.path}\0${framework.sink.line}`;
+    if (emitted.has(key)) continue;
+    emitted.add(key);
+    specialized.push({
+      ...record,
+      categories: [
+        "framework-dataflow:node-ssrf-ipv6-transition-incomplete-guard",
+        `modeled-source:${framework.source.kind}`,
+        `modeled-sink:${framework.sink.kind}`,
+        "broken-control:ipv4-only-private-address-denylist",
+      ],
+      priority: Math.max(record.priority, 120),
+      frameworkModel: {
+        ...framework,
+        id: "node-ssrf-ipv6-transition-incomplete-guard",
+        sink: { ...framework.sink, cweIds: ["CWE-918", "CWE-1389"] },
+        candidateControls: [
+          ...framework.candidateControls.filter(
+            (control) =>
+              control.kind !== "network-address-validation-or-pinning",
+          ),
+          {
+            kind: "incomplete-ipv6-transition-address-guard",
+            path: sinkFile.path,
+            line: guard.line,
+          },
+        ].filter(
+          (control, index, all) =>
+            all.findIndex(
+              (candidate) =>
+                candidate.kind === control.kind &&
+                candidate.path === control.path &&
+                candidate.line === control.line,
+            ) === index,
+        ),
+      },
+    });
+  }
+  return specialized;
+}
+
+function javascriptTestOrExamplePath(path: string): boolean {
+  return (
+    /(?:^|\/)(?:__tests__|examples?|test|tests|tests-ts)(?:\/|$)/iu.test(
+      path,
+    ) || /\.(?:spec|test)\.[^./]+$/iu.test(path)
+  );
+}
+
+function nodeIpv4OnlyHostGuard(
+  lines: readonly string[],
+  wrapper: ExportedJavascriptFunction,
+  sinkLine: number,
+  sinkExpression: string,
+): { line: number } | undefined {
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const valueIdentifiers = new Set(
+    javascriptExpressionIdentifiers(sinkExpression).filter(
+      (identifier) =>
+        !["fetch", "get", "got", "http", "https", "request", "undici"].includes(
+          identifier,
+        ),
+    ),
+  );
+  if (valueIdentifiers.size === 0) return undefined;
+
+  const aliases = new Set(valueIdentifiers);
+  for (
+    let index = wrapper.startLine - 1;
+    index < Math.min(sinkLine - 1, wrapper.endLine);
+    index += 1
+  ) {
+    const code = structuralLines[index] ?? "";
+    const assignment =
+      /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/u.exec(code);
+    if (
+      assignment?.[1] !== undefined &&
+      assignment[2] !== undefined &&
+      [...aliases].some((identifier) =>
+        lineReferencesIdentifier(assignment[2]!, identifier),
+      ) &&
+      /\b(?:host|hostname|new\s+URL|parse|process)\b|\.\s*(?:host|hostname)\b/iu.test(
+        assignment[2],
+      )
+    ) {
+      aliases.add(assignment[1]);
+    }
+  }
+
+  const wrapperText = codeLines
+    .slice(wrapper.startLine - 1, Math.min(sinkLine, wrapper.endLine))
+    .join("\n");
+
+  for (
+    let index = wrapper.startLine - 1;
+    index < Math.min(sinkLine - 1, wrapper.endLine);
+    index += 1
+  ) {
+    const structural = structuralLines[index] ?? "";
+    const original = codeLines[index] ?? "";
+    if (!/\bif\s*\(/u.test(structural)) continue;
+    if (
+      ![...aliases].some((identifier) =>
+        lineReferencesIdentifier(structural, identifier),
+      )
+    ) {
+      continue;
+    }
+    const explicitIpv4Classifier =
+      /\b(?:isPrivate|isReserved|isRfc1918|isLoopback)(?:DottedQuad|IPv?4)|\b(?:dottedQuad|ipv4)(?:Address)?IsPrivate\b/iu.test(
+        structural,
+      );
+    const ipv4LiteralGuard =
+      /(?:10\.|127\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)/u.test(
+        original,
+      );
+    if (!explicitIpv4Classifier && !ipv4LiteralGuard) continue;
+    const failClosedWindow = structuralLines
+      .slice(index, Math.min(index + 4, sinkLine - 1))
+      .join("\n");
+    if (!/\b(?:return|throw)\b/u.test(failClosedWindow)) continue;
+    if (
+      nodeHasCompleteIpv6TransitionCanonicalization(
+        lines,
+        wrapperText,
+        structural,
+      )
+    ) {
+      continue;
+    }
+    return { line: index + 1 };
+  }
+  return undefined;
+}
+
+function nodeHasCompleteIpv6TransitionCanonicalization(
+  lines: readonly string[],
+  wrapperText: string,
+  guardExpression: string,
+): boolean {
+  const assignment =
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*(?:canonical|normalize|unwrap|transition)[A-Za-z_$\d]*)\s*\(/iu.exec(
+      wrapperText,
+    );
+  const canonicalValue = assignment?.[1];
+  const canonicalizer = assignment?.[2];
+  if (
+    canonicalValue === undefined ||
+    canonicalizer === undefined ||
+    !lineReferencesIdentifier(guardExpression, canonicalValue)
+  ) {
+    return false;
+  }
+  const structuralLines = javascriptStructuralLines(lines);
+  const declaration = new RegExp(
+    `(?:\\bfunction\\s+${escapeRegularExpression(canonicalizer)}\\s*\\(|\\b(?:const|let|var)\\s+${escapeRegularExpression(canonicalizer)}\\s*=)`,
+    "u",
+  );
+  const declarationIndex = structuralLines.findIndex((line) =>
+    declaration.test(line),
+  );
+  if (declarationIndex < 0) return false;
+  const endLine = javascriptFunctionEndLine(lines, declarationIndex);
+  const definition = javascriptCodeLinesWithoutComments(
+    lines.slice(declarationIndex, endLine),
+  ).join("\n");
+  const mapped = /::ffff:|isIPv4MappedAddress|ipv4Mapped|mappedIpv4/iu.test(
+    definition,
+  );
+  const nat64 = /64:ff9b:|nat64/iu.test(definition);
+  const sixToFour = /2002:|6to4|sixToFour/iu.test(definition);
+  const extractsEmbeddedAddress =
+    /toIPv4Address|embeddedIpv4|extract[A-Za-z_$\d]*Ipv4|(?:slice|substring)\s*\(/iu.test(
+      definition,
+    );
+  return mapped && nat64 && sixToFour && extractsEmbeddedAddress;
 }
 
 function frameworkCrossFileDataflowRecords(
@@ -8074,6 +8291,41 @@ function nodeHttpUrlSink(
     return {};
   }
   return nodeAxiosUrlArgument(lines, sinkLine);
+}
+
+function nodeNativeHttpUrlArgument(
+  lines: readonly string[],
+  sinkLine: number,
+): NodeHttpUrlSink | undefined {
+  const endLine = Math.min(lines.length, sinkLine + 12);
+  const original = javascriptCodeLinesWithoutComments(
+    lines.slice(sinkLine - 1, endLine),
+  ).join("\n");
+  const structural = javascriptStructuralLines(
+    lines.slice(sinkLine - 1, endLine),
+  ).join("\n");
+  const call =
+    /\b(?:fetch|got)\s*\(|\bgot\s*\.\s*(?:delete|get|head|options|patch|post|put|request)\s*\(|\b(?:https?|undici)\s*\.\s*(?:get|request)\s*\(/u.exec(
+      structural,
+    );
+  if (call?.index === undefined) return undefined;
+  const open = structural.indexOf("(", call.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  const first = splitJavascriptArguments(original.slice(open + 1, close))[0];
+  if (first === undefined || first.trim() === "") return undefined;
+  const urlExpression =
+    javascriptObjectPropertyValue(first, "url") ??
+    javascriptObjectPropertyValue(first, "href") ??
+    javascriptObjectPropertyValue(first, "hostname") ??
+    javascriptObjectPropertyValue(first, "host") ??
+    first.trim();
+  return {
+    urlExpression,
+    callStartLine: sinkLine,
+    callEndLine:
+      sinkLine + (structural.slice(0, close).match(/\n/gu)?.length ?? 0),
+  };
 }
 
 function dotnetHttpClientSinkHasTypedReceiver(
