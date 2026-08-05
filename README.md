@@ -949,8 +949,15 @@ uses the common initializer-bound expression switch
 `switch selected := label; selected`. The initializer must short-declare one
 fresh guard from one exact built-in scalar parameter, and the guard must be the
 switch expression without appearing in any arm body. Calls, composite or
-non-scalar sources, mismatched guards, parameter or prior-local shadowing, type
-switches, and any non-terminal or labelled `break` remain fail closed.
+non-scalar sources, mismatched guards, parameter or prior-local shadowing, and
+any non-terminal or labelled `break` remain fail closed. A twenty-eighth pair
+exercises both exact `switch repository.(type)` and
+`switch selected := repository.(type)` recognition through an imported helper.
+The source must be one uniquely resolved interface parameter. A named guard
+must be fresh and may only be consumed by a leading `_ = selected` no-op; every
+value-bearing use remains rejected. Selector, conversion, scalar, aliased, or
+shadowed sources, malformed guards, missing final defaults, and divergent arms
+fail closed under the existing complete-state, topology, and resource checks.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1119,6 +1126,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-helper-initialized-s
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-initialized-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-helper-type-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-type-switch-write-authorization
 go test ./...
 Pop-Location
 ```

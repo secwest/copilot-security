@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains sixty-five vulnerable/control pairs:
+The versioned corpus currently contains sixty-six vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 390
+destination-pinned, redirect-free transport. Three runs per case produce 396
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -695,8 +695,14 @@ guard directly from an exact built-in scalar parameter before selecting among
 the same three all-path writes. The guard must be the switch expression and may
 not appear in an arm body; call results, non-scalar sources, mismatched guards,
 parameter or prior-local shadowing, and other initializer forms fail closed. Its
-control again changes only the account predicate. The suite proves all
-twenty-seven blocked attacks and
+control again changes only the account predicate. A twenty-eighth pair admits
+exact type switches whose source is one uniquely resolved interface parameter.
+Both unbound and fresh guard-bound forms reuse the same all-path replay. A named
+guard may appear only in a leading blank assignment such as `_ = selected`,
+which satisfies Go's compiler without changing tracked state; all value-bearing
+uses reject the join. Scalar, alias, selector, conversion, shadowed, and
+ambiguous sources remain rejected. Its control again changes only the account
+predicate. The suite proves all twenty-eight blocked attacks and
 successful owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
@@ -706,8 +712,8 @@ constructor-interface and constructor-field-write dispatch, including nested
 post-construction injection, exact all-path constructor joins, cross-file
 constructor parent helpers, imported local-module parent helpers, and imported
 constructor-helper field writes, shallow value-copy pointers, and exact helper
-two-way, multi-way, expression-switch, expressionless-switch, and
-initializer-bound-switch branch joins,
+two-way, multi-way, expression-switch, expressionless-switch,
+initializer-bound-switch, and interface-type-switch branch joins,
 without a database service:
 
 ```powershell
@@ -882,6 +888,12 @@ Push-Location fixtures\go-cross-package-imported-helper-initialized-switch-write
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-imported-helper-initialized-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-imported-helper-type-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-imported-helper-type-switch-write-authorization
 go test ./...
 Pop-Location
 ```

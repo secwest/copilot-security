@@ -593,7 +593,13 @@ directly from an exact built-in scalar parameter, must be the switch expression,
 and cannot appear in an arm body. Call results, composite or non-scalar sources,
 mismatched guards, parameter or prior-local shadowing, and all other initializer
 forms remain rejected. The same complete-world replay retains all three write
-origins and requires identity-compatible convergence. This directly
+origins and requires identity-compatible convergence. A twenty-eighth pair
+covers exact type switches sourced directly from one uniquely resolved
+interface parameter. Both unbound and fresh guard-bound spellings are admitted;
+a named guard can be consumed only by an exact leading blank assignment and
+cannot affect the tracked graph. Scalar, alias, selector, conversion, shadowed,
+and ambiguous sources, or any value-bearing guard use, fail closed. The same
+complete-world and topology proof is retained. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -608,7 +614,9 @@ This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
 failure semantics and executable object/principal controls. External-module
 and parameter-transforming helpers, nested helper branches, five-or-more-arm
-chains and switches, side-effecting or composite initializers and type switches, one-arm conditionals
+chains and switches, side-effecting or composite initializers, type switches
+over aliases, selectors, conversions, unconstrained `any`, or value-bearing
+guards, one-arm conditionals
 proven from pre-state, loop-sensitive writes,
 unbound interfaces, embedded promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
