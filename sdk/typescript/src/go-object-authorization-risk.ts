@@ -2175,7 +2175,8 @@ function objectWrapperSummaries(
     importPath?: string;
     name: string;
     methods: ReadonlySet<string>;
-    methodSignatures?: ReadonlyMap<string, string>;
+    packageIdentity: string;
+    canonicalMethodSignatures?: ReadonlyMap<string, string>;
   }
   interface ReceiverBinding {
     concrete: TypeReference;
@@ -2271,6 +2272,371 @@ function objectWrapperSummaries(
   }
 
   const interfaces: InterfaceDescriptor[] = [];
+  const packageTypeNames = new Map<string, Set<string>>();
+  const localPackageNamesByImportPath = new Map<string, Set<string>>();
+  const packageIdentity = (directory: string, packageName: string): string =>
+    localDirectoryImportPath(directory, modules) ??
+    `local:${directory}\0${packageName}`;
+  const packageKey = (directory: string, packageName: string): string =>
+    `${directory}\0${packageName}`;
+  for (const file of files) {
+    if (file.extension !== ".go") continue;
+    const structural = maskGoLines(file.lines, true).join("\n");
+    const packageMatch = /^\s*package\s+([A-Za-z_]\w*)\b/mu.exec(structural);
+    if (packageMatch === null) continue;
+    const directory = posix.dirname(file.path);
+    const key = packageKey(directory, packageMatch[1]!);
+    const names = packageTypeNames.get(key) ?? new Set<string>();
+    for (const declaration of structural.matchAll(
+      /\btype\s+([A-Za-z_]\w*)\b/gu,
+    ))
+      names.add(declaration[1]!);
+    packageTypeNames.set(key, names);
+    if (!file.path.endsWith("_test.go")) {
+      const importPath = localDirectoryImportPath(directory, modules);
+      if (importPath !== undefined) {
+        const packageNames =
+          localPackageNamesByImportPath.get(importPath) ?? new Set<string>();
+        packageNames.add(packageMatch[1]!);
+        localPackageNamesByImportPath.set(importPath, packageNames);
+      }
+    }
+  }
+
+  interface CanonicalTypeContext {
+    directory: string;
+    packageName: string;
+    packageIdentity: string;
+    importAliases: ReadonlyMap<string, string>;
+    importAliasesComplete: boolean;
+  }
+  const localImportPackageName = (importPath: string): string | undefined => {
+    const names =
+      localPackageNamesByImportPath.get(importPath) ?? new Set<string>();
+    return names.size === 1 ? [...names][0] : undefined;
+  };
+  const defaultImportAlias = (importPath: string): string | undefined => {
+    const local = localImportPackageName(importPath);
+    if (local !== undefined) return local;
+    const first = importPath.split("/")[0] ?? "";
+    const basename = posix.basename(importPath);
+    return !first.includes(".") &&
+      /^[A-Za-z_]\w*$/u.test(basename) &&
+      !/^v\d+$/u.test(basename)
+      ? basename
+      : undefined;
+  };
+  const importAliasesFor = (
+    file: GoHttpSourceFile,
+  ): { aliases: ReadonlyMap<string, string>; complete: boolean } => {
+    const source = maskGoLines(file.lines, false).join("\n");
+    const aliases = new Map<string, string>();
+    const importedPaths = new Set<string>();
+    let complete = true;
+    const add = (explicitAlias: string | undefined, importPath: string) => {
+      if (explicitAlias === "." || explicitAlias === "_") {
+        complete = false;
+        return;
+      }
+      const alias = explicitAlias ?? defaultImportAlias(importPath);
+      if (alias === undefined) {
+        complete = false;
+        return;
+      }
+      const prior = aliases.get(alias);
+      if (prior !== undefined || importedPaths.has(importPath)) {
+        complete = false;
+        return;
+      }
+      aliases.set(alias, importPath);
+      importedPaths.add(importPath);
+    };
+    const groups: Array<{ start: number; end: number }> = [];
+    for (const group of source.matchAll(/\bimport\s*\(([\s\S]*?)\)/gu)) {
+      const start = group.index ?? 0;
+      groups.push({ start, end: start + group[0].length });
+      const body = group[1]!;
+      const entries = [
+        ...body.matchAll(
+          /(?:^|[;\r\n])\s*(?:([A-Za-z_]\w*|[._])\s+)?["`]([^"`\r\n]+)["`]\s*(?=$|[;\r\n])/gmu,
+        ),
+      ];
+      const residue = body
+        .replace(
+          /(?:^|[;\r\n])\s*(?:([A-Za-z_]\w*|[._])\s+)?["`]([^"`\r\n]+)["`]\s*(?=$|[;\r\n])/gmu,
+          "\n",
+        )
+        .replace(/[;\s]/gu, "");
+      if (residue !== "") complete = false;
+      for (const entry of entries) add(entry[1], entry[2]!);
+    }
+    const outsideGroups = [...source]
+      .map((character, index) =>
+        groups.some(({ start, end }) => index >= start && index < end)
+          ? " "
+          : character,
+      )
+      .join("");
+    for (const direct of outsideGroups.matchAll(
+      /\bimport\s+(?:([A-Za-z_]\w*|[._])\s+)?["`]([^"`\r\n]+)["`]/gu,
+    ))
+      add(direct[1], direct[2]!);
+    return { aliases, complete };
+  };
+  const importAliases = new Map<
+    GoHttpSourceFile,
+    { aliases: ReadonlyMap<string, string>; complete: boolean }
+  >();
+  for (const file of files)
+    if (file.extension === ".go")
+      importAliases.set(file, importAliasesFor(file));
+
+  const matchingTypeDelimiter = (
+    value: string,
+    opening: string,
+    closing: string,
+  ): number => {
+    let depth = 0;
+    for (let index = 0; index < value.length; index += 1) {
+      if (value[index] === opening) depth += 1;
+      if (value[index] === closing) {
+        depth -= 1;
+        if (depth === 0) return index;
+        if (depth < 0) return -1;
+      }
+    }
+    return -1;
+  };
+  const canonicalBuiltinTypes = new Map<string, string>([
+    ["any", "interface{}"],
+    ["bool", "bool"],
+    ["byte", "uint8"],
+    ["complex128", "complex128"],
+    ["complex64", "complex64"],
+    ["error", "error"],
+    ["float32", "float32"],
+    ["float64", "float64"],
+    ["int", "int"],
+    ["int16", "int16"],
+    ["int32", "int32"],
+    ["int64", "int64"],
+    ["int8", "int8"],
+    ["rune", "int32"],
+    ["string", "string"],
+    ["uint", "uint"],
+    ["uint16", "uint16"],
+    ["uint32", "uint32"],
+    ["uint64", "uint64"],
+    ["uint8", "uint8"],
+    ["uintptr", "uintptr"],
+  ]);
+  let canonicalGoType: (
+    value: string,
+    context: CanonicalTypeContext,
+    depth?: number,
+  ) => string | undefined;
+  const canonicalParameterList = (
+    value: string,
+    context: CanonicalTypeContext,
+    depth: number,
+  ): string[] | undefined => {
+    if (value.trim() === "") return [];
+    const parts = splitGoArguments(value);
+    if (parts.some((part) => part === "")) return undefined;
+    const unnamed = parts.map((part) => canonicalGoType(part, context, depth));
+    const unnamedResult = unnamed.every(
+      (part): part is string => part !== undefined,
+    )
+      ? unnamed
+      : undefined;
+    const named: string[] = [];
+    const pending: string[] = [];
+    let namedValid = true;
+    for (const part of parts) {
+      const declaration = /^([A-Za-z_]\w*)\s+([\s\S]+)$/u.exec(part.trim());
+      if (declaration === null) {
+        if (/^[A-Za-z_]\w*$/u.test(part.trim())) pending.push(part.trim());
+        else namedValid = false;
+        continue;
+      }
+      const type = canonicalGoType(declaration[2]!, context, depth);
+      if (type === undefined) {
+        namedValid = false;
+        continue;
+      }
+      named.push(...pending.splice(0).map(() => type), type);
+    }
+    if (pending.length > 0) namedValid = false;
+    const namedResult = namedValid ? named : undefined;
+    if (unnamedResult !== undefined && namedResult !== undefined)
+      return unnamedResult.join("\0") === namedResult.join("\0")
+        ? unnamedResult
+        : undefined;
+    return unnamedResult ?? namedResult;
+  };
+  const canonicalResults = (
+    value: string,
+    context: CanonicalTypeContext,
+    depth: number,
+  ): string[] | undefined => {
+    const result = value.trim();
+    if (result === "") return [];
+    if (result.startsWith("(")) {
+      const close = matchingTypeDelimiter(result, "(", ")");
+      if (close !== result.length - 1) return undefined;
+      return canonicalParameterList(result.slice(1, close), context, depth);
+    }
+    const type = canonicalGoType(result, context, depth);
+    return type === undefined ? undefined : [type];
+  };
+  canonicalGoType = (
+    value: string,
+    context: CanonicalTypeContext,
+    depth = 0,
+  ): string | undefined => {
+    if (depth > 16) return undefined;
+    const type = value.trim();
+    if (type === "") return undefined;
+    if (type.startsWith("(")) {
+      const close = matchingTypeDelimiter(type, "(", ")");
+      return close === type.length - 1
+        ? canonicalGoType(type.slice(1, close), context, depth + 1)
+        : undefined;
+    }
+    if (type.startsWith("...")) {
+      const element = canonicalGoType(type.slice(3), context, depth + 1);
+      return element === undefined ? undefined : `variadic:${element}`;
+    }
+    if (type.startsWith("*")) {
+      const element = canonicalGoType(type.slice(1), context, depth + 1);
+      return element === undefined ? undefined : `pointer:${element}`;
+    }
+    if (/^\[\s*\]/u.test(type)) {
+      const element = canonicalGoType(
+        type.replace(/^\[\s*\]/u, ""),
+        context,
+        depth + 1,
+      );
+      return element === undefined ? undefined : `slice:${element}`;
+    }
+    if (type.startsWith("[")) {
+      const close = matchingTypeDelimiter(type, "[", "]");
+      if (close < 0) return undefined;
+      const length = type.slice(1, close).trim();
+      if (!/^(?:0|[1-9]\d*)$/u.test(length)) return undefined;
+      const element = canonicalGoType(
+        type.slice(close + 1),
+        context,
+        depth + 1,
+      );
+      return element === undefined ? undefined : `array:${length}:${element}`;
+    }
+    if (/^map\s*\[/u.test(type)) {
+      const open = type.indexOf("[");
+      const close = matchingTypeDelimiter(type.slice(open), "[", "]");
+      if (close < 0) return undefined;
+      const absoluteClose = open + close;
+      const key = canonicalGoType(
+        type.slice(open + 1, absoluteClose),
+        context,
+        depth + 1,
+      );
+      const element = canonicalGoType(
+        type.slice(absoluteClose + 1),
+        context,
+        depth + 1,
+      );
+      return key === undefined || element === undefined
+        ? undefined
+        : `map:${key}:${element}`;
+    }
+    for (const [prefix, label] of [
+      ["<-chan", "receive"],
+      ["chan<-", "send"],
+      ["chan", "both"],
+    ] as const) {
+      if (type.startsWith(prefix) && /^\s+/u.test(type.slice(prefix.length))) {
+        const element = canonicalGoType(
+          type.slice(prefix.length),
+          context,
+          depth + 1,
+        );
+        return element === undefined ? undefined : `chan:${label}:${element}`;
+      }
+    }
+    if (/^func\s*\(/u.test(type)) {
+      const open = type.indexOf("(");
+      const close = matchingTypeDelimiter(type.slice(open), "(", ")");
+      if (close < 0) return undefined;
+      const absoluteClose = open + close;
+      const parameters = canonicalParameterList(
+        type.slice(open + 1, absoluteClose),
+        context,
+        depth + 1,
+      );
+      const results = canonicalResults(
+        type.slice(absoluteClose + 1),
+        context,
+        depth + 1,
+      );
+      return parameters === undefined || results === undefined
+        ? undefined
+        : `func:(${parameters.join(",")}):(${results.join(",")})`;
+    }
+    if (/^interface\s*\{\s*\}$/u.test(type)) return "interface{}";
+    const named =
+      /^(?:([A-Za-z_]\w*)\s*\.\s*)?([A-Za-z_]\w*)(?:\s*\[([\s\S]+)\])?$/u.exec(
+        type,
+      );
+    if (named === null) return undefined;
+    let identity: string;
+    if (named[1] !== undefined) {
+      if (!context.importAliasesComplete) return undefined;
+      const importPath = context.importAliases.get(named[1]!);
+      if (importPath === undefined) return undefined;
+      identity = `named:${importPath}:${named[2]!}`;
+    } else {
+      const localTypes =
+        packageTypeNames.get(
+          packageKey(context.directory, context.packageName),
+        ) ?? new Set<string>();
+      if (localTypes.has(named[2]!))
+        identity = `named:${context.packageIdentity}:${named[2]!}`;
+      else {
+        const builtin = canonicalBuiltinTypes.get(named[2]!);
+        if (builtin === undefined) return undefined;
+        identity = `builtin:${builtin}`;
+      }
+    }
+    if (named[3] === undefined) return identity;
+    const arguments_ = splitGoArguments(named[3]!).map((argument) =>
+      canonicalGoType(argument, context, depth + 1),
+    );
+    return arguments_.every(
+      (argument): argument is string => argument !== undefined,
+    )
+      ? `${identity}[${arguments_.join(",")}]`
+      : undefined;
+  };
+  const canonicalMethodSignature = (
+    value: string,
+    context: CanonicalTypeContext,
+  ): string | undefined => {
+    const signature = value.trim();
+    if (!signature.startsWith("(")) return undefined;
+    const close = matchingTypeDelimiter(signature, "(", ")");
+    if (close < 0) return undefined;
+    const parameters = canonicalParameterList(
+      signature.slice(1, close),
+      context,
+      0,
+    );
+    const results = canonicalResults(signature.slice(close + 1), context, 0);
+    return parameters === undefined || results === undefined
+      ? undefined
+      : `(${parameters.join(",")})->(${results.join(",")})`;
+  };
+
   for (const file of files) {
     if (file.extension !== ".go") continue;
     const structural = maskGoLines(file.lines, true).join("\n");
@@ -2278,6 +2644,11 @@ function objectWrapperSummaries(
     if (packageMatch === null) continue;
     const directory = posix.dirname(file.path);
     const importPath = localDirectoryImportPath(directory, modules);
+    const identity = packageIdentity(directory, packageMatch[1]!);
+    const imports = importAliases.get(file) ?? {
+      aliases: new Map<string, string>(),
+      complete: false,
+    };
     for (const declaration of structural.matchAll(
       /\btype\s+([A-Za-z_]\w*)\s+interface\s*\{([\s\S]*?)\}/gu,
     )) {
@@ -2292,6 +2663,7 @@ function objectWrapperSummaries(
       );
       const methods = new Set(methodNames);
       const methodSignatures = new Map<string, string>();
+      const canonicalMethodSignatures = new Map<string, string>();
       let signaturesComplete = true;
       for (const fragment of body.split(/[;\r\n]+/u)) {
         const declaration = fragment.trim();
@@ -2319,6 +2691,15 @@ function objectWrapperSummaries(
           break;
         }
         methodSignatures.set(method[1]!, method[2]!.replace(/\s+/gu, ""));
+        const canonical = canonicalMethodSignature(method[2]!, {
+          directory,
+          packageName: packageMatch[1]!,
+          packageIdentity: identity,
+          importAliases: imports.aliases,
+          importAliasesComplete: imports.complete,
+        });
+        if (canonical === undefined) signaturesComplete = false;
+        else canonicalMethodSignatures.set(method[1]!, canonical);
       }
       const empty = body.trim() === "";
       if ((!empty && methods.size === 0) || methods.size !== methodNames.length)
@@ -2335,7 +2716,8 @@ function objectWrapperSummaries(
         ...(importPath === undefined ? {} : { importPath }),
         name: declaration[1]!,
         methods,
-        ...(signaturesComplete ? { methodSignatures } : {}),
+        packageIdentity: identity,
+        ...(signaturesComplete ? { canonicalMethodSignatures } : {}),
       });
     }
   }
@@ -3234,30 +3616,17 @@ function objectWrapperSummaries(
       const sourceInterface = source.interface_;
       if (
         sourceInterface === undefined ||
-        sourceInterface.directory !== target.directory ||
-        sourceInterface.packageName !== target.packageName ||
-        sourceInterface.methodSignatures === undefined ||
-        target.methodSignatures === undefined
-      )
-        return false;
-      if (
-        sourceInterface.file.path !== target.file.path &&
-        [...target.methods].some((method) => {
-          const sourceSignature =
-            sourceInterface.methodSignatures?.get(method) ?? "";
-          const targetSignature = target.methodSignatures?.get(method) ?? "";
-          return (
-            /\b[A-Za-z_]\w*\s*\./u.test(sourceSignature) ||
-            /\b[A-Za-z_]\w*\s*\./u.test(targetSignature)
-          );
-        })
+        sourceInterface.canonicalMethodSignatures === undefined ||
+        target.canonicalMethodSignatures === undefined
       )
         return false;
       return [...target.methods].every(
         (method) =>
           sourceInterface.methods.has(method) &&
-          sourceInterface.methodSignatures?.get(method) ===
-            target.methodSignatures?.get(method),
+          (/^[A-Z]/u.test(method) ||
+            sourceInterface.packageIdentity === target.packageIdentity) &&
+          sourceInterface.canonicalMethodSignatures?.get(method) ===
+            target.canonicalMethodSignatures?.get(method),
       );
     };
     const convertedInterfaceAlias = (

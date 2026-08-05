@@ -621,7 +621,16 @@ original parameter and dynamic value. Nested calls or conversions, selectors,
 composite arguments, broader or signature-mismatched targets, embedded or
 constraint interfaces, unresolved or cross-package nonempty signatures,
 shadowed targets, shadowed `any`, pre-1.18 modules, and a ninth assignment edge
-remain rejected. The same complete-world and topology proof is retained. This
+remain rejected. A thirty-second pair closes that cross-package boundary with
+bounded canonical Go identities. Parameter and result names are discarded,
+grouped declarations are expanded, imported named types bind to import paths
+instead of file-local aliases, local named types retain package identity, and
+unexported methods retain their declaring-package identity. Exact exported
+method sets can therefore match across files and local-module packages while
+different aliases, result types, package types, cross-package unexported
+methods, duplicate or unresolved imports, dot/blank imports, and unsupported
+type grammar fail closed. The same complete-world and topology proof is
+retained. This
 follows the [Go conversion and assignability rules](https://go.dev/ref/spec#Conversions),
 which preserve representation for this conversion family. It directly
 implements OWASP API1:2023's

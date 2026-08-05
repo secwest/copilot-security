@@ -986,6 +986,19 @@ the original dynamic value while replacing only its tracked static interface
 descriptor. Signature mismatch, a broader target, embedded or constraint
 interfaces, unresolved import identity, cross-package nonempty method sets,
 nested input, local type or value shadowing, and a ninth edge fail closed.
+A thirty-second pair replaces textual signature equality with bounded canonical
+Go type identities. Method parameter and result names are erased, grouped names
+are expanded, `byte`/`rune` aliases are normalized, and qualified types resolve
+through each declaring file's import aliases to their import paths. Local named
+types include their package identity, while unexported method identity also
+includes its declaring package. This admits exact same-package cross-file and
+cross-package exported basic-interface conversions even when parameter names and
+import aliases differ. It rejects missing or duplicate import identities,
+dot/blank imports, unresolved external implicit aliases, different imported or
+result types, cross-package unexported methods, malformed or unsupported types,
+and every existing ambiguity and depth failure. The executable pair places the
+target interface in a separate `contracts` package and proves both the unscoped
+deletion and its principal-bound control.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1178,6 +1191,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-helper-named-interfa
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-named-interface-type-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-helper-cross-package-interface-type-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-cross-package-interface-type-switch-write-authorization
 go test ./...
 Pop-Location
 ```

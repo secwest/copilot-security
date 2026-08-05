@@ -180,6 +180,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-imported-helper-empty-interface-type-switch-write-authorization",
       "go-cross-package-imported-helper-named-interface-type-switch-write-delete-idor",
       "go-cross-package-safe-imported-helper-named-interface-type-switch-write-authorization",
+      "go-cross-package-imported-helper-cross-package-interface-type-switch-write-delete-idor",
+      "go-cross-package-safe-imported-helper-cross-package-interface-type-switch-write-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -243,6 +245,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[59]?.expected).toEqual([]);
     expect(manifest.cases[60]?.expected).toHaveLength(1);
     expect(manifest.cases[61]?.expected).toEqual([]);
+    expect(manifest.cases[62]?.expected).toHaveLength(1);
+    expect(manifest.cases[63]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -1859,12 +1863,6 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(propagators).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          kind: "go-method-receiver-constructor-helper-call",
-          symbol: "parent.NewLayer",
-          path: "internal/service/service.go",
-          line: 16,
-        }),
-        expect.objectContaining({
           kind: "go-method-receiver-constructor-field-write",
           path: "internal/parent/layer.go",
           line: 27,
@@ -2395,6 +2393,69 @@ describe("Go HTTP object-authorization framework model", () => {
           kind: "go-method-receiver-constructor-helper-return",
           path: "internal/parent/layer.go",
           line: 41,
+        }),
+      ]),
+    );
+    expect(
+      propagators.filter(
+        ({ kind }) => kind === "go-method-receiver-constructor-field-write",
+      ),
+    ).toHaveLength(3);
+    expect(propagators.map(({ path }) => path)).not.toContain(
+      "internal/archive/store.go",
+    );
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      frameworkModel: {
+        candidateControls: [
+          expect.objectContaining({ kind: "principal-bound-object-query" }),
+        ],
+      },
+    });
+  });
+
+  test("preserves imported helper cross-package interface type switch writes and their control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-imported-helper-cross-package-interface-type-switch-write-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-imported-helper-cross-package-interface-type-switch-write-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 11 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "internal/primary/store.go",
+          line: 11,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    const propagators = vulnerable[0]?.frameworkModel?.propagators ?? [];
+    expect(propagators).toHaveLength(22);
+    expect(propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 32,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 34,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 36,
         }),
       ]),
     );
@@ -6058,7 +6119,7 @@ type DeleteRepository interface { DeleteInvoice(context.Context, *sql.DB, string
         },
         '"example.com/invoices/contracts"',
       ),
-    ).toEqual([]);
+    ).toHaveLength(1);
     expect(
       await repository(`func choose(repository InvoiceRepository) InvoiceRepository { return repository }
 func NewService(repository InvoiceRepository, label string) *Service {
@@ -6342,6 +6403,153 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
         ({ kind }) => kind === "go-method-receiver-constructor-field-write",
       ),
     ).toHaveLength(2);
+  });
+
+  test("canonicalizes assignable named interfaces across files and packages", async () => {
+    const scan = async ({
+      target,
+      targetExpression,
+      sourcePrivateMethod = "",
+      storePrivateMethod = "",
+      additionalFiles = {},
+    }: {
+      target: string;
+      targetExpression: string;
+      sourcePrivateMethod?: string;
+      storePrivateMethod?: string;
+      additionalFiles?: Record<string, string>;
+    }): Promise<ModelRecord[]> =>
+      repositoryInventory({
+        "go.mod": "module example.com/interface-identities\n\ngo 1.26\n",
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+  ${targetExpression.includes(".") ? 'contracts "example.com/interface-identities/contracts"' : ""}
+)
+type InvoiceRepository interface {
+  DeleteInvoice(requestContext context.Context, connection *sql.DB, invoiceID string) (failure error)
+  ArchiveInvoices(requestContext context.Context, connection *sql.DB, firstID, secondID string) (count int, failure error)
+  ${sourcePrivateMethod}
+}
+type Store struct{}
+func (*Store) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+func (*Store) ArchiveInvoices(ctx context.Context, db *sql.DB, firstID, secondID string) (int, error) {
+  _, _, _, _ = ctx, db, firstID, secondID
+  return 0, nil
+}
+${storePrivateMethod}
+type Service struct { repository InvoiceRepository }
+func NewService(repository InvoiceRepository) *Service {
+  service := &Service{}
+  switch ${targetExpression}(repository).(type) {
+  case *Store:
+    service.repository = repository
+  default:
+    service.repository = repository
+  }
+  return service
+}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.repository.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Store{})
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+        [targetExpression.includes(".")
+          ? "contracts/repository.go"
+          : "selected.go"]: target,
+        ...additionalFiles,
+      });
+
+    const crossPackage = `package contracts
+import (
+  ctx "context"
+  database "database/sql"
+)
+type SelectedRepository interface {
+  DeleteInvoice(ctx.Context, *database.DB, string) error
+  ArchiveInvoices(ctx.Context, *database.DB, string, string) (int, error)
+}`;
+    expect(
+      await scan({
+        target: crossPackage,
+        targetExpression: "contracts.SelectedRepository",
+      }),
+    ).toHaveLength(1);
+
+    expect(
+      await scan({
+        target: crossPackage.replace("package contracts", "package invoices"),
+        targetExpression: "SelectedRepository",
+      }),
+    ).toHaveLength(1);
+
+    expect(
+      await scan({
+        target: crossPackage.replace(
+          'ctx "context"',
+          'ctx "example.com/interface-identities/wrongcontext"',
+        ),
+        targetExpression: "contracts.SelectedRepository",
+        additionalFiles: {
+          "wrongcontext/context.go":
+            "package wrongcontext\ntype Context struct{}\n",
+        },
+      }),
+    ).toEqual([]);
+
+    expect(
+      await scan({
+        target: crossPackage.replace(
+          "  ArchiveInvoices(ctx.Context, *database.DB, string, string) (int, error)",
+          "  ArchiveInvoices(ctx.Context, *database.DB, string, string) (string, error)",
+        ),
+        targetExpression: "contracts.SelectedRepository",
+      }),
+    ).toEqual([]);
+
+    expect(
+      await scan({
+        target: `${crossPackage.slice(0, -2)}
+  authorize(string) error
+}`,
+        targetExpression: "contracts.SelectedRepository",
+        sourcePrivateMethod: "authorize(string) error",
+        storePrivateMethod:
+          "func (*Store) authorize(string) error { return nil }",
+      }),
+    ).toEqual([]);
+
+    expect(
+      await scan({
+        target: `package contracts
+import (
+  ctx "context"
+  ctx "database/sql"
+)
+type SelectedRepository interface {
+  DeleteInvoice(ctx.Context, *ctx.DB, string) error
+}`,
+        targetExpression: "contracts.SelectedRepository",
+      }),
+    ).toEqual([]);
+
+    expect(
+      await scan({
+        target: `package contracts
+type SelectedRepository interface {
+  DeleteInvoice(identity.Context, *identity.DB, string) error
+}`,
+        targetExpression: "contracts.SelectedRepository",
+      }),
+    ).toEqual([]);
   });
 
   test("accepts eight joined branch writes and rejects nine", async () => {

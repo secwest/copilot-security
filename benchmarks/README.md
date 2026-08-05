@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains sixty-nine vulnerable/control pairs:
+The versioned corpus currently contains seventy vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 414
+destination-pinned, redirect-free transport. Three runs per case produce 420
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -724,7 +724,15 @@ same-package method-set subset with matching signatures. Broader or mismatched
 targets, embedded or constraint interfaces, unresolved or cross-package
 nonempty signatures, nested inputs, local type or value shadowing, and a ninth
 edge fail closed. Its control again changes only the account predicate. The
-suite proves all thirty-one blocked attacks and
+thirty-second pair places the target interface in a separate local-module
+package and intentionally changes import aliases plus parameter and result
+names. Bounded canonical type identities erase parameter names, expand grouped
+names, resolve qualified types to import paths, normalize predeclared aliases,
+and retain package identity for local types and unexported methods. Exact
+exported cross-package method sets are admitted; ambiguous, duplicate, dot,
+blank, unresolved, or differently bound imports, result/type mismatches, and
+cross-package unexported methods fail closed. Its control again changes only
+the account predicate. The suite proves all thirty-two blocked attacks and
 successful owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
@@ -737,7 +745,8 @@ constructor-helper field writes, shallow value-copy pointers, and exact helper
 two-way, multi-way, expression-switch, expressionless-switch,
 initializer-bound-switch, direct interface-type-switch, and bounded aliased
 interface-type-switch, exact empty-interface-conversion, and exact named-basic-
-interface-conversion branch joins,
+interface-conversion and canonical cross-package-interface-conversion branch
+joins,
 without a database service:
 
 ```powershell
@@ -936,6 +945,12 @@ Push-Location fixtures\go-cross-package-imported-helper-named-interface-type-swi
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-imported-helper-named-interface-type-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-imported-helper-cross-package-interface-type-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-imported-helper-cross-package-interface-type-switch-write-authorization
 go test ./...
 Pop-Location
 ```
