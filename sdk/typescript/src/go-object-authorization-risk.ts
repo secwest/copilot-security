@@ -33,6 +33,7 @@ const MAX_OBJECT_CONSTRUCTOR_HELPER_DEPTH = 8;
 const MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES = 8;
 const MAX_OBJECT_CONSTRUCTOR_STATEMENT_LINES = 13;
 const MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES = 16;
+const MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS = 4;
 const MAX_TRANSACTION_HELPER_DEPTH = 32;
 const MAX_TRANSACTION_FUNCTION_VALUE_DEPTH = 8;
 const OBJECT_COLUMN = /^(?:id|key|uuid|[a-z][a-z0-9_]*_(?:id|key|uuid))$/iu;
@@ -2154,8 +2155,7 @@ function objectWrapperSummaries(
     | ConstructorValueHelperWriteStep
     | {
         kind: "branch";
-        thenSteps: ReadonlyArray<ConstructorValueHelperWriteStep>;
-        elseSteps: ReadonlyArray<ConstructorValueHelperWriteStep>;
+        arms: ReadonlyArray<ReadonlyArray<ConstructorValueHelperWriteStep>>;
       };
   interface ConstructorValueHelperSummary {
     key: string;
@@ -2749,15 +2749,12 @@ function objectWrapperSummaries(
     return { structural: first, endLine: startLine };
   };
 
-  const constructorIfElseStatement = (
+  const constructorIfElseBranches = (
     function_: GoFunction,
     startLine: number,
   ):
     | {
-        thenStartLine: number;
-        thenEndLine: number;
-        elseStartLine: number;
-        elseEndLine: number;
+        arms: ReadonlyArray<{ startLine: number; endLine: number }>;
         endLine: number;
       }
     | undefined => {
@@ -2765,40 +2762,55 @@ function objectWrapperSummaries(
     if (!/^\s*if\s+[^{};]+\s*\{\s*$/u.test(opening)) return undefined;
     let relativeDepth = braceDelta(opening);
     if (relativeDepth !== 1) return undefined;
-    let separatorLine: number | undefined;
+    const arms: Array<{ startLine: number; endLine: number }> = [];
+    let armStartLine = startLine + 1;
+    let finalElse = false;
     const maximumLine = Math.min(
       function_.endLine,
-      startLine + MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES * 2 + 2,
+      startLine +
+        MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES *
+          MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS +
+        MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS,
     );
     for (let line = startLine + 1; line <= maximumLine; line += 1) {
       const structural = function_.structuralLines[line - 1] ?? "";
       if (
         relativeDepth === 1 &&
-        separatorLine === undefined &&
-        /^\s*\}\s*else\s*\{\s*$/u.test(structural)
+        !finalElse &&
+        /^\s*\}\s*else\s+if\s+[^{};]+\s*\{\s*$/u.test(structural)
       ) {
-        separatorLine = line;
+        if (
+          line - armStartLine > MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES ||
+          arms.length + 1 >= MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
+        )
+          return undefined;
+        arms.push({ startLine: armStartLine, endLine: line - 1 });
+        armStartLine = line + 1;
         continue;
       }
       if (
         relativeDepth === 1 &&
-        separatorLine !== undefined &&
-        /^\s*\}\s*$/u.test(structural)
+        !finalElse &&
+        /^\s*\}\s*else\s*\{\s*$/u.test(structural)
       ) {
-        const thenLines = separatorLine - startLine - 1;
-        const elseLines = line - separatorLine - 1;
         if (
-          thenLines > MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES ||
-          elseLines > MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES
+          line - armStartLine > MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES ||
+          arms.length + 1 >= MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
         )
           return undefined;
-        return {
-          thenStartLine: startLine + 1,
-          thenEndLine: separatorLine - 1,
-          elseStartLine: separatorLine + 1,
-          elseEndLine: line - 1,
-          endLine: line,
-        };
+        arms.push({ startLine: armStartLine, endLine: line - 1 });
+        armStartLine = line + 1;
+        finalElse = true;
+        continue;
+      }
+      if (relativeDepth === 1 && finalElse && /^\s*\}\s*$/u.test(structural)) {
+        if (
+          line - armStartLine > MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES ||
+          arms.length + 1 > MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
+        )
+          return undefined;
+        arms.push({ startLine: armStartLine, endLine: line - 1 });
+        return arms.length >= 2 ? { arms, endLine: line } : undefined;
       }
       relativeDepth += braceDelta(structural);
       if (relativeDepth < 1) return undefined;
@@ -2867,16 +2879,13 @@ function objectWrapperSummaries(
     if (step.kind === "branch")
       return {
         kind: "branch",
-        thenSteps: step.thenSteps.map((write) => ({
-          ...write,
-          fields: [...write.fields],
-          propagators: [...write.propagators],
-        })),
-        elseSteps: step.elseSteps.map((write) => ({
-          ...write,
-          fields: [...write.fields],
-          propagators: [...write.propagators],
-        })),
+        arms: step.arms.map((arm) =>
+          arm.map((write) => ({
+            ...write,
+            fields: [...write.fields],
+            propagators: [...write.propagators],
+          })),
+        ),
       };
     return { ...step };
   };
@@ -2888,7 +2897,7 @@ function objectWrapperSummaries(
       step.kind === "write"
         ? [step]
         : step.kind === "branch"
-          ? [...step.thenSteps, ...step.elseSteps]
+          ? step.arms.flat()
           : [],
     );
 
@@ -2901,7 +2910,7 @@ function objectWrapperSummaries(
         (step.kind === "write"
           ? 1
           : step.kind === "branch"
-            ? Math.max(step.thenSteps.length, step.elseSteps.length)
+            ? Math.max(...step.arms.map((arm) => arm.length))
             : 0),
       0,
     );
@@ -3015,29 +3024,32 @@ function objectWrapperSummaries(
       const statementLine = line;
       const conditional =
         lineNestingDepth(function_, statementLine) === 1
-          ? constructorIfElseStatement(function_, statementLine)
+          ? constructorIfElseBranches(function_, statementLine)
           : undefined;
       if (conditional !== undefined) {
-        const thenSteps = branchWrites(
-          conditional.thenStartLine,
-          conditional.thenEndLine,
-        );
-        const elseSteps = branchWrites(
-          conditional.elseStartLine,
-          conditional.elseEndLine,
-        );
+        const arms: ConstructorValueHelperWriteStep[][] = [];
+        for (const { startLine, endLine } of conditional.arms) {
+          const writes = branchWrites(startLine, endLine);
+          if (writes === undefined) {
+            invalid = true;
+            break;
+          }
+          arms.push(writes);
+        }
+        if (invalid) break;
+        const writeCounts = arms.map((arm) => arm?.length);
+        const firstWriteCount = writeCounts[0];
         if (
-          thenSteps === undefined ||
-          elseSteps === undefined ||
-          thenSteps.length === 0 ||
-          thenSteps.length !== elseSteps.length ||
-          writeCount + thenSteps.length > MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES
+          firstWriteCount === undefined ||
+          firstWriteCount === 0 ||
+          writeCounts.some((count) => count !== firstWriteCount) ||
+          writeCount + firstWriteCount > MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES
         ) {
           invalid = true;
           break;
         }
-        steps.push({ kind: "branch", thenSteps, elseSteps });
-        writeCount += thenSteps.length;
+        steps.push({ kind: "branch", arms });
+        writeCount += firstWriteCount;
         line = conditional.endLine;
         continue;
       }
@@ -3697,15 +3709,18 @@ function objectWrapperSummaries(
           continue;
         }
         if (step.kind === "branch") {
-          const thenAliases = cloneHelperAliases(aliases);
-          const elseAliases = cloneHelperAliases(aliases);
-          if (
-            !applyBranchWrites(thenAliases, step.thenSteps) ||
-            !applyBranchWrites(elseAliases, step.elseSteps)
-          )
+          const worlds = step.arms.map((arm) => {
+            const world = cloneHelperAliases(aliases);
+            return applyBranchWrites(world, arm) ? world : undefined;
+          });
+          if (worlds.length < 2 || worlds.some((world) => world === undefined))
             return undefined;
-          const joined = joinHelperAliases(thenAliases, elseAliases);
-          if (joined === undefined) return undefined;
+          let joined = worlds[0]!;
+          for (const world of worlds.slice(1)) {
+            const next = joinHelperAliases(joined, world!);
+            if (next === undefined) return undefined;
+            joined = next;
+          }
           aliases.clear();
           for (const [name, value] of joined) aliases.set(name, value);
           continue;
@@ -4155,60 +4170,74 @@ function objectWrapperSummaries(
       line = statement.endLine;
       const conditional =
         lineNestingDepth(function_, statementLine) === 1
-          ? constructorIfElseStatement(function_, statementLine)
+          ? constructorIfElseBranches(function_, statementLine)
           : undefined;
       if (conditional !== undefined) {
-        const thenBranch = cloneAliases(aliases);
-        const elseBranch = cloneAliases(aliases);
-        const thenBudget: ConstructorWriteBudget = {
-          count: writeBudget.count,
-        };
-        const elseBudget: ConstructorWriteBudget = {
-          count: writeBudget.count,
-        };
-        const thenWrites = applyConstructorBranch(
-          thenBranch.aliases,
-          conditional.thenStartLine,
-          conditional.thenEndLine,
-          thenBudget,
-        );
-        const elseWrites = applyConstructorBranch(
-          elseBranch.aliases,
-          conditional.elseStartLine,
-          conditional.elseEndLine,
-          elseBudget,
-        );
+        const worlds = conditional.arms.map(({ startLine, endLine }) => {
+          const branch = cloneAliases(aliases);
+          const budget: ConstructorWriteBudget = { count: writeBudget.count };
+          const writes = applyConstructorBranch(
+            branch.aliases,
+            startLine,
+            endLine,
+            budget,
+          );
+          return { branch, budget, writes };
+        });
+        const firstWrites = worlds[0]?.writes;
+        const firstBudget = worlds[0]?.budget.count;
         if (
-          thenWrites === undefined ||
-          elseWrites === undefined ||
-          thenWrites === 0 ||
-          elseWrites === 0 ||
-          thenBudget.count !== elseBudget.count
+          worlds.length < 2 ||
+          firstWrites === undefined ||
+          firstWrites === 0 ||
+          firstBudget === undefined ||
+          worlds.some(
+            ({ writes, budget }) =>
+              writes === undefined ||
+              writes !== firstWrites ||
+              budget.count !== firstBudget,
+          )
         ) {
           invalid = true;
           break;
         }
-        const joinedStates = new Map<ConstructorState, ConstructorState>();
-        const valueMemo = constructorValueJoinMemo();
+        const originalStates = new Set<ConstructorState>();
         for (const alias of aliases.values()) {
-          if (joinedStates.has(alias.state)) continue;
-          const left = thenBranch.states.get(alias.state);
-          const right = elseBranch.states.get(alias.state);
-          if (left === undefined || right === undefined) {
+          originalStates.add(alias.state);
+        }
+        let joinedStates = new Map<ConstructorState, ConstructorState>();
+        for (const original of originalStates) {
+          const state = worlds[0]!.branch.states.get(original);
+          if (state === undefined) {
             invalid = true;
             break;
           }
-          const joined = joinConstructorStates(left, right, valueMemo);
-          if (joined === undefined) {
-            invalid = true;
-            break;
+          joinedStates.set(original, state);
+        }
+        for (const world of worlds.slice(1)) {
+          if (invalid) break;
+          const nextStates = new Map<ConstructorState, ConstructorState>();
+          const valueMemo = constructorValueJoinMemo();
+          for (const original of originalStates) {
+            const left = joinedStates.get(original);
+            const right = world.branch.states.get(original);
+            if (left === undefined || right === undefined) {
+              invalid = true;
+              break;
+            }
+            const joined = joinConstructorStates(left, right, valueMemo);
+            if (joined === undefined) {
+              invalid = true;
+              break;
+            }
+            nextStates.set(original, joined);
           }
-          joinedStates.set(alias.state, joined);
+          joinedStates = nextStates;
         }
         if (invalid) break;
         for (const alias of aliases.values())
           alias.state = joinedStates.get(alias.state)!;
-        writeBudget.count = thenBudget.count;
+        writeBudget.count = firstBudget;
         line = conditional.endLine;
         continue;
       }

@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains sixty-one vulnerable/control pairs:
+The versioned corpus currently contains sixty-two vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 366
+destination-pinned, redirect-free transport. Three runs per case produce 372
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -669,7 +669,14 @@ Evidence from both branch aliases and both write origins is retained. Concrete
 value isolation, pointer-slot replacement on different copies, divergent
 implementations, branch-local assignments, nested control flow, unequal write
 counts, a ninth write, and a seventeenth branch line fail closed. Its control
-again changes only the account predicate. The suite proves all twenty-three blocked
+again changes only the account predicate. A twenty-fourth pair generalizes the
+imported helper join to one exact `if / else if / else` chain. Three shallow
+value copies write the same shared pointer holder on three paths; the host
+retains all three origins and joins only complete, identity-compatible state.
+A mandatory final `else`, two-through-four-arm bound, equal nonzero write
+counts, and the existing per-path budgets make the accepted paths explicit; a
+fifth arm, missing final arm, or divergent state fails closed. Its control again
+changes only the account predicate. The suite proves all twenty-four blocked
 attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
@@ -680,7 +687,7 @@ constructor-interface and constructor-field-write dispatch, including nested
 post-construction injection, exact all-path constructor joins, cross-file
 constructor parent helpers, imported local-module parent helpers, and imported
 constructor-helper field writes, shallow value-copy pointers, and exact helper
-branch joins,
+two-way and multi-way branch joins,
 without a database service:
 
 ```powershell
@@ -831,6 +838,12 @@ Push-Location fixtures\go-cross-package-imported-helper-branch-write-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-imported-helper-branch-write-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-imported-helper-multi-branch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-imported-helper-multi-branch-write-authorization
 go test ./...
 Pop-Location
 ```

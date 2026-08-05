@@ -164,6 +164,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-imported-helper-value-copy-pointer-authorization",
       "go-cross-package-imported-helper-branch-write-delete-idor",
       "go-cross-package-safe-imported-helper-branch-write-authorization",
+      "go-cross-package-imported-helper-multi-branch-write-delete-idor",
+      "go-cross-package-safe-imported-helper-multi-branch-write-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -211,6 +213,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[43]?.expected).toEqual([]);
     expect(manifest.cases[44]?.expected).toHaveLength(1);
     expect(manifest.cases[45]?.expected).toEqual([]);
+    expect(manifest.cases[46]?.expected).toHaveLength(1);
+    expect(manifest.cases[47]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -1786,6 +1790,79 @@ describe("Go HTTP object-authorization framework model", () => {
         ({ kind }) => kind === "go-method-receiver-constructor-field-write",
       ),
     ).toHaveLength(2);
+    expect(propagators.map(({ path }) => path)).not.toContain(
+      "internal/archive/store.go",
+    );
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      frameworkModel: {
+        candidateControls: [
+          expect.objectContaining({ kind: "principal-bound-object-query" }),
+        ],
+      },
+    });
+  });
+
+  test("preserves imported helper multi-way branch writes and their control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-imported-helper-multi-branch-write-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-imported-helper-multi-branch-write-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 11 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "internal/primary/store.go",
+          line: 11,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    const propagators = vulnerable[0]?.frameworkModel?.propagators ?? [];
+    expect(propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-call",
+          symbol: "parent.NewLayer",
+          path: "internal/service/service.go",
+          line: 16,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 27,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 29,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-field-write",
+          path: "internal/parent/layer.go",
+          line: 31,
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-return",
+          path: "internal/parent/layer.go",
+          line: 33,
+        }),
+      ]),
+    );
+    expect(
+      propagators.filter(
+        ({ kind }) => kind === "go-method-receiver-constructor-field-write",
+      ),
+    ).toHaveLength(3);
     expect(propagators.map(({ path }) => path)).not.toContain(
       "internal/archive/store.go",
     );
@@ -4592,19 +4669,89 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
   }
   return service
 }`,
-      `func NewService(repository InvoiceRepository, label string) *Service {
+    ])
+      expect(await repository(constructor)).toEqual([]);
+
+    const multiWay =
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  primary := service
+  fallback := service
+  final := service
+  if label == "primary" {
+    primary.layer.repository = repository
+  } else if label == "fallback" {
+    fallback.layer.repository = repository
+  } else {
+    final.layer.repository = repository
+  }
+  return service
+}`);
+    expect(multiWay).toHaveLength(1);
+    const multiWayWrites = multiWay[0]?.frameworkModel?.propagators.filter(
+      ({ kind, symbol }) =>
+        kind === "go-method-receiver-constructor-field-write" &&
+        symbol === "Layer.repository:invoices.Store",
+    );
+    expect(multiWayWrites).toHaveLength(3);
+    expect(new Set(multiWayWrites?.map(({ line }) => line)).size).toBe(3);
+
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  if label == "primary" {
+    service.layer.repository = repository
+  } else if label == "fallback" {
+    service.layer.repository = &OtherStore{}
+  } else {
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toEqual([]);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
   service := &Service{layer: &Layer{label: label}}
   if label == "primary" {
     service.layer.repository = repository
   } else if label == "fallback" {
     service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toEqual([]);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  if label == "one" {
+    service.layer.repository = repository
+  } else if label == "two" {
+    service.layer.repository = repository
+  } else if label == "three" {
+    service.layer.repository = repository
   } else {
     service.layer.repository = repository
   }
   return service
-}`,
-    ])
-      expect(await repository(constructor)).toEqual([]);
+}`),
+    ).toHaveLength(1);
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  if label == "one" {
+    service.layer.repository = repository
+  } else if label == "two" {
+    service.layer.repository = repository
+  } else if label == "three" {
+    service.layer.repository = repository
+  } else if label == "four" {
+    service.layer.repository = repository
+  } else {
+    service.layer.repository = repository
+  }
+  return service
+}`),
+    ).toEqual([]);
   });
 
   test("preserves pointer-field sharing while joining value-result branches", async () => {
@@ -5667,6 +5814,119 @@ type Layer struct { holder Holder }`,
     layer.holder.repository = repository`,
         afterBody: "  first.holder.repository = alternative",
       }),
+    ).toEqual([]);
+  });
+
+  test("joins bounded multi-way helper writes on every path", async () => {
+    const scan = async (branchBody: string): Promise<ModelRecord[]> =>
+      repositoryInventory({
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+)
+type InvoiceRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type Primary struct{}
+func (*Primary) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+type Archive struct{}
+func (*Archive) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM archived_invoices WHERE id = ?", invoiceID)
+  return err
+}
+type Holder struct { repository InvoiceRepository }
+type Layer struct { holder *Holder }
+type Service struct { layer Layer }
+func newLayer(repository InvoiceRepository, alternative InvoiceRepository, label string) Layer {
+  layer := Layer{holder: &Holder{}}
+  first := layer
+  second := layer
+  third := layer
+  fourth := layer
+  fifth := layer
+${branchBody}
+  return layer
+}
+func NewService(repository InvoiceRepository, alternative InvoiceRepository) *Service {
+  return &Service{layer: newLayer(repository, alternative, "primary")}
+}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.layer.holder.repository.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Primary{}, &Archive{})
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+      });
+
+    const threeArms = `  if label == "primary" {
+    first.holder.repository = repository
+  } else if label == "secondary" {
+    second.holder.repository = repository
+  } else {
+    third.holder.repository = repository
+  }`;
+    const joined = await scan(threeArms);
+    expect(joined).toHaveLength(1);
+    const branchWrites = joined[0]?.frameworkModel?.propagators.filter(
+      ({ kind }) => kind === "go-method-receiver-constructor-field-write",
+    );
+    expect(branchWrites).toHaveLength(3);
+    expect(new Set(branchWrites?.map(({ line }) => line)).size).toBe(3);
+
+    expect(
+      await scan(`  if label == "primary" {
+    first.holder.repository = repository
+  } else if label == "secondary" {
+    second.holder.repository = alternative
+  } else {
+    third.holder.repository = repository
+  }`),
+    ).toEqual([]);
+    expect(
+      await scan(`  if label == "primary" {
+    first.holder.repository = repository
+  } else if label == "secondary" {
+    second.holder.repository = repository
+  }`),
+    ).toEqual([]);
+    expect(
+      await scan(`  if label == "primary" {
+    first.holder.repository = repository
+  } else if label == "secondary" {
+    second.holder.repository = repository
+    second.holder.repository = repository
+  } else {
+    third.holder.repository = repository
+  }`),
+    ).toEqual([]);
+    expect(
+      await scan(`  if label == "one" {
+    first.holder.repository = repository
+  } else if label == "two" {
+    second.holder.repository = repository
+  } else if label == "three" {
+    third.holder.repository = repository
+  } else {
+    fourth.holder.repository = repository
+  }`),
+    ).toHaveLength(1);
+    expect(
+      await scan(`  if label == "one" {
+    first.holder.repository = repository
+  } else if label == "two" {
+    second.holder.repository = repository
+  } else if label == "three" {
+    third.holder.repository = repository
+  } else if label == "four" {
+    fourth.holder.repository = repository
+  } else {
+    fifth.holder.repository = repository
+  }`),
     ).toEqual([]);
   });
 

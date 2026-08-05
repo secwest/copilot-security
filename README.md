@@ -875,15 +875,16 @@ independent. Missing parents, conditional writes, wrong field or implementation
 types, reassigned leaf parameters, a ninth selector field, and unresolved
 dynamic parent state fail closed.
 An eighteenth pair writes the same nested repository field through two
-pre-existing aliases on the explicit arms of one top-level `if`/`else`. The
-host clones the complete constructor alias graph for each arm, preserves shared
+pre-existing aliases on the explicit arms of one top-level branch chain. The
+host clones the complete constructor alias graph for every arm, preserves shared
 pointer nodes across shallow value copies, applies at most eight writes per
-executable path, and joins only structurally identical complete states. Both
-write origins remain separate evidence. Each arm may contain at most sixteen
+executable path, and joins only structurally identical complete states. Two
+through four write origins remain separate evidence. A mandatory final `else`
+makes every path explicit. Each arm may contain at most sixteen
 structural lines and only exact field writes on already-proven aliases.
 One-sided or divergent writes, different returned objects, branch-local
-assignment, nested control flow, `else if`, early returns, unequal write
-budgets, a seventeenth arm line, and ambiguity fail closed.
+assignment, nested control flow, early returns, unequal write budgets, a fifth
+arm, a missing final `else`, a seventeenth arm line, and ambiguity fail closed.
 A nineteenth pair obtains the constructor's parent pointer object from an
 exact receiverless helper in another file of the same package. Helper summaries
 accept a matching keyed composite directly, through at most eight exact aliases,
@@ -921,8 +922,8 @@ value fields or a parent returned by another helper; replacing the pointer on
 one copy detaches only that copy. The call, allocation, every copy alias, nested
 write, return, constructor field, and receiver retain separate evidence.
 A twenty-third pair places the shared-pointer repository write on both explicit
-arms of one top-level helper `if`/`else`, using a different value copy on each
-arm. The host clones the complete materialized helper graph for each path,
+arms of one top-level helper branch, using a different value copy on each arm.
+The host clones the complete materialized helper graph for each path,
 preserves all alias and nested pointer identities inside that path, and joins
 only structurally identical states with the same one-to-one node-sharing
 topology. Evidence from both aliases and both write origins is retained. Each
@@ -930,7 +931,11 @@ arm accepts only writes through aliases proven before the branch, with at most
 eight writes per path and sixteen structural lines.
 One-sided or divergent state, pointer-slot replacement on different copies,
 concrete-value isolation, branch-local assignments, nested control flow,
-`else if`, unequal write budgets, and over-budget paths fail closed.
+unequal write budgets, and over-budget paths fail closed. A twenty-fourth pair
+extends the same imported helper proof through `if / else if / else`: three
+shallow value copies write one shared holder on three explicit paths, and the
+host retains all three write origins. Exact chains accept two through four arms
+and require a final `else`; a fifth arm or incomplete chain fails closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1075,6 +1080,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-helper-branch-write-
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-branch-write-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-helper-multi-branch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-multi-branch-write-authorization
 go test ./...
 Pop-Location
 ```
