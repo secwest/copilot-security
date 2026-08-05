@@ -125,6 +125,14 @@ interface ObjectSink {
   controls: Array<{ kind: string; line: number }>;
 }
 
+interface ObjectReceiverRequirement {
+  fieldPath: readonly string[];
+  directory: string;
+  packageName: string;
+  typeName: string;
+  pointer: "value" | "pointer" | "either";
+}
+
 interface WrapperSummary {
   file: GoHttpSourceFile;
   sinkFile: GoHttpSourceFile;
@@ -140,6 +148,7 @@ interface WrapperSummary {
   principalParameterIndexes: number[];
   sink: ObjectSink;
   delegations: EvidencePropagator[];
+  receiverRequirements: readonly ObjectReceiverRequirement[];
   wrapperDepth: number;
   wrapperKeys: readonly string[];
 }
@@ -2088,8 +2097,17 @@ function objectWrapperSummaries(
     function_: GoFunction;
     importPath?: string;
     result: TypeReference;
+    resultStruct: StructDescriptor;
     returnLine: number;
     aliases: EvidencePropagator[];
+    fieldSources: ReadonlyMap<
+      string,
+      {
+        parameterIndex?: number;
+        expression?: string;
+        line: number;
+      }
+    >;
   }
   interface InterfaceDescriptor {
     directory: string;
@@ -2101,12 +2119,16 @@ function objectWrapperSummaries(
   interface ReceiverBinding {
     concrete: TypeReference;
     interface_?: InterfaceDescriptor;
+    fields: ReadonlyMap<string, ReceiverBinding>;
     aliasDepth: number;
     propagators: EvidencePropagator[];
   }
   interface ResolvedTarget {
     descriptor: Descriptor;
     receiverPropagators: EvidencePropagator[];
+    receiverRequirements: ObjectReceiverRequirement[];
+    receiverFieldPath: string[];
+    receiverBinding?: ReceiverBinding;
   }
   interface Edge {
     sourceKey: string;
@@ -2116,6 +2138,8 @@ function objectWrapperSummaries(
     target: Descriptor;
     call: GoCall;
     receiverPropagators: EvidencePropagator[];
+    receiverRequirements: ObjectReceiverRequirement[];
+    receiverFieldPath: string[];
     objectPropagators: EvidencePropagator[];
   }
   interface ParameterFlow {
@@ -2333,7 +2357,12 @@ function objectWrapperSummaries(
   const localCompositeResult = (
     expression: string,
     typeName: string,
-  ): { pointer: boolean } | undefined => {
+  ):
+    | {
+        pointer: boolean;
+        fields: ReadonlyMap<string, string>;
+      }
+    | undefined => {
     const trimmed = expression.trim().replace(/;\s*$/u, "");
     const prefix = new RegExp(
       `^(&)?\\s*${escapeRegularExpression(typeName)}\\s*`,
@@ -2350,7 +2379,17 @@ function objectWrapperSummaries(
       if (depth < 0 || (depth === 0 && index !== composite.length - 1))
         return undefined;
     }
-    return depth === 0 ? { pointer: prefix[1] !== undefined } : undefined;
+    if (depth !== 0) return undefined;
+    const fields = new Map<string, string>();
+    const body = composite.slice(1, -1).trim();
+    if (body !== "") {
+      for (const item of splitGoArguments(body)) {
+        const field = /^([A-Za-z_]\w*)\s*:\s*([\s\S]+)$/u.exec(item.trim());
+        if (field === null || fields.has(field[1]!)) return undefined;
+        fields.set(field[1]!, field[2]!.trim());
+      }
+    }
+    return { pointer: prefix[1] !== undefined, fields };
   };
 
   const constructorCandidates: ConstructorSummary[] = [];
@@ -2370,11 +2409,19 @@ function objectWrapperSummaries(
     if (matchingStructs.length !== 1) continue;
     const aliases = new Map<
       string,
-      { pointer: boolean; depth: number; propagators: EvidencePropagator[] }
+      {
+        pointer: boolean;
+        depth: number;
+        fields: ReadonlyMap<string, string>;
+        constructionLine: number;
+        propagators: EvidencePropagator[];
+      }
     >();
     const returns: Array<{
       pointer: boolean;
       line: number;
+      fields: ReadonlyMap<string, string>;
+      constructionLine: number;
       propagators: EvidencePropagator[];
     }> = [];
     let invalid = false;
@@ -2401,6 +2448,9 @@ function objectWrapperSummaries(
         returns.push({
           pointer: direct?.pointer ?? alias!.pointer,
           line,
+          fields: direct?.fields ?? alias!.fields,
+          constructionLine:
+            direct === undefined ? alias!.constructionLine : line,
           propagators: alias?.propagators ?? [],
         });
         continue;
@@ -2424,6 +2474,8 @@ function objectWrapperSummaries(
         aliases.set(name, {
           pointer: direct.pointer,
           depth: 0,
+          fields: direct.fields,
+          constructionLine: line,
           propagators: [
             {
               kind: "go-method-receiver-constructor-alias",
@@ -2448,6 +2500,8 @@ function objectWrapperSummaries(
       aliases.set(name, {
         pointer: prior.pointer,
         depth: prior.depth + 1,
+        fields: prior.fields,
+        constructionLine: prior.constructionLine,
         propagators: [
           ...prior.propagators,
           {
@@ -2466,6 +2520,50 @@ function objectWrapperSummaries(
     )
       continue;
     const importPath = localPackageImportPath(function_, modules);
+    const resultStruct = matchingStructs[0]!;
+    const fieldSources = new Map<
+      string,
+      {
+        parameterIndex?: number;
+        expression?: string;
+        line: number;
+      }
+    >();
+    for (const [fieldName, expression] of returns[0]!.fields) {
+      if (!resultStruct.fields.has(fieldName)) {
+        invalid = true;
+        break;
+      }
+      const parameterName = /^([A-Za-z_]\w*)$/u.exec(expression)?.[1];
+      const parameterIndex = function_.parameters.findIndex(
+        (parameter) => parameter.name === parameterName,
+      );
+      if (parameterIndex >= 0) {
+        const reassigned = Array.from(
+          {
+            length: Math.max(
+              0,
+              returns[0]!.constructionLine - function_.bodyStartLine,
+            ),
+          },
+          (_, index) => function_.bodyStartLine + index,
+        ).some((line) => {
+          const assignment = goAssignment(
+            function_.structuralLines[line - 1] ?? "",
+          );
+          return assignment?.names.includes(parameterName!) === true;
+        });
+        if (reassigned) {
+          invalid = true;
+          break;
+        }
+      }
+      fieldSources.set(fieldName, {
+        ...(parameterIndex < 0 ? { expression } : { parameterIndex }),
+        line: returns[0]!.constructionLine,
+      });
+    }
+    if (invalid) continue;
     constructorCandidates.push({
       key,
       function_,
@@ -2477,49 +2575,109 @@ function objectWrapperSummaries(
         resolvedPackageName: function_.packageName,
         ...(importPath === undefined ? {} : { resolvedImportPath: importPath }),
       },
+      resultStruct,
       returnLine: returns[0]!.line,
       aliases: returns[0]!.propagators,
+      fieldSources,
     });
   }
   const constructors = constructorCandidates.filter(
     (summary) => constructorCounts.get(summary.key) === 1,
   );
 
-  const interfaceForType = (
-    caller: GoFunction,
+  const interfaceForReference = (
     reference: TypeReference,
-    line: number,
+    contextFile: GoHttpSourceFile,
+    contextPackageName: string,
+    contextFunction?: GoFunction,
+    contextLine?: number,
   ): InterfaceDescriptor | undefined => {
     if (reference.pointer) return undefined;
     const candidates = interfaces.filter((interface_) => {
       if (interface_.name !== reference.typeName) return false;
       if (reference.qualifier === undefined) {
         return (
-          interface_.directory === posix.dirname(caller.file.path) &&
-          interface_.packageName === caller.packageName
+          interface_.directory === posix.dirname(contextFile.path) &&
+          interface_.packageName === contextPackageName
         );
       }
       if (interface_.importPath === undefined) return false;
       return (
         goImportAlias(
-          caller.file.lines,
+          contextFile.lines,
           interface_.importPath,
           interface_.packageName,
         ) === reference.qualifier &&
-        packageAliasIsAvailable(caller, reference.qualifier, line)
+        (contextFunction === undefined ||
+          contextLine === undefined ||
+          packageAliasIsAvailable(
+            contextFunction,
+            reference.qualifier,
+            contextLine,
+          ))
       );
     });
     return candidates.length === 1 ? candidates[0] : undefined;
+  };
+
+  const interfaceForType = (
+    caller: GoFunction,
+    reference: TypeReference,
+    line: number,
+  ): InterfaceDescriptor | undefined =>
+    interfaceForReference(
+      reference,
+      caller.file,
+      caller.packageName,
+      caller,
+      line,
+    );
+
+  const canonicalConcreteReference = (
+    reference: TypeReference,
+    contextFile: GoHttpSourceFile,
+    contextPackageName: string,
+    contextFunction?: GoFunction,
+    contextLine?: number,
+  ): TypeReference | undefined => {
+    const matches = structs.filter(
+      (descriptor) =>
+        descriptor.name === reference.typeName &&
+        typeMatchesIdentity(
+          reference,
+          contextFile,
+          contextPackageName,
+          descriptor.directory,
+          descriptor.packageName,
+          descriptor.importPath,
+          contextFunction,
+          contextLine,
+        ),
+    );
+    if (matches.length !== 1) return undefined;
+    const descriptor = matches[0]!;
+    return {
+      typeName: descriptor.name,
+      pointer: reference.pointer,
+      resolvedDirectory: descriptor.directory,
+      resolvedPackageName: descriptor.packageName,
+      ...(descriptor.importPath === undefined
+        ? {}
+        : { resolvedImportPath: descriptor.importPath }),
+    };
   };
 
   const concreteExpression = (
     caller: GoFunction,
     expression: string,
     line: number,
+    availableBindings: ReadonlyMap<string, ReceiverBinding> = new Map(),
+    constructorDepth = 0,
   ):
     | {
         concrete: TypeReference;
         interface_?: InterfaceDescriptor;
+        fields?: ReadonlyMap<string, ReceiverBinding>;
         propagators?: EvidencePropagator[];
       }
     | undefined => {
@@ -2555,6 +2713,8 @@ function objectWrapperSummaries(
           ? []
           : splitGoArguments(constructorCall[2]!);
       const matches = constructors.filter((summary) => {
+        if (constructorDepth >= MAX_OBJECT_CONSTRUCTOR_ALIAS_DEPTH)
+          return false;
         const variadic =
           summary.function_.parameters.at(-1)?.type.trim().startsWith("...") ===
           true;
@@ -2598,8 +2758,174 @@ function objectWrapperSummaries(
       });
       if (matches.length === 1) {
         const summary = matches[0]!;
+        const fields = new Map<string, ReceiverBinding>();
+        let validFields = true;
+        for (const [fieldName, source] of summary.fieldSources) {
+          const field = summary.resultStruct.fields.get(fieldName);
+          if (field === undefined) {
+            validFields = false;
+            break;
+          }
+          const fieldInterface = interfaceForReference(
+            field.type,
+            field.file,
+            field.packageName,
+          );
+          let value:
+            | {
+                concrete: TypeReference;
+                interface_?: InterfaceDescriptor;
+                fields?: ReadonlyMap<string, ReceiverBinding>;
+                propagators?: EvidencePropagator[];
+              }
+            | undefined;
+          if (source.parameterIndex !== undefined) {
+            const argument = arguments_[source.parameterIndex];
+            if (argument === undefined) {
+              validFields = false;
+              break;
+            }
+            const parameter =
+              summary.function_.parameters[source.parameterIndex];
+            const parameterType =
+              parameter === undefined
+                ? undefined
+                : typeReference(parameter.type);
+            if (parameterType === undefined) {
+              validFields = false;
+              break;
+            }
+            const parameterInterface = interfaceForType(
+              summary.function_,
+              parameterType,
+              source.line,
+            );
+            if (fieldInterface !== undefined) {
+              if (
+                parameterInterface !== undefined &&
+                (parameterInterface.directory !== fieldInterface.directory ||
+                  parameterInterface.packageName !==
+                    fieldInterface.packageName ||
+                  parameterInterface.name !== fieldInterface.name)
+              ) {
+                validFields = false;
+                break;
+              }
+            } else {
+              const expectedParameter = canonicalConcreteReference(
+                field.type,
+                field.file,
+                field.packageName,
+              );
+              const actualParameter = canonicalConcreteReference(
+                parameterType,
+                summary.function_.file,
+                summary.function_.packageName,
+                summary.function_,
+                source.line,
+              );
+              if (
+                parameterInterface !== undefined ||
+                expectedParameter === undefined ||
+                actualParameter === undefined ||
+                expectedParameter.resolvedDirectory !==
+                  actualParameter.resolvedDirectory ||
+                expectedParameter.resolvedPackageName !==
+                  actualParameter.resolvedPackageName ||
+                expectedParameter.typeName !== actualParameter.typeName ||
+                expectedParameter.pointer !== actualParameter.pointer
+              ) {
+                validFields = false;
+                break;
+              }
+            }
+            const bare = /^([A-Za-z_]\w*)$/u.exec(argument.trim())?.[1];
+            const bound =
+              bare === undefined ? undefined : availableBindings.get(bare);
+            value =
+              bound === undefined
+                ? concreteExpression(
+                    caller,
+                    argument,
+                    line,
+                    availableBindings,
+                    constructorDepth + 1,
+                  )
+                : {
+                    concrete: bound.concrete,
+                    ...(bound.interface_ === undefined
+                      ? {}
+                      : { interface_: bound.interface_ }),
+                    fields: bound.fields,
+                    propagators: bound.propagators,
+                  };
+          } else if (source.expression !== undefined) {
+            value = concreteExpression(
+              summary.function_,
+              source.expression,
+              source.line,
+              new Map(),
+              constructorDepth + 1,
+            );
+          }
+          if (value === undefined) {
+            validFields = false;
+            break;
+          }
+          const canonical = canonicalConcreteReference(
+            value.concrete,
+            source.parameterIndex === undefined
+              ? summary.function_.file
+              : caller.file,
+            source.parameterIndex === undefined
+              ? summary.function_.packageName
+              : caller.packageName,
+            source.parameterIndex === undefined ? summary.function_ : caller,
+            source.parameterIndex === undefined ? source.line : line,
+          );
+          if (canonical === undefined) {
+            validFields = false;
+            break;
+          }
+          if (fieldInterface === undefined) {
+            const expected = canonicalConcreteReference(
+              field.type,
+              field.file,
+              field.packageName,
+            );
+            if (
+              expected === undefined ||
+              expected.resolvedDirectory !== canonical.resolvedDirectory ||
+              expected.resolvedPackageName !== canonical.resolvedPackageName ||
+              expected.typeName !== canonical.typeName ||
+              expected.pointer !== canonical.pointer
+            ) {
+              validFields = false;
+              break;
+            }
+          }
+          fields.set(fieldName, {
+            concrete: canonical,
+            ...(fieldInterface === undefined
+              ? {}
+              : { interface_: fieldInterface }),
+            fields: value.fields ?? new Map(),
+            aliasDepth: 0,
+            propagators: [
+              ...(value.propagators ?? []),
+              {
+                kind: "go-method-receiver-constructor-field",
+                line: source.line,
+                symbol: `${summary.resultStruct.name}.${fieldName}:${canonical.resolvedPackageName}.${canonical.typeName}`,
+                path: summary.function_.file.path,
+              },
+            ],
+          });
+        }
+        if (!validFields) return undefined;
         return {
           concrete: summary.result,
+          fields,
           propagators: [
             {
               kind: "go-method-receiver-constructor-call",
@@ -2627,12 +2953,19 @@ function objectWrapperSummaries(
     if (interfaceType === undefined) return undefined;
     const interface_ = interfaceForType(caller, interfaceType, line);
     if (interface_ === undefined) return undefined;
-    const inner = concreteExpression(caller, conversion[2]!, line);
+    const inner = concreteExpression(
+      caller,
+      conversion[2]!,
+      line,
+      availableBindings,
+      constructorDepth,
+    );
     return inner === undefined
       ? undefined
       : {
           concrete: inner.concrete,
           interface_,
+          ...(inner.fields === undefined ? {} : { fields: inner.fields }),
           ...(inner.propagators === undefined
             ? {}
             : { propagators: inner.propagators }),
@@ -2733,6 +3066,7 @@ function objectWrapperSummaries(
       if (interface_ !== undefined) return;
       bindings.set(name, {
         concrete: reference,
+        fields: new Map(),
         aliasDepth: 0,
         propagators: [
           {
@@ -2819,7 +3153,12 @@ function objectWrapperSummaries(
           );
           continue;
         }
-        const concrete = concreteExpression(caller, initializer, candidateLine);
+        const concrete = concreteExpression(
+          caller,
+          initializer,
+          candidateLine,
+          bindings,
+        );
         if (
           concrete === undefined ||
           (interface_ !== undefined && !interface_.methods.has(methodName))
@@ -2837,6 +3176,7 @@ function objectWrapperSummaries(
         bindings.set(typed[1]!, {
           concrete: concrete.concrete,
           ...(interface_ === undefined ? {} : { interface_ }),
+          fields: concrete.fields ?? new Map(),
           aliasDepth: 0,
           propagators: [
             ...(concrete.propagators ?? []),
@@ -2908,6 +3248,7 @@ function objectWrapperSummaries(
         caller,
         assignment.value,
         candidateLine,
+        bindings,
       );
       const interface_ = concrete?.interface_ ?? declaredInterfaces.get(name);
       const concreteType = declaredConcreteTypes.get(name);
@@ -2926,6 +3267,7 @@ function objectWrapperSummaries(
       bindings.set(name, {
         concrete: concrete.concrete,
         ...(interface_ === undefined ? {} : { interface_ }),
+        fields: concrete.fields ?? new Map(),
         aliasDepth: 0,
         propagators: [
           ...(concrete.propagators ?? []),
@@ -3108,6 +3450,7 @@ function objectWrapperSummaries(
           objectParameterLine: descriptor.function_.startLine,
           principalParameterIndexes,
           sink,
+          receiverRequirements: [],
           delegations: [],
           wrapperDepth: 0,
           wrapperKeys: [parameterKey(descriptor, parameter.index)],
@@ -3148,7 +3491,9 @@ function objectWrapperSummaries(
       let contextFunction: GoFunction | undefined = caller.function_;
       let contextLine: number | undefined = resolved.targetLine;
       const propagators = [...binding.propagators];
-      for (const fieldName of fieldNames) {
+      const receiverRequirements: ObjectReceiverRequirement[] = [];
+      const receiverFieldPath: string[] = [];
+      for (const [fieldIndex, fieldName] of fieldNames.entries()) {
         const matchingStructs = structs.filter(
           (descriptor) =>
             descriptor.name === reference.typeName &&
@@ -3166,7 +3511,8 @@ function objectWrapperSummaries(
         if (matchingStructs.length !== 1) return [];
         const owner = matchingStructs[0]!;
         const field = owner.fields.get(fieldName);
-        if (field === undefined || field.type.pointer) return [];
+        if (field === undefined) return [];
+        receiverFieldPath.push(fieldName);
         propagators.push({
           kind: "go-method-receiver-field",
           line: field.line,
@@ -3175,7 +3521,55 @@ function objectWrapperSummaries(
           }${field.type.typeName}`,
           path: field.file.path,
         });
-        reference = field.type;
+        const fieldInterface = interfaceForReference(
+          field.type,
+          field.file,
+          field.packageName,
+        );
+        if (fieldInterface !== undefined) {
+          if (
+            fieldIndex !== fieldNames.length - 1 ||
+            !fieldInterface.methods.has(methodName)
+          )
+            return [];
+          return [...descriptors.values()]
+            .filter(
+              (target) =>
+                target.receiver !== undefined &&
+                target.function_.name === methodName,
+            )
+            .map((descriptor) => ({
+              descriptor,
+              receiverPropagators: propagators,
+              receiverRequirements: [
+                ...receiverRequirements,
+                {
+                  fieldPath: [...receiverFieldPath],
+                  directory: posix.dirname(descriptor.function_.file.path),
+                  packageName: descriptor.function_.packageName,
+                  typeName: descriptor.receiver!.typeName,
+                  pointer: descriptor.receiver!.pointer ? "pointer" : "either",
+                },
+              ],
+              receiverFieldPath: [...receiverFieldPath],
+              receiverBinding: binding,
+            }));
+        }
+        const canonical = canonicalConcreteReference(
+          field.type,
+          field.file,
+          field.packageName,
+        );
+        if (canonical === undefined) return [];
+        if (field.type.pointer)
+          receiverRequirements.push({
+            fieldPath: [...receiverFieldPath],
+            directory: canonical.resolvedDirectory!,
+            packageName: canonical.resolvedPackageName!,
+            typeName: canonical.typeName,
+            pointer: "pointer",
+          });
+        reference = canonical;
         contextFile = field.file;
         contextPackageName = field.packageName;
         contextFunction = undefined;
@@ -3201,6 +3595,9 @@ function objectWrapperSummaries(
         .map((descriptor) => ({
           descriptor,
           receiverPropagators: propagators,
+          receiverRequirements,
+          receiverFieldPath,
+          receiverBinding: binding,
         }));
     }
     const plain = /^([A-Za-z_]\w*)$/u.exec(resolved.name);
@@ -3216,6 +3613,8 @@ function objectWrapperSummaries(
       return targets.map((descriptor) => ({
         descriptor,
         receiverPropagators: [],
+        receiverRequirements: [],
+        receiverFieldPath: [],
       }));
     }
     const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(resolved.name);
@@ -3242,7 +3641,12 @@ function objectWrapperSummaries(
           target.function_.packageName,
         );
         if (alias === qualified[1])
-          targets.push({ descriptor: target, receiverPropagators: [] });
+          targets.push({
+            descriptor: target,
+            receiverPropagators: [],
+            receiverRequirements: [],
+            receiverFieldPath: [],
+          });
       }
     }
     const binding = receiverBindings(
@@ -3270,6 +3674,9 @@ function objectWrapperSummaries(
         targets.push({
           descriptor: target,
           receiverPropagators: binding.propagators,
+          receiverRequirements: [],
+          receiverFieldPath: [],
+          receiverBinding: binding,
         });
       }
     }
@@ -3294,35 +3701,43 @@ function objectWrapperSummaries(
       )
         continue;
       const targets = targetDescriptors(source, call);
-      if (targets.length !== 1) continue;
-      const resolvedTarget = targets[0]!;
-      const target = resolvedTarget.descriptor;
-      for (const sourceParameter of source.parameters) {
-        const sourceKey = parameterKey(source, sourceParameter.index);
-        for (const targetParameter of target.parameters) {
-          const argument = call.rawArguments[targetParameter.index];
-          if (argument === undefined) continue;
-          const reaching = parameterFlowsReachingExpression(
-            source,
-            argument,
-            call.line,
-            "go-object-identifier-assignment",
-          );
-          if (
-            reaching.length !== 1 ||
-            reaching[0]!.index !== sourceParameter.index
-          )
-            continue;
-          edges.push({
-            sourceKey,
-            source,
-            sourceParameter,
-            targetKey: parameterKey(target, targetParameter.index),
-            target,
-            call,
-            receiverPropagators: resolvedTarget.receiverPropagators,
-            objectPropagators: reaching[0]!.propagators,
-          });
+      if (
+        targets.length === 0 ||
+        (targets.length > 1 &&
+          targets.some((target) => target.receiverRequirements.length === 0))
+      )
+        continue;
+      for (const resolvedTarget of targets) {
+        const target = resolvedTarget.descriptor;
+        for (const sourceParameter of source.parameters) {
+          const sourceKey = parameterKey(source, sourceParameter.index);
+          for (const targetParameter of target.parameters) {
+            const argument = call.rawArguments[targetParameter.index];
+            if (argument === undefined) continue;
+            const reaching = parameterFlowsReachingExpression(
+              source,
+              argument,
+              call.line,
+              "go-object-identifier-assignment",
+            );
+            if (
+              reaching.length !== 1 ||
+              reaching[0]!.index !== sourceParameter.index
+            )
+              continue;
+            edges.push({
+              sourceKey,
+              source,
+              sourceParameter,
+              targetKey: parameterKey(target, targetParameter.index),
+              target,
+              call,
+              receiverPropagators: resolvedTarget.receiverPropagators,
+              receiverRequirements: resolvedTarget.receiverRequirements,
+              receiverFieldPath: resolvedTarget.receiverFieldPath,
+              objectPropagators: reaching[0]!.propagators,
+            });
+          }
         }
       }
     }
@@ -3338,6 +3753,7 @@ function objectWrapperSummaries(
       wrapperKeys: summary.wrapperKeys,
       principalParameterIndexes: summary.principalParameterIndexes,
       delegations: summary.delegations,
+      receiverRequirements: summary.receiverRequirements,
     });
   const addCandidate = (summary: WrapperSummary): boolean => {
     const identity = candidateIdentity(summary);
@@ -3410,6 +3826,16 @@ function objectWrapperSummaries(
               (left, right) => left - right,
             ),
             sink: child.sink,
+            receiverRequirements: [
+              ...edge.receiverRequirements,
+              ...child.receiverRequirements.map((requirement) => ({
+                ...requirement,
+                fieldPath: [
+                  ...edge.receiverFieldPath,
+                  ...requirement.fieldPath,
+                ],
+              })),
+            ],
             delegations: [
               ...edge.receiverPropagators,
               ...edge.objectPropagators,
@@ -3440,8 +3866,15 @@ function objectWrapperSummaries(
   const summaries = overflow
     ? direct
     : [...groups.values()]
-        .filter((group) => group.size === 1)
-        .map((group) => group.values().next().value!)
+        .flatMap((group) => {
+          const candidates = [...group.values()];
+          return candidates.length === 1 ||
+            candidates.every(
+              (candidate) => candidate.receiverRequirements.length > 0,
+            )
+            ? candidates
+            : [];
+        })
         .sort(
           (left, right) =>
             left.file.path.localeCompare(right.file.path) ||
@@ -3450,6 +3883,38 @@ function objectWrapperSummaries(
             left.sinkFile.path.localeCompare(right.sinkFile.path) ||
             left.sink.line - right.sink.line,
         );
+  const satisfyReceiverRequirements = (
+    binding: ReceiverBinding | undefined,
+    requirements: readonly ObjectReceiverRequirement[],
+  ): EvidencePropagator[] | undefined => {
+    if (requirements.length === 0) return [];
+    if (binding === undefined) return undefined;
+    const propagators: EvidencePropagator[] = [];
+    for (const requirement of requirements) {
+      let current = binding;
+      for (const fieldName of requirement.fieldPath) {
+        const field = current.fields.get(fieldName);
+        if (field === undefined) return undefined;
+        current = field;
+      }
+      if (
+        current.concrete.resolvedDirectory !== requirement.directory ||
+        current.concrete.resolvedPackageName !== requirement.packageName ||
+        current.concrete.typeName !== requirement.typeName ||
+        (requirement.pointer === "pointer" && !current.concrete.pointer) ||
+        (requirement.pointer === "value" && current.concrete.pointer)
+      )
+        return undefined;
+      propagators.push(...current.propagators);
+    }
+    const unique = new Map<string, EvidencePropagator>();
+    for (const propagator of propagators)
+      unique.set(
+        `${propagator.kind}\0${propagator.path}\0${propagator.line}\0${propagator.symbol}`,
+        propagator,
+      );
+    return [...unique.values()];
+  };
   const matches = (caller: GoFunction, call: GoCall): ObjectWrapperMatch[] => {
     const callerReceiver = receiverOf(caller);
     const callerDescriptor: Descriptor = {
@@ -3462,17 +3927,34 @@ function objectWrapperSummaries(
       ...(callerReceiver === undefined ? {} : { receiver: callerReceiver }),
     };
     const targets = targetDescriptors(callerDescriptor, call);
-    const targetKeys = new Set(targets.map((target) => target.descriptor.key));
-    if (targetKeys.size !== 1) return [];
-    const target = targets.find((candidate) =>
-      targetKeys.has(candidate.descriptor.key),
-    )!;
-    return summaries
-      .filter((summary) => summary.callableKey === target.descriptor.key)
-      .map((summary) => ({
-        summary,
-        receiverPropagators: target.receiverPropagators,
-      }));
+    if (
+      targets.length > 1 &&
+      targets.some((target) => target.receiverRequirements.length === 0)
+    )
+      return [];
+    const matched: ObjectWrapperMatch[] = [];
+    const emitted = new Set<string>();
+    for (const target of targets) {
+      for (const summary of summaries) {
+        if (summary.callableKey !== target.descriptor.key) continue;
+        const requirementPropagators = satisfyReceiverRequirements(
+          target.receiverBinding,
+          summary.receiverRequirements,
+        );
+        if (requirementPropagators === undefined) continue;
+        const identity = candidateIdentity(summary);
+        if (emitted.has(identity)) continue;
+        emitted.add(identity);
+        matched.push({
+          summary,
+          receiverPropagators: [
+            ...target.receiverPropagators,
+            ...requirementPropagators,
+          ],
+        });
+      }
+    }
+    return matched;
   };
   return { summaries, matches };
 }

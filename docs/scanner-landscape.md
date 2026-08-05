@@ -481,11 +481,20 @@ an exact ordinary or minimum variadic argument count, and one direct composite
 return or alias chain of at most eight bindings.
 Concrete field chains retain every declaration and its per-file import identity
 and stop after eight fields. Returned parameters, nested or multiple returns,
-constructor function values or shadowing, and pointer, interface, embedded,
-anonymous, generic, duplicate, missing, or ambiguous fields fail
-closed. Its positive deletes the victim; its control keeps the complete
-constructor/field topology and proves the victim survives while an owned
-deletion succeeds. This directly
+constructor function values or shadowing, and embedded, anonymous, generic,
+duplicate, missing, or ambiguous fields fail closed. Its positive deletes the
+victim; its control keeps the complete constructor/field topology and proves the
+victim survives while an owned deletion succeeds. A fourteenth pair injects one
+of two valid repository implementations through a constructor parameter into an
+interface field. The host maps keyed constructor fields to exact parameters or
+direct concrete expressions, carries instance identity through call-site aliases,
+enumerates valid method implementations, and narrows the summary to the concrete
+argument and its Go method set. Missing initialization, unbound interface values,
+constructor-parameter reassignment, wrong concrete field types, and value
+instances lacking a required pointer method fail closed. The positive proves
+that only the selected repository sink is reached; the control preserves the
+multiple-implementation topology and adds only the authenticated account
+predicate. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query

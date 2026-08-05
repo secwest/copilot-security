@@ -834,12 +834,18 @@ A thirteenth pair obtains the service through an exact same-package or imported
 constructor and traverses a named concrete value field to the repository method.
 The constructor must return its single exact local struct result directly or
 through at most eight top-level aliases, and the call must satisfy its ordinary
-or variadic arity. Field chains retain each declaration's
-own package/import identity and stop after eight fields. Pointer, interface,
-embedded, anonymous, generic, duplicate, missing, or ambiguous fields;
-constructor parameters returned as the result; nested or multiple returns;
-shadowed constructor names; a ninth constructor alias; and a ninth field fail
-closed.
+or variadic arity. Field chains retain each declaration's own package/import
+identity and stop after eight fields. A fourteenth pair injects an exact
+repository instance into a pointer or interface field through a keyed
+constructor composite. Constructor summaries bind each field to its exact
+parameter or direct concrete expression; call sites carry that instance through
+aliases, enumerate valid interface implementations, and retain only the
+implementation selected by the concrete argument and Go method set. Missing
+fields, unbound arguments, parameter reassignment, wrong static types,
+pointer-method calls on interface-held values, embedded, anonymous, generic,
+duplicate, missing, or ambiguous fields; constructor parameters returned as the
+result; nested or multiple returns; shadowed constructor names; a ninth
+constructor alias; and a ninth field fail closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -924,6 +930,12 @@ Push-Location benchmarks\fixtures\go-cross-package-constructor-field-delete-idor
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-field-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-constructor-interface-field-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-interface-field-delete-authorization
 go test ./...
 Pop-Location
 ```

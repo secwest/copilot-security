@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains fifty-one vulnerable/control pairs:
+The versioned corpus currently contains fifty-two vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -621,12 +621,16 @@ traverses its named concrete repository value field before calling the sink
 method. Exact constructor call, internal return aliases, return location,
 receiver binding, field declaration, object aliases, and principal positions
 remain visible; the control again changes only the account predicate. The suite
-proves all thirteen blocked attacks and successful
+adds a fourteenth pair whose constructor stores one of two valid repository
+implementations in an interface field. Exact constructor-parameter mapping,
+call-site instance identity, implementation narrowing, field dispatch, object
+aliases, and principal positions remain visible; the control again changes only
+the account predicate. The suite proves all fourteen blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
-function-value, object-wrapper, concrete-method, exact interface dispatch, and
-constructor/concrete-field dispatch,
+function-value, object-wrapper, concrete-method, exact local-interface,
+constructor/concrete-field, and constructor-injected interface dispatch,
 without a database service:
 
 ```powershell
@@ -717,6 +721,12 @@ Push-Location fixtures\go-cross-package-constructor-field-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-constructor-field-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-constructor-interface-field-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-constructor-interface-field-delete-authorization
 go test ./...
 Pop-Location
 ```
