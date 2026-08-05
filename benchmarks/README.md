@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains fifty-eight vulnerable/control pairs:
+The versioned corpus currently contains fifty-nine vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 348
+destination-pinned, redirect-free transport. Three runs per case produce 354
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -651,8 +651,14 @@ control again changes only the account predicate. A twentieth pair moves that
 allocator into another package in the same Go module. Exact import aliases,
 exported callable/type/field visibility, defining-package composite identity,
 the shared helper-depth bound, and the multiline field's actual source line are
-preserved; its control again changes only the account predicate. The suite
-proves all twenty blocked attacks and successful
+preserved; its control again changes only the account predicate. A twenty-first
+pair moves repository injection into the imported helper: it allocates an empty
+parent, aliases the pointer, writes the selected repository, and returns the
+original alias. Exact linear writes, nested parent existence, pointer sharing,
+direct value-field copying, explicit dereference, and the eight-write bound are
+enforced; nested pointer sharing through a copied value fails closed. Its
+control again changes only the account predicate. The suite proves all
+twenty-one blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
@@ -660,7 +666,8 @@ function-value, object-wrapper, concrete-method, exact local-interface,
 constructor/concrete-field, constructor-injected interface, and nested
 constructor-interface and constructor-field-write dispatch, including nested
 post-construction injection, exact all-path constructor joins, cross-file
-constructor parent helpers, and imported local-module parent helpers,
+constructor parent helpers, imported local-module parent helpers, and imported
+constructor-helper field writes,
 without a database service:
 
 ```powershell
@@ -793,6 +800,12 @@ Push-Location fixtures\go-cross-package-imported-constructor-helper-parent-delet
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-imported-constructor-helper-parent-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-imported-constructor-helper-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-imported-constructor-helper-write-authorization
 go test ./...
 Pop-Location
 ```

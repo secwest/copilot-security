@@ -904,6 +904,16 @@ fields retain the helper expression's actual line. Function values, wrong or
 external module paths, unexported helpers, types, or fields, duplicate targets,
 and mismatched defining-package identity fail closed under the shared eight-call
 bound.
+A twenty-first pair moves repository injection into that imported helper. The
+factory allocates an empty parent, aliases its pointer, writes the selected
+repository through the alias, and returns the original pointer. Helper writes
+must be top-level, linear, declared-field assignments on a live result alias;
+pointer aliases share state while direct fields on value aliases use independent
+snapshots. Nested pointer sharing through a copied value remains unsupported and
+fails closed. Nested writes require every exact materialized parent, and
+explicit dereference requires a pointer. Conditional writes, missing parents or
+fields, transformed parameters, invalid value dereferences, and ninth writes or
+selector fields fail closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1030,6 +1040,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-constructor-helper-p
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-constructor-helper-parent-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-constructor-helper-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-constructor-helper-write-authorization
 go test ./...
 Pop-Location
 ```

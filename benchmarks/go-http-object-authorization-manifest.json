@@ -454,6 +454,28 @@
       "id": "go-cross-package-safe-imported-constructor-helper-parent-delete-authorization",
       "fixture": "fixtures/go-cross-package-safe-imported-constructor-helper-parent-delete-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-package-imported-constructor-helper-write-delete-idor",
+      "fixture": "fixtures/go-cross-package-imported-constructor-helper-write-delete-idor",
+      "expected": [
+        {
+          "title": "Go imported constructor helper field write selects an unscoped repository deletion",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "internal/primary/store.go",
+          "line": 11,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-package-safe-imported-constructor-helper-write-authorization",
+      "fixture": "fixtures/go-cross-package-safe-imported-constructor-helper-write-authorization",
+      "expected": []
     }
   ]
 }

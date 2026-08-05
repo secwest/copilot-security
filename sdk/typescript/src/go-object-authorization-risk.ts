@@ -2137,6 +2137,13 @@ function objectWrapperSummaries(
     expressionLine: number;
     returnLine: number;
     aliases: EvidencePropagator[];
+    writes: ReadonlyArray<{
+      fields: string[];
+      value: string;
+      valueLine: number;
+      line: number;
+      propagators: EvidencePropagator[];
+    }>;
   }
   interface InterfaceDescriptor {
     directory: string;
@@ -2816,6 +2823,13 @@ function objectWrapperSummaries(
         expressionLine: number;
         depth: number;
         propagators: EvidencePropagator[];
+        writes: Array<{
+          fields: string[];
+          value: string;
+          valueLine: number;
+          line: number;
+          propagators: EvidencePropagator[];
+        }>;
       }
     >();
     const returns: Array<{
@@ -2823,8 +2837,16 @@ function objectWrapperSummaries(
       expressionLine: number;
       returnLine: number;
       propagators: EvidencePropagator[];
+      writes: Array<{
+        fields: string[];
+        value: string;
+        valueLine: number;
+        line: number;
+        propagators: EvidencePropagator[];
+      }>;
     }> = [];
     let invalid = false;
+    let writeCount = 0;
     const singleLineReturn = singleLineConstructorHelperReturn(function_);
     if (singleLineReturn !== undefined) {
       const direct = localCompositeResult(singleLineReturn, result.typeName);
@@ -2840,6 +2862,7 @@ function objectWrapperSummaries(
           expressionLine: function_.startLine,
           returnLine: function_.startLine,
           propagators: [],
+          writes: [],
         });
     }
     for (
@@ -2887,6 +2910,12 @@ function objectWrapperSummaries(
               : alias!.expressionLine,
           returnLine: statementLine,
           propagators: alias?.propagators ?? [],
+          writes:
+            alias?.writes.map((write) => ({
+              ...write,
+              fields: [...write.fields],
+              propagators: [...write.propagators],
+            })) ?? [],
         });
         continue;
       }
@@ -2902,6 +2931,37 @@ function objectWrapperSummaries(
       ) {
         invalid = true;
         break;
+      }
+      const fieldWrite = constructorFieldAssignment(structural);
+      if (fieldWrite !== undefined) {
+        const alias = aliases.get(fieldWrite.target);
+        if (alias === undefined) continue;
+        if (
+          lineNestingDepth(function_, statementLine) !== 1 ||
+          (fieldWrite.explicitDereference && !result.pointer) ||
+          fieldWrite.fields.length === 0 ||
+          fieldWrite.fields.length > MAX_OBJECT_RECEIVER_FIELD_DEPTH ||
+          writeCount >= MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES
+        ) {
+          invalid = true;
+          break;
+        }
+        const valueOffset = structural.indexOf(fieldWrite.value);
+        const valueLine =
+          valueOffset < 0
+            ? statementLine
+            : statementLine +
+              structural.slice(0, valueOffset).split("\n").length -
+              1;
+        alias.writes.push({
+          fields: [...fieldWrite.fields],
+          value: fieldWrite.value,
+          valueLine,
+          line: statementLine,
+          propagators: alias.propagators.slice(-1),
+        });
+        writeCount += 1;
+        continue;
       }
       const assignment = goAssignment(structural);
       if (assignment === undefined) continue;
@@ -2928,6 +2988,7 @@ function objectWrapperSummaries(
           expression: assignment.value,
           expressionLine: statementLine,
           depth: 0,
+          writes: [],
           propagators: [
             {
               kind: "go-method-receiver-constructor-helper-alias",
@@ -2953,6 +3014,13 @@ function objectWrapperSummaries(
         expression: prior.expression,
         expressionLine: prior.expressionLine,
         depth: prior.depth + 1,
+        writes: result.pointer
+          ? prior.writes
+          : prior.writes.map((write) => ({
+              ...write,
+              fields: [...write.fields],
+              propagators: [...write.propagators],
+            })),
         propagators: [
           ...prior.propagators,
           {
@@ -2964,7 +3032,12 @@ function objectWrapperSummaries(
         ],
       });
     }
-    if (invalid || returns.length !== 1) continue;
+    if (
+      invalid ||
+      returns.length !== 1 ||
+      returns[0]!.writes.length > MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES
+    )
+      continue;
     const returned = returns[0]!;
     const resolvedImportPath = localPackageImportPath(function_, modules);
     constructorValueHelperCandidates.push({
@@ -2981,6 +3054,7 @@ function objectWrapperSummaries(
       expressionLine: returned.expressionLine,
       returnLine: returned.returnLine,
       aliases: returned.propagators,
+      writes: returned.writes,
     });
   }
   const constructorValueHelpers = constructorValueHelperCandidates.filter(
@@ -3031,6 +3105,28 @@ function objectWrapperSummaries(
         ? {}
         : { resolvedImportPath: descriptor.importPath }),
     };
+  };
+
+  const constructorHelperCompositeOwner = (
+    reference: TypeReference,
+    context: GoFunction,
+    line: number,
+  ): StructDescriptor | undefined => {
+    const matches = structs.filter(
+      (descriptor) =>
+        descriptor.name === reference.typeName &&
+        typeMatchesIdentity(
+          reference,
+          context.file,
+          context.packageName,
+          descriptor.directory,
+          descriptor.packageName,
+          descriptor.importPath,
+          context,
+          line,
+        ),
+    );
+    return matches.length === 1 ? matches[0] : undefined;
   };
 
   function materializeConstructorHelperValue(
@@ -3172,6 +3268,72 @@ function objectWrapperSummaries(
       fieldDepth,
       nextVisiting,
     );
+    if (state?.composite !== undefined) {
+      for (const write of summary.writes) {
+        if (fieldDepth + write.fields.length > MAX_OBJECT_RECEIVER_FIELD_DEPTH)
+          return undefined;
+        let composite = state.composite;
+        let owner = constructorHelperCompositeOwner(
+          composite.reference,
+          summary.function_,
+          write.line,
+        );
+        if (owner === undefined) return undefined;
+        for (const [index, fieldName] of write.fields.entries()) {
+          const field = owner.fields.get(fieldName);
+          if (
+            field === undefined ||
+            (owner.packageName !== summary.function_.packageName &&
+              !/^[A-Z]/u.test(fieldName))
+          )
+            return undefined;
+          if (index === write.fields.length - 1) {
+            const value = materializeConstructorHelperValue(
+              write.value,
+              summary.function_,
+              write.valueLine,
+              bindings,
+              helperDepth + 1,
+              fieldDepth + write.fields.length,
+              nextVisiting,
+            );
+            if (value === undefined) return undefined;
+            value.line = write.line;
+            value.write = true;
+            value.path = summary.function_.file.path;
+            value.propagators = [
+              ...write.propagators,
+              ...(value.propagators ?? []),
+            ];
+            composite.fields.set(fieldName, value);
+            break;
+          }
+          const parent = composite.fields.get(fieldName);
+          if (parent?.composite === undefined) return undefined;
+          const nextOwner = constructorHelperCompositeOwner(
+            parent.composite.reference,
+            summary.function_,
+            write.line,
+          );
+          if (
+            nextOwner === undefined ||
+            field.type.pointer !== parent.composite.reference.pointer ||
+            !typeMatchesIdentity(
+              field.type,
+              field.file,
+              field.packageName,
+              nextOwner.directory,
+              nextOwner.packageName,
+              nextOwner.importPath,
+            )
+          )
+            return undefined;
+          composite = parent.composite;
+          owner = nextOwner;
+        }
+      }
+      state.expression = renderConstructorValueState(state);
+    }
     if (
       state?.composite === undefined ||
       state.composite.reference.qualifier !== undefined ||
@@ -3198,6 +3360,7 @@ function objectWrapperSummaries(
       },
       ...(state.propagators ?? []),
       ...summary.aliases,
+      ...summary.writes.flatMap((write) => write.propagators),
       {
         kind: "go-method-receiver-constructor-helper-return",
         line: summary.returnLine,

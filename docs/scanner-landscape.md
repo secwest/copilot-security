@@ -546,7 +546,15 @@ helpers. Multiline constructor fields retain the qualified helper expression's
 actual line. Wrong or external module paths, function values, unexported or
 duplicate targets, and package/type mismatches fail closed. The positive reaches
 only the imported-parent-selected primary implementation; the control again
-adds only principal scope. This directly
+adds only principal scope. A twenty-first pair moves the repository injection
+inside that imported helper. The host preserves pointer-alias sharing and
+direct value-field copying, requires exact top-level linear writes and every
+nested parent, checks field and pointer identity at each selector, and records
+the writer alias and field-write line independently. Nested pointer sharing
+through a copied value remains unsupported. Conditional writes, invalid
+dereferences, missing parents or fields, transformed parameters, and ninth
+writes fail closed. The positive reaches only the helper-written primary
+implementation; the control again adds only principal scope. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -559,8 +567,8 @@ describes call-graph target resolution; Semgrep documents [separate per-file
 and cross-file analysis modes](https://semgrep.dev/docs/writing-rules/glossary).
 This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
-failure semantics and executable object/principal controls. External-module and
-parameter-transforming constructor helpers, branchy helpers, one-arm
+failure semantics and executable object/principal controls. External-module,
+parameter-transforming, and branchy constructor helpers, one-arm
 conditionals, `else if` chains, loop-sensitive writes, unbound
 interfaces, embedded promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
