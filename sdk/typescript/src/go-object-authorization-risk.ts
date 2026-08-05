@@ -31,6 +31,7 @@ const MAX_OBJECT_RECEIVER_FIELD_DEPTH = 8;
 const MAX_OBJECT_CONSTRUCTOR_ALIAS_DEPTH = 8;
 const MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES = 8;
 const MAX_OBJECT_CONSTRUCTOR_STATEMENT_LINES = 13;
+const MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES = 16;
 const MAX_TRANSACTION_HELPER_DEPTH = 32;
 const MAX_TRANSACTION_FUNCTION_VALUE_DEPTH = 8;
 const OBJECT_COLUMN = /^(?:id|key|uuid|[a-z][a-z0-9_]*_(?:id|key|uuid))$/iu;
@@ -2098,6 +2099,7 @@ function objectWrapperSummaries(
     expression: string;
     line: number;
     write: boolean;
+    origins?: number[];
     composite?: {
       reference: TypeReference;
       fields: Map<string, ConstructorValueState>;
@@ -2463,6 +2465,7 @@ function objectWrapperSummaries(
     expression: state.expression,
     line: state.line,
     write: state.write,
+    ...(state.origins === undefined ? {} : { origins: [...state.origins] }),
     ...(state.composite === undefined
       ? {}
       : {
@@ -2492,6 +2495,82 @@ function objectWrapperSummaries(
       )
       .join(", ");
     return `${reference.pointer ? "&" : ""}${type}{${fields}}`;
+  };
+
+  const constructorValueOrigins = (state: ConstructorValueState): number[] =>
+    state.origins ?? [state.line];
+
+  const sameTypeReference = (
+    left: TypeReference,
+    right: TypeReference,
+  ): boolean =>
+    left.qualifier === right.qualifier &&
+    left.typeName === right.typeName &&
+    left.pointer === right.pointer &&
+    left.resolvedDirectory === right.resolvedDirectory &&
+    left.resolvedPackageName === right.resolvedPackageName &&
+    left.resolvedImportPath === right.resolvedImportPath;
+
+  const joinConstructorValueState = (
+    left: ConstructorValueState,
+    right: ConstructorValueState,
+    memo: Map<
+      ConstructorValueState,
+      Map<ConstructorValueState, ConstructorValueState>
+    >,
+  ): ConstructorValueState | undefined => {
+    const prior = memo.get(left)?.get(right);
+    if (prior !== undefined) return prior;
+    if (
+      left.write !== right.write ||
+      (left.composite === undefined) !== (right.composite === undefined)
+    )
+      return undefined;
+    if (
+      left.composite === undefined &&
+      left.expression.trim() !== right.expression.trim()
+    )
+      return undefined;
+    if (
+      left.composite !== undefined &&
+      right.composite !== undefined &&
+      (!sameTypeReference(
+        left.composite.reference,
+        right.composite.reference,
+      ) ||
+        left.composite.fields.size !== right.composite.fields.size)
+    )
+      return undefined;
+    const origins = [
+      ...new Set([
+        ...constructorValueOrigins(left),
+        ...constructorValueOrigins(right),
+      ]),
+    ].sort((first, second) => first - second);
+    const joined: ConstructorValueState = {
+      expression: left.expression,
+      line: origins[0]!,
+      write: left.write,
+      ...(origins.length === 1 ? {} : { origins }),
+    };
+    const byRight = memo.get(left) ?? new Map();
+    byRight.set(right, joined);
+    memo.set(left, byRight);
+    if (left.composite !== undefined && right.composite !== undefined) {
+      const fields = new Map<string, ConstructorValueState>();
+      for (const [field, leftValue] of left.composite.fields) {
+        const rightValue = right.composite.fields.get(field);
+        if (rightValue === undefined) return undefined;
+        const value = joinConstructorValueState(leftValue, rightValue, memo);
+        if (value === undefined) return undefined;
+        fields.set(field, value);
+      }
+      joined.composite = {
+        reference: left.composite.reference,
+        fields,
+      };
+    }
+    return joined;
   };
 
   const constructorFieldAssignment = (
@@ -2549,6 +2628,63 @@ function objectWrapperSummaries(
     return { structural: first, endLine: startLine };
   };
 
+  const constructorIfElseStatement = (
+    function_: GoFunction,
+    startLine: number,
+  ):
+    | {
+        thenStartLine: number;
+        thenEndLine: number;
+        elseStartLine: number;
+        elseEndLine: number;
+        endLine: number;
+      }
+    | undefined => {
+    const opening = function_.structuralLines[startLine - 1] ?? "";
+    if (!/^\s*if\s+[^{};]+\s*\{\s*$/u.test(opening)) return undefined;
+    let relativeDepth = braceDelta(opening);
+    if (relativeDepth !== 1) return undefined;
+    let separatorLine: number | undefined;
+    const maximumLine = Math.min(
+      function_.endLine,
+      startLine + MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES * 2 + 2,
+    );
+    for (let line = startLine + 1; line <= maximumLine; line += 1) {
+      const structural = function_.structuralLines[line - 1] ?? "";
+      if (
+        relativeDepth === 1 &&
+        separatorLine === undefined &&
+        /^\s*\}\s*else\s*\{\s*$/u.test(structural)
+      ) {
+        separatorLine = line;
+        continue;
+      }
+      if (
+        relativeDepth === 1 &&
+        separatorLine !== undefined &&
+        /^\s*\}\s*$/u.test(structural)
+      ) {
+        const thenLines = separatorLine - startLine - 1;
+        const elseLines = line - separatorLine - 1;
+        if (
+          thenLines > MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES ||
+          elseLines > MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES
+        )
+          return undefined;
+        return {
+          thenStartLine: startLine + 1,
+          thenEndLine: separatorLine - 1,
+          elseStartLine: separatorLine + 1,
+          elseEndLine: line - 1,
+          endLine: line,
+        };
+      }
+      relativeDepth += braceDelta(structural);
+      if (relativeDepth < 1) return undefined;
+    }
+    return undefined;
+  };
+
   const constructorCandidates: ConstructorSummary[] = [];
   const constructorCounts = new Map<string, number>();
   for (const function_ of functions) {
@@ -2567,7 +2703,15 @@ function objectWrapperSummaries(
     const resultStruct = matchingStructs[0]!;
     interface ConstructorState {
       fields: Map<string, ConstructorValueState>;
-      fieldWrites: number;
+    }
+    interface ConstructorWriteBudget {
+      count: number;
+    }
+    interface ConstructorAlias {
+      pointer: boolean;
+      depth: number;
+      state: ConstructorState;
+      propagators: EvidencePropagator[];
     }
     const stateForComposite = (
       fields: ReadonlyMap<string, string>,
@@ -2581,7 +2725,6 @@ function objectWrapperSummaries(
           ],
         ),
       ),
-      fieldWrites: 0,
     });
     const snapshotState = (state: ConstructorState): ConstructorState => ({
       fields: new Map(
@@ -2592,7 +2735,6 @@ function objectWrapperSummaries(
           ],
         ),
       ),
-      fieldWrites: state.fieldWrites,
     });
     function copyValueForStruct(
       value: ConstructorValueState,
@@ -2604,6 +2746,7 @@ function objectWrapperSummaries(
         expression: value.expression,
         line: value.line,
         write: value.write,
+        ...(value.origins === undefined ? {} : { origins: [...value.origins] }),
         composite: {
           reference: value.composite.reference,
           fields: new Map(
@@ -2658,17 +2801,147 @@ function objectWrapperSummaries(
           },
         ),
       ),
-      fieldWrites: state.fieldWrites,
     });
-    const aliases = new Map<
-      string,
-      {
-        pointer: boolean;
-        depth: number;
-        state: ConstructorState;
-        propagators: EvidencePropagator[];
+    const cloneConstructorValueGraph = (
+      value: ConstructorValueState,
+      memo: Map<ConstructorValueState, ConstructorValueState>,
+    ): ConstructorValueState => {
+      const prior = memo.get(value);
+      if (prior !== undefined) return prior;
+      const clone: ConstructorValueState = {
+        expression: value.expression,
+        line: value.line,
+        write: value.write,
+        ...(value.origins === undefined ? {} : { origins: [...value.origins] }),
+      };
+      memo.set(value, clone);
+      if (value.composite !== undefined) {
+        clone.composite = {
+          reference: value.composite.reference,
+          fields: new Map(
+            [...value.composite.fields].map(
+              ([field, fieldValue]): [string, ConstructorValueState] => [
+                field,
+                cloneConstructorValueGraph(fieldValue, memo),
+              ],
+            ),
+          ),
+        };
       }
-    >();
+      return clone;
+    };
+    const cloneAliases = (
+      source: ReadonlyMap<string, ConstructorAlias>,
+    ): {
+      aliases: Map<string, ConstructorAlias>;
+      states: Map<ConstructorState, ConstructorState>;
+    } => {
+      const states = new Map<ConstructorState, ConstructorState>();
+      const values = new Map<ConstructorValueState, ConstructorValueState>();
+      const aliases = new Map<string, ConstructorAlias>();
+      for (const [name, alias] of source) {
+        let state = states.get(alias.state);
+        if (state === undefined) {
+          state = {
+            fields: new Map(
+              [...alias.state.fields].map(
+                ([field, value]): [string, ConstructorValueState] => [
+                  field,
+                  cloneConstructorValueGraph(value, values),
+                ],
+              ),
+            ),
+          };
+          states.set(alias.state, state);
+        }
+        aliases.set(name, {
+          pointer: alias.pointer,
+          depth: alias.depth,
+          state,
+          propagators: [...alias.propagators],
+        });
+      }
+      return { aliases, states };
+    };
+    const applyConstructorFieldWrite = (
+      targetAliases: ReadonlyMap<string, ConstructorAlias>,
+      fieldWrite: NonNullable<ReturnType<typeof constructorFieldAssignment>>,
+      statementLine: number,
+      expectedDepth: number,
+      budget: ConstructorWriteBudget,
+    ): boolean => {
+      const alias = targetAliases.get(fieldWrite.target);
+      if (
+        alias === undefined ||
+        lineNestingDepth(function_, statementLine) !== expectedDepth ||
+        fieldWrite.fields.length > MAX_OBJECT_RECEIVER_FIELD_DEPTH ||
+        (fieldWrite.explicitDereference && !alias.pointer) ||
+        budget.count >= MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES
+      )
+        return false;
+      let fields = alias.state.fields;
+      for (let index = 0; index < fieldWrite.fields.length - 1; index += 1) {
+        const parent = fields.get(fieldWrite.fields[index]!);
+        if (parent?.composite === undefined) return false;
+        fields = parent.composite.fields;
+      }
+      fields.set(
+        fieldWrite.fields.at(-1)!,
+        constructorValueState(fieldWrite.value, statementLine, true),
+      );
+      budget.count += 1;
+      return true;
+    };
+    const applyConstructorBranch = (
+      targetAliases: ReadonlyMap<string, ConstructorAlias>,
+      startLine: number,
+      endLine: number,
+      budget: ConstructorWriteBudget,
+    ): number | undefined => {
+      let writes = 0;
+      for (let line = startLine; line <= endLine; line += 1) {
+        if ((function_.structuralLines[line - 1] ?? "").trim() === "") continue;
+        const statementLine = line;
+        const statement = constructorStatement(function_, line);
+        if (statement.endLine > endLine) return undefined;
+        line = statement.endLine;
+        const fieldWrite = constructorFieldAssignment(statement.structural);
+        if (
+          fieldWrite === undefined ||
+          !applyConstructorFieldWrite(
+            targetAliases,
+            fieldWrite,
+            statementLine,
+            2,
+            budget,
+          )
+        )
+          return undefined;
+        writes += 1;
+      }
+      return writes;
+    };
+    const joinConstructorStates = (
+      left: ConstructorState,
+      right: ConstructorState,
+      memo: Map<
+        ConstructorValueState,
+        Map<ConstructorValueState, ConstructorValueState>
+      >,
+    ): ConstructorState | undefined => {
+      if (left.fields.size !== right.fields.size) return undefined;
+      const fields = new Map<string, ConstructorValueState>();
+      for (const [field, leftValue] of left.fields) {
+        const rightValue = right.fields.get(field);
+        if (rightValue === undefined) return undefined;
+        const value = joinConstructorValueState(leftValue, rightValue, memo);
+        if (value === undefined) return undefined;
+        fields.set(field, value);
+      }
+      return { fields };
+    };
+    const aliases = new Map<string, ConstructorAlias>();
+    const writeBudget: ConstructorWriteBudget = { count: 0 };
     const returns: Array<{
       pointer: boolean;
       line: number;
@@ -2685,6 +2958,68 @@ function objectWrapperSummaries(
       const statement = constructorStatement(function_, line);
       const structural = statement.structural;
       line = statement.endLine;
+      const conditional =
+        lineNestingDepth(function_, statementLine) === 1
+          ? constructorIfElseStatement(function_, statementLine)
+          : undefined;
+      if (conditional !== undefined) {
+        const thenBranch = cloneAliases(aliases);
+        const elseBranch = cloneAliases(aliases);
+        const thenBudget: ConstructorWriteBudget = {
+          count: writeBudget.count,
+        };
+        const elseBudget: ConstructorWriteBudget = {
+          count: writeBudget.count,
+        };
+        const thenWrites = applyConstructorBranch(
+          thenBranch.aliases,
+          conditional.thenStartLine,
+          conditional.thenEndLine,
+          thenBudget,
+        );
+        const elseWrites = applyConstructorBranch(
+          elseBranch.aliases,
+          conditional.elseStartLine,
+          conditional.elseEndLine,
+          elseBudget,
+        );
+        if (
+          thenWrites === undefined ||
+          elseWrites === undefined ||
+          thenWrites === 0 ||
+          elseWrites === 0 ||
+          thenBudget.count !== elseBudget.count
+        ) {
+          invalid = true;
+          break;
+        }
+        const joinedStates = new Map<ConstructorState, ConstructorState>();
+        const valueMemo = new Map<
+          ConstructorValueState,
+          Map<ConstructorValueState, ConstructorValueState>
+        >();
+        for (const alias of aliases.values()) {
+          if (joinedStates.has(alias.state)) continue;
+          const left = thenBranch.states.get(alias.state);
+          const right = elseBranch.states.get(alias.state);
+          if (left === undefined || right === undefined) {
+            invalid = true;
+            break;
+          }
+          const joined = joinConstructorStates(left, right, valueMemo);
+          if (joined === undefined) {
+            invalid = true;
+            break;
+          }
+          joinedStates.set(alias.state, joined);
+        }
+        if (invalid) break;
+        for (const alias of aliases.values())
+          alias.state = joinedStates.get(alias.state)!;
+        writeBudget.count = thenBudget.count;
+        line = conditional.endLine;
+        continue;
+      }
       const returnMatch = /^\s*return\s+(.+?)\s*;?\s*$/u.exec(structural);
       if (/\breturn\b/u.test(structural)) {
         if (
@@ -2716,32 +3051,19 @@ function objectWrapperSummaries(
       }
       const fieldWrite = constructorFieldAssignment(structural);
       if (fieldWrite !== undefined) {
-        const alias = aliases.get(fieldWrite.target);
-        if (alias === undefined) continue;
+        if (!aliases.has(fieldWrite.target)) continue;
         if (
-          lineNestingDepth(function_, statementLine) !== 1 ||
-          fieldWrite.fields.length > MAX_OBJECT_RECEIVER_FIELD_DEPTH ||
-          (fieldWrite.explicitDereference && !alias.pointer) ||
-          alias.state.fieldWrites >= MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES
+          !applyConstructorFieldWrite(
+            aliases,
+            fieldWrite,
+            statementLine,
+            1,
+            writeBudget,
+          )
         ) {
           invalid = true;
           break;
         }
-        let fields = alias.state.fields;
-        for (let index = 0; index < fieldWrite.fields.length - 1; index += 1) {
-          const parent = fields.get(fieldWrite.fields[index]!);
-          if (parent?.composite === undefined) {
-            invalid = true;
-            break;
-          }
-          fields = parent.composite.fields;
-        }
-        if (invalid) break;
-        fields.set(
-          fieldWrite.fields.at(-1)!,
-          constructorValueState(fieldWrite.value, statementLine, true),
-        );
-        alias.state.fieldWrites += 1;
         continue;
       }
       const assignment = goAssignment(structural);
@@ -2826,7 +3148,10 @@ function objectWrapperSummaries(
               `\\b${escapeRegularExpression(parameter.name)}\\b`,
               "u",
             ).test(value.expression)
-              ? [{ name: parameter.name, line: value.line }]
+              ? constructorValueOrigins(value).map((line) => ({
+                  name: parameter.name,
+                  line,
+                }))
               : [],
           )
         : [...value.composite.fields.values()].flatMap(parameterUses);
@@ -3029,7 +3354,11 @@ function objectWrapperSummaries(
       const fields = new Map<string, ReceiverBinding>();
       for (const [fieldName, fieldExpression] of composite.fields) {
         const fieldState = valueState?.composite?.fields.get(fieldName);
-        const fieldLine = fieldState?.line ?? line;
+        const fieldLines =
+          fieldState === undefined
+            ? [line]
+            : constructorValueOrigins(fieldState);
+        const fieldLine = fieldLines[0]!;
         const field = owner.fields.get(fieldName);
         if (field === undefined) return undefined;
         const fieldInterface = interfaceForReference(
@@ -3092,15 +3421,17 @@ function objectWrapperSummaries(
           aliasDepth: 0,
           propagators: [
             ...(value.propagators ?? []),
-            {
-              kind:
-                fieldState?.write === true
-                  ? "go-method-receiver-constructor-field-write"
-                  : "go-method-receiver-composite-field",
-              line: fieldLine,
-              symbol: `${owner.name}.${fieldName}:${canonical.resolvedPackageName}.${canonical.typeName}`,
-              path: caller.file.path,
-            },
+            ...fieldLines.map(
+              (originLine): EvidencePropagator => ({
+                kind:
+                  fieldState?.write === true
+                    ? "go-method-receiver-constructor-field-write"
+                    : "go-method-receiver-composite-field",
+                line: originLine,
+                symbol: `${owner.name}.${fieldName}:${canonical.resolvedPackageName}.${canonical.typeName}`,
+                path: caller.file.path,
+              }),
+            ),
           ],
         });
       }

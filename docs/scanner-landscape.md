@@ -518,7 +518,16 @@ across shallow value copies, recursively copies concrete value fields, and
 replaces only the written leaf. Missing or dynamic parents, wrong types,
 conditional writes, and a ninth selector field fail closed. The positive reaches
 only the injected primary implementation; the control again adds only principal
-scope. This directly
+scope. An eighteenth pair exercises one explicit top-level constructor
+`if`/`else` whose arms write the same nested field through different aliases of
+the returned pointer. The host clones the complete alias and shared-value graph
+per arm, applies the existing eight-write bound per executable path, retains
+both write origins, and joins only identical complete states. Arms are limited
+to sixteen structural lines and exact field writes on pre-existing aliases.
+One-sided or divergent state, different objects, branch-local assignments,
+nested control flow, `else if`, early returns, unequal write budgets, and a
+seventeenth arm line fail closed. The positive reaches only the joined primary
+implementation; the control again adds only principal scope. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -532,10 +541,10 @@ and cross-file analysis modes](https://semgrep.dev/docs/writing-rules/glossary).
 This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
 failure semantics and executable object/principal controls. Constructor helper
-chains and branch-sensitive field writes, unbound interfaces, embedded
-promotion, function-value object wrappers, nested and
+chains, one-arm conditionals, `else if` chains, loop-sensitive writes, unbound
+interfaces, embedded promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
-sqlc, ORMs, branch-sensitive dominance, and deployment authorization remain
+sqlc, ORMs, general dominance and multi-branch joins, and deployment authorization remain
 future work.
 
 This bounded application-function summary follows the same precision principle

@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains fifty-five vulnerable/control pairs:
+The versioned corpus currently contains fifty-six vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 294
+destination-pinned, redirect-free transport. Three runs per case produce 336
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -638,14 +638,19 @@ layer first and injects the selected repository through a later nested selector.
 The recursive constructor-state tree retains separate parent-creation and leaf-
 write lines, shallow pointer sharing, deep concrete-value copying, and exact
 implementation replacement; the control again changes only the account
-predicate. The suite proves all seventeen blocked attacks and successful
+predicate. An eighteenth pair writes the same nested repository field on both
+arms of one explicit constructor `if`/`else`, using two aliases of the returned
+pointer. The host clones each complete alias graph, preserves shallow pointer
+sharing, joins only structurally identical post-branch states, and retains both
+write lines as evidence; the control again changes only the account predicate.
+The suite proves all eighteen blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
 function-value, object-wrapper, concrete-method, exact local-interface,
 constructor/concrete-field, constructor-injected interface, and nested
-constructor-interface and constructor-field-write dispatch,
-including nested post-construction injection,
+constructor-interface and constructor-field-write dispatch, including nested
+post-construction injection and exact all-path constructor joins,
 without a database service:
 
 ```powershell
@@ -760,6 +765,12 @@ Push-Location fixtures\go-cross-package-constructor-nested-field-write-delete-id
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-constructor-nested-field-write-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-constructor-branch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-constructor-branch-write-delete-authorization
 go test ./...
 Pop-Location
 ```

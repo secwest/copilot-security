@@ -874,6 +874,16 @@ pointer-field state while recursively copied concrete value fields remain
 independent. Missing parents, conditional writes, wrong field or implementation
 types, reassigned leaf parameters, a ninth selector field, and unresolved
 dynamic parent state fail closed.
+An eighteenth pair writes the same nested repository field through two
+pre-existing aliases on the explicit arms of one top-level `if`/`else`. The
+host clones the complete constructor alias graph for each arm, preserves shared
+pointer nodes across shallow value copies, applies at most eight writes per
+executable path, and joins only structurally identical complete states. Both
+write origins remain separate evidence. Each arm may contain at most sixteen
+structural lines and only exact field writes on already-proven aliases.
+One-sided or divergent writes, different returned objects, branch-local
+assignment, nested control flow, `else if`, early returns, unequal write
+budgets, a seventeenth arm line, and ambiguity fail closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -982,6 +992,12 @@ Push-Location benchmarks\fixtures\go-cross-package-constructor-nested-field-writ
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-nested-field-write-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-constructor-branch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-branch-write-delete-authorization
 go test ./...
 Pop-Location
 ```
