@@ -527,6 +527,15 @@ to sixteen structural lines and exact field writes on pre-existing aliases.
 One-sided or divergent state, different objects, branch-local assignments,
 nested control flow, `else if`, early returns, unequal write budgets, and a
 seventeenth arm line fail closed. The positive reaches only the joined primary
+implementation; the control again adds only principal scope. A nineteenth pair
+materializes the constructor's parent pointer from one exact receiverless
+same-package helper in a separate file. The host follows a matching keyed
+composite through bounded aliases or helper calls, substitutes only bare
+non-reassigned parameters, and preserves call, creation, alias, return, binding,
+write, and receiver evidence at their actual paths and lines. Duplicate or
+shadowed helpers, cycles, ninth calls, result pointer/value mismatch,
+transformed parameters, positional composites, nested or multiple returns, and
+dynamic state fail closed. The positive reaches only the injected primary
 implementation; the control again adds only principal scope. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
@@ -540,8 +549,9 @@ describes call-graph target resolution; Semgrep documents [separate per-file
 and cross-file analysis modes](https://semgrep.dev/docs/writing-rules/glossary).
 This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
-failure semantics and executable object/principal controls. Constructor helper
-chains, one-arm conditionals, `else if` chains, loop-sensitive writes, unbound
+failure semantics and executable object/principal controls. Imported
+cross-package and parameter-transforming constructor helpers, branchy helpers,
+one-arm conditionals, `else if` chains, loop-sensitive writes, unbound
 interfaces, embedded promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
 sqlc, ORMs, general dominance and multi-branch joins, and deployment authorization remain

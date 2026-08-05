@@ -884,6 +884,16 @@ structural lines and only exact field writes on already-proven aliases.
 One-sided or divergent writes, different returned objects, branch-local
 assignment, nested control flow, `else if`, early returns, unequal write
 budgets, a seventeenth arm line, and ambiguity fail closed.
+A nineteenth pair obtains the constructor's parent pointer object from an
+exact receiverless helper in another file of the same package. Helper summaries
+accept a matching keyed composite directly, through at most eight exact aliases,
+or through at most eight exact helper calls. Bare parameters are substituted at
+their real constructor use line, while helper call, internal alias, composite,
+return, constructor binding, nested write, and receiver evidence retain their
+own paths and lines. Duplicate or shadowed helpers, cycles, a ninth call, pointer
+or value result mismatch, parameter reassignment, positional composites,
+transformed parameters, nested or multiple returns, and dynamic state fail
+closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -998,6 +1008,12 @@ Push-Location benchmarks\fixtures\go-cross-package-constructor-branch-write-dele
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-branch-write-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-constructor-helper-parent-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-helper-parent-delete-authorization
 go test ./...
 Pop-Location
 ```

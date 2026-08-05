@@ -154,6 +154,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-constructor-nested-field-write-delete-authorization",
       "go-cross-package-constructor-branch-write-delete-idor",
       "go-cross-package-safe-constructor-branch-write-delete-authorization",
+      "go-cross-package-constructor-helper-parent-delete-idor",
+      "go-cross-package-safe-constructor-helper-parent-delete-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -191,6 +193,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[33]?.expected).toEqual([]);
     expect(manifest.cases[34]?.expected).toHaveLength(1);
     expect(manifest.cases[35]?.expected).toEqual([]);
+    expect(manifest.cases[36]?.expected).toHaveLength(1);
+    expect(manifest.cases[37]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -1422,6 +1426,61 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(
       vulnerable[0]?.frameworkModel?.propagators.map(({ path }) => path),
     ).not.toContain("internal/archive/store.go");
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      frameworkModel: {
+        candidateControls: [
+          expect.objectContaining({ kind: "principal-bound-object-query" }),
+        ],
+      },
+    });
+  });
+
+  test("materializes a cross-file constructor parent helper and its control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-constructor-helper-parent-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-constructor-helper-parent-delete-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 11 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "internal/primary/store.go",
+          line: 11,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    const propagators = vulnerable[0]?.frameworkModel?.propagators ?? [];
+    expect(propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-call",
+          symbol: "newRepositoryLayer",
+          path: "internal/service/service.go",
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-alias",
+          path: "internal/service/layer.go",
+        }),
+        expect.objectContaining({
+          kind: "go-method-receiver-constructor-helper-return",
+          path: "internal/service/layer.go",
+        }),
+      ]),
+    );
+    expect(propagators.map(({ path }) => path)).not.toContain(
+      "internal/archive/store.go",
+    );
     expect(safe).toHaveLength(1);
     expect(safe[0]).toMatchObject({
       path: "internal/primary/store.go",
@@ -4397,6 +4456,224 @@ func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 
     expect(await scan(16)).toHaveLength(1);
     expect(await scan(17)).toEqual([]);
+  });
+
+  test("materializes exact constructor parent helpers", async () => {
+    const repository = async (construction: string): Promise<ModelRecord[]> =>
+      repositoryInventory({
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+)
+type InvoiceRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type Store struct{}
+func (*Store) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+type Layer struct { repository InvoiceRepository; label string }
+type Service struct { layer *Layer }
+${construction}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.layer.repository.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Store{}, "primary")
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+      });
+
+    const rows = await repository(`func newLayer(label string) *Layer {
+  return &Layer{label: label}
+}
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: newLayer(label)}
+  service.layer.repository = repository
+  return service
+}`);
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0]?.frameworkModel?.propagators.filter(({ kind }) =>
+        /constructor-helper-(?:call|return)$/u.test(kind),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "go-method-receiver-constructor-helper-call",
+        symbol: "newLayer",
+      }),
+      expect.objectContaining({
+        kind: "go-method-receiver-constructor-helper-return",
+        symbol: "*invoices.Layer",
+      }),
+    ]);
+    expect(
+      rows[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toContain("go-method-receiver-constructor-field-write");
+
+    expect(
+      await repository(`func newLayer(label string) *Layer {
+  layer := &Layer{label: label}
+  alias := layer
+  return alias
+}
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: newLayer(label)}
+  service.layer.repository = repository
+  return service
+}`),
+    ).toHaveLength(1);
+
+    expect(
+      await repository(`func newLayer(label string) *Layer { return &Layer{label: label} }
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: newLayer(label)}
+  service.layer.repository = repository
+  return service
+}`),
+    ).toHaveLength(1);
+
+    const injected =
+      await repository(`func newLayer(repository InvoiceRepository, label string) *Layer {
+  return &Layer{repository: repository, label: label}
+}
+func NewService(repository InvoiceRepository, label string) *Service {
+  return &Service{layer: newLayer(repository, label)}
+}`);
+    expect(injected).toHaveLength(1);
+    expect(
+      injected[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toContain("go-method-receiver-composite-field");
+
+    for (const [index, construction] of [
+      `func newLayer(label string) *Layer {
+  label = "fixed"
+  return &Layer{label: label}
+}
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: newLayer(label)}
+  service.layer.repository = repository
+  return service
+}`,
+      `func newLayer(label string) *Layer {
+  return &Layer{label}
+}
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: newLayer(label)}
+  service.layer.repository = repository
+  return service
+}`,
+      `func newLayer(label string) *Layer {
+  if label != "" {
+    return &Layer{label: label}
+  }
+  return &Layer{}
+}
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: newLayer(label)}
+  service.layer.repository = repository
+  return service
+}`,
+      `func newLayer(label string) *Layer {
+  return newLayer(label)
+}
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: newLayer(label)}
+  service.layer.repository = repository
+  return service
+}`,
+      `func newLayer(label string) Layer {
+  return Layer{label: label}
+}
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: newLayer(label)}
+  service.layer.repository = repository
+  return service
+}`,
+      `func newLayer(label string) *Layer {
+  return &Layer{label: "prefix-" + label}
+}
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: newLayer(label)}
+  service.layer.repository = repository
+  return service
+}`,
+      `func newLayer(label string) *Layer { return &Layer{label: label} }
+func otherLayer(label string) *Layer { return &Layer{label: label} }
+func NewService(repository InvoiceRepository, label string) *Service {
+  newLayer := otherLayer
+  service := &Service{layer: newLayer(label)}
+  service.layer.repository = repository
+  return service
+}`,
+      `func newLayer(label string) *Layer { return &Layer{label: label} }
+func newLayer(label string) *Layer { return &Layer{label: label} }
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: newLayer(label)}
+  service.layer.repository = repository
+  return service
+}`,
+    ].entries())
+      expect(
+        await repository(construction),
+        `negative helper ${index}`,
+      ).toEqual([]);
+  });
+
+  test("accepts eight constructor parent helpers and rejects nine", async () => {
+    const scan = async (depth: number): Promise<ModelRecord[]> => {
+      const helpers = Array.from({ length: depth }, (_, index) => {
+        const name = `newLayer${index}`;
+        return index === depth - 1
+          ? `func ${name}(label string) *Layer {
+  return &Layer{label: label}
+}`
+          : `func ${name}(label string) *Layer {
+  return newLayer${index + 1}(label)
+}`;
+      }).join("\n");
+      return repositoryInventory({
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+)
+type InvoiceRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type Store struct{}
+func (*Store) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+type Layer struct { repository InvoiceRepository; label string }
+type Service struct { layer *Layer }
+${helpers}
+func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: newLayer0(label)}
+  service.layer.repository = repository
+  return service
+}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.layer.repository.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Store{}, "primary")
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+      });
+    };
+
+    const accepted = await scan(8);
+    expect(accepted).toHaveLength(1);
+    expect(
+      accepted[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) => kind === "go-method-receiver-constructor-helper-call",
+      ),
+    ).toHaveLength(8);
+    expect(await scan(9)).toEqual([]);
   });
 
   test("preserves shallow pointer sharing and deep value copying", async () => {
