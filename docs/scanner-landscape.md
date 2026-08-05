@@ -576,7 +576,12 @@ holder on three explicit paths, and the scanner preserves all three write
 origins while enforcing complete-state and one-to-one identity convergence.
 Exact chains accept two through four arms and require a final `else`; a fifth
 arm, incomplete chain, unequal writes, or divergent state fails closed. This
-directly implements OWASP API1:2023's
+is followed by a twenty-fifth pair using an exact `switch` with two named cases
+and a mandatory final `default`. The same bounded world replay retains all three
+write origins and requires complete-state and one-to-one identity convergence.
+Missing or non-final `default`, `fallthrough`, `break`, empty or divergent arms,
+nested control, a fifth arm, and over-budget paths fail closed. This directly
+implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
 index](https://codeql.github.com/codeql-query-help/go/) and published [gosec
@@ -590,7 +595,8 @@ This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
 failure semantics and executable object/principal controls. External-module
 and parameter-transforming helpers, nested helper branches, five-or-more-arm
-chains, one-arm conditionals proven from pre-state, loop-sensitive writes,
+chains and switches, expressionless and type switches, one-arm conditionals
+proven from pre-state, loop-sensitive writes,
 unbound interfaces, embedded promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
 sqlc, ORMs, general dominance and nested joins, and deployment authorization remain

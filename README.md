@@ -935,7 +935,12 @@ unequal write budgets, and over-budget paths fail closed. A twenty-fourth pair
 extends the same imported helper proof through `if / else if / else`: three
 shallow value copies write one shared holder on three explicit paths, and the
 host retains all three write origins. Exact chains accept two through four arms
-and require a final `else`; a fifth arm or incomplete chain fails closed.
+and require a final `else`; a fifth arm or incomplete chain fails closed. A
+twenty-fifth pair expresses the same all-path helper initialization as an exact
+`switch`. Each `case` and the mandatory final `default` reuses the bounded world
+replay and identity-topology join. Two through four arms are accepted;
+`fallthrough`, `break`, missing or non-final `default`, empty or divergent arms,
+nested control flow, and a fifth arm fail closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1086,6 +1091,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-helper-multi-branch-
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-multi-branch-write-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-helper-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-switch-write-authorization
 go test ./...
 Pop-Location
 ```

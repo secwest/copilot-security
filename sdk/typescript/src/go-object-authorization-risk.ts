@@ -2755,6 +2755,7 @@ function objectWrapperSummaries(
   ):
     | {
         arms: ReadonlyArray<{ startLine: number; endLine: number }>;
+        statementDepth: number;
         endLine: number;
       }
     | undefined => {
@@ -2810,13 +2811,106 @@ function objectWrapperSummaries(
         )
           return undefined;
         arms.push({ startLine: armStartLine, endLine: line - 1 });
-        return arms.length >= 2 ? { arms, endLine: line } : undefined;
+        return arms.length >= 2
+          ? { arms, statementDepth: 2, endLine: line }
+          : undefined;
       }
       relativeDepth += braceDelta(structural);
       if (relativeDepth < 1) return undefined;
     }
     return undefined;
   };
+
+  const constructorSwitchBranches = (
+    function_: GoFunction,
+    startLine: number,
+  ):
+    | {
+        arms: ReadonlyArray<{ startLine: number; endLine: number }>;
+        statementDepth: number;
+        endLine: number;
+      }
+    | undefined => {
+    const opening = function_.structuralLines[startLine - 1] ?? "";
+    if (!/^\s*switch\s+[^{};]+\s*\{\s*$/u.test(opening)) return undefined;
+    if (/\.\s*\(\s*type\s*\)/u.test(opening)) return undefined;
+    let relativeDepth = braceDelta(opening);
+    if (relativeDepth !== 1) return undefined;
+    const arms: Array<{ startLine: number; endLine: number }> = [];
+    let armStartLine: number | undefined;
+    let finalDefault = false;
+    const maximumLine = Math.min(
+      function_.endLine,
+      startLine +
+        MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES *
+          MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS +
+        MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS +
+        1,
+    );
+    for (let line = startLine + 1; line <= maximumLine; line += 1) {
+      const structural = function_.structuralLines[line - 1] ?? "";
+      if (
+        relativeDepth === 1 &&
+        !finalDefault &&
+        /^\s*case\s+[^:{};]+\s*:\s*$/u.test(structural)
+      ) {
+        if (armStartLine !== undefined) {
+          if (
+            line - armStartLine > MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES ||
+            arms.length + 1 >= MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
+          )
+            return undefined;
+          arms.push({ startLine: armStartLine, endLine: line - 1 });
+        }
+        armStartLine = line + 1;
+        continue;
+      }
+      if (
+        relativeDepth === 1 &&
+        !finalDefault &&
+        /^\s*default\s*:\s*$/u.test(structural)
+      ) {
+        if (armStartLine === undefined) return undefined;
+        if (
+          line - armStartLine > MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES ||
+          arms.length + 1 >= MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
+        )
+          return undefined;
+        arms.push({ startLine: armStartLine, endLine: line - 1 });
+        armStartLine = line + 1;
+        finalDefault = true;
+        continue;
+      }
+      if (relativeDepth === 1 && /^\s*\}\s*$/u.test(structural)) {
+        if (!finalDefault || armStartLine === undefined) return undefined;
+        if (
+          line - armStartLine > MAX_OBJECT_CONSTRUCTOR_BRANCH_LINES ||
+          arms.length + 1 > MAX_OBJECT_CONSTRUCTOR_BRANCH_ARMS
+        )
+          return undefined;
+        arms.push({ startLine: armStartLine, endLine: line - 1 });
+        return arms.length >= 2
+          ? { arms, statementDepth: 2, endLine: line }
+          : undefined;
+      }
+      if (
+        relativeDepth === 1 &&
+        armStartLine === undefined &&
+        structural.trim() !== ""
+      )
+        return undefined;
+      relativeDepth += braceDelta(structural);
+      if (relativeDepth < 1) return undefined;
+    }
+    return undefined;
+  };
+
+  const constructorControlBranches = (
+    function_: GoFunction,
+    startLine: number,
+  ) =>
+    constructorIfElseBranches(function_, startLine) ??
+    constructorSwitchBranches(function_, startLine);
 
   const constructorValueHelperCall = (
     expression: string,
@@ -2956,6 +3050,7 @@ function objectWrapperSummaries(
     const branchWrites = (
       startLine: number,
       endLine: number,
+      statementDepth: number,
     ): ConstructorValueHelperWriteStep[] | undefined => {
       const writes: ConstructorValueHelperWriteStep[] = [];
       for (let line = startLine; line <= endLine; line += 1) {
@@ -2970,7 +3065,7 @@ function objectWrapperSummaries(
         if (
           fieldWrite === undefined ||
           alias === undefined ||
-          lineNestingDepth(function_, statementLine) !== 2 ||
+          lineNestingDepth(function_, statementLine) !== statementDepth ||
           (fieldWrite.explicitDereference && !result.pointer) ||
           fieldWrite.fields.length === 0 ||
           fieldWrite.fields.length > MAX_OBJECT_RECEIVER_FIELD_DEPTH
@@ -3024,12 +3119,16 @@ function objectWrapperSummaries(
       const statementLine = line;
       const conditional =
         lineNestingDepth(function_, statementLine) === 1
-          ? constructorIfElseBranches(function_, statementLine)
+          ? constructorControlBranches(function_, statementLine)
           : undefined;
       if (conditional !== undefined) {
         const arms: ConstructorValueHelperWriteStep[][] = [];
         for (const { startLine, endLine } of conditional.arms) {
-          const writes = branchWrites(startLine, endLine);
+          const writes = branchWrites(
+            startLine,
+            endLine,
+            conditional.statementDepth,
+          );
           if (writes === undefined) {
             invalid = true;
             break;
@@ -4109,6 +4208,7 @@ function objectWrapperSummaries(
       targetAliases: ReadonlyMap<string, ConstructorAlias>,
       startLine: number,
       endLine: number,
+      statementDepth: number,
       budget: ConstructorWriteBudget,
     ): number | undefined => {
       let writes = 0;
@@ -4125,7 +4225,7 @@ function objectWrapperSummaries(
             targetAliases,
             fieldWrite,
             statementLine,
-            2,
+            statementDepth,
             budget,
           )
         )
@@ -4170,7 +4270,7 @@ function objectWrapperSummaries(
       line = statement.endLine;
       const conditional =
         lineNestingDepth(function_, statementLine) === 1
-          ? constructorIfElseBranches(function_, statementLine)
+          ? constructorControlBranches(function_, statementLine)
           : undefined;
       if (conditional !== undefined) {
         const worlds = conditional.arms.map(({ startLine, endLine }) => {
@@ -4180,6 +4280,7 @@ function objectWrapperSummaries(
             branch.aliases,
             startLine,
             endLine,
+            conditional.statementDepth,
             budget,
           );
           return { branch, budget, writes };
