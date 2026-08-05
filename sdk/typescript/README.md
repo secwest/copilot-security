@@ -99,9 +99,16 @@ The package is ESM-only and provides:
   cross-package chains use the same 32-bound, deepest-module, import-alias,
   export, shadowing, uniqueness, cycle, reassignment, and nesting rules as
   finalizer chains. Evidence retains every factory edge and the real leaf begin
-  path instead of attributing transaction creation to the caller. Interfaces,
-  methods, function values, arbitrary result transforms, and named-result-only
-  returns are rejected.
+  path instead of attributing transaction creation to the caller. A factory or
+  finalizer call may pass through at most eight exact local function-value
+  bindings. Each binding must be a top-level single-name assignment to an
+  identifier or qualified function, must never be reassigned, and is retained
+  with its file, line, and target as evidence. Qualified targets are validated
+  against the import binding at capture time. Parameters, receivers, local
+  declarations, package or helper shadowing, nested or multi-name assignments,
+  unknown values, cycles, and a ninth binding fail closed. Interfaces, methods,
+  dynamically selected callbacks, arbitrary result transforms, and
+  named-result-only returns remain rejected.
   Transaction outcome can also close through an exact chain of uniquely
   resolved local functions whose typed `database/sql` transaction parameter
   reaches exactly one non-deferred function-level `Commit` or `Rollback`.
@@ -112,7 +119,9 @@ The package is ESM-only and provides:
   helper nesting, argument position, alias identity, reassignment, module,
   definition and outcome ambiguity, depth, and finalizer order remain enforced;
   commit evidence retains every forwarding call and the leaf file and line
-  rather than attributing the standard-library operation to the caller.
+  rather than attributing the standard-library operation to the caller. The
+  same eight-binding exact function-value rule applies within and between
+  finalizer helpers.
   Same-query security predicates count only
   when bound to a context-derived principal, and fail-closed returned-owner
   comparisons remain explicit control evidence. Fixed or reassigned IDs,

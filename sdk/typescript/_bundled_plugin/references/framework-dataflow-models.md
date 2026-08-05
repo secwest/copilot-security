@@ -430,9 +430,15 @@ interpreter that consumes the value.
   the same authoritative module path, ordinary import alias, exported unique
   target, unshadowed binding, exact argument, cycle, depth, and ambiguity
   checks as finalizers. Preserve every factory edge and the actual leaf begin
-  path. Reject interfaces, methods, function values, transformed results,
-  nested creation, wrong return shapes, reassignment, cycles, and over-depth
-  chains rather than inferring a transaction.
+  path. An exact factory or finalizer call may traverse at most eight top-level
+  local function-value bindings. Require one single-name assignment per binding
+  to an identifier or qualified function, validate qualified import identity at
+  capture time, and preserve every binding file, line, and target as evidence.
+  Reject parameters, receivers, declarations without a proven binding,
+  shadowing, reassignment, nested or multi-name assignment, unknown values,
+  cycles, and a ninth binding. Also reject interfaces, methods, dynamically
+  selected callbacks, transformed results, nested creation, wrong return
+  shapes, and over-depth helper chains rather than inferring a transaction.
 - A transaction may close through a bounded exact chain of local functions only
   when an exact typed `database/sql` transaction parameter reaches exactly one
   non-deferred function-level `Commit` or `Rollback`. Cross-package edges require

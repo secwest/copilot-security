@@ -439,9 +439,16 @@ the real `Begin`/`BeginTx`, return `*sql.Tx` first, and expose the unchanged
 result through a direct return or one assigned-then-return identity. Evidence
 retains every factory boundary and leaf begin path. DB/Conn method mismatch,
 wrong or transformed results, nesting, reassignment, cycles, alias shadowing,
-ambiguous modules or definitions, interfaces, methods, and function values fail
-closed. A ninth executable pair crosses two imported factory packages and
-proves both the durable unscoped deletion and its principal-bound control. This
+ambiguous modules or definitions, interfaces, and methods fail closed. A ninth
+executable pair crosses two imported factory packages and proves both the
+durable unscoped deletion and its principal-bound control. Exact local function
+values now compose with both factory and finalizer summaries through at most
+eight top-level, single-name, single-assignment bindings. Each capture is
+evidence, qualified imports bind at capture time, and shadowing, reassignment,
+nesting, multi-name assignment, unknown targets, cycles, or a ninth binding fail
+closed. A tenth executable pair crosses application and internal-package
+function values on both creation and finalization paths and proves the durable
+unscoped deletion plus its principal-bound control. This
 directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
@@ -458,9 +465,9 @@ as CodeQL's distinction between local flow and explicitly modeled
 interprocedural flow summaries: the summary expands a proven semantic boundary,
 not every similarly named call. It remains deliberately narrower than whole-
 program call-graph and control-flow analysis; interface dispatch, function
-values, method factories, named-result-only returns, recursive transaction
-helpers, replace-only packages without source inventory, and dynamically
-selected creation or finalization remain future work.
+parameters, method values and factories, named-result-only returns, recursive
+transaction helpers, replace-only packages without source inventory, and
+dynamically selected creation or finalization callbacks remain future work.
 
 `benchmarks/go-sqlx-sql-injection-manifest.json` adds a strict sqlx lane. The
 positive carries an HTTP query value through one unique same-package wrapper,

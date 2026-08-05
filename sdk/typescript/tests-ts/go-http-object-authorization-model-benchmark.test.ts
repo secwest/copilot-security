@@ -136,6 +136,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-helper-transaction-delete-authorization",
       "go-cross-package-transaction-factory-delete-idor",
       "go-cross-package-safe-transaction-factory-delete-authorization",
+      "go-cross-package-transaction-function-value-delete-idor",
+      "go-cross-package-safe-transaction-function-value-delete-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -155,6 +157,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[15]?.expected).toEqual([]);
     expect(manifest.cases[16]?.expected).toHaveLength(1);
     expect(manifest.cases[17]?.expected).toEqual([]);
+    expect(manifest.cases[18]?.expected).toHaveLength(1);
+    expect(manifest.cases[19]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -767,6 +771,110 @@ describe("Go HTTP object-authorization framework model", () => {
     ]);
   });
 
+  test("preserves the transaction-function-value exploit and control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-transaction-function-value-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-transaction-function-value-delete-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "store.go",
+      line: 22,
+      categories: [
+        "framework-dataflow:go-http-object-authorization",
+        "modeled-source:go-http-path-value",
+        "modeled-sink:go-database-object-committed-mutation",
+      ],
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 9 },
+        sink: {
+          kind: "go-database-object-committed-mutation",
+          path: "store.go",
+          line: 22,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) =>
+          kind === "go-sql-transaction-helper-function-value" ||
+          /^go-sql-transaction-begin/u.test(kind) ||
+          /^go-sql-transaction-finalizer/u.test(kind) ||
+          kind === "go-sql-transaction-commit",
+      ),
+    ).toEqual([
+      {
+        kind: "go-sql-transaction-helper-function-value",
+        line: 11,
+        symbol: "factory.StartTransaction",
+        path: "store.go",
+      },
+      {
+        kind: "go-sql-transaction-begin-helper",
+        line: 12,
+        symbol: "StartTransaction",
+        path: "store.go",
+      },
+      {
+        kind: "go-sql-transaction-helper-function-value",
+        line: 10,
+        symbol: "leaf.OpenTransaction",
+        path: "internal/txfactory/coordinator.go",
+      },
+      {
+        kind: "go-sql-transaction-begin-helper",
+        line: 11,
+        symbol: "OpenTransaction",
+        path: "internal/txfactory/coordinator.go",
+      },
+      {
+        kind: "go-sql-transaction-begin",
+        line: 9,
+        symbol: "db",
+        path: "internal/txleaf/transaction.go",
+      },
+      {
+        kind: "go-sql-transaction-helper-function-value",
+        line: 21,
+        symbol: "guard.FinalizeTransaction",
+        path: "store.go",
+      },
+      {
+        kind: "go-sql-transaction-finalizer-helper",
+        line: 22,
+        symbol: "FinalizeTransaction",
+        path: "store.go",
+      },
+      {
+        kind: "go-sql-transaction-helper-function-value",
+        line: 9,
+        symbol: "leaf.CommitTransaction",
+        path: "internal/txguard/coordinator.go",
+      },
+      {
+        kind: "go-sql-transaction-finalizer-helper",
+        line: 10,
+        symbol: "CommitTransaction",
+        path: "internal/txguard/coordinator.go",
+      },
+      {
+        kind: "go-sql-transaction-commit",
+        line: 13,
+        symbol: "tx",
+        path: "internal/txleaf/transaction.go",
+      },
+    ]);
+    expect(safe).toHaveLength(1);
+    expect(safe[0]?.frameworkModel?.candidateControls).toEqual([
+      { kind: "principal-bound-object-query", path: "store.go", line: 18 },
+    ]);
+  });
+
   test("closes Prepare and PrepareContext through the exact Stmt execution", async () => {
     const bodies = [
       `  id := r.PathValue("invoiceID")
@@ -1021,6 +1129,91 @@ func Open(db *sql.DB) (*sql.Tx, error) { return db.Begin() }`,
         symbol: "db",
       },
     ]);
+  });
+
+  test("creates transactions through exact local function values", async () => {
+    const rows = await scopedRepositoryInventory({
+      "go.mod": `module example.com/billing
+go 1.26`,
+      "handler.go": `package invoices
+import (
+  "database/sql"
+  "net/http"
+  factory "example.com/billing/internal/txfactory"
+)
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  begin := factory.Start
+  selected := begin
+  tx, _ := selected(db)
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()
+}`,
+      "internal/txfactory/transaction.go": `package txfactory
+import "database/sql"
+func Start(db *sql.DB) (*sql.Tx, error) { return db.Begin() }`,
+    });
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) =>
+          kind === "go-sql-transaction-helper-function-value" ||
+          kind === "go-sql-transaction-begin-helper",
+      ),
+    ).toEqual([
+      {
+        kind: "go-sql-transaction-helper-function-value",
+        path: "handler.go",
+        line: 9,
+        symbol: "factory.Start",
+      },
+      {
+        kind: "go-sql-transaction-helper-function-value",
+        path: "handler.go",
+        line: 10,
+        symbol: "begin",
+      },
+      {
+        kind: "go-sql-transaction-begin-helper",
+        path: "handler.go",
+        line: 11,
+        symbol: "Start",
+      },
+    ]);
+  });
+
+  test("accepts eight transaction function-value aliases and rejects nine", async () => {
+    const files = {
+      "transaction.go": `package invoices
+import "database/sql"
+func start(db *sql.DB) (*sql.Tx, error) { return db.Begin() }`,
+    };
+    const body = (count: number) => {
+      const assignments = Array.from({ length: count }, (_, index) =>
+        index === 0 ? "begin0 := start" : `begin${index} := begin${index - 1}`,
+      ).join("\n  ");
+      return `  id := r.PathValue("invoiceID")
+  ${assignments}
+  tx, _ := begin${count - 1}(db)
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  tx.Commit()`;
+    };
+    const accepted = await repositoryInventory({
+      "handler.go": handler(body(8)),
+      ...files,
+    });
+    expect(accepted).toHaveLength(1);
+    expect(
+      accepted[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) => kind === "go-sql-transaction-helper-function-value",
+      ),
+    ).toHaveLength(8);
+    expect(
+      await repositoryInventory({
+        "handler.go": handler(body(9)),
+        ...files,
+      }),
+    ).toEqual([]);
   });
 
   test("resolves the deepest exact local Go module for transaction creation", async () => {
@@ -1380,6 +1573,127 @@ func Commit(tx *sql.Tx) error { return tx.Commit() }`,
         symbol: "tx",
       },
     ]);
+  });
+
+  test("finalizes transactions through exact local function values", async () => {
+    const rows = await scopedRepositoryInventory({
+      "go.mod": `module example.com/billing
+go 1.26`,
+      "handler.go": `package invoices
+import (
+  "database/sql"
+  "net/http"
+  guard "example.com/billing/internal/dbtx"
+)
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  finish := guard.Finalize
+  selected := finish
+  selected(tx)
+}`,
+      "internal/dbtx/transaction.go": `package dbtx
+import "database/sql"
+func Finalize(tx *sql.Tx) error { return tx.Commit() }`,
+    });
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) =>
+          kind === "go-sql-transaction-helper-function-value" ||
+          kind === "go-sql-transaction-finalizer-helper",
+      ),
+    ).toEqual([
+      {
+        kind: "go-sql-transaction-helper-function-value",
+        path: "handler.go",
+        line: 11,
+        symbol: "guard.Finalize",
+      },
+      {
+        kind: "go-sql-transaction-helper-function-value",
+        path: "handler.go",
+        line: 12,
+        symbol: "finish",
+      },
+      {
+        kind: "go-sql-transaction-finalizer-helper",
+        path: "handler.go",
+        line: 13,
+        symbol: "Finalize",
+      },
+    ]);
+  });
+
+  test("rejects shadowed and reassigned transaction helper calls", async () => {
+    const parameterShadow = `package invoices
+import (
+  "database/sql"
+  "net/http"
+)
+func finish(tx *sql.Tx) error { return tx.Commit() }
+func Handler(db *sql.DB, finish func(*sql.Tx) error, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  finish(tx)
+}`;
+    const localShadow = `package invoices
+import (
+  "database/sql"
+  "net/http"
+)
+func finish(tx *sql.Tx) error { return tx.Commit() }
+func noop(*sql.Tx) error { return nil }
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  finish := noop
+  finish(tx)
+}`;
+    const nestedBinding = `package invoices
+import (
+  "database/sql"
+  "net/http"
+)
+func finish(tx *sql.Tx) error { return tx.Commit() }
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  var selected func(*sql.Tx) error
+  if id != "" {
+    selected = finish
+  }
+  selected(tx)
+}`;
+    const reassignedBinding = `package invoices
+import (
+  "database/sql"
+  "net/http"
+)
+func finish(tx *sql.Tx) error { return tx.Commit() }
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  id := r.PathValue("invoiceID")
+  tx, _ := db.Begin()
+  tx.Exec("DELETE FROM invoices WHERE id = ?", id)
+  selected := finish
+  selected = finish
+  selected(tx)
+}`;
+    for (const source of [
+      parameterShadow,
+      localShadow,
+      nestedBinding,
+      reassignedBinding,
+    ]) {
+      expect(
+        await repositoryInventory({ "handler.go": source }),
+        source,
+      ).toEqual([]);
+    }
   });
 
   test("resolves the deepest exact local Go module for finalization", async () => {

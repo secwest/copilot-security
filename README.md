@@ -807,7 +807,12 @@ two imported factory packages before executing and committing the mutation.
 Factory summaries require a unique typed `*sql.DB` or `*sql.Conn` input, an
 exact first `*sql.Tx` return, a direct-return or assigned-then-return leaf
 `Begin`/`BeginTx`, and the same authoritative module/import rules. Each control
-changes only the authenticated account predicate:
+changes only the authenticated account predicate. A tenth pair captures both
+the application factory and finalizer as local function values, while each
+imported helper captures its leaf function in turn. Resolution accepts at most
+eight exact, top-level, single-assignment aliases and retains every binding as
+evidence; shadowing, reassignment, nested assignment, cycles, ambiguity, and a
+ninth alias fail closed:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -868,6 +873,12 @@ Push-Location benchmarks\fixtures\go-cross-package-transaction-factory-delete-id
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-transaction-factory-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-transaction-function-value-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-transaction-function-value-delete-authorization
 go test ./...
 Pop-Location
 ```

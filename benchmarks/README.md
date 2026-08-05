@@ -603,11 +603,16 @@ exported functions; the control again changes only the account predicate. A
 ninth pair obtains the transaction through an imported coordinator and leaf
 factory before mutation and commit. The exact typed DB/Conn input, first Tx
 return, module path, import aliases, helper chain, and leaf `BeginTx` are all
-preserved; its control again changes only the account predicate. The suite
-proves all nine blocked attacks and successful
+preserved; its control again changes only the account predicate. A tenth pair
+captures the imported factory and finalizer in application function values,
+and both helpers capture their leaf operations the same way. Each exact local
+binding and helper boundary remains visible in the evidence path; its control
+again changes only the account predicate. The suite proves all ten blocked
+attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
-transaction behavior, plus cross-package transaction creation, without a
+transaction behavior, plus cross-package transaction creation and exact
+function-value dispatch, without a
 database service:
 
 ```powershell
@@ -674,6 +679,12 @@ Push-Location fixtures\go-cross-package-transaction-factory-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-transaction-factory-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-transaction-function-value-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-transaction-function-value-delete-authorization
 go test ./...
 Pop-Location
 ```

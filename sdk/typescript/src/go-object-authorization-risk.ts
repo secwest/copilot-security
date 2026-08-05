@@ -23,6 +23,7 @@ const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
 const MAX_RECORDS = 64;
 const MAX_TRANSACTION_HELPER_DEPTH = 32;
+const MAX_TRANSACTION_FUNCTION_VALUE_DEPTH = 8;
 const OBJECT_COLUMN = /^(?:id|key|uuid|[a-z][a-z0-9_]*_(?:id|key|uuid))$/iu;
 const SECURITY_COLUMN =
   /^(?:account|customer|organization|org|owner|principal|shop|tenant|user|workspace)_(?:id|key|uuid)$/iu;
@@ -161,6 +162,12 @@ interface LocalGoModule {
   importPath: string;
 }
 
+interface ResolvedTransactionHelperCall {
+  name: string;
+  targetLine: number;
+  functionValues: EvidencePropagator[];
+}
+
 function localGoModules(files: readonly GoHttpSourceFile[]): LocalGoModule[] {
   const modules: LocalGoModule[] = [];
   for (const file of files) {
@@ -244,66 +251,125 @@ function packageAliasIsAvailable(
   return true;
 }
 
-function transactionFinalizerCallMatches(
+function resolvedTransactionHelperCall(
   function_: GoFunction,
   callName: string,
   line: number,
-  summary: TransactionFinalizerSummary,
-): boolean {
+  visiting: ReadonlySet<string> = new Set(),
+  depth = 0,
+): ResolvedTransactionHelperCall | undefined {
+  if (/^[A-Za-z_]\w*\.[A-Za-z_]\w*$/u.test(callName))
+    return { name: callName, targetLine: line, functionValues: [] };
+  if (!/^[A-Za-z_]\w*$/u.test(callName)) return undefined;
   if (
-    summary.functionName === callName &&
-    summary.packageName === function_.packageName &&
-    posix.dirname(summary.file.path) === posix.dirname(function_.file.path)
+    depth > MAX_TRANSACTION_FUNCTION_VALUE_DEPTH ||
+    visiting.has(callName) ||
+    function_.parameters.some((parameter) => parameter.name === callName) ||
+    (function_.receiver !== undefined &&
+      new RegExp(`\\(\\s*${escapeRegularExpression(callName)}\\b`, "u").test(
+        function_.receiver,
+      ))
   )
-    return true;
-  if (
-    summary.packageImportPath === undefined ||
-    !/^[A-Z]/u.test(summary.functionName)
-  )
-    return false;
-  const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(callName);
-  if (qualified?.[2] !== summary.functionName) return false;
-  const alias = goImportAlias(
-    function_.file.lines,
-    summary.packageImportPath,
-    summary.packageName,
+    return undefined;
+
+  let local = false;
+  let binding: { target: string; line: number } | undefined;
+  const declaration = new RegExp(
+    `\\b(?:var|const|type)\\s+${escapeRegularExpression(callName)}\\b`,
+    "u",
   );
-  return (
-    alias !== undefined &&
-    alias === qualified[1] &&
-    packageAliasIsAvailable(function_, alias, line)
+  for (
+    let candidateLine = function_.bodyStartLine;
+    candidateLine < line;
+    candidateLine += 1
+  ) {
+    const structural = function_.structuralLines[candidateLine - 1] ?? "";
+    const assignment = goAssignment(structural);
+    if (assignment?.names.includes(callName) === true) {
+      if (local) return undefined;
+      local = true;
+      binding = undefined;
+      if (
+        lineNestingDepth(function_, candidateLine) !== 1 ||
+        assignment.names.length !== 1 ||
+        assignment.names[0] !== callName
+      )
+        return undefined;
+      const target = /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)$/u.exec(
+        assignment.value.trim(),
+      )?.[1];
+      if (target !== undefined && target !== callName)
+        binding = { target, line: candidateLine };
+      continue;
+    }
+    if (declaration.test(structural)) {
+      local = true;
+      binding = undefined;
+    }
+  }
+  if (!local) return { name: callName, targetLine: line, functionValues: [] };
+  if (binding === undefined) return undefined;
+  const nextVisiting = new Set(visiting);
+  nextVisiting.add(callName);
+  const target = resolvedTransactionHelperCall(
+    function_,
+    binding.target,
+    binding.line,
+    nextVisiting,
+    depth + 1,
   );
+  if (target === undefined) return undefined;
+  return {
+    name: target.name,
+    targetLine: target.targetLine,
+    functionValues: [
+      ...target.functionValues,
+      {
+        kind: "go-sql-transaction-helper-function-value",
+        line: binding.line,
+        symbol: binding.target,
+        path: function_.file.path,
+      },
+    ],
+  };
 }
 
-function transactionCreatorCallMatches(
+function transactionSummaryCallMatch(
   function_: GoFunction,
   callName: string,
   line: number,
-  summary: TransactionCreatorSummary,
-): boolean {
+  summary: {
+    file: GoHttpSourceFile;
+    packageName: string;
+    packageImportPath?: string;
+    functionName: string;
+  },
+): ResolvedTransactionHelperCall | undefined {
+  const resolved = resolvedTransactionHelperCall(function_, callName, line);
+  if (resolved === undefined) return undefined;
   if (
-    summary.functionName === callName &&
+    summary.functionName === resolved.name &&
     summary.packageName === function_.packageName &&
     posix.dirname(summary.file.path) === posix.dirname(function_.file.path)
   )
-    return true;
+    return resolved;
   if (
     summary.packageImportPath === undefined ||
     !/^[A-Z]/u.test(summary.functionName)
   )
-    return false;
-  const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(callName);
-  if (qualified?.[2] !== summary.functionName) return false;
+    return undefined;
+  const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(resolved.name);
+  if (qualified?.[2] !== summary.functionName) return undefined;
   const alias = goImportAlias(
     function_.file.lines,
     summary.packageImportPath,
     summary.packageName,
   );
-  return (
-    alias !== undefined &&
+  return alias !== undefined &&
     alias === qualified[1] &&
-    packageAliasIsAvailable(function_, alias, line)
-  );
+    packageAliasIsAvailable(function_, alias, resolved.targetLine)
+    ? resolved
+    : undefined;
 }
 
 function sqlAlias(function_: GoFunction): string | undefined {
@@ -909,11 +975,17 @@ function analyzeFunction(
           continue;
         }
       }
-      const matchingFinalizers = finalizers.filter((summary) =>
-        transactionFinalizerCallMatches(function_, call.name, line, summary),
-      );
+      const matchingFinalizers = finalizers.flatMap((summary) => {
+        const match = transactionSummaryCallMatch(
+          function_,
+          call.name,
+          line,
+          summary,
+        );
+        return match === undefined ? [] : [{ summary, match }];
+      });
       if (matchingFinalizers.length === 1) {
-        const summary = matchingFinalizers[0]!;
+        const { summary, match } = matchingFinalizers[0]!;
         const transactionName =
           call.rawArguments[summary.transactionParameterIndex]?.trim();
         const transaction =
@@ -927,6 +999,7 @@ function analyzeFunction(
           callNestingDepth(function_, call) === 1
         ) {
           finalizeTransaction(transaction, summary.method, line, [
+            ...match.functionValues,
             {
               kind: "go-sql-transaction-finalizer-helper",
               line,
@@ -947,11 +1020,17 @@ function analyzeFunction(
           continue;
         }
       }
-      const matchingCreators = creators.filter((summary) =>
-        transactionCreatorCallMatches(function_, call.name, line, summary),
-      );
+      const matchingCreators = creators.flatMap((summary) => {
+        const match = transactionSummaryCallMatch(
+          function_,
+          call.name,
+          line,
+          summary,
+        );
+        return match === undefined ? [] : [{ summary, match }];
+      });
       if (matchingCreators.length === 1 && result !== undefined) {
-        const summary = matchingCreators[0]!;
+        const { summary, match } = matchingCreators[0]!;
         const databaseName =
           call.rawArguments[summary.databaseParameterIndex]?.trim();
         const databaseMatches =
@@ -969,6 +1048,7 @@ function analyzeFunction(
             active: true,
             pending: [],
             creationEvidence: [
+              ...match.functionValues,
               {
                 kind: "go-sql-transaction-begin-helper",
                 line,
@@ -1560,8 +1640,16 @@ function transactionCreatorSummaries(
         }
         continue;
       }
-      const plainCall = /^([A-Za-z_]\w*)$/u.exec(call.name);
-      const qualifiedCall = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(call.name);
+      const resolvedCall = resolvedTransactionHelperCall(
+        descriptor.function_,
+        call.name,
+        call.line,
+      );
+      if (resolvedCall === undefined) continue;
+      const plainCall = /^([A-Za-z_]\w*)$/u.exec(resolvedCall.name);
+      const qualifiedCall = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(
+        resolvedCall.name,
+      );
       const targets: Array<{ key: string; descriptor: Descriptor }> = [];
       if (plainCall !== null) {
         const targetKey = `${posix.dirname(descriptor.function_.file.path)}\0${descriptor.function_.packageName}\0${plainCall[1]}`;
@@ -1574,7 +1662,7 @@ function transactionCreatorSummaries(
         packageAliasIsAvailable(
           descriptor.function_,
           qualifiedCall[1]!,
-          call.line,
+          resolvedCall.targetLine,
         )
       ) {
         for (const [targetKey, target] of descriptors) {
@@ -1642,6 +1730,7 @@ function transactionCreatorSummaries(
         creatorFile: target.summary.creatorFile,
         creatorReceiverName: target.summary.creatorReceiverName,
         delegations: [
+          ...resolvedCall.functionValues,
           {
             kind: "go-sql-transaction-begin-helper",
             line: call.line,
@@ -1801,8 +1890,16 @@ function transactionFinalizerSummaries(
           });
         continue;
       }
-      const plainCall = /^([A-Za-z_]\w*)$/u.exec(call.name);
-      const qualifiedCall = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(call.name);
+      const resolvedCall = resolvedTransactionHelperCall(
+        descriptor.function_,
+        call.name,
+        call.line,
+      );
+      if (resolvedCall === undefined) continue;
+      const plainCall = /^([A-Za-z_]\w*)$/u.exec(resolvedCall.name);
+      const qualifiedCall = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(
+        resolvedCall.name,
+      );
       const targets: Array<{ key: string; descriptor: Descriptor }> = [];
       if (plainCall !== null) {
         const targetKey = `${posix.dirname(descriptor.function_.file.path)}\0${descriptor.function_.packageName}\0${plainCall[1]}`;
@@ -1815,7 +1912,7 @@ function transactionFinalizerSummaries(
         packageAliasIsAvailable(
           descriptor.function_,
           qualifiedCall[1]!,
-          call.line,
+          resolvedCall.targetLine,
         )
       ) {
         for (const [targetKey, target] of descriptors) {
@@ -1879,6 +1976,7 @@ function transactionFinalizerSummaries(
         finalizerFile: target.summary.finalizerFile,
         finalizerTransactionName: target.summary.finalizerTransactionName,
         delegations: [
+          ...resolvedCall.functionValues,
           {
             kind: "go-sql-transaction-finalizer-helper",
             line: call.line,
