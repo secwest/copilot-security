@@ -2169,11 +2169,13 @@ function objectWrapperSummaries(
     steps: ReadonlyArray<ConstructorValueHelperStep>;
   }
   interface InterfaceDescriptor {
+    file: GoHttpSourceFile;
     directory: string;
     packageName: string;
     importPath?: string;
     name: string;
     methods: ReadonlySet<string>;
+    methodSignatures?: ReadonlyMap<string, string>;
   }
   interface ReceiverBinding {
     concrete: TypeReference;
@@ -2289,13 +2291,51 @@ function objectWrapperSummaries(
         (method) => method[1]!,
       );
       const methods = new Set(methodNames);
-      if (methods.size === 0 || methods.size !== methodNames.length) continue;
+      const methodSignatures = new Map<string, string>();
+      let signaturesComplete = true;
+      for (const fragment of body.split(/[;\r\n]+/u)) {
+        const declaration = fragment.trim();
+        if (declaration === "") continue;
+        const method = /^([A-Za-z_]\w*)\s*(\([\s\S]+)$/u.exec(declaration);
+        if (method === null || methodSignatures.has(method[1]!)) {
+          signaturesComplete = false;
+          break;
+        }
+        let parenthesisDepth = 0;
+        let bracketDepth = 0;
+        let valid = true;
+        for (const character of method[2]!) {
+          if (character === "(") parenthesisDepth += 1;
+          if (character === ")") parenthesisDepth -= 1;
+          if (character === "[") bracketDepth += 1;
+          if (character === "]") bracketDepth -= 1;
+          if (parenthesisDepth < 0 || bracketDepth < 0) {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid || parenthesisDepth !== 0 || bracketDepth !== 0) {
+          signaturesComplete = false;
+          break;
+        }
+        methodSignatures.set(method[1]!, method[2]!.replace(/\s+/gu, ""));
+      }
+      const empty = body.trim() === "";
+      if ((!empty && methods.size === 0) || methods.size !== methodNames.length)
+        continue;
+      if (
+        methodSignatures.size !== methods.size ||
+        [...methodSignatures].some(([method]) => !methods.has(method))
+      )
+        signaturesComplete = false;
       interfaces.push({
+        file,
         directory,
         packageName: packageMatch[1]!,
         ...(importPath === undefined ? {} : { importPath }),
         name: declaration[1]!,
         methods,
+        ...(signaturesComplete ? { methodSignatures } : {}),
       });
     }
   }
@@ -2845,11 +2885,11 @@ function objectWrapperSummaries(
         opening,
       );
     const unboundConvertedTypeSwitch =
-      /^\s*switch\s+(any|interface\s*\{\s*\})\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\.\s*\(\s*type\s*\)\s*\{\s*$/u.exec(
+      /^\s*switch\s+((?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*|interface\s*\{\s*\})\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\.\s*\(\s*type\s*\)\s*\{\s*$/u.exec(
         opening,
       );
     const boundConvertedTypeSwitch =
-      /^\s*switch\s+([A-Za-z_]\w*)\s*:=\s*(any|interface\s*\{\s*\})\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\.\s*\(\s*type\s*\)\s*\{\s*$/u.exec(
+      /^\s*switch\s+([A-Za-z_]\w*)\s*:=\s*((?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*|interface\s*\{\s*\})\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\.\s*\(\s*type\s*\)\s*\{\s*$/u.exec(
         opening,
       );
     const switchAliasIsFresh = (target: string): boolean =>
@@ -2860,31 +2900,40 @@ function objectWrapperSummaries(
           .slice(function_.bodyStartLine - 1, startLine - 1)
           .join("\n"),
       );
-    const isInterfaceParameter = (source: string): boolean => {
+    interface InterfaceValueAlias {
+      parameterName: string;
+      interface_?: InterfaceDescriptor;
+      depth: number;
+    }
+    const interfaceParameterSource = (
+      source: string,
+    ): InterfaceValueAlias | undefined => {
       const parameters = function_.parameters.filter(
         ({ name }) => name === source,
       );
-      if (parameters.length !== 1) return false;
+      if (parameters.length !== 1) return undefined;
       const parameterType = parameters[0]!.type;
-      if (parameterType.replace(/\s+/gu, "") === "interface{}") return true;
+      if (parameterType.replace(/\s+/gu, "") === "interface{}")
+        return { parameterName: source, depth: 0 };
       const reference = typeReference(parameterType);
-      if (reference === undefined || reference.pointer) return false;
-      return (
-        interfaces.filter(
-          (interface_) =>
-            interface_.name === reference.typeName &&
-            typeMatchesIdentity(
-              reference,
-              function_.file,
-              function_.packageName,
-              interface_.directory,
-              interface_.packageName,
-              interface_.importPath,
-              function_,
-              startLine,
-            ),
-        ).length === 1
+      if (reference === undefined || reference.pointer) return undefined;
+      const candidates = interfaces.filter(
+        (interface_) =>
+          interface_.name === reference.typeName &&
+          typeMatchesIdentity(
+            reference,
+            function_.file,
+            function_.packageName,
+            interface_.directory,
+            interface_.packageName,
+            interface_.importPath,
+            function_,
+            startLine,
+          ),
       );
+      return candidates.length === 1
+        ? { parameterName: source, interface_: candidates[0]!, depth: 0 }
+        : undefined;
     };
     const parenthesisDelta = (value: string): number =>
       [...value].reduce(
@@ -2892,10 +2941,13 @@ function objectWrapperSummaries(
           delta + (character === "(" ? 1 : character === ")" ? -1 : 0),
         0,
       );
-    const declarationNamesAny = (value: string): boolean =>
-      /^(?:[A-Za-z_]\w*\s*,\s*)*any(?:\s*,|\s|=|$)/u.test(value.trim());
-    const declarationGroupNamesAny = (value: string): boolean =>
-      value.split(";").some(declarationNamesAny);
+    const declarationNames = (value: string, name: string): boolean =>
+      new RegExp(
+        `^(?:[A-Za-z_]\\w*\\s*,\\s*)*${escapeRegularExpression(name)}(?:\\s*,|\\s|=|$)`,
+        "u",
+      ).test(value.trim());
+    const declarationGroupNames = (value: string, name: string): boolean =>
+      value.split(";").some((fragment) => declarationNames(fragment, name));
     const packageDeclaresAny = (): boolean => {
       const directory = posix.dirname(function_.file.path);
       for (const file of files) {
@@ -2923,7 +2975,7 @@ function objectWrapperSummaries(
             if (
               declarationGroup !== undefined &&
               declarationGroup.depth === 1 &&
-              declarationGroupNamesAny(structural)
+              declarationGroupNames(structural, "any")
             )
               return true;
             if (declarationGroup === undefined) {
@@ -2932,8 +2984,9 @@ function objectWrapperSummaries(
                 const depth = parenthesisDelta(structural);
                 if (depth < 0) return true;
                 if (
-                  declarationGroupNamesAny(
+                  declarationGroupNames(
                     structural.slice(structural.indexOf("(") + 1),
+                    "any",
                   )
                 )
                   return true;
@@ -3047,16 +3100,27 @@ function objectWrapperSummaries(
       const minor = Number.parseInt(version[2]!, 10);
       return major > 1 || (major === 1 && minor >= 18);
     };
-    const namedResultShadowsAny = (): boolean => {
+    const namedResultShadows = (name: string): boolean => {
       const signature = function_.returnSignature.trim();
       if (!signature.startsWith("(") || !signature.endsWith(")")) return false;
+      const namePattern = escapeRegularExpression(name);
       return splitGoArguments(signature.slice(1, -1)).some((result) =>
-        /^(?:[A-Za-z_]\w*\s*,\s*)*any(?:\s*,\s*[A-Za-z_]\w*)*\s+\S/u.test(
-          result.trim(),
-        ),
+        new RegExp(
+          `^(?:[A-Za-z_]\\w*\\s*,\\s*)*${namePattern}(?:\\s*,\\s*[A-Za-z_]\\w*)*\\s+\\S`,
+          "u",
+        ).test(result.trim()),
       );
     };
-    const localDeclaresAnyBefore = (line: number): boolean => {
+    const localDeclaresBefore = (name: string, line: number): boolean => {
+      const namePattern = escapeRegularExpression(name);
+      const directDeclaration = new RegExp(
+        `\\b(?:const|type|var)\\s+(?:[A-Za-z_]\\w*\\s*,\\s*)*${namePattern}(?:\\s*,|\\s|=|$)`,
+        "u",
+      );
+      const shortDeclaration = new RegExp(
+        `\\b(?:[A-Za-z_]\\w*\\s*,\\s*)*${namePattern}(?:\\s*,\\s*[A-Za-z_]\\w*)*\\s*:=`,
+        "u",
+      );
       let declarationGroup:
         | { kind: "const" | "type" | "var"; depth: number }
         | undefined;
@@ -3067,18 +3131,14 @@ function objectWrapperSummaries(
       ) {
         const structural = function_.structuralLines[candidateLine - 1] ?? "";
         if (
-          /\b(?:const|type|var)\s+(?:[A-Za-z_]\w*\s*,\s*)*any(?:\s*,|\s|=|$)/u.test(
-            structural,
-          ) ||
-          /\b(?:[A-Za-z_]\w*\s*,\s*)*any(?:\s*,\s*[A-Za-z_]\w*)*\s*:=/u.test(
-            structural,
-          )
+          directDeclaration.test(structural) ||
+          shortDeclaration.test(structural)
         )
           return true;
         if (
           declarationGroup !== undefined &&
           declarationGroup.depth === 1 &&
-          declarationGroupNamesAny(structural)
+          declarationGroupNames(structural, name)
         )
           return true;
         if (declarationGroup === undefined) {
@@ -3088,8 +3148,9 @@ function objectWrapperSummaries(
             const depth = parenthesisDelta(groupText);
             if (depth < 0) return true;
             if (
-              declarationGroupNamesAny(
+              declarationGroupNames(
                 groupText.slice(groupText.indexOf("(") + 1),
+                name,
               )
             )
               return true;
@@ -3110,7 +3171,21 @@ function objectWrapperSummaries(
     let packageDeclaresAnyResult: boolean | undefined;
     let fileImportsAsAnyResult: boolean | undefined;
     let moduleSupportsPredeclaredAnyResult: boolean | undefined;
-    let namedResultShadowsAnyResult: boolean | undefined;
+    const lexicalIdentifierAvailability = new Map<string, boolean>();
+    const lexicalIdentifierIsAvailable = (
+      name: string,
+      line: number,
+    ): boolean => {
+      const key = `${name}\0${line}`;
+      const cached = lexicalIdentifierAvailability.get(key);
+      if (cached !== undefined) return cached;
+      const available =
+        !namedResultShadows(name) &&
+        packageAliasIsAvailable(function_, name, line) &&
+        !localDeclaresBefore(name, line);
+      lexicalIdentifierAvailability.set(key, available);
+      return available;
+    };
     const predeclaredAnyAvailability = new Map<number, boolean>();
     const predeclaredAnyIsAvailable = (line: number): boolean => {
       const cached = predeclaredAnyAvailability.get(line);
@@ -3118,52 +3193,138 @@ function objectWrapperSummaries(
       packageDeclaresAnyResult ??= packageDeclaresAny();
       fileImportsAsAnyResult ??= fileImportsAsAny();
       moduleSupportsPredeclaredAnyResult ??= moduleSupportsPredeclaredAny();
-      namedResultShadowsAnyResult ??= namedResultShadowsAny();
       const available =
         moduleSupportsPredeclaredAnyResult &&
         !packageDeclaresAnyResult &&
         !fileImportsAsAnyResult &&
-        !namedResultShadowsAnyResult &&
-        packageAliasIsAvailable(function_, "any", line) &&
-        !localDeclaresAnyBefore(line);
+        lexicalIdentifierIsAvailable("any", line);
       predeclaredAnyAvailability.set(line, available);
       return available;
     };
-    const exactEmptyInterfaceSource = (
+    const resolvedNamedInterfaceTarget = (
       value: string,
       line: number,
-    ): string | undefined => {
+    ): InterfaceDescriptor | undefined => {
+      const reference = typeReference(value);
+      if (reference === undefined || reference.pointer) return undefined;
+      const lexicalName = reference.qualifier ?? reference.typeName;
+      if (!lexicalIdentifierIsAvailable(lexicalName, line)) return undefined;
+      const candidates = interfaces.filter(
+        (interface_) =>
+          interface_.name === reference.typeName &&
+          typeMatchesIdentity(
+            reference,
+            function_.file,
+            function_.packageName,
+            interface_.directory,
+            interface_.packageName,
+            interface_.importPath,
+            function_,
+            line,
+          ),
+      );
+      return candidates.length === 1 ? candidates[0] : undefined;
+    };
+    const namedInterfaceAccepts = (
+      source: InterfaceValueAlias,
+      target: InterfaceDescriptor,
+    ): boolean => {
+      if (source.interface_ === target || target.methods.size === 0)
+        return true;
+      const sourceInterface = source.interface_;
+      if (
+        sourceInterface === undefined ||
+        sourceInterface.directory !== target.directory ||
+        sourceInterface.packageName !== target.packageName ||
+        sourceInterface.methodSignatures === undefined ||
+        target.methodSignatures === undefined
+      )
+        return false;
+      if (
+        sourceInterface.file.path !== target.file.path &&
+        [...target.methods].some((method) => {
+          const sourceSignature =
+            sourceInterface.methodSignatures?.get(method) ?? "";
+          const targetSignature = target.methodSignatures?.get(method) ?? "";
+          return (
+            /\b[A-Za-z_]\w*\s*\./u.test(sourceSignature) ||
+            /\b[A-Za-z_]\w*\s*\./u.test(targetSignature)
+          );
+        })
+      )
+        return false;
+      return [...target.methods].every(
+        (method) =>
+          sourceInterface.methods.has(method) &&
+          sourceInterface.methodSignatures?.get(method) ===
+            target.methodSignatures?.get(method),
+      );
+    };
+    const convertedInterfaceAlias = (
+      targetText: string,
+      source: InterfaceValueAlias,
+      line: number,
+    ): InterfaceValueAlias | undefined => {
+      const normalizedTarget = targetText.replace(/\s+/gu, "");
+      if (normalizedTarget === "interface{}")
+        return { parameterName: source.parameterName, depth: source.depth };
+      if (normalizedTarget === "any")
+        return predeclaredAnyIsAvailable(line)
+          ? { parameterName: source.parameterName, depth: source.depth }
+          : undefined;
+      const target = resolvedNamedInterfaceTarget(targetText, line);
+      return target !== undefined && namedInterfaceAccepts(source, target)
+        ? {
+            parameterName: source.parameterName,
+            interface_: target,
+            depth: source.depth,
+          }
+        : undefined;
+    };
+    const parsedInterfaceConversion = (
+      value: string,
+    ): { target: string; source: string } | undefined => {
       const conversion =
-        /^\s*(any|interface\s*\{\s*\})\s*\(\s*([A-Za-z_]\w*)\s*\)\s*$/u.exec(
+        /^\s*((?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*|interface\s*\{\s*\})\s*\(\s*([A-Za-z_]\w*)\s*\)\s*$/u.exec(
           value,
         );
-      if (conversion === null) return undefined;
-      return conversion[1] === "any" && !predeclaredAnyIsAvailable(line)
+      return conversion === null
         ? undefined
-        : conversion[2];
+        : { target: conversion[1]!, source: conversion[2]! };
     };
-    const interfaceParameterForSwitchSource = (
+    const interfaceAliasForSwitchSource = (
       source: string,
-    ): string | undefined => {
-      const aliases = new Map<
-        string,
-        { parameterName: string; depth: number }
-      >();
+      conversionTarget?: string,
+    ): InterfaceValueAlias | undefined => {
+      const aliases = new Map<string, InterfaceValueAlias>();
       for (const { name } of function_.parameters) {
-        if (isInterfaceParameter(name)) {
-          aliases.set(name, { parameterName: name, depth: 0 });
-        }
+        const parameter = interfaceParameterSource(name);
+        if (parameter !== undefined) aliases.set(name, parameter);
       }
       let structuralDepth = 0;
       for (let line = function_.bodyStartLine; line < startLine; line += 1) {
         const structural = function_.structuralLines[line - 1] ?? "";
         const assignment = goAssignment(structural);
         if (assignment !== undefined) {
-          const priorName =
-            /^([A-Za-z_]\w*)$/u.exec(assignment.value.trim())?.[1] ??
-            exactEmptyInterfaceSource(assignment.value, line);
+          const bareName = /^([A-Za-z_]\w*)$/u.exec(
+            assignment.value.trim(),
+          )?.[1];
+          const conversion = parsedInterfaceConversion(assignment.value);
+          const barePrior =
+            bareName === undefined ? undefined : aliases.get(bareName);
+          const conversionPrior =
+            conversion === undefined
+              ? undefined
+              : aliases.get(conversion.source);
           const prior =
-            priorName === undefined ? undefined : aliases.get(priorName);
+            barePrior ??
+            (conversionPrior === undefined || conversion === undefined
+              ? undefined
+              : convertedInterfaceAlias(
+                  conversion.target,
+                  conversionPrior,
+                  line,
+                ));
           for (const name of assignment.names) aliases.delete(name);
           if (
             structuralDepth === 1 &&
@@ -3173,6 +3334,9 @@ function objectWrapperSummaries(
           ) {
             aliases.set(assignment.names[0]!, {
               parameterName: prior.parameterName,
+              ...(prior.interface_ === undefined
+                ? {}
+                : { interface_: prior.interface_ }),
               depth: prior.depth + 1,
             });
           }
@@ -3180,7 +3344,10 @@ function objectWrapperSummaries(
         structuralDepth += braceDelta(structural);
       }
       if (structuralDepth !== 1) return undefined;
-      return aliases.get(source)?.parameterName;
+      const resolved = aliases.get(source);
+      return resolved === undefined || conversionTarget === undefined
+        ? resolved
+        : convertedInterfaceAlias(conversionTarget, resolved, startLine);
     };
     let armForbiddenAlias: string | undefined;
     let armLeadingNoOpAlias: string | undefined;
@@ -3200,8 +3367,7 @@ function objectWrapperSummaries(
         unboundConvertedTypeSwitch?.[2];
       if (
         source === undefined ||
-        interfaceParameterForSwitchSource(source) === undefined ||
-        (conversion === "any" && !predeclaredAnyIsAvailable(startLine)) ||
+        interfaceAliasForSwitchSource(source, conversion) === undefined ||
         (target !== undefined && !switchAliasIsFresh(target))
       )
         return undefined;

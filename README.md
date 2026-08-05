@@ -970,12 +970,22 @@ only when the enclosing module does not select a language version before Go
 1.18 and `any` is not shadowed by a package declaration in any same-package
 file, the current file's explicit or effective import name, a parameter,
 receiver, named result, or preceding local declaration. Conversion assignments
-consume the same eight-hop alias budget. Named-interface conversions, nested
-calls or conversions, selectors, composite arguments, shadowed `any`, and a
+consume the same eight-hop alias budget. Nested calls or conversions,
+selectors, composite arguments, shadowed `any`, and a
 ninth local edge remain fail closed. Constructor-helper discovery also ignores
 unqualified call-shaped expressions unless a same-package function is actually
 declared, preventing built-ins and type conversions from erasing otherwise
-complete helper-boundary evidence.
+complete helper-boundary evidence. A thirty-first pair converts the exact
+source to a distinct named basic interface before one further alias and the
+same bounded type switch. The target must resolve uniquely after lexical
+shadow checks. Identical interfaces and named empty interfaces are admitted;
+otherwise both descriptors must belong to the same package and the source
+method set must contain every target method with an exact signature. Qualified
+local-module empty-interface targets are also supported. The conversion keeps
+the original dynamic value while replacing only its tracked static interface
+descriptor. Signature mismatch, a broader target, embedded or constraint
+interfaces, unresolved import identity, cross-package nonempty method sets,
+nested input, local type or value shadowing, and a ninth edge fail closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1162,6 +1172,12 @@ Push-Location benchmarks\fixtures\go-cross-package-imported-helper-empty-interfa
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-empty-interface-type-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-helper-named-interface-type-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-helper-named-interface-type-switch-write-authorization
 go test ./...
 Pop-Location
 ```

@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains sixty-eight vulnerable/control pairs:
+The versioned corpus currently contains sixty-nine vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 408
+destination-pinned, redirect-free transport. Three runs per case produce 414
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -712,10 +712,19 @@ empty interface before one further local alias and the type switch. Exact
 `interface{}` conversion is unconditional; predeclared `any` requires Go 1.18
 or later when the enclosing module declares a version and must remain unshadowed
 across the package, current file imports, function signature, and preceding
-local scope. Conversion assignments share the eight-edge alias budget. Named
-conversions, nested calls, selectors, composites, shadowed imports or
+local scope. Conversion assignments share the eight-edge alias budget. Nested
+calls, selectors, composites, shadowed imports or
 declarations, and pre-1.18 modules fail closed. Its control again changes only
-the account predicate. The suite proves all thirty blocked attacks and
+the account predicate. A thirty-first pair converts the source to a distinct
+named basic interface with an identical method signature, carries that value
+through one local alias, and enters the same all-path type switch. The target
+must resolve uniquely without lexical shadowing. Identical and named-empty
+interfaces are admitted directly; nonempty distinct targets require an exact
+same-package method-set subset with matching signatures. Broader or mismatched
+targets, embedded or constraint interfaces, unresolved or cross-package
+nonempty signatures, nested inputs, local type or value shadowing, and a ninth
+edge fail closed. Its control again changes only the account predicate. The
+suite proves all thirty-one blocked attacks and
 successful owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
@@ -727,7 +736,8 @@ constructor parent helpers, imported local-module parent helpers, and imported
 constructor-helper field writes, shallow value-copy pointers, and exact helper
 two-way, multi-way, expression-switch, expressionless-switch,
 initializer-bound-switch, direct interface-type-switch, and bounded aliased
-interface-type-switch and exact empty-interface-conversion branch joins,
+interface-type-switch, exact empty-interface-conversion, and exact named-basic-
+interface-conversion branch joins,
 without a database service:
 
 ```powershell
@@ -920,6 +930,12 @@ Push-Location fixtures\go-cross-package-imported-helper-empty-interface-type-swi
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-imported-helper-empty-interface-type-switch-write-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-imported-helper-named-interface-type-switch-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-imported-helper-named-interface-type-switch-write-authorization
 go test ./...
 Pop-Location
 ```

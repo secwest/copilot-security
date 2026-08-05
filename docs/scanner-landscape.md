@@ -611,10 +611,19 @@ parameter, receiver, named result, or preceding local declaration shadows the
 predeclared alias. Effective local import package names are resolved before the
 path basename fallback. Unqualified call-shaped constructor-helper expressions
 must now name an actual same-package function, so conversions and built-ins do
-not truncate helper call, alias, write, and return evidence. Named conversions,
-nested calls or conversions, selectors, composite arguments, shadowed `any`,
-pre-1.18 modules, and a ninth assignment edge remain rejected. The same
-complete-world and topology proof is retained. This directly
+not truncate helper call, alias, write, and return evidence. A thirty-first pair
+adds exact named basic-interface conversions. The target name must resolve
+uniquely after lexical shadow checks. Identical and named-empty interfaces are
+admitted; a distinct nonempty target requires a same-package basic interface
+whose every method and canonical signature is present in the source method
+set. The tracked alias changes static interface identity while preserving the
+original parameter and dynamic value. Nested calls or conversions, selectors,
+composite arguments, broader or signature-mismatched targets, embedded or
+constraint interfaces, unresolved or cross-package nonempty signatures,
+shadowed targets, shadowed `any`, pre-1.18 modules, and a ninth assignment edge
+remain rejected. The same complete-world and topology proof is retained. This
+follows the [Go conversion and assignability rules](https://go.dev/ref/spec#Conversions),
+which preserve representation for this conversion family. It directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -631,7 +640,7 @@ analysis, but a standalone deterministic proof path with explicit bounded
 failure semantics and executable object/principal controls. External-module
 and parameter-transforming helpers, nested helper branches, five-or-more-arm
 chains and switches, side-effecting or composite initializers, type switches
-over selectors, named or nested conversions, transformed, composite,
+over selectors, unresolved named or nested conversions, transformed, composite,
 field-held, package-held, or branch-joined aliases, or value-bearing guards,
 one-arm conditionals
 proven from pre-state, loop-sensitive writes,
