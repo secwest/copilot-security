@@ -536,7 +536,17 @@ write, and receiver evidence at their actual paths and lines. Duplicate or
 shadowed helpers, cycles, ninth calls, result pointer/value mismatch,
 transformed parameters, positional composites, nested or multiple returns, and
 dynamic state fail closed. The positive reaches only the injected primary
-implementation; the control again adds only principal scope. This directly
+implementation; the control again adds only principal scope. A twentieth pair
+moves the allocator into another package under the same authoritative local Go
+module. The host requires the exact import path and ordinary alias, exported
+helper, type, and traversed field, unshadowed package identity, and a unique
+local definition. The helper composite retains its defining-package identity
+through constructor substitution and shares the eight-call bound with local
+helpers. Multiline constructor fields retain the qualified helper expression's
+actual line. Wrong or external module paths, function values, unexported or
+duplicate targets, and package/type mismatches fail closed. The positive reaches
+only the imported-parent-selected primary implementation; the control again
+adds only principal scope. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -549,9 +559,9 @@ describes call-graph target resolution; Semgrep documents [separate per-file
 and cross-file analysis modes](https://semgrep.dev/docs/writing-rules/glossary).
 This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
-failure semantics and executable object/principal controls. Imported
-cross-package and parameter-transforming constructor helpers, branchy helpers,
-one-arm conditionals, `else if` chains, loop-sensitive writes, unbound
+failure semantics and executable object/principal controls. External-module and
+parameter-transforming constructor helpers, branchy helpers, one-arm
+conditionals, `else if` chains, loop-sensitive writes, unbound
 interfaces, embedded promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
 sqlc, ORMs, general dominance and multi-branch joins, and deployment authorization remain

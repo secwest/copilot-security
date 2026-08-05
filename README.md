@@ -894,6 +894,16 @@ own paths and lines. Duplicate or shadowed helpers, cycles, a ninth call, pointe
 or value result mismatch, parameter reassignment, positional composites,
 transformed parameters, nested or multiple returns, and dynamic state fail
 closed.
+A twentieth pair imports the parent allocator from another package in the same
+authoritative Go module. Qualified helper calls require an exact ordinary import
+alias, an exported function, a uniquely resolved local-module path, and an
+unshadowed package binding. Materialized composites retain the helper package's
+type identity across constructor substitution, while selectors into that parent
+must obey Go's exported-type and exported-field rules. Multiline constructor
+fields retain the helper expression's actual line. Function values, wrong or
+external module paths, unexported helpers, types, or fields, duplicate targets,
+and mismatched defining-package identity fail closed under the shared eight-call
+bound.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -1014,6 +1024,12 @@ Push-Location benchmarks\fixtures\go-cross-package-constructor-helper-parent-del
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-helper-parent-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-imported-constructor-helper-parent-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-imported-constructor-helper-parent-delete-authorization
 go test ./...
 Pop-Location
 ```

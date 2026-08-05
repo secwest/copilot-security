@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains fifty-seven vulnerable/control pairs:
+The versioned corpus currently contains fifty-eight vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -118,7 +118,7 @@ validation, and fail-open external policy authorization that exposes signing
 keys on policy errors, paired with exact-boolean fail-closed enforcement. It
 also covers DNS-rebinding SSRF where validation and connection resolve the same
 hostname separately, paired with complete answer-set validation and a
-destination-pinned, redirect-free transport. Three runs per case produce 342
+destination-pinned, redirect-free transport. Three runs per case produce 348
 scans in the complete corpus.
 
 ## Comparing scanner versions or implementations
@@ -647,16 +647,20 @@ The suite adds a nineteenth pair whose constructor obtains its pointer parent
 from an exact same-package helper in another file before injecting the selected
 repository through a nested write. The helper's composite, alias, return, call,
 constructor binding, and field-write locations remain distinct evidence; its
-control again changes only the account predicate. The suite proves all nineteen
-blocked attacks and successful
+control again changes only the account predicate. A twentieth pair moves that
+allocator into another package in the same Go module. Exact import aliases,
+exported callable/type/field visibility, defining-package composite identity,
+the shared helper-depth bound, and the multiline field's actual source line are
+preserved; its control again changes only the account predicate. The suite
+proves all twenty blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
 function-value, object-wrapper, concrete-method, exact local-interface,
 constructor/concrete-field, constructor-injected interface, and nested
 constructor-interface and constructor-field-write dispatch, including nested
-post-construction injection, exact all-path constructor joins, and cross-file
-constructor parent helpers,
+post-construction injection, exact all-path constructor joins, cross-file
+constructor parent helpers, and imported local-module parent helpers,
 without a database service:
 
 ```powershell
@@ -783,6 +787,12 @@ Push-Location fixtures\go-cross-package-constructor-helper-parent-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-constructor-helper-parent-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-imported-constructor-helper-parent-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-imported-constructor-helper-parent-delete-authorization
 go test ./...
 Pop-Location
 ```

@@ -2358,6 +2358,11 @@ function objectWrapperSummaries(
     contextFunction?: GoFunction,
     contextLine?: number,
   ): boolean => {
+    if (
+      reference.qualifier !== undefined &&
+      !/^[A-Z]/u.test(reference.typeName)
+    )
+      return false;
     if (reference.resolvedDirectory !== undefined) {
       return (
         reference.resolvedDirectory === targetDirectory &&
@@ -2667,7 +2672,7 @@ function objectWrapperSummaries(
     );
     for (let line = startLine; line <= maximumLine; line += 1) {
       const fragment = function_.structuralLines[line - 1] ?? "";
-      structural += `${structural === "" ? "" : " "}${fragment.trim()}`;
+      structural += `${structural === "" ? "" : "\n"}${fragment.trim()}`;
       for (const character of fragment) {
         if (character === "(" || character === "[" || character === "{")
           depth += 1;
@@ -2740,14 +2745,15 @@ function objectWrapperSummaries(
   const constructorValueHelperCall = (
     expression: string,
   ): { name: string; arguments: string[] } | undefined => {
-    const match = /^([A-Za-z_]\w*)\s*\(([\s\S]*)\)\s*;?\s*$/u.exec(
-      expression.trim(),
-    );
+    const match =
+      /^([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)?)\s*\(([\s\S]*)\)\s*;?\s*$/u.exec(
+        expression.trim(),
+      );
     if (match === null) return undefined;
     const arguments_ =
       match[2]!.trim() === "" ? [] : splitGoArguments(match[2]!);
     if (arguments_.some((argument) => argument.trim() === "")) return undefined;
-    return { name: match[1]!, arguments: arguments_ };
+    return { name: match[1]!.replace(/\s+/gu, ""), arguments: arguments_ };
   };
 
   const singleLineConstructorHelperReturn = (
@@ -2780,7 +2786,7 @@ function objectWrapperSummaries(
     const bodyOpen = structural.indexOf("{", close + 1);
     const bodyClose = structural.lastIndexOf("}");
     if (bodyOpen < 0 || bodyClose <= bodyOpen) return undefined;
-    return /^\s*return\s+(.+?)\s*;?\s*$/u.exec(
+    return /^\s*return\s+([\s\S]+?)\s*;?\s*$/u.exec(
       structural.slice(bodyOpen + 1, bodyClose),
     )?.[1];
   };
@@ -2848,7 +2854,7 @@ function objectWrapperSummaries(
       const statement = constructorStatement(function_, line);
       const structural = statement.structural;
       line = statement.endLine;
-      const returnMatch = /^\s*return\s+(.+?)\s*;?\s*$/u.exec(structural);
+      const returnMatch = /^\s*return\s+([\s\S]+?)\s*;?\s*$/u.exec(structural);
       if (/\breturn\b/u.test(structural)) {
         if (
           lineNestingDepth(function_, statementLine) !== 1 ||
@@ -2995,6 +3001,38 @@ function objectWrapperSummaries(
       ),
     );
 
+  const constructorHelperCompositeReference = (
+    reference: TypeReference,
+    context: GoFunction,
+    line: number,
+  ): TypeReference | undefined => {
+    const matches = structs.filter(
+      (descriptor) =>
+        descriptor.name === reference.typeName &&
+        typeMatchesIdentity(
+          reference,
+          context.file,
+          context.packageName,
+          descriptor.directory,
+          descriptor.packageName,
+          descriptor.importPath,
+          context,
+          line,
+        ),
+    );
+    if (matches.length !== 1) return undefined;
+    const descriptor = matches[0]!;
+    return {
+      typeName: descriptor.name,
+      pointer: reference.pointer,
+      resolvedDirectory: descriptor.directory,
+      resolvedPackageName: descriptor.packageName,
+      ...(descriptor.importPath === undefined
+        ? {}
+        : { resolvedImportPath: descriptor.importPath }),
+    };
+  };
+
   function materializeConstructorHelperValue(
     expression: string,
     context: GoFunction,
@@ -3031,6 +3069,12 @@ function objectWrapperSummaries(
     const composite = keyedCompositeResult(expression);
     if (composite !== undefined) {
       if (fieldDepth >= MAX_OBJECT_RECEIVER_FIELD_DEPTH) return undefined;
+      const reference = constructorHelperCompositeReference(
+        composite.reference,
+        context,
+        line,
+      );
+      if (reference === undefined) return undefined;
       const fields = new Map<string, ConstructorValueState>();
       for (const [field, value] of composite.fields) {
         const state = materializeConstructorHelperValue(
@@ -3050,7 +3094,7 @@ function objectWrapperSummaries(
         line,
         write: false,
         path: context.file.path,
-        composite: { reference: composite.reference, fields },
+        composite: { reference, fields },
       };
       state.expression = renderConstructorValueState(state);
       return state;
@@ -3081,26 +3125,26 @@ function objectWrapperSummaries(
     if (helperDepth >= MAX_OBJECT_CONSTRUCTOR_HELPER_DEPTH) return undefined;
     const call = constructorValueHelperCall(expression);
     if (call === undefined) return undefined;
-    const resolved = resolvedTransactionHelperCall(caller, call.name, line);
-    if (
-      resolved === undefined ||
-      resolved.name !== call.name ||
-      resolved.functionValues.length !== 0
-    )
-      return undefined;
-    const matches = constructorValueHelpers.filter(
-      (summary) =>
-        summary.function_.name === call.name &&
-        posix.dirname(summary.function_.file.path) ===
-          posix.dirname(caller.file.path) &&
-        summary.function_.packageName === caller.packageName &&
-        summary.function_.parameters.length === call.arguments.length &&
-        !summary.function_.parameters.some((parameter) =>
+    const matches = constructorValueHelpers.flatMap((summary) => {
+      if (
+        summary.function_.parameters.length !== call.arguments.length ||
+        summary.function_.parameters.some((parameter) =>
           parameter.type.trim().startsWith("..."),
-        ),
-    );
+        )
+      )
+        return [];
+      const resolved = transactionSummaryCallMatch(caller, call.name, line, {
+        file: summary.function_.file,
+        packageName: summary.function_.packageName,
+        packageImportPath: summary.result.resolvedImportPath,
+        functionName: summary.function_.name,
+      });
+      return resolved === undefined || resolved.functionValues.length !== 0
+        ? []
+        : [{ summary, resolved }];
+    });
     if (matches.length !== 1) return undefined;
-    const summary = matches[0]!;
+    const { summary, resolved } = matches[0]!;
     if (visiting.has(summary.key)) return undefined;
     const bindings = new Map<string, ConstructorHelperArgumentBinding>();
     for (const [index, parameter] of summary.function_.parameters.entries()) {
@@ -3149,7 +3193,7 @@ function objectWrapperSummaries(
       {
         kind: "go-method-receiver-constructor-helper-call",
         line,
-        symbol: summary.function_.name,
+        symbol: resolved.name,
         path: caller.file.path,
       },
       ...(state.propagators ?? []),
@@ -3228,16 +3272,28 @@ function objectWrapperSummaries(
     const stateForComposite = (
       fields: ReadonlyMap<string, string>,
       line: number,
-    ): ConstructorState => ({
-      fields: new Map(
-        [...fields].map(
-          ([field, expression]): [string, ConstructorValueState] => [
-            field,
-            valueState(expression, line, false),
-          ],
+      source: string,
+    ): ConstructorState => {
+      let searchOffset = 0;
+      return {
+        fields: new Map(
+          [...fields].map(
+            ([field, expression]): [string, ConstructorValueState] => {
+              const expressionOffset = source.indexOf(expression, searchOffset);
+              const expressionLine =
+                expressionOffset < 0
+                  ? line
+                  : line +
+                    source.slice(0, expressionOffset).split("\n").length -
+                    1;
+              if (expressionOffset >= 0)
+                searchOffset = expressionOffset + expression.length;
+              return [field, valueState(expression, expressionLine, false)];
+            },
+          ),
         ),
-      ),
-    });
+      };
+    };
     const snapshotState = (state: ConstructorState): ConstructorState => ({
       fields: new Map(
         [...state.fields].map(
@@ -3391,6 +3447,25 @@ function objectWrapperSummaries(
       }
       return { aliases, states };
     };
+    const constructorCompositeOwner = (
+      reference: TypeReference,
+    ): StructDescriptor | undefined => {
+      const matches = structs.filter(
+        (descriptor) =>
+          descriptor.name === reference.typeName &&
+          typeMatchesIdentity(
+            reference,
+            function_.file,
+            function_.packageName,
+            descriptor.directory,
+            descriptor.packageName,
+            descriptor.importPath,
+            function_,
+            function_.startLine,
+          ),
+      );
+      return matches.length === 1 ? matches[0] : undefined;
+    };
     const applyConstructorFieldWrite = (
       targetAliases: ReadonlyMap<string, ConstructorAlias>,
       fieldWrite: NonNullable<ReturnType<typeof constructorFieldAssignment>>,
@@ -3408,9 +3483,33 @@ function objectWrapperSummaries(
       )
         return false;
       let fields = alias.state.fields;
-      for (let index = 0; index < fieldWrite.fields.length - 1; index += 1) {
-        const parent = fields.get(fieldWrite.fields[index]!);
+      let owner = resultStruct;
+      for (const [index, fieldName] of fieldWrite.fields.entries()) {
+        const field = owner.fields.get(fieldName);
+        if (
+          field === undefined ||
+          (owner.packageName !== function_.packageName &&
+            !/^[A-Z]/u.test(fieldName))
+        )
+          return false;
+        if (index === fieldWrite.fields.length - 1) break;
+        const parent = fields.get(fieldName);
         if (parent?.composite === undefined) return false;
+        const nextOwner = constructorCompositeOwner(parent.composite.reference);
+        if (
+          nextOwner === undefined ||
+          field.type.pointer !== parent.composite.reference.pointer ||
+          !typeMatchesIdentity(
+            field.type,
+            field.file,
+            field.packageName,
+            nextOwner.directory,
+            nextOwner.packageName,
+            nextOwner.importPath,
+          )
+        )
+          return false;
+        owner = nextOwner;
         fields = parent.composite.fields;
       }
       fields.set(
@@ -3548,7 +3647,7 @@ function objectWrapperSummaries(
         line = conditional.endLine;
         continue;
       }
-      const returnMatch = /^\s*return\s+(.+?)\s*;?\s*$/u.exec(structural);
+      const returnMatch = /^\s*return\s+([\s\S]+?)\s*;?\s*$/u.exec(structural);
       if (/\breturn\b/u.test(structural)) {
         if (
           lineNestingDepth(function_, statementLine) !== 1 ||
@@ -3568,7 +3667,7 @@ function objectWrapperSummaries(
         const state =
           direct === undefined
             ? snapshotState(alias!.state)
-            : stateForComposite(direct.fields, statementLine);
+            : stateForComposite(direct.fields, statementLine, returnMatch[1]!);
         returns.push({
           pointer: direct?.pointer ?? alias!.pointer,
           line: statementLine,
@@ -3613,7 +3712,11 @@ function objectWrapperSummaries(
         aliases.set(name, {
           pointer: direct.pointer,
           depth: 0,
-          state: stateForComposite(direct.fields, statementLine),
+          state: stateForComposite(
+            direct.fields,
+            statementLine,
+            assignment.value,
+          ),
           propagators: [
             {
               kind: "go-method-receiver-constructor-alias",
@@ -3861,13 +3964,20 @@ function objectWrapperSummaries(
     const trimmed = expression.trim().replace(/;\s*$/u, "");
     const composite = keyedCompositeResult(trimmed);
     if (composite !== undefined) {
+      const compositeReference =
+        valueState?.composite?.reference ?? composite.reference;
+      if (
+        compositeReference.typeName !== composite.reference.typeName ||
+        compositeReference.pointer !== composite.reference.pointer
+      )
+        return undefined;
       if (
         constructorDepth > MAX_OBJECT_CONSTRUCTOR_ALIAS_DEPTH &&
         composite.fields.size > 0
       )
         return undefined;
       const concrete = canonicalConcreteReference(
-        composite.reference,
+        compositeReference,
         caller.file,
         caller.packageName,
         caller,
@@ -3967,7 +4077,7 @@ function objectWrapperSummaries(
         });
       }
       return {
-        concrete: composite.reference,
+        concrete: compositeReference,
         fields,
         ...(valueState?.propagators === undefined
           ? {}
@@ -4875,7 +4985,12 @@ function objectWrapperSummaries(
         if (matchingStructs.length !== 1) return [];
         const owner = matchingStructs[0]!;
         const field = owner.fields.get(fieldName);
-        if (field === undefined) return [];
+        if (
+          field === undefined ||
+          (owner.packageName !== caller.function_.packageName &&
+            !/^[A-Z]/u.test(fieldName))
+        )
+          return [];
         receiverFieldPath.push(fieldName);
         propagators.push({
           kind: "go-method-receiver-field",
