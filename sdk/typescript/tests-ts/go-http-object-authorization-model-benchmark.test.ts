@@ -150,6 +150,8 @@ describe("Go HTTP object-authorization framework model", () => {
       "go-cross-package-safe-nested-constructor-interface-field-delete-authorization",
       "go-cross-package-constructor-field-write-delete-idor",
       "go-cross-package-safe-constructor-field-write-delete-authorization",
+      "go-cross-package-constructor-nested-field-write-delete-idor",
+      "go-cross-package-safe-constructor-nested-field-write-delete-authorization",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -183,6 +185,8 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(manifest.cases[29]?.expected).toEqual([]);
     expect(manifest.cases[30]?.expected).toHaveLength(1);
     expect(manifest.cases[31]?.expected).toEqual([]);
+    expect(manifest.cases[32]?.expected).toHaveLength(1);
+    expect(manifest.cases[33]?.expected).toEqual([]);
   });
 
   test("models typed query, form, path, and header object identifiers", async () => {
@@ -1316,6 +1320,52 @@ describe("Go HTTP object-authorization framework model", () => {
     expect(
       vulnerable[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
     ).toContain("go-method-receiver-constructor-field-write");
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.map(({ path }) => path),
+    ).not.toContain("internal/archive/store.go");
+    expect(safe).toHaveLength(1);
+    expect(safe[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      frameworkModel: {
+        candidateControls: [
+          expect.objectContaining({ kind: "principal-bound-object-query" }),
+        ],
+      },
+    });
+  });
+
+  test("preserves nested constructor field-write dispatch and its control", async () => {
+    const vulnerable = await fixtureInventory(
+      "go-cross-package-constructor-nested-field-write-delete-idor",
+    );
+    const safe = await fixtureInventory(
+      "go-cross-package-safe-constructor-nested-field-write-delete-authorization",
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: "internal/primary/store.go",
+      line: 11,
+      frameworkModel: {
+        scope: "cross-file-wrapper",
+        source: { kind: "go-http-path-value", path: "handler.go", line: 11 },
+        sink: {
+          kind: "go-database-object-mutation",
+          path: "internal/primary/store.go",
+          line: 11,
+          cweIds: ["CWE-639", "CWE-862"],
+        },
+        candidateControls: [],
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel?.propagators.filter(
+        ({ kind }) => kind === "go-method-receiver-constructor-field-write",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        symbol: "repositoryLayer.repository:primary.Store",
+      }),
+    ]);
     expect(
       vulnerable[0]?.frameworkModel?.propagators.map(({ path }) => path),
     ).not.toContain("internal/archive/store.go");
@@ -3871,11 +3921,6 @@ ${setup}
   return service
 }`,
       `func NewService(repository InvoiceRepository, label string) *Service {
-  service := &Service{layer: &Layer{repository: repository}}
-  service.layer.repository = &OtherStore{}
-  return service
-}`,
-      `func NewService(repository InvoiceRepository, label string) *Service {
   service := &Service{}
   repository = &OtherStore{}
   service.layer = &Layer{repository: repository, label: label}
@@ -3889,6 +3934,207 @@ ${setup}
 }`,
     ])
       expect(await repository(constructor)).toEqual([]);
+  });
+
+  test("tracks nested constructor field writes through exact parent state", async () => {
+    const repository = async (constructor: string): Promise<ModelRecord[]> =>
+      repositoryInventory({
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+)
+type InvoiceRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type Store struct{}
+func (*Store) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+type OtherStore struct{}
+func (*OtherStore) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM archive_invoices WHERE id = ?", invoiceID)
+  return err
+}
+type Layer struct { repository InvoiceRepository; label string }
+type Service struct { layer *Layer }
+${constructor}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.layer.repository.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Store{}, "primary")
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+      });
+
+    const rows =
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  alias := service
+  alias.layer.repository = repository
+  return service
+}`);
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0]?.frameworkModel?.propagators.filter(({ kind }) =>
+        /receiver-(?:constructor-field|constructor-field-write|field)$/u.test(
+          kind,
+        ),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "go-method-receiver-constructor-field",
+        symbol: "Service.layer:invoices.Layer",
+      }),
+      expect.objectContaining({
+        kind: "go-method-receiver-constructor-field-write",
+        symbol: "Layer.repository:invoices.Store",
+      }),
+      expect.objectContaining({
+        kind: "go-method-receiver-field",
+        symbol: "Service.layer:Layer",
+      }),
+      expect.objectContaining({
+        kind: "go-method-receiver-field",
+        symbol: "Layer.repository:InvoiceRepository",
+      }),
+    ]);
+
+    const overwritten =
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{repository: repository, label: label}}
+  service.layer.repository = &OtherStore{}
+  return service
+}`);
+    expect(overwritten).toHaveLength(1);
+    expect(overwritten[0]?.line).toBe(15);
+    expect(
+      overwritten[0]?.frameworkModel?.propagators.map(({ symbol }) => symbol),
+    ).toContain("Layer.repository:invoices.OtherStore");
+    expect(
+      overwritten[0]?.frameworkModel?.propagators.map(({ symbol }) => symbol),
+    ).not.toContain("Layer.repository:invoices.Store");
+
+    expect(
+      await repository(`func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  (*service).layer.repository = repository
+  return service
+}`),
+    ).toHaveLength(1);
+
+    for (const constructor of [
+      `func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{}
+  service.layer.repository = repository
+  return service
+}`,
+      `func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  repository = &OtherStore{}
+  service.layer.repository = repository
+  return service
+}`,
+      `func NewService(repository InvoiceRepository, label string) *Service {
+  service := &Service{layer: &Layer{label: label}}
+  if label != "" {
+    service.layer.repository = repository
+  }
+  return service
+}`,
+    ])
+      expect(await repository(constructor)).toEqual([]);
+  });
+
+  test("preserves shallow pointer sharing and deep value copying", async () => {
+    const repository = async (
+      layerType: "*Layer" | "Layer",
+      layerExpression: "&Layer{}" | "Layer{}",
+    ): Promise<ModelRecord[]> =>
+      repositoryInventory({
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+)
+type InvoiceRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type Store struct{}
+func (*Store) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+type Layer struct { repository InvoiceRepository }
+type Service struct { layer ${layerType} }
+func NewService(repository InvoiceRepository) Service {
+  service := Service{layer: ${layerExpression}}
+  copied := service
+  copied.layer.repository = repository
+  return service
+}
+func (service Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.layer.repository.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Store{})
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+      });
+
+    expect(await repository("*Layer", "&Layer{}")).toHaveLength(1);
+    expect(await repository("Layer", "Layer{}")).toEqual([]);
+  });
+
+  test("accepts eight nested write fields and rejects nine", async () => {
+    const scan = async (fieldDepth: number): Promise<ModelRecord[]> => {
+      const intermediateCount = fieldDepth - 2;
+      const layers = Array.from(
+        { length: intermediateCount + 1 },
+        (_, index) =>
+          index === 0
+            ? "type Layer0 struct { repository InvoiceRepository }"
+            : `type Layer${index} struct { next *Layer${index - 1} }`,
+      ).join("\n");
+      let composite = "&Layer0{}";
+      for (let index = 1; index <= intermediateCount; index += 1)
+        composite = `&Layer${index}{next: ${composite}}`;
+      const selector = `${"next.".repeat(intermediateCount + 1)}repository`;
+      return repositoryInventory({
+        "invoices.go": `package invoices
+import (
+  "context"
+  "database/sql"
+  "net/http"
+)
+type InvoiceRepository interface { DeleteInvoice(context.Context, *sql.DB, string) error }
+type Store struct{}
+func (*Store) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  _, err := db.ExecContext(ctx, "DELETE FROM invoices WHERE id = ?", invoiceID)
+  return err
+}
+${layers}
+type Service struct { next *Layer${intermediateCount} }
+func NewService(repository InvoiceRepository) *Service {
+  service := &Service{next: ${composite}}
+  service.${selector} = repository
+  return service
+}
+func (service *Service) DeleteInvoice(ctx context.Context, db *sql.DB, invoiceID string) error {
+  return service.${selector}.DeleteInvoice(ctx, db, invoiceID)
+}
+func Handler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+  invoiceID := r.PathValue("invoiceID")
+  service := NewService(&Store{})
+  service.DeleteInvoice(r.Context(), db, invoiceID)
+}`,
+      });
+    };
+
+    expect(await scan(8)).toHaveLength(1);
+    expect(await scan(9)).toEqual([]);
   });
 
   test("copies value-constructor state while sharing pointer-constructor state", async () => {

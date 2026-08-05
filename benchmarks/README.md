@@ -56,7 +56,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains fifty-four vulnerable/control pairs:
+The versioned corpus currently contains fifty-five vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -633,13 +633,19 @@ again changes only the account predicate. A sixteenth pair constructs an empty
 service and then writes the nested layer through a pointer alias. Exact
 post-construction state, pointer alias sharing, scalar writes, nested interface
 identity, and the distinct field-write evidence line remain visible; the control
-again changes only the account predicate. The suite proves all sixteen blocked attacks and successful
+again changes only the account predicate. A seventeenth pair creates the pointer
+layer first and injects the selected repository through a later nested selector.
+The recursive constructor-state tree retains separate parent-creation and leaf-
+write lines, shallow pointer sharing, deep concrete-value copying, and exact
+implementation replacement; the control again changes only the account
+predicate. The suite proves all seventeen blocked attacks and successful
 owned-object, owned-collection, prepared-mutation, direct-transaction, and
 transferred-statement, direct-helper, same-package-chain, and cross-package-chain
 transaction behavior, plus cross-package transaction creation and exact
 function-value, object-wrapper, concrete-method, exact local-interface,
 constructor/concrete-field, constructor-injected interface, and nested
 constructor-interface and constructor-field-write dispatch,
+including nested post-construction injection,
 without a database service:
 
 ```powershell
@@ -748,6 +754,12 @@ Push-Location fixtures\go-cross-package-constructor-field-write-delete-idor
 go test ./...
 Pop-Location
 Push-Location fixtures\go-cross-package-safe-constructor-field-write-delete-authorization
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-constructor-nested-field-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location fixtures\go-cross-package-safe-constructor-nested-field-write-delete-authorization
 go test ./...
 Pop-Location
 ```

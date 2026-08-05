@@ -865,6 +865,15 @@ line, the latest linear overwrite wins, and only the returned instance is
 materialized. Eight writes and thirteen structural lines per write are accepted;
 a ninth write, fourteenth line, conditional write, nested selector path, invalid
 dereference, unresolved value, or parameter reassignment fails closed.
+A seventeenth pair initializes the parent pointer layer first and injects the
+repository later through a nested selector. Constructor values now retain a
+recursive field-state tree and an independent origin for every node. A nested
+write requires every parent to be a materialized keyed composite, may traverse
+at most eight fields, and replaces only the exact leaf. Shallow copies share
+pointer-field state while recursively copied concrete value fields remain
+independent. Missing parents, conditional writes, wrong field or implementation
+types, reassigned leaf parameters, a ninth selector field, and unresolved
+dynamic parent state fail closed.
 
 ```powershell
 node benchmarks/run-benchmark.mjs `
@@ -967,6 +976,12 @@ Push-Location benchmarks\fixtures\go-cross-package-constructor-field-write-delet
 go test ./...
 Pop-Location
 Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-field-write-delete-authorization
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-constructor-nested-field-write-delete-idor
+go test ./...
+Pop-Location
+Push-Location benchmarks\fixtures\go-cross-package-safe-constructor-nested-field-write-delete-authorization
 go test ./...
 Pop-Location
 ```

@@ -2094,6 +2094,15 @@ function objectWrapperSummaries(
     name: string;
     fields: ReadonlyMap<string, StructFieldDescriptor>;
   }
+  interface ConstructorValueState {
+    expression: string;
+    line: number;
+    write: boolean;
+    composite?: {
+      reference: TypeReference;
+      fields: Map<string, ConstructorValueState>;
+    };
+  }
   interface ConstructorSummary {
     key: string;
     function_: GoFunction;
@@ -2109,6 +2118,7 @@ function objectWrapperSummaries(
         expression?: string;
         line: number;
         write?: boolean;
+        state?: ConstructorValueState;
       }
     >;
   }
@@ -2415,6 +2425,75 @@ function objectWrapperSummaries(
       : { pointer: composite.reference.pointer, fields: composite.fields };
   };
 
+  const constructorValueState = (
+    expression: string,
+    line: number,
+    write: boolean,
+    depth = 0,
+  ): ConstructorValueState => {
+    const composite =
+      depth >= MAX_OBJECT_RECEIVER_FIELD_DEPTH
+        ? undefined
+        : keyedCompositeResult(expression);
+    return {
+      expression,
+      line,
+      write,
+      ...(composite === undefined
+        ? {}
+        : {
+            composite: {
+              reference: composite.reference,
+              fields: new Map(
+                [...composite.fields].map(
+                  ([field, value]): [string, ConstructorValueState] => [
+                    field,
+                    constructorValueState(value, line, false, depth + 1),
+                  ],
+                ),
+              ),
+            },
+          }),
+    };
+  };
+
+  const copyConstructorValueState = (
+    state: ConstructorValueState,
+  ): ConstructorValueState => ({
+    expression: state.expression,
+    line: state.line,
+    write: state.write,
+    ...(state.composite === undefined
+      ? {}
+      : {
+          composite: {
+            reference: state.composite.reference,
+            fields: new Map(
+              [...state.composite.fields].map(
+                ([field, value]): [string, ConstructorValueState] => [
+                  field,
+                  copyConstructorValueState(value),
+                ],
+              ),
+            ),
+          },
+        }),
+  });
+
+  const renderConstructorValueState = (
+    state: ConstructorValueState,
+  ): string => {
+    if (state.composite === undefined) return state.expression;
+    const reference = state.composite.reference;
+    const type = `${reference.qualifier === undefined ? "" : `${reference.qualifier}.`}${reference.typeName}`;
+    const fields = [...state.composite.fields]
+      .map(
+        ([field, value]) => `${field}: ${renderConstructorValueState(value)}`,
+      )
+      .join(", ");
+    return `${reference.pointer ? "&" : ""}${type}{${fields}}`;
+  };
+
   const constructorFieldAssignment = (
     statement: string,
   ):
@@ -2485,31 +2564,100 @@ function objectWrapperSummaries(
         descriptor.name === result.typeName,
     );
     if (matchingStructs.length !== 1) continue;
-    interface ConstructorFieldOrigin {
-      line: number;
-      write: boolean;
-    }
+    const resultStruct = matchingStructs[0]!;
     interface ConstructorState {
-      fields: Map<string, string>;
-      origins: Map<string, ConstructorFieldOrigin>;
+      fields: Map<string, ConstructorValueState>;
       fieldWrites: number;
     }
     const stateForComposite = (
       fields: ReadonlyMap<string, string>,
       line: number,
     ): ConstructorState => ({
-      fields: new Map(fields),
-      origins: new Map(
-        [...fields.keys()].map((field): [string, ConstructorFieldOrigin] => [
-          field,
-          { line, write: false },
-        ]),
+      fields: new Map(
+        [...fields].map(
+          ([field, expression]): [string, ConstructorValueState] => [
+            field,
+            constructorValueState(expression, line, false),
+          ],
+        ),
       ),
       fieldWrites: 0,
     });
-    const copyState = (state: ConstructorState): ConstructorState => ({
-      fields: new Map(state.fields),
-      origins: new Map(state.origins),
+    const snapshotState = (state: ConstructorState): ConstructorState => ({
+      fields: new Map(
+        [...state.fields].map(
+          ([field, value]): [string, ConstructorValueState] => [
+            field,
+            copyConstructorValueState(value),
+          ],
+        ),
+      ),
+      fieldWrites: state.fieldWrites,
+    });
+    function copyValueForStruct(
+      value: ConstructorValueState,
+      owner: StructDescriptor,
+    ): ConstructorValueState {
+      if (value.composite === undefined)
+        return copyConstructorValueState(value);
+      return {
+        expression: value.expression,
+        line: value.line,
+        write: value.write,
+        composite: {
+          reference: value.composite.reference,
+          fields: new Map(
+            [...value.composite.fields].map(
+              ([fieldName, fieldValue]): [string, ConstructorValueState] => {
+                const field = owner.fields.get(fieldName);
+                return [
+                  fieldName,
+                  field === undefined
+                    ? copyConstructorValueState(fieldValue)
+                    : copyValueForField(fieldValue, field),
+                ];
+              },
+            ),
+          ),
+        },
+      };
+    }
+    function copyValueForField(
+      value: ConstructorValueState,
+      field: StructFieldDescriptor,
+    ): ConstructorValueState {
+      if (field.type.pointer) return value;
+      const owners = structs.filter(
+        (descriptor) =>
+          descriptor.name === field.type.typeName &&
+          typeMatchesIdentity(
+            field.type,
+            field.file,
+            field.packageName,
+            descriptor.directory,
+            descriptor.packageName,
+            descriptor.importPath,
+          ),
+      );
+      if (owners.length === 1) return copyValueForStruct(value, owners[0]!);
+      return value.composite?.reference.pointer === true
+        ? value
+        : copyConstructorValueState(value);
+    }
+    const copyAssignedState = (state: ConstructorState): ConstructorState => ({
+      fields: new Map(
+        [...state.fields].map(
+          ([fieldName, value]): [string, ConstructorValueState] => {
+            const field = resultStruct.fields.get(fieldName);
+            return [
+              fieldName,
+              field === undefined
+                ? copyConstructorValueState(value)
+                : copyValueForField(value, field),
+            ];
+          },
+        ),
+      ),
       fieldWrites: state.fieldWrites,
     });
     const aliases = new Map<
@@ -2524,8 +2672,7 @@ function objectWrapperSummaries(
     const returns: Array<{
       pointer: boolean;
       line: number;
-      fields: ReadonlyMap<string, string>;
-      origins: ReadonlyMap<string, ConstructorFieldOrigin>;
+      fields: ReadonlyMap<string, ConstructorValueState>;
       propagators: EvidencePropagator[];
     }> = [];
     let invalid = false;
@@ -2557,13 +2704,12 @@ function objectWrapperSummaries(
         }
         const state =
           direct === undefined
-            ? copyState(alias!.state)
+            ? snapshotState(alias!.state)
             : stateForComposite(direct.fields, statementLine);
         returns.push({
           pointer: direct?.pointer ?? alias!.pointer,
           line: statementLine,
           fields: state.fields,
-          origins: state.origins,
           propagators: alias?.propagators ?? [],
         });
         continue;
@@ -2574,19 +2720,27 @@ function objectWrapperSummaries(
         if (alias === undefined) continue;
         if (
           lineNestingDepth(function_, statementLine) !== 1 ||
-          fieldWrite.fields.length !== 1 ||
+          fieldWrite.fields.length > MAX_OBJECT_RECEIVER_FIELD_DEPTH ||
           (fieldWrite.explicitDereference && !alias.pointer) ||
           alias.state.fieldWrites >= MAX_OBJECT_CONSTRUCTOR_FIELD_WRITES
         ) {
           invalid = true;
           break;
         }
-        const fieldName = fieldWrite.fields[0]!;
-        alias.state.fields.set(fieldName, fieldWrite.value);
-        alias.state.origins.set(fieldName, {
-          line: statementLine,
-          write: true,
-        });
+        let fields = alias.state.fields;
+        for (let index = 0; index < fieldWrite.fields.length - 1; index += 1) {
+          const parent = fields.get(fieldWrite.fields[index]!);
+          if (parent?.composite === undefined) {
+            invalid = true;
+            break;
+          }
+          fields = parent.composite.fields;
+        }
+        if (invalid) break;
+        fields.set(
+          fieldWrite.fields.at(-1)!,
+          constructorValueState(fieldWrite.value, statementLine, true),
+        );
         alias.state.fieldWrites += 1;
         continue;
       }
@@ -2634,7 +2788,7 @@ function objectWrapperSummaries(
       aliases.set(name, {
         pointer: prior.pointer,
         depth: prior.depth + 1,
-        state: prior.pointer ? prior.state : copyState(prior.state),
+        state: prior.pointer ? prior.state : copyAssignedState(prior.state),
         propagators: [
           ...prior.propagators,
           {
@@ -2653,7 +2807,6 @@ function objectWrapperSummaries(
     )
       continue;
     const importPath = localPackageImportPath(function_, modules);
-    const resultStruct = matchingStructs[0]!;
     const fieldSources = new Map<
       string,
       {
@@ -2661,56 +2814,55 @@ function objectWrapperSummaries(
         expression?: string;
         line: number;
         write?: boolean;
+        state?: ConstructorValueState;
       }
     >();
-    for (const [fieldName, expression] of returns[0]!.fields) {
+    const parameterUses = (
+      value: ConstructorValueState,
+    ): Array<{ name: string; line: number }> =>
+      value.composite === undefined
+        ? function_.parameters.flatMap((parameter) =>
+            new RegExp(
+              `\\b${escapeRegularExpression(parameter.name)}\\b`,
+              "u",
+            ).test(value.expression)
+              ? [{ name: parameter.name, line: value.line }]
+              : [],
+          )
+        : [...value.composite.fields.values()].flatMap(parameterUses);
+    for (const [fieldName, state] of returns[0]!.fields) {
       if (!resultStruct.fields.has(fieldName)) {
         invalid = true;
         break;
       }
+      const expression = renderConstructorValueState(state);
       const parameterName = /^([A-Za-z_]\w*)$/u.exec(expression)?.[1];
       const parameterIndex = function_.parameters.findIndex(
         (parameter) => parameter.name === parameterName,
       );
-      const referencedParameters = function_.parameters.filter((parameter) =>
-        new RegExp(
-          `\\b${escapeRegularExpression(parameter.name)}\\b`,
-          "u",
-        ).test(expression),
-      );
-      if (referencedParameters.length > 0) {
-        const origin = returns[0]!.origins.get(fieldName);
-        if (origin === undefined) {
-          invalid = true;
-          break;
-        }
+      for (const use of parameterUses(state)) {
         const reassigned = Array.from(
           {
-            length: Math.max(0, origin.line - function_.bodyStartLine),
+            length: Math.max(0, use.line - function_.bodyStartLine),
           },
           (_, index) => function_.bodyStartLine + index,
         ).some((line) => {
           const assignment = goAssignment(
             function_.structuralLines[line - 1] ?? "",
           );
-          return referencedParameters.some(
-            (parameter) => assignment?.names.includes(parameter.name) === true,
-          );
+          return assignment?.names.includes(use.name) === true;
         });
         if (reassigned) {
           invalid = true;
           break;
         }
       }
-      const origin = returns[0]!.origins.get(fieldName);
-      if (origin === undefined) {
-        invalid = true;
-        break;
-      }
+      if (invalid) break;
       fieldSources.set(fieldName, {
         ...(parameterIndex < 0 ? { expression } : { parameterIndex }),
-        line: origin.line,
-        ...(origin.write ? { write: true } : {}),
+        line: state.line,
+        ...(state.write ? { write: true } : {}),
+        state,
       });
     }
     if (invalid) continue;
@@ -2841,6 +2993,7 @@ function objectWrapperSummaries(
     line: number,
     availableBindings: ReadonlyMap<string, ReceiverBinding> = new Map(),
     constructorDepth = 0,
+    valueState?: ConstructorValueState,
   ):
     | {
         concrete: TypeReference;
@@ -2875,6 +3028,8 @@ function objectWrapperSummaries(
       const owner = owners[0]!;
       const fields = new Map<string, ReceiverBinding>();
       for (const [fieldName, fieldExpression] of composite.fields) {
+        const fieldState = valueState?.composite?.fields.get(fieldName);
+        const fieldLine = fieldState?.line ?? line;
         const field = owner.fields.get(fieldName);
         if (field === undefined) return undefined;
         const fieldInterface = interfaceForReference(
@@ -2896,9 +3051,10 @@ function objectWrapperSummaries(
             ? concreteExpression(
                 caller,
                 fieldExpression,
-                line,
+                fieldLine,
                 availableBindings,
                 constructorDepth + 1,
+                fieldState,
               )
             : {
                 concrete: bound.concrete,
@@ -2914,7 +3070,7 @@ function objectWrapperSummaries(
           caller.file,
           caller.packageName,
           caller,
-          line,
+          fieldLine,
         );
         if (canonical === undefined) return undefined;
         if (
@@ -2937,8 +3093,11 @@ function objectWrapperSummaries(
           propagators: [
             ...(value.propagators ?? []),
             {
-              kind: "go-method-receiver-composite-field",
-              line,
+              kind:
+                fieldState?.write === true
+                  ? "go-method-receiver-constructor-field-write"
+                  : "go-method-receiver-composite-field",
+              line: fieldLine,
               symbol: `${owner.name}.${fieldName}:${canonical.resolvedPackageName}.${canonical.typeName}`,
               path: caller.file.path,
             },
@@ -3200,6 +3359,7 @@ function objectWrapperSummaries(
               source.line,
               parameterBindings,
               constructorDepth + 1,
+              source.state,
             );
           }
           if (value === undefined) {

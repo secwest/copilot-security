@@ -366,6 +366,28 @@
       "id": "go-cross-package-safe-constructor-field-write-delete-authorization",
       "fixture": "fixtures/go-cross-package-safe-constructor-field-write-delete-authorization",
       "expected": []
+    },
+    {
+      "id": "go-cross-package-constructor-nested-field-write-delete-idor",
+      "fixture": "fixtures/go-cross-package-constructor-nested-field-write-delete-idor",
+      "expected": [
+        {
+          "title": "Go nested constructor field write selects an unscoped repository deletion",
+          "cwe": ["CWE-639", "CWE-862"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "internal/primary/store.go",
+          "line": 11,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-cross-package-safe-constructor-nested-field-write-delete-authorization",
+      "fixture": "fixtures/go-cross-package-safe-constructor-nested-field-write-delete-authorization",
+      "expected": []
     }
   ]
 }

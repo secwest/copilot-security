@@ -508,9 +508,17 @@ constructs an empty service and writes its nested pointer layer afterward
 through an alias. The host models exact top-level linear writes, shares pointer
 state, copies value state, records the real write line, accepts ordinary
 multiline composites, and bounds both aliases and writes at eight. Conditional,
-nested-path, invalid-dereference, unresolved, over-bound, and parameter-reassigned
-writes fail closed. The positive reaches only the selected implementation; the
-control adds only principal scope. This directly
+invalid-dereference, unresolved, over-bound, and parameter-reassigned writes
+fail closed. The positive reaches only the selected implementation; the control
+adds only principal scope. A seventeenth pair builds the parent pointer layer
+before injecting its repository through a later nested selector. The host keeps
+a recursive constructor-state tree with a distinct origin per field, requires
+every parent to be a materialized exact keyed composite, shares pointer fields
+across shallow value copies, recursively copies concrete value fields, and
+replaces only the written leaf. Missing or dynamic parents, wrong types,
+conditional writes, and a ninth selector field fail closed. The positive reaches
+only the injected primary implementation; the control again adds only principal
+scope. This directly
 implements OWASP API1:2023's
 [exact-object authorization requirement](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
 for a standard-library Go boundary that the current [CodeQL Go query
@@ -524,7 +532,7 @@ and cross-file analysis modes](https://semgrep.dev/docs/writing-rules/glossary).
 This host's differentiator is therefore not the existence of interprocedural
 analysis, but a standalone deterministic proof path with explicit bounded
 failure semantics and executable object/principal controls. Constructor helper
-chains and nested-path or branch-sensitive field writes, unbound interfaces, embedded
+chains and branch-sensitive field writes, unbound interfaces, embedded
 promotion, function-value object wrappers, nested and
 multi-result-set loops, joins, composite keys, row mappers, policy services,
 sqlc, ORMs, branch-sensitive dominance, and deployment authorization remain
