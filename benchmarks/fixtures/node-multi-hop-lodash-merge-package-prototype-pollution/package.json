@@ -1,0 +1,8 @@
+{
+  "name": "benchmark-node-multi-hop-lodash-merge-package-prototype-pollution",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "lodash.merge": "4.6.1"
+  }
+}

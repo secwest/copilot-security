@@ -84,6 +84,41 @@
         "node-multi-hop-locked-patched-lodash-merge/run-1/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-lodash-merge-package-prototype-pollution",
+      "description": "An Express JSON object crosses three relative-import boundaries into a source operand of the standalone lodash.merge package under a nearest runtime manifest pinned to vulnerable version 4.6.1, allowing constructor.prototype traversal to modify Object.prototype and supply inherited authorization state.",
+      "fixture": "fixtures/node-multi-hop-lodash-merge-package-prototype-pollution",
+      "findingsPaths": [
+        "node-multi-hop-lodash-merge-package-prototype-pollution/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-lodash-merge-package-recursive-merge",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-lodash-merge-package",
+      "description": "The same Express and three-relay topology reaches the standalone lodash.merge package, but the nearest runtime manifest pins patched version 4.6.2 and therefore excludes the historical vulnerable-version model.",
+      "fixture": "fixtures/node-multi-hop-patched-lodash-merge-package",
+      "findingsPaths": [
+        "node-multi-hop-patched-lodash-merge-package/run-1/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

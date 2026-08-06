@@ -1,0 +1,8 @@
+{
+  "name": "benchmark-node-multi-hop-patched-lodash-merge-package",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "lodash.merge": "4.6.2"
+  }
+}

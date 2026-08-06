@@ -45,6 +45,8 @@ const caseIds = [
   "node-multi-hop-patched-lodash-merge",
   "node-multi-hop-locked-lodash-merge-prototype-pollution",
   "node-multi-hop-locked-patched-lodash-merge",
+  "node-multi-hop-lodash-merge-package-prototype-pollution",
+  "node-multi-hop-patched-lodash-merge-package",
 ] as const;
 const temporaryPaths: string[] = [];
 
@@ -72,6 +74,7 @@ async function writeCase(
   source: string,
   dependencySection = "dependencies",
   version = "4.17.10",
+  dependencyName = "lodash",
 ): Promise<void> {
   const root = join(repository, id);
   await mkdir(root, { recursive: true });
@@ -81,7 +84,7 @@ async function writeCase(
       {
         name: id,
         private: true,
-        [dependencySection]: { lodash: version },
+        [dependencySection]: { [dependencyName]: version },
       },
       null,
       2,
@@ -100,8 +103,10 @@ async function writeNpmLock(
     lockfileVersion?: number;
     rootDeclaration?: string;
     includeInstalledPackage?: boolean;
+    dependencyName?: string;
   } = {},
 ): Promise<void> {
+  const dependencyName = options.dependencyName ?? "lodash";
   await writeFile(
     join(repository, id, options.name ?? "package-lock.json"),
     JSON.stringify(
@@ -111,13 +116,13 @@ async function writeNpmLock(
         packages: {
           "": {
             dependencies: {
-              lodash: options.rootDeclaration ?? declaration,
+              [dependencyName]: options.rootDeclaration ?? declaration,
             },
           },
           ...(options.includeInstalledPackage === false
             ? {}
             : {
-                "node_modules/lodash": {
+                [`node_modules/${dependencyName}`]: {
                   version: resolvedVersion,
                 },
               }),
@@ -162,31 +167,44 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       requireCodeEvidence: true,
     });
     expect(manifest.cases[3]?.expected).toEqual([]);
+    expect(manifest.cases[4]?.expected[0]).toMatchObject({
+      cwe: ["CWE-1321"],
+      acceptableSeverities: ["high", "medium"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[5]?.expected).toEqual([]);
     expect(
       manifest.cases.every(({ findingsPaths }) => findingsPaths.length === 1),
     ).toBeTrue();
   });
 
   test("preserves the three-boundary source flow only for vulnerable resolved versions", async () => {
-    const [unsafe, safe, lockedUnsafe, lockedSafe] = (await Promise.all(
-      caseIds.map(async (caseId) =>
-        mergeRecords(
-          await buildResidualRiskInventory(
-            join(benchmarkRoot, "fixtures", caseId),
+    const [unsafe, safe, lockedUnsafe, lockedSafe, packageUnsafe, packageSafe] =
+      (await Promise.all(
+        caseIds.map(async (caseId) =>
+          mergeRecords(
+            await buildResidualRiskInventory(
+              join(benchmarkRoot, "fixtures", caseId),
+            ),
           ),
         ),
-      ),
-    )) as [
-      FrameworkRecord[],
-      FrameworkRecord[],
-      FrameworkRecord[],
-      FrameworkRecord[],
-    ];
+      )) as [
+        FrameworkRecord[],
+        FrameworkRecord[],
+        FrameworkRecord[],
+        FrameworkRecord[],
+        FrameworkRecord[],
+        FrameworkRecord[],
+      ];
 
     expect(unsafe).toHaveLength(1);
     expect(safe).toHaveLength(0);
     expect(lockedUnsafe).toHaveLength(1);
     expect(lockedSafe).toHaveLength(0);
+    expect(packageUnsafe).toHaveLength(1);
+    expect(packageSafe).toHaveLength(0);
     expect(unsafe[0]?.frameworkModel).toMatchObject({
       scope: "cross-file-multi-hop-wrapper",
       source: { path: "src/server.js", line: 8, kind: "http-request-field" },
@@ -223,6 +241,19 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(lockedUnsafe[0]?.frameworkModel?.propagators).toEqual(
       unsafe[0]?.frameworkModel?.propagators,
     );
+    expect(packageUnsafe[0]?.frameworkModel).toMatchObject({
+      scope: "cross-file-multi-hop-wrapper",
+      source: { path: "src/server.js", line: 8, kind: "http-request-field" },
+      sink: {
+        path: "src/storage.js",
+        line: 4,
+        kind: "vulnerable-lodash-merge-package-recursive-merge",
+        cweIds: ["CWE-1321"],
+      },
+    });
+    expect(packageUnsafe[0]?.frameworkModel?.propagators).toEqual(
+      unsafe[0]?.frameworkModel?.propagators,
+    );
   });
 
   test("retains the vulnerable row under the repository cap", async () => {
@@ -241,6 +272,12 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     );
     expect(paths).not.toContain(
       "benchmarks/fixtures/node-multi-hop-locked-patched-lodash-merge/src/storage.js",
+    );
+    expect(paths).toContain(
+      "benchmarks/fixtures/node-multi-hop-lodash-merge-package-prototype-pollution/src/storage.js",
+    );
+    expect(paths).not.toContain(
+      "benchmarks/fixtures/node-multi-hop-patched-lodash-merge-package/src/storage.js",
     );
   }, 60_000);
 
@@ -486,6 +523,109 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     },
   );
 
+  test("keeps the standalone lodash.merge package on its own 4.6.2 version line", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-lodash-merge-package-"),
+    );
+    temporaryPaths.push(repository);
+    const importSource =
+      'import merge from "lodash.merge";\nexport function handler(request) { return merge({}, request.body); }\n';
+    const requireSource =
+      'const merge = require("lodash.merge");\nexport function handler(request) { return merge({}, request.body); }\n';
+
+    await writeCase(
+      repository,
+      "exact-import",
+      importSource,
+      "dependencies",
+      "4.6.1",
+      "lodash.merge",
+    );
+    await writeCase(
+      repository,
+      "exact-require",
+      requireSource,
+      "optionalDependencies",
+      "4.6.1",
+      "lodash.merge",
+    );
+    await writeCase(
+      repository,
+      "locked-range",
+      importSource,
+      "dependencies",
+      "^4.6.0",
+      "lodash.merge",
+    );
+    await writeNpmLock(repository, "locked-range", "^4.6.0", "4.6.1", {
+      dependencyName: "lodash.merge",
+    });
+
+    for (const [id, source, version, dependencyName] of [
+      ["fixed-boundary", importSource, "4.6.2", "lodash.merge"],
+      ["wrong-manifest", importSource, "4.17.10", "lodash"],
+      [
+        "namespace",
+        'import * as merge from "lodash.merge";\nexport function handler(request) { return merge({}, request.body); }\n',
+        "4.6.1",
+        "lodash.merge",
+      ],
+      [
+        "named",
+        'import { merge } from "lodash.merge";\nexport function handler(request) { return merge({}, request.body); }\n',
+        "4.6.1",
+        "lodash.merge",
+      ],
+      [
+        "reassigned",
+        'import merge from "lodash.merge";\nmerge = helper;\nexport function handler(request) { return merge({}, request.body); }\n',
+        "4.6.1",
+        "lodash.merge",
+      ],
+    ] as const) {
+      await writeCase(
+        repository,
+        id,
+        source,
+        "dependencies",
+        version,
+        dependencyName,
+      );
+    }
+    await writeCase(
+      repository,
+      "locked-fixed",
+      importSource,
+      "dependencies",
+      "^4.6.0",
+      "lodash.merge",
+    );
+    await writeNpmLock(repository, "locked-fixed", "^4.6.0", "4.6.2", {
+      dependencyName: "lodash.merge",
+    });
+
+    const records = mergeRecords(await buildResidualRiskInventory(repository));
+    expect(
+      records.map((record) => ({
+        path: record.path,
+        kind: record.frameworkModel?.sink.kind,
+      })),
+    ).toEqual([
+      {
+        path: "exact-import/handler.mjs",
+        kind: "vulnerable-lodash-merge-package-recursive-merge",
+      },
+      {
+        path: "exact-require/handler.mjs",
+        kind: "vulnerable-lodash-merge-package-recursive-merge",
+      },
+      {
+        path: "locked-range/handler.mjs",
+        kind: "lock-resolved-vulnerable-lodash-merge-package-recursive-merge",
+      },
+    ]);
+  });
+
   test("teaches version, recursion, manifest, and constructor.prototype proof", () => {
     const prompt = scanQualityGatePrompt("");
     expect(prompt).toContain("node-http-prototype-merge");
@@ -494,6 +634,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(prompt).toContain("nearest package.json");
     expect(prompt).toContain("package-lock.json");
     expect(prompt).toContain("npm-shrinkwrap.json");
+    expect(prompt).toContain("lodash.merge");
+    expect(prompt).toContain("4.6.2");
     expect(prompt).toContain("source operands");
     expect(prompt).toContain("constructor.prototype");
     expect(prompt).toContain("CWE-1321");

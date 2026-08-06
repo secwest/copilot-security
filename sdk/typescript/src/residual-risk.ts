@@ -583,7 +583,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
     activation: [
-      /["']lodash(?:\/merge(?:\.js)?)?["']/u,
+      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge)["']/u,
       /\b[A-Za-z_$][\w$]*(?:\s*\.\s*merge)?\s*\(/u,
     ],
     sources: [
@@ -2429,7 +2429,9 @@ interface NodePrototypeMergeSink {
   sourceExpressions: string[];
   kind:
     | "vulnerable-lodash-recursive-merge"
-    | "lock-resolved-vulnerable-lodash-recursive-merge";
+    | "lock-resolved-vulnerable-lodash-recursive-merge"
+    | "vulnerable-lodash-merge-package-recursive-merge"
+    | "lock-resolved-vulnerable-lodash-merge-package-recursive-merge";
 }
 
 interface NodeRuntimeDependency {
@@ -2618,19 +2620,25 @@ function nodeLodashVersionIsPrototypePollutionVulnerable(
   );
 }
 
+function nodeLodashMergePackageVersionIsPrototypePollutionVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    major < 4 || (major === 4 && (minor < 6 || (minor === 6 && patch < 2)))
+  );
+}
+
 function nodePrototypeMergeSink(
   files: readonly SourceFileSnapshot[],
   path: string,
   lines: readonly string[],
   line: number,
 ): NodePrototypeMergeSink | undefined {
-  const dependency = nodeRuntimeDependency(files, path, "lodash");
-  if (
-    dependency === undefined ||
-    !nodeLodashVersionIsPrototypePollutionVulnerable(dependency.version)
-  ) {
-    return undefined;
-  }
   const structuralLines = javascriptStructuralLines(lines);
   const codeLines = javascriptCodeLinesWithoutComments(lines);
   const wrapper = exportedJavascriptFunctions(lines).find(
@@ -2640,6 +2648,7 @@ function nodePrototypeMergeSink(
     kind: "direct" | "receiver";
     local: string;
     line: number;
+    dependencyName: "lodash" | "lodash.merge";
   }> = [];
   for (let index = 0; index < codeLines.length; index += 1) {
     const structural = codeLines[index] ?? "";
@@ -2659,13 +2668,40 @@ function nodePrototypeMergeSink(
       /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']lodash\/merge(?:\.js)?["']\s*\)/u.exec(
         structural,
       );
+    const packageImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']lodash\.merge["']/u.exec(
+        structural,
+      );
+    const packageRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']lodash\.merge["']\s*\)/u.exec(
+        structural,
+      );
     const receiver = defaultOrNamespace?.[1] ?? commonjsReceiver?.[1];
     const direct = directImport?.[1] ?? directRequire?.[1];
     if (receiver !== undefined) {
-      bindings.push({ kind: "receiver", local: receiver, line: index + 1 });
+      bindings.push({
+        kind: "receiver",
+        local: receiver,
+        line: index + 1,
+        dependencyName: "lodash",
+      });
     }
     if (direct !== undefined) {
-      bindings.push({ kind: "direct", local: direct, line: index + 1 });
+      bindings.push({
+        kind: "direct",
+        local: direct,
+        line: index + 1,
+        dependencyName: "lodash",
+      });
+    }
+    const packageDirect = packageImport?.[1] ?? packageRequire?.[1];
+    if (packageDirect !== undefined) {
+      bindings.push({
+        kind: "direct",
+        local: packageDirect,
+        line: index + 1,
+        dependencyName: "lodash.merge",
+      });
     }
   }
   for (const imported of importedJavascriptSymbols(lines)) {
@@ -2677,10 +2713,26 @@ function nodePrototypeMergeSink(
         kind: "direct",
         local: imported.local,
         line: imported.line,
+        dependencyName: "lodash",
       });
     }
   }
   for (const binding of bindings) {
+    const dependency = nodeRuntimeDependency(
+      files,
+      path,
+      binding.dependencyName,
+    );
+    if (
+      dependency === undefined ||
+      (binding.dependencyName === "lodash"
+        ? !nodeLodashVersionIsPrototypePollutionVulnerable(dependency.version)
+        : !nodeLodashMergePackageVersionIsPrototypePollutionVulnerable(
+            dependency.version,
+          ))
+    ) {
+      continue;
+    }
     if (
       binding.line >= line ||
       wrapper?.parameters.includes(binding.local) === true ||
@@ -2721,9 +2773,13 @@ function nodePrototypeMergeSink(
       return {
         sourceExpressions,
         kind:
-          dependency.proof === "npm-lockfile"
-            ? "lock-resolved-vulnerable-lodash-recursive-merge"
-            : "vulnerable-lodash-recursive-merge",
+          binding.dependencyName === "lodash.merge"
+            ? dependency.proof === "npm-lockfile"
+              ? "lock-resolved-vulnerable-lodash-merge-package-recursive-merge"
+              : "vulnerable-lodash-merge-package-recursive-merge"
+            : dependency.proof === "npm-lockfile"
+              ? "lock-resolved-vulnerable-lodash-recursive-merge"
+              : "vulnerable-lodash-recursive-merge",
       };
     }
   }
