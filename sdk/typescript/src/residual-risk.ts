@@ -14484,8 +14484,17 @@ function compareResidualRiskRecords(
   left: ResidualRiskRecord,
   right: ResidualRiskRecord,
 ): number {
+  const leftHasFixedUpdateBoundary =
+    left.frameworkModel?.candidateControls.some(
+      (control) => control.kind === "fixed-update-field-value-boundary",
+    ) === true;
+  const rightHasFixedUpdateBoundary =
+    right.frameworkModel?.candidateControls.some(
+      (control) => control.kind === "fixed-update-field-value-boundary",
+    ) === true;
   return (
     right.priority - left.priority ||
+    Number(leftHasFixedUpdateBoundary) - Number(rightHasFixedUpdateBoundary) ||
     left.path.localeCompare(right.path) ||
     left.line - right.line
   );

@@ -267,6 +267,26 @@ describe("Node Mongoose update-document framework model", () => {
     }
   });
 
+  test("ranks the unmitigated update before its controlled sibling", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "a-controlled.mjs",
+      'import mongoose from "mongoose";\nconst User = mongoose.model("User", new mongoose.Schema({displayName:String}));\nexport async function handler(request) { return User.updateOne({}, { $set: { displayName: request.body.displayName } }).exec(); }\n',
+    );
+    await writeRepositoryFile(
+      repository,
+      "z-unmitigated.mjs",
+      'import mongoose from "mongoose";\nconst User = mongoose.model("User", new mongoose.Schema({displayName:String}));\nexport async function handler(request) { return User.updateOne({}, request.body.patch).exec(); }\n',
+    );
+
+    const records = updateRecords(await buildResidualRiskInventory(repository));
+    expect(records.map(({ path }) => path)).toEqual([
+      "z-unmitigated.mjs",
+      "a-controlled.mjs",
+    ]);
+  });
+
   test("teaches update grammar, validator limits, and exact impact classification", () => {
     const prompt = scanQualityGatePrompt(
       JSON.stringify({ frameworkModel: { id: "node-http-mongoose-update" } }),
