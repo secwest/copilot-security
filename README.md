@@ -85,7 +85,16 @@ preserve a request-controlled record identifier into the exact single-record
 lookup argument and retain only same-query principal/owner filtering or a
 post-lookup check on that returned object as control leads. Authentication,
 UUID opacity, ORM use, or unrelated owner text is not classified as object
-authorization. GitHub Copilot SDK prompt-injection rows require an exact named
+authorization. Node/TypeScript Mongoose selector-injection rows require an
+official `mongoose` binding, a unique Model created through that exact
+unmodified binding, request flow into argument zero of a documented
+filter-bearing Model operation, and proof that the Query is consumed through
+`await`, an async returned thenable, `exec`, `then`, or `catch`. Update,
+replacement, projection, and options values are not filters. Exact `$eq` and
+official `mongoose.sanitizeFilter` boundaries are retained as counterevidence;
+same-named local helpers, casting, `strictQuery`, `runValidators`,
+`requireFilter`, authentication, and result limiting are not treated as
+selector sanitization. GitHub Copilot SDK prompt-injection rows require an exact named
 `CopilotClient` import from `@github/copilot-sdk`, one constructed and
 non-reassigned client, and `createSession` or `resumeSession`. They preserve
 request data only when it reaches `systemMessage` content, customize-section

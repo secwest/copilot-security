@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains seventy-six vulnerable/control pairs:
+The versioned corpus currently contains seventy-seven vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -133,8 +133,24 @@ trusted-instruction injection where request data crosses two relative-module
 wrappers into `systemMessage.content`, paired with the same data sent only as
 an ordinary `sendAndWait` prompt, plus an unannotated Razor Page handler
 parameter that crosses a typed service boundary into SQL grammar, paired with
-the same handler topology and a typed `SqlParameter`. Three runs per case
-produce 456 scans in the complete corpus.
+the same handler topology and a typed `SqlParameter`, plus Mongoose document
+selector injection where an object-valued Express field crosses three module
+boundaries into a Model query filter, paired with an exact `$eq` literal-value
+boundary. Three runs per case produce 462 scans in the complete corpus.
+
+`node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
+under perfect single-run gates. The positive must retain the HTTP source, all
+nine ordered import/call/parameter propagators, the exact filter position,
+CWE-943, validation, attack-path analysis, and code evidence. The paired
+control keeps the same four-file topology and query operation but wraps the
+request value in `$eq`. Deterministic regressions resolve official default,
+namespace, named-model, and CommonJS bindings; distinguish filters from update
+and options data; require query consumption; retain exact
+`mongoose.sanitizeFilter`; and reject Model, factory, and sanitizer lookalikes,
+reassignment, malformed receiver factories, and inert synchronous returns.
+The executable witness evaluates representative MongoDB operator semantics:
+the vulnerable selector selects the administrator record, while the control
+rejects the operator object and retains literal lookup.
 
 `node-copilot-prompt-injection-manifest.json` isolates that SDK boundary under
 perfect single-run gates. The positive must retain the HTTP source, all six
