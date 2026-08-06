@@ -3,8 +3,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class VulnerableFileGetNameWitness {
+    private static String basename(String input) {
+        return new File(input).getName();
+    }
+
     private static String read(Path root, String requested) throws Exception {
-        String basename = new File(requested).getName();
+        String basename = basename(requested);
         return Files.readString(root.resolve(basename).resolve("content.txt"));
     }
 

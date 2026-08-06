@@ -14,8 +14,12 @@ public final class DocumentStore {
         this.contentRoot = contentRoot;
     }
 
+    private static String basename(String input) {
+        return new File(input).getName();
+    }
+
     public String read(String path) throws IOException {
-        String basename = new File(path).getName();
+        String basename = basename(path);
         return Files.readString(contentRoot.resolve(basename).resolve("content.txt"));
     }
 }

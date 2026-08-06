@@ -3,8 +3,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class SafeFileGetNameWitness {
+    private static String basename(String input) {
+        return new File(input).getName();
+    }
+
     private static String read(Path root, String requested) throws Exception {
-        String basename = new File(requested).getName();
+        String basename = basename(requested);
         if ("..".equals(basename)) {
             throw new SecurityException("parent path components are forbidden");
         }

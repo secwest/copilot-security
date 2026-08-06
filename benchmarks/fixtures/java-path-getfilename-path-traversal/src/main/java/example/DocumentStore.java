@@ -13,8 +13,12 @@ public final class DocumentStore {
         this.contentRoot = contentRoot;
     }
 
+    private static Path basename(String input) {
+        return Path.of(input).getFileName();
+    }
+
     public String read(String path) throws IOException {
-        Path basename = Path.of(path).getFileName();
+        Path basename = basename(path);
         if (Path.of("..").equals(basename)) {
             System.getLogger(DocumentStore.class.getName()).log(System.Logger.Level.WARNING, "parent path requested");
         }

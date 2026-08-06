@@ -1586,6 +1586,20 @@ interface ExportedJavaMethod {
   endLine: number;
 }
 
+interface JavaMethodDeclaration extends ExportedJavaMethod {
+  access: "package" | "private" | "protected" | "public";
+  isStatic: boolean;
+  returnType: string;
+}
+
+interface JavaBasenameHelperSummary {
+  symbol: string;
+  parameterIndex: number;
+  parameterCount: number;
+  inputKind: "file" | "path" | "string";
+  reductionLine: number;
+}
+
 interface ExportedDotnetMethod {
   ownerType: string;
   symbol: string;
@@ -2344,6 +2358,7 @@ function javaFileGetNamePathBoundaryRecords(
   records: readonly ResidualRiskRecord[],
 ): ResidualRiskRecord[] {
   const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const packageTypes = javaPackageTypeIndex(files);
   const emitted = new Set<string>();
   const specialized: ResidualRiskRecord[] = [];
   for (const record of records) {
@@ -2370,6 +2385,7 @@ function javaFileGetNamePathBoundaryRecords(
             propagator.symbol === undefined ? [] : [propagator.symbol],
           ),
       ),
+      javaSamePackageTopLevelTypes(packageTypes, files, sinkFile),
     );
     if (boundary === undefined) continue;
     const key = `${framework.source.path}\0${framework.source.line}\0${framework.sink.path}\0${framework.sink.line}`;
@@ -2613,10 +2629,242 @@ function javaDominatingEqualityRejection(
   return undefined;
 }
 
+function javaExpressionIsExactIdentifier(
+  expression: string,
+  identifiers: Iterable<string>,
+): boolean {
+  return [...identifiers].some((identifier) =>
+    new RegExp(
+      String.raw`^\s*\(?\s*${escapeRegularExpression(identifier)}\s*\)?\s*$`,
+      "u",
+    ).test(expression),
+  );
+}
+
+function javaDeclaredParameterType(parameter: {
+  name: string;
+  declaration: string;
+}): string {
+  return parameter.declaration
+    .replace(
+      new RegExp(
+        `${escapeRegularExpression(parameter.name)}\\s*(?:\\[\\s*\\])?\\s*$`,
+        "u",
+      ),
+      "",
+    )
+    .replace(/@[A-Za-z_$][\w$.]*(?:\([^)]*\))?/gu, " ")
+    .replace(/\b(?:final|volatile|transient)\b/gu, " ")
+    .replace(/\s*\.\s*/gu, ".")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function javaStraightLineReturn(
+  lines: readonly string[],
+  method: JavaMethodDeclaration,
+):
+  | {
+      beforeReturn: string;
+      expression: string;
+      returnLine: number;
+      bodyLineOffset: number;
+    }
+  | undefined {
+  const methodLines = lines.slice(method.startLine - 1, method.endLine);
+  const rawMethod = methodLines.join("\n");
+  const structuralMethod = cFamilyStructuralLines(methodLines).join("\n");
+  const open = structuralMethod.indexOf("{");
+  const close = matchingStructuralBrace(structuralMethod, open);
+  if (open < 0 || close < 0) return undefined;
+  const structuralBody = structuralMethod.slice(open + 1, close);
+  if (
+    /[{}]|->|\b(?:if|else|switch|try|catch|finally|for|while|do|synchronized|throw|break|continue|yield)\b/u.test(
+      structuralBody,
+    )
+  ) {
+    return undefined;
+  }
+  const returns = [...structuralBody.matchAll(/\breturn\b([\s\S]*?);/gu)];
+  if (returns.length !== 1 || returns[0]?.index === undefined) {
+    return undefined;
+  }
+  const returnMatch = returns[0];
+  const returnEnd = returnMatch.index + returnMatch[0].length;
+  if (structuralBody.slice(returnEnd).trim() !== "") return undefined;
+  const rawBody = rawMethod.slice(open + 1, close);
+  const expressionStart =
+    returnMatch.index + returnMatch[0].indexOf("return") + "return".length;
+  const expressionEnd = returnEnd - 1;
+  const bodyLineOffset = rawMethod.slice(0, open + 1).split("\n").length - 1;
+  return {
+    beforeReturn: rawBody.slice(0, returnMatch.index),
+    expression: rawBody.slice(expressionStart, expressionEnd),
+    returnLine:
+      method.startLine +
+      bodyLineOffset +
+      rawBody.slice(0, returnMatch.index).split("\n").length -
+      1,
+    bodyLineOffset,
+  };
+}
+
+function javaBasenameHelperSummaries(
+  lines: readonly string[],
+  returnTypePattern: string,
+  inputTypes: ReadonlyArray<{
+    kind: JavaBasenameHelperSummary["inputKind"];
+    pattern: string;
+  }>,
+  constructions: (
+    expression: string,
+  ) => Array<{ argument: string; reduced: boolean }>,
+  reductionMethod: "getFileName" | "getName",
+): JavaBasenameHelperSummary[] {
+  const methods = javaMethodDeclarations(lines);
+  const summaries: JavaBasenameHelperSummary[] = [];
+  for (const method of methods) {
+    if (
+      methods.filter((candidate) => candidate.symbol === method.symbol)
+        .length !== 1 ||
+      !new RegExp(String.raw`^(?:${returnTypePattern})$`, "u").test(
+        method.returnType,
+      )
+    ) {
+      continue;
+    }
+    const body = javaStraightLineReturn(lines, method);
+    if (body === undefined) continue;
+    for (const [parameterIndex, parameter] of method.parameters.entries()) {
+      const parameterType = javaDeclaredParameterType(parameter);
+      const inputKind = inputTypes.find(({ pattern }) =>
+        new RegExp(String.raw`^(?:${pattern})$`, "u").test(parameterType),
+      )?.kind;
+      if (inputKind === undefined) continue;
+      const aliases = new Set([parameter.name]);
+      const receivers = new Set<string>(
+        inputKind === "path" || inputKind === "file" ? [parameter.name] : [],
+      );
+      const reductions = new Map<string, number>();
+      const assignment = /\b([A-Za-z_$][\w$]*)\s*=(?!=)\s*([^;]+);/gu;
+      for (const match of body.beforeReturn.matchAll(assignment)) {
+        const target = match[1];
+        const value = match[2];
+        if (target === undefined || value === undefined) continue;
+        const line =
+          method.startLine +
+          body.bodyLineOffset +
+          body.beforeReturn.slice(0, match.index ?? 0).split("\n").length -
+          1;
+        const exactAlias = javaExpressionIsExactIdentifier(value, aliases);
+        const exactReceiverAlias = javaExpressionIsExactIdentifier(
+          value,
+          receivers,
+        );
+        const factoryResults = constructions(value);
+        const directConstruction = factoryResults.some(({ argument }) =>
+          javaExpressionIsExactIdentifier(argument, aliases),
+        );
+        const directReduction = factoryResults.some(
+          ({ argument, reduced }) =>
+            reduced && javaExpressionIsExactIdentifier(argument, aliases),
+        );
+        const receiverReduction = [...receivers].some((identifier) =>
+          new RegExp(
+            String.raw`^\s*${escapeRegularExpression(identifier)}\s*\.\s*${reductionMethod}\s*\(\s*\)\s*$`,
+            "u",
+          ).test(value),
+        );
+        const inheritedOrigin = [...reductions].find(([identifier]) =>
+          javaExpressionIsExactIdentifier(value, [identifier]),
+        )?.[1];
+
+        if (exactAlias) aliases.add(target);
+        else aliases.delete(target);
+        if (directConstruction || exactReceiverAlias) receivers.add(target);
+        else receivers.delete(target);
+        if (directReduction || receiverReduction) reductions.set(target, line);
+        else if (inheritedOrigin !== undefined)
+          reductions.set(target, inheritedOrigin);
+        else reductions.delete(target);
+      }
+
+      const returnedFactories = constructions(body.expression);
+      const directReturnReduction = returnedFactories.some(
+        ({ argument, reduced }) =>
+          reduced && javaExpressionIsExactIdentifier(argument, aliases),
+      );
+      const receiverReturnReduction = [...receivers].some((identifier) =>
+        new RegExp(
+          String.raw`^\s*${escapeRegularExpression(identifier)}\s*\.\s*${reductionMethod}\s*\(\s*\)\s*$`,
+          "u",
+        ).test(body.expression),
+      );
+      const returnedOrigin = [...reductions].find(([identifier]) =>
+        javaExpressionIsExactIdentifier(body.expression, [identifier]),
+      )?.[1];
+      const reductionLine =
+        directReturnReduction || receiverReturnReduction
+          ? body.returnLine
+          : returnedOrigin;
+      if (reductionLine === undefined) continue;
+      summaries.push({
+        symbol: method.symbol,
+        parameterIndex,
+        parameterCount: method.parameters.length,
+        inputKind,
+        reductionLine,
+      });
+    }
+  }
+  return summaries;
+}
+
+function javaExactBasenameHelperCall(
+  expression: string,
+  ownerType: string,
+  summaries: readonly JavaBasenameHelperSummary[],
+  stringInputs: ReadonlySet<string>,
+  pathInputs: ReadonlySet<string>,
+  fileInputs: ReadonlySet<string>,
+): JavaBasenameHelperSummary | undefined {
+  const structural = cFamilyStructuralLines(expression.split(/\r?\n/u)).join(
+    "\n",
+  );
+  const matches = summaries.filter((summary) => {
+    const call = new RegExp(
+      String.raw`^\s*(?:(?:this|${escapeRegularExpression(ownerType)})\s*\.\s*)?${escapeRegularExpression(summary.symbol)}\s*\(`,
+      "u",
+    ).exec(structural);
+    if (call === null) return false;
+    const open = structural.indexOf("(", call.index);
+    const close = matchingCallParenthesis(structural, open);
+    if (open < 0 || close < 0 || structural.slice(close + 1).trim() !== "") {
+      return false;
+    }
+    const arguments_ = splitJavascriptArguments(
+      expression.slice(open + 1, close),
+    );
+    if (arguments_.length !== summary.parameterCount) return false;
+    const inputs =
+      summary.inputKind === "path"
+        ? pathInputs
+        : summary.inputKind === "file"
+          ? fileInputs
+          : stringInputs;
+    return javaExpressionIsExactIdentifier(
+      arguments_[summary.parameterIndex] ?? "",
+      inputs,
+    );
+  });
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 function javaFileGetNamePathBoundary(
   lines: readonly string[],
   sinkLine: number,
   provenSinkParameters: ReadonlySet<string>,
+  samePackageTopLevelTypes: ReadonlySet<string>,
 ): { reductionLine: number; parentRejectionLine?: number } | undefined {
   const method = exportedJavaMethods(lines).find(
     (candidate) =>
@@ -2625,16 +2873,25 @@ function javaFileGetNamePathBoundary(
   if (method === undefined) return undefined;
   const structuralLines = cFamilyStructuralLines(lines);
   const structuralText = structuralLines.join("\n");
-  const fileImported = /^\s*import\s+java\.io\.(?:File|\*)\s*;/mu.test(
+  const fileSingleImported = /^\s*import\s+java\.io\.File\s*;/mu.test(
+    structuralText,
+  );
+  const ioWildcardImported = /^\s*import\s+java\.io\.\*\s*;/mu.test(
     structuralText,
   );
   const fileShadowed = /\b(?:class|enum|interface|record)\s+File\b/u.test(
     structuralText,
   );
-  const fileType =
-    fileImported && !fileShadowed
-      ? String.raw`(?:(?:java\s*\.\s*io\s*\.\s*)?File)`
-      : String.raw`(?:java\s*\.\s*io\s*\.\s*File)`;
+  const simpleFileIsOfficial =
+    !fileShadowed &&
+    (fileSingleImported ||
+      (ioWildcardImported && !samePackageTopLevelTypes.has("File")));
+  const fileType = simpleFileIsOfficial
+    ? String.raw`(?:(?:java\s*\.\s*io\s*\.\s*)?File)`
+    : String.raw`(?:java\s*\.\s*io\s*\.\s*File)`;
+  const stringType = !samePackageTopLevelTypes.has("String")
+    ? String.raw`(?:(?:java\s*\.\s*lang\s*\.\s*)?String)`
+    : String.raw`(?:java\s*\.\s*lang\s*\.\s*String)`;
   const sinkExpression = javaCallExpression(lines, sinkLine, method.endLine);
   const bodyLines = structuralLines.slice(method.startLine - 1, sinkLine - 1);
   const body = bodyLines.join("\n");
@@ -2649,6 +2906,7 @@ function javaFileGetNamePathBoundary(
     eligibleParameters.map((parameter) => parameter.name),
   );
   const fileReceivers = new Set<string>();
+  const pathReceivers = new Set<string>();
   const basenameOrigins = new Map<string, number>();
   const referencesAny = (
     expression: string,
@@ -2679,6 +2937,16 @@ function javaFileGetNamePathBoundary(
       ];
     });
   };
+  const helperSummaries = javaBasenameHelperSummaries(
+    lines,
+    stringType,
+    [
+      { kind: "string", pattern: stringType },
+      { kind: "file", pattern: fileType },
+    ],
+    fileConstructions,
+    "getName",
+  );
   const assignment = /\b([A-Za-z_$][\w$]*)\s*=(?!=)\s*([^;]+);/gu;
   for (const match of body.matchAll(assignment)) {
     const target = match[1];
@@ -2691,6 +2959,14 @@ function javaFileGetNamePathBoundary(
       cFamilyLineReferencesIdentifier(value, identifier),
     );
     const constructions = fileConstructions(value);
+    const helperSummary = javaExactBasenameHelperCall(
+      value,
+      method.ownerType,
+      helperSummaries,
+      tainted,
+      pathReceivers,
+      fileReceivers,
+    );
     const directFileConstruction = constructions.some(({ argument }) =>
       referencesAny(argument, tainted),
     );
@@ -2719,7 +2995,9 @@ function javaFileGetNamePathBoundary(
       fileReceivers.delete(target);
     }
 
-    if (directReduction || receiverReduction) {
+    if (helperSummary !== undefined) {
+      basenameOrigins.set(target, helperSummary.reductionLine);
+    } else if (directReduction || receiverReduction) {
       basenameOrigins.set(target, line);
     } else if (inheritedOrigin !== undefined) {
       basenameOrigins.set(target, inheritedOrigin);
@@ -3018,6 +3296,9 @@ function javaPathGetFileNamePathBoundary(
   const pathType = simplePathIsOfficial
     ? String.raw`(?:(?:java\s*\.\s*nio\s*\.\s*file\s*\.\s*)?Path)`
     : String.raw`(?:java\s*\.\s*nio\s*\.\s*file\s*\.\s*Path)`;
+  const stringType = !samePackageTopLevelTypes.has("String")
+    ? String.raw`(?:(?:java\s*\.\s*lang\s*\.\s*)?String)`
+    : String.raw`(?:java\s*\.\s*lang\s*\.\s*String)`;
   const factoryTypes = [
     String.raw`java\s*\.\s*nio\s*\.\s*file\s*\.\s*Path\s*\.\s*of`,
     String.raw`java\s*\.\s*nio\s*\.\s*file\s*\.\s*Paths\s*\.\s*get`,
@@ -3057,6 +3338,7 @@ function javaPathGetFileNamePathBoundary(
       )
       .map((parameter) => parameter.name),
   );
+  const fileReceivers = new Set<string>();
   const basenameOrigins = new Map<string, number>();
   const referencesAny = (
     expression: string,
@@ -3096,6 +3378,16 @@ function javaPathGetFileNamePathBoundary(
       ];
     });
   };
+  const helperSummaries = javaBasenameHelperSummaries(
+    lines,
+    pathType,
+    [
+      { kind: "string", pattern: stringType },
+      { kind: "path", pattern: pathType },
+    ],
+    pathFactories,
+    "getFileName",
+  );
   const assignment = /\b([A-Za-z_$][\w$]*)\s*=(?!=)\s*([^;]+);/gu;
   for (const match of body.matchAll(assignment)) {
     const target = match[1];
@@ -3105,6 +3397,14 @@ function javaPathGetFileNamePathBoundary(
       method.startLine + body.slice(0, match.index ?? 0).split("\n").length - 1;
     const derivesFromTaint = referencesAny(value, tainted);
     const constructions = pathFactories(value);
+    const helperSummary = javaExactBasenameHelperCall(
+      value,
+      method.ownerType,
+      helperSummaries,
+      tainted,
+      pathReceivers,
+      fileReceivers,
+    );
     const directPathConstruction = constructions.some(({ argument }) =>
       referencesAny(argument, tainted),
     );
@@ -3124,13 +3424,19 @@ function javaPathGetFileNamePathBoundary(
     if (derivesFromTaint) tainted.add(target);
     else tainted.delete(target);
 
-    if (directPathConstruction || exactAliasOf(value, pathReceivers)) {
+    if (
+      directPathConstruction ||
+      exactAliasOf(value, pathReceivers) ||
+      helperSummary !== undefined
+    ) {
       pathReceivers.add(target);
     } else {
       pathReceivers.delete(target);
     }
 
-    if (directReduction || receiverReduction) {
+    if (helperSummary !== undefined) {
+      basenameOrigins.set(target, helperSummary.reductionLine);
+    } else if (directReduction || receiverReduction) {
       basenameOrigins.set(target, line);
     } else if (inheritedOrigin !== undefined) {
       basenameOrigins.set(target, inheritedOrigin);
@@ -5876,6 +6182,86 @@ function javaOwnerType(lines: readonly string[]): string | undefined {
     if (match !== null) return match[1]!;
   }
   return undefined;
+}
+
+function javaMethodDeclarations(
+  lines: readonly string[],
+): JavaMethodDeclaration[] {
+  const ownerType = javaOwnerType(lines);
+  if (ownerType === undefined) return [];
+  const methods: JavaMethodDeclaration[] = [];
+  const structuralLines = cFamilyStructuralLines(lines);
+  const blockContext = javaLexicalBlockContext(structuralLines);
+  const expression =
+    /^\s*(?:(?:@[A-Za-z_$][\w$.]*(?:\([^)]*\))?)\s*)*(?:(public|protected|private)\s+)?(?:(?:default|final|native|static|strictfp|synchronized)\s+)*(?:<[^>]+>\s+)?([A-Za-z_$][\w$.[\]<>?,]*(?:\s*\[\s*\])?)\s+([A-Za-z_$][\w$]*)\s*\(([\s\S]*?)\)\s*(?:throws\s+[^{}]+)?\s*\{/u;
+  for (let index = 0; index < lines.length; index += 1) {
+    const depth = (blockContext.paths[index] ?? "")
+      .split(".")
+      .filter(Boolean).length;
+    if (depth !== 1) continue;
+    const declarationLines = lines.slice(
+      index,
+      Math.min(lines.length, index + 9),
+    );
+    const structuralDeclaration =
+      cFamilyStructuralLines(declarationLines).join(" ");
+    const match = expression.exec(structuralDeclaration);
+    if (match === null || match[3] === ownerType) continue;
+    const originalDeclaration = declarationLines.join(" ");
+    const methodCall = new RegExp(
+      `\\b${escapeRegularExpression(match[3]!)}\\s*\\(`,
+      "u",
+    ).exec(cFamilyStructuralLines([originalDeclaration])[0] ?? "");
+    const originalOpen =
+      methodCall === null
+        ? -1
+        : originalDeclaration.indexOf("(", methodCall.index);
+    const originalClose = matchingCallParenthesis(
+      originalDeclaration,
+      originalOpen,
+    );
+    if (originalOpen < 0 || originalClose < 0) continue;
+    const parameters = splitJavascriptArguments(
+      originalDeclaration.slice(originalOpen + 1, originalClose),
+    ).flatMap((declaration) => {
+      const name = /([A-Za-z_$][\w$]*)\s*(?:\[\s*\])?\s*$/u.exec(
+        declaration.trim(),
+      )?.[1];
+      return name === undefined
+        ? []
+        : [{ name, declaration: declaration.trim() }];
+    });
+    const declaration: JavaMethodDeclaration = {
+      ownerType,
+      symbol: match[3]!,
+      access:
+        match[1] === "public" ||
+        match[1] === "protected" ||
+        match[1] === "private"
+          ? match[1]
+          : "package",
+      isStatic: /\bstatic\b/u.test(structuralDeclaration),
+      returnType: match[2]!.replace(/\s*\.\s*/gu, ".").trim(),
+      parameters,
+      startLine: index + 1,
+      endLine: cFamilyFunctionEndLine(structuralLines, index),
+    };
+    const duplicateIndex = methods.findIndex(
+      (candidate) =>
+        candidate.symbol === declaration.symbol &&
+        candidate.returnType === declaration.returnType &&
+        candidate.endLine === declaration.endLine &&
+        candidate.parameters.length === declaration.parameters.length &&
+        candidate.parameters.every(
+          (parameter, parameterIndex) =>
+            parameter.declaration ===
+            declaration.parameters[parameterIndex]?.declaration,
+        ),
+    );
+    if (duplicateIndex < 0) methods.push(declaration);
+    else methods[duplicateIndex] = declaration;
+  }
+  return methods;
 }
 
 function exportedJavaMethods(lines: readonly string[]): ExportedJavaMethod[] {

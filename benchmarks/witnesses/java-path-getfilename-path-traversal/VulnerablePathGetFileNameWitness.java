@@ -2,8 +2,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class VulnerablePathGetFileNameWitness {
+    private static Path basename(String input) {
+        return Path.of(input).getFileName();
+    }
+
     private static String read(Path root, String requested) throws Exception {
-        Path basename = Path.of(requested).getFileName();
+        Path basename = basename(requested);
         if (Path.of("..").equals(basename)) {
             System.getLogger(VulnerablePathGetFileNameWitness.class.getName()).log(System.Logger.Level.WARNING, "parent path requested");
         }

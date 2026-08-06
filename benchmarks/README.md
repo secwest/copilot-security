@@ -1288,7 +1288,8 @@ The same manifest also contains a second matched pair for
 but preserves the exact value `..`, so the reduced result can still select the
 trusted root's parent. The negative control rejects that exact reduced component
 before the sink. Its witnesses prove the parent escape, rejection of both `..`
-and `nested/..`, and continued access to an allowed basename.
+and `nested/..`, and continued access to an allowed basename. Both halves call
+the reduction through an exact private same-file helper.
 
 A third pair applies the same adversarial boundary to exact
 `java.nio.file.Path.of`/`Paths.get` construction followed by
@@ -1296,7 +1297,9 @@ A third pair applies the same adversarial boundary to exact
 `getFileName` or `getNameCount` call is therefore not accepted as a control.
 The matched control compares the same reduced `Path` with exact `Path.of("..")`
 before the sink. Its witnesses prove runtime parent escape, exact and nested
-parent rejection, and continued access to an allowed name.
+parent rejection, and continued access to an allowed name. Both halves use the
+same private helper-return boundary, exercising helper summary and caller-side
+guard recognition together.
 
 The deterministic identity gate implements Java's compilation-unit import
 precedence. A single-type `Path` or `Paths` import remains exact even when

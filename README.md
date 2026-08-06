@@ -1529,6 +1529,15 @@ method, qualified lookalike call, or competing same-name static import can own
 the call. Fully qualified factories remain independent of every simple-name
 shadow.
 
+Both basename specializations also follow exact same-file helper returns. A
+helper must have one unoverloaded symbol, exact official `String`/`File` or
+`String`/`Path` input and return types, a straight-line single return, exact
+fixed arity and argument position, and a bare, `this`, or owner-type call.
+Branches, transformations, reassignment, helper chains, foreign receivers, and
+lookalike types fail closed. The bundled exploit/control fixtures route both
+basename APIs through private helpers so this behavior is exercised by the
+strict executable benchmark rather than only unit fixtures.
+
 The basename controls are branch-sensitive. An exact comparison contributes a
 parent-rejection lead only when the equality is not negated or conditionally
 conjoined, its matching branch itself unconditionally returns or throws, that

@@ -180,7 +180,8 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
       "utf8",
     );
     expect(getNameVulnerableWitness).toContain('read(documents, "..")');
-    expect(getNameVulnerableWitness).toContain("new File(requested).getName()");
+    expect(getNameVulnerableWitness).toContain("new File(input).getName()");
+    expect(getNameVulnerableWitness).toContain("basename(requested)");
     const getNameSafeWitness = await readFile(
       join(
         benchmarkRoot,
@@ -341,7 +342,7 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
     expect(getNameVulnerable[0]?.path).toBe(
       "src/main/java/example/DocumentStore.java",
     );
-    expect(getNameVulnerable[0]?.frameworkModel?.sink.line).toBe(19);
+    expect(getNameVulnerable[0]?.frameworkModel?.sink.line).toBe(23);
     expect(
       getNameVulnerable[0]?.frameworkModel?.candidateControls.map(
         ({ kind }) => kind,
@@ -351,7 +352,7 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
     expect(javaPathRecords(getNameSafeInventory)).toHaveLength(1);
     const getNameSafe = javaFileGetNameRecords(getNameSafeInventory);
     expect(getNameSafe).toHaveLength(1);
-    expect(getNameSafe[0]?.frameworkModel?.sink.line).toBe(22);
+    expect(getNameSafe[0]?.frameworkModel?.sink.line).toBe(26);
     expect(
       getNameSafe[0]?.frameworkModel?.candidateControls.map(({ kind }) => kind),
     ).toEqual(
@@ -369,7 +370,7 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
     expect(pathGetFileNameVulnerable[0]?.path).toBe(
       "src/main/java/example/DocumentStore.java",
     );
-    expect(pathGetFileNameVulnerable[0]?.frameworkModel?.sink.line).toBe(24);
+    expect(pathGetFileNameVulnerable[0]?.frameworkModel?.sink.line).toBe(28);
     expect(
       pathGetFileNameVulnerable[0]?.frameworkModel?.candidateControls.map(
         ({ kind }) => kind,
@@ -381,7 +382,7 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
       pathGetFileNameSafeInventory,
     );
     expect(pathGetFileNameSafe).toHaveLength(1);
-    expect(pathGetFileNameSafe[0]?.frameworkModel?.sink.line).toBe(21);
+    expect(pathGetFileNameSafe[0]?.frameworkModel?.sink.line).toBe(25);
     expect(
       pathGetFileNameSafe[0]?.frameworkModel?.candidateControls.map(
         ({ kind }) => kind,
@@ -527,6 +528,250 @@ public final class FullyQualifiedController {
     ).toBeTrue();
   });
 
+  test("summarizes exact same-file File basename helpers", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "src/DirectFileHelperController.java",
+      `
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class DirectFileHelperController {
+  @Deprecated
+  private static String basename(String input) {
+    return new File(input).getName();
+  }
+  public String read(@RequestParam String path) throws Exception {
+    String name = basename(path);
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/FileParameterHelperController.java",
+      `
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class FileParameterHelperController {
+  private String basename(File input) {
+    File copy = input;
+    String name = copy.getName();
+    String result = name;
+    return result;
+  }
+  public String read(@RequestParam String path) throws Exception {
+    File requested = new File(path);
+    String name = this.basename(requested);
+    if ("..".equals(name)) throw new SecurityException("parent");
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/MultiParameterFileHelperController.java",
+      `
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class MultiParameterFileHelperController {
+  private static String selectName(String ignored, String input) {
+    return new File(input).getName();
+  }
+  public String read(@RequestParam String path) throws Exception {
+    String name = MultiParameterFileHelperController.selectName("fixed", path);
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "qualified/example/String.java",
+      `package qualified.example; final class String {}`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "qualified/example/QualifiedFileHelperController.java",
+      `
+package qualified.example;
+public final class QualifiedFileHelperController {
+  static java.lang.String basename(java.lang.String input) {
+    java.io.File requested = new java.io.File(input);
+    java.io.File copy = requested;
+    java.lang.String name = copy.getName();
+    return name;
+  }
+  public java.lang.String read(@RequestParam java.lang.String path) throws Exception {
+    java.lang.String name = basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(4);
+    const specialized = javaFileGetNameRecords(inventory);
+    expect(specialized).toHaveLength(4);
+    expect(
+      specialized
+        .find(
+          (record) => record.path === "src/FileParameterHelperController.java",
+        )
+        ?.frameworkModel?.candidateControls.map(({ kind }) => kind),
+    ).toContain("parent-path-component-rejection");
+    expect(
+      specialized.every((record) =>
+        record.frameworkModel?.candidateControls.some(
+          ({ kind }) => kind === "incomplete-java-io-file-getname-reduction",
+        ),
+      ),
+    ).toBeTrue();
+  });
+
+  test("rejects ambiguous or transformed File basename helpers", async () => {
+    const repository = await temporaryRepository();
+    const controller = (
+      className: string,
+      helpers: string,
+      call: string,
+    ): string => `
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class ${className} {
+${helpers}
+  public String read(@RequestParam String path) throws Exception {
+    String name = ${call};
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`;
+    await writeRepositoryFile(
+      repository,
+      "src/OverloadedFileHelperController.java",
+      controller(
+        "OverloadedFileHelperController",
+        `  private static String basename(String input) { return new File(input).getName(); }
+  private static String basename(File input) { return input.getName(); }`,
+        "basename(path)",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/BranchFileHelperController.java",
+      controller(
+        "BranchFileHelperController",
+        `  private static String basename(String input) {
+    if (input.isEmpty()) return "guide";
+    return new File(input).getName();
+  }`,
+        "basename(path)",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/TransformedFileHelperController.java",
+      controller(
+        "TransformedFileHelperController",
+        `  private static String basename(String input) {
+    return new File(input + ".txt").getName();
+  }`,
+        "basename(path)",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/TransformedFileCallController.java",
+      controller(
+        "TransformedFileCallController",
+        `  private static String basename(String input) {
+    return new File(input).getName();
+  }`,
+        'basename("prefix/" + path)',
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/ReassignedFileHelperController.java",
+      controller(
+        "ReassignedFileHelperController",
+        `  private static String basename(String input) {
+    input = "guide";
+    return new File(input).getName();
+  }`,
+        "basename(path)",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/NestedFileHelperController.java",
+      controller(
+        "NestedFileHelperController",
+        `  private static String reduce(String input) { return new File(input).getName(); }
+  private static String basename(String input) { return reduce(input); }`,
+        "basename(path)",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/ForeignFileReceiverController.java",
+      `
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+final class FileReducer {
+  String basename(String input) { return new File(input).getName(); }
+}
+public final class ForeignFileReceiverController {
+  private final FileReducer reducer = new FileReducer();
+  public String read(@RequestParam String path) throws Exception {
+    String name = reducer.basename(path);
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "wildcard/file/File.java",
+      `
+package wildcard.file;
+final class File {
+  File(String ignored) {}
+  String getName() { return "guide"; }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "wildcard/file/WildcardFileHelperController.java",
+      `
+package wildcard.file;
+import java.io.*;
+public final class WildcardFileHelperController {
+  private static String basename(String input) {
+    return new File(input).getName();
+  }
+  public String read(@RequestParam String path) throws Exception {
+    String name = basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(8);
+    expect(javaFileGetNameRecords(inventory)).toEqual([]);
+  });
+
   test("derives exact java.nio.file.Path.getFileName boundary evidence from a proven path", async () => {
     const repository = await temporaryRepository();
     await writeRepositoryFile(
@@ -611,6 +856,214 @@ public final class PathParameterController {
         ),
       ),
     ).toBeTrue();
+  });
+
+  test("summarizes exact same-file Path basename helpers", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "src/DirectHelperController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class DirectHelperController {
+  private static Path basename(String input) {
+    return Path.of(input).getFileName();
+  }
+  public String read(@RequestParam String path) throws Exception {
+    Path name = basename(path);
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/PathParameterHelperController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class PathParameterHelperController {
+  private Path basename(Path input) {
+    Path copy = input;
+    Path name = copy.getFileName();
+    return name;
+  }
+  public String read(@RequestParam String path) throws Exception {
+    Path requested = Path.of(path);
+    Path name = this.basename(requested);
+    if (Path.of("..").equals(name)) throw new SecurityException("parent");
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/MultiParameterHelperController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+public final class MultiParameterHelperController {
+  private static Path selectName(String ignored, String input) {
+    return Paths.get(input).getFileName();
+  }
+  public String read(@RequestParam String path) throws Exception {
+    Path name = MultiParameterHelperController.selectName("fixed", path);
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/AliasHelperController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class AliasHelperController {
+  static Path basename(String input) {
+    String copy = input;
+    Path requested = Path.of(copy);
+    Path name = requested.getFileName();
+    Path result = name;
+    return result;
+  }
+  public String read(@RequestParam String path) throws Exception {
+    Path name = basename(path);
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(4);
+    const specialized = javaPathGetFileNameRecords(inventory);
+    expect(specialized).toHaveLength(4);
+    expect(
+      specialized
+        .find(
+          (record) => record.path === "src/PathParameterHelperController.java",
+        )
+        ?.frameworkModel?.candidateControls.map(({ kind }) => kind),
+    ).toContain("parent-path-component-rejection");
+    expect(
+      specialized.every((record) =>
+        record.frameworkModel?.candidateControls.some(
+          ({ kind }) =>
+            kind === "incomplete-java-nio-path-getfilename-reduction",
+        ),
+      ),
+    ).toBeTrue();
+  });
+
+  test("rejects ambiguous or transformed Path basename helpers", async () => {
+    const repository = await temporaryRepository();
+    const controller = (
+      className: string,
+      helpers: string,
+      call: string,
+    ): string => `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class ${className} {
+${helpers}
+  public String read(@RequestParam String path) throws Exception {
+    Path name = ${call};
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`;
+    await writeRepositoryFile(
+      repository,
+      "src/OverloadedHelperController.java",
+      controller(
+        "OverloadedHelperController",
+        `  private static Path basename(String input) { return Path.of(input).getFileName(); }
+  private static Path basename(Path input) { return input.getFileName(); }`,
+        "basename(path)",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/BranchHelperController.java",
+      controller(
+        "BranchHelperController",
+        `  private static Path basename(String input) {
+    if (input.isEmpty()) return Path.of("guide");
+    return Path.of(input).getFileName();
+  }`,
+        "basename(path)",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/TransformedHelperController.java",
+      controller(
+        "TransformedHelperController",
+        `  private static Path basename(String input) {
+    return Path.of(input + ".txt").getFileName();
+  }`,
+        "basename(path)",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/TransformedCallController.java",
+      controller(
+        "TransformedCallController",
+        `  private static Path basename(String input) {
+    return Path.of(input).getFileName();
+  }`,
+        'basename("prefix/" + path)',
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/ReassignedHelperController.java",
+      controller(
+        "ReassignedHelperController",
+        `  private static Path basename(String input) {
+    input = "guide";
+    return Path.of(input).getFileName();
+  }`,
+        "basename(path)",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/NestedHelperController.java",
+      controller(
+        "NestedHelperController",
+        `  private static Path reduce(String input) { return Path.of(input).getFileName(); }
+  private static Path basename(String input) { return reduce(input); }`,
+        "basename(path)",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/ForeignReceiverController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+final class Reducer {
+  Path basename(String input) { return Path.of(input).getFileName(); }
+}
+public final class ForeignReceiverController {
+  private final Reducer reducer = new Reducer();
+  public String read(@RequestParam String path) throws Exception {
+    Path name = reducer.basename(path);
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(7);
+    expect(javaPathGetFileNameRecords(inventory)).toEqual([]);
   });
 
   test("resolves same-package Path and Paths shadows under Java import precedence", async () => {
@@ -1691,6 +2144,15 @@ public final class DocumentController {
     );
     expect(prompt).toContain(
       "Exact or wildcard static imports of Path.of and Paths.get are eligible only without a local method declaration",
+    );
+    expect(prompt).toContain(
+      "An exact same-file helper summary is eligible only for an unoverloaded method symbol",
+    );
+    expect(prompt).toContain(
+      "an exact unqualified, this-qualified, or owner-qualified call with matching arity",
+    );
+    expect(prompt).toContain(
+      "nested helper calls, foreign receivers, ambiguous overloads, and inexact types fail closed",
     );
     expect(prompt).toContain(
       "the exact equality is not negated or conditionally conjoined",

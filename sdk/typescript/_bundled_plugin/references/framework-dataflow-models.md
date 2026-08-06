@@ -314,7 +314,12 @@ interpreter that consumes the value.
   single-type import wins over a top-level same-package lookalike; a wildcard
   import does not. Exact or wildcard static `Path.of`/`Paths.get` imports are
   eligible only when no local method, qualified lookalike call, or competing
-  same-name static import can own the call. Only fixed
+  same-name static import can own the call. A same-file helper summary requires
+  one unoverloaded symbol, exact official `String`/`File` or `String`/`Path`
+  parameter and return types, a straight-line single return, exact argument
+  position and arity, and an unqualified, `this`-qualified, or owner-qualified
+  call. Branches, input transformations or reassignment, nested helpers,
+  foreign receivers, overloads, and lookalike types fail closed. Only fixed
   server-owned selection, a strict server-owned name allowlist, or a dominating
   fail-closed rejection of that exact reduced parent value is a strong lead;
   another reduction, logging, substring matching, or a post-sink check is not.
