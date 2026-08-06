@@ -678,6 +678,37 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-mongoose-aggregate",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]mongoose['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "mongoose-aggregate-pipeline",
+        expression: /\.\s*aggregate\s*\(/u,
+        cweIds: ["CWE-943", "CWE-915"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-aggregate-match-value-boundary",
+        expression: /\$match\s*:\s*\{/u,
+      },
+    ],
+  },
+  {
     id: "node-http-object-authorization",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2277,7 +2308,8 @@ function frameworkDataflowRecords(
     if (
       (model.id === "node-http-mongoose-nosql" ||
         model.id === "node-http-mongoose-update" ||
-        model.id === "node-http-mongoose-bulk-write") &&
+        model.id === "node-http-mongoose-bulk-write" ||
+        model.id === "node-http-mongoose-aggregate") &&
       !nodeMongooseHasOfficialFactoryBinding(lines)
     ) {
       continue;
@@ -2332,7 +2364,8 @@ function frameworkDataflowRecords(
       ? model.id === "node-http-object-authorization" ||
         model.id === "node-http-mongoose-nosql" ||
         model.id === "node-http-mongoose-update" ||
-        model.id === "node-http-mongoose-bulk-write"
+        model.id === "node-http-mongoose-bulk-write" ||
+        model.id === "node-http-mongoose-aggregate"
         ? []
         : model.id === "node-http-ssrf" || model.id === "node-http-path"
           ? matchingJavascriptControlLines(lines, model.controls, 24)
@@ -2374,6 +2407,10 @@ function frameworkDataflowRecords(
       const nodeMongooseBulkWrite =
         model.id === "node-http-mongoose-bulk-write"
           ? nodeMongooseBulkWriteSink(lines, sink.line)
+          : undefined;
+      const nodeMongooseAggregate =
+        model.id === "node-http-mongoose-aggregate"
+          ? nodeMongooseAggregateSink(lines, sink.line)
           : undefined;
       const pythonPathSink =
         model.id === "python-web-path"
@@ -2433,6 +2470,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-mongoose-bulk-write" &&
         nodeMongooseBulkWrite === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-mongoose-aggregate" &&
+        nodeMongooseAggregate === undefined
       ) {
         continue;
       }
@@ -2531,43 +2574,49 @@ function frameworkDataflowRecords(
               }))
               .find((candidate) => candidate.source !== undefined)
           : undefined;
+      const nodeMongooseAggregateResolution =
+        model.id === "node-http-mongoose-aggregate" &&
+        nodeMongooseAggregate !== undefined
+          ? nodeMongooseAggregate.positions
+              .map((position) => ({
+                position,
+                source: modeledObjectLookupSource(
+                  lines,
+                  sources,
+                  sink.line,
+                  position.expression,
+                  model.sources,
+                ),
+              }))
+              .find((candidate) => candidate.source !== undefined)
+          : undefined;
       const source =
-        model.id === "node-http-mongoose-bulk-write"
-          ? nodeMongooseBulkWriteResolution?.source
-          : model.id === "node-http-mongoose-update" &&
-              nodeMongooseUpdate !== undefined
-            ? modeledObjectLookupSource(
-                lines,
-                sources,
-                sink.line,
-                nodeMongooseUpdate.updateExpression,
-                model.sources,
-              )
-            : model.id === "node-http-mongoose-nosql" &&
-                nodeMongooseSink !== undefined
+        model.id === "node-http-mongoose-aggregate"
+          ? nodeMongooseAggregateResolution?.source
+          : model.id === "node-http-mongoose-bulk-write"
+            ? nodeMongooseBulkWriteResolution?.source
+            : model.id === "node-http-mongoose-update" &&
+                nodeMongooseUpdate !== undefined
               ? modeledObjectLookupSource(
                   lines,
                   sources,
                   sink.line,
-                  nodeMongooseSink.filterExpression,
+                  nodeMongooseUpdate.updateExpression,
                   model.sources,
                 )
-              : model.id === "node-http-path" && nodePathSink !== undefined
-                ? nodePathSink.expressions
-                    .map((expression) =>
-                      modeledObjectLookupSource(
-                        lines,
-                        sources,
-                        sink.line,
-                        expression,
-                        model.sources,
-                      ),
-                    )
-                    .find((candidate) => candidate !== undefined)
-                : model.id === "python-web-path" && pythonPathSink !== undefined
-                  ? pythonPathSink.expressions
+              : model.id === "node-http-mongoose-nosql" &&
+                  nodeMongooseSink !== undefined
+                ? modeledObjectLookupSource(
+                    lines,
+                    sources,
+                    sink.line,
+                    nodeMongooseSink.filterExpression,
+                    model.sources,
+                  )
+                : model.id === "node-http-path" && nodePathSink !== undefined
+                  ? nodePathSink.expressions
                       .map((expression) =>
-                        modeledPythonObjectSource(
+                        modeledObjectLookupSource(
                           lines,
                           sources,
                           sink.line,
@@ -2576,99 +2625,118 @@ function frameworkDataflowRecords(
                         ),
                       )
                       .find((candidate) => candidate !== undefined)
-                  : model.id === "node-http-object-authorization" &&
-                      nodeObjectSink !== undefined
-                    ? modeledObjectLookupSource(
-                        lines,
-                        sources,
-                        sink.line,
-                        nodeObjectSink.argument,
-                        model.sources,
-                      )
-                    : model.id === "node-http-ssrf" &&
-                        nodeHttpSink?.urlExpression !== undefined
-                      ? modeledCallSource(
+                  : model.id === "python-web-path" &&
+                      pythonPathSink !== undefined
+                    ? pythonPathSink.expressions
+                        .map((expression) =>
+                          modeledPythonObjectSource(
+                            lines,
+                            sources,
+                            sink.line,
+                            expression,
+                            model.sources,
+                          ),
+                        )
+                        .find((candidate) => candidate !== undefined)
+                    : model.id === "node-http-object-authorization" &&
+                        nodeObjectSink !== undefined
+                      ? modeledObjectLookupSource(
                           lines,
                           sources,
                           sink.line,
-                          nodeHttpSink.urlExpression,
+                          nodeObjectSink.argument,
                           model.sources,
                         )
-                      : model.id === "node-copilot-system-prompt-injection"
-                        ? nodeCopilotResolution?.source
-                        : extension === ".java" &&
-                            model.id === "spring-http-object-authorization" &&
-                            javaObjectSink !== undefined
-                          ? modeledSameFileJavaObjectSource(
-                              lines,
-                              sink.line,
-                              javaObjectSink.argument,
-                              model.sources,
-                            )
+                      : model.id === "node-http-ssrf" &&
+                          nodeHttpSink?.urlExpression !== undefined
+                        ? modeledCallSource(
+                            lines,
+                            sources,
+                            sink.line,
+                            nodeHttpSink.urlExpression,
+                            model.sources,
+                          )
+                        : model.id === "node-copilot-system-prompt-injection"
+                          ? nodeCopilotResolution?.source
                           : extension === ".java" &&
-                              model.id === "spring-mvc-jpa-mass-assignment" &&
-                              javaJpaSink !== undefined &&
-                              javaJpaDomainType !== undefined
-                            ? (() => {
-                                const method = exportedJavaMethods(lines).find(
-                                  (candidate) =>
-                                    sink.line >= candidate.startLine &&
-                                    sink.line <= candidate.endLine,
-                                );
-                                return method === undefined
-                                  ? undefined
-                                  : modeledJavaMassAssignmentSource(
-                                      lines,
-                                      method,
-                                      sink.line,
-                                      javaJpaSink.argument,
-                                      javaJpaDomainType,
-                                    );
-                              })()
+                              model.id === "spring-http-object-authorization" &&
+                              javaObjectSink !== undefined
+                            ? modeledSameFileJavaObjectSource(
+                                lines,
+                                sink.line,
+                                javaObjectSink.argument,
+                                model.sources,
+                              )
                             : extension === ".java" &&
-                                (model.id === "spring-http-ssrf" ||
-                                  model.id === "spring-http-path")
-                              ? modeledSameFileJavaSource(
-                                  lines,
-                                  sink.line,
-                                  model.id,
-                                  model.sources,
-                                )
-                              : extension === ".cs" &&
-                                  model.id === "aspnet-http-template-injection"
-                                ? modeledSameFileDotnetTemplateSource(
+                                model.id === "spring-mvc-jpa-mass-assignment" &&
+                                javaJpaSink !== undefined &&
+                                javaJpaDomainType !== undefined
+                              ? (() => {
+                                  const method = exportedJavaMethods(
+                                    lines,
+                                  ).find(
+                                    (candidate) =>
+                                      sink.line >= candidate.startLine &&
+                                      sink.line <= candidate.endLine,
+                                  );
+                                  return method === undefined
+                                    ? undefined
+                                    : modeledJavaMassAssignmentSource(
+                                        lines,
+                                        method,
+                                        sink.line,
+                                        javaJpaSink.argument,
+                                        javaJpaDomainType,
+                                      );
+                                })()
+                              : extension === ".java" &&
+                                  (model.id === "spring-http-ssrf" ||
+                                    model.id === "spring-http-path")
+                                ? modeledSameFileJavaSource(
                                     lines,
                                     sink.line,
+                                    model.id,
                                     model.sources,
-                                    files,
-                                    path,
                                   )
                                 : extension === ".cs" &&
                                     model.id ===
-                                      "aspnet-http-object-authorization" &&
-                                    dotnetObjectSink !== undefined
-                                  ? modeledSameFileDotnetObjectSource(
+                                      "aspnet-http-template-injection"
+                                  ? modeledSameFileDotnetTemplateSource(
                                       lines,
                                       sink.line,
-                                      dotnetObjectSink.argument,
                                       model.sources,
                                       files,
                                       path,
                                     )
                                   : extension === ".cs" &&
-                                      model.id.startsWith("aspnet-http-")
-                                    ? modeledSameFileDotnetSource(
+                                      model.id ===
+                                        "aspnet-http-object-authorization" &&
+                                      dotnetObjectSink !== undefined
+                                    ? modeledSameFileDotnetObjectSource(
                                         lines,
                                         sink.line,
+                                        dotnetObjectSink.argument,
                                         model.sources,
                                         files,
                                         path,
-                                      ) ??
-                                      nearestModeledSource(
-                                        matchedSources,
-                                        sink.line,
                                       )
-                                    : nearestModeledSource(sources, sink.line);
+                                    : extension === ".cs" &&
+                                        model.id.startsWith("aspnet-http-")
+                                      ? modeledSameFileDotnetSource(
+                                          lines,
+                                          sink.line,
+                                          model.sources,
+                                          files,
+                                          path,
+                                        ) ??
+                                        nearestModeledSource(
+                                          matchedSources,
+                                          sink.line,
+                                        )
+                                      : nearestModeledSource(
+                                          sources,
+                                          sink.line,
+                                        );
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -2701,6 +2769,14 @@ function frameworkDataflowRecords(
           ? nodeMongooseBulkWriteControls(
               lines,
               nodeMongooseBulkWrite,
+              sink.line,
+            )
+          : []),
+        ...(model.id === "node-http-mongoose-aggregate" &&
+        nodeMongooseAggregate !== undefined
+          ? nodeMongooseAggregateControls(
+              lines,
+              nodeMongooseAggregate,
               sink.line,
             )
           : []),
@@ -2762,9 +2838,16 @@ function frameworkDataflowRecords(
           : nodeMongooseBulkWriteSinkMetadata(
               nodeMongooseBulkWriteResolution.position,
             );
+      const aggregateSinkMetadata =
+        nodeMongooseAggregateResolution === undefined
+          ? undefined
+          : nodeMongooseAggregateSinkMetadata(
+              nodeMongooseAggregateResolution.position,
+            );
       const effectiveSinkLine = nodeCopilotResolution?.input.line ?? sink.line;
       const effectiveSinkKind =
         nodeCopilotResolution?.input.kind ??
+        aggregateSinkMetadata?.kind ??
         bulkSinkMetadata?.kind ??
         sink.kind;
       const startLine = Math.max(1, effectiveSinkLine - CONTEXT_LINES_BEFORE);
@@ -2800,7 +2883,10 @@ function frameworkDataflowRecords(
             kind: effectiveSinkKind,
             path,
             line: effectiveSinkLine,
-            cweIds: bulkSinkMetadata?.cweIds ?? sinkPattern.cweIds,
+            cweIds:
+              aggregateSinkMetadata?.cweIds ??
+              bulkSinkMetadata?.cweIds ??
+              sinkPattern.cweIds,
           },
           propagators: [],
           candidateControls: nearbyControls.map((control) => ({
@@ -6690,7 +6776,8 @@ function javascriptFrameworkWrapperSummaries(
       if (
         (model.id === "node-http-mongoose-nosql" ||
           model.id === "node-http-mongoose-update" ||
-          model.id === "node-http-mongoose-bulk-write") &&
+          model.id === "node-http-mongoose-bulk-write" ||
+          model.id === "node-http-mongoose-aggregate") &&
         !nodeMongooseHasOfficialFactoryBinding(file.lines)
       ) {
         continue;
@@ -6703,7 +6790,8 @@ function javascriptFrameworkWrapperSummaries(
         model.id === "node-http-object-authorization" ||
         model.id === "node-http-mongoose-nosql" ||
         model.id === "node-http-mongoose-update" ||
-        model.id === "node-http-mongoose-bulk-write"
+        model.id === "node-http-mongoose-bulk-write" ||
+        model.id === "node-http-mongoose-aggregate"
           ? []
           : model.id === "node-http-ssrf" || model.id === "node-http-path"
             ? matchingJavascriptControlLines(file.lines, model.controls, 64)
@@ -6744,6 +6832,10 @@ function javascriptFrameworkWrapperSummaries(
             model.id === "node-http-mongoose-bulk-write"
               ? nodeMongooseBulkWriteSink(file.lines, sink.line)
               : undefined;
+          const nodeMongooseAggregate =
+            model.id === "node-http-mongoose-aggregate"
+              ? nodeMongooseAggregateSink(file.lines, sink.line)
+              : undefined;
           if (model.id === "node-http-ssrf" && nodeHttpSink === undefined) {
             continue;
           }
@@ -6781,12 +6873,23 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-mongoose-aggregate" &&
+            nodeMongooseAggregate === undefined
+          ) {
+            continue;
+          }
+          if (
             nodeHttpSink?.axiosReceiver !== undefined &&
             wrapper.parameters.includes(nodeHttpSink.axiosReceiver)
           ) {
             continue;
           }
           const sinkValue =
+            (nodeMongooseAggregate === undefined
+              ? undefined
+              : nodeMongooseAggregate.positions
+                  .map(({ expression }) => expression)
+                  .join("\n")) ??
             (nodeMongooseBulkWrite === undefined
               ? undefined
               : nodeMongooseBulkWrite.positions
@@ -6881,6 +6984,14 @@ function javascriptFrameworkWrapperSummaries(
                   sink.line,
                 )
               : []),
+            ...(model.id === "node-http-mongoose-aggregate" &&
+            nodeMongooseAggregate !== undefined
+              ? nodeMongooseAggregateControls(
+                  file.lines,
+                  nodeMongooseAggregate,
+                  sink.line,
+                )
+              : []),
           ].filter(
             (control, index, all) =>
               all.findIndex(
@@ -6901,6 +7012,17 @@ function javascriptFrameworkWrapperSummaries(
                       ),
                     )
                     .map(nodeMongooseBulkWriteSinkMetadata)[0];
+            const aggregateSinkMetadata =
+              nodeMongooseAggregate === undefined
+                ? undefined
+                : nodeMongooseAggregate.positions
+                    .filter((position) =>
+                      lineReferencesIdentifier(
+                        position.expression,
+                        wrapper.parameters[parameterIndex]!,
+                      ),
+                    )
+                    .map(nodeMongooseAggregateSinkMetadata)[0];
             const copilotInput = nodeCopilotSink?.inputs.find(
               ({ expression }) =>
                 lineReferencesIdentifier(
@@ -6917,13 +7039,18 @@ function javascriptFrameworkWrapperSummaries(
               declarationLine: wrapper.startLine,
               sink: {
                 ...sink,
-                ...(bulkSinkMetadata === undefined
-                  ? {}
-                  : { kind: bulkSinkMetadata.kind }),
+                ...(aggregateSinkMetadata === undefined
+                  ? bulkSinkMetadata === undefined
+                    ? {}
+                    : { kind: bulkSinkMetadata.kind }
+                  : { kind: aggregateSinkMetadata.kind }),
                 ...(copilotInput === undefined
                   ? {}
                   : { kind: copilotInput.kind, line: copilotInput.line }),
-                cweIds: bulkSinkMetadata?.cweIds ?? sinkPattern.cweIds,
+                cweIds:
+                  aggregateSinkMetadata?.cweIds ??
+                  bulkSinkMetadata?.cweIds ??
+                  sinkPattern.cweIds,
               },
               controls: wrapperControls.slice(0, 8),
             });
@@ -8515,6 +8642,22 @@ interface NodeMongooseBulkWriteSinkMetadata {
   kind: string;
 }
 
+interface NodeMongooseAggregatePosition {
+  expression: string;
+  line: number;
+  stage: string;
+}
+
+interface NodeMongooseAggregateSink {
+  pipelineExpression: string;
+  positions: NodeMongooseAggregatePosition[];
+}
+
+interface NodeMongooseAggregateSinkMetadata {
+  cweIds: string[];
+  kind: string;
+}
+
 interface NodeMongooseBindingContext {
   mongooseReceivers: ReadonlyArray<{ local: string; line: number }>;
   modelFunctions: ReadonlyArray<{ local: string; line: number }>;
@@ -8745,6 +8888,172 @@ function nodeMongooseUpdateSink(
   return undefined;
 }
 
+function nodeMongooseAggregatePositions(
+  lines: readonly string[],
+  pipelineExpression: string,
+  sinkLine: number,
+): NodeMongooseAggregatePosition[] {
+  const pipeline = resolvedJavascriptExpression(
+    lines,
+    pipelineExpression,
+    sinkLine,
+  );
+  const elements = javascriptArrayEntries(pipeline);
+  if (elements.length === 0) {
+    return [
+      {
+        expression: pipeline.value,
+        line: pipeline.line,
+        stage: "dynamic",
+      },
+    ];
+  }
+  const positions: NodeMongooseAggregatePosition[] = [];
+  const addPosition = (
+    expression: string,
+    line: number,
+    stage: string,
+  ): void => {
+    const resolved = resolvedJavascriptExpression(lines, expression, line);
+    positions.push({
+      expression: resolved.value,
+      line: resolved.line,
+      stage,
+    });
+  };
+  for (const element of elements) {
+    const stageObject = resolvedJavascriptExpression(
+      lines,
+      element.value,
+      element.line,
+    );
+    const stageEntries = javascriptObjectEntries(stageObject);
+    if (stageEntries.length === 0 || /\.\.\.|\[/u.test(stageObject.value)) {
+      addPosition(
+        stageObject.value.replace(/^\s*\.\.\./u, ""),
+        stageObject.line,
+        "dynamic",
+      );
+      continue;
+    }
+    for (const stageEntry of stageEntries) {
+      addPosition(stageEntry.value, stageEntry.line, stageEntry.key);
+    }
+  }
+  return positions.filter(
+    (position, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.expression === position.expression &&
+          candidate.stage === position.stage,
+      ) === index,
+  );
+}
+
+function nodeMongooseAggregateIsConsumed(
+  lines: readonly string[],
+  line: number,
+  call: RegExp,
+  wrapper: ExportedJavascriptFunction | undefined,
+): boolean {
+  const windowLines = lines.slice(line - 1, Math.min(lines.length, line + 24));
+  const structuralWindow = javascriptStructuralLines(windowLines).join("\n");
+  const match = call.exec(structuralWindow);
+  if (match === null) return false;
+  const open = structuralWindow.indexOf("(", match.index);
+  if (open < 0) return false;
+  const close = matchingCallParenthesis(structuralWindow, open);
+  if (close < 0) return false;
+  const prefix = structuralWindow.slice(0, match.index);
+  const tail = structuralWindow.slice(close + 1);
+  const statementEnd = tail.indexOf(";");
+  const statementTail = tail.slice(
+    0,
+    statementEnd >= 0 ? statementEnd : tail.length,
+  );
+  if (/\bawait\b/u.test(prefix)) return true;
+  if (/\.\s*(?:exec|then|catch|finally|cursor)\s*\(/u.test(statementTail)) {
+    return true;
+  }
+  if (
+    /\breturn\b/u.test(prefix) &&
+    wrapper !== undefined &&
+    /\basync\b/u.test(lines[wrapper.startLine - 1] ?? "")
+  ) {
+    return true;
+  }
+  const assignment = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*$/u.exec(
+    prefix,
+  );
+  if (assignment === null || wrapper === undefined) return false;
+  const aggregate = assignment[1]!;
+  if (
+    javascriptIdentifierReassignedBetween(
+      lines,
+      aggregate,
+      line,
+      wrapper.endLine,
+    )
+  ) {
+    return false;
+  }
+  const remainder = javascriptStructuralLines(
+    lines.slice(line, wrapper.endLine),
+  ).join("\n");
+  return (
+    new RegExp(
+      `\\bawait\\s+${escapeRegularExpression(aggregate)}\\b|\\b${escapeRegularExpression(aggregate)}\\s*\\.\\s*(?:exec|then|catch|finally|cursor)\\s*\\(`,
+      "u",
+    ).test(remainder) &&
+    !new RegExp(
+      `\\b${escapeRegularExpression(aggregate)}\\s*\\.\\s*(?:pipeline|model)\\s*\\(`,
+      "u",
+    ).test(remainder)
+  );
+}
+
+function nodeMongooseAggregateSink(
+  lines: readonly string[],
+  line: number,
+): NodeMongooseAggregateSink | undefined {
+  const context = nodeMongooseBindingContext(lines);
+  const wrapper = context.wrappers.find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const structuralLine =
+    javascriptStructuralLines([lines[line - 1] ?? ""])[0] ?? "";
+  for (const model of context.models) {
+    if (
+      model.line >= line ||
+      wrapper?.parameters.includes(model.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        model.local,
+        model.line,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const call = new RegExp(
+      `\\b${escapeRegularExpression(model.local)}\\s*\\.\\s*aggregate\\s*\\(`,
+      "u",
+    );
+    if (!call.test(structuralLine)) continue;
+    if (!nodeMongooseAggregateIsConsumed(lines, line, call, wrapper)) continue;
+    const arguments_ = javascriptCallArgumentsAtLine(lines, line, call);
+    const pipelineExpression = arguments_?.[0]?.trim();
+    if (!pipelineExpression) continue;
+    const positions = nodeMongooseAggregatePositions(
+      lines,
+      pipelineExpression,
+      line,
+    );
+    if (positions.length > 0) return { pipelineExpression, positions };
+  }
+  return undefined;
+}
+
 function resolvedJavascriptExpression(
   lines: readonly string[],
   expression: string,
@@ -8951,6 +9260,37 @@ function nodeMongooseBulkWriteSinkMetadata(
   };
 }
 
+function nodeMongooseAggregateSinkMetadata(
+  position: NodeMongooseAggregatePosition,
+): NodeMongooseAggregateSinkMetadata {
+  if (position.stage === "$merge" || position.stage === "$out") {
+    return {
+      kind: "mongoose-aggregate-write-stage",
+      cweIds: ["CWE-943", "CWE-915"],
+    };
+  }
+  if (position.stage === "dynamic") {
+    return {
+      kind: "mongoose-aggregate-pipeline",
+      cweIds: ["CWE-943", "CWE-915"],
+    };
+  }
+  if (position.stage === "$match" || position.stage === "$redact") {
+    return { kind: "mongoose-aggregate-filter-stage", cweIds: ["CWE-943"] };
+  }
+  if (
+    position.stage === "$lookup" ||
+    position.stage === "$graphLookup" ||
+    position.stage === "$unionWith"
+  ) {
+    return {
+      kind: "mongoose-aggregate-cross-collection-stage",
+      cweIds: ["CWE-943"],
+    };
+  }
+  return { kind: "mongoose-aggregate-stage", cweIds: ["CWE-943"] };
+}
+
 function fixedMongooseUpdateFieldCoversParameter(
   updateExpression: string,
   parameter: string,
@@ -9083,6 +9423,78 @@ function nodeMongooseBulkWriteControls(
     ) {
       controls.push({
         kind: "fixed-document-field-projection",
+        line: sinkLine,
+      });
+    }
+  }
+  return controls.filter(
+    (control, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.kind === control.kind && candidate.line === control.line,
+      ) === index,
+  );
+}
+
+function fixedMongooseAggregateMatchCoversParameter(
+  matchExpression: string,
+  parameter: string,
+): boolean {
+  const code = javascriptCodeLinesWithoutComments(
+    matchExpression.split(/\r?\n/u),
+  ).join("\n");
+  if (/\.\.\.|\[/u.test(code)) return false;
+  const properties = javascriptObjectEntries({ line: 1, value: code });
+  if (properties.length === 0) return false;
+  const identifier = new RegExp(
+    `\\b${escapeRegularExpression(parameter)}\\b`,
+    "u",
+  );
+  const taintedProperties = properties.filter(({ value }) =>
+    identifier.test(value),
+  );
+  if (taintedProperties.length === 0) return false;
+  const equalityOperand = new RegExp(
+    `^\\s*${escapeRegularExpression(parameter)}(?:\\s*\\.\\s*[A-Za-z_$][\\w$]*)*\\s*$`,
+    "u",
+  );
+  return taintedProperties.every(({ value }) => {
+    const operators = javascriptObjectEntries({ line: 1, value });
+    return (
+      operators.length === 1 &&
+      operators[0]?.key === "$eq" &&
+      equalityOperand.test(operators[0].value)
+    );
+  });
+}
+
+function nodeMongooseAggregateControls(
+  lines: readonly string[],
+  sink: NodeMongooseAggregateSink,
+  sinkLine: number,
+): Array<{ kind: string; line: number }> {
+  const context = nodeMongooseBindingContext(lines);
+  const wrapper = context.wrappers.find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  const controls: Array<{ kind: string; line: number }> = [];
+  for (const position of sink.positions) {
+    if (position.stage !== "$match") continue;
+    const taintedParameters = (wrapper?.parameters ?? []).filter((parameter) =>
+      lineReferencesIdentifier(position.expression, parameter),
+    );
+    if (
+      taintedParameters.length > 0 &&
+      taintedParameters.every((parameter) =>
+        fixedMongooseAggregateMatchCoversParameter(
+          position.expression,
+          parameter,
+        ),
+      )
+    ) {
+      controls.push({
+        kind: "fixed-aggregate-match-value-boundary",
         line: sinkLine,
       });
     }
@@ -14943,6 +15355,11 @@ function compareResidualRiskRecords(
         (control) =>
           control.kind === "fixed-update-field-value-boundary" ||
           control.kind === "fixed-document-field-projection",
+      );
+    }
+    if (framework?.id === "node-http-mongoose-aggregate") {
+      return framework.candidateControls.some(
+        (control) => control.kind === "fixed-aggregate-match-value-boundary",
       );
     }
     return false;

@@ -141,8 +141,10 @@ crosses the same topology and selects `$unset` to remove an MFA secret, paired
 with one scalar beneath a fixed server-owned `$set` field, plus Mongoose
 `bulkWrite()` update-operator injection and replacement-document mass
 assignment across the same topology, each paired with its exact fixed update
-or document boundary. Three runs per case produce 480 scans in the complete
-corpus.
+or document boundary, plus Mongoose aggregation-pipeline injection that uses
+`$lookup` to cross a collection boundary or `$merge` to overwrite protected
+account state, paired with fixed `$match`, projection, mutation, and write
+destinations. Three runs per case produce 492 scans in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -186,6 +188,24 @@ and operation or specification spreads. They reject bulk options,
 executable witnesses prove MFA deletion and role/MFA replacement on the
 vulnerable paths, and protected-field preservation plus legitimate
 display-name changes on the controls.
+
+`node-mongoose-aggregate-manifest.json` isolates Mongoose aggregation read and
+write grammar under perfect gates. Its two positives retain the HTTP source,
+all nine ordered propagators, the exact lazy `Model.aggregate()` execution,
+validation, attack-path analysis, and code evidence. One supplies a complete
+pipeline whose `$lookup` and projection expose a signing-key collection; the
+other supplies `$set` plus `$merge` stages that replace role and MFA state.
+Their controls preserve the four-file topology while binding one scalar through
+a fixed `$match` field and exact `$eq`; the read control fixes the public
+projection, and the write control also fixes the mutation, destination,
+identity key, and merge policy. Deterministic regressions distinguish complete
+pipelines, dynamic or spread stages, filters, cross-collection reads, and write
+stages; require exact official Model identity and consumption of the lazy
+Aggregate; reject options-only, inert, lookalike, and reassigned calls; and
+credit only direct or exact-`$eq` fixed-match values. Four executable witnesses
+prove secret disclosure and protected-state replacement on the vulnerable
+paths, and operator rejection, public projection, protected-state retention,
+and fixed destination on the controls.
 
 `node-copilot-prompt-injection-manifest.json` isolates that SDK boundary under
 perfect single-run gates. The positive must retain the HTTP source, all six

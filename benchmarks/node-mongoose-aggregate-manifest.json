@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-mongoose-multi-hop-aggregate-lookup-injection",
+      "description": "An Express JSON pipeline crosses three relative-import boundaries and becomes the complete Mongoose aggregation pipeline, allowing an attacker-selected $lookup to expose a secret collection.",
+      "fixture": "fixtures/node-mongoose-multi-hop-aggregate-lookup-injection",
+      "findingsPaths": [
+        "node-mongoose-multi-hop-aggregate-lookup-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mongoose-aggregate-lookup-injection",
+          "cwe": ["CWE-943"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 12,
+              "endLine": 12,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-mongoose-multi-hop-safe-aggregate-match",
+      "description": "The same topology binds one request scalar beneath a fixed $match field and exact $eq, then projects only public fields.",
+      "fixture": "fixtures/node-mongoose-multi-hop-safe-aggregate-match",
+      "findingsPaths": [
+        "node-mongoose-multi-hop-safe-aggregate-match/run-1/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "node-mongoose-multi-hop-aggregate-merge-injection",
+      "description": "An Express JSON pipeline crosses three relative-import boundaries and selects $set plus $merge stages that overwrite protected account fields.",
+      "fixture": "fixtures/node-mongoose-multi-hop-aggregate-merge-injection",
+      "findingsPaths": [
+        "node-mongoose-multi-hop-aggregate-merge-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mongoose-aggregate-merge-injection",
+          "cwe": ["CWE-943", "CWE-915"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 12,
+              "endLine": 12,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-mongoose-multi-hop-safe-aggregate-write-scope",
+      "description": "The same topology keeps match grammar, mutation fields, merge destination, and merge policy fixed while binding one request scalar through exact equality.",
+      "fixture": "fixtures/node-mongoose-multi-hop-safe-aggregate-write-scope",
+      "findingsPaths": [
+        "node-mongoose-multi-hop-safe-aggregate-write-scope/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

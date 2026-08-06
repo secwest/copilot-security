@@ -1,0 +1,9 @@
+{
+  "name": "node-mongoose-multi-hop-aggregate-lookup-injection-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "5.1.0",
+    "mongoose": "9.8.1"
+  }
+}
