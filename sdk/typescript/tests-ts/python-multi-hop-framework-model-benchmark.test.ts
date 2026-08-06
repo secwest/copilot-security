@@ -26,7 +26,7 @@ const caseIds = [
 ] as const;
 
 describe("Python multi-hop framework-model effectiveness benchmark", () => {
-  test("keeps three-file positives and negatives paired under strict gates", async () => {
+  test("keeps four-file positives and negatives paired under strict gates", async () => {
     const manifest = JSON.parse(
       await readFile(
         join(benchmarkRoot, "python-multi-hop-framework-manifest.json"),
@@ -64,11 +64,14 @@ describe("Python multi-hop framework-model effectiveness benchmark", () => {
     const command = inventories.get("python-multi-hop-command-injection");
     expect(command).toContain('"scope":"cross-file-multi-hop-wrapper"');
     expect(command).toContain('"id":"python-web-command"');
-    expect(command?.match(/"kind":"relative-python-import"/gu)).toHaveLength(2);
-    expect(command?.match(/"kind":"wrapper-call-argument"/gu)).toHaveLength(2);
-    expect(command?.match(/"kind":"wrapper-parameter"/gu)).toHaveLength(2);
+    expect(command?.match(/"kind":"relative-python-import"/gu)).toHaveLength(3);
+    expect(command?.match(/"kind":"wrapper-call-argument"/gu)).toHaveLength(3);
+    expect(command?.match(/"kind":"wrapper-parameter"/gu)).toHaveLength(3);
     expect(command).toContain('"path":"src/server.py","line":3');
     expect(command).toContain('"path":"src/server.py","line":11');
+    expect(command).toContain('"path":"src/gateway.py","line":4');
+    expect(command).toContain('"path":"src/gateway.py","line":1');
+    expect(command).toContain('"path":"src/gateway.py","line":5');
     expect(command).toContain('"path":"src/service.py","line":4');
     expect(command).toContain('"path":"src/service.py","line":1');
     expect(command).toContain('"path":"src/service.py","line":5');
@@ -159,6 +162,89 @@ describe("Python multi-hop framework-model effectiveness benchmark", () => {
           '"scope":"cross-file-multi-hop-wrapper"',
         );
       }
+
+      await writeFile(
+        join(source, "service.py"),
+        [
+          "from .runner import run_report",
+          "def dispatch_report(report_name):",
+          "    return run_report(report_name)",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(source, "server.py"),
+        [
+          "from flask import request",
+          "from .gateway import route_report",
+          "def report():",
+          '    report_name = request.args.get("name", "")',
+          "    return route_report(report_name)",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(source, "gateway.py"),
+        [
+          "from .service import dispatch_report",
+          "def route_report(report_name):",
+          '    report_name = "fixed"',
+          "    return dispatch_report(report_name)",
+          "",
+        ].join("\n"),
+      );
+      expect(await buildResidualRiskInventory(root)).not.toContain(
+        '"scope":"cross-file-multi-hop-wrapper"',
+      );
+
+      await writeFile(
+        join(source, "gateway.py"),
+        [
+          "from .facade import forward_report",
+          "def route_report(report_name):",
+          "    return forward_report(report_name)",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(source, "facade.py"),
+        [
+          "from .service import dispatch_report",
+          "def forward_report(report_name):",
+          "    return dispatch_report(report_name)",
+          "",
+        ].join("\n"),
+      );
+      expect(await buildResidualRiskInventory(root)).not.toContain(
+        '"scope":"cross-file-multi-hop-wrapper"',
+      );
+
+      await writeFile(
+        join(source, "runner.py"),
+        [
+          "import os",
+          "from .service import dispatch_report",
+          "def run_report(report_name):",
+          '    return os.system(f"/opt/reports/{report_name}")',
+          "def reenter_report(report_name):",
+          "    return dispatch_report(report_name)",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(source, "server.py"),
+        [
+          "from flask import request",
+          "from .runner import reenter_report",
+          "def report():",
+          '    report_name = request.args.get("name", "")',
+          "    return reenter_report(report_name)",
+          "",
+        ].join("\n"),
+      );
+      expect(await buildResidualRiskInventory(root)).not.toContain(
+        '"scope":"cross-file-multi-hop-wrapper"',
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -454,7 +454,7 @@ export function handler() {
     ).toBeFalse();
   });
 
-  test("preserves an exact request-to-relay-to-shell chain across three files", async () => {
+  test("preserves an exact request-to-relay-to-shell chain across four files", async () => {
     const records = parseRecords(
       await buildResidualRiskInventory(
         join(benchmarkFixtures, "javascript-multi-hop-command-injection"),
@@ -487,12 +487,30 @@ export function handler() {
           kind: "relative-module-import",
           path: "src/server.js",
           line: 1,
-          symbol: "dispatchHostCheck as dispatchHostCheck",
+          symbol: "routeHostCheck as routeHostCheck",
         },
         {
           kind: "wrapper-call-argument",
           path: "src/server.js",
           line: 5,
+          symbol: "routeHostCheck[0]",
+        },
+        {
+          kind: "wrapper-parameter",
+          path: "src/gateway.js",
+          line: 3,
+          symbol: "host",
+        },
+        {
+          kind: "relative-module-import",
+          path: "src/gateway.js",
+          line: 1,
+          symbol: "dispatchHostCheck as dispatchHostCheck",
+        },
+        {
+          kind: "wrapper-call-argument",
+          path: "src/gateway.js",
+          line: 4,
           symbol: "dispatchHostCheck[0]",
         },
         {
@@ -522,9 +540,7 @@ export function handler() {
       ],
       candidateControls: [],
     });
-    expect(decode(record!, true)).toContain(
-      "dispatchHostCheck(host, response)",
-    );
+    expect(decode(record!, true)).toContain("routeHostCheck(host, response)");
     expect(decode(record!)).toContain("exec(`ping");
   });
 

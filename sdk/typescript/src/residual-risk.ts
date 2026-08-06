@@ -34,6 +34,7 @@ const MAX_SIGNALS = 96;
 const MAX_SIGNALS_PER_FILE = MAX_SIGNALS;
 const MAX_FRAMEWORK_CROSS_FILE_RECORDS = 64;
 const MAX_FRAMEWORK_MULTI_HOP_RECORDS = 64;
+const MAX_RELATIVE_IMPORT_RELAY_LAYERS = 2;
 const MAX_TYPED_SERVICE_RELAY_LAYERS = 2;
 const MAX_WRAPPER_FUNCTION_LINES = 160;
 const MAX_WRAPPER_CALL_DISTANCE = 12;
@@ -1705,8 +1706,13 @@ interface FrameworkRelaySummary {
   declarationLine: number;
   downstreamImport: ImportedJavascriptSymbol | ImportedPythonSymbol;
   downstreamCallLine: number;
-  downstream: FrameworkWrapperSummary;
+  downstream: FrameworkWrapperSummary | FrameworkRelaySummary;
   controls: Array<{ kind: string; line: number }>;
+}
+
+interface ImportedFrameworkRelayChain {
+  relays: readonly FrameworkRelaySummary[];
+  sink: FrameworkWrapperSummary;
 }
 
 interface DotnetFrameworkRelaySummary {
@@ -4805,6 +4811,40 @@ function frameworkDirectDotnetDataflowRecords(
   return records;
 }
 
+function importedFrameworkRelayChain(
+  summary: FrameworkRelaySummary,
+): ImportedFrameworkRelayChain | undefined {
+  const relays: FrameworkRelaySummary[] = [];
+  const paths = new Set<string>();
+  let current: FrameworkWrapperSummary | FrameworkRelaySummary = summary;
+  while ("downstream" in current) {
+    if (
+      relays.length >= MAX_RELATIVE_IMPORT_RELAY_LAYERS ||
+      paths.has(current.file.path)
+    ) {
+      return undefined;
+    }
+    relays.push(current);
+    paths.add(current.file.path);
+    current = current.downstream;
+  }
+  if (paths.has(current.file.path)) return undefined;
+  return { relays, sink: current };
+}
+
+function importedFrameworkSummaryPaths(
+  summary: FrameworkWrapperSummary | FrameworkRelaySummary,
+): ReadonlySet<string> | undefined {
+  if (!("downstream" in summary)) return new Set([summary.file.path]);
+  const chain = importedFrameworkRelayChain(summary);
+  return chain === undefined
+    ? undefined
+    : new Set([
+        ...chain.relays.map((relay) => relay.file.path),
+        chain.sink.file.path,
+      ]);
+}
+
 function frameworkMultiHopDataflowRecords(
   files: readonly SourceFileSnapshot[],
 ): ResidualRiskRecord[] {
@@ -4812,11 +4852,20 @@ function frameworkMultiHopDataflowRecords(
     files.map((file) => [modelPathComparisonKey(file.path), file.path]),
   );
   const sinkSummaries = javascriptFrameworkWrapperSummaries(files);
-  const relaySummaries = javascriptFrameworkRelaySummaries(
-    files,
-    sinkSummaries,
-    knownPaths,
-  );
+  const relaySummaries: FrameworkRelaySummary[] = [];
+  let downstreamSummaries: readonly (
+    | FrameworkWrapperSummary
+    | FrameworkRelaySummary
+  )[] = sinkSummaries;
+  for (let layer = 0; layer < MAX_RELATIVE_IMPORT_RELAY_LAYERS; layer += 1) {
+    const next = javascriptFrameworkRelaySummaries(
+      files,
+      downstreamSummaries,
+      knownPaths,
+    );
+    relaySummaries.push(...next);
+    downstreamSummaries = next;
+  }
   const summariesByFileAndSymbol = new Map<string, FrameworkRelaySummary[]>();
   for (const summary of relaySummaries) {
     const key = `${summary.file.path}\0${summary.symbol}`;
@@ -4840,6 +4889,8 @@ function frameworkMultiHopDataflowRecords(
         summariesByFileAndSymbol.get(`${importedPath}\0${imported.imported}`) ??
         [];
       for (const summary of matchingSummaries) {
+        const chain = importedFrameworkRelayChain(summary);
+        if (chain === undefined || chain.relays.length === 0) continue;
         const sources = matchingJavascriptModelLines(
           caller.lines,
           summary.model.sources,
@@ -4857,16 +4908,18 @@ function frameworkMultiHopDataflowRecords(
             summary.model.sources,
           );
           if (source === undefined) continue;
-          const sinkSummary = summary.downstream;
+          const sinkSummary = chain.sink;
           const key = [
             summary.model.id,
             caller.path,
             call.line,
-            summary.file.path,
-            summary.downstreamCallLine,
+            ...chain.relays.flatMap((relay) => [
+              relay.file.path,
+              relay.downstreamCallLine,
+              relay.parameterIndex,
+            ]),
             sinkSummary.file.path,
             sinkSummary.sink.line,
-            summary.parameterIndex,
             sinkSummary.parameterIndex,
           ].join("\0");
           if (emitted.has(key)) continue;
@@ -4886,10 +4939,12 @@ function frameworkMultiHopDataflowRecords(
             Math.max(source.line, call.line) + 2,
           );
           const candidateControls = [
-            ...summary.controls.map((control) => ({
-              ...control,
-              path: summary.file.path,
-            })),
+            ...chain.relays.flatMap((relay) =>
+              relay.controls.map((control) => ({
+                ...control,
+                path: relay.file.path,
+              })),
+            ),
             ...sinkSummary.controls.map((control) => ({
               ...control,
               path: sinkSummary.file.path,
@@ -4941,24 +4996,26 @@ function frameworkMultiHopDataflowRecords(
                   line: call.line,
                   symbol: `${imported.local}[${summary.parameterIndex}]`,
                 },
-                {
-                  kind: "wrapper-parameter",
-                  path: summary.file.path,
-                  line: summary.declarationLine,
-                  symbol: summary.parameter,
-                },
-                {
-                  kind: "relative-module-import",
-                  path: summary.file.path,
-                  line: summary.downstreamImport.line,
-                  symbol: `${summary.downstreamImport.imported} as ${summary.downstreamImport.local}`,
-                },
-                {
-                  kind: "wrapper-call-argument",
-                  path: summary.file.path,
-                  line: summary.downstreamCallLine,
-                  symbol: `${summary.downstreamImport.local}[${sinkSummary.parameterIndex}]`,
-                },
+                ...chain.relays.flatMap((relay) => [
+                  {
+                    kind: "wrapper-parameter",
+                    path: relay.file.path,
+                    line: relay.declarationLine,
+                    symbol: relay.parameter,
+                  },
+                  {
+                    kind: "relative-module-import",
+                    path: relay.file.path,
+                    line: relay.downstreamImport.line,
+                    symbol: `${relay.downstreamImport.imported} as ${relay.downstreamImport.local}`,
+                  },
+                  {
+                    kind: "wrapper-call-argument",
+                    path: relay.file.path,
+                    line: relay.downstreamCallLine,
+                    symbol: `${relay.downstreamImport.local}[${relay.downstream.parameterIndex}]`,
+                  },
+                ]),
                 {
                   kind: "wrapper-parameter",
                   path: sinkSummary.file.path,
@@ -4986,11 +5043,20 @@ function frameworkPythonMultiHopDataflowRecords(
     files.map((file) => [modelPathComparisonKey(file.path), file.path]),
   );
   const sinkSummaries = pythonFrameworkWrapperSummaries(files);
-  const relaySummaries = pythonFrameworkRelaySummaries(
-    files,
-    sinkSummaries,
-    knownPaths,
-  );
+  const relaySummaries: FrameworkRelaySummary[] = [];
+  let downstreamSummaries: readonly (
+    | FrameworkWrapperSummary
+    | FrameworkRelaySummary
+  )[] = sinkSummaries;
+  for (let layer = 0; layer < MAX_RELATIVE_IMPORT_RELAY_LAYERS; layer += 1) {
+    const next = pythonFrameworkRelaySummaries(
+      files,
+      downstreamSummaries,
+      knownPaths,
+    );
+    relaySummaries.push(...next);
+    downstreamSummaries = next;
+  }
   const summariesByFileAndSymbol = new Map<string, FrameworkRelaySummary[]>();
   for (const summary of relaySummaries) {
     const key = `${summary.file.path}\0${summary.symbol}`;
@@ -5014,6 +5080,8 @@ function frameworkPythonMultiHopDataflowRecords(
         summariesByFileAndSymbol.get(`${importedPath}\0${imported.imported}`) ??
         [];
       for (const summary of matchingSummaries) {
+        const chain = importedFrameworkRelayChain(summary);
+        if (chain === undefined || chain.relays.length === 0) continue;
         const sources = matchingPythonModelLines(
           caller.lines,
           summary.model.sources,
@@ -5031,16 +5099,18 @@ function frameworkPythonMultiHopDataflowRecords(
             summary.model.sources,
           );
           if (source === undefined) continue;
-          const sinkSummary = summary.downstream;
+          const sinkSummary = chain.sink;
           const key = [
             summary.model.id,
             caller.path,
             call.line,
-            summary.file.path,
-            summary.downstreamCallLine,
+            ...chain.relays.flatMap((relay) => [
+              relay.file.path,
+              relay.downstreamCallLine,
+              relay.parameterIndex,
+            ]),
             sinkSummary.file.path,
             sinkSummary.sink.line,
-            summary.parameterIndex,
             sinkSummary.parameterIndex,
           ].join("\0");
           if (emitted.has(key)) continue;
@@ -5060,10 +5130,12 @@ function frameworkPythonMultiHopDataflowRecords(
             Math.max(source.line, call.line) + 2,
           );
           const candidateControls = [
-            ...summary.controls.map((control) => ({
-              ...control,
-              path: summary.file.path,
-            })),
+            ...chain.relays.flatMap((relay) =>
+              relay.controls.map((control) => ({
+                ...control,
+                path: relay.file.path,
+              })),
+            ),
             ...sinkSummary.controls.map((control) => ({
               ...control,
               path: sinkSummary.file.path,
@@ -5115,24 +5187,26 @@ function frameworkPythonMultiHopDataflowRecords(
                   line: call.line,
                   symbol: `${imported.local}[${summary.parameterIndex}]`,
                 },
-                {
-                  kind: "wrapper-parameter",
-                  path: summary.file.path,
-                  line: summary.declarationLine,
-                  symbol: summary.parameter,
-                },
-                {
-                  kind: "relative-python-import",
-                  path: summary.file.path,
-                  line: summary.downstreamImport.line,
-                  symbol: `${summary.downstreamImport.imported} as ${summary.downstreamImport.local}`,
-                },
-                {
-                  kind: "wrapper-call-argument",
-                  path: summary.file.path,
-                  line: summary.downstreamCallLine,
-                  symbol: `${summary.downstreamImport.local}[${sinkSummary.parameterIndex}]`,
-                },
+                ...chain.relays.flatMap((relay) => [
+                  {
+                    kind: "wrapper-parameter",
+                    path: relay.file.path,
+                    line: relay.declarationLine,
+                    symbol: relay.parameter,
+                  },
+                  {
+                    kind: "relative-python-import",
+                    path: relay.file.path,
+                    line: relay.downstreamImport.line,
+                    symbol: `${relay.downstreamImport.imported} as ${relay.downstreamImport.local}`,
+                  },
+                  {
+                    kind: "wrapper-call-argument",
+                    path: relay.file.path,
+                    line: relay.downstreamCallLine,
+                    symbol: `${relay.downstreamImport.local}[${relay.downstream.parameterIndex}]`,
+                  },
+                ]),
                 {
                   kind: "wrapper-parameter",
                   path: sinkSummary.file.path,
@@ -5948,10 +6022,13 @@ function dotnetOwnerPaths(
 
 function javascriptFrameworkRelaySummaries(
   files: readonly SourceFileSnapshot[],
-  sinkSummaries: readonly FrameworkWrapperSummary[],
+  sinkSummaries: readonly (FrameworkWrapperSummary | FrameworkRelaySummary)[],
   knownPaths: ReadonlyMap<string, string>,
 ): FrameworkRelaySummary[] {
-  const summariesByFileAndSymbol = new Map<string, FrameworkWrapperSummary[]>();
+  const summariesByFileAndSymbol = new Map<
+    string,
+    Array<FrameworkWrapperSummary | FrameworkRelaySummary>
+  >();
   for (const summary of sinkSummaries) {
     const key = `${summary.file.path}\0${summary.symbol}`;
     const existing = summariesByFileAndSymbol.get(key) ?? [];
@@ -5982,6 +6059,10 @@ function javascriptFrameworkRelaySummaries(
             call.line > wrapper.startLine && call.line <= wrapper.endLine,
         );
         for (const downstream of downstreamSummaries) {
+          const downstreamPaths = importedFrameworkSummaryPaths(downstream);
+          if (downstreamPaths === undefined || downstreamPaths.has(file.path)) {
+            continue;
+          }
           const controls = matchingModelLines(
             file.lines,
             downstream.model.controls,
@@ -6036,10 +6117,13 @@ function javascriptFrameworkRelaySummaries(
 
 function pythonFrameworkRelaySummaries(
   files: readonly SourceFileSnapshot[],
-  sinkSummaries: readonly FrameworkWrapperSummary[],
+  sinkSummaries: readonly (FrameworkWrapperSummary | FrameworkRelaySummary)[],
   knownPaths: ReadonlyMap<string, string>,
 ): FrameworkRelaySummary[] {
-  const summariesByFileAndSymbol = new Map<string, FrameworkWrapperSummary[]>();
+  const summariesByFileAndSymbol = new Map<
+    string,
+    Array<FrameworkWrapperSummary | FrameworkRelaySummary>
+  >();
   for (const summary of sinkSummaries) {
     const key = `${summary.file.path}\0${summary.symbol}`;
     const existing = summariesByFileAndSymbol.get(key) ?? [];
@@ -6070,6 +6154,10 @@ function pythonFrameworkRelaySummaries(
             call.line > wrapper.startLine && call.line <= wrapper.endLine,
         );
         for (const downstream of downstreamSummaries) {
+          const downstreamPaths = importedFrameworkSummaryPaths(downstream);
+          if (downstreamPaths === undefined || downstreamPaths.has(file.path)) {
+            continue;
+          }
           const controls = matchingPythonModelLines(
             file.lines,
             downstream.model.controls,

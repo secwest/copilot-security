@@ -1,6 +1,6 @@
-import { dispatchHostCheck } from "./service.js";
+import { routeHostCheck } from "./gateway.js";
 
 export function checkHost(request, response) {
   const host = String(request.query.host ?? "");
-  return dispatchHostCheck(host, response);
+  return routeHostCheck(host, response);
 }

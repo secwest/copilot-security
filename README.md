@@ -194,14 +194,14 @@ action revisions are rejected. Ordinary `pull_request` rows retain code
 execution without inventing secret or write-token impact; other triggers keep
 exact permissions, structurally available secrets, review gates, deployment
 environments, and runner reachability as separate evidence.
-For Node/TypeScript relative-module wrappers, the host can
-emit bounded one-hop and two-hop cross-file chains. For Python, it can resolve
-either one direct wrapper or exactly one public module-level relay through
+For Node/TypeScript relative-module wrappers, the host can emit bounded
+one-to-three-hop cross-file chains. For Python, it can resolve one direct
+wrapper or up to two public module-level relays through
 explicit relative from-imports, bind each exact positional argument, and
 inspect bounded multiline relay and sink calls, including DB-API binding and
-outbound HTTP calls. A two-hop row contains the exact caller import and
-argument, relay parameter, relay import and argument, sink-wrapper parameter,
-and sink that references that parameter. Language strings and comments are
+outbound HTTP calls. A multi-hop row contains every exact caller/relay import
+and argument, each relay parameter, the sink-wrapper parameter, and the sink
+that references that parameter. Language strings and comments are
 masked before structural source, sink, and call matching. These rows remain
 hypotheses: the correction turn must prove runtime same-value flow through
 every recorded file and reject unused imports, fixed arguments, intervening
@@ -494,8 +494,9 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
-The Python multi-hop lane adds one public service relay and keeps the same
-strict positive, safe, reassignment, fixed-argument, and text-only controls:
+The Python multi-hop lane adds public gateway and service relays and keeps the
+same strict positive, safe, reassignment, fixed-argument, and text-only
+controls:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `

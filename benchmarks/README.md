@@ -1637,9 +1637,9 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
-The Python multi-hop lane inserts one public module-level service relay between
-the registered Flask route and sink wrapper. It also exercises bounded
-multiline relay calls:
+The Python multi-hop lane inserts public gateway and service relays between the
+registered Flask route and sink wrapper. It also exercises bounded multiline
+relay calls:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -1654,9 +1654,9 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
-The bounded multi-hop lane adds an exported service relay between the request
-caller and command or SQL sink wrapper. Its paired negatives retain the same
-three-file topology while using bounded shell-free execution or native SQL
+The bounded multi-hop lane adds exported gateway and service relays between the
+request caller and command or SQL sink wrapper. Its paired negatives retain the
+same four-file topology while using bounded shell-free execution or native SQL
 binding:
 
 ```powershell

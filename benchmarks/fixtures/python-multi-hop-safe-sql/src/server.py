@@ -1,6 +1,6 @@
 from flask import Flask, request
 
-from .service import lookup_user
+from .gateway import route_user_lookup
 
 app = Flask(__name__)
 
@@ -8,4 +8,4 @@ app = Flask(__name__)
 @app.get("/users/lookup")
 def user_lookup():
     email = request.args.get("email", "")
-    return lookup_user(email)
+    return route_user_lookup(email)

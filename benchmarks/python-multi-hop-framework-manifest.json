@@ -17,7 +17,7 @@
   "cases": [
     {
       "id": "python-multi-hop-command-injection",
-      "description": "A Flask request value crosses a public Python service relay and imported os.system wrapper.",
+      "description": "A Flask request value crosses public Python gateway and service relays and an imported os.system wrapper.",
       "fixture": "fixtures/python-multi-hop-command-injection",
       "findingsPaths": [
         "python-multi-hop-command-injection/run-1/findings.json"
@@ -43,14 +43,14 @@
     },
     {
       "id": "python-multi-hop-safe-command",
-      "description": "The same Python service relay reaches a fixed shell-free executable with bounded execution.",
+      "description": "The same Python gateway and service relays reach a fixed shell-free executable with bounded execution.",
       "fixture": "fixtures/python-multi-hop-safe-command",
       "findingsPaths": ["python-multi-hop-safe-command/run-1/findings.json"],
       "expected": []
     },
     {
       "id": "python-multi-hop-sql-injection",
-      "description": "A Flask request value crosses a public Python service relay into interpolated SQLite grammar.",
+      "description": "A Flask request value crosses public Python gateway and service relays into interpolated SQLite grammar.",
       "fixture": "fixtures/python-multi-hop-sql-injection",
       "findingsPaths": ["python-multi-hop-sql-injection/run-1/findings.json"],
       "expected": [
@@ -74,7 +74,7 @@
     },
     {
       "id": "python-multi-hop-safe-sql",
-      "description": "The same Python service relay reaches native SQLite positional parameter binding.",
+      "description": "The same Python gateway and service relays reach native SQLite positional parameter binding.",
       "fixture": "fixtures/python-multi-hop-safe-sql",
       "findingsPaths": ["python-multi-hop-safe-sql/run-1/findings.json"],
       "expected": []

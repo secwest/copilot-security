@@ -17,7 +17,7 @@
   "cases": [
     {
       "id": "javascript-multi-hop-command-injection",
-      "description": "A Node HTTP value crosses an exported service relay and an imported process wrapper before reaching a shell sink.",
+      "description": "A Node HTTP value crosses exported gateway and service relays and an imported process wrapper before reaching a shell sink.",
       "fixture": "fixtures/javascript-multi-hop-command-injection",
       "findingsPaths": [
         "javascript-multi-hop-command-injection/run-1/findings.json"
@@ -43,7 +43,7 @@
     },
     {
       "id": "javascript-multi-hop-safe-command",
-      "description": "The same service relay reaches a trusted shell-free wrapper with an allowlisted inert value and bounded execution.",
+      "description": "The same gateway and service relays reach a trusted shell-free wrapper with an allowlisted inert value and bounded execution.",
       "fixture": "fixtures/javascript-multi-hop-safe-command",
       "findingsPaths": [
         "javascript-multi-hop-safe-command/run-1/findings.json"
@@ -52,7 +52,7 @@
     },
     {
       "id": "javascript-multi-hop-sql-injection",
-      "description": "A Node HTTP value crosses an exported service relay and an imported database wrapper before reaching interpolated SQL syntax.",
+      "description": "A Node HTTP value crosses exported gateway and service relays and an imported database wrapper before reaching interpolated SQL syntax.",
       "fixture": "fixtures/javascript-multi-hop-sql-injection",
       "findingsPaths": [
         "javascript-multi-hop-sql-injection/run-1/findings.json"
@@ -78,7 +78,7 @@
     },
     {
       "id": "javascript-multi-hop-safe-sql",
-      "description": "The same database relay keeps the value outside SQL syntax through native positional binding.",
+      "description": "The same gateway and database-service relays keep the value outside SQL syntax through native positional binding.",
       "fixture": "fixtures/javascript-multi-hop-safe-sql",
       "findingsPaths": ["javascript-multi-hop-safe-sql/run-1/findings.json"],
       "expected": []

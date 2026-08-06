@@ -154,14 +154,13 @@ position. Bounded Node/TypeScript and Python cross-file layers
 additionally resolve explicit repository-relative imports
 into exported or public module-level wrappers and preserve the exact
 argument-to-parameter position. Node/TypeScript follows either one direct
-wrapper or exactly one exported relay before the sink wrapper. Axios calls are
+wrapper or up to two exported relays before the sink wrapper. Axios calls are
 accepted only through a real package binding or bounded non-reassigned
 `axios.create(...)` instance, and only the URL argument or request-config
 `url` property participates in destination flow. This avoids both literal
 receiver false negatives and generic `.get`/`.post` or body-only false
-positives. Python follows
-either one direct relative from-import or exactly one public module-level relay
-and parses bounded complete relay and sink calls so multiline forwarding,
+positives. Python follows one direct relative from-import or up to two public
+module-level relays and parses bounded complete relay and sink calls so multiline forwarding,
 parameter binding, and outbound request calls remain visible. The host masks
 language string and comment contents before structural matching while retaining
 exact JavaScript template and Python f-string expressions only for
@@ -1282,10 +1281,9 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
 
 ## Prioritized next improvements
 
-1. **Expand typed framework security models.** Extend bounded summaries beyond
-   two Node/TypeScript or Python relative-import hops; extend Java and ASP.NET
-   beyond their current three uniquely typed service boundaries only with
-   measured false-negative evidence;
+1. **Expand typed framework security models.** Extend Node/TypeScript, Python,
+   Java, and ASP.NET beyond their current three exact import or service
+   boundaries only with measured false-negative evidence;
    extend framework-specific authorization models beyond the bounded Node,
    Spring Data, and ASP.NET object-reference lanes, add ASP.NET template engines
    beyond the typed Scriban and RazorLight lanes,

@@ -3380,7 +3380,7 @@ public final class DocumentController {
       "Path.normalize is syntactic and does not resolve filesystem links",
     );
     expect(prompt).toContain(
-      "C# and Java prove either two or three ordered call/parameter hops",
+      "C# and Java likewise prove either two or three ordered call/parameter hops",
     );
     expect(prompt).toContain(
       "String.startsWith can accept a sibling directory prefix",
