@@ -41,6 +41,10 @@ const caseIds = [
   "node-mongoose-multi-hop-aggregate-merge-injection",
   "node-mongoose-multi-hop-safe-aggregate-write-scope",
 ] as const;
+const appendCaseIds = [
+  "node-mongoose-multi-hop-aggregate-append-lookup-injection",
+  "node-mongoose-multi-hop-safe-aggregate-append",
+] as const;
 const temporaryPaths: string[] = [];
 
 afterEach(async () => {
@@ -95,7 +99,10 @@ describe("Node Mongoose aggregate framework model", () => {
       ),
     ).toBeTrue();
     expect(manifest.thresholds["maxFalsePositivesPerRun"]).toBe(0);
-    expect(manifest.cases.map(({ id }) => id)).toEqual([...caseIds]);
+    expect(manifest.cases.map(({ id }) => id)).toEqual([
+      ...caseIds,
+      ...appendCaseIds,
+    ]);
     expect(manifest.cases[0]?.expected[0]).toMatchObject({
       cwe: ["CWE-943"],
       acceptableSeverities: ["high", "medium"],
@@ -109,9 +116,139 @@ describe("Node Mongoose aggregate framework model", () => {
       acceptableSeverities: ["high"],
     });
     expect(manifest.cases[3]?.expected).toEqual([]);
+    expect(manifest.cases[4]?.expected[0]).toMatchObject({
+      cwe: ["CWE-943"],
+      acceptableSeverities: ["high", "medium"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[5]?.expected).toEqual([]);
     expect(
       manifest.cases.every(({ findingsPaths }) => findingsPaths.length === 1),
     ).toBeTrue();
+  });
+
+  test("models assigned append mutation through its later execution", async () => {
+    const inventories = await Promise.all(
+      appendCaseIds.map((caseId) =>
+        buildResidualRiskInventory(join(benchmarkRoot, "fixtures", caseId)),
+      ),
+    );
+    const [unsafe, safe] = inventories.map(aggregateRecords) as [
+      FrameworkRecord[],
+      FrameworkRecord[],
+    ];
+
+    for (const records of [unsafe, safe]) {
+      expect(records).toHaveLength(1);
+      expect(
+        records[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+      ).toEqual([
+        "relative-module-import",
+        "wrapper-call-argument",
+        "wrapper-parameter",
+        "relative-module-import",
+        "wrapper-call-argument",
+        "wrapper-parameter",
+        "relative-module-import",
+        "wrapper-call-argument",
+        "wrapper-parameter",
+      ]);
+    }
+    expect(unsafe[0]?.frameworkModel).toMatchObject({
+      scope: "cross-file-multi-hop-wrapper",
+      source: { path: "src/server.js", kind: "http-request-field" },
+      sink: {
+        path: "src/storage.js",
+        line: 12,
+        kind: "mongoose-aggregate-appended-pipeline",
+        cweIds: ["CWE-943", "CWE-915"],
+      },
+      candidateControls: [],
+    });
+    expect(safe[0]?.frameworkModel?.sink).toMatchObject({
+      path: "src/storage.js",
+      line: 12,
+      kind: "mongoose-aggregate-appended-filter-stage",
+      cweIds: ["CWE-943"],
+    });
+    expect(safe[0]?.frameworkModel?.candidateControls).toContainEqual({
+      kind: "fixed-aggregate-match-value-boundary",
+      path: "src/storage.js",
+      line: 12,
+    });
+  });
+
+  test("accepts documented append forms only when later execution consumes them", async () => {
+    const repository = await temporaryRepository();
+    const prefix =
+      'import mongoose from "mongoose";\nconst User = mongoose.model("User", new mongoose.Schema({name:String}));\n';
+    const cases: Array<[string, string]> = [
+      [
+        "chained-array.mjs",
+        `${prefix}export async function handler(request) { return User.aggregate([]).append(request.body.stages).exec(); }\n`,
+      ],
+      [
+        "chained-varargs.mjs",
+        `${prefix}export async function handler(request) { return User.aggregate([]).append({ $match: { active: true } }, request.body.stage).exec(); }\n`,
+      ],
+      [
+        "assigned-array.mjs",
+        `${prefix}export async function handler(request) {\n  const aggregate = User.aggregate([]);\n  aggregate.append(request.body.stages);\n  return aggregate.exec();\n}\n`,
+      ],
+      [
+        "await-returned-append.mjs",
+        `${prefix}export async function handler(request) {\n  const aggregate = User.aggregate([]);\n  return await aggregate.append(request.body.stages);\n}\n`,
+      ],
+      [
+        "append-after-exec.mjs",
+        `${prefix}export async function handler(request) {\n  const aggregate = User.aggregate([]);\n  await aggregate.exec();\n  aggregate.append(request.body.stages);\n  return [];\n}\n`,
+      ],
+      [
+        "inspection-only.mjs",
+        `${prefix}export function handler(request) {\n  const aggregate = User.aggregate([]);\n  aggregate.append(request.body.stages);\n  return aggregate.pipeline();\n}\n`,
+      ],
+      [
+        "unrelated-append.mjs",
+        `${prefix}const collector = { append(value) { return value; } };\nexport async function handler(request) { collector.append(request.body.stages); return User.aggregate([]).exec(); }\n`,
+      ],
+      [
+        "different-receiver-exec.mjs",
+        `${prefix}const other = { exec() { return []; } };\nexport async function handler(request) {\n  const aggregate = User.aggregate([]);\n  aggregate.append(request.body.stages);\n  return other.exec();\n}\n`,
+      ],
+    ];
+    for (const [path, contents] of cases) {
+      await writeRepositoryFile(repository, path, contents);
+    }
+
+    const records = aggregateRecords(
+      await buildResidualRiskInventory(repository),
+    );
+    expect(records.map(({ path }) => path)).toEqual([
+      "assigned-array.mjs",
+      "await-returned-append.mjs",
+      "chained-array.mjs",
+      "chained-varargs.mjs",
+    ]);
+  });
+
+  test("preserves appended write-stage impact and pipeline-wide ordering", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "appended-write.mjs",
+      'import mongoose from "mongoose";\nconst User = mongoose.model("User", new mongoose.Schema({name:String}));\nexport async function handler(request) { return User.aggregate([{ $match: { active: true } }]).append(request.body.stage, { $merge: "audit" }).exec(); }\n',
+    );
+
+    const records = aggregateRecords(
+      await buildResidualRiskInventory(repository),
+    );
+    expect(records).toHaveLength(1);
+    expect(records[0]?.frameworkModel?.sink).toMatchObject({
+      kind: "mongoose-aggregate-appended-input-before-write-stage",
+      cweIds: ["CWE-943", "CWE-915"],
+    });
   });
 
   test("preserves three boundaries and exact match counterevidence", async () => {
@@ -185,15 +322,24 @@ describe("Node Mongoose aggregate framework model", () => {
     );
 
     expect(records.map(({ path }) => path)).toEqual(
-      [caseIds[0], caseIds[2], caseIds[1], caseIds[3]].map((caseId) =>
+      [
+        appendCaseIds[0],
+        caseIds[0],
+        caseIds[2],
+        appendCaseIds[1],
+        caseIds[1],
+        caseIds[3],
+      ].map((caseId) =>
         ["benchmarks", "fixtures", caseId, "src", "storage.js"].join("/"),
       ),
     );
     expect(
       records.map(({ frameworkModel }) => frameworkModel?.sink.kind),
     ).toEqual([
+      "mongoose-aggregate-appended-pipeline",
       "mongoose-aggregate-pipeline",
       "mongoose-aggregate-input-before-write-stage",
+      "mongoose-aggregate-appended-filter-stage",
       "mongoose-aggregate-filter-stage",
       "mongoose-aggregate-filter-before-write-stage",
     ]);
@@ -398,5 +544,9 @@ describe("Node Mongoose aggregate framework model", () => {
     expect(prompt).toContain("fixed $match");
     expect(prompt).toContain("CWE-943");
     expect(prompt).toContain("CWE-915");
+    expect(prompt).toContain("Aggregate.append");
+    expect(prompt).toContain("multiple stage objects");
+    expect(prompt).toContain("single stage array");
+    expect(prompt).toContain("later execution");
   });
 });

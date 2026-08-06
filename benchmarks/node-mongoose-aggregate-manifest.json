@@ -84,6 +84,41 @@
         "node-mongoose-multi-hop-safe-aggregate-write-scope/run-1/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-mongoose-multi-hop-aggregate-append-lookup-injection",
+      "description": "An Express JSON stage array crosses three relative-import boundaries into Aggregate.append(), and later exec consumes attacker-selected $lookup and projection stages that expose a secret collection.",
+      "fixture": "fixtures/node-mongoose-multi-hop-aggregate-append-lookup-injection",
+      "findingsPaths": [
+        "node-mongoose-multi-hop-aggregate-append-lookup-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mongoose-aggregate-append-lookup-injection",
+          "cwe": ["CWE-943"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 12,
+              "endLine": 12,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-mongoose-multi-hop-safe-aggregate-append",
+      "description": "The same topology appends one request value only through exact $eq beneath a fixed $match field and appends a separate fixed public projection before execution.",
+      "fixture": "fixtures/node-mongoose-multi-hop-safe-aggregate-append",
+      "findingsPaths": [
+        "node-mongoose-multi-hop-safe-aggregate-append/run-1/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

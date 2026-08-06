@@ -2567,7 +2567,7 @@ function frameworkDataflowRecords(
                 source: modeledObjectLookupSource(
                   lines,
                   sources,
-                  sink.line,
+                  position.line,
                   position.expression,
                   model.sources,
                 ),
@@ -2844,7 +2844,10 @@ function frameworkDataflowRecords(
           : nodeMongooseAggregateSinkMetadata(
               nodeMongooseAggregateResolution.position,
             );
-      const effectiveSinkLine = nodeCopilotResolution?.input.line ?? sink.line;
+      const effectiveSinkLine =
+        nodeCopilotResolution?.input.line ??
+        nodeMongooseAggregateResolution?.position.line ??
+        sink.line;
       const effectiveSinkKind =
         nodeCopilotResolution?.input.kind ??
         aggregateSinkMetadata?.kind ??
@@ -7012,17 +7015,19 @@ function javascriptFrameworkWrapperSummaries(
                       ),
                     )
                     .map(nodeMongooseBulkWriteSinkMetadata)[0];
-            const aggregateSinkMetadata =
+            const aggregateSinkPosition =
               nodeMongooseAggregate === undefined
                 ? undefined
-                : nodeMongooseAggregate.positions
-                    .filter((position) =>
-                      lineReferencesIdentifier(
-                        position.expression,
-                        wrapper.parameters[parameterIndex]!,
-                      ),
-                    )
-                    .map(nodeMongooseAggregateSinkMetadata)[0];
+                : nodeMongooseAggregate.positions.find((position) =>
+                    lineReferencesIdentifier(
+                      position.expression,
+                      wrapper.parameters[parameterIndex]!,
+                    ),
+                  );
+            const aggregateSinkMetadata =
+              aggregateSinkPosition === undefined
+                ? undefined
+                : nodeMongooseAggregateSinkMetadata(aggregateSinkPosition);
             const copilotInput = nodeCopilotSink?.inputs.find(
               ({ expression }) =>
                 lineReferencesIdentifier(
@@ -7043,7 +7048,10 @@ function javascriptFrameworkWrapperSummaries(
                   ? bulkSinkMetadata === undefined
                     ? {}
                     : { kind: bulkSinkMetadata.kind }
-                  : { kind: aggregateSinkMetadata.kind }),
+                  : {
+                      kind: aggregateSinkMetadata.kind,
+                      line: aggregateSinkPosition!.line,
+                    }),
                 ...(copilotInput === undefined
                   ? {}
                   : { kind: copilotInput.kind, line: copilotInput.line }),
@@ -8645,6 +8653,7 @@ interface NodeMongooseBulkWriteSinkMetadata {
 interface NodeMongooseAggregatePosition {
   expression: string;
   line: number;
+  origin: "append" | "initial";
   pipelineHasWriteStage: boolean;
   stage: string;
 }
@@ -8893,6 +8902,7 @@ function nodeMongooseAggregatePositions(
   lines: readonly string[],
   pipelineExpression: string,
   sinkLine: number,
+  origin: "append" | "initial" = "initial",
 ): NodeMongooseAggregatePosition[] {
   const pipeline = resolvedJavascriptExpression(
     lines,
@@ -8905,6 +8915,7 @@ function nodeMongooseAggregatePositions(
       {
         expression: pipeline.value,
         line: pipeline.line,
+        origin,
         pipelineHasWriteStage: false,
         stage: "dynamic",
       },
@@ -8920,6 +8931,7 @@ function nodeMongooseAggregatePositions(
     positions.push({
       expression: resolved.value,
       line: resolved.line,
+      origin,
       pipelineHasWriteStage: false,
       stage,
     });
@@ -8948,6 +8960,7 @@ function nodeMongooseAggregatePositions(
       all.findIndex(
         (candidate) =>
           candidate.expression === position.expression &&
+          candidate.origin === position.origin &&
           candidate.stage === position.stage,
       ) === index,
   );
@@ -8958,6 +8971,217 @@ function nodeMongooseAggregatePositions(
     ...position,
     pipelineHasWriteStage,
   }));
+}
+
+interface JavascriptParsedCall {
+  arguments: string[];
+  close: number;
+  line: number;
+  start: number;
+}
+
+function javascriptCallsInText(
+  original: string,
+  structural: string,
+  baseLine: number,
+  callee: RegExp,
+): JavascriptParsedCall[] {
+  const flags = [...new Set(`${callee.flags.replaceAll("y", "")}g`)].join("");
+  const expression = new RegExp(callee.source, flags);
+  const calls: JavascriptParsedCall[] = [];
+  for (const match of structural.matchAll(expression)) {
+    if (match.index === undefined) continue;
+    const open = structural.indexOf("(", match.index);
+    if (open < 0) continue;
+    const close = matchingCallParenthesis(structural, open);
+    if (close < 0) continue;
+    calls.push({
+      arguments: splitJavascriptArguments(original.slice(open + 1, close)),
+      close,
+      line:
+        baseLine +
+        (structural.slice(0, match.index).match(/\n/gu)?.length ?? 0),
+      start: match.index,
+    });
+  }
+  return calls;
+}
+
+function nodeMongooseAggregateAppendArgumentPositions(
+  lines: readonly string[],
+  arguments_: readonly string[],
+  appendLine: number,
+): NodeMongooseAggregatePosition[] {
+  if (arguments_.length === 0) return [];
+  if (arguments_.length > 1) {
+    return nodeMongooseAggregatePositions(
+      lines,
+      `[${arguments_.join(",")}]`,
+      appendLine,
+      "append",
+    );
+  }
+  const argument = arguments_[0]!.trim();
+  if (argument === "") return [];
+  const resolved = resolvedJavascriptExpression(lines, argument, appendLine);
+  if (
+    /^\s*\{/u.test(resolved.value) &&
+    javascriptObjectEntries(resolved).length > 0
+  ) {
+    return nodeMongooseAggregatePositions(
+      lines,
+      `[${resolved.value}]`,
+      resolved.line,
+      "append",
+    );
+  }
+  return nodeMongooseAggregatePositions(lines, argument, appendLine, "append");
+}
+
+function nodeMongooseAggregatePositionsWithWriteStage(
+  positions: readonly NodeMongooseAggregatePosition[],
+): NodeMongooseAggregatePosition[] {
+  const unique = positions.filter(
+    (position, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.expression === position.expression &&
+          candidate.origin === position.origin &&
+          candidate.stage === position.stage,
+      ) === index,
+  );
+  const pipelineHasWriteStage = unique.some(
+    ({ stage }) => stage === "$merge" || stage === "$out",
+  );
+  return unique.map((position) => ({ ...position, pipelineHasWriteStage }));
+}
+
+function nodeMongooseAggregateAppendCallIsConsumed(
+  structural: string,
+  call: JavascriptParsedCall,
+  aggregate: string | undefined,
+  asyncWrapper: boolean,
+): boolean {
+  const prefix = structural.slice(0, call.start);
+  const localPrefix = prefix.slice(
+    Math.max(prefix.lastIndexOf(";"), prefix.lastIndexOf("\n")) + 1,
+  );
+  if (/\bawait\s*$/u.test(localPrefix)) return true;
+  if (asyncWrapper && /\breturn\s*$/u.test(localPrefix)) return true;
+  const suffix = structural.slice(call.close + 1);
+  if (/^\s*\.\s*(?:exec|then|catch|finally|cursor)\s*\(/u.test(suffix)) {
+    return true;
+  }
+  if (aggregate === undefined) return false;
+  const escaped = escapeRegularExpression(aggregate);
+  if (
+    new RegExp(
+      `\\bawait\\s+${escaped}\\b|\\b${escaped}\\s*\\.\\s*(?:exec|then|catch|finally|cursor)\\s*\\(`,
+      "u",
+    ).test(suffix)
+  ) {
+    return true;
+  }
+  return (
+    asyncWrapper && new RegExp(`\\breturn\\s+${escaped}\\b`, "u").test(suffix)
+  );
+}
+
+function nodeMongooseAggregateAppendedPositions(
+  lines: readonly string[],
+  line: number,
+  call: RegExp,
+  wrapper: ExportedJavascriptFunction | undefined,
+): NodeMongooseAggregatePosition[] {
+  const windowLines = lines.slice(line - 1, Math.min(lines.length, line + 24));
+  const originalWindow =
+    javascriptCodeLinesWithoutComments(windowLines).join("\n");
+  const structuralWindow = javascriptStructuralLines(windowLines).join("\n");
+  const aggregateCall = call.exec(structuralWindow);
+  if (aggregateCall === null) return [];
+  const open = structuralWindow.indexOf("(", aggregateCall.index);
+  if (open < 0) return [];
+  const close = matchingCallParenthesis(structuralWindow, open);
+  if (close < 0) return [];
+  const prefix = structuralWindow.slice(0, aggregateCall.index);
+  const assignment = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*$/u.exec(
+    prefix,
+  );
+  const aggregate = assignment?.[1];
+  const asyncWrapper =
+    wrapper !== undefined &&
+    /\basync\b/u.test(lines[wrapper.startLine - 1] ?? "");
+  const tailStructural = structuralWindow.slice(close + 1);
+  const tailOriginal = originalWindow.slice(close + 1);
+  const statementEnd = tailStructural.indexOf(";");
+  const newlineEnd = tailStructural.indexOf("\n");
+  const statementBoundary =
+    statementEnd >= 0
+      ? statementEnd
+      : newlineEnd >= 0
+        ? newlineEnd
+        : tailStructural.length;
+  const statementStructural = tailStructural.slice(0, statementBoundary);
+  const statementOriginal = tailOriginal.slice(0, statementStructural.length);
+  const tailBaseLine =
+    line + (structuralWindow.slice(0, close + 1).match(/\n/gu)?.length ?? 0);
+  const chainCalls = javascriptCallsInText(
+    statementOriginal,
+    statementStructural,
+    tailBaseLine,
+    /\.\s*append\s*\(/u,
+  );
+  const firstExecution = /\.\s*(?:exec|then|catch|finally|cursor)\s*\(/u.exec(
+    statementStructural,
+  )?.index;
+  const positions: NodeMongooseAggregatePosition[] = [];
+  for (const append of chainCalls) {
+    if (firstExecution !== undefined && firstExecution < append.start) continue;
+    positions.push(
+      ...nodeMongooseAggregateAppendArgumentPositions(
+        lines,
+        append.arguments,
+        append.line,
+      ),
+    );
+  }
+  if (aggregate === undefined || wrapper === undefined) {
+    return positions;
+  }
+  const assignedLines = lines.slice(line, wrapper.endLine);
+  const assignedOriginal =
+    javascriptCodeLinesWithoutComments(assignedLines).join("\n");
+  const assignedStructural =
+    javascriptStructuralLines(assignedLines).join("\n");
+  const assignedCalls = javascriptCallsInText(
+    assignedOriginal,
+    assignedStructural,
+    line + 1,
+    new RegExp(
+      `\\b${escapeRegularExpression(aggregate)}\\s*\\.\\s*append\\s*\\(`,
+      "u",
+    ),
+  );
+  for (const append of assignedCalls) {
+    if (
+      !nodeMongooseAggregateAppendCallIsConsumed(
+        assignedStructural,
+        append,
+        aggregate,
+        asyncWrapper,
+      )
+    ) {
+      continue;
+    }
+    positions.push(
+      ...nodeMongooseAggregateAppendArgumentPositions(
+        lines,
+        append.arguments,
+        append.line,
+      ),
+    );
+  }
+  return positions;
 }
 
 function nodeMongooseAggregateIsConsumed(
@@ -9054,11 +9278,10 @@ function nodeMongooseAggregateSink(
     const arguments_ = javascriptCallArgumentsAtLine(lines, line, call);
     const pipelineExpression = arguments_?.[0]?.trim();
     if (!pipelineExpression) continue;
-    const positions = nodeMongooseAggregatePositions(
-      lines,
-      pipelineExpression,
-      line,
-    );
+    const positions = nodeMongooseAggregatePositionsWithWriteStage([
+      ...nodeMongooseAggregatePositions(lines, pipelineExpression, line),
+      ...nodeMongooseAggregateAppendedPositions(lines, line, call, wrapper),
+    ]);
     if (positions.length > 0) return { pipelineExpression, positions };
   }
   return undefined;
@@ -9275,23 +9498,36 @@ function nodeMongooseAggregateSinkMetadata(
 ): NodeMongooseAggregateSinkMetadata {
   if (position.stage === "$merge" || position.stage === "$out") {
     return {
-      kind: "mongoose-aggregate-write-stage",
+      kind:
+        position.origin === "append"
+          ? "mongoose-aggregate-appended-write-stage"
+          : "mongoose-aggregate-write-stage",
       cweIds: ["CWE-943", "CWE-915"],
     };
   }
   if (position.stage === "dynamic") {
     return {
-      kind: position.pipelineHasWriteStage
-        ? "mongoose-aggregate-input-before-write-stage"
-        : "mongoose-aggregate-pipeline",
+      kind:
+        position.origin === "append"
+          ? position.pipelineHasWriteStage
+            ? "mongoose-aggregate-appended-input-before-write-stage"
+            : "mongoose-aggregate-appended-pipeline"
+          : position.pipelineHasWriteStage
+            ? "mongoose-aggregate-input-before-write-stage"
+            : "mongoose-aggregate-pipeline",
       cweIds: ["CWE-943", "CWE-915"],
     };
   }
   if (position.stage === "$match" || position.stage === "$redact") {
     return {
-      kind: position.pipelineHasWriteStage
-        ? "mongoose-aggregate-filter-before-write-stage"
-        : "mongoose-aggregate-filter-stage",
+      kind:
+        position.origin === "append"
+          ? position.pipelineHasWriteStage
+            ? "mongoose-aggregate-appended-filter-before-write-stage"
+            : "mongoose-aggregate-appended-filter-stage"
+          : position.pipelineHasWriteStage
+            ? "mongoose-aggregate-filter-before-write-stage"
+            : "mongoose-aggregate-filter-stage",
       cweIds: ["CWE-943"],
     };
   }
@@ -9301,11 +9537,20 @@ function nodeMongooseAggregateSinkMetadata(
     position.stage === "$unionWith"
   ) {
     return {
-      kind: "mongoose-aggregate-cross-collection-stage",
+      kind:
+        position.origin === "append"
+          ? "mongoose-aggregate-appended-cross-collection-stage"
+          : "mongoose-aggregate-cross-collection-stage",
       cweIds: ["CWE-943"],
     };
   }
-  return { kind: "mongoose-aggregate-stage", cweIds: ["CWE-943"] };
+  return {
+    kind:
+      position.origin === "append"
+        ? "mongoose-aggregate-appended-stage"
+        : "mongoose-aggregate-stage",
+    cweIds: ["CWE-943"],
+  };
 }
 
 function fixedMongooseUpdateFieldCoversParameter(
@@ -9512,7 +9757,7 @@ function nodeMongooseAggregateControls(
     ) {
       controls.push({
         kind: "fixed-aggregate-match-value-boundary",
-        line: sinkLine,
+        line: position.origin === "append" ? position.line : sinkLine,
       });
     }
   }

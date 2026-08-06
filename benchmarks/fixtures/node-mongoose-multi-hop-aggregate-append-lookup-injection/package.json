@@ -1,0 +1,13 @@
+{
+  "name": "node-mongoose-multi-hop-aggregate-append-lookup-injection",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "express": "5.1.0",
+    "mongoose": "9.0.0"
+  }
+}
