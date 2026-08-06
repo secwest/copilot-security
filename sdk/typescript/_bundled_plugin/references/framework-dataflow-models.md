@@ -305,6 +305,15 @@ interpreter that consumes the value.
   absolute. `Path.normalize` is syntactic and does not resolve filesystem
   links. A bare `String.startsWith` check can admit a sibling directory prefix;
   component-aware `Path.startsWith` avoids that specific confusion.
+- `File.getName` and `Path.getFileName` are lexical reductions, not universal
+  traversal barriers. Exact `new File("..").getName()` and
+  `Path.of("..").getFileName()` preserve the parent component. A bare
+  `getFileName` or `getNameCount` occurrence is not counterevidence. For a
+  specialized row, preserve exact `java.io.File` or `java.nio.file.Path`/
+  `Paths` identity and the same reduced value at the sink. Only fixed
+  server-owned selection, a strict server-owned name allowlist, or a dominating
+  fail-closed rejection of that exact reduced parent value is a strong lead;
+  another reduction, logging, substring matching, or a post-sink check is not.
 - Strong counterevidence is an exact server-owned file map or a dominating
   boundary that rejects absolute input, normalizes under the intended root,
   checks component-aware lexical containment, resolves the existing root and

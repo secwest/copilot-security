@@ -1290,6 +1290,14 @@ trusted root's parent. The negative control rejects that exact reduced component
 before the sink. Its witnesses prove the parent escape, rejection of both `..`
 and `nested/..`, and continued access to an allowed basename.
 
+A third pair applies the same adversarial boundary to exact
+`java.nio.file.Path.of`/`Paths.get` construction followed by
+`Path.getFileName()`. The last lexical name element remains `..`; a bare
+`getFileName` or `getNameCount` call is therefore not accepted as a control.
+The matched control compares the same reduced `Path` with exact `Path.of("..")`
+before the sink. Its witnesses prove runtime parent escape, exact and nested
+parent rejection, and continued access to an allowed name.
+
 ```powershell
 javac -d C:\security-benchmarks\java-path-vulnerable `
   benchmarks\witnesses\java-multi-hop-path-traversal\VulnerablePathWitness.java
@@ -1306,9 +1314,17 @@ java -cp C:\security-benchmarks\java-file-name-vulnerable VulnerableFileGetNameW
 javac -d C:\security-benchmarks\java-file-name-safe `
   benchmarks\witnesses\java-file-getname-safe-path\SafeFileGetNameWitness.java
 java -cp C:\security-benchmarks\java-file-name-safe SafeFileGetNameWitness
+
+javac -d C:\security-benchmarks\java-path-file-name-vulnerable `
+  benchmarks\witnesses\java-path-getfilename-path-traversal\VulnerablePathGetFileNameWitness.java
+java -cp C:\security-benchmarks\java-path-file-name-vulnerable VulnerablePathGetFileNameWitness
+
+javac -d C:\security-benchmarks\java-path-file-name-safe `
+  benchmarks\witnesses\java-path-getfilename-safe-path\SafePathGetFileNameWitness.java
+java -cp C:\security-benchmarks\java-path-file-name-safe SafePathGetFileNameWitness
 ```
 
-Run all four strict cases with:
+Run all six strict cases with:
 
 ```powershell
 $env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'

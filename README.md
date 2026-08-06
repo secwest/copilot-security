@@ -1514,7 +1514,10 @@ control rejects absolute input, proves component-aware lexical containment,
 resolves both the existing root and target through `toRealPath`, and rejects a
 real target outside the real root. Pure-JDK witnesses cover parent traversal,
 absolute reset, sibling-prefix confusion, symlink escape, and an allowed
-in-root document:
+in-root document. Two additional matched pairs prove that neither exact
+`java.io.File.getName()` nor exact `java.nio.file.Path.getFileName()` rejects
+the parent name `..`; each control rejects the exact reduced parent before the
+same sink while preserving an allowed name:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `

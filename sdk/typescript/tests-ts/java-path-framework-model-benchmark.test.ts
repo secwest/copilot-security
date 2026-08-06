@@ -46,6 +46,8 @@ const caseIds = [
   "java-multi-hop-safe-path",
   "java-file-getname-path-traversal",
   "java-file-getname-safe-path",
+  "java-path-getfilename-path-traversal",
+  "java-path-getfilename-safe-path",
 ] as const;
 const temporaryPaths: string[] = [];
 
@@ -73,6 +75,13 @@ function javaPathRecords(inventory: string): FrameworkRecord[] {
 function javaFileGetNameRecords(inventory: string): FrameworkRecord[] {
   return parseRecords(inventory).filter(
     (record) => record.frameworkModel?.id === "java-file-getname-path-boundary",
+  );
+}
+
+function javaPathGetFileNameRecords(inventory: string): FrameworkRecord[] {
+  return parseRecords(inventory).filter(
+    (record) =>
+      record.frameworkModel?.id === "java-path-getfilename-path-boundary",
   );
 }
 
@@ -127,6 +136,14 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
       requireCodeEvidence: true,
     });
     expect(manifest.cases[3]?.expected).toEqual([]);
+    expect(manifest.cases[4]?.expected[0]).toMatchObject({
+      cwe: ["CWE-22"],
+      acceptableSeverities: ["high", "medium"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[5]?.expected).toEqual([]);
     expect(
       manifest.cases.every((entry) => entry.findingsPaths.length === 1),
     ).toBeTrue();
@@ -177,6 +194,34 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
     expect(getNameSafeWitness).toContain(
       'expectRejected(documents, "nested/..")',
     );
+    const pathGetFileNameVulnerableWitness = await readFile(
+      join(
+        benchmarkRoot,
+        "witnesses",
+        caseIds[4],
+        "VulnerablePathGetFileNameWitness.java",
+      ),
+      "utf8",
+    );
+    expect(pathGetFileNameVulnerableWitness).toContain(
+      'Path.of("..").getFileName()',
+    );
+    expect(pathGetFileNameVulnerableWitness).toContain('read(documents, "..")');
+    const pathGetFileNameSafeWitness = await readFile(
+      join(
+        benchmarkRoot,
+        "witnesses",
+        caseIds[5],
+        "SafePathGetFileNameWitness.java",
+      ),
+      "utf8",
+    );
+    expect(pathGetFileNameSafeWitness).toContain(
+      'expectRejected(documents, "..")',
+    );
+    expect(pathGetFileNameSafeWitness).toContain(
+      'expectRejected(documents, "nested/..")',
+    );
   });
 
   test("preserves both typed Java service boundaries into java.nio.file.Files", async () => {
@@ -195,6 +240,12 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
     );
     const getNameSafeInventory = await buildResidualRiskInventory(
       join(benchmarkRoot, "fixtures", caseIds[3]),
+    );
+    const pathGetFileNameVulnerableInventory = await buildResidualRiskInventory(
+      join(benchmarkRoot, "fixtures", caseIds[4]),
+    );
+    const pathGetFileNameSafeInventory = await buildResidualRiskInventory(
+      join(benchmarkRoot, "fixtures", caseIds[5]),
     );
 
     expect(vulnerable).toHaveLength(1);
@@ -306,6 +357,38 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
     ).toEqual(
       expect.arrayContaining([
         "incomplete-java-io-file-getname-reduction",
+        "parent-path-component-rejection",
+      ]),
+    );
+
+    expect(javaPathRecords(pathGetFileNameVulnerableInventory)).toHaveLength(1);
+    const pathGetFileNameVulnerable = javaPathGetFileNameRecords(
+      pathGetFileNameVulnerableInventory,
+    );
+    expect(pathGetFileNameVulnerable).toHaveLength(1);
+    expect(pathGetFileNameVulnerable[0]?.path).toBe(
+      "src/main/java/example/DocumentStore.java",
+    );
+    expect(pathGetFileNameVulnerable[0]?.frameworkModel?.sink.line).toBe(18);
+    expect(
+      pathGetFileNameVulnerable[0]?.frameworkModel?.candidateControls.map(
+        ({ kind }) => kind,
+      ),
+    ).toEqual(["incomplete-java-nio-path-getfilename-reduction"]);
+
+    expect(javaPathRecords(pathGetFileNameSafeInventory)).toHaveLength(1);
+    const pathGetFileNameSafe = javaPathGetFileNameRecords(
+      pathGetFileNameSafeInventory,
+    );
+    expect(pathGetFileNameSafe).toHaveLength(1);
+    expect(pathGetFileNameSafe[0]?.frameworkModel?.sink.line).toBe(21);
+    expect(
+      pathGetFileNameSafe[0]?.frameworkModel?.candidateControls.map(
+        ({ kind }) => kind,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "incomplete-java-nio-path-getfilename-reduction",
         "parent-path-component-rejection",
       ]),
     );
@@ -444,6 +527,314 @@ public final class FullyQualifiedController {
     ).toBeTrue();
   });
 
+  test("derives exact java.nio.file.Path.getFileName boundary evidence from a proven path", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "src/ImportedPathController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class ImportedPathController {
+  public String read(@RequestParam String path) throws Exception {
+    Path requested = Path.of(path);
+    Path copy = requested;
+    Path basename = copy.getFileName();
+    Path candidate = Path.of("documents").resolve(basename).resolve("content.txt");
+    return Files.readString(candidate);
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/ImportedPathsController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+public final class ImportedPathsController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Paths.get(path).getFileName();
+    return Files.readString(Path.of("documents").resolve(basename).resolve("content.txt"));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/FullyQualifiedPathController.java",
+      `
+public final class FullyQualifiedPathController {
+  public String read(@RequestParam String path) throws Exception {
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(java.nio.file.Path.of(path).getFileName()).resolve("content.txt"));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/PathParameterController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class PathParameterController {
+  public String read(@RequestParam Path path) throws Exception {
+    Path basename = path.getFileName();
+    return Files.readString(Path.of("documents").resolve(basename).resolve("content.txt"));
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(4);
+    const specialized = javaPathGetFileNameRecords(inventory);
+    expect(specialized).toHaveLength(4);
+    expect(
+      specialized.map((record) => record.frameworkModel?.candidateControls),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "incomplete-java-nio-path-getfilename-reduction",
+          }),
+        ]),
+      ]),
+    );
+    expect(
+      specialized.every((record) =>
+        record.frameworkModel?.candidateControls.every(
+          (control) =>
+            control.kind !== "single-path-component-validation" &&
+            control.kind !== "parent-path-component-rejection",
+        ),
+      ),
+    ).toBeTrue();
+  });
+
+  test("retains only exact pre-sink Path parent rejection", async () => {
+    const repository = await temporaryRepository();
+    const controller = (guard: string): string => `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class DocumentController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Path.of(path).getFileName();
+    Path candidate = Path.of("documents").resolve(basename).resolve("content.txt");
+${guard}
+    return Files.readString(candidate);
+  }
+}
+`;
+    await writeRepositoryFile(
+      repository,
+      "safe/DocumentController.java",
+      controller(
+        `    if (Path.of("..").equals(basename)) { throw new SecurityException("parent"); }`,
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "reverse/DocumentController.java",
+      controller(
+        `    if (basename.equals(Path.of(".."))) { return "rejected"; }`,
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "weak/DocumentController.java",
+      controller(
+        `    if (basename.toString().contains("..")) { System.out.println("parent"); }`,
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "other/DocumentController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class DocumentController {
+  public String read(@RequestParam String path) throws Exception {
+    Path checked = Path.of(path).getFileName();
+    Path basename = Path.of(path).getFileName();
+    if (Path.of("..").equals(checked)) { throw new SecurityException("parent"); }
+    return Files.readString(Path.of("documents").resolve(basename).resolve("content.txt"));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "late/DocumentController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class DocumentController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Path.of(path).getFileName();
+    String result = Files.readString(Path.of("documents").resolve(basename).resolve("content.txt"));
+    if (Path.of("..").equals(basename)) { throw new SecurityException("parent"); }
+    return result;
+  }
+}
+`,
+    );
+
+    const specialized = javaPathGetFileNameRecords(
+      await buildResidualRiskInventory(repository),
+    );
+    expect(specialized).toHaveLength(5);
+    const controls = new Map(
+      specialized.map((record) => [
+        record.path,
+        record.frameworkModel?.candidateControls.map(({ kind }) => kind),
+      ]),
+    );
+    for (const path of [
+      "safe/DocumentController.java",
+      "reverse/DocumentController.java",
+    ]) {
+      expect(controls.get(path)).toContain("parent-path-component-rejection");
+    }
+    for (const path of [
+      "weak/DocumentController.java",
+      "other/DocumentController.java",
+      "late/DocumentController.java",
+    ]) {
+      expect(controls.get(path)).not.toContain(
+        "parent-path-component-rejection",
+      );
+    }
+  });
+
+  test("rejects Path lookalikes, unrelated reductions, fixed values, tests, and reassignment", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "src/ShadowPathController.java",
+      `
+import java.nio.file.Files;
+final class Path {
+  static Path of(String value) { return new Path(); }
+  Path getFileName() { return this; }
+  Path resolve(Path value) { return this; }
+}
+public final class ShadowPathController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Path.of(path).getFileName();
+    return Files.readString(java.nio.file.Path.of("documents").resolve(basename.toString()));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/ShadowPathsController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+final class Paths { static Path get(String value) { return Path.of("fixed"); } }
+public final class ShadowPathsController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Paths.get(path).getFileName();
+    return Files.readString(Path.of("documents").resolve(basename));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/UnrelatedController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class UnrelatedController {
+  public String read(@RequestParam String path) throws Exception {
+    Object basename = metadata.getFileName();
+    return Files.readString(Path.of(path));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/FixedReductionController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class FixedReductionController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Path.of("guide").getFileName();
+    return Files.readString(Path.of(path).resolve(basename));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/ClearedController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class ClearedController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Path.of(path).getFileName();
+    basename = Path.of("guide");
+    return Files.readString(Path.of("documents").resolve(basename));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/test/FixtureTest.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class FixtureTest {
+  public String read(@RequestParam String path) throws Exception {
+    return Files.readString(Path.of("documents").resolve(Path.of(path).getFileName()));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "cross/MixedController.java",
+      `
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+@RestController
+public final class MixedController {
+  private final MixedStore store;
+  public MixedController(MixedStore store) { this.store = store; }
+  public String read(@RequestParam String path) throws Exception {
+    return store.read(path, "guide");
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "cross/MixedStore.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class MixedStore {
+  public String read(String path, String trusted) throws Exception {
+    Path basename = Path.of(trusted).getFileName();
+    return Files.readString(Path.of(path).resolve(basename));
+  }
+}
+`,
+    );
+
+    expect(
+      javaPathGetFileNameRecords(await buildResidualRiskInventory(repository)),
+    ).toEqual([]);
+  });
+
   test("preserves exact parent rejection and rejects weak or post-sink checks", async () => {
     const repository = await temporaryRepository();
     const controller = (guard: string): string => `
@@ -499,11 +890,28 @@ public final class DocumentController {
 }
 `,
     );
+    await writeRepositoryFile(
+      repository,
+      "parallel/DocumentController.java",
+      `
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class DocumentController {
+  public String read(@RequestParam String path) throws Exception {
+    String checked = new File(path).getName();
+    String basename = new File(path).getName();
+    if ("..".equals(checked)) { throw new SecurityException("parent"); }
+    return Files.readString(Path.of("documents").resolve(basename));
+  }
+}
+`,
+    );
 
     const specialized = javaFileGetNameRecords(
       await buildResidualRiskInventory(repository),
     );
-    expect(specialized).toHaveLength(4);
+    expect(specialized).toHaveLength(5);
     const controlKinds = new Map(
       specialized.map((record) => [
         record.path,
@@ -517,6 +925,7 @@ public final class DocumentController {
       "weak/DocumentController.java",
       "other/DocumentController.java",
       "late/DocumentController.java",
+      "parallel/DocumentController.java",
     ]) {
       expect(controlKinds.get(path)).not.toContain(
         "parent-path-component-rejection",
@@ -792,8 +1201,12 @@ public final class DocumentController {
       'new File("..").getName() returns the exact parent component ".."',
     );
     expect(prompt).toContain(
-      "Path.getFileName has the same parent-component caveat",
+      'Path.of("..").getFileName() preserves the exact parent component',
     );
+    expect(prompt).toContain(
+      "getFileName and getNameCount are not standalone traversal controls",
+    );
+    expect(prompt).toContain("A check on another reduction");
     expect(prompt).toContain("a check after the operation is insufficient");
   });
 });

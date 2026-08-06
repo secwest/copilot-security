@@ -921,6 +921,22 @@ post-sink rejection fails closed. Even the exact rejection remains reviewer evid
 junctions, mounts, attacker-writable directories, races, platform semantics,
 tenant boundaries, and object authorization are separate questions.
 
+The third pair closes the analogous `java.nio.file.Path.getFileName()` gap.
+Oracle [defines `getFileName`](<https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/file/Path.html#getFileName()>)
+as returning the farthest lexical name element;
+the executable witness confirms that `Path.of("..").getFileName()` remains
+exact `..` and escapes when resolved beneath a trusted root. The host requires
+exact imported or fully qualified `Path.of`/`Paths.get` identity, exact request
+reachability into that factory or a typed `Path` parameter, exact receiver or
+direct reduction, and exact result reachability to the existing typed sink. It
+removes the previous generic `getFileName`/`getNameCount` candidate control and
+records only exact pre-sink equality with `Path.of("..")` or `Paths.get("..")`
+as a parent-rejection lead. Local `Path`/`Paths` lookalikes, another object's
+method, fixed factory input, cleared results, unrelated parallel reductions,
+tests, logging, substring checks, and post-sink checks fail closed. Provider,
+zero-element/null, volume, separator, link, mount, writable-directory, race,
+tenant, object, and concrete-effect proof remains independent.
+
 `benchmarks/java-multi-hop-ssrf-manifest.json` adds a strict three-file Spring
 outbound-request lane. The positive carries an annotated request value through
 a controller, service, and transport, constructs a JDK `HttpRequest` from the

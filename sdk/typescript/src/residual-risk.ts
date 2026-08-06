@@ -1219,10 +1219,6 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         expression: /\.startsWith\s*\(/iu,
       },
       {
-        kind: "single-path-component-validation",
-        expression: /\.getFileName\s*\(\)|\.getNameCount\s*\(\)/iu,
-      },
-      {
         kind: "link-or-race-resistant-filesystem-access",
         expression:
           /\b(?:LinkOption\.NOFOLLOW_LINKS|SecureDirectoryStream|NOFOLLOW_LINKS)\b/iu,
@@ -1834,6 +1830,7 @@ export async function buildResidualRiskInventory(
     ...nodeIpv6TransitionIncompleteGuardRecords(sourceFiles, records),
   );
   records.push(...javaFileGetNamePathBoundaryRecords(sourceFiles, records));
+  records.push(...javaPathGetFileNamePathBoundaryRecords(sourceFiles, records));
 
   return selectResidualRiskRecords(records, MAX_SIGNALS)
     .map(({ priority: _priority, excerpt, sourceExcerpt, ...record }) =>
@@ -2558,7 +2555,14 @@ function javaFileGetNamePathBoundary(
   );
   if (reachingBasenames.length === 0) return undefined;
   const reductionLine = Math.min(...reachingBasenames.map(([, line]) => line));
-  const basenameIdentifiers = new Set(basenameOrigins.keys());
+  const reachingOrigins = new Set(
+    reachingBasenames.map(([, origin]) => origin),
+  );
+  const basenameIdentifiers = new Set(
+    [...basenameOrigins]
+      .filter(([, origin]) => reachingOrigins.has(origin))
+      .map(([identifier]) => identifier),
+  );
   for (
     let index = reductionLine;
     index < Math.min(sinkLine - 1, method.endLine);
@@ -2575,6 +2579,290 @@ function javaFileGetNamePathBoundary(
       ).test(structural);
       const rawCheck = new RegExp(
         String.raw`(?:\b${escaped}\s*\.\s*equals\s*\(\s*"\.\."\s*\)|"\.\."\s*\.\s*equals\s*\(\s*${escaped}\s*\))`,
+        "u",
+      ).test(raw);
+      return structuralCheck && rawCheck;
+    });
+    if (!checked) continue;
+    const failClosed = structuralLines
+      .slice(index, Math.min(index + 4, sinkLine - 1))
+      .join("\n");
+    if (/\b(?:return|throw)\b/u.test(failClosed)) {
+      return { reductionLine, parentRejectionLine: index + 1 };
+    }
+  }
+  return { reductionLine };
+}
+
+function javaPathGetFileNamePathBoundaryRecords(
+  files: readonly SourceFileSnapshot[],
+  records: readonly ResidualRiskRecord[],
+): ResidualRiskRecord[] {
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const emitted = new Set<string>();
+  const specialized: ResidualRiskRecord[] = [];
+  for (const record of records) {
+    const framework = record.frameworkModel;
+    if (framework?.id !== "spring-http-path") continue;
+    const sinkFile = filesByPath.get(framework.sink.path);
+    if (
+      sinkFile?.extension !== ".java" ||
+      javaTestOrExamplePath(sinkFile.path)
+    ) {
+      continue;
+    }
+    const boundary = javaPathGetFileNamePathBoundary(
+      sinkFile.lines,
+      framework.sink.line,
+      new Set(
+        framework.propagators
+          .filter(
+            (propagator) =>
+              propagator.kind === "wrapper-parameter" &&
+              propagator.path === sinkFile.path,
+          )
+          .flatMap((propagator) =>
+            propagator.symbol === undefined ? [] : [propagator.symbol],
+          ),
+      ),
+    );
+    if (boundary === undefined) continue;
+    const key = `${framework.source.path}\0${framework.source.line}\0${framework.sink.path}\0${framework.sink.line}`;
+    if (emitted.has(key)) continue;
+    emitted.add(key);
+    specialized.push({
+      ...record,
+      categories: [
+        "framework-dataflow:java-path-getfilename-path-boundary",
+        `modeled-source:${framework.source.kind}`,
+        `modeled-sink:${framework.sink.kind}`,
+        "broken-control:java-nio-path-basename-reduction",
+        ...(boundary.parentRejectionLine === undefined
+          ? []
+          : ["candidate-control:parent-path-component-rejection"]),
+      ],
+      priority: Math.max(record.priority, 122),
+      frameworkModel: {
+        ...framework,
+        id: "java-path-getfilename-path-boundary",
+        candidateControls: [
+          ...framework.candidateControls.filter(
+            (control) => control.kind !== "single-path-component-validation",
+          ),
+          {
+            kind: "incomplete-java-nio-path-getfilename-reduction",
+            path: sinkFile.path,
+            line: boundary.reductionLine,
+          },
+          ...(boundary.parentRejectionLine === undefined
+            ? []
+            : [
+                {
+                  kind: "parent-path-component-rejection",
+                  path: sinkFile.path,
+                  line: boundary.parentRejectionLine,
+                },
+              ]),
+        ].filter(
+          (control, index, all) =>
+            all.findIndex(
+              (candidate) =>
+                candidate.kind === control.kind &&
+                candidate.path === control.path &&
+                candidate.line === control.line,
+            ) === index,
+        ),
+      },
+    });
+  }
+  return specialized;
+}
+
+function javaPathGetFileNamePathBoundary(
+  lines: readonly string[],
+  sinkLine: number,
+  provenSinkParameters: ReadonlySet<string>,
+): { reductionLine: number; parentRejectionLine?: number } | undefined {
+  const method = exportedJavaMethods(lines).find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  if (method === undefined) return undefined;
+  const structuralLines = cFamilyStructuralLines(lines);
+  const structuralText = structuralLines.join("\n");
+  const pathImported = /^\s*import\s+java\.nio\.file\.(?:Path|\*)\s*;/mu.test(
+    structuralText,
+  );
+  const pathsImported = /^\s*import\s+java\.nio\.file\.(?:Paths|\*)\s*;/mu.test(
+    structuralText,
+  );
+  const pathShadowed = /\b(?:class|enum|interface|record)\s+Path\b/u.test(
+    structuralText,
+  );
+  const pathsShadowed = /\b(?:class|enum|interface|record)\s+Paths\b/u.test(
+    structuralText,
+  );
+  const pathType =
+    pathImported && !pathShadowed
+      ? String.raw`(?:(?:java\s*\.\s*nio\s*\.\s*file\s*\.\s*)?Path)`
+      : String.raw`(?:java\s*\.\s*nio\s*\.\s*file\s*\.\s*Path)`;
+  const factoryTypes = [
+    String.raw`java\s*\.\s*nio\s*\.\s*file\s*\.\s*Path\s*\.\s*of`,
+    String.raw`java\s*\.\s*nio\s*\.\s*file\s*\.\s*Paths\s*\.\s*get`,
+    ...(pathImported && !pathShadowed ? [String.raw`Path\s*\.\s*of`] : []),
+    ...(pathsImported && !pathsShadowed ? [String.raw`Paths\s*\.\s*get`] : []),
+  ];
+  const factoryStart = new RegExp(
+    String.raw`\b(?:${factoryTypes.join("|")})\s*\(`,
+    "gu",
+  );
+  const sinkExpression = javaCallExpression(lines, sinkLine, method.endLine);
+  const bodyLines = structuralLines.slice(method.startLine - 1, sinkLine - 1);
+  const body = bodyLines.join("\n");
+  const eligibleParameters =
+    provenSinkParameters.size === 0
+      ? method.parameters
+      : method.parameters.filter((parameter) =>
+          provenSinkParameters.has(parameter.name),
+        );
+  if (eligibleParameters.length === 0) return undefined;
+  const tainted = new Set(
+    eligibleParameters.map((parameter) => parameter.name),
+  );
+  const pathReceivers = new Set(
+    eligibleParameters
+      .filter((parameter) =>
+        new RegExp(
+          String.raw`\b${pathType}\s+${escapeRegularExpression(parameter.name)}\b`,
+          "u",
+        ).test(parameter.declaration),
+      )
+      .map((parameter) => parameter.name),
+  );
+  const basenameOrigins = new Map<string, number>();
+  const referencesAny = (
+    expression: string,
+    identifiers: Iterable<string>,
+  ): boolean =>
+    [...identifiers].some((identifier) =>
+      cFamilyLineReferencesIdentifier(expression, identifier),
+    );
+  const exactAliasOf = (
+    expression: string,
+    identifiers: Iterable<string>,
+  ): boolean =>
+    [...identifiers].some((identifier) =>
+      new RegExp(
+        String.raw`^\s*\(?\s*${escapeRegularExpression(identifier)}\s*\)?\s*$`,
+        "u",
+      ).test(expression),
+    );
+  const pathFactories = (
+    expression: string,
+  ): Array<{ argument: string; reduced: boolean }> => {
+    factoryStart.lastIndex = 0;
+    return [...expression.matchAll(factoryStart)].flatMap((match) => {
+      if (match.index === undefined) return [];
+      const relativeOpen = match[0].lastIndexOf("(");
+      const open = match.index + relativeOpen;
+      const close = matchingCallParenthesis(expression, open);
+      if (relativeOpen < 0 || close < 0) return [];
+      return [
+        {
+          argument: expression.slice(open + 1, close),
+          reduced: /^\s*\.\s*getFileName\s*\(\s*\)/u.test(
+            expression.slice(close + 1),
+          ),
+        },
+      ];
+    });
+  };
+  const assignment = /\b([A-Za-z_$][\w$]*)\s*=(?!=)\s*([^;]+);/gu;
+  for (const match of body.matchAll(assignment)) {
+    const target = match[1];
+    const value = match[2];
+    if (target === undefined || value === undefined) continue;
+    const line =
+      method.startLine + body.slice(0, match.index ?? 0).split("\n").length - 1;
+    const derivesFromTaint = referencesAny(value, tainted);
+    const constructions = pathFactories(value);
+    const directPathConstruction = constructions.some(({ argument }) =>
+      referencesAny(argument, tainted),
+    );
+    const directReduction = constructions.some(
+      ({ argument, reduced }) => reduced && referencesAny(argument, tainted),
+    );
+    const receiverReduction = [...pathReceivers].some((identifier) =>
+      new RegExp(
+        String.raw`\b${escapeRegularExpression(identifier)}\s*\.\s*getFileName\s*\(\s*\)`,
+        "u",
+      ).test(value),
+    );
+    const inheritedOrigin = [...basenameOrigins].find(([identifier]) =>
+      cFamilyLineReferencesIdentifier(value, identifier),
+    )?.[1];
+
+    if (derivesFromTaint) tainted.add(target);
+    else tainted.delete(target);
+
+    if (directPathConstruction || exactAliasOf(value, pathReceivers)) {
+      pathReceivers.add(target);
+    } else {
+      pathReceivers.delete(target);
+    }
+
+    if (directReduction || receiverReduction) {
+      basenameOrigins.set(target, line);
+    } else if (inheritedOrigin !== undefined) {
+      basenameOrigins.set(target, inheritedOrigin);
+    } else {
+      basenameOrigins.delete(target);
+    }
+  }
+
+  const directSinkReduction = pathFactories(sinkExpression).some(
+    ({ argument, reduced }) => reduced && referencesAny(argument, tainted),
+  );
+  const receiverSinkReduction = [...pathReceivers].some((identifier) =>
+    new RegExp(
+      String.raw`\b${escapeRegularExpression(identifier)}\s*\.\s*getFileName\s*\(\s*\)`,
+      "u",
+    ).test(sinkExpression),
+  );
+  if (directSinkReduction || receiverSinkReduction) {
+    return { reductionLine: sinkLine };
+  }
+  const reachingBasenames = [...basenameOrigins].filter(([identifier]) =>
+    cFamilyLineReferencesIdentifier(sinkExpression, identifier),
+  );
+  if (reachingBasenames.length === 0) return undefined;
+  const reductionLine = Math.min(...reachingBasenames.map(([, line]) => line));
+  const reachingOrigins = new Set(
+    reachingBasenames.map(([, origin]) => origin),
+  );
+  const basenameIdentifiers = new Set(
+    [...basenameOrigins]
+      .filter(([, origin]) => reachingOrigins.has(origin))
+      .map(([identifier]) => identifier),
+  );
+  const parentFactories = factoryTypes.join("|");
+  for (
+    let index = reductionLine;
+    index < Math.min(sinkLine - 1, method.endLine);
+    index += 1
+  ) {
+    const structural = structuralLines[index] ?? "";
+    const raw = lines[index] ?? "";
+    if (!/\bif\s*\(/u.test(structural)) continue;
+    const checked = [...basenameIdentifiers].some((identifier) => {
+      const escaped = escapeRegularExpression(identifier);
+      const structuralCheck = new RegExp(
+        String.raw`(?:\b${escaped}\s*\.\s*equals\s*\(|\.\s*equals\s*\(\s*${escaped}\s*\))`,
+        "u",
+      ).test(structural);
+      const parentPath = String.raw`(?:${parentFactories})\s*\(\s*"\.\."\s*\)`;
+      const rawCheck = new RegExp(
+        String.raw`(?:\b${escaped}\s*\.\s*equals\s*\(\s*${parentPath}\s*\)|${parentPath}\s*\.\s*equals\s*\(\s*${escaped}\s*\))`,
         "u",
       ).test(raw);
       return structuralCheck && rawCheck;
