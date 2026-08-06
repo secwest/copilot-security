@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-node-multi-hop-null-prototype-assign",
+  "private": true,
+  "type": "module"
+}

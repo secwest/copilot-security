@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains seventy-nine vulnerable/control pairs:
+The versioned corpus currently contains eighty vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -97,7 +97,9 @@ RSA-SHA256-verified SAML signed-versus-consumed assertion confusion with
 one-time request, issuer, destination, audience, recipient, lifetime, and
 signed-object-to-session binding as the control, prototype pollution including
 an HTTP value crossing three module boundaries into two nested computed object
-keys, paired with nested `Map` storage as the prototype-safe control, disabled
+keys, paired with nested `Map` storage as the prototype-safe control,
+setter-triggering shallow `Object.assign()` from an HTTP object, paired with an
+exact null-prototype target, disabled
 TLS certificate verification,
 predictable security tokens, server-side template injection including typed Go
 `text/template` source-to-execution closure with registered-function capability
@@ -149,7 +151,7 @@ account state, paired with fixed `$match`, projection, mutation, and write
 destinations, plus later `Aggregate.append()` mutation that exposes a signing
 key through attacker-selected `$lookup` and projection stages, paired with an
 exact `$eq` match value and fixed public projection. Three runs per case
-produce 504 scans in the complete corpus.
+produce 510 scans in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -230,6 +232,20 @@ assignment earlier on the same line cannot hide a later exact sink. The
 executable witnesses demonstrate inherited `Object.prototype` authorization
 state on the vulnerable path and ordinary retained `__proto__` data with no
 prototype mutation on the control.
+
+`node-object-assign-prototype-manifest.json` isolates shallow built-in copy
+semantics under perfect gates. The positive retains the Express body source,
+all nine ordered propagators, and only the source-argument position of exact
+`Object.assign()` at `src/storage.js:4`; an own JSON `__proto__` property
+replaces the ordinary options target's prototype and supplies an inherited
+authorization flag. Its control keeps the same topology and call but uses an
+exact `Object.create(null)` target, so the key remains own data and is retained
+as `null-prototype-assignment-target` counterevidence. Deterministic regressions
+accept direct, aliased, and later source arguments while rejecting remote data
+used only as the target, shadowed or reassigned built-ins, lookalike methods,
+object spread, and code-shaped strings. The witnesses separately prove target
+prototype replacement without claiming global `Object.prototype` mutation,
+and safe null-prototype retention of both defaults and hostile key data.
 
 `node-copilot-prompt-injection-manifest.json` isolates that SDK boundary under
 perfect single-run gates. The positive must retain the HTTP source, all six

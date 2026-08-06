@@ -1,0 +1,5 @@
+{
+  "name": "benchmark-node-multi-hop-object-assign-prototype-pollution",
+  "private": true,
+  "type": "module"
+}

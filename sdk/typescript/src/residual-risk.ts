@@ -548,6 +548,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-prototype-copy",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/\bObject\s*\.\s*assign\s*\(/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "object-assign-prototype-copy",
+        expression: /\bObject\s*\.\s*assign\s*\(/u,
+        cweIds: ["CWE-1321"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2352,6 +2378,56 @@ function nodePrototypePollutionSink(
   return undefined;
 }
 
+interface NodePrototypeCopySink {
+  targetExpression: string;
+  sourceExpressions: string[];
+  controls: Array<{ kind: string; line: number }>;
+}
+
+function nodePrototypeCopySink(
+  lines: readonly string[],
+  line: number,
+): NodePrototypeCopySink | undefined {
+  const structuralLines = javascriptStructuralLines(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  if (wrapper?.parameters.includes("Object") === true) return undefined;
+  const objectBinding =
+    /\b(?:const|let|var|function|class)\s+Object\b|\bimport\s+Object\b|\bimport\s*\{[^}]*\bas\s+Object\b|\bcatch\s*\(\s*Object\b/u;
+  if (structuralLines.some((candidate) => objectBinding.test(candidate))) {
+    return undefined;
+  }
+  const throughSink = structuralLines.slice(0, line).join("\n");
+  if (
+    /\bObject\s*=\s*(?!=|>)|\bObject\s*\.\s*assign\s*(?:[+\-*/%&|^?]?=(?!=|>)|\+\+|--)|(?:\+\+|--)\s*Object\s*\.\s*assign\b/u.test(
+      throughSink,
+    )
+  ) {
+    return undefined;
+  }
+  const arguments_ = javascriptCallArgumentsAtLine(
+    lines,
+    line,
+    /\bObject\s*\.\s*assign\s*\(/u,
+  );
+  if (arguments_ === undefined || arguments_.length < 2) return undefined;
+  const targetExpression = arguments_[0]?.trim() ?? "";
+  const sourceExpressions = arguments_
+    .slice(1)
+    .map((expression) => expression.trim())
+    .filter(Boolean);
+  if (targetExpression === "" || sourceExpressions.length === 0) {
+    return undefined;
+  }
+  const controls = /^Object\s*\.\s*create\s*\(\s*null\s*\)$/u.test(
+    targetExpression,
+  )
+    ? [{ kind: "null-prototype-assignment-target", line }]
+    : [];
+  return { targetExpression, sourceExpressions, controls };
+}
+
 function frameworkDataflowRecords(
   path: string,
   lines: readonly string[],
@@ -2463,6 +2539,10 @@ function frameworkDataflowRecords(
         model.id === "node-http-prototype-pollution"
           ? nodePrototypePollutionSink(lines, sink.line)
           : undefined;
+      const nodePrototypeCopy =
+        model.id === "node-http-prototype-copy"
+          ? nodePrototypeCopySink(lines, sink.line)
+          : undefined;
       const nodePathSink =
         model.id === "node-http-path"
           ? nodeFilesystemPathSink(lines, sink.line)
@@ -2526,6 +2606,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-prototype-pollution" &&
         nodePrototypeSink === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-prototype-copy" &&
+        nodePrototypeCopy === undefined
       ) {
         continue;
       }
@@ -2668,54 +2754,51 @@ function frameworkDataflowRecords(
               .find((candidate) => candidate.source !== undefined)
           : undefined;
       const source =
-        model.id === "node-http-prototype-pollution" &&
-        nodePrototypeSink !== undefined
+        model.id === "node-http-prototype-copy" &&
+        nodePrototypeCopy !== undefined
           ? modeledObjectLookupSource(
               lines,
               sources,
               sink.line,
-              nodePrototypeSink.keyExpressions.join("\n"),
+              nodePrototypeCopy.sourceExpressions.join("\n"),
               model.sources,
             )
-          : model.id === "node-http-mongoose-aggregate"
-            ? nodeMongooseAggregateResolution?.source
-            : model.id === "node-http-mongoose-bulk-write"
-              ? nodeMongooseBulkWriteResolution?.source
-              : model.id === "node-http-mongoose-update" &&
-                  nodeMongooseUpdate !== undefined
-                ? modeledObjectLookupSource(
-                    lines,
-                    sources,
-                    sink.line,
-                    nodeMongooseUpdate.updateExpression,
-                    model.sources,
-                  )
-                : model.id === "node-http-mongoose-nosql" &&
-                    nodeMongooseSink !== undefined
+          : model.id === "node-http-prototype-pollution" &&
+              nodePrototypeSink !== undefined
+            ? modeledObjectLookupSource(
+                lines,
+                sources,
+                sink.line,
+                nodePrototypeSink.keyExpressions.join("\n"),
+                model.sources,
+              )
+            : model.id === "node-http-mongoose-aggregate"
+              ? nodeMongooseAggregateResolution?.source
+              : model.id === "node-http-mongoose-bulk-write"
+                ? nodeMongooseBulkWriteResolution?.source
+                : model.id === "node-http-mongoose-update" &&
+                    nodeMongooseUpdate !== undefined
                   ? modeledObjectLookupSource(
                       lines,
                       sources,
                       sink.line,
-                      nodeMongooseSink.filterExpression,
+                      nodeMongooseUpdate.updateExpression,
                       model.sources,
                     )
-                  : model.id === "node-http-path" && nodePathSink !== undefined
-                    ? nodePathSink.expressions
-                        .map((expression) =>
-                          modeledObjectLookupSource(
-                            lines,
-                            sources,
-                            sink.line,
-                            expression,
-                            model.sources,
-                          ),
-                        )
-                        .find((candidate) => candidate !== undefined)
-                    : model.id === "python-web-path" &&
-                        pythonPathSink !== undefined
-                      ? pythonPathSink.expressions
+                  : model.id === "node-http-mongoose-nosql" &&
+                      nodeMongooseSink !== undefined
+                    ? modeledObjectLookupSource(
+                        lines,
+                        sources,
+                        sink.line,
+                        nodeMongooseSink.filterExpression,
+                        model.sources,
+                      )
+                    : model.id === "node-http-path" &&
+                        nodePathSink !== undefined
+                      ? nodePathSink.expressions
                           .map((expression) =>
-                            modeledPythonObjectSource(
+                            modeledObjectLookupSource(
                               lines,
                               sources,
                               sink.line,
@@ -2724,107 +2807,121 @@ function frameworkDataflowRecords(
                             ),
                           )
                           .find((candidate) => candidate !== undefined)
-                      : model.id === "node-http-object-authorization" &&
-                          nodeObjectSink !== undefined
-                        ? modeledObjectLookupSource(
-                            lines,
-                            sources,
-                            sink.line,
-                            nodeObjectSink.argument,
-                            model.sources,
-                          )
-                        : model.id === "node-http-ssrf" &&
-                            nodeHttpSink?.urlExpression !== undefined
-                          ? modeledCallSource(
+                      : model.id === "python-web-path" &&
+                          pythonPathSink !== undefined
+                        ? pythonPathSink.expressions
+                            .map((expression) =>
+                              modeledPythonObjectSource(
+                                lines,
+                                sources,
+                                sink.line,
+                                expression,
+                                model.sources,
+                              ),
+                            )
+                            .find((candidate) => candidate !== undefined)
+                        : model.id === "node-http-object-authorization" &&
+                            nodeObjectSink !== undefined
+                          ? modeledObjectLookupSource(
                               lines,
                               sources,
                               sink.line,
-                              nodeHttpSink.urlExpression,
+                              nodeObjectSink.argument,
                               model.sources,
                             )
-                          : model.id === "node-copilot-system-prompt-injection"
-                            ? nodeCopilotResolution?.source
-                            : extension === ".java" &&
-                                model.id ===
-                                  "spring-http-object-authorization" &&
-                                javaObjectSink !== undefined
-                              ? modeledSameFileJavaObjectSource(
-                                  lines,
-                                  sink.line,
-                                  javaObjectSink.argument,
-                                  model.sources,
-                                )
+                          : model.id === "node-http-ssrf" &&
+                              nodeHttpSink?.urlExpression !== undefined
+                            ? modeledCallSource(
+                                lines,
+                                sources,
+                                sink.line,
+                                nodeHttpSink.urlExpression,
+                                model.sources,
+                              )
+                            : model.id ===
+                                "node-copilot-system-prompt-injection"
+                              ? nodeCopilotResolution?.source
                               : extension === ".java" &&
                                   model.id ===
-                                    "spring-mvc-jpa-mass-assignment" &&
-                                  javaJpaSink !== undefined &&
-                                  javaJpaDomainType !== undefined
-                                ? (() => {
-                                    const method = exportedJavaMethods(
-                                      lines,
-                                    ).find(
-                                      (candidate) =>
-                                        sink.line >= candidate.startLine &&
-                                        sink.line <= candidate.endLine,
-                                    );
-                                    return method === undefined
-                                      ? undefined
-                                      : modeledJavaMassAssignmentSource(
-                                          lines,
-                                          method,
-                                          sink.line,
-                                          javaJpaSink.argument,
-                                          javaJpaDomainType,
-                                        );
-                                  })()
+                                    "spring-http-object-authorization" &&
+                                  javaObjectSink !== undefined
+                                ? modeledSameFileJavaObjectSource(
+                                    lines,
+                                    sink.line,
+                                    javaObjectSink.argument,
+                                    model.sources,
+                                  )
                                 : extension === ".java" &&
-                                    (model.id === "spring-http-ssrf" ||
-                                      model.id === "spring-http-path")
-                                  ? modeledSameFileJavaSource(
-                                      lines,
-                                      sink.line,
-                                      model.id,
-                                      model.sources,
-                                    )
-                                  : extension === ".cs" &&
-                                      model.id ===
-                                        "aspnet-http-template-injection"
-                                    ? modeledSameFileDotnetTemplateSource(
+                                    model.id ===
+                                      "spring-mvc-jpa-mass-assignment" &&
+                                    javaJpaSink !== undefined &&
+                                    javaJpaDomainType !== undefined
+                                  ? (() => {
+                                      const method = exportedJavaMethods(
+                                        lines,
+                                      ).find(
+                                        (candidate) =>
+                                          sink.line >= candidate.startLine &&
+                                          sink.line <= candidate.endLine,
+                                      );
+                                      return method === undefined
+                                        ? undefined
+                                        : modeledJavaMassAssignmentSource(
+                                            lines,
+                                            method,
+                                            sink.line,
+                                            javaJpaSink.argument,
+                                            javaJpaDomainType,
+                                          );
+                                    })()
+                                  : extension === ".java" &&
+                                      (model.id === "spring-http-ssrf" ||
+                                        model.id === "spring-http-path")
+                                    ? modeledSameFileJavaSource(
                                         lines,
                                         sink.line,
+                                        model.id,
                                         model.sources,
-                                        files,
-                                        path,
                                       )
                                     : extension === ".cs" &&
                                         model.id ===
-                                          "aspnet-http-object-authorization" &&
-                                        dotnetObjectSink !== undefined
-                                      ? modeledSameFileDotnetObjectSource(
+                                          "aspnet-http-template-injection"
+                                      ? modeledSameFileDotnetTemplateSource(
                                           lines,
                                           sink.line,
-                                          dotnetObjectSink.argument,
                                           model.sources,
                                           files,
                                           path,
                                         )
                                       : extension === ".cs" &&
-                                          model.id.startsWith("aspnet-http-")
-                                        ? modeledSameFileDotnetSource(
+                                          model.id ===
+                                            "aspnet-http-object-authorization" &&
+                                          dotnetObjectSink !== undefined
+                                        ? modeledSameFileDotnetObjectSource(
                                             lines,
                                             sink.line,
+                                            dotnetObjectSink.argument,
                                             model.sources,
                                             files,
                                             path,
-                                          ) ??
-                                          nearestModeledSource(
-                                            matchedSources,
-                                            sink.line,
                                           )
-                                        : nearestModeledSource(
-                                            sources,
-                                            sink.line,
-                                          );
+                                        : extension === ".cs" &&
+                                            model.id.startsWith("aspnet-http-")
+                                          ? modeledSameFileDotnetSource(
+                                              lines,
+                                              sink.line,
+                                              model.sources,
+                                              files,
+                                              path,
+                                            ) ??
+                                            nearestModeledSource(
+                                              matchedSources,
+                                              sink.line,
+                                            )
+                                          : nearestModeledSource(
+                                              sources,
+                                              sink.line,
+                                            );
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -2837,6 +2934,10 @@ function frameworkDataflowRecords(
         : [];
       const nearbyControls = [
         ...sinkExpressionControls,
+        ...(model.id === "node-http-prototype-copy" &&
+        nodePrototypeCopy !== undefined
+          ? nodePrototypeCopy.controls
+          : []),
         ...(model.id === "node-http-ssrf" && nodeHttpSink !== undefined
           ? nodeAxiosConfigurationControls(lines, nodeHttpSink, model.controls)
           : []),
@@ -6911,6 +7012,10 @@ function javascriptFrameworkWrapperSummaries(
             model.id === "node-http-prototype-pollution"
               ? nodePrototypePollutionSink(file.lines, sink.line)
               : undefined;
+          const nodePrototypeCopy =
+            model.id === "node-http-prototype-copy"
+              ? nodePrototypeCopySink(file.lines, sink.line)
+              : undefined;
           const nodePathSink =
             model.id === "node-http-path"
               ? nodeFilesystemPathSink(file.lines, sink.line)
@@ -6952,6 +7057,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-prototype-copy" &&
+            nodePrototypeCopy === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -6986,6 +7097,9 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           const sinkValue =
+            (nodePrototypeCopy === undefined
+              ? undefined
+              : nodePrototypeCopy.sourceExpressions.join("\n")) ??
             (nodePrototypeSink === undefined
               ? undefined
               : nodePrototypeSink.keyExpressions.join("\n")) ??
@@ -7038,6 +7152,10 @@ function javascriptFrameworkWrapperSummaries(
           );
           if (sinkPattern === undefined) continue;
           const wrapperControls = [
+            ...(model.id === "node-http-prototype-copy" &&
+            nodePrototypeCopy !== undefined
+              ? nodePrototypeCopy.controls
+              : []),
             ...controls.filter(
               (control) =>
                 nodeHttpGeneralControlApplies(nodeHttpSink, control.kind) &&
@@ -15704,10 +15822,13 @@ function compareResidualRiskRecords(
   left: ResidualRiskRecord,
   right: ResidualRiskRecord,
 ): number {
-  const hasEstablishedFixedMongooseBoundary = (
-    record: ResidualRiskRecord,
-  ): boolean => {
+  const hasEstablishedFixedBoundary = (record: ResidualRiskRecord): boolean => {
     const framework = record.frameworkModel;
+    if (framework?.id === "node-http-prototype-copy") {
+      return framework.candidateControls.some(
+        (control) => control.kind === "null-prototype-assignment-target",
+      );
+    }
     if (framework?.id === "node-http-mongoose-update") {
       return framework.candidateControls.some(
         (control) => control.kind === "fixed-update-field-value-boundary",
@@ -15727,9 +15848,8 @@ function compareResidualRiskRecords(
     }
     return false;
   };
-  const leftHasEstablishedBoundary = hasEstablishedFixedMongooseBoundary(left);
-  const rightHasEstablishedBoundary =
-    hasEstablishedFixedMongooseBoundary(right);
+  const leftHasEstablishedBoundary = hasEstablishedFixedBoundary(left);
+  const rightHasEstablishedBoundary = hasEstablishedFixedBoundary(right);
   return (
     right.priority - left.priority ||
     Number(leftHasEstablishedBoundary) - Number(rightHasEstablishedBoundary) ||
