@@ -1,5 +1,5 @@
 import { maintainAccounts } from "./service.js";
 
-export async function routeAccountMaintenance(pipeline) {
-  return maintainAccounts(pipeline);
+export async function routeAccountMaintenance(stages) {
+  return maintainAccounts(stages);
 }

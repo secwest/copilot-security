@@ -52,7 +52,7 @@
     },
     {
       "id": "node-mongoose-multi-hop-aggregate-merge-injection",
-      "description": "An Express JSON pipeline crosses three relative-import boundaries and selects $set plus $merge stages that overwrite protected account fields.",
+      "description": "An Express JSON stage array crosses three relative-import boundaries and selects $set mutations before a fixed $merge stage overwrites protected account fields.",
       "fixture": "fixtures/node-mongoose-multi-hop-aggregate-merge-injection",
       "findingsPaths": [
         "node-mongoose-multi-hop-aggregate-merge-injection/run-1/findings.json"

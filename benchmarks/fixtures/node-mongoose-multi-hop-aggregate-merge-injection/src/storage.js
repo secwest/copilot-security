@@ -8,6 +8,16 @@ const ACCOUNT_SCHEMA = new mongoose.Schema({
 });
 const Account = mongoose.model("Account", ACCOUNT_SCHEMA);
 
-export async function aggregateAccountMaintenance(pipeline) {
-  return Account.aggregate(pipeline).exec();
+export async function aggregateAccountMaintenance(stages) {
+  return Account.aggregate([
+    ...stages,
+    {
+      $merge: {
+        into: "accounts",
+        on: "_id",
+        whenMatched: "replace",
+        whenNotMatched: "discard",
+      },
+    },
+  ]).exec();
 }

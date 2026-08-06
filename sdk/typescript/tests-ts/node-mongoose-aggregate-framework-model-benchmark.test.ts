@@ -164,7 +164,7 @@ describe("Node Mongoose aggregate framework model", () => {
       line: 12,
     });
     expect(unsafeMerge[0]?.frameworkModel?.sink).toMatchObject({
-      kind: "mongoose-aggregate-pipeline",
+      kind: "mongoose-aggregate-input-before-write-stage",
       cweIds: ["CWE-943", "CWE-915"],
     });
     expect(unsafeMerge[0]?.frameworkModel?.candidateControls).toEqual([]);
@@ -173,6 +173,30 @@ describe("Node Mongoose aggregate framework model", () => {
       path: "src/storage.js",
       line: 12,
     });
+    expect(safeWrite[0]?.frameworkModel?.sink).toMatchObject({
+      kind: "mongoose-aggregate-filter-before-write-stage",
+      cweIds: ["CWE-943"],
+    });
+  });
+
+  test("retains both read/write pairs under the whole-repository cap", async () => {
+    const records = aggregateRecords(
+      await buildResidualRiskInventory(resolve(process.cwd(), "..", "..")),
+    );
+
+    expect(records.map(({ path }) => path)).toEqual(
+      [caseIds[0], caseIds[2], caseIds[1], caseIds[3]].map((caseId) =>
+        ["benchmarks", "fixtures", caseId, "src", "storage.js"].join("/"),
+      ),
+    );
+    expect(
+      records.map(({ frameworkModel }) => frameworkModel?.sink.kind),
+    ).toEqual([
+      "mongoose-aggregate-pipeline",
+      "mongoose-aggregate-input-before-write-stage",
+      "mongoose-aggregate-filter-stage",
+      "mongoose-aggregate-filter-before-write-stage",
+    ]);
   });
 
   test("requires exact Model identity, pipeline position, and aggregate consumption", async () => {

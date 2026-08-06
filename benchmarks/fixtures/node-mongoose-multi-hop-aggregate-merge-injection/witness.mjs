@@ -25,10 +25,16 @@ function executeWritePipeline(documents, pipeline) {
   }
 }
 
-executeWritePipeline(accounts, [
-  { $set: { role: "admin", mfaSecret: null } },
-  { $merge: { into: "accounts", on: "_id", whenMatched: "replace" } },
-]);
+const attackerStages = [{ $set: { role: "admin", mfaSecret: null } }];
+const fixedWriteStage = {
+  $merge: {
+    into: "accounts",
+    on: "_id",
+    whenMatched: "replace",
+    whenNotMatched: "discard",
+  },
+};
+executeWritePipeline(accounts, [...attackerStages, fixedWriteStage]);
 if (accounts[0]?.role !== "admin" || accounts[0]?.mfaSecret !== null) {
   throw new Error("aggregate merge injection not reproduced");
 }

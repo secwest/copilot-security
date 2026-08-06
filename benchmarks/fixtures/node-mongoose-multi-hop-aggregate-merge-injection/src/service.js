@@ -1,5 +1,5 @@
 import { aggregateAccountMaintenance } from "./storage.js";
 
-export async function maintainAccounts(pipeline) {
-  return aggregateAccountMaintenance(pipeline);
+export async function maintainAccounts(stages) {
+  return aggregateAccountMaintenance(stages);
 }

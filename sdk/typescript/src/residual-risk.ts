@@ -8645,6 +8645,7 @@ interface NodeMongooseBulkWriteSinkMetadata {
 interface NodeMongooseAggregatePosition {
   expression: string;
   line: number;
+  pipelineHasWriteStage: boolean;
   stage: string;
 }
 
@@ -8904,6 +8905,7 @@ function nodeMongooseAggregatePositions(
       {
         expression: pipeline.value,
         line: pipeline.line,
+        pipelineHasWriteStage: false,
         stage: "dynamic",
       },
     ];
@@ -8918,6 +8920,7 @@ function nodeMongooseAggregatePositions(
     positions.push({
       expression: resolved.value,
       line: resolved.line,
+      pipelineHasWriteStage: false,
       stage,
     });
   };
@@ -8940,7 +8943,7 @@ function nodeMongooseAggregatePositions(
       addPosition(stageEntry.value, stageEntry.line, stageEntry.key);
     }
   }
-  return positions.filter(
+  const uniquePositions = positions.filter(
     (position, index, all) =>
       all.findIndex(
         (candidate) =>
@@ -8948,6 +8951,13 @@ function nodeMongooseAggregatePositions(
           candidate.stage === position.stage,
       ) === index,
   );
+  const pipelineHasWriteStage = uniquePositions.some(
+    ({ stage }) => stage === "$merge" || stage === "$out",
+  );
+  return uniquePositions.map((position) => ({
+    ...position,
+    pipelineHasWriteStage,
+  }));
 }
 
 function nodeMongooseAggregateIsConsumed(
@@ -9271,12 +9281,19 @@ function nodeMongooseAggregateSinkMetadata(
   }
   if (position.stage === "dynamic") {
     return {
-      kind: "mongoose-aggregate-pipeline",
+      kind: position.pipelineHasWriteStage
+        ? "mongoose-aggregate-input-before-write-stage"
+        : "mongoose-aggregate-pipeline",
       cweIds: ["CWE-943", "CWE-915"],
     };
   }
   if (position.stage === "$match" || position.stage === "$redact") {
-    return { kind: "mongoose-aggregate-filter-stage", cweIds: ["CWE-943"] };
+    return {
+      kind: position.pipelineHasWriteStage
+        ? "mongoose-aggregate-filter-before-write-stage"
+        : "mongoose-aggregate-filter-stage",
+      cweIds: ["CWE-943"],
+    };
   }
   if (
     position.stage === "$lookup" ||

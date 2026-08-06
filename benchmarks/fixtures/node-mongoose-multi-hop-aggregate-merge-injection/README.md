@@ -1,3 +1,3 @@
 # Node Mongoose multi-hop aggregate merge injection
 
-The complete JSON pipeline crosses three exact relative imports and becomes the pipeline passed to Mongoose `Model.aggregate()`. An attacker can combine `$set` with `$merge` to replace protected account state.
+An attacker-controlled JSON stage array crosses three exact relative imports and is spread before a fixed `$merge` stage in Mongoose `Model.aggregate()`. The fixed destination does not make attacker-selected `$set` stages safe: they can replace protected account state before the write.

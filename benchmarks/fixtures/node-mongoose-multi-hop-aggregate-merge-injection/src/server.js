@@ -5,7 +5,7 @@ const app = express();
 app.use(express.json());
 
 app.post("/account-maintenance", async (request, response) => {
-  const result = await routeAccountMaintenance(request.body.pipeline);
+  const result = await routeAccountMaintenance(request.body.stages);
   response.json(result);
 });
 
