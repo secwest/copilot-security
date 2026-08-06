@@ -7868,49 +7868,30 @@ function javascriptCallArgumentsAtLine(
   return splitJavascriptArguments(original.slice(open + 1, close));
 }
 
-function nodeFilesystemPathSink(
+interface NodeFilesystemBindingContext {
+  wrappers: readonly ExportedJavascriptFunction[];
+  namedBindings: readonly ImportedJavascriptSymbol[];
+  receiverBindings: ReadonlyArray<{ local: string; line: number }>;
+}
+
+const NODE_FILESYSTEM_BINDING_CACHE = new WeakMap<
+  readonly string[],
+  NodeFilesystemBindingContext
+>();
+
+function nodeFilesystemBindingContext(
   lines: readonly string[],
-  line: number,
-): FrameworkFilesystemPathSink | undefined {
+): NodeFilesystemBindingContext {
+  const cached = NODE_FILESYSTEM_BINDING_CACHE.get(lines);
+  if (cached !== undefined) return cached;
   const fsModule = /^(?:node:)?fs(?:\/promises)?$/u;
-  const wrapper = exportedJavascriptFunctions(lines).find(
-    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
-  );
   const namedBindings = importedJavascriptSymbols(lines).filter(
     (binding) =>
       fsModule.test(binding.moduleSpecifier) &&
       NODE_FILESYSTEM_PATH_ARGUMENTS.has(binding.imported),
   );
-  for (const binding of namedBindings) {
-    if (
-      binding.line >= line ||
-      wrapper?.parameters.includes(binding.local) === true ||
-      javascriptIdentifierReassignedBetween(
-        lines,
-        binding.local,
-        binding.line,
-        line,
-      )
-    ) {
-      continue;
-    }
-    const arguments_ = javascriptCallArgumentsAtLine(
-      lines,
-      line,
-      new RegExp(`\\b${escapeRegularExpression(binding.local)}\\s*\\(`, "u"),
-    );
-    if (arguments_ === undefined) continue;
-    const positions = NODE_FILESYSTEM_PATH_ARGUMENTS.get(binding.imported)!;
-    const expressions = positions.flatMap((position) =>
-      arguments_[position]?.trim() ? [arguments_[position]!.trim()] : [],
-    );
-    if (expressions.length !== positions.length) continue;
-    return { expressions, operation: binding.imported };
-  }
-
-  const structuralLines = javascriptStructuralLines(lines);
   const receiverBindings: Array<{ local: string; line: number }> = [];
-  for (let index = 0; index < structuralLines.length; index += 1) {
+  for (let index = 0; index < lines.length; index += 1) {
     const structural = javascriptCodeBeforeComment(lines[index] ?? "");
     const namespace =
       /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']((?:node:)?fs(?:\/promises)?)["']/u.exec(
@@ -7943,7 +7924,51 @@ function nodeFilesystemPathSink(
       receiverBindings.push({ local, line: index + 1 });
     }
   }
-  for (const binding of receiverBindings) {
+  const context = {
+    wrappers: exportedJavascriptFunctions(lines),
+    namedBindings,
+    receiverBindings,
+  } satisfies NodeFilesystemBindingContext;
+  NODE_FILESYSTEM_BINDING_CACHE.set(lines, context);
+  return context;
+}
+
+function nodeFilesystemPathSink(
+  lines: readonly string[],
+  line: number,
+): FrameworkFilesystemPathSink | undefined {
+  const context = nodeFilesystemBindingContext(lines);
+  const wrapper = context.wrappers.find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  for (const binding of context.namedBindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const arguments_ = javascriptCallArgumentsAtLine(
+      lines,
+      line,
+      new RegExp(`\\b${escapeRegularExpression(binding.local)}\\s*\\(`, "u"),
+    );
+    if (arguments_ === undefined) continue;
+    const positions = NODE_FILESYSTEM_PATH_ARGUMENTS.get(binding.imported)!;
+    const expressions = positions.flatMap((position) =>
+      arguments_[position]?.trim() ? [arguments_[position]!.trim()] : [],
+    );
+    if (expressions.length !== positions.length) continue;
+    return { expressions, operation: binding.imported };
+  }
+
+  for (const binding of context.receiverBindings) {
     if (
       binding.line >= line ||
       wrapper?.parameters.includes(binding.local) === true ||
@@ -8004,12 +8029,51 @@ function exactFilesystemPathSinkLines(
     modelId === "node-http-path"
       ? javascriptStructuralLines(lines)
       : pythonStructuralLines(lines);
+  const operations =
+    modelId === "node-http-path"
+      ? [...NODE_FILESYSTEM_PATH_ARGUMENTS.keys()]
+      : [...PYTHON_FILESYSTEM_PATH_ARGUMENTS.keys()].map(
+          (qualified) => qualified.split(".").at(-1)!,
+        );
+  const aliases = new Set<string>();
+  if (modelId === "node-http-path") {
+    for (const binding of importedJavascriptSymbols(lines)) {
+      if (
+        /^(?:node:)?fs(?:\/promises)?$/u.test(binding.moduleSpecifier) &&
+        NODE_FILESYSTEM_PATH_ARGUMENTS.has(binding.imported)
+      ) {
+        aliases.add(binding.local);
+      }
+    }
+  } else {
+    for (const structural of structuralLines) {
+      const fromImport =
+        /^\s*from\s+(builtins|os|shutil)\s+import\s+(.+)$/u.exec(structural);
+      if (fromImport === null) continue;
+      for (const rawBinding of splitPythonArguments(fromImport[2] ?? "")) {
+        const parsed = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+          rawBinding.trim(),
+        );
+        if (
+          parsed !== null &&
+          PYTHON_FILESYSTEM_PATH_ARGUMENTS.has(`${fromImport[1]}.${parsed[1]}`)
+        ) {
+          aliases.add(parsed[2] ?? parsed[1]!);
+        }
+      }
+    }
+  }
+  const candidateNames = [...new Set([...operations, ...aliases])]
+    .map(escapeRegularExpression)
+    .join("|");
+  if (candidateNames === "") return sinks;
+  const candidateCall = new RegExp(`\\b(?:${candidateNames})\\s*\\(`, "u");
   for (
     let index = 0;
     index < structuralLines.length && sinks.length < limit;
     index += 1
   ) {
-    if (!(structuralLines[index] ?? "").includes("(")) continue;
+    if (!candidateCall.test(structuralLines[index] ?? "")) continue;
     const line = index + 1;
     const sink =
       modelId === "node-http-path"
