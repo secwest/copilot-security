@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-mongoose-multi-hop-bulk-update-operator-injection",
+      "description": "An Express JSON patch crosses three relative-import boundaries and becomes the update document in a Mongoose bulkWrite updateOne operation, allowing an attacker-selected $unset operator.",
+      "fixture": "fixtures/node-mongoose-multi-hop-bulk-update-operator-injection",
+      "findingsPaths": [
+        "node-mongoose-multi-hop-bulk-update-operator-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mongoose-bulk-update-operator-injection",
+          "cwe": ["CWE-943", "CWE-915"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 12,
+              "endLine": 12,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-mongoose-multi-hop-safe-bulk-update-field",
+      "description": "The same topology maps one request property to a fixed server-owned $set field in the nested bulk update document.",
+      "fixture": "fixtures/node-mongoose-multi-hop-safe-bulk-update-field",
+      "findingsPaths": [
+        "node-mongoose-multi-hop-safe-bulk-update-field/run-1/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "node-mongoose-multi-hop-bulk-replacement-mass-assignment",
+      "description": "An Express JSON document crosses three relative-import boundaries and becomes a bulkWrite replaceOne replacement, allowing protected role and MFA fields to be overwritten.",
+      "fixture": "fixtures/node-mongoose-multi-hop-bulk-replacement-mass-assignment",
+      "findingsPaths": [
+        "node-mongoose-multi-hop-bulk-replacement-mass-assignment/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mongoose-bulk-replacement-mass-assignment",
+          "cwe": ["CWE-915"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 12,
+              "endLine": 12,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-mongoose-multi-hop-safe-bulk-replacement-projection",
+      "description": "The same topology builds a fixed replacement document and reads only the displayName scalar from request data.",
+      "fixture": "fixtures/node-mongoose-multi-hop-safe-bulk-replacement-projection",
+      "findingsPaths": [
+        "node-mongoose-multi-hop-safe-bulk-replacement-projection/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

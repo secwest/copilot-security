@@ -138,8 +138,11 @@ selector injection where an object-valued Express field crosses three module
 boundaries into a Model query filter, paired with an exact `$eq` literal-value
 boundary, plus Mongoose update-document injection where an Express patch
 crosses the same topology and selects `$unset` to remove an MFA secret, paired
-with one scalar beneath a fixed server-owned `$set` field. Three runs per case
-produce 468 scans in the complete corpus.
+with one scalar beneath a fixed server-owned `$set` field, plus Mongoose
+`bulkWrite()` update-operator injection and replacement-document mass
+assignment across the same topology, each paired with its exact fixed update
+or document boundary. Three runs per case produce 480 scans in the complete
+corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -167,6 +170,22 @@ computed fields, spreads, complete objects beneath `$set`, and validators as a
 universal control. The executable witnesses prove MFA-secret deletion in the
 operator path and MFA preservation plus legitimate display-name change in the
 fixed-field path.
+
+`node-mongoose-bulk-write-manifest.json` isolates the complete documented
+Mongoose bulk operation-array grammar under perfect gates. Its two positives
+retain the HTTP source, all nine ordered propagators, the exact `bulkWrite()`
+call, both CWE review choices, validation, attack-path analysis, and code
+evidence. One proves nested `updateOne.update` operator control; the other
+proves `replaceOne.replacement` mass assignment. Their controls preserve the
+topology but use one scalar beneath a fixed server-owned `$set` field or a
+fixed literal replacement projection. Deterministic regressions separately
+trace insert documents; update, delete, and replacement filters; update
+documents; replacement documents; whole operation arrays; dynamic elements;
+and operation or specification spreads. They reject bulk options,
+`arrayFilters`, fixed-only calls, Model lookalikes, and reassignment. The four
+executable witnesses prove MFA deletion and role/MFA replacement on the
+vulnerable paths, and protected-field preservation plus legitimate
+display-name changes on the controls.
 
 `node-copilot-prompt-injection-manifest.json` isolates that SDK boundary under
 perfect single-run gates. The positive must retain the HTTP source, all six
