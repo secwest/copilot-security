@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-lodash-merge-prototype-pollution",
+      "description": "An Express JSON object crosses three relative-import boundaries into a source operand of lodash.merge under a nearest runtime manifest pinned to vulnerable Lodash 4.17.11, allowing constructor.prototype traversal to modify Object.prototype and supply inherited authorization state.",
+      "fixture": "fixtures/node-multi-hop-lodash-merge-prototype-pollution",
+      "findingsPaths": [
+        "node-multi-hop-lodash-merge-prototype-pollution/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-lodash-recursive-merge",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-lodash-merge",
+      "description": "The same Express and three-relay topology reaches lodash.merge, but the nearest runtime manifest pins patched Lodash 4.17.21 and therefore excludes the historical vulnerable-version model.",
+      "fixture": "fixtures/node-multi-hop-patched-lodash-merge",
+      "findingsPaths": [
+        "node-multi-hop-patched-lodash-merge/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

@@ -44,6 +44,8 @@ const MAX_INVENTORY_BYTES = 8 * 1024 * 1024;
 const MAX_COVERAGE_BYTES = 32 * 1024 * 1024;
 const MAX_FINDINGS_BYTES = 128 * 1024 * 1024;
 const MAX_JAVA_MAVEN_MODEL_DEPTH = 128;
+const MAX_NODE_PACKAGE_MANIFESTS = 512;
+const MAX_NODE_PACKAGE_MANIFEST_BYTES = 2 * 1024 * 1024;
 const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
 const MAX_EXCERPT_LINES = 16;
@@ -568,6 +570,35 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
       {
         kind: "object-assign-prototype-copy",
         expression: /\bObject\s*\.\s*assign\s*\(/u,
+        cweIds: ["CWE-1321"],
+      },
+    ],
+    controls: [],
+  },
+  {
+    id: "node-http-prototype-merge",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [
+      /["']lodash(?:\/merge(?:\.js)?)?["']/u,
+      /\b[A-Za-z_$][\w$]*(?:\s*\.\s*merge)?\s*\(/u,
+    ],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-lodash-recursive-merge",
+        expression: /\b[A-Za-z_$][\w$]*(?:\s*\.\s*merge)?\s*\(/u,
         cweIds: ["CWE-1321"],
       },
     ],
@@ -2286,6 +2317,13 @@ export async function buildResidualRiskInventory(
     );
   }
 
+  sourceFiles.push(
+    ...(await nearestNodePackageManifestSnapshots(
+      canonicalRepository,
+      sourceFiles,
+    )),
+  );
+
   for (const file of sourceFiles) {
     records.push(
       ...frameworkDataflowRecords(file.path, file.lines, sourceFiles),
@@ -2382,6 +2420,194 @@ interface NodePrototypeCopySink {
   targetExpression: string;
   sourceExpressions: string[];
   controls: Array<{ kind: string; line: number }>;
+}
+
+interface NodePrototypeMergeSink {
+  sourceExpressions: string[];
+}
+
+interface NodeRuntimeDependency {
+  manifestPath: string;
+  line: number;
+  version: string;
+}
+
+function nodeRuntimeDependency(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  dependencyName: string,
+): NodeRuntimeDependency | undefined {
+  const manifests = files
+    .filter(
+      (file) =>
+        posix.basename(file.path) === "package.json" &&
+        pathWithinDirectory(sourcePath, posix.dirname(file.path)),
+    )
+    .sort(
+      (left, right) =>
+        posix.dirname(right.path).length - posix.dirname(left.path).length,
+    );
+  const manifest = manifests[0];
+  if (manifest === undefined) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(manifest.text) as unknown;
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+  const root = parsed as Record<string, unknown>;
+  const declaredVersions = ["dependencies", "optionalDependencies"].flatMap(
+    (section) => {
+      const dependencies = root[section];
+      if (
+        typeof dependencies !== "object" ||
+        dependencies === null ||
+        Array.isArray(dependencies)
+      ) {
+        return [];
+      }
+      const version = (dependencies as Record<string, unknown>)[dependencyName];
+      return typeof version === "string" ? [version] : [];
+    },
+  );
+  if (
+    declaredVersions.length === 0 ||
+    declaredVersions.some((version) => version !== declaredVersions[0])
+  ) {
+    return undefined;
+  }
+  const version = declaredVersions[0]!;
+  if (!/^\d+\.\d+\.\d+$/u.test(version)) return undefined;
+  const escapedDependency = escapeRegularExpression(dependencyName);
+  const line =
+    manifest.lines.findIndex((candidate) =>
+      new RegExp(`^[\\s\"]*${escapedDependency}\"\\s*:`, "u").test(candidate),
+    ) + 1;
+  return {
+    manifestPath: manifest.path,
+    line: Math.max(1, line),
+    version,
+  };
+}
+
+function nodeLodashVersionIsPrototypePollutionVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    major < 4 || (major === 4 && (minor < 17 || (minor === 17 && patch < 12)))
+  );
+}
+
+function nodePrototypeMergeSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodePrototypeMergeSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "lodash");
+  if (
+    dependency === undefined ||
+    !nodeLodashVersionIsPrototypePollutionVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: Array<{
+    kind: "direct" | "receiver";
+    local: string;
+    line: number;
+  }> = [];
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const structural = codeLines[index] ?? "";
+    const defaultOrNamespace =
+      /^\s*import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s+["']lodash["']/u.exec(
+        structural,
+      );
+    const commonjsReceiver =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']lodash["']\s*\)/u.exec(
+        structural,
+      );
+    const directImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']lodash\/merge(?:\.js)?["']/u.exec(
+        structural,
+      );
+    const directRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']lodash\/merge(?:\.js)?["']\s*\)/u.exec(
+        structural,
+      );
+    const receiver = defaultOrNamespace?.[1] ?? commonjsReceiver?.[1];
+    const direct = directImport?.[1] ?? directRequire?.[1];
+    if (receiver !== undefined) {
+      bindings.push({ kind: "receiver", local: receiver, line: index + 1 });
+    }
+    if (direct !== undefined) {
+      bindings.push({ kind: "direct", local: direct, line: index + 1 });
+    }
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "lodash" &&
+      imported.imported === "merge"
+    ) {
+      bindings.push({
+        kind: "direct",
+        local: imported.local,
+        line: imported.line,
+      });
+    }
+  }
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escapedLocal = escapeRegularExpression(binding.local);
+    if (
+      binding.kind === "receiver" &&
+      structuralLines
+        .slice(binding.line, Math.max(binding.line, line))
+        .some((candidate) =>
+          new RegExp(
+            `\\b${escapedLocal}\\s*\\.\\s*merge\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+        )
+    ) {
+      continue;
+    }
+    const callee =
+      binding.kind === "receiver"
+        ? new RegExp(`\\b${escapedLocal}\\s*\\.\\s*merge\\s*\\(`, "u")
+        : new RegExp(`\\b${escapedLocal}\\s*\\(`, "u");
+    const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+    if (arguments_ === undefined || arguments_.length < 2) continue;
+    const sourceExpressions = arguments_
+      .slice(1)
+      .map((expression) => expression.trim())
+      .filter(Boolean);
+    if (sourceExpressions.length > 0) return { sourceExpressions };
+  }
+  return undefined;
 }
 
 function nodePrototypeCopySink(
@@ -2543,6 +2769,10 @@ function frameworkDataflowRecords(
         model.id === "node-http-prototype-copy"
           ? nodePrototypeCopySink(lines, sink.line)
           : undefined;
+      const nodePrototypeMerge =
+        model.id === "node-http-prototype-merge"
+          ? nodePrototypeMergeSink(files, path, lines, sink.line)
+          : undefined;
       const nodePathSink =
         model.id === "node-http-path"
           ? nodeFilesystemPathSink(lines, sink.line)
@@ -2612,6 +2842,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-prototype-copy" &&
         nodePrototypeCopy === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-prototype-merge" &&
+        nodePrototypeMerge === undefined
       ) {
         continue;
       }
@@ -2754,64 +2990,60 @@ function frameworkDataflowRecords(
               .find((candidate) => candidate.source !== undefined)
           : undefined;
       const source =
-        model.id === "node-http-prototype-copy" &&
-        nodePrototypeCopy !== undefined
+        model.id === "node-http-prototype-merge" &&
+        nodePrototypeMerge !== undefined
           ? modeledObjectLookupSource(
               lines,
               sources,
               sink.line,
-              nodePrototypeCopy.sourceExpressions.join("\n"),
+              nodePrototypeMerge.sourceExpressions.join("\n"),
               model.sources,
             )
-          : model.id === "node-http-prototype-pollution" &&
-              nodePrototypeSink !== undefined
+          : model.id === "node-http-prototype-copy" &&
+              nodePrototypeCopy !== undefined
             ? modeledObjectLookupSource(
                 lines,
                 sources,
                 sink.line,
-                nodePrototypeSink.keyExpressions.join("\n"),
+                nodePrototypeCopy.sourceExpressions.join("\n"),
                 model.sources,
               )
-            : model.id === "node-http-mongoose-aggregate"
-              ? nodeMongooseAggregateResolution?.source
-              : model.id === "node-http-mongoose-bulk-write"
-                ? nodeMongooseBulkWriteResolution?.source
-                : model.id === "node-http-mongoose-update" &&
-                    nodeMongooseUpdate !== undefined
-                  ? modeledObjectLookupSource(
-                      lines,
-                      sources,
-                      sink.line,
-                      nodeMongooseUpdate.updateExpression,
-                      model.sources,
-                    )
-                  : model.id === "node-http-mongoose-nosql" &&
-                      nodeMongooseSink !== undefined
+            : model.id === "node-http-prototype-pollution" &&
+                nodePrototypeSink !== undefined
+              ? modeledObjectLookupSource(
+                  lines,
+                  sources,
+                  sink.line,
+                  nodePrototypeSink.keyExpressions.join("\n"),
+                  model.sources,
+                )
+              : model.id === "node-http-mongoose-aggregate"
+                ? nodeMongooseAggregateResolution?.source
+                : model.id === "node-http-mongoose-bulk-write"
+                  ? nodeMongooseBulkWriteResolution?.source
+                  : model.id === "node-http-mongoose-update" &&
+                      nodeMongooseUpdate !== undefined
                     ? modeledObjectLookupSource(
                         lines,
                         sources,
                         sink.line,
-                        nodeMongooseSink.filterExpression,
+                        nodeMongooseUpdate.updateExpression,
                         model.sources,
                       )
-                    : model.id === "node-http-path" &&
-                        nodePathSink !== undefined
-                      ? nodePathSink.expressions
-                          .map((expression) =>
-                            modeledObjectLookupSource(
-                              lines,
-                              sources,
-                              sink.line,
-                              expression,
-                              model.sources,
-                            ),
-                          )
-                          .find((candidate) => candidate !== undefined)
-                      : model.id === "python-web-path" &&
-                          pythonPathSink !== undefined
-                        ? pythonPathSink.expressions
+                    : model.id === "node-http-mongoose-nosql" &&
+                        nodeMongooseSink !== undefined
+                      ? modeledObjectLookupSource(
+                          lines,
+                          sources,
+                          sink.line,
+                          nodeMongooseSink.filterExpression,
+                          model.sources,
+                        )
+                      : model.id === "node-http-path" &&
+                          nodePathSink !== undefined
+                        ? nodePathSink.expressions
                             .map((expression) =>
-                              modeledPythonObjectSource(
+                              modeledObjectLookupSource(
                                 lines,
                                 sources,
                                 sink.line,
@@ -2820,108 +3052,123 @@ function frameworkDataflowRecords(
                               ),
                             )
                             .find((candidate) => candidate !== undefined)
-                        : model.id === "node-http-object-authorization" &&
-                            nodeObjectSink !== undefined
-                          ? modeledObjectLookupSource(
-                              lines,
-                              sources,
-                              sink.line,
-                              nodeObjectSink.argument,
-                              model.sources,
-                            )
-                          : model.id === "node-http-ssrf" &&
-                              nodeHttpSink?.urlExpression !== undefined
-                            ? modeledCallSource(
+                        : model.id === "python-web-path" &&
+                            pythonPathSink !== undefined
+                          ? pythonPathSink.expressions
+                              .map((expression) =>
+                                modeledPythonObjectSource(
+                                  lines,
+                                  sources,
+                                  sink.line,
+                                  expression,
+                                  model.sources,
+                                ),
+                              )
+                              .find((candidate) => candidate !== undefined)
+                          : model.id === "node-http-object-authorization" &&
+                              nodeObjectSink !== undefined
+                            ? modeledObjectLookupSource(
                                 lines,
                                 sources,
                                 sink.line,
-                                nodeHttpSink.urlExpression,
+                                nodeObjectSink.argument,
                                 model.sources,
                               )
-                            : model.id ===
-                                "node-copilot-system-prompt-injection"
-                              ? nodeCopilotResolution?.source
-                              : extension === ".java" &&
-                                  model.id ===
-                                    "spring-http-object-authorization" &&
-                                  javaObjectSink !== undefined
-                                ? modeledSameFileJavaObjectSource(
-                                    lines,
-                                    sink.line,
-                                    javaObjectSink.argument,
-                                    model.sources,
-                                  )
+                            : model.id === "node-http-ssrf" &&
+                                nodeHttpSink?.urlExpression !== undefined
+                              ? modeledCallSource(
+                                  lines,
+                                  sources,
+                                  sink.line,
+                                  nodeHttpSink.urlExpression,
+                                  model.sources,
+                                )
+                              : model.id ===
+                                  "node-copilot-system-prompt-injection"
+                                ? nodeCopilotResolution?.source
                                 : extension === ".java" &&
                                     model.id ===
-                                      "spring-mvc-jpa-mass-assignment" &&
-                                    javaJpaSink !== undefined &&
-                                    javaJpaDomainType !== undefined
-                                  ? (() => {
-                                      const method = exportedJavaMethods(
-                                        lines,
-                                      ).find(
-                                        (candidate) =>
-                                          sink.line >= candidate.startLine &&
-                                          sink.line <= candidate.endLine,
-                                      );
-                                      return method === undefined
-                                        ? undefined
-                                        : modeledJavaMassAssignmentSource(
-                                            lines,
-                                            method,
-                                            sink.line,
-                                            javaJpaSink.argument,
-                                            javaJpaDomainType,
-                                          );
-                                    })()
+                                      "spring-http-object-authorization" &&
+                                    javaObjectSink !== undefined
+                                  ? modeledSameFileJavaObjectSource(
+                                      lines,
+                                      sink.line,
+                                      javaObjectSink.argument,
+                                      model.sources,
+                                    )
                                   : extension === ".java" &&
-                                      (model.id === "spring-http-ssrf" ||
-                                        model.id === "spring-http-path")
-                                    ? modeledSameFileJavaSource(
-                                        lines,
-                                        sink.line,
-                                        model.id,
-                                        model.sources,
-                                      )
-                                    : extension === ".cs" &&
-                                        model.id ===
-                                          "aspnet-http-template-injection"
-                                      ? modeledSameFileDotnetTemplateSource(
+                                      model.id ===
+                                        "spring-mvc-jpa-mass-assignment" &&
+                                      javaJpaSink !== undefined &&
+                                      javaJpaDomainType !== undefined
+                                    ? (() => {
+                                        const method = exportedJavaMethods(
+                                          lines,
+                                        ).find(
+                                          (candidate) =>
+                                            sink.line >= candidate.startLine &&
+                                            sink.line <= candidate.endLine,
+                                        );
+                                        return method === undefined
+                                          ? undefined
+                                          : modeledJavaMassAssignmentSource(
+                                              lines,
+                                              method,
+                                              sink.line,
+                                              javaJpaSink.argument,
+                                              javaJpaDomainType,
+                                            );
+                                      })()
+                                    : extension === ".java" &&
+                                        (model.id === "spring-http-ssrf" ||
+                                          model.id === "spring-http-path")
+                                      ? modeledSameFileJavaSource(
                                           lines,
                                           sink.line,
+                                          model.id,
                                           model.sources,
-                                          files,
-                                          path,
                                         )
                                       : extension === ".cs" &&
                                           model.id ===
-                                            "aspnet-http-object-authorization" &&
-                                          dotnetObjectSink !== undefined
-                                        ? modeledSameFileDotnetObjectSource(
+                                            "aspnet-http-template-injection"
+                                        ? modeledSameFileDotnetTemplateSource(
                                             lines,
                                             sink.line,
-                                            dotnetObjectSink.argument,
                                             model.sources,
                                             files,
                                             path,
                                           )
                                         : extension === ".cs" &&
-                                            model.id.startsWith("aspnet-http-")
-                                          ? modeledSameFileDotnetSource(
+                                            model.id ===
+                                              "aspnet-http-object-authorization" &&
+                                            dotnetObjectSink !== undefined
+                                          ? modeledSameFileDotnetObjectSource(
                                               lines,
                                               sink.line,
+                                              dotnetObjectSink.argument,
                                               model.sources,
                                               files,
                                               path,
-                                            ) ??
-                                            nearestModeledSource(
-                                              matchedSources,
-                                              sink.line,
                                             )
-                                          : nearestModeledSource(
-                                              sources,
-                                              sink.line,
-                                            );
+                                          : extension === ".cs" &&
+                                              model.id.startsWith(
+                                                "aspnet-http-",
+                                              )
+                                            ? modeledSameFileDotnetSource(
+                                                lines,
+                                                sink.line,
+                                                model.sources,
+                                                files,
+                                                path,
+                                              ) ??
+                                              nearestModeledSource(
+                                                matchedSources,
+                                                sink.line,
+                                              )
+                                            : nearestModeledSource(
+                                                sources,
+                                                sink.line,
+                                              );
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -7016,6 +7263,10 @@ function javascriptFrameworkWrapperSummaries(
             model.id === "node-http-prototype-copy"
               ? nodePrototypeCopySink(file.lines, sink.line)
               : undefined;
+          const nodePrototypeMerge =
+            model.id === "node-http-prototype-merge"
+              ? nodePrototypeMergeSink(files, file.path, file.lines, sink.line)
+              : undefined;
           const nodePathSink =
             model.id === "node-http-path"
               ? nodeFilesystemPathSink(file.lines, sink.line)
@@ -7063,6 +7314,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-prototype-merge" &&
+            nodePrototypeMerge === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -7097,6 +7354,9 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           const sinkValue =
+            (nodePrototypeMerge === undefined
+              ? undefined
+              : nodePrototypeMerge.sourceExpressions.join("\n")) ??
             (nodePrototypeCopy === undefined
               ? undefined
               : nodePrototypeCopy.sourceExpressions.join("\n")) ??
@@ -15995,6 +16255,66 @@ async function discoverSourcePaths(repository: string): Promise<string[]> {
     }
   }
   return paths.sort((left, right) => left.localeCompare(right));
+}
+
+async function nearestNodePackageManifestSnapshots(
+  repository: string,
+  files: readonly SourceFileSnapshot[],
+): Promise<SourceFileSnapshot[]> {
+  const examined = new Map<string, SourceFileSnapshot | null>();
+  const selected = new Map<string, SourceFileSnapshot>();
+  let totalBytes = 0;
+  sourceFiles: for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      selected.size >= MAX_NODE_PACKAGE_MANIFESTS
+    ) {
+      continue;
+    }
+    let directory = posix.dirname(file.path);
+    while (true) {
+      const manifestPath =
+        directory === "."
+          ? "package.json"
+          : posix.join(directory, "package.json");
+      let manifest = examined.get(manifestPath);
+      if (manifest === undefined) {
+        const source = await readBoundedRepositoryFile(
+          repository,
+          manifestPath,
+        );
+        if (source === null || source.includes(0)) {
+          manifest = null;
+        } else if (
+          totalBytes + source.byteLength >
+          MAX_NODE_PACKAGE_MANIFEST_BYTES
+        ) {
+          break sourceFiles;
+        } else {
+          totalBytes += source.byteLength;
+          const text = source.toString("utf8");
+          manifest = {
+            path: manifestPath,
+            extension: ".json",
+            lines: text.split(/\r?\n/u),
+            text,
+          };
+        }
+        examined.set(manifestPath, manifest);
+      }
+      if (manifest !== null) {
+        selected.set(manifest.path, manifest);
+        break;
+      }
+      if (directory === ".") break;
+      const parent = posix.dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+  }
+  return [...selected.values()].sort((left, right) =>
+    left.path.localeCompare(right.path),
+  );
 }
 
 function isSourcePath(path: string): boolean {

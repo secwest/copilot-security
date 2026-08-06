@@ -150,8 +150,10 @@ or document boundary, plus Mongoose aggregation-pipeline injection that uses
 account state, paired with fixed `$match`, projection, mutation, and write
 destinations, plus later `Aggregate.append()` mutation that exposes a signing
 key through attacker-selected `$lookup` and projection stages, paired with an
-exact `$eq` match value and fixed public projection. Three runs per case
-produce 510 scans in the complete corpus.
+exact `$eq` match value and fixed public projection, plus a request object
+crossing three wrappers into a recursively traversed Lodash merge source
+under an exact vulnerable runtime pin, paired with the same call and a
+patched pin. Three runs per case produce 516 scans in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -246,6 +248,20 @@ used only as the target, shadowed or reassigned built-ins, lookalike methods,
 object spread, and code-shaped strings. The witnesses separately prove target
 prototype replacement without claiming global `Object.prototype` mutation,
 and safe null-prototype retention of both defaults and hostile key data.
+
+`node-lodash-prototype-merge-manifest.json` isolates recursive third-party
+merge semantics under perfect gates. The positive retains the Express body
+source, all nine ordered propagators, the exact `lodash.merge()` source operand
+at `src/storage.js:4`, a nearest runtime `package.json` pin of 4.17.11,
+CWE-1321, validation, attack-path analysis, and code evidence. Its matched
+control preserves the call and topology but pins patched Lodash 4.17.21 and
+therefore emits no vulnerable-version row. Deterministic regressions accept
+official default, namespace, CommonJS, destructured, subpath, and optional
+runtime bindings; reject patched or ranged versions, development-only
+declarations, target-only data, lookalikes, receiver or member reassignment,
+and code-shaped strings; and fail closed on missing or malformed version proof.
+Dependency-free witnesses isolate `constructor.prototype` traversal and the
+patched dangerous-key boundary without installing a vulnerable package.
 
 `node-copilot-prompt-injection-manifest.json` isolates that SDK boundary under
 perfect single-run gates. The positive must retain the HTTP source, all six
