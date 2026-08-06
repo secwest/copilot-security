@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   mkdtemp,
@@ -11,7 +12,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  BENCHMARK_RUNNER_LOCK_ARCHIVE_DIRECTORY,
+  BENCHMARK_RUNNER_LOCK_FILENAME,
   BENCHMARK_CAMPAIGN_FILENAME,
+  acquireBenchmarkRunnerLock,
   createBenchmarkAttemptOutput,
   createBenchmarkCampaign,
   ensureBenchmarkCampaign,
@@ -396,6 +400,111 @@ describe("benchmark campaign integrity", () => {
     expect(tampered.cases[0]?.runs[0]?.error).toContain(
       "receipt artifact findingsSha256 does not match",
     );
+  });
+});
+
+describe("benchmark runner lock", () => {
+  test("refuses a live owner and permits a new owner after release", async () => {
+    const root = await temporaryDirectory("benchmark-runner-lock-live-");
+    const first = await acquireBenchmarkRunnerLock(root);
+
+    await expect(acquireBenchmarkRunnerLock(root)).rejects.toThrow(
+      `Another benchmark runner is active for ${root}`,
+    );
+    const owner = JSON.parse(
+      await readFile(join(root, BENCHMARK_RUNNER_LOCK_FILENAME), "utf8"),
+    );
+    expect(owner.pid).toBe(process.pid);
+    expect(owner.token).toBe(first.token);
+
+    await first.release();
+    const second = await acquireBenchmarkRunnerLock(root);
+    expect(second.token).not.toBe(first.token);
+    await second.release();
+  });
+
+  test("archives a dead owner and permits campaign creation with operational lock entries", async () => {
+    const root = await temporaryDirectory("benchmark-runner-lock-stale-");
+    const completed = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+    expect(completed.status).toBe(0);
+    expect(completed.pid).toBeGreaterThan(0);
+    await writeFile(
+      join(root, BENCHMARK_RUNNER_LOCK_FILENAME),
+      `${JSON.stringify({
+        documentType: "copilot-security.benchmark-runner-lock",
+        schemaVersion: "1.0",
+        pid: completed.pid,
+        token: "a".repeat(32),
+        startedAt: "2030-01-02T03:04:05.000Z",
+      })}\n`,
+    );
+
+    const lock = await acquireBenchmarkRunnerLock(root);
+    expect(
+      await readdir(join(root, BENCHMARK_RUNNER_LOCK_ARCHIVE_DIRECTORY)),
+    ).toEqual([
+      `stale-2030-01-02T03-04-05-000Z-${completed.pid}-${"a".repeat(32)}.json`,
+    ]);
+    expect(await ensureBenchmarkCampaign(root, campaign())).toEqual(campaign());
+    await lock.release();
+  });
+
+  test("fails closed on malformed ownership evidence", async () => {
+    const root = await temporaryDirectory("benchmark-runner-lock-invalid-");
+    const path = join(root, BENCHMARK_RUNNER_LOCK_FILENAME);
+    await writeFile(path, "{}\n");
+
+    await expect(acquireBenchmarkRunnerLock(root)).rejects.toThrow(
+      "Invalid benchmark runner lock",
+    );
+    expect(await readFile(path, "utf8")).toBe("{}\n");
+    await expect(ensureBenchmarkCampaign(root, campaign())).rejects.toThrow(
+      `without ${BENCHMARK_CAMPAIGN_FILENAME}`,
+    );
+  });
+
+  test("rejects an archive lookalike before recovering a dead owner", async () => {
+    const root = await temporaryDirectory("benchmark-runner-lock-archive-");
+    const completed = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+    expect(completed.status).toBe(0);
+    await writeFile(
+      join(root, BENCHMARK_RUNNER_LOCK_FILENAME),
+      `${JSON.stringify({
+        documentType: "copilot-security.benchmark-runner-lock",
+        schemaVersion: "1.0",
+        pid: completed.pid,
+        token: "c".repeat(32),
+        startedAt: "2030-02-03T04:05:06.000Z",
+      })}\n`,
+    );
+    await writeFile(
+      join(root, BENCHMARK_RUNNER_LOCK_ARCHIVE_DIRECTORY),
+      "not a directory\n",
+    );
+
+    await expect(acquireBenchmarkRunnerLock(root)).rejects.toThrow(
+      "Benchmark runner lock archive is not a regular directory",
+    );
+    await expect(ensureBenchmarkCampaign(root, campaign())).rejects.toThrow(
+      `without ${BENCHMARK_CAMPAIGN_FILENAME}`,
+    );
+  });
+
+  test("does not remove a lock whose ownership token changed", async () => {
+    const root = await temporaryDirectory("benchmark-runner-lock-token-");
+    const lock = await acquireBenchmarkRunnerLock(root);
+    const path = join(root, BENCHMARK_RUNNER_LOCK_FILENAME);
+    const replacement = `${JSON.stringify({
+      documentType: "copilot-security.benchmark-runner-lock",
+      schemaVersion: "1.0",
+      pid: process.pid,
+      token: "b".repeat(32),
+      startedAt: new Date().toISOString(),
+    })}\n`;
+    await writeFile(path, replacement);
+
+    await lock.release();
+    expect(await readFile(path, "utf8")).toBe(replacement);
   });
 });
 

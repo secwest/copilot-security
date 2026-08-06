@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { lstatSync, readFileSync, rmSync } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -14,10 +15,32 @@ import { CopilotSecurityError } from "./errors.js";
 
 const MAX_CAMPAIGN_BYTES = 1024 * 1024;
 const MAX_RECEIPT_BYTES = 256 * 1024;
+const MAX_RUNNER_LOCK_BYTES = 16 * 1024;
 const MAX_FIXTURE_FILES = 10_000;
 const MAX_FIXTURE_BYTES = 256 * 1024 * 1024;
+const RUNNER_LOCK_RECOVERY_DELAY_MS = 25;
+const MAX_RUNNER_LOCK_TRANSITIONS = 32;
 
 export const BENCHMARK_CAMPAIGN_FILENAME = "benchmark-campaign.json";
+export const BENCHMARK_RUNNER_LOCK_FILENAME = ".benchmark-runner.lock";
+export const BENCHMARK_RUNNER_LOCK_ARCHIVE_DIRECTORY =
+  ".benchmark-runner-locks";
+
+interface BenchmarkRunnerLockDocument {
+  documentType: "copilot-security.benchmark-runner-lock";
+  schemaVersion: "1.0";
+  pid: number;
+  token: string;
+  startedAt: string;
+}
+
+export interface BenchmarkRunnerLock {
+  path: string;
+  pid: number;
+  token: string;
+  release(): Promise<void>;
+  releaseSync(): void;
+}
 
 export interface BenchmarkCampaignScanner {
   cliPath: string;
@@ -215,7 +238,28 @@ export async function ensureBenchmarkCampaign(
     );
   } catch (error) {
     if (!isMissing(error)) throw error;
-    const entries = await readdir(root);
+    const entries = [];
+    for (const entry of await readdir(root)) {
+      if (entry === BENCHMARK_RUNNER_LOCK_FILENAME) {
+        try {
+          parseBenchmarkRunnerLock(
+            await readBounded(
+              join(root, entry),
+              MAX_RUNNER_LOCK_BYTES,
+              "benchmark runner lock",
+            ),
+            join(root, entry),
+          );
+          continue;
+        } catch {
+          // An invalid lookalike is unprovenanced campaign content.
+        }
+      } else if (entry === BENCHMARK_RUNNER_LOCK_ARCHIVE_DIRECTORY) {
+        const metadata = await lstat(join(root, entry));
+        if (metadata.isDirectory() && !metadata.isSymbolicLink()) continue;
+      }
+      entries.push(entry);
+    }
     if (entries.length > 0) {
       throw new CopilotSecurityError(
         `Benchmark results already exist without ${BENCHMARK_CAMPAIGN_FILENAME}: ${root}. Use a new results directory so scanner revisions and policies cannot be mixed.`,
@@ -239,6 +283,164 @@ export async function ensureBenchmarkCampaign(
     );
   }
   return existing;
+}
+
+export async function acquireBenchmarkRunnerLock(
+  resultsDirectory: string,
+): Promise<BenchmarkRunnerLock> {
+  const root = resolve(resultsDirectory);
+  await mkdir(root, { recursive: true });
+  const path = join(root, BENCHMARK_RUNNER_LOCK_FILENAME);
+  const owner: BenchmarkRunnerLockDocument = {
+    documentType: "copilot-security.benchmark-runner-lock",
+    schemaVersion: "1.0",
+    pid: process.pid,
+    token: randomBytes(16).toString("hex"),
+    startedAt: new Date().toISOString(),
+  };
+  const contents = `${JSON.stringify(owner, null, 2)}\n`;
+
+  for (
+    let transition = 0;
+    transition < MAX_RUNNER_LOCK_TRANSITIONS;
+    transition += 1
+  ) {
+    let handle;
+    try {
+      handle = await open(path, "wx", 0o600);
+      await handle.writeFile(contents, "utf8");
+      await handle.sync();
+    } catch (error) {
+      if (isAlreadyExists(error)) {
+        await recoverStaleBenchmarkRunnerLock(root, path);
+        continue;
+      }
+      throw error;
+    } finally {
+      await handle?.close();
+    }
+
+    // Let any contender that inspected a prior stale owner finish its
+    // recovery attempt, then prove that this process still owns the path.
+    await delay(RUNNER_LOCK_RECOVERY_DELAY_MS * 2);
+    const verified = await readBounded(
+      path,
+      MAX_RUNNER_LOCK_BYTES,
+      "benchmark runner lock",
+    ).catch((error: unknown) => {
+      if (isMissing(error)) return null;
+      throw error;
+    });
+    if (verified === null || verified.toString("utf8") !== contents) {
+      continue;
+    }
+
+    let released = false;
+    return {
+      path,
+      pid: owner.pid,
+      token: owner.token,
+      async release() {
+        if (released) return;
+        const current = await readBounded(
+          path,
+          MAX_RUNNER_LOCK_BYTES,
+          "benchmark runner lock",
+        ).catch((error: unknown) => {
+          if (isMissing(error)) return null;
+          throw error;
+        });
+        if (current?.toString("utf8") === contents) {
+          await rm(path, { force: true });
+        }
+        released = true;
+      },
+      releaseSync() {
+        if (released) return;
+        released = true;
+        try {
+          const metadata = lstatSync(path);
+          if (
+            metadata.isFile() &&
+            !metadata.isSymbolicLink() &&
+            metadata.size <= MAX_RUNNER_LOCK_BYTES &&
+            readFileSync(path, "utf8") === contents
+          ) {
+            rmSync(path, { force: true });
+          }
+        } catch (error) {
+          if (!isMissing(error)) {
+            // Exit cleanup is best-effort; stale-owner recovery remains
+            // available to the next runner.
+          }
+        }
+      },
+    };
+  }
+
+  throw new CopilotSecurityError(
+    `Benchmark runner lock changed too many times: ${path}. Refusing to mutate an unstable results directory.`,
+  );
+}
+
+async function recoverStaleBenchmarkRunnerLock(
+  root: string,
+  path: string,
+): Promise<void> {
+  const first = await readBounded(
+    path,
+    MAX_RUNNER_LOCK_BYTES,
+    "benchmark runner lock",
+  ).catch((error: unknown) => {
+    if (isMissing(error)) return null;
+    throw error;
+  });
+  if (first === null) return;
+  const owner = parseBenchmarkRunnerLock(first, path);
+  if (isProcessAlive(owner.pid)) {
+    throw new CopilotSecurityError(
+      `Another benchmark runner is active for ${root} (PID ${owner.pid}, started ${owner.startedAt}). Wait for it to finish or use a different results directory.`,
+    );
+  }
+
+  await delay(RUNNER_LOCK_RECOVERY_DELAY_MS);
+  const second = await readBounded(
+    path,
+    MAX_RUNNER_LOCK_BYTES,
+    "benchmark runner lock",
+  ).catch((error: unknown) => {
+    if (isMissing(error)) return null;
+    throw error;
+  });
+  if (second === null || !first.equals(second)) return;
+  const confirmed = parseBenchmarkRunnerLock(second, path);
+  if (isProcessAlive(confirmed.pid)) return;
+
+  const archiveRoot = join(root, BENCHMARK_RUNNER_LOCK_ARCHIVE_DIRECTORY);
+  let archiveMetadata = await lstat(archiveRoot).catch((error: unknown) => {
+    if (isMissing(error)) return null;
+    throw error;
+  });
+  if (archiveMetadata === null) {
+    await mkdir(archiveRoot, { recursive: true });
+    archiveMetadata = await lstat(archiveRoot);
+  }
+  if (!archiveMetadata.isDirectory() || archiveMetadata.isSymbolicLink()) {
+    throw new CopilotSecurityError(
+      `Benchmark runner lock archive is not a regular directory: ${archiveRoot}.`,
+    );
+  }
+  const timestamp = confirmed.startedAt.replace(/[^0-9A-Za-z]+/gu, "-");
+  const destination = join(
+    archiveRoot,
+    `stale-${timestamp}-${confirmed.pid}-${confirmed.token}.json`,
+  );
+  try {
+    await rename(path, destination);
+  } catch (error) {
+    if (isMissing(error) || isAlreadyExists(error)) return;
+    throw error;
+  }
 }
 
 export async function readBenchmarkCampaign(
@@ -734,6 +936,37 @@ function parseReceipt(bytes: Buffer, path: string): BenchmarkRunReceipt {
   return value;
 }
 
+function parseBenchmarkRunnerLock(
+  bytes: Buffer,
+  path: string,
+): BenchmarkRunnerLockDocument {
+  let value: unknown;
+  try {
+    value = JSON.parse(bytes.toString("utf8"));
+  } catch (error) {
+    throw new CopilotSecurityError(
+      `Invalid benchmark runner lock: ${path}. Refusing automatic recovery.`,
+      { cause: error },
+    );
+  }
+  if (
+    !isRecord(value) ||
+    value["documentType"] !== "copilot-security.benchmark-runner-lock" ||
+    value["schemaVersion"] !== "1.0" ||
+    !Number.isSafeInteger(value["pid"]) ||
+    (value["pid"] as number) < 1 ||
+    typeof value["token"] !== "string" ||
+    !/^[a-f0-9]{32}$/u.test(value["token"]) ||
+    typeof value["startedAt"] !== "string" ||
+    !Number.isFinite(Date.parse(value["startedAt"]))
+  ) {
+    throw new CopilotSecurityError(
+      `Invalid benchmark runner lock: ${path}. Refusing automatic recovery.`,
+    );
+  }
+  return value as unknown as BenchmarkRunnerLockDocument;
+}
+
 function validateReceipt(
   value: unknown,
   path: string,
@@ -894,4 +1127,42 @@ function isMissing(error: unknown): boolean {
     "code" in error &&
     error.code === "ENOENT"
   );
+}
+
+function isAlreadyExists(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "EEXIST"
+  );
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ESRCH"
+    ) {
+      return false;
+    }
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "EPERM"
+    ) {
+      return true;
+    }
+    throw error;
+  }
+}
+
+async function delay(milliseconds: number): Promise<void> {
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }

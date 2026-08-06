@@ -16,6 +16,7 @@ import {
 } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  acquireBenchmarkRunnerLock,
   createBenchmarkAttemptOutput,
   createBenchmarkCampaign,
   ensureBenchmarkCampaign,
@@ -89,6 +90,8 @@ const scannerCli = resolve(options.scannerCli ?? defaultCli);
 const scannerPackageRoot = resolve(dirname(scannerCli), "..");
 requireOutsideRepository(resultsDirectory);
 await requireRegularFile(scannerCli, "Scanner CLI");
+const benchmarkRunnerLock = await acquireBenchmarkRunnerLock(resultsDirectory);
+process.once("exit", () => benchmarkRunnerLock.releaseSync());
 
 const manifestBytes = await readBoundedRegularFile(
   manifestPath,
@@ -309,6 +312,7 @@ if (typeof evaluation.stdout === "string") {
 }
 process.exitCode =
   scanFailures > 0 ? 1 : evaluation.status === null ? 1 : evaluation.status;
+await benchmarkRunnerLock.release();
 
 async function runTask(task, worker) {
   const { benchmarkCase, fixture, fixtureSha256, findingsPath, run } = task;

@@ -1636,6 +1636,23 @@ controls fresh process attempts per invocation, `--scan-timeout-ms N` supplies
 an outer process-tree deadline, and `--workers N` runs up to eight independent
 case/runs concurrently. The default remains one worker.
 
+The runner holds an exclusive `.benchmark-runner.lock` for the complete
+campaign operation, including `--finalize-only`. Do not start a second command
+against the same results directory: a live owner is reported with its PID and
+start time before either process can alter campaign or run output. This matters
+after terminal, automation, or CI timeouts because losing the host command does
+not prove that its descendant process tree stopped. Check the reported PID or
+wait for the first runner instead of deleting a live lock.
+
+If the recorded PID is no longer alive, the next runner verifies that the
+bounded, regular lock record is stable, moves it intact under
+`.benchmark-runner-locks/`, and acquires a fresh token before continuing.
+Malformed, oversized, symbolic-link, permission-denied, or otherwise
+unverifiable ownership evidence fails closed and is not removed automatically.
+Normal and process-exit cleanup compare the complete ownership record, so a
+late cleanup cannot remove another process's replacement lock. Stale archives
+are operational evidence and may remain beside `benchmark-campaign.json`.
+
 If the runner is interrupted after scan receipts are written but before its
 selection manifest or report is committed, rerun the identical campaign command
 with `--finalize-only`. This mode validates the existing campaign identity,

@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBestEffortWriter } from "../../../benchmarks/best-effort-output.mjs";
+import { acquireBenchmarkRunnerLock } from "../src/benchmark-campaign.js";
 
 const temporaryPaths: string[] = [];
 const repositoryRoot = join(import.meta.dir, "..", "..", "..");
@@ -64,6 +65,33 @@ describe("benchmark runner interruption recovery", () => {
     ]);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("4194304-byte limit");
+  });
+
+  test("refuses a second runner before it can mutate shared campaign output", async () => {
+    const root = await temporaryDirectory("benchmark-concurrent-runner-");
+    const results = join(root, "results");
+    const lock = await acquireBenchmarkRunnerLock(results);
+    try {
+      const result = runNode([
+        runner,
+        "--results-dir",
+        results,
+        "--manifest",
+        manifest,
+        "--case",
+        "c-safe-literal-format-audit",
+        "--runs",
+        "1",
+        "--selection-only",
+        "--finalize-only",
+      ]);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("Another benchmark runner is active");
+      expect(result.stderr).toContain(`PID ${process.pid}`);
+      expect(await readdir(results)).toEqual([".benchmark-runner.lock"]);
+    } finally {
+      await lock.release();
+    }
   });
 
   test("binds per-case SARIF seed bytes into the campaign and scanner invocation", async () => {
@@ -148,7 +176,11 @@ describe("benchmark runner interruption recovery", () => {
       },
     );
     expect(result.status).toBe(1);
-    const scannerArguments = JSON.parse(await readFile(invocation, "utf8"));
+    const scannerArguments = JSON.parse(
+      await readFile(invocation, "utf8").catch(() => {
+        throw new Error(`Fixture scanner was not invoked:\n${result.stderr}`);
+      }),
+    );
     const optionIndex = scannerArguments.indexOf("--seed-sarif");
     expect(optionIndex).toBeGreaterThan(-1);
     expect(scannerArguments[optionIndex + 1]).toBe(seed);
