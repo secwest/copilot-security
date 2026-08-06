@@ -69,6 +69,7 @@ const SOURCE_EXTENSIONS = new Set([
   ".fs",
   ".fsx",
   ".go",
+  ".gradle",
   ".groovy",
   ".gvy",
   ".h",
@@ -106,6 +107,13 @@ const SOURCE_EXTENSIONS = new Set([
   ".xml",
   ".yaml",
   ".yml",
+]);
+const JAVA_PROJECT_BOUNDARY_FILES = new Set([
+  "pom.xml",
+  "build.gradle",
+  "build.gradle.kts",
+  "settings.gradle",
+  "settings.gradle.kts",
 ]);
 
 const RISK_SIGNALS: ReadonlyArray<
@@ -2916,7 +2924,8 @@ function javaExternalHelperOwnerIsUnique(
       (file) =>
         file.extension === ".java" &&
         !javaTestOrExamplePath(file.path) &&
-        javaProjectRootForPath(files, file.path) === summary.projectRoot &&
+        javaBasenameProjectRootForPath(files, file.path) ===
+          summary.projectRoot &&
         javaPackageName(file.lines) === summary.packageName &&
         javaTopLevelTypeNames(file.lines).has(summary.ownerType),
     ).length === 1
@@ -2933,7 +2942,7 @@ function javaExactExternalBasenameHelperCall(
   fileInputs: ReadonlySet<string>,
 ): JavaBasenameHelperSummary | undefined {
   const sinkPackage = javaPackageName(sinkFile.lines);
-  const sinkProjectRoot = javaProjectRootForPath(files, sinkFile.path);
+  const sinkProjectRoot = javaBasenameProjectRootForPath(files, sinkFile.path);
   const imports = javaSingleTypeImports(sinkFile.lines);
   const structural = cFamilyStructuralLines(expression.split(/\r?\n/u)).join(
     "\n",
@@ -3273,7 +3282,7 @@ function javaPackageTypeIndex(
   files: readonly SourceFileSnapshot[],
 ): ReadonlyMap<string, ReadonlySet<string>> {
   const projectRoots = files
-    .filter((file) => posix.basename(file.path).toLowerCase() === "pom.xml")
+    .filter((file) => javaProjectBoundaryFile(file.path))
     .map((file) => posix.dirname(file.path))
     .sort((left, right) => right.length - left.length);
   const mutable = new Map<string, Set<string>>();
@@ -3298,7 +3307,7 @@ function javaSamePackageTopLevelTypes(
   files: readonly SourceFileSnapshot[],
   sinkFile: SourceFileSnapshot,
 ): ReadonlySet<string> {
-  const projectRoot = javaProjectRootForPath(files, sinkFile.path);
+  const projectRoot = javaBasenameProjectRootForPath(files, sinkFile.path);
   const key = `${projectRoot}\0${javaPackageName(sinkFile.lines) ?? "<unnamed>"}`;
   return index.get(key) ?? new Set<string>();
 }
@@ -3365,7 +3374,7 @@ function javaFileBasenameHelperSummaries(
         ...(javaPackageName(file.lines) === undefined
           ? {}
           : { packageName: javaPackageName(file.lines) }),
-        projectRoot: javaProjectRootForPath(files, file.path),
+        projectRoot: javaBasenameProjectRootForPath(files, file.path),
       },
       stringType,
       [
@@ -3477,7 +3486,7 @@ function javaPathBasenameHelperSummaries(
         ...(javaPackageName(file.lines) === undefined
           ? {}
           : { packageName: javaPackageName(file.lines) }),
-        projectRoot: javaProjectRootForPath(files, file.path),
+        projectRoot: javaBasenameProjectRootForPath(files, file.path),
       },
       pathType,
       [
@@ -8511,6 +8520,26 @@ function javaProjectRootForPath(
       .map((file) => posix.dirname(file.path))
       .sort((left, right) => right.length - left.length)[0] ?? "."
   );
+}
+
+function javaBasenameProjectRootForPath(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+): string {
+  return (
+    files
+      .filter(
+        (file) =>
+          javaProjectBoundaryFile(file.path) &&
+          pathWithinDirectory(sourcePath, posix.dirname(file.path)),
+      )
+      .map((file) => posix.dirname(file.path))
+      .sort((left, right) => right.length - left.length)[0] ?? "."
+  );
+}
+
+function javaProjectBoundaryFile(path: string): boolean {
+  return JAVA_PROJECT_BOUNDARY_FILES.has(posix.basename(path).toLowerCase());
 }
 
 interface DotnetRazorBoundProperty {

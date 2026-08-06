@@ -928,10 +928,16 @@ but keeps a stricter host boundary because no compiler database is available:
 one unoverloaded symbol, official parameter/return types, one straight-line
 return, and exact fixed arity, argument position, and value identity. Same-file
 calls may be bare, `this`-qualified, or exact-owner calls. Cross-file calls must
-stay in the nearest Maven project, resolve one top-level owner through the same
-package, an exact single-type import, or a fully qualified name, and invoke an
-accessible static method; cross-package use also requires a public top-level
-type and method. That conservative policy reflects the owner, accessibility,
+stay in the nearest Maven project or conventional Gradle project/module,
+resolve one top-level owner through the same package, an exact single-type
+import, or a fully qualified name, and invoke an accessible static method;
+cross-package use also requires a public top-level type and method. Exact
+Gradle Groovy/Kotlin build scripts and settings files partition ordinary
+modules and nested composite builds, with the deepest ancestor winning. This
+prevents an unrelated sibling duplicate from suppressing a real local summary
+and prevents an undeclared sibling helper from supplying a call target. Custom
+project-directory/build-file mappings and declared cross-module dependencies
+remain outside the bounded proof. That conservative policy reflects the owner, accessibility,
 applicability, arity, and overload work required by
 [JLS 15.12](https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.12).
 Wildcard custom imports, duplicate owners, nested projects, inaccessible or

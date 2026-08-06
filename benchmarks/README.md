@@ -1302,14 +1302,19 @@ use the same project-local cross-file helper boundary, exercising helper-file
 reduction evidence and caller-side guard recognition together.
 
 Cross-file summaries remain deliberately narrower than Java compilation. The
-caller and helper must share the nearest Maven project; the top-level owner must
-be unique and resolve through the same package, one exact single-type import,
-or its fully qualified name; and the method must be static and accessible.
-Calls across packages additionally require a public top-level type and public
-method. Exact official types, an unoverloaded symbol, a straight-line return,
-fixed arity, argument position, and value identity remain mandatory. Wildcard
-custom imports, duplicate owners, nested projects, inaccessible or instance
-methods, transformations, and ambiguity fail closed.
+caller and helper must share the nearest Maven project or conventional Gradle
+project/module; the top-level owner must be unique and resolve through the same
+package, one exact single-type import, or its fully qualified name; and the
+method must be static and accessible. Exact `build.gradle`,
+`build.gradle.kts`, `settings.gradle`, and `settings.gradle.kts` ancestors
+partition Gradle modules and nested composite builds, with the deepest marker
+winning. Calls across packages additionally require a public top-level type and
+public method. Exact official types, an unoverloaded symbol, a straight-line
+return, fixed arity, argument position, and value identity remain mandatory.
+Wildcard custom imports, duplicate owners inside one module, undeclared sibling
+modules, inaccessible or instance methods, transformations, and ambiguity fail
+closed. Custom Gradle project-directory/build-file mappings and declared
+cross-module dependencies remain outside this bounded proof.
 
 The deterministic identity gate implements Java's compilation-unit import
 precedence. A single-type `Path` or `Paths` import remains exact even when

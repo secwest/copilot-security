@@ -1370,6 +1370,170 @@ public final class ChildPathNames {
     expect(javaFileGetNameRecords(inventory)).toEqual([]);
   });
 
+  test("isolates exact Gradle modules when resolving Java basename helpers", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "settings.gradle.kts",
+      `rootProject.name = "basename-modules"
+include("app", "peer", "isolated", "library")
+`,
+    );
+    for (const [module, buildFile] of [
+      ["app", "build.gradle.kts"],
+      ["peer", "build.gradle"],
+      ["isolated", "build.gradle.kts"],
+      ["library", "build.gradle"],
+    ] as const) {
+      await writeRepositoryFile(
+        repository,
+        `${module}/${buildFile}`,
+        `${
+          buildFile.endsWith(".kts")
+            ? "plugins { java }"
+            : "plugins { id 'java' }"
+        }
+`,
+      );
+    }
+    await writeRepositoryFile(
+      repository,
+      "app/src/main/java/example/PathNames.java",
+      `
+package example;
+import java.nio.file.Path;
+final class PathNames {
+  static Path basename(String input) {
+    return Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "app/src/main/java/example/AppController.java",
+      `
+package example;
+public final class AppController {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = PathNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "peer/src/main/java/example/PathNames.java",
+      `
+package example;
+final class PathNames {
+  static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "library/src/main/java/example/FileNames.java",
+      `
+package example;
+final class FileNames {
+  static String basename(String input) {
+    return new java.io.File(input).getName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "isolated/src/main/java/example/IsolatedController.java",
+      `
+package example;
+public final class IsolatedController {
+  public String read(@RequestParam String path) throws Exception {
+    String name = FileNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/composite/PathNames.java",
+      `
+package composite;
+final class PathNames {
+  static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "included/settings.gradle",
+      `rootProject.name = 'included-build'
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "included/src/main/java/composite/PathNames.java",
+      `
+package composite;
+final class PathNames {
+  static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "included/src/main/java/composite/IncludedController.java",
+      `
+package composite;
+public final class IncludedController {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = PathNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(3);
+    const pathSpecialized = javaPathGetFileNameRecords(inventory);
+    expect(pathSpecialized).toHaveLength(2);
+    expect(pathSpecialized.map(({ path }) => path)).toEqual(
+      expect.arrayContaining([
+        "app/src/main/java/example/AppController.java",
+        "included/src/main/java/composite/IncludedController.java",
+      ]),
+    );
+    expect(
+      pathSpecialized.flatMap(
+        (record) => record.frameworkModel?.candidateControls ?? [],
+      ),
+    ).toContainEqual({
+      kind: "incomplete-java-nio-path-getfilename-reduction",
+      path: "app/src/main/java/example/PathNames.java",
+      line: 6,
+    });
+    expect(
+      pathSpecialized.flatMap(
+        (record) => record.frameworkModel?.candidateControls ?? [],
+      ),
+    ).toContainEqual({
+      kind: "incomplete-java-nio-path-getfilename-reduction",
+      path: "included/src/main/java/composite/PathNames.java",
+      line: 5,
+    });
+    expect(javaFileGetNameRecords(inventory)).toHaveLength(0);
+  });
+
   test("rejects ambiguous or transformed Path basename helpers", async () => {
     const repository = await temporaryRepository();
     const controller = (
@@ -2557,13 +2721,16 @@ public final class DocumentController {
       "Exact or wildcard static imports of Path.of and Paths.get are eligible only without a local method declaration",
     );
     expect(prompt).toContain(
-      "A cross-file call must remain in the nearest Maven project",
+      "A cross-file call must remain in the nearest Maven or Gradle project or module",
     );
     expect(prompt).toContain(
       "resolve exactly one top-level helper owner through the same package, one exact single-type import, or its fully qualified name",
     );
     expect(prompt).toContain(
       "The reduction evidence belongs to the helper file",
+    );
+    expect(prompt).toContain(
+      "an undeclared sibling module is not a source of helper code",
     );
     expect(prompt).toContain(
       "the exact equality is not negated or conditionally conjoined",
