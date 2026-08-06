@@ -613,6 +613,281 @@ public final class PathParameterController {
     ).toBeTrue();
   });
 
+  test("resolves same-package Path and Paths shadows under Java import precedence", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "exact/example/Path.java",
+      `package exact.example; final class Path {}`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "exact/example/ExactImportController.java",
+      `
+package exact.example;
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class ExactImportController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Path.of(path).getFileName();
+    return Files.readString(Path.of("documents").resolve(basename));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "wildcard/example/Path.java",
+      `
+package wildcard.example;
+final class Path {
+  static Path of(String value) { return new Path(); }
+  Path getFileName() { return this; }
+  java.nio.file.Path toOfficial() { return java.nio.file.Path.of("guide"); }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "wildcard/example/WildcardController.java",
+      `
+package wildcard.example;
+import java.nio.file.*;
+public final class WildcardController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Path.of(path).getFileName();
+    return Files.readString(java.nio.file.Path.of("documents").resolve(basename.toOfficial()));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "wildcardpaths/example/Paths.java",
+      `
+package wildcardpaths.example;
+final class Paths {
+  static java.nio.file.Path get(String value) { return java.nio.file.Path.of("guide"); }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "wildcardpaths/example/WildcardPathsController.java",
+      `
+package wildcardpaths.example;
+import java.nio.file.*;
+public final class WildcardPathsController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Paths.get(path).getFileName();
+    return Files.readString(Path.of("documents").resolve(basename));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "nested/example/Holder.java",
+      `package nested.example; final class Holder { static final class Path {} }`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "nested/example/NestedController.java",
+      `
+package nested.example;
+import java.nio.file.*;
+public final class NestedController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Path.of(path).getFileName();
+    return Files.readString(Path.of("documents").resolve(basename));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "other/shadow/Path.java",
+      `package other.shadow; final class Path {}`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "different/example/DifferentPackageController.java",
+      `
+package different.example;
+import java.nio.file.*;
+public final class DifferentPackageController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Path.of(path).getFileName();
+    return Files.readString(Path.of("documents").resolve(basename));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "qualified/example/Path.java",
+      `package qualified.example; final class Path {}`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "qualified/example/QualifiedController.java",
+      `
+package qualified.example;
+public final class QualifiedController {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path basename = java.nio.file.Path.of(path).getFileName();
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(basename));
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(6);
+    expect(
+      javaPathGetFileNameRecords(inventory).map((record) => record.path),
+    ).toEqual([
+      "different/example/DifferentPackageController.java",
+      "exact/example/ExactImportController.java",
+      "nested/example/NestedController.java",
+      "qualified/example/QualifiedController.java",
+    ]);
+  });
+
+  test("accepts exact static Path factories and rejects local or ambiguous owners", async () => {
+    const repository = await temporaryRepository();
+    const staticController = (
+      packageName: string,
+      staticImport: string,
+      factory: string,
+      guard = "",
+    ): string => `
+package ${packageName};
+import java.nio.file.Files;
+${staticImport}
+public final class StaticController {
+  public String read(@RequestParam String path) throws Exception {
+    var basename = ${factory}(path).getFileName();
+${guard}
+    return Files.readString(java.nio.file.Path.of("documents").resolve(basename));
+  }
+}
+`;
+    await writeRepositoryFile(
+      repository,
+      "staticof/exact/StaticController.java",
+      staticController(
+        "staticof.exact",
+        "import static java.nio.file.Path.of;",
+        "of",
+        `    if (basename.equals(of(".."))) throw new SecurityException("parent");`,
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "staticof/wildcard/StaticController.java",
+      staticController(
+        "staticof.wildcard",
+        "import static java.nio.file.Path.*;",
+        "of",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "staticget/exact/StaticController.java",
+      staticController(
+        "staticget.exact",
+        "import static java.nio.file.Paths.get;",
+        "get",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "staticget/wildcard/StaticController.java",
+      staticController(
+        "staticget.wildcard",
+        "import static java.nio.file.Paths.*;",
+        "get",
+      ),
+    );
+    await writeRepositoryFile(
+      repository,
+      "shadow/local/StaticController.java",
+      `
+package shadow.local;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import static java.nio.file.Path.of;
+public final class StaticController {
+  private static Path of(String ignored) { return Path.of("guide"); }
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = of(path).getFileName();
+    return Files.readString(Path.of("documents").resolve(basename));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "shadow/qualified/StaticController.java",
+      `
+package shadow.qualified;
+import java.nio.file.Files;
+import static java.nio.file.Path.of;
+final class Evil { static java.nio.file.Path of(String value) { return java.nio.file.Path.of("guide"); } }
+public final class StaticController {
+  public String read(@RequestParam String path) throws Exception {
+    var basename = Evil.of(path).getFileName();
+    return Files.readString(java.nio.file.Path.of("documents").resolve(basename));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "shadow/ambiguous/Factory.java",
+      `
+package shadow.ambiguous;
+public final class Factory {
+  public static java.nio.file.Path of(String value) { return java.nio.file.Path.of("guide"); }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "shadow/ambiguous/StaticController.java",
+      `
+package shadow.ambiguous;
+import java.nio.file.Files;
+import static java.nio.file.Path.*;
+import static shadow.ambiguous.Factory.*;
+public final class StaticController {
+  public String read(@RequestParam String path) throws Exception {
+    var basename = of(path).getFileName();
+    return Files.readString(java.nio.file.Path.of("documents").resolve(basename));
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(7);
+    const specialized = javaPathGetFileNameRecords(inventory);
+    expect(specialized.map((record) => record.path)).toEqual([
+      "staticget/exact/StaticController.java",
+      "staticget/wildcard/StaticController.java",
+      "staticof/exact/StaticController.java",
+      "staticof/wildcard/StaticController.java",
+    ]);
+    expect(
+      specialized
+        .find(
+          (record) => record.path === "staticof/exact/StaticController.java",
+        )
+        ?.frameworkModel?.candidateControls.map(({ kind }) => kind),
+    ).toContain("parent-path-component-rejection");
+  });
+
   test("retains only exact pre-sink Path parent rejection", async () => {
     const repository = await temporaryRepository();
     const controller = (guard: string): string => `
@@ -1205,6 +1480,12 @@ public final class DocumentController {
     );
     expect(prompt).toContain(
       "getFileName and getNameCount are not standalone traversal controls",
+    );
+    expect(prompt).toContain(
+      "Exact single-type imports remain authoritative over another top-level Path or Paths in the same package",
+    );
+    expect(prompt).toContain(
+      "Exact or wildcard static imports of Path.of and Paths.get are eligible only without a local method declaration",
     );
     expect(prompt).toContain("A check on another reduction");
     expect(prompt).toContain("a check after the operation is insufficient");

@@ -2594,11 +2594,127 @@ function javaFileGetNamePathBoundary(
   return { reductionLine };
 }
 
+function javaBraceSurface(
+  lines: readonly string[],
+  maximumDepth: number,
+): string {
+  const structural = cFamilyStructuralLines(lines).join("\n");
+  let depth = 0;
+  let surface = "";
+  for (const character of structural) {
+    if (character === "{") {
+      if (depth <= maximumDepth) surface += character;
+      depth += 1;
+      continue;
+    }
+    if (character === "}") {
+      depth = Math.max(0, depth - 1);
+      if (depth <= maximumDepth) surface += character;
+      continue;
+    }
+    if (depth <= maximumDepth) {
+      surface += character;
+    } else if (character === "\n") {
+      surface += "\n";
+    }
+  }
+  return surface;
+}
+
+function javaPackageName(lines: readonly string[]): string | undefined {
+  const structural = cFamilyStructuralLines(lines).join("\n");
+  const declaration =
+    /^\s*package\s+([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*;/mu.exec(
+      structural,
+    )?.[1];
+  return declaration?.replace(/\s+/gu, "");
+}
+
+function javaTopLevelTypeNames(lines: readonly string[]): Set<string> {
+  const surface = javaBraceSurface(lines, 0);
+  return new Set(
+    [
+      ...surface.matchAll(
+        /\b(?:class|enum|interface|record)\s+([A-Za-z_$][\w$]*)\b/gu,
+      ),
+    ].flatMap((match) => (match[1] === undefined ? [] : [match[1]])),
+  );
+}
+
+function javaPackageTypeIndex(
+  files: readonly SourceFileSnapshot[],
+): ReadonlyMap<string, ReadonlySet<string>> {
+  const projectRoots = files
+    .filter((file) => posix.basename(file.path).toLowerCase() === "pom.xml")
+    .map((file) => posix.dirname(file.path))
+    .sort((left, right) => right.length - left.length);
+  const mutable = new Map<string, Set<string>>();
+  for (const file of files) {
+    if (file.extension !== ".java" || javaTestOrExamplePath(file.path)) {
+      continue;
+    }
+    const projectRoot =
+      projectRoots.find((candidate) =>
+        pathWithinDirectory(file.path, candidate),
+      ) ?? ".";
+    const key = `${projectRoot}\0${javaPackageName(file.lines) ?? "<unnamed>"}`;
+    const types = mutable.get(key) ?? new Set<string>();
+    for (const name of javaTopLevelTypeNames(file.lines)) types.add(name);
+    mutable.set(key, types);
+  }
+  return mutable;
+}
+
+function javaSamePackageTopLevelTypes(
+  index: ReadonlyMap<string, ReadonlySet<string>>,
+  files: readonly SourceFileSnapshot[],
+  sinkFile: SourceFileSnapshot,
+): ReadonlySet<string> {
+  const projectRoot = javaProjectRootForPath(files, sinkFile.path);
+  const key = `${projectRoot}\0${javaPackageName(sinkFile.lines) ?? "<unnamed>"}`;
+  return index.get(key) ?? new Set<string>();
+}
+
+function javaCompilationUnitDeclaresMethod(
+  lines: readonly string[],
+  methodName: string,
+): boolean {
+  const surface = javaBraceSurface(lines, 1);
+  const escaped = escapeRegularExpression(methodName);
+  return new RegExp(
+    String.raw`(?:^|[;{}])\s*(?:(?:@[A-Za-z_$][\w$.]*(?:\([^;{}]*\))?)\s*)*(?:(?:public|protected|private|abstract|default|final|native|static|strictfp|synchronized)\s+)*(?:<[^;{}]+>\s+)?[A-Za-z_$][\w$.[\]<>?,]*(?:\s*\[\s*\])?\s+${escaped}\s*\(`,
+    "mu",
+  ).test(surface);
+}
+
+function javaStaticFactoryImportIsExact(
+  structuralText: string,
+  owner: string,
+  methodName: string,
+): boolean {
+  const normalized = structuralText.replace(/\s*\.\s*/gu, ".");
+  const imports = [
+    ...normalized.matchAll(
+      /^\s*import\s+static\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*|\.\*)+)\s*;/gmu,
+    ),
+  ].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
+  const exact = `${owner}.${methodName}`;
+  const wildcard = `${owner}.*`;
+  if (!imports.includes(exact) && !imports.includes(wildcard)) return false;
+  return !imports.some(
+    (candidate) =>
+      candidate !== exact &&
+      candidate !== wildcard &&
+      (candidate.endsWith(`.${methodName}`) || candidate.endsWith(".*")),
+  );
+}
+
 function javaPathGetFileNamePathBoundaryRecords(
   files: readonly SourceFileSnapshot[],
   records: readonly ResidualRiskRecord[],
 ): ResidualRiskRecord[] {
   const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const packageTypes = javaPackageTypeIndex(files);
   const emitted = new Set<string>();
   const specialized: ResidualRiskRecord[] = [];
   for (const record of records) {
@@ -2625,6 +2741,7 @@ function javaPathGetFileNamePathBoundaryRecords(
             propagator.symbol === undefined ? [] : [propagator.symbol],
           ),
       ),
+      javaSamePackageTopLevelTypes(packageTypes, files, sinkFile),
     );
     if (boundary === undefined) continue;
     const key = `${framework.source.path}\0${framework.source.line}\0${framework.sink.path}\0${framework.sink.line}`;
@@ -2682,6 +2799,7 @@ function javaPathGetFileNamePathBoundary(
   lines: readonly string[],
   sinkLine: number,
   provenSinkParameters: ReadonlySet<string>,
+  samePackageTopLevelTypes: ReadonlySet<string>,
 ): { reductionLine: number; parentRejectionLine?: number } | undefined {
   const method = exportedJavaMethods(lines).find(
     (candidate) =>
@@ -2690,10 +2808,13 @@ function javaPathGetFileNamePathBoundary(
   if (method === undefined) return undefined;
   const structuralLines = cFamilyStructuralLines(lines);
   const structuralText = structuralLines.join("\n");
-  const pathImported = /^\s*import\s+java\.nio\.file\.(?:Path|\*)\s*;/mu.test(
+  const pathSingleImported = /^\s*import\s+java\.nio\.file\.Path\s*;/mu.test(
     structuralText,
   );
-  const pathsImported = /^\s*import\s+java\.nio\.file\.(?:Paths|\*)\s*;/mu.test(
+  const pathsSingleImported = /^\s*import\s+java\.nio\.file\.Paths\s*;/mu.test(
+    structuralText,
+  );
+  const nioFileWildcardImported = /^\s*import\s+java\.nio\.file\.\*\s*;/mu.test(
     structuralText,
   );
   const pathShadowed = /\b(?:class|enum|interface|record)\s+Path\b/u.test(
@@ -2702,15 +2823,46 @@ function javaPathGetFileNamePathBoundary(
   const pathsShadowed = /\b(?:class|enum|interface|record)\s+Paths\b/u.test(
     structuralText,
   );
-  const pathType =
-    pathImported && !pathShadowed
-      ? String.raw`(?:(?:java\s*\.\s*nio\s*\.\s*file\s*\.\s*)?Path)`
-      : String.raw`(?:java\s*\.\s*nio\s*\.\s*file\s*\.\s*Path)`;
+  const simplePathIsOfficial =
+    !pathShadowed &&
+    (pathSingleImported ||
+      (nioFileWildcardImported && !samePackageTopLevelTypes.has("Path")));
+  const simplePathsIsOfficial =
+    !pathsShadowed &&
+    (pathsSingleImported ||
+      (nioFileWildcardImported && !samePackageTopLevelTypes.has("Paths")));
+  const localOfMethod = javaCompilationUnitDeclaresMethod(
+    structuralLines,
+    "of",
+  );
+  const localGetMethod = javaCompilationUnitDeclaresMethod(
+    structuralLines,
+    "get",
+  );
+  const staticPathOfImported = javaStaticFactoryImportIsExact(
+    structuralText,
+    "java.nio.file.Path",
+    "of",
+  );
+  const staticPathsGetImported = javaStaticFactoryImportIsExact(
+    structuralText,
+    "java.nio.file.Paths",
+    "get",
+  );
+  const pathType = simplePathIsOfficial
+    ? String.raw`(?:(?:java\s*\.\s*nio\s*\.\s*file\s*\.\s*)?Path)`
+    : String.raw`(?:java\s*\.\s*nio\s*\.\s*file\s*\.\s*Path)`;
   const factoryTypes = [
     String.raw`java\s*\.\s*nio\s*\.\s*file\s*\.\s*Path\s*\.\s*of`,
     String.raw`java\s*\.\s*nio\s*\.\s*file\s*\.\s*Paths\s*\.\s*get`,
-    ...(pathImported && !pathShadowed ? [String.raw`Path\s*\.\s*of`] : []),
-    ...(pathsImported && !pathsShadowed ? [String.raw`Paths\s*\.\s*get`] : []),
+    ...(simplePathIsOfficial ? [String.raw`Path\s*\.\s*of`] : []),
+    ...(simplePathsIsOfficial ? [String.raw`Paths\s*\.\s*get`] : []),
+    ...(staticPathOfImported && !localOfMethod
+      ? [String.raw`(?<![A-Za-z0-9_$.])of`]
+      : []),
+    ...(staticPathsGetImported && !localGetMethod
+      ? [String.raw`(?<![A-Za-z0-9_$.])get`]
+      : []),
   ];
   const factoryStart = new RegExp(
     String.raw`\b(?:${factoryTypes.join("|")})\s*\(`,
@@ -2760,6 +2912,7 @@ function javaPathGetFileNamePathBoundary(
   const pathFactories = (
     expression: string,
   ): Array<{ argument: string; reduced: boolean }> => {
+    expression = expression.replace(/\s*\.\s*/gu, ".");
     factoryStart.lastIndex = 0;
     return [...expression.matchAll(factoryStart)].flatMap((match) => {
       if (match.index === undefined) return [];
@@ -2852,7 +3005,7 @@ function javaPathGetFileNamePathBoundary(
     index += 1
   ) {
     const structural = structuralLines[index] ?? "";
-    const raw = lines[index] ?? "";
+    const raw = (lines[index] ?? "").replace(/\s*\.\s*/gu, ".");
     if (!/\bif\s*\(/u.test(structural)) continue;
     const checked = [...basenameIdentifiers].some((identifier) => {
       const escaped = escapeRegularExpression(identifier);

@@ -1298,6 +1298,15 @@ The matched control compares the same reduced `Path` with exact `Path.of("..")`
 before the sink. Its witnesses prove runtime parent escape, exact and nested
 parent rejection, and continued access to an allowed name.
 
+The deterministic identity gate implements Java's compilation-unit import
+precedence. A single-type `Path` or `Paths` import remains exact even when
+another compilation unit in the same package declares that simple name; an
+on-demand `java.nio.file.*` import is suppressed by the same-package top-level
+type. Nested and different-package lookalikes do not suppress the JDK type.
+Exact and on-demand static imports of `Path.of` or `Paths.get` are accepted only
+without a local method declaration, qualified lookalike call, or competing
+same-name static import. Focused negative controls exercise each ambiguity.
+
 ```powershell
 javac -d C:\security-benchmarks\java-path-vulnerable `
   benchmarks\witnesses\java-multi-hop-path-traversal\VulnerablePathWitness.java

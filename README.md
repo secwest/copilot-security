@@ -1519,6 +1519,16 @@ in-root document. Two additional matched pairs prove that neither exact
 the parent name `..`; each control rejects the exact reduced parent before the
 same sink while preserving an allowed name:
 
+The `Path` specialization follows Java compilation-unit identity rather than
+simple spelling. An exact `java.nio.file.Path` or `Paths` import remains
+authoritative over a top-level lookalike in the same package, while
+`java.nio.file.*` is rejected when such a same-package type exists. Nested and
+different-package names do not suppress the JDK binding. Exact and wildcard
+static imports of `Path.of` and `Paths.get` are supported only when no local
+method, qualified lookalike call, or competing same-name static import can own
+the call. Fully qualified factories remain independent of every simple-name
+shadow.
+
 ```powershell
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/java-multi-hop-path-manifest.json `

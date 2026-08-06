@@ -310,7 +310,11 @@ interpreter that consumes the value.
   `Path.of("..").getFileName()` preserve the parent component. A bare
   `getFileName` or `getNameCount` occurrence is not counterevidence. For a
   specialized row, preserve exact `java.io.File` or `java.nio.file.Path`/
-  `Paths` identity and the same reduced value at the sink. Only fixed
+  `Paths` identity and the same reduced value at the sink. An exact
+  single-type import wins over a top-level same-package lookalike; a wildcard
+  import does not. Exact or wildcard static `Path.of`/`Paths.get` imports are
+  eligible only when no local method, qualified lookalike call, or competing
+  same-name static import can own the call. Only fixed
   server-owned selection, a strict server-owned name allowlist, or a dominating
   fail-closed rejection of that exact reduced parent value is a strong lead;
   another reduction, logging, substring matching, or a post-sink check is not.
