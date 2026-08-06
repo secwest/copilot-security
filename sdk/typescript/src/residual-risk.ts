@@ -2199,6 +2199,12 @@ function frameworkDataflowRecords(
     ) {
       continue;
     }
+    if (
+      model.id === "node-http-mongoose-nosql" &&
+      !nodeMongooseHasOfficialFactoryBinding(lines)
+    ) {
+      continue;
+    }
     const rawMatchedSources = JAVASCRIPT_EXTENSIONS.has(extension)
       ? matchingJavascriptModelLines(lines, model.sources, 16)
       : PYTHON_EXTENSIONS.has(extension)
@@ -2267,8 +2273,7 @@ function frameworkDataflowRecords(
           ? nodeHttpUrlSink(lines, sink.line)
           : undefined;
       const nodeObjectSink =
-        model.id === "node-http-object-authorization" ||
-        model.id === "node-http-mongoose-nosql"
+        model.id === "node-http-object-authorization"
           ? nodeObjectAuthorizationSink(lines, sink.line)
           : undefined;
       const nodeCopilotSink =
@@ -6535,12 +6540,19 @@ function javascriptFrameworkWrapperSummaries(
       ) {
         continue;
       }
+      if (
+        model.id === "node-http-mongoose-nosql" &&
+        !nodeMongooseHasOfficialFactoryBinding(file.lines)
+      ) {
+        continue;
+      }
       const sinks =
         model.id === "node-http-path"
           ? exactFilesystemPathSinkLines(file.lines, model.id, 32)
           : matchingJavascriptModelLines(file.lines, model.sinks, 32);
       const controls =
-        model.id === "node-http-object-authorization"
+        model.id === "node-http-object-authorization" ||
+        model.id === "node-http-mongoose-nosql"
           ? []
           : model.id === "node-http-ssrf" || model.id === "node-http-path"
             ? matchingJavascriptControlLines(file.lines, model.controls, 64)
@@ -7479,9 +7491,16 @@ function cFamilyFunctionEndLine(
   return Math.min(structuralLines.length, startIndex + 1);
 }
 
+const EXPORTED_PYTHON_FUNCTIONS_CACHE = new WeakMap<
+  readonly string[],
+  ExportedPythonFunction[]
+>();
+
 function exportedPythonFunctions(
   lines: readonly string[],
 ): ExportedPythonFunction[] {
+  const cached = EXPORTED_PYTHON_FUNCTIONS_CACHE.get(lines);
+  if (cached !== undefined) return cached;
   const functions: ExportedPythonFunction[] = [];
   const structuralLines = pythonStructuralLines(lines);
   const expression =
@@ -7509,6 +7528,7 @@ function exportedPythonFunctions(
       endLine: pythonFunctionEndLine(lines, index),
     });
   }
+  EXPORTED_PYTHON_FUNCTIONS_CACHE.set(lines, functions);
   return functions;
 }
 
@@ -7531,10 +7551,18 @@ function pythonFunctionEndLine(
   return Math.min(lines.length, Math.max(startIndex + 1, lastBodyLine));
 }
 
+const EXPORTED_JAVASCRIPT_FUNCTIONS_CACHE = new WeakMap<
+  readonly string[],
+  ExportedJavascriptFunction[]
+>();
+
 function exportedJavascriptFunctions(
   lines: readonly string[],
 ): ExportedJavascriptFunction[] {
+  const cached = EXPORTED_JAVASCRIPT_FUNCTIONS_CACHE.get(lines);
+  if (cached !== undefined) return cached;
   const functions: ExportedJavascriptFunction[] = [];
+  const structuralLines = javascriptStructuralLines(lines);
   const patterns = [
     /^\s*export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{/u,
     /^\s*export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>/u,
@@ -7542,11 +7570,11 @@ function exportedJavascriptFunctions(
     /^\s*export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?([A-Za-z_$][\w$]*)\s*=>/u,
   ];
   for (let index = 0; index < lines.length; index += 1) {
-    const firstLine = javascriptStructuralLines([lines[index] ?? ""])[0] ?? "";
+    const firstLine = structuralLines[index] ?? "";
     if (firstLine.trim() === "") continue;
-    const declaration = javascriptStructuralLines(
-      lines.slice(index, Math.min(lines.length, index + 13)),
-    ).join("\n");
+    const declaration = structuralLines
+      .slice(index, Math.min(lines.length, index + 13))
+      .join("\n");
     const match = patterns
       .map((pattern) => pattern.exec(declaration))
       .find((candidate) => candidate !== null);
@@ -7569,6 +7597,7 @@ function exportedJavascriptFunctions(
       endLine: javascriptFunctionEndLine(lines, index),
     });
   }
+  EXPORTED_JAVASCRIPT_FUNCTIONS_CACHE.set(lines, functions);
   return functions;
 }
 
@@ -7625,9 +7654,13 @@ function javascriptCodeBeforeComment(line: string): string {
   return line;
 }
 
+const JAVASCRIPT_CODE_LINES_CACHE = new WeakMap<readonly string[], string[]>();
+
 function javascriptCodeLinesWithoutComments(
   lines: readonly string[],
 ): string[] {
+  const cached = JAVASCRIPT_CODE_LINES_CACHE.get(lines);
+  if (cached !== undefined) return cached;
   const result: string[] = [];
   let blockComment = false;
   for (const line of lines) {
@@ -7666,13 +7699,23 @@ function javascriptCodeLinesWithoutComments(
     }
     result.push(output.join(""));
   }
+  JAVASCRIPT_CODE_LINES_CACHE.set(lines, result);
   return result;
 }
 
+const JAVASCRIPT_STRUCTURAL_LINES_CACHE = new WeakMap<
+  readonly string[],
+  string[]
+>();
+
 function javascriptStructuralLines(lines: readonly string[]): string[] {
-  return javascriptCodeLinesWithoutComments(lines).map((line) =>
+  const cached = JAVASCRIPT_STRUCTURAL_LINES_CACHE.get(lines);
+  if (cached !== undefined) return cached;
+  const structural = javascriptCodeLinesWithoutComments(lines).map((line) =>
     javascriptStructuralCode(line),
   );
+  JAVASCRIPT_STRUCTURAL_LINES_CACHE.set(lines, structural);
+  return structural;
 }
 
 function javascriptStructuralCode(line: string): string {
@@ -7791,7 +7834,14 @@ function pythonStructuralCode(line: string): string {
   return pythonStructuralLines([line])[0] ?? "";
 }
 
+const PYTHON_STRUCTURAL_LINES_CACHE = new WeakMap<
+  readonly string[],
+  string[]
+>();
+
 function pythonStructuralLines(lines: readonly string[]): string[] {
+  const cached = PYTHON_STRUCTURAL_LINES_CACHE.get(lines);
+  if (cached !== undefined) return cached;
   const structural: string[] = [];
   let tripleQuote = "";
   for (const line of lines) {
@@ -7835,6 +7885,7 @@ function pythonStructuralLines(lines: readonly string[]): string[] {
     }
     structural.push(output.join(""));
   }
+  PYTHON_STRUCTURAL_LINES_CACHE.set(lines, structural);
   return structural;
 }
 
@@ -8250,6 +8301,29 @@ const NODE_MONGOOSE_FILTER_OPERATIONS = new Set([
   "updateOne",
 ]);
 
+function nodeMongooseHasOfficialFactoryBinding(
+  lines: readonly string[],
+): boolean {
+  for (const line of lines) {
+    const code = javascriptCodeBeforeComment(line);
+    if (
+      /^\s*import\s+\*\s+as\s+[A-Za-z_$][\w$]*\s+from\s+["']mongoose["']/u.test(
+        code,
+      ) ||
+      /^\s*import\s+[A-Za-z_$][\w$]*\s+from\s+["']mongoose["']/u.test(code) ||
+      /^\s*(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*require\s*\(\s*["']mongoose["']\s*\)/u.test(
+        code,
+      )
+    ) {
+      return true;
+    }
+  }
+  return importedJavascriptSymbols(lines).some(
+    (binding) =>
+      binding.moduleSpecifier === "mongoose" && binding.imported === "model",
+  );
+}
+
 function nodeMongooseBindingContext(
   lines: readonly string[],
 ): NodeMongooseBindingContext {
@@ -8390,16 +8464,39 @@ function nodeMongooseNoSqlControls(
       value: sink.filterExpression,
     } satisfies JavascriptResolvedExpression);
   const controls: Array<{ kind: string; line: number }> = [];
-  if (/\$eq\s*:/u.test(resolved.value)) {
-    controls.push({ kind: "literal-query-value-equality", line: sinkLine });
-  }
   const context = nodeMongooseBindingContext(lines);
+  const wrapper = context.wrappers.find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  const taintedParameters = (wrapper?.parameters ?? []).filter((parameter) =>
+    lineReferencesIdentifier(resolved.value, parameter),
+  );
   if (
-    context.mongooseReceivers.some((binding) =>
+    taintedParameters.length > 0 &&
+    taintedParameters.every((parameter) =>
       new RegExp(
-        `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*sanitizeFilter\\s*\\(`,
+        `\\$eq\\s*:\\s*${escapeRegularExpression(parameter)}\\b`,
         "u",
       ).test(resolved.value),
+    )
+  ) {
+    controls.push({ kind: "literal-query-value-equality", line: sinkLine });
+  }
+  if (
+    context.mongooseReceivers.some(
+      (binding) =>
+        binding.line < resolved.line &&
+        !javascriptIdentifierReassignedBetween(
+          lines,
+          binding.local,
+          binding.line,
+          resolved.line,
+        ) &&
+        new RegExp(
+          `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*sanitizeFilter\\s*\\(`,
+          "u",
+        ).test(resolved.value),
     )
   ) {
     controls.push({

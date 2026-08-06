@@ -231,9 +231,29 @@ describe("Node Mongoose NoSQL selector framework model", () => {
       "fake-sanitize.mjs",
       'import mongoose from "mongoose";\nconst User = mongoose.model("User", new mongoose.Schema({name:String}));\nfunction sanitizeFilter(value) { return value; }\nexport async function handler(request) {\n  const filter = sanitizeFilter({ name: request.body.name });\n  return User.findOne(filter).exec();\n}\n',
     );
+    await writeRepositoryFile(
+      repository,
+      "unrelated-eq.mjs",
+      'import mongoose from "mongoose";\nconst User = mongoose.model("User", new mongoose.Schema({name:String}));\nexport async function handler(request) { return User.findOne({ tenant: { $eq: "public" }, name: request.body.name }).exec(); }\n',
+    );
+    await writeRepositoryFile(
+      repository,
+      "reassigned-sanitize.mjs",
+      'import mongoose from "mongoose";\nconst User = mongoose.model("User", new mongoose.Schema({name:String}));\nmongoose = { sanitizeFilter(value) { return value; } };\nexport async function handler(request) {\n  const filter = mongoose.sanitizeFilter({ name: request.body.name });\n  return User.findOne(filter).exec();\n}\n',
+    );
+    await writeRepositoryFile(
+      repository,
+      "fake-store.mjs",
+      'import mongoose from "mongoose";\nconst User = mongoose.model("User", new mongoose.Schema({name:String}));\nfunction sanitizeFilter(value) { return value; }\nexport async function fakeLoad(selector) {\n  const filter = sanitizeFilter({ name: selector });\n  return User.findOne(filter).exec();\n}\n',
+    );
+    await writeRepositoryFile(
+      repository,
+      "fake-server.mjs",
+      'import { fakeLoad } from "./fake-store.mjs";\nexport async function handler(request) { return fakeLoad(request.body.name); }\n',
+    );
 
     const records = nosqlRecords(await buildResidualRiskInventory(repository));
-    expect(records).toHaveLength(3);
+    expect(records).toHaveLength(6);
     expect(
       records.find(({ path }) => path === "eq.mjs")?.frameworkModel
         ?.candidateControls,
@@ -252,6 +272,18 @@ describe("Node Mongoose NoSQL selector framework model", () => {
     });
     expect(
       records.find(({ path }) => path === "fake-sanitize.mjs")?.frameworkModel
+        ?.candidateControls,
+    ).toEqual([]);
+    expect(
+      records.find(({ path }) => path === "unrelated-eq.mjs")?.frameworkModel
+        ?.candidateControls,
+    ).toEqual([]);
+    expect(
+      records.find(({ path }) => path === "reassigned-sanitize.mjs")
+        ?.frameworkModel?.candidateControls,
+    ).toEqual([]);
+    expect(
+      records.find(({ path }) => path === "fake-store.mjs")?.frameworkModel
         ?.candidateControls,
     ).toEqual([]);
   });
