@@ -17,7 +17,7 @@
   "cases": [
     {
       "id": "node-multi-hop-lodash-merge-prototype-pollution",
-      "description": "An Express JSON object crosses three relative-import boundaries into a source operand of lodash.merge under a nearest runtime manifest pinned to vulnerable Lodash 4.17.11, allowing constructor.prototype traversal to modify Object.prototype and supply inherited authorization state.",
+      "description": "An Express JSON object crosses three relative-import boundaries into a source operand of lodash.merge under a nearest runtime manifest pinned to vulnerable Lodash 4.17.10, allowing constructor.prototype traversal to modify Object.prototype and supply inherited authorization state.",
       "fixture": "fixtures/node-multi-hop-lodash-merge-prototype-pollution",
       "findingsPaths": [
         "node-multi-hop-lodash-merge-prototype-pollution/run-1/findings.json"
@@ -52,7 +52,7 @@
     },
     {
       "id": "node-multi-hop-locked-lodash-merge-prototype-pollution",
-      "description": "An Express JSON object crosses three relative-import boundaries into a source operand of lodash.merge under a nearest runtime manifest range whose fresh npm v3 lockfile resolves vulnerable Lodash 4.17.11, allowing constructor.prototype traversal to modify Object.prototype and supply inherited authorization state.",
+      "description": "An Express JSON object crosses three relative-import boundaries into a source operand of lodash.merge under a nearest runtime manifest range whose fresh npm v3 lockfile resolves vulnerable Lodash 4.17.10, allowing constructor.prototype traversal to modify Object.prototype and supply inherited authorization state.",
       "fixture": "fixtures/node-multi-hop-locked-lodash-merge-prototype-pollution",
       "findingsPaths": [
         "node-multi-hop-locked-lodash-merge-prototype-pollution/run-1/findings.json"

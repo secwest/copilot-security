@@ -2614,7 +2614,7 @@ function nodeLodashVersionIsPrototypePollutionVulnerable(
   }
   const [major, minor, patch] = parts as [number, number, number];
   return (
-    major < 4 || (major === 4 && (minor < 17 || (minor === 17 && patch < 12)))
+    major < 4 || (major === 4 && (minor < 17 || (minor === 17 && patch < 11)))
   );
 }
 

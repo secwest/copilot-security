@@ -71,7 +71,7 @@ async function writeCase(
   id: string,
   source: string,
   dependencySection = "dependencies",
-  version = "4.17.11",
+  version = "4.17.10",
 ): Promise<void> {
   const root = join(repository, id);
   await mkdir(root, { recursive: true });
@@ -281,44 +281,45 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       "optionalDependencies",
     );
     const rejected: Array<[string, string, string, string]> = [
+      ["fixed-boundary", accepted[0][1], "dependencies", "4.17.11"],
       ["patched", accepted[0][1], "dependencies", "4.17.21"],
-      ["range", accepted[0][1], "dependencies", "^4.17.11"],
-      ["dev-only", accepted[0][1], "devDependencies", "4.17.11"],
+      ["range", accepted[0][1], "dependencies", "^4.17.10"],
+      ["dev-only", accepted[0][1], "devDependencies", "4.17.10"],
       [
         "target-only",
         'import lodash from "lodash";\nexport function handler(request) { return lodash.merge(request.body, { mode: "strict" }); }\n',
         "dependencies",
-        "4.17.11",
+        "4.17.10",
       ],
       [
         "lookalike",
         'import lodash from "lodash-lookalike";\nexport function handler(request) { return lodash.merge({}, request.body); }\n',
         "dependencies",
-        "4.17.11",
+        "4.17.10",
       ],
       [
         "reassigned",
         'import lodash from "lodash";\nlodash = helper;\nexport function handler(request) { return lodash.merge({}, request.body); }\n',
         "dependencies",
-        "4.17.11",
+        "4.17.10",
       ],
       [
         "member-reassigned",
         'import lodash from "lodash";\nlodash.merge = helper;\nexport function handler(request) { return lodash.merge({}, request.body); }\n',
         "dependencies",
-        "4.17.11",
+        "4.17.10",
       ],
       [
         "same-line-reassigned",
         'import lodash from "lodash";\nexport function handler(request) { lodash.merge = helper; return lodash.merge({}, request.body); }\n',
         "dependencies",
-        "4.17.11",
+        "4.17.10",
       ],
       [
         "text",
         'import lodash from "lodash";\nexport function handler(request) { return "lodash.merge({}, request.body)"; }\n',
         "dependencies",
-        "4.17.11",
+        "4.17.10",
       ],
     ];
     for (const [id, source, section, version] of rejected) {
@@ -357,11 +358,11 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
 
     for (const [id, declaration, lockfileVersion] of [
       ["caret-v3", "^4.17.0", 3],
-      ["comparator-v2", ">=4.0.0 <4.17.12", 2],
+      ["comparator-v2", ">=4.0.0 <4.17.11", 2],
       ["wildcard-v3", "4.x", 3],
     ] as const) {
       await writeCase(repository, id, source, "dependencies", declaration);
-      await writeNpmLock(repository, id, declaration, "4.17.11", {
+      await writeNpmLock(repository, id, declaration, "4.17.10", {
         lockfileVersion,
       });
     }
@@ -374,7 +375,7 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       "^4.17.0",
     );
     await writeNpmLock(repository, "shrinkwrap-wins", "^4.17.0", "4.17.21");
-    await writeNpmLock(repository, "shrinkwrap-wins", "^4.17.0", "4.17.11", {
+    await writeNpmLock(repository, "shrinkwrap-wins", "^4.17.0", "4.17.10", {
       name: "npm-shrinkwrap.json",
     });
 
@@ -389,7 +390,7 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       repository,
       "invalid-shrinkwrap-wins",
       "^4.17.0",
-      "4.17.11",
+      "4.17.10",
     );
     await writeFile(
       join(repository, "invalid-shrinkwrap-wins", "npm-shrinkwrap.json"),
@@ -398,23 +399,25 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
 
     for (const [id, declaration] of [
       ["patched", "^4.17.0"],
+      ["fixed-boundary", "^4.17.0"],
       ["stale", "^4.17.0"],
       ["v1", "^4.17.0"],
       ["missing-installed", "^4.17.0"],
-      ["alias", "npm:lodash@4.17.11"],
+      ["alias", "npm:lodash@4.17.10"],
       ["workspace", "workspace:^4.17.0"],
       ["tag", "latest"],
     ] as const) {
       await writeCase(repository, id, source, "dependencies", declaration);
     }
     await writeNpmLock(repository, "patched", "^4.17.0", "4.17.21");
-    await writeNpmLock(repository, "stale", "^4.17.0", "4.17.11", {
+    await writeNpmLock(repository, "fixed-boundary", "^4.17.0", "4.17.11");
+    await writeNpmLock(repository, "stale", "^4.17.0", "4.17.10", {
       rootDeclaration: "^4.16.0",
     });
-    await writeNpmLock(repository, "v1", "^4.17.0", "4.17.11", {
+    await writeNpmLock(repository, "v1", "^4.17.0", "4.17.10", {
       lockfileVersion: 1,
     });
-    await writeNpmLock(repository, "missing-installed", "^4.17.0", "4.17.11", {
+    await writeNpmLock(repository, "missing-installed", "^4.17.0", "4.17.10", {
       includeInstalledPackage: false,
     });
     for (const id of ["alias", "workspace", "tag"] as const) {
@@ -422,11 +425,11 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
         repository,
         id,
         id === "alias"
-          ? "npm:lodash@4.17.11"
+          ? "npm:lodash@4.17.10"
           : id === "workspace"
             ? "workspace:^4.17.0"
             : "latest",
-        "4.17.11",
+        "4.17.10",
       );
     }
 
@@ -441,7 +444,7 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     await mkdir(join(boundaryRoot, "child"), { recursive: true });
     await writeFile(
       join(boundaryRoot, "package.json"),
-      JSON.stringify({ dependencies: { lodash: "4.17.11" } }),
+      JSON.stringify({ dependencies: { lodash: "4.17.10" } }),
     );
     await writeFile(
       join(boundaryRoot, "child", "package.json"),
@@ -470,7 +473,7 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
         'import lodash from "lodash";\nexport function handler(request) { return lodash.merge({}, request.body); }\n';
       await writeCase(repository, id, source, "dependencies", "^4.17.0");
       await mkdir(join(repository, "evidence"));
-      await writeNpmLock(repository, "evidence", "^4.17.0", "4.17.11");
+      await writeNpmLock(repository, "evidence", "^4.17.0", "4.17.10");
       await symlink(
         join(repository, "evidence", "package-lock.json"),
         join(repository, id, "package-lock.json"),
@@ -487,7 +490,7 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     const prompt = scanQualityGatePrompt("");
     expect(prompt).toContain("node-http-prototype-merge");
     expect(prompt).toContain("lodash");
-    expect(prompt).toContain("4.17.12");
+    expect(prompt).toContain("4.17.11");
     expect(prompt).toContain("nearest package.json");
     expect(prompt).toContain("package-lock.json");
     expect(prompt).toContain("npm-shrinkwrap.json");

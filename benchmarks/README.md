@@ -255,9 +255,9 @@ and safe null-prototype retention of both defaults and hostile key data.
 merge semantics under perfect gates. Its two positives retain the Express
 body source, all nine ordered propagators, the exact `lodash.merge()` source
 operand at `src/storage.js:4`, CWE-1321, validation, attack-path analysis, and
-code evidence. One uses a nearest runtime `package.json` pin of 4.17.11; the
+code evidence. One uses a nearest runtime `package.json` pin of 4.17.10; the
 other uses `^4.17.0` plus an adjacent npm v3 lockfile that repeats the root
-declaration and resolves 4.17.11. Their matched controls preserve the calls
+declaration and resolves 4.17.10. Their matched controls preserve the calls
 and topology while exact or lock-resolved evidence selects patched 4.17.21.
 Deterministic regressions accept official default, namespace, CommonJS,
 destructured, subpath, and optional runtime bindings, plus fresh npm v2/v3
