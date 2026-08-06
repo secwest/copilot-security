@@ -59,16 +59,17 @@ row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
 bodies, and preserves annotated Spring or servlet-assigned request values
-through the exact call argument and wrapper parameter. Java can follow either
-one direct service wrapper or exactly one additional uniquely typed service
-relay before a typed sink. For C#, the host
-likewise resolves one uniquely named class, record, or struct from an ASP.NET
+through the exact call argument and wrapper parameter. Java can follow one
+direct service wrapper or up to two additional uniquely typed service relays
+before a typed sink. For C#, the host likewise resolves one uniquely named
+class, record, or struct from an ASP.NET
 controller field or static receiver, binds the exact service-call argument to
 the public, protected, or internal wrapper parameter, and preserves either an
 annotated bound parameter or an assigned `HttpRequest` field through
 `ProcessStartInfo`/`Process.Start`, the query-text argument of `SqlCommand`,
 `FromSqlRaw`, or `ExecuteSqlRaw`, or a complete outbound `HttpClient` request
-URI. Exact Razor Pages sources also include public HTTP-verb handler parameters
+URI. C# follows the same one-to-three service-boundary ceiling and exact
+positional identity at every call. Exact Razor Pages sources also include public HTTP-verb handler parameters
 on official `PageModel` subclasses and public writable `[BindProperty]` or
 `[BindProperties]` properties, with GET/HEAD property binding gated by
 `SupportsGet = true`; service parameters, `[NonHandler]`, `[BindNever]`, local
@@ -105,7 +106,7 @@ predicate only when it is bound to an authenticated-principal-shaped value, or
 an `IAuthorizationService.AuthorizeAsync(User, returnedEntity, policy)` call
 only when its exact result is enforced fail-closed before the protected effect.
 Spring object-authorization rows preserve an annotated or servlet-derived
-identifier through one or two uniquely typed service boundaries into an
+identifier through one to three uniquely typed service boundaries into an
 official Spring Data `CrudRepository` or `JpaRepository` `findById` lookup or
 an explicitly declared owner-qualified derived query. Endpoint authentication,
 role-only `@PreAuthorize`, opaque IDs, and repository identity are not object
@@ -116,7 +117,7 @@ owner-like dimension to a typed Spring Security `Authentication`, Java
 security is active, the expression authorizes the returned object's owner
 against `authentication.name`, and no write occurs before the decision.
 Spring mass-assignment rows preserve an official `@ModelAttribute` JPA domain
-object from a state-changing controller through one or two uniquely typed
+object from a state-changing controller through one to three uniquely typed
 service boundaries into the exact `CrudRepository` or `JpaRepository` `save`
 argument. The domain type must resolve to one unique official JPA entity.
 `@Valid`, authentication, role checks, denylisted fields, and repository use
@@ -1508,7 +1509,7 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
-The Spring path lane carries an annotated request parameter across two
+The Spring path lane carries an annotated request parameter across three
 constructor-injected Java services into `Files.readString`. Its negative
 control rejects absolute input, proves component-aware lexical containment,
 resolves both the existing root and target through `toRealPath`, and rejects a
@@ -1670,7 +1671,7 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
-The ASP.NET path lane follows a request value across two uniquely typed
+The ASP.NET path lane follows a request value across three uniquely typed
 service boundaries into `Path.Combine` and `File.ReadAllTextAsync`. Its
 negative control rejects rooted input, canonicalizes the configured root and
 candidate, and proves exact relative containment before the file operation.

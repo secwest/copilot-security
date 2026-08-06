@@ -1,7 +1,8 @@
 # ASP.NET multi-hop safe-path fixture
 
-The request value crosses the same controller, facade, and storage topology as
-the vulnerable fixture. The storage boundary rejects rooted input, resolves
+The request value crosses the same three service boundaries—controller to
+`DocumentFacade`, `DocumentService`, and `DocumentStore`—as the vulnerable
+fixture. The storage boundary rejects rooted input, resolves
 both the trusted root and candidate to full paths, and uses
 `Path.GetRelativePath` to reject parent or independently rooted results before
 the file operation. This avoids both `Path.Combine` absolute-reset behavior and

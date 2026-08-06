@@ -132,9 +132,9 @@ when their language, request-source syntax, and concrete runtime or sink API are
 present in one bounded source file. The bounded Java cross-file layer resolves
 unique service types from controller fields, parses public and protected method
 bodies, and preserves exact annotated-parameter or servlet-assignment flow into
-either one direct service wrapper or exactly one additional uniquely typed
-service relay. It records both receiver type bindings and exact argument and
-parameter positions, including bounded local URI, request-object, and path
+one direct service wrapper or up to two additional uniquely typed service
+relays. It records every receiver type binding and exact argument and parameter
+position, including bounded local URI, request-object, and path
 assignments into typed JDK filesystem, JDK `HttpClient`, Spring
 `RestTemplate`, reactive `WebClient.UriSpec.uri`, or OkHttp
 `Request.Builder.url` sinks. The WebClient model
@@ -148,9 +148,9 @@ exact-argument discipline to class, record, or struct receivers; public,
 protected, or internal controller and service methods; ASP.NET bound parameters
 or assigned request fields; and `ProcessStartInfo`/`Process.Start`, raw SQL
 query-text, complete `HttpClient` request-URI, or typed `System.IO` path sinks.
-The C# layer now follows either one direct service wrapper or exactly one
-additional uniquely typed service relay and records both type bindings and
-argument positions. Bounded Node/TypeScript and Python cross-file layers
+The C# layer now follows one direct service wrapper or up to two additional
+uniquely typed service relays and records every type binding and argument
+position. Bounded Node/TypeScript and Python cross-file layers
 additionally resolve explicit repository-relative imports
 into exported or public module-level wrappers and preserve the exact
 argument-to-parameter position. Node/TypeScript follows either one direct
@@ -891,13 +891,14 @@ which assigns the family security severity 9.3 and treats fixed template source
 as the principal counterexample. The shared Java method-flow layer also feeds
 the existing Spring command and raw-SQL models.
 
-`benchmarks/java-multi-hop-path-manifest.json` adds a strict three-file Spring
+`benchmarks/java-multi-hop-path-manifest.json` adds a strict four-file Spring
 path lane. The positive carries an annotated request value across a controller,
-service, and store into typed `java.nio.file.Files.readString`; untrusted parent
-components or an absolute later `Path.resolve` operand can escape the configured
-root. The negative preserves the topology while rejecting absolute input,
-checking normalized component-aware containment, resolving the existing root
-and target through `toRealPath`, and checking real containment before the read.
+facade, service, and store into typed `java.nio.file.Files.readString`;
+untrusted parent components or an absolute later `Path.resolve` operand can
+escape the configured root. The negative preserves the topology while
+rejecting absolute input, checking normalized component-aware containment,
+resolving the existing root and target through `toRealPath`, and checking real
+containment before the read.
 Pure-JDK witnesses prove parent traversal, absolute-root reset, sibling-prefix
 rejection, symbolic-link rejection where supported, and an allowed in-root
 read. This follows CodeQL's [Java partial path-traversal query](https://codeql.github.com/codeql-query-help/java/java-partial-path-traversal/)
@@ -1226,7 +1227,7 @@ authority and fixed destination selection from its
 and preserves .NET's documented default redirect behavior from
 [HttpClientHandler.AllowAutoRedirect](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclienthandler.allowautoredirect).
 
-`benchmarks/aspnet-multi-hop-path-manifest.json` adds a strict three-file path
+`benchmarks/aspnet-multi-hop-path-manifest.json` adds a strict four-file path
 lane. The positive carries `[FromQuery]` data through a controller, facade, and
 storage service into `Path.Combine` and `File.ReadAllTextAsync`; both parent
 components and a rooted later argument escape the configured content root.
@@ -1283,7 +1284,8 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
 
 1. **Expand typed framework security models.** Extend bounded summaries beyond
    two Node/TypeScript or Python relative-import hops; extend Java and ASP.NET
-   beyond two uniquely typed service boundaries;
+   beyond their current three uniquely typed service boundaries only with
+   measured false-negative evidence;
    extend framework-specific authorization models beyond the bounded Node,
    Spring Data, and ASP.NET object-reference lanes, add ASP.NET template engines
    beyond the typed Scriban and RazorLight lanes,

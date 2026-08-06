@@ -52,23 +52,24 @@ reassigned arguments, parameters unused by the sink, and C# comments or string
 examples that merely name an API.
 
 For C#, `scope: "cross-file-multi-hop-wrapper"` extends that same discipline by
-exactly one additional uniquely typed service relay. The host requires both
-owner types to resolve to one source file, matches both positional arguments,
-rejects reassignment before either call, and records both receiver bindings,
-calls, and wrapper parameters in order. It does not infer interface dispatch,
-dependency-injection registrations, named arguments, callbacks, or a third
-service hop.
+up to two additional uniquely typed service relays. The host requires every
+owner type to resolve to one source file, matches every positional argument,
+rejects reassignment before any recorded call, and records every receiver
+binding, call, and wrapper parameter in order. It does not infer interface
+dispatch, dependency-injection registrations, named arguments, callbacks, or
+a fourth service hop.
 
-For Java, `scope: "cross-file-multi-hop-wrapper"` now applies the same exact
-two-boundary contract to public or protected methods. Both simple owner types
-must resolve to one `.java` source file, each call must preserve the exact
-positional parameter without reassignment, and the final wrapper parameter
-must reach the typed sink through either the sink expression or bounded local
-Java assignments. The host records both Java receiver
-bindings, calls, and wrapper declarations in order. It rejects duplicate type
-names, local filesystem or outbound-client type shadows, fixed arguments,
-text-only calls, and a third service hop; it does not infer interfaces, framework registrations,
-overload resolution, named Kotlin arguments, callbacks, or reflection.
+For Java, `scope: "cross-file-multi-hop-wrapper"` applies the same exact
+one-to-three-boundary contract to public or protected methods. Every simple
+owner type must resolve to one `.java` source file, each call must preserve the
+exact positional parameter without reassignment, and the terminal wrapper
+parameter must reach the typed sink through either the sink expression or
+bounded local Java assignments. The host records every Java receiver binding,
+call, and wrapper declaration in order. It rejects duplicate type names, local
+filesystem or outbound-client type shadows, fixed arguments, text-only calls,
+and a fourth service hop; it does not infer interfaces, framework
+registrations, overload resolution, named Kotlin arguments, callbacks, or
+reflection.
 
 `scope: "cross-file-multi-hop-wrapper"` is the same bounded syntax extended by
 exactly one exported JavaScript/TypeScript or public module-level Python relay.
@@ -257,7 +258,7 @@ interpreter that consumes the value.
 - For cross-file rows, verify the receiver's unique declared Java type, exact
   public service method, argument position, wrapper parameter, and final engine
   argument. Duplicate simple class names, unresolved receiver types, values
-  reassigned before the service call, and text-only API examples do not prove a
+  reassigned before any service call, and text-only API examples do not prove a
   flow.
 - A directly reachable Spring or servlet source flowing into unsandboxed
   general-purpose Velocity template-source evaluation is high severity. Lower
@@ -270,7 +271,7 @@ interpreter that consumes the value.
 - Sinks: request objects or complete URI values passed to typed JDK
   `HttpClient.send`/`sendAsync`, typed Spring `RestTemplate` operations, or the
   first destination argument of typed reactive `WebClient.UriSpec.uri` calls.
-- Preserve both uniquely resolved Java service types, exact arguments and
+- Preserve every uniquely resolved Java service type, exact arguments and
   parameters, and bounded local URI/request assignments. A local class that
   shadows `HttpClient`, `RestTemplate`, or `WebClient` is not an outbound HTTP
   sink. For WebClient request-spec aliases, reopen the typed root client and
@@ -298,7 +299,7 @@ interpreter that consumes the value.
   and stream operations, plus imported or fully qualified `java.io`
   `FileInputStream`, `FileOutputStream`, `FileReader`, `FileWriter`, and
   `RandomAccessFile` construction.
-- Preserve both uniquely resolved Java service types, exact call arguments,
+- Preserve every uniquely resolved Java service type, exact call argument,
   wrapper parameters, and the final path argument. A local class that shadows
   `Files` or a `java.io` sink type is not a JDK sink.
 - `Path.resolve` does not retain the trusted root when its later operand is
@@ -427,8 +428,8 @@ interpreter that consumes the value.
   is inert for Scriban; RazorLight's string API compiles and renders in the
   same call. Require the corresponding import or fully qualified type and
   reject local engine lookalikes.
-- Preserve the uniquely resolved C# service type, controller argument,
-  wrapper parameter, bounded local aliases, and exact first parse argument.
+- Preserve every uniquely resolved C# service type, controller argument,
+  wrapper parameter, bounded local alias, and exact first parse argument.
   The optional second source-file-name argument and parser options are not
   template source.
 - For RazorLight, preserve the template key, content, and model roles. The key

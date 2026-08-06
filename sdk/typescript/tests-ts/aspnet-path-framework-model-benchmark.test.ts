@@ -134,7 +134,7 @@ describe("ASP.NET path framework-model effectiveness benchmark", () => {
     expect(safeWitness).toContain('ReadAsync("guide.txt"');
   });
 
-  test("preserves both typed service boundaries into the System.IO sink", async () => {
+  test("preserves three typed service boundaries into the System.IO sink", async () => {
     const vulnerable = aspnetPathRecords(
       await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", caseIds[0]),
@@ -169,13 +169,31 @@ describe("ASP.NET path framework-model effectiveness benchmark", () => {
           kind: "dotnet-type-binding",
           path: "Controllers/DocumentController.cs",
           line: 10,
-          symbol: "_documents:DocumentService",
+          symbol: "_documents:DocumentFacade",
         },
         {
           kind: "wrapper-call-argument",
           path: "Controllers/DocumentController.cs",
           line: 23,
           symbol: "_documents.ReadAsync[0]",
+        },
+        {
+          kind: "wrapper-parameter",
+          path: "Services/DocumentFacade.cs",
+          line: 12,
+          symbol: "path",
+        },
+        {
+          kind: "dotnet-type-binding",
+          path: "Services/DocumentFacade.cs",
+          line: 5,
+          symbol: "_service:DocumentService",
+        },
+        {
+          kind: "wrapper-call-argument",
+          path: "Services/DocumentFacade.cs",
+          line: 14,
+          symbol: "_service.ReadAsync[0]",
         },
         {
           kind: "wrapper-parameter",
@@ -394,8 +412,22 @@ describe("ASP.NET path framework-model effectiveness benchmark", () => {
         "  private readonly DocumentStore _store;",
         "  public DocumentService(DocumentStore store) { _store = store; }",
         "  public Task<string> ReadAsync(string path, CancellationToken token) {",
-        '    path = "fixed.txt";',
         "    return _store.ReadAsync(path, token);",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    await writeRepositoryFile(
+      repository,
+      "Services/DocumentFacade.cs",
+      [
+        "public sealed class DocumentFacade {",
+        "  private readonly DocumentService _service;",
+        "  public DocumentFacade(DocumentService service) { _service = service; }",
+        "  public Task<string> ReadAsync(string path, CancellationToken token) {",
+        '    path = "fixed.txt";',
+        "    return _service.ReadAsync(path, token);",
         "  }",
         "}",
         "",
@@ -407,13 +439,53 @@ describe("ASP.NET path framework-model effectiveness benchmark", () => {
       [
         "using Microsoft.AspNetCore.Mvc;",
         "public sealed class DocumentController : ControllerBase {",
-        "  private readonly DocumentService _documents;",
-        "  public DocumentController(DocumentService documents) { _documents = documents; }",
+        "  private readonly DocumentFacade _documents;",
+        "  public DocumentController(DocumentFacade documents) { _documents = documents; }",
         "  public Task<string> Get([FromQuery] string path, CancellationToken token) {",
         "    // _documents.ReadAsync(path, token);",
         '    var example = "_documents.ReadAsync(path, token)";',
         "    return _documents.ReadAsync(path, token);",
         "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    await writeRepositoryFile(
+      repository,
+      "Deep/DeepStore.cs",
+      [
+        "using System.IO;",
+        "public sealed class DeepStore {",
+        "  public string Read(string path) { return File.ReadAllText(path); }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    for (const [owner, downstream] of [
+      ["DeepService", "DeepStore"],
+      ["DeepFacade", "DeepService"],
+      ["DeepGateway", "DeepFacade"],
+    ] as const) {
+      await writeRepositoryFile(
+        repository,
+        `Deep/${owner}.cs`,
+        [
+          `public sealed class ${owner} {`,
+          `  private readonly ${downstream} _next;`,
+          `  public string Read(string path) { return _next.Read(path); }`,
+          "}",
+          "",
+        ].join("\n"),
+      );
+    }
+    await writeRepositoryFile(
+      repository,
+      "Deep/DeepController.cs",
+      [
+        "using Microsoft.AspNetCore.Mvc;",
+        "public sealed class DeepController : ControllerBase {",
+        "  private readonly DeepGateway _documents;",
+        "  public string Get([FromQuery] string path) { return _documents.Read(path); }",
         "}",
         "",
       ].join("\n"),
@@ -488,7 +560,7 @@ describe("ASP.NET path framework-model effectiveness benchmark", () => {
     ).toEqual([]);
   });
 
-  test("teaches the reviewer the exact .NET path boundary and two-hop contract", () => {
+  test("teaches the reviewer the exact .NET path boundary and three-service contract", () => {
     const prompt = scanQualityGatePrompt(
       JSON.stringify({ frameworkModel: { id: "aspnet-http-path" } }),
     );
@@ -496,7 +568,7 @@ describe("ASP.NET path framework-model effectiveness benchmark", () => {
       "Path.Combine is not containment: a rooted later argument can discard the trusted prefix",
     );
     expect(prompt).toContain(
-      "C# uses uniquely resolved receiver types at both service boundaries",
+      "require a uniquely resolved receiver type at every recorded service boundary",
     );
     expect(prompt).toContain(
       "a root string-prefix check without an exact directory boundary can accept sibling paths",
@@ -504,6 +576,8 @@ describe("ASP.NET path framework-model effectiveness benchmark", () => {
     expect(prompt).toContain(
       "symlinks, junctions, reparse points, rename races",
     );
-    expect(prompt).toContain("values reassigned before either service call");
+    expect(prompt).toContain(
+      "values reassigned before any recorded service call",
+    );
   });
 });

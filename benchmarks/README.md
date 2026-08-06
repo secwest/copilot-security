@@ -1270,7 +1270,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
-The Java path lane carries an annotated Spring request parameter through two
+The Java path lane carries an annotated Spring request parameter through three
 constructor-injected service boundaries into `Files.readString`. The vulnerable
 fixture passes the value directly to `Path.resolve`, which permits both parent
 traversal and an absolute later operand that discards the trusted root. The
@@ -1563,8 +1563,9 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
-The ASP.NET path lane adds a second typed service hop between the controller
-and storage sink. The vulnerable fixture lets a later rooted `Path.Combine`
+The ASP.NET path lane carries the request through three typed service
+boundaries between the controller and storage sink. The vulnerable fixture
+lets a later rooted `Path.Combine`
 argument discard the configured root and lets `..` escape it. The control
 rejects rooted input, resolves full root and candidate paths, and rejects any
 relative result that is `..`, begins with an exact parent-directory boundary,

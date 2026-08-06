@@ -7,9 +7,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public final class DocumentController {
-    private final DocumentService documents;
+    private final DocumentFacade documents;
 
-    public DocumentController(DocumentService documents) {
+    public DocumentController(DocumentFacade documents) {
         this.documents = documents;
     }
 

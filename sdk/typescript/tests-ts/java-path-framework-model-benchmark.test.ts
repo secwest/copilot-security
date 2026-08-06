@@ -225,7 +225,7 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
     );
   });
 
-  test("preserves both typed Java service boundaries into java.nio.file.Files", async () => {
+  test("preserves three typed Java service boundaries into java.nio.file.Files", async () => {
     const vulnerable = javaPathRecords(
       await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", caseIds[0]),
@@ -274,13 +274,31 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
           kind: "java-type-binding",
           path: "src/main/java/example/DocumentController.java",
           line: 10,
-          symbol: "documents:DocumentService",
+          symbol: "documents:DocumentFacade",
         },
         {
           kind: "wrapper-call-argument",
           path: "src/main/java/example/DocumentController.java",
           line: 18,
           symbol: "documents.read[0]",
+        },
+        {
+          kind: "wrapper-parameter",
+          path: "src/main/java/example/DocumentFacade.java",
+          line: 14,
+          symbol: "path",
+        },
+        {
+          kind: "java-type-binding",
+          path: "src/main/java/example/DocumentFacade.java",
+          line: 8,
+          symbol: "service:DocumentService",
+        },
+        {
+          kind: "wrapper-call-argument",
+          path: "src/main/java/example/DocumentFacade.java",
+          line: 15,
+          symbol: "service.read[0]",
         },
         {
           kind: "wrapper-parameter",
@@ -3191,8 +3209,20 @@ public final class DocumentStore {
 public final class DocumentService {
   private final DocumentStore store;
   public String read(String path) throws Exception {
-    path = "fixed.txt";
     return store.read(path);
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/DocumentFacade.java",
+      `
+public final class DocumentFacade {
+  private final DocumentService service;
+  public String read(String path) throws Exception {
+    path = "fixed.txt";
+    return service.read(path);
   }
 }
 `,
@@ -3202,12 +3232,49 @@ public final class DocumentService {
       "src/DocumentController.java",
       `
 public final class DocumentController {
-  private final DocumentService documents;
+  private final DocumentFacade documents;
   public String read(@RequestParam String path) throws Exception {
     // documents.read(path);
     String example = "documents.read(path)";
     return documents.read(path);
   }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "deep/DeepStore.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class DeepStore {
+  public String read(String path) throws Exception { return Files.readString(Path.of(path)); }
+}
+`,
+    );
+    for (const [owner, downstream] of [
+      ["DeepService", "DeepStore"],
+      ["DeepFacade", "DeepService"],
+      ["DeepGateway", "DeepFacade"],
+    ] as const) {
+      await writeRepositoryFile(
+        repository,
+        `deep/${owner}.java`,
+        `
+public final class ${owner} {
+  private final ${downstream} next;
+  public String read(String path) throws Exception { return next.read(path); }
+}
+`,
+      );
+    }
+    await writeRepositoryFile(
+      repository,
+      "deep/DeepController.java",
+      `
+public final class DeepController {
+  private final DeepGateway documents;
+  public String read(@RequestParam String path) throws Exception { return documents.read(path); }
 }
 `,
     );
@@ -3302,7 +3369,7 @@ public final class DocumentController {
     ).toEqual([]);
   });
 
-  test("teaches the reviewer the Java path and two-hop service contract", () => {
+  test("teaches the reviewer the Java path and three-service contract", () => {
     const prompt = scanQualityGatePrompt(
       JSON.stringify({ frameworkModel: { id: "spring-http-path" } }),
     );
@@ -3313,12 +3380,14 @@ public final class DocumentController {
       "Path.normalize is syntactic and does not resolve filesystem links",
     );
     expect(prompt).toContain(
-      "Java uses the same exact type resolution at both service boundaries",
+      "C# and Java prove either two or three ordered call/parameter hops",
     );
     expect(prompt).toContain(
       "String.startsWith can accept a sibling directory prefix",
     );
-    expect(prompt).toContain("values reassigned before either service call");
+    expect(prompt).toContain(
+      "values reassigned before any recorded service call",
+    );
     expect(prompt).toContain(
       'new File("..").getName() returns the exact parent component ".."',
     );

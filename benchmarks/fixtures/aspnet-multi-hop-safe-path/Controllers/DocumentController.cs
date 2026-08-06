@@ -7,9 +7,9 @@ namespace Secwest.Benchmarks.Controllers;
 [Route("api/documents")]
 public sealed class DocumentController : ControllerBase
 {
-    private readonly DocumentService _documents;
+    private readonly DocumentFacade _documents;
 
-    public DocumentController(DocumentService documents)
+    public DocumentController(DocumentFacade documents)
     {
         _documents = documents;
     }

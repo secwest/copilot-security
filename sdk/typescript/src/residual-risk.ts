@@ -34,6 +34,7 @@ const MAX_SIGNALS = 96;
 const MAX_SIGNALS_PER_FILE = MAX_SIGNALS;
 const MAX_FRAMEWORK_CROSS_FILE_RECORDS = 64;
 const MAX_FRAMEWORK_MULTI_HOP_RECORDS = 64;
+const MAX_TYPED_SERVICE_RELAY_LAYERS = 2;
 const MAX_WRAPPER_FUNCTION_LINES = 160;
 const MAX_WRAPPER_CALL_DISTANCE = 12;
 const MAX_COVERAGE_GAPS = 256;
@@ -1719,11 +1720,16 @@ interface DotnetFrameworkRelaySummary {
   declarationLine: number;
   downstreamBinding: JavaReceiverBinding;
   downstreamCallLine: number;
-  downstream: FrameworkWrapperSummary;
+  downstream: FrameworkWrapperSummary | DotnetFrameworkRelaySummary;
   controls: Array<{ kind: string; line: number }>;
 }
 
 type JavaFrameworkRelaySummary = DotnetFrameworkRelaySummary;
+
+interface TypedFrameworkRelayChain {
+  relays: readonly DotnetFrameworkRelaySummary[];
+  sink: FrameworkWrapperSummary;
+}
 
 interface ImportedJavascriptSymbol {
   imported: string;
@@ -5147,16 +5153,59 @@ function frameworkPythonMultiHopDataflowRecords(
   return records;
 }
 
+function typedFrameworkRelayChain(
+  summary: DotnetFrameworkRelaySummary,
+): TypedFrameworkRelayChain | undefined {
+  const relays: DotnetFrameworkRelaySummary[] = [];
+  const paths = new Set<string>();
+  let current: FrameworkWrapperSummary | DotnetFrameworkRelaySummary = summary;
+  while ("downstream" in current) {
+    if (
+      relays.length >= MAX_TYPED_SERVICE_RELAY_LAYERS ||
+      paths.has(current.file.path)
+    ) {
+      return undefined;
+    }
+    relays.push(current);
+    paths.add(current.file.path);
+    current = current.downstream;
+  }
+  if (paths.has(current.file.path)) return undefined;
+  return { relays, sink: current };
+}
+
+function typedFrameworkSummaryPaths(
+  summary: FrameworkWrapperSummary | DotnetFrameworkRelaySummary,
+): ReadonlySet<string> | undefined {
+  if (!("downstream" in summary)) return new Set([summary.file.path]);
+  const chain = typedFrameworkRelayChain(summary);
+  return chain === undefined
+    ? undefined
+    : new Set([
+        ...chain.relays.map((relay) => relay.file.path),
+        chain.sink.file.path,
+      ]);
+}
+
 function frameworkJavaMultiHopDataflowRecords(
   files: readonly SourceFileSnapshot[],
 ): ResidualRiskRecord[] {
   const sinkSummaries = javaFrameworkWrapperSummaries(files);
   const ownerPaths = javaOwnerPaths(files);
-  const relaySummaries = javaFrameworkRelaySummaries(
-    files,
-    sinkSummaries,
-    ownerPaths,
-  );
+  const relaySummaries: JavaFrameworkRelaySummary[] = [];
+  let downstreamSummaries: readonly (
+    | FrameworkWrapperSummary
+    | JavaFrameworkRelaySummary
+  )[] = sinkSummaries;
+  for (let layer = 0; layer < MAX_TYPED_SERVICE_RELAY_LAYERS; layer += 1) {
+    const next = javaFrameworkRelaySummaries(
+      files,
+      downstreamSummaries,
+      ownerPaths,
+    );
+    relaySummaries.push(...next);
+    downstreamSummaries = next;
+  }
   const summariesByOwnerAndMethod = new Map<
     string,
     JavaFrameworkRelaySummary[]
@@ -5198,10 +5247,12 @@ function frameworkJavaMultiHopDataflowRecords(
           if (callerMethod === undefined) continue;
           for (const summary of matchingSummaries) {
             if (summary.file.path === caller.path) continue;
+            const chain = typedFrameworkRelayChain(summary);
+            if (chain === undefined || chain.relays.length === 0) continue;
             if (call.arguments.length !== summary.parameterCount) continue;
             const argument = call.arguments[summary.parameterIndex];
             if (argument === undefined) continue;
-            const sinkSummary = summary.downstream;
+            const sinkSummary = chain.sink;
             const source =
               summary.model.id === "spring-mvc-jpa-mass-assignment" &&
               sinkSummary.valueType !== undefined
@@ -5235,11 +5286,13 @@ function frameworkJavaMultiHopDataflowRecords(
               summary.model.id,
               caller.path,
               call.line,
-              summary.file.path,
-              summary.downstreamCallLine,
+              ...chain.relays.flatMap((relay) => [
+                relay.file.path,
+                relay.downstreamCallLine,
+                relay.parameterIndex,
+              ]),
               sinkSummary.file.path,
               sinkSummary.sink.line,
-              summary.parameterIndex,
               sinkSummary.parameterIndex,
             ].join("\0");
             if (emitted.has(recordKey)) continue;
@@ -5266,10 +5319,12 @@ function frameworkJavaMultiHopDataflowRecords(
                 ...control,
                 path: caller.path,
               })),
-              ...summary.controls.map((control) => ({
-                ...control,
-                path: summary.file.path,
-              })),
+              ...chain.relays.flatMap((relay) =>
+                relay.controls.map((control) => ({
+                  ...control,
+                  path: relay.file.path,
+                })),
+              ),
               ...sinkSummary.controls.map((control) => ({
                 ...control,
                 path: sinkSummary.file.path,
@@ -5337,26 +5392,28 @@ function frameworkJavaMultiHopDataflowRecords(
                     line: call.line,
                     symbol: `${binding.receiver}.${method}[${summary.parameterIndex}]`,
                   },
-                  {
-                    kind: "wrapper-parameter",
-                    path: summary.file.path,
-                    line: summary.declarationLine,
-                    symbol: summary.parameter,
-                  },
-                  {
-                    kind: "java-type-binding",
-                    path: summary.file.path,
-                    line:
-                      summary.downstreamBinding.line ||
-                      summary.downstreamCallLine,
-                    symbol: `${summary.downstreamBinding.receiver}:${summary.downstreamBinding.ownerType}`,
-                  },
-                  {
-                    kind: "wrapper-call-argument",
-                    path: summary.file.path,
-                    line: summary.downstreamCallLine,
-                    symbol: `${summary.downstreamBinding.receiver}.${sinkSummary.symbol}[${sinkSummary.parameterIndex}]`,
-                  },
+                  ...chain.relays.flatMap((relay) => [
+                    {
+                      kind: "wrapper-parameter",
+                      path: relay.file.path,
+                      line: relay.declarationLine,
+                      symbol: relay.parameter,
+                    },
+                    {
+                      kind: "java-type-binding",
+                      path: relay.file.path,
+                      line:
+                        relay.downstreamBinding.line ||
+                        relay.downstreamCallLine,
+                      symbol: `${relay.downstreamBinding.receiver}:${relay.downstreamBinding.ownerType}`,
+                    },
+                    {
+                      kind: "wrapper-call-argument",
+                      path: relay.file.path,
+                      line: relay.downstreamCallLine,
+                      symbol: `${relay.downstreamBinding.receiver}.${relay.downstream.symbol}[${relay.downstream.parameterIndex}]`,
+                    },
+                  ]),
                   {
                     kind: "wrapper-parameter",
                     path: sinkSummary.file.path,
@@ -5383,11 +5440,20 @@ function frameworkDotnetMultiHopDataflowRecords(
 ): ResidualRiskRecord[] {
   const sinkSummaries = dotnetFrameworkWrapperSummaries(files);
   const ownerPaths = dotnetOwnerPaths(files);
-  const relaySummaries = dotnetFrameworkRelaySummaries(
-    files,
-    sinkSummaries,
-    ownerPaths,
-  );
+  const relaySummaries: DotnetFrameworkRelaySummary[] = [];
+  let downstreamSummaries: readonly (
+    | FrameworkWrapperSummary
+    | DotnetFrameworkRelaySummary
+  )[] = sinkSummaries;
+  for (let layer = 0; layer < MAX_TYPED_SERVICE_RELAY_LAYERS; layer += 1) {
+    const next = dotnetFrameworkRelaySummaries(
+      files,
+      downstreamSummaries,
+      ownerPaths,
+    );
+    relaySummaries.push(...next);
+    downstreamSummaries = next;
+  }
   const summariesByOwnerAndMethod = new Map<
     string,
     DotnetFrameworkRelaySummary[]
@@ -5429,6 +5495,8 @@ function frameworkDotnetMultiHopDataflowRecords(
           if (callerMethod === undefined) continue;
           for (const summary of matchingSummaries) {
             if (summary.file.path === caller.path) continue;
+            const chain = typedFrameworkRelayChain(summary);
+            if (chain === undefined || chain.relays.length === 0) continue;
             if (call.arguments.length !== summary.parameterCount) continue;
             const argument = call.arguments[summary.parameterIndex];
             if (argument === undefined) continue;
@@ -5443,16 +5511,18 @@ function frameworkDotnetMultiHopDataflowRecords(
               caller.path,
             );
             if (source === undefined) continue;
-            const sinkSummary = summary.downstream;
+            const sinkSummary = chain.sink;
             const recordKey = [
               summary.model.id,
               caller.path,
               call.line,
-              summary.file.path,
-              summary.downstreamCallLine,
+              ...chain.relays.flatMap((relay) => [
+                relay.file.path,
+                relay.downstreamCallLine,
+                relay.parameterIndex,
+              ]),
               sinkSummary.file.path,
               sinkSummary.sink.line,
-              summary.parameterIndex,
               sinkSummary.parameterIndex,
             ].join("\0");
             if (emitted.has(recordKey)) continue;
@@ -5475,10 +5545,12 @@ function frameworkDotnetMultiHopDataflowRecords(
               Math.max(source.line, call.line) + 2,
             );
             const candidateControls = [
-              ...summary.controls.map((control) => ({
-                ...control,
-                path: summary.file.path,
-              })),
+              ...chain.relays.flatMap((relay) =>
+                relay.controls.map((control) => ({
+                  ...control,
+                  path: relay.file.path,
+                })),
+              ),
               ...sinkSummary.controls.map((control) => ({
                 ...control,
                 path: sinkSummary.file.path,
@@ -5546,26 +5618,28 @@ function frameworkDotnetMultiHopDataflowRecords(
                     line: call.line,
                     symbol: `${binding.receiver}.${method}[${summary.parameterIndex}]`,
                   },
-                  {
-                    kind: "wrapper-parameter",
-                    path: summary.file.path,
-                    line: summary.declarationLine,
-                    symbol: summary.parameter,
-                  },
-                  {
-                    kind: "dotnet-type-binding",
-                    path: summary.file.path,
-                    line:
-                      summary.downstreamBinding.line ||
-                      summary.downstreamCallLine,
-                    symbol: `${summary.downstreamBinding.receiver}:${summary.downstreamBinding.ownerType}`,
-                  },
-                  {
-                    kind: "wrapper-call-argument",
-                    path: summary.file.path,
-                    line: summary.downstreamCallLine,
-                    symbol: `${summary.downstreamBinding.receiver}.${sinkSummary.symbol}[${sinkSummary.parameterIndex}]`,
-                  },
+                  ...chain.relays.flatMap((relay) => [
+                    {
+                      kind: "wrapper-parameter",
+                      path: relay.file.path,
+                      line: relay.declarationLine,
+                      symbol: relay.parameter,
+                    },
+                    {
+                      kind: "dotnet-type-binding",
+                      path: relay.file.path,
+                      line:
+                        relay.downstreamBinding.line ||
+                        relay.downstreamCallLine,
+                      symbol: `${relay.downstreamBinding.receiver}:${relay.downstreamBinding.ownerType}`,
+                    },
+                    {
+                      kind: "wrapper-call-argument",
+                      path: relay.file.path,
+                      line: relay.downstreamCallLine,
+                      symbol: `${relay.downstreamBinding.receiver}.${relay.downstream.symbol}[${relay.downstream.parameterIndex}]`,
+                    },
+                  ]),
                   {
                     kind: "wrapper-parameter",
                     path: sinkSummary.file.path,
@@ -5589,12 +5663,15 @@ function frameworkDotnetMultiHopDataflowRecords(
 
 function javaFrameworkRelaySummaries(
   files: readonly SourceFileSnapshot[],
-  sinkSummaries: readonly FrameworkWrapperSummary[],
+  sinkSummaries: readonly (
+    | FrameworkWrapperSummary
+    | JavaFrameworkRelaySummary
+  )[],
   ownerPaths: ReadonlyMap<string, ReadonlySet<string>>,
 ): JavaFrameworkRelaySummary[] {
   const summariesByOwnerAndMethod = new Map<
     string,
-    FrameworkWrapperSummary[]
+    Array<FrameworkWrapperSummary | JavaFrameworkRelaySummary>
   >();
   for (const summary of sinkSummaries) {
     if (summary.ownerType === undefined) continue;
@@ -5638,7 +5715,18 @@ function javaFrameworkRelaySummaries(
               call.line >= method.startLine && call.line <= method.endLine,
           );
           for (const downstream of downstreamSummaries) {
-            if (downstream.file.path === file.path) continue;
+            const downstreamPaths = typedFrameworkSummaryPaths(downstream);
+            if (
+              downstreamPaths === undefined ||
+              downstreamPaths.has(file.path)
+            ) {
+              continue;
+            }
+            const sink =
+              "downstream" in downstream
+                ? typedFrameworkRelayChain(downstream)?.sink
+                : downstream;
+            if (sink === undefined) continue;
             const controls =
               downstream.model.id === "spring-mvc-jpa-mass-assignment"
                 ? []
@@ -5669,8 +5757,8 @@ function javaFrameworkRelaySummaries(
                 if (argument !== parameter.name) continue;
                 if (
                   downstream.model.id === "spring-mvc-jpa-mass-assignment" &&
-                  (downstream.valueType === undefined ||
-                    javaParameterSimpleType(parameter) !== downstream.valueType)
+                  (sink.valueType === undefined ||
+                    javaParameterSimpleType(parameter) !== sink.valueType)
                 ) {
                   continue;
                 }
@@ -5725,12 +5813,15 @@ function javaOwnerPaths(
 
 function dotnetFrameworkRelaySummaries(
   files: readonly SourceFileSnapshot[],
-  sinkSummaries: readonly FrameworkWrapperSummary[],
+  sinkSummaries: readonly (
+    | FrameworkWrapperSummary
+    | DotnetFrameworkRelaySummary
+  )[],
   ownerPaths: ReadonlyMap<string, ReadonlySet<string>>,
 ): DotnetFrameworkRelaySummary[] {
   const summariesByOwnerAndMethod = new Map<
     string,
-    FrameworkWrapperSummary[]
+    Array<FrameworkWrapperSummary | DotnetFrameworkRelaySummary>
   >();
   for (const summary of sinkSummaries) {
     if (summary.ownerType === undefined) continue;
@@ -5774,7 +5865,13 @@ function dotnetFrameworkRelaySummaries(
               call.line >= method.startLine && call.line <= method.endLine,
           );
           for (const downstream of downstreamSummaries) {
-            if (downstream.file.path === file.path) continue;
+            const downstreamPaths = typedFrameworkSummaryPaths(downstream);
+            if (
+              downstreamPaths === undefined ||
+              downstreamPaths.has(file.path)
+            ) {
+              continue;
+            }
             const controls = matchingJavaModelLines(
               file.lines,
               downstream.model.controls,
