@@ -907,6 +907,20 @@ normalization cannot resolve links, string prefix checks are not component
 checks, and link-capable or concurrently mutable roots require stronger
 filesystem-boundary proof.
 
+The same manifest now includes a second exploit/control pair derived from the
+[CodeQL 2.26.2 correction](https://codeql.github.com/docs/codeql-overview/codeql-changelog/codeql-cli-2.26.2/).
+The positive applies exact `java.io.File.getName()` basename reduction before
+the typed read. The JDK [`File.getName()` contract](<https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/io/File.html#getName()>)
+still permits `new File("..").getName()` to return `..`, so that reduction is
+not parent-component rejection. Its matched control rejects the exact reduced
+parent value before the operation. The specialization requires an existing
+Spring path proof, exact `java.io.File` identity, and exact result reachability;
+a local `File` lookalike, another object's `getName`, a reassigned result, a test
+or dedicated `examples` directory, weak logging, another variable, or a
+post-sink rejection fails closed. Even the exact rejection remains reviewer evidence because links,
+junctions, mounts, attacker-writable directories, races, platform semantics,
+tenant boundaries, and object authorization are separate questions.
+
 `benchmarks/java-multi-hop-ssrf-manifest.json` adds a strict three-file Spring
 outbound-request lane. The positive carries an annotated request value through
 a controller, service, and transport, constructs a JDK `HttpRequest` from the

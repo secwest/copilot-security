@@ -45,6 +45,37 @@
       "fixture": "fixtures/java-multi-hop-safe-path",
       "findingsPaths": ["java-multi-hop-safe-path/run-1/findings.json"],
       "expected": []
+    },
+    {
+      "id": "java-file-getname-path-traversal",
+      "description": "A Spring request reaches java.io.File.getName(), which preserves an exact parent component, before a java.nio.file.Files read.",
+      "fixture": "fixtures/java-file-getname-path-traversal",
+      "findingsPaths": ["java-file-getname-path-traversal/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "spring-java-file-getname-path-traversal",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/main/java/example/DocumentStore.java",
+              "startLine": 19,
+              "endLine": 19,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "java-file-getname-safe-path",
+      "description": "The matched Spring flow rejects the exact parent basename after java.io.File.getName() and before the filesystem sink.",
+      "fixture": "fixtures/java-file-getname-safe-path",
+      "findingsPaths": ["java-file-getname-safe-path/run-1/findings.json"],
+      "expected": []
     }
   ]
 }

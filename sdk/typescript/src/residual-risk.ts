@@ -1833,6 +1833,7 @@ export async function buildResidualRiskInventory(
   records.push(
     ...nodeIpv6TransitionIncompleteGuardRecords(sourceFiles, records),
   );
+  records.push(...javaFileGetNamePathBoundaryRecords(sourceFiles, records));
 
   return selectResidualRiskRecords(records, MAX_SIGNALS)
     .map(({ priority: _priority, excerpt, sourceExcerpt, ...record }) =>
@@ -2339,6 +2340,254 @@ function javascriptTestOrExamplePath(path: string): boolean {
       path,
     ) || /\.(?:spec|test)\.[^./]+$/iu.test(path)
   );
+}
+
+function javaFileGetNamePathBoundaryRecords(
+  files: readonly SourceFileSnapshot[],
+  records: readonly ResidualRiskRecord[],
+): ResidualRiskRecord[] {
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const emitted = new Set<string>();
+  const specialized: ResidualRiskRecord[] = [];
+  for (const record of records) {
+    const framework = record.frameworkModel;
+    if (framework?.id !== "spring-http-path") continue;
+    const sinkFile = filesByPath.get(framework.sink.path);
+    if (
+      sinkFile?.extension !== ".java" ||
+      javaTestOrExamplePath(sinkFile.path)
+    ) {
+      continue;
+    }
+    const boundary = javaFileGetNamePathBoundary(
+      sinkFile.lines,
+      framework.sink.line,
+      new Set(
+        framework.propagators
+          .filter(
+            (propagator) =>
+              propagator.kind === "wrapper-parameter" &&
+              propagator.path === sinkFile.path,
+          )
+          .flatMap((propagator) =>
+            propagator.symbol === undefined ? [] : [propagator.symbol],
+          ),
+      ),
+    );
+    if (boundary === undefined) continue;
+    const key = `${framework.source.path}\0${framework.source.line}\0${framework.sink.path}\0${framework.sink.line}`;
+    if (emitted.has(key)) continue;
+    emitted.add(key);
+    specialized.push({
+      ...record,
+      categories: [
+        "framework-dataflow:java-file-getname-path-boundary",
+        `modeled-source:${framework.source.kind}`,
+        `modeled-sink:${framework.sink.kind}`,
+        "broken-control:java-io-file-basename-reduction",
+        ...(boundary.parentRejectionLine === undefined
+          ? []
+          : ["candidate-control:parent-path-component-rejection"]),
+      ],
+      priority: Math.max(record.priority, 121),
+      frameworkModel: {
+        ...framework,
+        id: "java-file-getname-path-boundary",
+        candidateControls: [
+          ...framework.candidateControls,
+          {
+            kind: "incomplete-java-io-file-getname-reduction",
+            path: sinkFile.path,
+            line: boundary.reductionLine,
+          },
+          ...(boundary.parentRejectionLine === undefined
+            ? []
+            : [
+                {
+                  kind: "parent-path-component-rejection",
+                  path: sinkFile.path,
+                  line: boundary.parentRejectionLine,
+                },
+              ]),
+        ].filter(
+          (control, index, all) =>
+            all.findIndex(
+              (candidate) =>
+                candidate.kind === control.kind &&
+                candidate.path === control.path &&
+                candidate.line === control.line,
+            ) === index,
+        ),
+      },
+    });
+  }
+  return specialized;
+}
+
+function javaTestOrExamplePath(path: string): boolean {
+  return (
+    /(?:^|\/)(?:examples|test|tests)(?:\/|$)/iu.test(path) ||
+    /(?:^|\/)src\/test(?:\/|$)/iu.test(path) ||
+    /(?:Test|Tests)\.java$/u.test(path)
+  );
+}
+
+function javaFileGetNamePathBoundary(
+  lines: readonly string[],
+  sinkLine: number,
+  provenSinkParameters: ReadonlySet<string>,
+): { reductionLine: number; parentRejectionLine?: number } | undefined {
+  const method = exportedJavaMethods(lines).find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  if (method === undefined) return undefined;
+  const structuralLines = cFamilyStructuralLines(lines);
+  const structuralText = structuralLines.join("\n");
+  const fileImported = /^\s*import\s+java\.io\.(?:File|\*)\s*;/mu.test(
+    structuralText,
+  );
+  const fileShadowed = /\b(?:class|enum|interface|record)\s+File\b/u.test(
+    structuralText,
+  );
+  const fileType =
+    fileImported && !fileShadowed
+      ? String.raw`(?:(?:java\s*\.\s*io\s*\.\s*)?File)`
+      : String.raw`(?:java\s*\.\s*io\s*\.\s*File)`;
+  const sinkExpression = javaCallExpression(lines, sinkLine, method.endLine);
+  const bodyLines = structuralLines.slice(method.startLine - 1, sinkLine - 1);
+  const body = bodyLines.join("\n");
+  const eligibleParameters =
+    provenSinkParameters.size === 0
+      ? method.parameters
+      : method.parameters.filter((parameter) =>
+          provenSinkParameters.has(parameter.name),
+        );
+  if (eligibleParameters.length === 0) return undefined;
+  const tainted = new Set(
+    eligibleParameters.map((parameter) => parameter.name),
+  );
+  const fileReceivers = new Set<string>();
+  const basenameOrigins = new Map<string, number>();
+  const referencesAny = (
+    expression: string,
+    identifiers: Iterable<string>,
+  ): boolean =>
+    [...identifiers].some((identifier) =>
+      cFamilyLineReferencesIdentifier(expression, identifier),
+    );
+  const fileConstructions = (
+    expression: string,
+  ): Array<{ argument: string; reduced: boolean }> => {
+    const starts = expression.matchAll(
+      new RegExp(String.raw`\bnew\s+${fileType}\s*\(`, "gu"),
+    );
+    return [...starts].flatMap((match) => {
+      if (match.index === undefined) return [];
+      const relativeOpen = match[0].lastIndexOf("(");
+      const open = match.index + relativeOpen;
+      const close = matchingCallParenthesis(expression, open);
+      if (relativeOpen < 0 || close < 0) return [];
+      return [
+        {
+          argument: expression.slice(open + 1, close),
+          reduced: /^\s*\.\s*getName\s*\(\s*\)/u.test(
+            expression.slice(close + 1),
+          ),
+        },
+      ];
+    });
+  };
+  const assignment = /\b([A-Za-z_$][\w$]*)\s*=(?!=)\s*([^;]+);/gu;
+  for (const match of body.matchAll(assignment)) {
+    const target = match[1];
+    const value = match[2];
+    if (target === undefined || value === undefined) continue;
+    const line =
+      method.startLine + body.slice(0, match.index ?? 0).split("\n").length - 1;
+    const derivesFromTaint = referencesAny(value, tainted);
+    const priorFileReceiver = [...fileReceivers].find((identifier) =>
+      cFamilyLineReferencesIdentifier(value, identifier),
+    );
+    const constructions = fileConstructions(value);
+    const directFileConstruction = constructions.some(({ argument }) =>
+      referencesAny(argument, tainted),
+    );
+    const directReduction = constructions.some(
+      ({ argument, reduced }) => reduced && referencesAny(argument, tainted),
+    );
+    const receiverReduction = [...fileReceivers].some((identifier) =>
+      new RegExp(
+        String.raw`\b${escapeRegularExpression(identifier)}\s*\.\s*getName\s*\(\s*\)`,
+        "u",
+      ).test(value),
+    );
+    const inheritedOrigin = [...basenameOrigins].find(([identifier]) =>
+      cFamilyLineReferencesIdentifier(value, identifier),
+    )?.[1];
+
+    if (derivesFromTaint) tainted.add(target);
+    else tainted.delete(target);
+
+    if (
+      (directFileConstruction && derivesFromTaint) ||
+      priorFileReceiver !== undefined
+    ) {
+      fileReceivers.add(target);
+    } else {
+      fileReceivers.delete(target);
+    }
+
+    if (directReduction || receiverReduction) {
+      basenameOrigins.set(target, line);
+    } else if (inheritedOrigin !== undefined) {
+      basenameOrigins.set(target, inheritedOrigin);
+    } else {
+      basenameOrigins.delete(target);
+    }
+  }
+
+  const directSinkReduction = fileConstructions(sinkExpression).some(
+    ({ argument, reduced }) => reduced && referencesAny(argument, tainted),
+  );
+  if (directSinkReduction) {
+    return { reductionLine: sinkLine };
+  }
+  const reachingBasenames = [...basenameOrigins].filter(([identifier]) =>
+    cFamilyLineReferencesIdentifier(sinkExpression, identifier),
+  );
+  if (reachingBasenames.length === 0) return undefined;
+  const reductionLine = Math.min(...reachingBasenames.map(([, line]) => line));
+  const basenameIdentifiers = new Set(basenameOrigins.keys());
+  for (
+    let index = reductionLine;
+    index < Math.min(sinkLine - 1, method.endLine);
+    index += 1
+  ) {
+    const structural = structuralLines[index] ?? "";
+    const raw = lines[index] ?? "";
+    if (!/\bif\s*\(/u.test(structural)) continue;
+    const checked = [...basenameIdentifiers].some((identifier) => {
+      const escaped = escapeRegularExpression(identifier);
+      const structuralCheck = new RegExp(
+        String.raw`(?:\b${escaped}\s*\.\s*equals\s*\(|\.\s*equals\s*\(\s*${escaped}\s*\))`,
+        "u",
+      ).test(structural);
+      const rawCheck = new RegExp(
+        String.raw`(?:\b${escaped}\s*\.\s*equals\s*\(\s*"\.\."\s*\)|"\.\."\s*\.\s*equals\s*\(\s*${escaped}\s*\))`,
+        "u",
+      ).test(raw);
+      return structuralCheck && rawCheck;
+    });
+    if (!checked) continue;
+    const failClosed = structuralLines
+      .slice(index, Math.min(index + 4, sinkLine - 1))
+      .join("\n");
+    if (/\b(?:return|throw)\b/u.test(failClosed)) {
+      return { reductionLine, parentRejectionLine: index + 1 };
+    }
+  }
+  return { reductionLine };
 }
 
 function nodeIpv4OnlyHostGuard(

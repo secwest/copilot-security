@@ -1283,6 +1283,13 @@ open boundary. Dependency-free JDK witnesses exercise both exploit forms,
 sibling-prefix rejection, symbolic-link rejection when the host permits links,
 and an allowed in-root document:
 
+The same manifest also contains a second matched pair for
+`java.io.File.getName()`. Basename reduction removes ordinary parent prefixes
+but preserves the exact value `..`, so the reduced result can still select the
+trusted root's parent. The negative control rejects that exact reduced component
+before the sink. Its witnesses prove the parent escape, rejection of both `..`
+and `nested/..`, and continued access to an allowed basename.
+
 ```powershell
 javac -d C:\security-benchmarks\java-path-vulnerable `
   benchmarks\witnesses\java-multi-hop-path-traversal\VulnerablePathWitness.java
@@ -1291,9 +1298,17 @@ java -cp C:\security-benchmarks\java-path-vulnerable VulnerablePathWitness
 javac -d C:\security-benchmarks\java-path-safe `
   benchmarks\witnesses\java-multi-hop-safe-path\SafePathWitness.java
 java -cp C:\security-benchmarks\java-path-safe SafePathWitness
+
+javac -d C:\security-benchmarks\java-file-name-vulnerable `
+  benchmarks\witnesses\java-file-getname-path-traversal\VulnerableFileGetNameWitness.java
+java -cp C:\security-benchmarks\java-file-name-vulnerable VulnerableFileGetNameWitness
+
+javac -d C:\security-benchmarks\java-file-name-safe `
+  benchmarks\witnesses\java-file-getname-safe-path\SafeFileGetNameWitness.java
+java -cp C:\security-benchmarks\java-file-name-safe SafeFileGetNameWitness
 ```
 
-Run the strict live pair with:
+Run all four strict cases with:
 
 ```powershell
 $env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'

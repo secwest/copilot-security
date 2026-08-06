@@ -35,6 +35,8 @@ jobs:
             benchmarks/fixtures/java-cross-file-safe-template/pom.xml
             benchmarks/fixtures/java-multi-hop-path-traversal/pom.xml
             benchmarks/fixtures/java-multi-hop-safe-path/pom.xml
+            benchmarks/fixtures/java-file-getname-path-traversal/pom.xml
+            benchmarks/fixtures/java-file-getname-safe-path/pom.xml
             benchmarks/fixtures/java-multi-hop-ssrf/pom.xml
             benchmarks/fixtures/java-multi-hop-safe-fetch/pom.xml
             benchmarks/fixtures/java-webclient-multi-hop-ssrf/pom.xml
@@ -58,6 +60,8 @@ jobs:
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-cross-file-safe-template/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-path-traversal/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-safe-path/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-file-getname-path-traversal/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-file-getname-safe-path/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-ssrf/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-multi-hop-safe-fetch/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-webclient-multi-hop-ssrf/pom.xml verify
@@ -78,6 +82,11 @@ jobs:
           java -cp "$RUNNER_TEMP/java-path-vulnerable" VulnerablePathWitness
           javac -d "$RUNNER_TEMP/java-path-safe" benchmarks/witnesses/java-multi-hop-safe-path/SafePathWitness.java
           java -cp "$RUNNER_TEMP/java-path-safe" SafePathWitness
+          mkdir -p "$RUNNER_TEMP/java-file-name-vulnerable" "$RUNNER_TEMP/java-file-name-safe"
+          javac -d "$RUNNER_TEMP/java-file-name-vulnerable" benchmarks/witnesses/java-file-getname-path-traversal/VulnerableFileGetNameWitness.java
+          java -cp "$RUNNER_TEMP/java-file-name-vulnerable" VulnerableFileGetNameWitness
+          javac -d "$RUNNER_TEMP/java-file-name-safe" benchmarks/witnesses/java-file-getname-safe-path/SafeFileGetNameWitness.java
+          java -cp "$RUNNER_TEMP/java-file-name-safe" SafeFileGetNameWitness
 
       - name: Prove vulnerable and safe outbound-request behavior
         shell: bash
