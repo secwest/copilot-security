@@ -2515,20 +2515,25 @@ function frameworkDataflowRecords(
         nodeCopilotSink !== undefined
           ? nodeCopilotPromptSource(lines, nodeCopilotSink, model.sources)
           : undefined;
-      const source =
+      const nodeMongooseBulkWriteResolution =
         model.id === "node-http-mongoose-bulk-write" &&
         nodeMongooseBulkWrite !== undefined
           ? nodeMongooseBulkWrite.positions
-              .map(({ expression }) =>
-                modeledObjectLookupSource(
+              .map((position) => ({
+                position,
+                source: modeledObjectLookupSource(
                   lines,
                   sources,
                   sink.line,
-                  expression,
+                  position.expression,
                   model.sources,
                 ),
-              )
-              .find((candidate) => candidate !== undefined)
+              }))
+              .find((candidate) => candidate.source !== undefined)
+          : undefined;
+      const source =
+        model.id === "node-http-mongoose-bulk-write"
+          ? nodeMongooseBulkWriteResolution?.source
           : model.id === "node-http-mongoose-update" &&
               nodeMongooseUpdate !== undefined
             ? modeledObjectLookupSource(
@@ -2751,8 +2756,17 @@ function frameworkDataflowRecords(
         (pattern) => pattern.kind === sink.kind,
       );
       if (sinkPattern === undefined) continue;
+      const bulkSinkMetadata =
+        nodeMongooseBulkWriteResolution === undefined
+          ? undefined
+          : nodeMongooseBulkWriteSinkMetadata(
+              nodeMongooseBulkWriteResolution.position,
+            );
       const effectiveSinkLine = nodeCopilotResolution?.input.line ?? sink.line;
-      const effectiveSinkKind = nodeCopilotResolution?.input.kind ?? sink.kind;
+      const effectiveSinkKind =
+        nodeCopilotResolution?.input.kind ??
+        bulkSinkMetadata?.kind ??
+        sink.kind;
       const startLine = Math.max(1, effectiveSinkLine - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(
         lines.length,
@@ -2786,7 +2800,7 @@ function frameworkDataflowRecords(
             kind: effectiveSinkKind,
             path,
             line: effectiveSinkLine,
-            cweIds: sinkPattern.cweIds,
+            cweIds: bulkSinkMetadata?.cweIds ?? sinkPattern.cweIds,
           },
           propagators: [],
           candidateControls: nearbyControls.map((control) => ({
@@ -6876,6 +6890,17 @@ function javascriptFrameworkWrapperSummaries(
               ) === index,
           );
           for (const parameterIndex of parameterIndexes) {
+            const bulkSinkMetadata =
+              nodeMongooseBulkWrite === undefined
+                ? undefined
+                : nodeMongooseBulkWrite.positions
+                    .filter((position) =>
+                      lineReferencesIdentifier(
+                        position.expression,
+                        wrapper.parameters[parameterIndex]!,
+                      ),
+                    )
+                    .map(nodeMongooseBulkWriteSinkMetadata)[0];
             const copilotInput = nodeCopilotSink?.inputs.find(
               ({ expression }) =>
                 lineReferencesIdentifier(
@@ -6892,10 +6917,13 @@ function javascriptFrameworkWrapperSummaries(
               declarationLine: wrapper.startLine,
               sink: {
                 ...sink,
+                ...(bulkSinkMetadata === undefined
+                  ? {}
+                  : { kind: bulkSinkMetadata.kind }),
                 ...(copilotInput === undefined
                   ? {}
                   : { kind: copilotInput.kind, line: copilotInput.line }),
-                cweIds: sinkPattern.cweIds,
+                cweIds: bulkSinkMetadata?.cweIds ?? sinkPattern.cweIds,
               },
               controls: wrapperControls.slice(0, 8),
             });
@@ -8482,6 +8510,11 @@ interface NodeMongooseBulkWriteSink {
   positions: NodeMongooseBulkWritePosition[];
 }
 
+interface NodeMongooseBulkWriteSinkMetadata {
+  cweIds: string[];
+  kind: string;
+}
+
 interface NodeMongooseBindingContext {
   mongooseReceivers: ReadonlyArray<{ local: string; line: number }>;
   modelFunctions: ReadonlyArray<{ local: string; line: number }>;
@@ -8889,6 +8922,33 @@ function nodeMongooseBulkWriteSink(
     if (positions.length > 0) return { operationsExpression, positions };
   }
   return undefined;
+}
+
+function nodeMongooseBulkWriteSinkMetadata(
+  position: NodeMongooseBulkWritePosition,
+): NodeMongooseBulkWriteSinkMetadata {
+  if (position.kind === "filter") {
+    return { kind: "mongoose-bulk-filter", cweIds: ["CWE-943"] };
+  }
+  if (position.kind === "update") {
+    return {
+      kind: "mongoose-bulk-update-document",
+      cweIds: ["CWE-943", "CWE-915"],
+    };
+  }
+  if (position.kind === "document" && position.operation === "insertOne") {
+    return { kind: "mongoose-bulk-insert-document", cweIds: ["CWE-915"] };
+  }
+  if (position.kind === "document" && position.operation === "replaceOne") {
+    return {
+      kind: "mongoose-bulk-replacement-document",
+      cweIds: ["CWE-915"],
+    };
+  }
+  return {
+    kind: "mongoose-bulk-write-operation-array",
+    cweIds: ["CWE-943", "CWE-915"],
+  };
 }
 
 function fixedMongooseUpdateFieldCoversParameter(
@@ -14869,17 +14929,30 @@ function compareResidualRiskRecords(
   left: ResidualRiskRecord,
   right: ResidualRiskRecord,
 ): number {
-  const leftHasFixedUpdateBoundary =
-    left.frameworkModel?.candidateControls.some(
-      (control) => control.kind === "fixed-update-field-value-boundary",
-    ) === true;
-  const rightHasFixedUpdateBoundary =
-    right.frameworkModel?.candidateControls.some(
-      (control) => control.kind === "fixed-update-field-value-boundary",
-    ) === true;
+  const hasEstablishedFixedMongooseBoundary = (
+    record: ResidualRiskRecord,
+  ): boolean => {
+    const framework = record.frameworkModel;
+    if (framework?.id === "node-http-mongoose-update") {
+      return framework.candidateControls.some(
+        (control) => control.kind === "fixed-update-field-value-boundary",
+      );
+    }
+    if (framework?.id === "node-http-mongoose-bulk-write") {
+      return framework.candidateControls.some(
+        (control) =>
+          control.kind === "fixed-update-field-value-boundary" ||
+          control.kind === "fixed-document-field-projection",
+      );
+    }
+    return false;
+  };
+  const leftHasEstablishedBoundary = hasEstablishedFixedMongooseBoundary(left);
+  const rightHasEstablishedBoundary =
+    hasEstablishedFixedMongooseBoundary(right);
   return (
     right.priority - left.priority ||
-    Number(leftHasFixedUpdateBoundary) - Number(rightHasFixedUpdateBoundary) ||
+    Number(leftHasEstablishedBoundary) - Number(rightHasEstablishedBoundary) ||
     left.path.localeCompare(right.path) ||
     left.line - right.line
   );

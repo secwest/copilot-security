@@ -149,7 +149,7 @@ describe("Node Mongoose bulkWrite framework model", () => {
       sink: {
         path: "src/storage.js",
         line: 12,
-        kind: "mongoose-bulk-write-operation-array",
+        kind: "mongoose-bulk-update-document",
         cweIds: ["CWE-943", "CWE-915"],
       },
       candidateControls: [],
@@ -322,6 +322,59 @@ describe("Node Mongoose bulkWrite framework model", () => {
           ?.candidateControls,
       ).toEqual([]);
     }
+  });
+
+  test("ranks both unmitigated operation kinds before controlled siblings", async () => {
+    const repository = await temporaryRepository();
+    const prefix =
+      'import mongoose from "mongoose";\nconst User = mongoose.model("User", new mongoose.Schema({name:String}));\n';
+    const cases: Array<[string, string]> = [
+      [
+        "a-safe-update.mjs",
+        `${prefix}export async function handler(request) { return User.bulkWrite([{ updateOne: { filter: {}, update: { $set: { name: request.body.name } } } }]); }\n`,
+      ],
+      [
+        "b-safe-replacement.mjs",
+        `${prefix}export async function handler(request) { return User.bulkWrite([{ replaceOne: { filter: {}, replacement: { name: request.body.name, role: "user" } } }]); }\n`,
+      ],
+      [
+        "y-unsafe-replacement.mjs",
+        `${prefix}export async function handler(request) { return User.bulkWrite([{ replaceOne: { filter: {}, replacement: request.body.document } }]); }\n`,
+      ],
+      [
+        "z-unsafe-update.mjs",
+        `${prefix}export async function handler(request) { return User.bulkWrite([{ updateOne: { filter: {}, update: request.body.patch } }]); }\n`,
+      ],
+    ];
+    for (const [path, contents] of cases) {
+      await writeRepositoryFile(repository, path, contents);
+    }
+
+    const records = bulkWriteRecords(
+      await buildResidualRiskInventory(repository),
+    );
+    expect(records.map(({ path }) => path)).toEqual([
+      "y-unsafe-replacement.mjs",
+      "z-unsafe-update.mjs",
+      "a-safe-update.mjs",
+      "b-safe-replacement.mjs",
+    ]);
+    expect(
+      records.map(({ frameworkModel }) => frameworkModel?.sink.kind),
+    ).toEqual([
+      "mongoose-bulk-replacement-document",
+      "mongoose-bulk-update-document",
+      "mongoose-bulk-update-document",
+      "mongoose-bulk-replacement-document",
+    ]);
+    expect(
+      records.map(({ frameworkModel }) => frameworkModel?.sink.cweIds),
+    ).toEqual([
+      ["CWE-915"],
+      ["CWE-943", "CWE-915"],
+      ["CWE-943", "CWE-915"],
+      ["CWE-915"],
+    ]);
   });
 
   test("teaches the nested grammar, execution contract, and impact split", () => {
