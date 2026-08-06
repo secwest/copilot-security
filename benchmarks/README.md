@@ -1595,6 +1595,38 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The Node/Python filesystem-path lane carries one request value through route,
+gateway, service, and storage modules. The vulnerable fixtures pass it to the
+documented path position of an exact `node:fs/promises` `readFile` binding or
+the unshadowed Python `open` builtin and can read the committed parent witness.
+The matched controls accept only a server-owned key mapped to a fixed complete
+document path. Request data used only as `writeFile` contents or an `open`
+encoding is not a path sink. Official aliases, Node namespace/default/CommonJS
+receivers, both source and destination copy positions, Python module aliases,
+and local/import shadow rejection are covered by deterministic regressions.
+
+Run the strict four-case lane with:
+
+```powershell
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/filesystem-path-framework-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-filesystem-path `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
+The fixture data is itself executable: each vulnerable storage module returns
+its language-specific private witness for `../private/deployment-secret.txt`,
+while each control rejects that key and still returns the public `welcome`
+document. These witnesses exercise actual Node and Linux Python filesystem
+semantics without network access or third-party services.
+
 Run the live scanner lane with an inner model-turn deadline below the outer
 process deadline:
 

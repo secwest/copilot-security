@@ -1687,6 +1687,22 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
+The standalone Node/Python filesystem-path lane follows an HTTP request value
+across three exact relative-import boundaries into official Node `fs` or Python
+`builtins`/`os`/`shutil` path positions. Its controls preserve the same
+four-file topology but select one complete server-owned path from a fixed map.
+The host distinguishes path arguments from file contents and encodings, accepts
+documented source and destination roles for copy/move/link/rename operations,
+and rejects aliases bound to local lookalikes or foreign Python modules:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/filesystem-path-framework-manifest.json `
+  --results-dir C:\security-benchmarks\filesystem-path-framework `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
 Use `--model` and `--effort` to select a Copilot model and reasoning effort.
 The default is Copilot's `auto` model selection. The configured `xhigh` effort
 is retained for explicit models and is deliberately not sent for `auto`, because

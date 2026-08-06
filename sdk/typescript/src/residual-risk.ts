@@ -748,6 +748,56 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-path",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"](?:node:)?fs(?:\/promises)?['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "filesystem-path",
+        expression:
+          /\b(?:access|appendFile|appendFileSync|chmod|chmodSync|chown|chownSync|copyFile|copyFileSync|cp|cpSync|createReadStream|createWriteStream|link|linkSync|lstat|lstatSync|mkdir|mkdirSync|mkdtemp|mkdtempSync|open|openSync|opendir|opendirSync|readFile|readFileSync|readdir|readdirSync|readlink|readlinkSync|realpath|realpathSync|rename|renameSync|rm|rmSync|rmdir|rmdirSync|stat|statSync|symlink|symlinkSync|truncate|truncateSync|unlink|unlinkSync|utimes|utimesSync|watch|writeFile|writeFileSync)\s*\(/u,
+        cweIds: ["CWE-22"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-path-allowlist",
+        expression:
+          /\b(?:ALLOWED|DOCUMENTS|KNOWN|TRUSTED)_(?:FILES?|PATHS?)\b|\b(?:allowed|document|known|trusted)(?:Files?|Paths?)\b|\bDOCUMENTS\b|\bObject\.(?:hasOwn|freeze)\s*\(/iu,
+      },
+      {
+        kind: "absolute-path-rejection",
+        expression: /\b(?:isAbsolute|isSafeRelativePath)\s*\(/iu,
+      },
+      {
+        kind: "canonical-or-normalized-path",
+        expression: /\b(?:realpath|realpathSync|resolve)\s*\(/iu,
+      },
+      {
+        kind: "component-aware-root-containment",
+        expression:
+          /\brelative\s*\(|\b(?:candidate|relative)\.(?:startsWith|includes)\s*\(/iu,
+      },
+      {
+        kind: "link-or-race-resistant-filesystem-access",
+        expression: /\b(?:O_NOFOLLOW|opendir|openat|realpath|realpathSync)\b/iu,
+      },
+    ],
+  },
+  {
     id: "python-web-command",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -928,6 +978,54 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         kind: "bounded-template-identifier-map",
         expression:
           /\b(?:allowed_templates?|template_map|template_names?|trusted_templates?)\b/iu,
+      },
+    ],
+  },
+  {
+    id: "python-web-path",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [/\bopen\s*\(/u, /\b(?:builtins|os|shutil)\b/iu],
+    sources: [
+      {
+        kind: "framework-request-field",
+        expression:
+          /\brequest\.(?:args|cookies|files|form|GET|headers|json|POST|values)\b|\brequest\.get_json\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\b(?:Body|Cookie|Form|Header|Path|Query)\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "filesystem-path",
+        expression:
+          /\b(?:chmod|chown|copy|copy2|copyfile|copytree|lchmod|lchown|listdir|lstat|makedirs|mkdir|move|open|readlink|remove|removedirs|rename|renames|replace|rmdir|rmtree|scandir|stat|truncate|unlink|utime|walk)\s*\(/u,
+        cweIds: ["CWE-22"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fixed-path-allowlist",
+        expression:
+          /\b(?:ALLOWED|DOCUMENTS|KNOWN|TRUSTED)_(?:FILES?|PATHS?)\b|\b(?:allowed|document|known|trusted)_(?:files?|paths?)\b|\bDOCUMENTS\b/iu,
+      },
+      {
+        kind: "absolute-path-rejection",
+        expression: /\b(?:isabs|is_absolute|is_safe_relative_path)\s*\(/iu,
+      },
+      {
+        kind: "canonical-or-normalized-path",
+        expression: /\b(?:abspath|normpath|realpath|resolve)\s*\(/iu,
+      },
+      {
+        kind: "component-aware-root-containment",
+        expression: /\b(?:commonpath|is_relative_to|relative_to)\s*\(/iu,
+      },
+      {
+        kind: "link-or-race-resistant-filesystem-access",
+        expression: /\b(?:dir_fd|O_NOFOLLOW|follow_symlinks\s*=\s*False)\b/u,
       },
     ],
   },
@@ -1751,6 +1849,103 @@ interface ImportedPythonSymbol {
   line: number;
 }
 
+interface FrameworkFilesystemPathSink {
+  expressions: readonly string[];
+  operation: string;
+}
+
+const NODE_FILESYSTEM_PATH_ARGUMENTS: ReadonlyMap<string, readonly number[]> =
+  new Map<string, readonly number[]>([
+    ...[
+      "access",
+      "appendFile",
+      "appendFileSync",
+      "chmod",
+      "chmodSync",
+      "chown",
+      "chownSync",
+      "createReadStream",
+      "createWriteStream",
+      "lstat",
+      "lstatSync",
+      "mkdir",
+      "mkdirSync",
+      "mkdtemp",
+      "mkdtempSync",
+      "open",
+      "openSync",
+      "opendir",
+      "opendirSync",
+      "readFile",
+      "readFileSync",
+      "readdir",
+      "readdirSync",
+      "readlink",
+      "readlinkSync",
+      "realpath",
+      "realpathSync",
+      "rm",
+      "rmSync",
+      "rmdir",
+      "rmdirSync",
+      "stat",
+      "statSync",
+      "truncate",
+      "truncateSync",
+      "unlink",
+      "unlinkSync",
+      "utimes",
+      "utimesSync",
+      "watch",
+      "writeFile",
+      "writeFileSync",
+    ].map((operation) => [operation, [0] as const] as const),
+    ...[
+      "copyFile",
+      "copyFileSync",
+      "cp",
+      "cpSync",
+      "link",
+      "linkSync",
+      "rename",
+      "renameSync",
+      "symlink",
+      "symlinkSync",
+    ].map((operation) => [operation, [0, 1] as const] as const),
+  ]);
+
+const PYTHON_FILESYSTEM_PATH_ARGUMENTS: ReadonlyMap<string, readonly number[]> =
+  new Map<string, readonly number[]>([
+    ["builtins.open", [0]],
+    ...[
+      "chmod",
+      "chown",
+      "lchmod",
+      "lchown",
+      "listdir",
+      "lstat",
+      "makedirs",
+      "mkdir",
+      "readlink",
+      "remove",
+      "removedirs",
+      "rmdir",
+      "scandir",
+      "stat",
+      "truncate",
+      "unlink",
+      "utime",
+      "walk",
+    ].map((operation) => [`os.${operation}`, [0] as const] as const),
+    ...["rename", "renames", "replace"].map(
+      (operation) => [`os.${operation}`, [0, 1] as const] as const,
+    ),
+    ["shutil.rmtree", [0]],
+    ...["copy", "copy2", "copyfile", "copytree", "move"].map(
+      (operation) => [`shutil.${operation}`, [0, 1] as const] as const,
+    ),
+  ]);
+
 interface NodeCopilotTrustedInput {
   expression: string;
   kind:
@@ -1968,13 +2163,20 @@ function frameworkDataflowRecords(
     ) {
       continue;
     }
-    const matchedSources = JAVASCRIPT_EXTENSIONS.has(extension)
+    const rawMatchedSources = JAVASCRIPT_EXTENSIONS.has(extension)
       ? matchingJavascriptModelLines(lines, model.sources, 16)
       : PYTHON_EXTENSIONS.has(extension)
         ? matchingPythonModelLines(lines, model.sources, 16)
         : extension === ".java" || extension === ".cs"
           ? matchingJavaModelLines(lines, model.sources, 16)
           : matchingModelLines(lines, model.sources, 16);
+    const matchedSources = PYTHON_EXTENSIONS.has(extension)
+      ? rawMatchedSources.filter(
+          (source) =>
+            source.kind !== "fastapi-bound-parameter" ||
+            pythonFastApiParameterSourceHasOfficialBinding(lines),
+        )
+      : rawMatchedSources;
     const sources =
       extension === ".cs" && model.id.startsWith("aspnet-http-")
         ? [...matchedSources, ...dotnetRazorPageSources(files, path, lines)]
@@ -1988,26 +2190,29 @@ function frameworkDataflowRecords(
             )
             .slice(0, 16)
         : matchedSources;
-    const sinks = JAVASCRIPT_EXTENSIONS.has(extension)
-      ? matchingJavascriptModelLines(
-          lines,
-          model.sinks,
-          model.id === "node-http-ssrf" ||
-            model.id === "node-http-object-authorization" ||
-            model.id === "node-copilot-system-prompt-injection"
-            ? 64
-            : 8,
-        )
-      : PYTHON_EXTENSIONS.has(extension)
-        ? matchingPythonModelLines(lines, model.sinks, 8)
-        : extension === ".java" || extension === ".cs"
-          ? matchingJavaModelLines(lines, model.sinks, 8)
-          : matchingModelLines(lines, model.sinks, 8);
+    const sinks =
+      model.id === "node-http-path" || model.id === "python-web-path"
+        ? exactFilesystemPathSinkLines(lines, model.id, 32)
+        : JAVASCRIPT_EXTENSIONS.has(extension)
+          ? matchingJavascriptModelLines(
+              lines,
+              model.sinks,
+              model.id === "node-http-ssrf" ||
+                model.id === "node-http-object-authorization" ||
+                model.id === "node-copilot-system-prompt-injection"
+                ? 64
+                : 8,
+            )
+          : PYTHON_EXTENSIONS.has(extension)
+            ? matchingPythonModelLines(lines, model.sinks, 8)
+            : extension === ".java" || extension === ".cs"
+              ? matchingJavaModelLines(lines, model.sinks, 8)
+              : matchingModelLines(lines, model.sinks, 8);
     if (sources.length === 0 || sinks.length === 0) continue;
     const controls = JAVASCRIPT_EXTENSIONS.has(extension)
       ? model.id === "node-http-object-authorization"
         ? []
-        : model.id === "node-http-ssrf"
+        : model.id === "node-http-ssrf" || model.id === "node-http-path"
           ? matchingJavascriptControlLines(lines, model.controls, 24)
           : matchingModelLines(lines, model.controls, 24)
       : PYTHON_EXTENSIONS.has(extension)
@@ -2031,6 +2236,14 @@ function frameworkDataflowRecords(
       const nodeCopilotSink =
         model.id === "node-copilot-system-prompt-injection"
           ? nodeCopilotPromptSink(lines, sink.line)
+          : undefined;
+      const nodePathSink =
+        model.id === "node-http-path"
+          ? nodeFilesystemPathSink(lines, sink.line)
+          : undefined;
+      const pythonPathSink =
+        model.id === "python-web-path"
+          ? pythonFilesystemPathSink(lines, sink.line)
           : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
@@ -2066,6 +2279,12 @@ function frameworkDataflowRecords(
         model.id === "node-copilot-system-prompt-injection" &&
         nodeCopilotSink === undefined
       ) {
+        continue;
+      }
+      if (model.id === "node-http-path" && nodePathSink === undefined) {
+        continue;
+      }
+      if (model.id === "python-web-path" && pythonPathSink === undefined) {
         continue;
       }
       if (
@@ -2145,94 +2364,119 @@ function frameworkDataflowRecords(
           ? nodeCopilotPromptSource(lines, nodeCopilotSink, model.sources)
           : undefined;
       const source =
-        model.id === "node-http-object-authorization" &&
-        nodeObjectSink !== undefined
-          ? modeledObjectLookupSource(
-              lines,
-              sources,
-              sink.line,
-              nodeObjectSink.argument,
-              model.sources,
-            )
-          : model.id === "node-http-ssrf" &&
-              nodeHttpSink?.urlExpression !== undefined
-            ? modeledCallSource(
-                lines,
-                sources,
-                sink.line,
-                nodeHttpSink.urlExpression,
-                model.sources,
+        model.id === "node-http-path" && nodePathSink !== undefined
+          ? nodePathSink.expressions
+              .map((expression) =>
+                modeledObjectLookupSource(
+                  lines,
+                  sources,
+                  sink.line,
+                  expression,
+                  model.sources,
+                ),
               )
-            : model.id === "node-copilot-system-prompt-injection"
-              ? nodeCopilotResolution?.source
-              : extension === ".java" &&
-                  model.id === "spring-http-object-authorization" &&
-                  javaObjectSink !== undefined
-                ? modeledSameFileJavaObjectSource(
+              .find((candidate) => candidate !== undefined)
+          : model.id === "python-web-path" && pythonPathSink !== undefined
+            ? pythonPathSink.expressions
+                .map((expression) =>
+                  modeledPythonObjectSource(
                     lines,
+                    sources,
                     sink.line,
-                    javaObjectSink.argument,
+                    expression,
+                    model.sources,
+                  ),
+                )
+                .find((candidate) => candidate !== undefined)
+            : model.id === "node-http-object-authorization" &&
+                nodeObjectSink !== undefined
+              ? modeledObjectLookupSource(
+                  lines,
+                  sources,
+                  sink.line,
+                  nodeObjectSink.argument,
+                  model.sources,
+                )
+              : model.id === "node-http-ssrf" &&
+                  nodeHttpSink?.urlExpression !== undefined
+                ? modeledCallSource(
+                    lines,
+                    sources,
+                    sink.line,
+                    nodeHttpSink.urlExpression,
                     model.sources,
                   )
-                : extension === ".java" &&
-                    model.id === "spring-mvc-jpa-mass-assignment" &&
-                    javaJpaSink !== undefined &&
-                    javaJpaDomainType !== undefined
-                  ? (() => {
-                      const method = exportedJavaMethods(lines).find(
-                        (candidate) =>
-                          sink.line >= candidate.startLine &&
-                          sink.line <= candidate.endLine,
-                      );
-                      return method === undefined
-                        ? undefined
-                        : modeledJavaMassAssignmentSource(
-                            lines,
-                            method,
-                            sink.line,
-                            javaJpaSink.argument,
-                            javaJpaDomainType,
-                          );
-                    })()
+                : model.id === "node-copilot-system-prompt-injection"
+                  ? nodeCopilotResolution?.source
                   : extension === ".java" &&
-                      (model.id === "spring-http-ssrf" ||
-                        model.id === "spring-http-path")
-                    ? modeledSameFileJavaSource(
+                      model.id === "spring-http-object-authorization" &&
+                      javaObjectSink !== undefined
+                    ? modeledSameFileJavaObjectSource(
                         lines,
                         sink.line,
-                        model.id,
+                        javaObjectSink.argument,
                         model.sources,
                       )
-                    : extension === ".cs" &&
-                        model.id === "aspnet-http-template-injection"
-                      ? modeledSameFileDotnetTemplateSource(
-                          lines,
-                          sink.line,
-                          model.sources,
-                          files,
-                          path,
-                        )
-                      : extension === ".cs" &&
-                          model.id === "aspnet-http-object-authorization" &&
-                          dotnetObjectSink !== undefined
-                        ? modeledSameFileDotnetObjectSource(
+                    : extension === ".java" &&
+                        model.id === "spring-mvc-jpa-mass-assignment" &&
+                        javaJpaSink !== undefined &&
+                        javaJpaDomainType !== undefined
+                      ? (() => {
+                          const method = exportedJavaMethods(lines).find(
+                            (candidate) =>
+                              sink.line >= candidate.startLine &&
+                              sink.line <= candidate.endLine,
+                          );
+                          return method === undefined
+                            ? undefined
+                            : modeledJavaMassAssignmentSource(
+                                lines,
+                                method,
+                                sink.line,
+                                javaJpaSink.argument,
+                                javaJpaDomainType,
+                              );
+                        })()
+                      : extension === ".java" &&
+                          (model.id === "spring-http-ssrf" ||
+                            model.id === "spring-http-path")
+                        ? modeledSameFileJavaSource(
                             lines,
                             sink.line,
-                            dotnetObjectSink.argument,
+                            model.id,
                             model.sources,
-                            files,
-                            path,
                           )
                         : extension === ".cs" &&
-                            model.id.startsWith("aspnet-http-")
-                          ? modeledSameFileDotnetSource(
+                            model.id === "aspnet-http-template-injection"
+                          ? modeledSameFileDotnetTemplateSource(
                               lines,
                               sink.line,
                               model.sources,
                               files,
                               path,
-                            ) ?? nearestModeledSource(matchedSources, sink.line)
-                          : nearestModeledSource(sources, sink.line);
+                            )
+                          : extension === ".cs" &&
+                              model.id === "aspnet-http-object-authorization" &&
+                              dotnetObjectSink !== undefined
+                            ? modeledSameFileDotnetObjectSource(
+                                lines,
+                                sink.line,
+                                dotnetObjectSink.argument,
+                                model.sources,
+                                files,
+                                path,
+                              )
+                            : extension === ".cs" &&
+                                model.id.startsWith("aspnet-http-")
+                              ? modeledSameFileDotnetSource(
+                                  lines,
+                                  sink.line,
+                                  model.sources,
+                                  files,
+                                  path,
+                                ) ??
+                                nearestModeledSource(matchedSources, sink.line)
+                              : nearestModeledSource(sources, sink.line);
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -2287,7 +2531,8 @@ function frameworkDataflowRecords(
           (control) =>
             control.line >= Math.min(source.line, sink.line) - 8 &&
             control.line <= Math.max(source.line, sink.line) + 8 &&
-            nodeHttpGeneralControlApplies(nodeHttpSink, control.kind),
+            nodeHttpGeneralControlApplies(nodeHttpSink, control.kind) &&
+            filesystemPathControlApplies(model.id, control.kind, controls),
         ),
       ]
         .filter(
@@ -6225,11 +6470,14 @@ function javascriptFrameworkWrapperSummaries(
       ) {
         continue;
       }
-      const sinks = matchingJavascriptModelLines(file.lines, model.sinks, 32);
+      const sinks =
+        model.id === "node-http-path"
+          ? exactFilesystemPathSinkLines(file.lines, model.id, 32)
+          : matchingJavascriptModelLines(file.lines, model.sinks, 32);
       const controls =
         model.id === "node-http-object-authorization"
           ? []
-          : model.id === "node-http-ssrf"
+          : model.id === "node-http-ssrf" || model.id === "node-http-path"
             ? matchingJavascriptControlLines(file.lines, model.controls, 64)
             : matchingModelLines(file.lines, model.controls, 64);
       for (const wrapper of exportedFunctions) {
@@ -6252,6 +6500,10 @@ function javascriptFrameworkWrapperSummaries(
             model.id === "node-copilot-system-prompt-injection"
               ? nodeCopilotPromptSink(file.lines, sink.line)
               : undefined;
+          const nodePathSink =
+            model.id === "node-http-path"
+              ? nodeFilesystemPathSink(file.lines, sink.line)
+              : undefined;
           if (model.id === "node-http-ssrf" && nodeHttpSink === undefined) {
             continue;
           }
@@ -6267,6 +6519,9 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (model.id === "node-http-path" && nodePathSink === undefined) {
+            continue;
+          }
           if (
             nodeHttpSink?.axiosReceiver !== undefined &&
             wrapper.parameters.includes(nodeHttpSink.axiosReceiver)
@@ -6274,6 +6529,13 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           const sinkValue =
+            nodePathSink?.expressions
+              .map(
+                (expression) =>
+                  resolveJavascriptExpression(file.lines, expression, sink.line)
+                    ?.value ?? expression,
+              )
+              .join("\n") ??
             nodeHttpSink?.urlExpression ??
             nodeObjectSink?.argument ??
             nodeCopilotSink?.inputs
@@ -6294,9 +6556,14 @@ function javascriptFrameworkWrapperSummaries(
           const wrapperControls = [
             ...controls.filter(
               (control) =>
-                control.line >= wrapper.startLine &&
-                control.line <= wrapper.endLine &&
-                nodeHttpGeneralControlApplies(nodeHttpSink, control.kind),
+                nodeHttpGeneralControlApplies(nodeHttpSink, control.kind) &&
+                filesystemPathWrapperControlApplies(
+                  model.id,
+                  control,
+                  controls,
+                  wrapper.startLine,
+                  wrapper.endLine,
+                ),
             ),
             ...(model.id === "node-http-ssrf" && nodeHttpSink !== undefined
               ? nodeAxiosConfigurationControls(
@@ -6369,7 +6636,10 @@ function pythonFrameworkWrapperSummaries(
       ) {
         continue;
       }
-      const sinks = matchingPythonModelLines(file.lines, model.sinks, 32);
+      const sinks =
+        model.id === "python-web-path"
+          ? exactFilesystemPathSinkLines(file.lines, model.id, 32)
+          : matchingPythonModelLines(file.lines, model.sinks, 32);
       const controls = matchingPythonModelLines(file.lines, model.controls, 64);
       for (const wrapper of exportedFunctions) {
         for (const sink of sinks) {
@@ -6381,9 +6651,24 @@ function pythonFrameworkWrapperSummaries(
             sink.line,
             wrapper.endLine,
           );
+          const pythonPathSink =
+            model.id === "python-web-path"
+              ? pythonFilesystemPathSink(file.lines, sink.line)
+              : undefined;
+          if (model.id === "python-web-path" && pythonPathSink === undefined) {
+            continue;
+          }
+          const tracedSinkExpression =
+            pythonPathSink?.expressions
+              .map(
+                (expression) =>
+                  resolvePythonExpression(file.lines, expression, sink.line) ??
+                  expression,
+              )
+              .join("\n") ?? sinkExpression;
           const parameterIndexes = wrapper.parameters.flatMap(
             (parameter, parameterIndex) =>
-              pythonLineReferencesIdentifier(sinkExpression, parameter)
+              pythonLineReferencesIdentifier(tracedSinkExpression, parameter)
                 ? [parameterIndex]
                 : [],
           );
@@ -6397,10 +6682,14 @@ function pythonFrameworkWrapperSummaries(
             .map((control) => ({ kind: control.kind, line: sink.line }));
           const wrapperControls = [
             ...sinkControls,
-            ...controls.filter(
-              (control) =>
-                control.line >= wrapper.startLine &&
-                control.line <= wrapper.endLine,
+            ...controls.filter((control) =>
+              filesystemPathWrapperControlApplies(
+                model.id,
+                control,
+                controls,
+                wrapper.startLine,
+                wrapper.endLine,
+              ),
             ),
           ].filter(
             (control, index, all) =>
@@ -7553,6 +7842,380 @@ function importedPythonSymbols(
   return imports;
 }
 
+function pythonFastApiParameterSourceHasOfficialBinding(
+  lines: readonly string[],
+): boolean {
+  return pythonStructuralLines(lines).some((line) =>
+    /^\s*from\s+fastapi(?:\.params)?\s+import\s+[^#]*(?:\bBody\b|\bCookie\b|\bForm\b|\bHeader\b|\bPath\b|\bQuery\b)/u.test(
+      line,
+    ),
+  );
+}
+
+function javascriptCallArgumentsAtLine(
+  lines: readonly string[],
+  line: number,
+  callee: RegExp,
+): string[] | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const original = javascriptCodeLinesWithoutComments(callLines).join("\n");
+  const structural = javascriptStructuralLines(callLines).join("\n");
+  const match = callee.exec(structural.split("\n", 1)[0] ?? "");
+  if (match === null) return undefined;
+  const open = structural.indexOf("(", match.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  return splitJavascriptArguments(original.slice(open + 1, close));
+}
+
+function nodeFilesystemPathSink(
+  lines: readonly string[],
+  line: number,
+): FrameworkFilesystemPathSink | undefined {
+  const fsModule = /^(?:node:)?fs(?:\/promises)?$/u;
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const namedBindings = importedJavascriptSymbols(lines).filter(
+    (binding) =>
+      fsModule.test(binding.moduleSpecifier) &&
+      NODE_FILESYSTEM_PATH_ARGUMENTS.has(binding.imported),
+  );
+  for (const binding of namedBindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const arguments_ = javascriptCallArgumentsAtLine(
+      lines,
+      line,
+      new RegExp(`\\b${escapeRegularExpression(binding.local)}\\s*\\(`, "u"),
+    );
+    if (arguments_ === undefined) continue;
+    const positions = NODE_FILESYSTEM_PATH_ARGUMENTS.get(binding.imported)!;
+    const expressions = positions.flatMap((position) =>
+      arguments_[position]?.trim() ? [arguments_[position]!.trim()] : [],
+    );
+    if (expressions.length !== positions.length) continue;
+    return { expressions, operation: binding.imported };
+  }
+
+  const structuralLines = javascriptStructuralLines(lines);
+  const receiverBindings: Array<{ local: string; line: number }> = [];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = javascriptCodeBeforeComment(lines[index] ?? "");
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']((?:node:)?fs(?:\/promises)?)["']/u.exec(
+        structural,
+      );
+    const defaultImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']((?:node:)?fs(?:\/promises)?)["']/u.exec(
+        structural,
+      );
+    const requireBinding =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']((?:node:)?fs(?:\/promises)?)["']\s*\)(?:\s*\.\s*promises)?/u.exec(
+        structural,
+      );
+    const promisesBinding =
+      /^\s*import\s*\{\s*promises(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*\}\s*from\s*["']((?:node:)?fs)["']/u.exec(
+        structural,
+      );
+    const local =
+      namespace?.[1] ??
+      defaultImport?.[1] ??
+      requireBinding?.[1] ??
+      promisesBinding?.[1] ??
+      (promisesBinding === null ? undefined : "promises");
+    const moduleSpecifier =
+      namespace?.[2] ??
+      defaultImport?.[2] ??
+      requireBinding?.[2] ??
+      promisesBinding?.[2];
+    if (local !== undefined && moduleSpecifier !== undefined) {
+      receiverBindings.push({ local, line: index + 1 });
+    }
+  }
+  for (const binding of receiverBindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line,
+      )
+    ) {
+      continue;
+    }
+    for (const [operation, positions] of NODE_FILESYSTEM_PATH_ARGUMENTS) {
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        line,
+        new RegExp(
+          `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*(?:promises\\s*\\.\\s*)?${escapeRegularExpression(operation)}\\s*\\(`,
+          "u",
+        ),
+      );
+      if (arguments_ === undefined) continue;
+      const expressions = positions.flatMap((position) =>
+        arguments_[position]?.trim() ? [arguments_[position]!.trim()] : [],
+      );
+      if (expressions.length !== positions.length) continue;
+      return { expressions, operation };
+    }
+  }
+
+  for (const [operation, positions] of NODE_FILESYSTEM_PATH_ARGUMENTS) {
+    const arguments_ = javascriptCallArgumentsAtLine(
+      lines,
+      line,
+      new RegExp(
+        `\\brequire\\s*\\(\\s*["'](?:node:)?fs(?:/promises)?["']\\s*\\)\\s*\\.\\s*(?:promises\\s*\\.\\s*)?${escapeRegularExpression(operation)}\\s*\\(`,
+        "u",
+      ),
+    );
+    if (arguments_ === undefined) continue;
+    const expressions = positions.flatMap((position) =>
+      arguments_[position]?.trim() ? [arguments_[position]!.trim()] : [],
+    );
+    if (expressions.length === positions.length) {
+      return { expressions, operation };
+    }
+  }
+  return undefined;
+}
+
+function exactFilesystemPathSinkLines(
+  lines: readonly string[],
+  modelId: string,
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const sinks: Array<{ kind: string; line: number }> = [];
+  const structuralLines =
+    modelId === "node-http-path"
+      ? javascriptStructuralLines(lines)
+      : pythonStructuralLines(lines);
+  for (
+    let index = 0;
+    index < structuralLines.length && sinks.length < limit;
+    index += 1
+  ) {
+    if (!(structuralLines[index] ?? "").includes("(")) continue;
+    const line = index + 1;
+    const sink =
+      modelId === "node-http-path"
+        ? nodeFilesystemPathSink(lines, line)
+        : pythonFilesystemPathSink(lines, line);
+    if (sink !== undefined) sinks.push({ kind: "filesystem-path", line });
+  }
+  return sinks;
+}
+
+function filesystemPathControlApplies(
+  modelId: string,
+  kind: string,
+  controls: readonly { kind: string; line: number }[],
+): boolean {
+  if (modelId !== "node-http-path" && modelId !== "python-web-path") {
+    return true;
+  }
+  if (
+    kind !== "canonical-or-normalized-path" &&
+    kind !== "absolute-path-rejection"
+  ) {
+    return true;
+  }
+  return controls.some(
+    (control) => control.kind === "component-aware-root-containment",
+  );
+}
+
+function filesystemPathWrapperControlApplies(
+  modelId: string,
+  control: { kind: string; line: number },
+  controls: readonly { kind: string; line: number }[],
+  wrapperStartLine: number,
+  wrapperEndLine: number,
+): boolean {
+  if (!filesystemPathControlApplies(modelId, control.kind, controls)) {
+    return false;
+  }
+  if (
+    (modelId === "node-http-path" || modelId === "python-web-path") &&
+    control.kind === "fixed-path-allowlist"
+  ) {
+    return (
+      control.line >= Math.max(1, wrapperStartLine - 64) &&
+      control.line <= wrapperEndLine &&
+      controls.findIndex(
+        (candidate) => candidate.kind === "fixed-path-allowlist",
+      ) === controls.indexOf(control)
+    );
+  }
+  return control.line >= wrapperStartLine && control.line <= wrapperEndLine;
+}
+
+function pythonCallArgumentsAtLine(
+  lines: readonly string[],
+  line: number,
+  callee: RegExp,
+): string[] | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const original = callLines.join("\n");
+  const structural = pythonStructuralLines(callLines).join("\n");
+  const match = callee.exec(structural.split("\n", 1)[0] ?? "");
+  if (match === null) return undefined;
+  const open = structural.indexOf("(", match.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  return splitPythonArguments(original.slice(open + 1, close));
+}
+
+function pythonFilesystemPathSink(
+  lines: readonly string[],
+  line: number,
+): FrameworkFilesystemPathSink | undefined {
+  const structuralLines = pythonStructuralLines(lines);
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const namedBindings: Array<{
+    local: string;
+    qualified: string;
+    line: number;
+  }> = [];
+  const moduleBindings: Array<{ local: string; module: string; line: number }> =
+    [];
+  const importedLocals = new Set<string>();
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const moduleImport =
+      /^\s*import\s+(builtins|os|shutil)(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+        structural,
+      );
+    if (moduleImport !== null) {
+      moduleBindings.push({
+        module: moduleImport[1]!,
+        local: moduleImport[2] ?? moduleImport[1]!,
+        line: index + 1,
+      });
+      continue;
+    }
+    const fromImport =
+      /^\s*from\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+import\s+(.+)$/u.exec(
+        structural,
+      );
+    if (fromImport === null) continue;
+    for (const rawBinding of splitPythonArguments(fromImport[2] ?? "")) {
+      const parsed = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      if (parsed === null) continue;
+      const local = parsed[2] ?? parsed[1]!;
+      importedLocals.add(local);
+      const qualified = `${fromImport[1]}.${parsed[1]}`;
+      if (PYTHON_FILESYSTEM_PATH_ARGUMENTS.has(qualified)) {
+        namedBindings.push({ local, qualified, line: index + 1 });
+      }
+    }
+  }
+
+  for (const binding of namedBindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      pythonIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const arguments_ = pythonCallArgumentsAtLine(
+      lines,
+      line,
+      new RegExp(`\\b${escapeRegularExpression(binding.local)}\\s*\\(`, "u"),
+    );
+    if (arguments_ === undefined) continue;
+    const positions = PYTHON_FILESYSTEM_PATH_ARGUMENTS.get(binding.qualified)!;
+    const expressions = positions.flatMap((position) =>
+      arguments_[position]?.trim() ? [arguments_[position]!.trim()] : [],
+    );
+    if (expressions.length === positions.length) {
+      return {
+        expressions,
+        operation: binding.qualified.split(".").at(-1)!,
+      };
+    }
+  }
+
+  for (const binding of moduleBindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      pythonIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line,
+      )
+    ) {
+      continue;
+    }
+    for (const [qualified, positions] of PYTHON_FILESYSTEM_PATH_ARGUMENTS) {
+      const [module, operation] = qualified.split(".");
+      if (module !== binding.module) continue;
+      const arguments_ = pythonCallArgumentsAtLine(
+        lines,
+        line,
+        new RegExp(
+          `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*${escapeRegularExpression(operation!)}\\s*\\(`,
+          "u",
+        ),
+      );
+      if (arguments_ === undefined) continue;
+      const expressions = positions.flatMap((position) =>
+        arguments_[position]?.trim() ? [arguments_[position]!.trim()] : [],
+      );
+      if (expressions.length === positions.length) {
+        return { expressions, operation: operation! };
+      }
+    }
+  }
+
+  const builtinShadowed =
+    importedLocals.has("open") ||
+    wrapper?.parameters.includes("open") === true ||
+    structuralLines.some((candidate, index) =>
+      index + 1 < line
+        ? /^\s*(?:async\s+)?def\s+open\s*\(|^\s*class\s+open\b|^\s*open\s*(?::[^=]+)?=/u.test(
+            candidate,
+          )
+        : false,
+    );
+  if (!builtinShadowed) {
+    const arguments_ = pythonCallArgumentsAtLine(
+      lines,
+      line,
+      /(?<![.\w])open\s*\(/u,
+    );
+    const expression = arguments_?.[0]?.trim();
+    if (expression) return { expressions: [expression], operation: "open" };
+  }
+  return undefined;
+}
+
 function resolveRelativeModelImport(
   callerPath: string,
   moduleSpecifier: string,
@@ -7881,6 +8544,76 @@ function modeledPythonCallSource(
     }
   }
   return undefined;
+}
+
+function modeledPythonObjectSource(
+  lines: readonly string[],
+  sources: readonly { kind: string; line: number }[],
+  callLine: number,
+  argument: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const direct = sourcePatterns.find((pattern) =>
+    pattern.expression.test(argument),
+  );
+  if (direct !== undefined) return { kind: direct.kind, line: callLine };
+  const structuralLines = pythonStructuralLines(lines);
+  const earliest = Math.max(1, callLine - MAX_WRAPPER_CALL_DISTANCE);
+  for (let line = callLine - 1; line >= earliest; line -= 1) {
+    const source = sources.find((candidate) => candidate.line === line);
+    if (source === undefined) continue;
+    const assignment = /^\s*([A-Za-z_]\w*)\s*(?::[^=]+)?=/u.exec(
+      structuralLines[line - 1] ?? "",
+    );
+    const identifier = assignment?.[1];
+    if (
+      identifier === undefined ||
+      !pythonLineReferencesIdentifier(argument, identifier) ||
+      pythonIdentifierReassignedBetween(lines, identifier, line, callLine)
+    ) {
+      continue;
+    }
+    return source;
+  }
+  return undefined;
+}
+
+function resolvePythonExpression(
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+): string | undefined {
+  const value = expression.trim();
+  if (value === "" || depth > 8) return undefined;
+  if (!/^[A-Za-z_]\w*$/u.test(value)) return value;
+  if (seen.has(value)) return undefined;
+  const earliest = Math.max(1, beforeLine - 64);
+  const structuralLines = pythonStructuralLines(lines);
+  const assignment = new RegExp(
+    `^\\s*${escapeRegularExpression(value)}\\s*(?::[^=]+)?=\\s*(.+)$`,
+    "u",
+  );
+  for (let line = beforeLine - 1; line >= earliest; line -= 1) {
+    const structural = structuralLines[line - 1] ?? "";
+    const match = assignment.exec(structural);
+    if (match === null) continue;
+    if (pythonIdentifierReassignedBetween(lines, value, line, beforeLine)) {
+      return undefined;
+    }
+    const original = pythonCodeBeforeComment(lines[line - 1] ?? "");
+    const equals = original.indexOf("=");
+    if (equals < 0) return undefined;
+    return resolvePythonExpression(
+      lines,
+      original.slice(equals + 1),
+      line,
+      depth + 1,
+      new Set([...seen, value]),
+    );
+  }
+  return value;
 }
 
 function modeledJavaCallSource(
@@ -12112,7 +12845,7 @@ function javascriptIdentifierReassignedBetween(
 ): boolean {
   const escapedIdentifier = escapeRegularExpression(identifier);
   const reassignment = new RegExp(
-    `(?:\\b${escapedIdentifier}\\s*(?:[+*/%&|^?-]?=|\\+\\+|--)|(?:\\+\\+|--)\\s*${escapedIdentifier}\\b|\\b(?:const|let|var)\\s+${escapedIdentifier}\\b)`,
+    `(?:\\b${escapedIdentifier}\\s*(?:[+\\-*/%&|^?]=|=(?!=|>)|\\+\\+|--)|(?:\\+\\+|--)\\s*${escapedIdentifier}\\b|\\b(?:const|let|var)\\s+${escapedIdentifier}\\b)`,
     "u",
   );
   return lines
