@@ -342,23 +342,31 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
     expect(getNameVulnerable[0]?.path).toBe(
       "src/main/java/example/DocumentStore.java",
     );
-    expect(getNameVulnerable[0]?.frameworkModel?.sink.line).toBe(23);
-    expect(
-      getNameVulnerable[0]?.frameworkModel?.candidateControls.map(
-        ({ kind }) => kind,
-      ),
-    ).toEqual(["incomplete-java-io-file-getname-reduction"]);
+    expect(getNameVulnerable[0]?.frameworkModel?.sink.line).toBe(18);
+    expect(getNameVulnerable[0]?.frameworkModel?.candidateControls).toEqual([
+      {
+        kind: "incomplete-java-io-file-getname-reduction",
+        path: "src/main/java/example/DocumentNames.java",
+        line: 9,
+      },
+    ]);
 
     expect(javaPathRecords(getNameSafeInventory)).toHaveLength(1);
     const getNameSafe = javaFileGetNameRecords(getNameSafeInventory);
     expect(getNameSafe).toHaveLength(1);
-    expect(getNameSafe[0]?.frameworkModel?.sink.line).toBe(26);
-    expect(
-      getNameSafe[0]?.frameworkModel?.candidateControls.map(({ kind }) => kind),
-    ).toEqual(
+    expect(getNameSafe[0]?.frameworkModel?.sink.line).toBe(21);
+    expect(getNameSafe[0]?.frameworkModel?.candidateControls).toEqual(
       expect.arrayContaining([
-        "incomplete-java-io-file-getname-reduction",
-        "parent-path-component-rejection",
+        {
+          kind: "incomplete-java-io-file-getname-reduction",
+          path: "src/main/java/example/DocumentNames.java",
+          line: 9,
+        },
+        {
+          kind: "parent-path-component-rejection",
+          path: "src/main/java/example/DocumentStore.java",
+          line: 18,
+        },
       ]),
     );
 
@@ -370,27 +378,35 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
     expect(pathGetFileNameVulnerable[0]?.path).toBe(
       "src/main/java/example/DocumentStore.java",
     );
-    expect(pathGetFileNameVulnerable[0]?.frameworkModel?.sink.line).toBe(28);
+    expect(pathGetFileNameVulnerable[0]?.frameworkModel?.sink.line).toBe(24);
     expect(
-      pathGetFileNameVulnerable[0]?.frameworkModel?.candidateControls.map(
-        ({ kind }) => kind,
-      ),
-    ).toEqual(["incomplete-java-nio-path-getfilename-reduction"]);
+      pathGetFileNameVulnerable[0]?.frameworkModel?.candidateControls,
+    ).toEqual([
+      {
+        kind: "incomplete-java-nio-path-getfilename-reduction",
+        path: "src/main/java/example/DocumentNames.java",
+        line: 9,
+      },
+    ]);
 
     expect(javaPathRecords(pathGetFileNameSafeInventory)).toHaveLength(1);
     const pathGetFileNameSafe = javaPathGetFileNameRecords(
       pathGetFileNameSafeInventory,
     );
     expect(pathGetFileNameSafe).toHaveLength(1);
-    expect(pathGetFileNameSafe[0]?.frameworkModel?.sink.line).toBe(25);
-    expect(
-      pathGetFileNameSafe[0]?.frameworkModel?.candidateControls.map(
-        ({ kind }) => kind,
-      ),
-    ).toEqual(
+    expect(pathGetFileNameSafe[0]?.frameworkModel?.sink.line).toBe(21);
+    expect(pathGetFileNameSafe[0]?.frameworkModel?.candidateControls).toEqual(
       expect.arrayContaining([
-        "incomplete-java-nio-path-getfilename-reduction",
-        "parent-path-component-rejection",
+        {
+          kind: "incomplete-java-nio-path-getfilename-reduction",
+          path: "src/main/java/example/DocumentNames.java",
+          line: 9,
+        },
+        {
+          kind: "parent-path-component-rejection",
+          path: "src/main/java/example/DocumentStore.java",
+          line: 18,
+        },
       ]),
     );
   });
@@ -957,6 +973,401 @@ public final class AliasHelperController {
         ),
       ),
     ).toBeTrue();
+  });
+
+  test("summarizes exact project-local cross-file Java basename helpers", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "pom.xml",
+      `<project><modelVersion>4.0.0</modelVersion></project>`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/example/PathNames.java",
+      `
+package example;
+import java.nio.file.Path;
+final class PathNames {
+  static Path basename(String input) {
+    return Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/example/DocumentController.java",
+      `
+package example;
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class DocumentController {
+  public String read(@RequestParam String path) throws Exception {
+    Path name = PathNames.basename(path);
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/example/FileNames.java",
+      `
+package example;
+import java.io.File;
+final class FileNames {
+  static String basename(String input) {
+    return new File(input).getName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/example/FileDocumentController.java",
+      `
+package example;
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class FileDocumentController {
+  public String read(@RequestParam String path) throws Exception {
+    String name = FileNames.basename(path);
+    if ("..".equals(name)) throw new SecurityException("parent");
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/helpers/ImportedPathNames.java",
+      `
+package helpers;
+import java.nio.file.Path;
+public final class ImportedPathNames {
+  public static Path basename(String input) {
+    return Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/client/ImportedController.java",
+      `
+package client;
+import helpers.ImportedPathNames;
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class ImportedController {
+  public String read(@RequestParam String path) throws Exception {
+    Path name = ImportedPathNames.basename(path);
+    return Files.readString(Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/helpers/QualifiedFileNames.java",
+      `
+package helpers;
+public final class QualifiedFileNames {
+  public static java.lang.String basename(java.lang.String input) {
+    return new java.io.File(input).getName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/client/QualifiedController.java",
+      `
+package client;
+public final class QualifiedController {
+  public String read(@RequestParam String path) throws Exception {
+    String name = helpers.QualifiedFileNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(4);
+    const pathSpecialized = javaPathGetFileNameRecords(inventory);
+    const fileSpecialized = javaFileGetNameRecords(inventory);
+    expect(pathSpecialized).toHaveLength(2);
+    expect(fileSpecialized).toHaveLength(2);
+    expect(
+      pathSpecialized.flatMap(
+        (record) => record.frameworkModel?.candidateControls ?? [],
+      ),
+    ).toContainEqual({
+      kind: "incomplete-java-nio-path-getfilename-reduction",
+      path: "src/main/java/example/PathNames.java",
+      line: 6,
+    });
+    expect(
+      pathSpecialized.flatMap(
+        (record) => record.frameworkModel?.candidateControls ?? [],
+      ),
+    ).toContainEqual({
+      kind: "incomplete-java-nio-path-getfilename-reduction",
+      path: "src/main/java/helpers/ImportedPathNames.java",
+      line: 6,
+    });
+    expect(
+      fileSpecialized.flatMap(
+        (record) => record.frameworkModel?.candidateControls ?? [],
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          kind: "incomplete-java-io-file-getname-reduction",
+          path: "src/main/java/example/FileNames.java",
+          line: 6,
+        },
+        {
+          kind: "incomplete-java-io-file-getname-reduction",
+          path: "src/main/java/helpers/QualifiedFileNames.java",
+          line: 5,
+        },
+        expect.objectContaining({ kind: "parent-path-component-rejection" }),
+      ]),
+    );
+  });
+
+  test("rejects ambiguous, inaccessible, or inexact cross-file basename helpers", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "pom.xml",
+      `<project><modelVersion>4.0.0</modelVersion></project>`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/duplicate/PathNames.java",
+      `
+package duplicate;
+import java.nio.file.Path;
+final class PathNames {
+  static Path basename(String input) { return Path.of(input).getFileName(); }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/duplicate/Other.java",
+      `package duplicate; final class PathNames {}`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/duplicate/DuplicateController.java",
+      `
+package duplicate;
+public final class DuplicateController {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = PathNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/overload/PathNames.java",
+      `
+package overload;
+import java.nio.file.Path;
+final class PathNames {
+  static Path basename(String input) { return Path.of(input).getFileName(); }
+  static Path basename(Path input) { return input.getFileName(); }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/overload/OverloadController.java",
+      `
+package overload;
+public final class OverloadController {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = PathNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/privatecase/FileNames.java",
+      `
+package privatecase;
+import java.io.File;
+final class FileNames {
+  private static String basename(String input) { return new File(input).getName(); }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/privatecase/PrivateController.java",
+      `
+package privatecase;
+public final class PrivateController {
+  public String read(@RequestParam String path) throws Exception {
+    String name = FileNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/hidden/HiddenPathNames.java",
+      `
+package hidden;
+import java.nio.file.Path;
+final class HiddenPathNames {
+  public static Path basename(String input) { return Path.of(input).getFileName(); }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/client/HiddenController.java",
+      `
+package client;
+import hidden.HiddenPathNames;
+public final class HiddenController {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = HiddenPathNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/transform/FileNames.java",
+      `
+package transform;
+public final class FileNames {
+  public static String basename(String input) { return new java.io.File(input).getName(); }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/client/TransformController.java",
+      `
+package client;
+import transform.FileNames;
+public final class TransformController {
+  public String read(@RequestParam String path) throws Exception {
+    String name = FileNames.basename("prefix/" + path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/receiver/PathNames.java",
+      `
+package receiver;
+import java.nio.file.Path;
+final class PathNames {
+  Path basename(String input) { return Path.of(input).getFileName(); }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/receiver/ReceiverController.java",
+      `
+package receiver;
+public final class ReceiverController {
+  private final PathNames names = new PathNames();
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = names.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/shadow/File.java",
+      `package shadow; final class File { File(String ignored) {} String getName() { return "guide"; } }`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/shadow/FileNames.java",
+      `
+package shadow;
+import java.io.*;
+final class FileNames {
+  static String basename(String input) { return new File(input).getName(); }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "src/main/java/shadow/ShadowController.java",
+      `
+package shadow;
+public final class ShadowController {
+  public String read(@RequestParam String path) throws Exception {
+    String name = FileNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "nested/pom.xml",
+      `<project><modelVersion>4.0.0</modelVersion></project>`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "nested/src/main/java/nested/NestedController.java",
+      `
+package nested;
+import child.ChildPathNames;
+public final class NestedController {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = ChildPathNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "nested/module/pom.xml",
+      `<project><modelVersion>4.0.0</modelVersion></project>`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "nested/module/src/main/java/child/ChildPathNames.java",
+      `
+package child;
+public final class ChildPathNames {
+  public static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(8);
+    expect(javaPathGetFileNameRecords(inventory)).toEqual([]);
+    expect(javaFileGetNameRecords(inventory)).toEqual([]);
   });
 
   test("rejects ambiguous or transformed Path basename helpers", async () => {
@@ -2146,13 +2557,13 @@ public final class DocumentController {
       "Exact or wildcard static imports of Path.of and Paths.get are eligible only without a local method declaration",
     );
     expect(prompt).toContain(
-      "An exact same-file helper summary is eligible only for an unoverloaded method symbol",
+      "A cross-file call must remain in the nearest Maven project",
     );
     expect(prompt).toContain(
-      "an exact unqualified, this-qualified, or owner-qualified call with matching arity",
+      "resolve exactly one top-level helper owner through the same package, one exact single-type import, or its fully qualified name",
     );
     expect(prompt).toContain(
-      "nested helper calls, foreign receivers, ambiguous overloads, and inexact types fail closed",
+      "The reduction evidence belongs to the helper file",
     );
     expect(prompt).toContain(
       "the exact equality is not negated or conditionally conjoined",

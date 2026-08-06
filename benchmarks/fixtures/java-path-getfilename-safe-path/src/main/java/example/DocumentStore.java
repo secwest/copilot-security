@@ -13,12 +13,8 @@ public final class DocumentStore {
         this.contentRoot = contentRoot;
     }
 
-    private static Path basename(String input) {
-        return Path.of(input).getFileName();
-    }
-
     public String read(String path) throws IOException {
-        Path basename = basename(path);
+        Path basename = DocumentNames.basename(path);
         if (Path.of("..").equals(basename)) {
             throw new SecurityException("parent path components are forbidden");
         }

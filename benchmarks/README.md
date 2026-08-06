@@ -1288,8 +1288,8 @@ The same manifest also contains a second matched pair for
 but preserves the exact value `..`, so the reduced result can still select the
 trusted root's parent. The negative control rejects that exact reduced component
 before the sink. Its witnesses prove the parent escape, rejection of both `..`
-and `nested/..`, and continued access to an allowed basename. Both halves call
-the reduction through an exact private same-file helper.
+and `nested/..`, and continued access to an allowed basename. Both Spring
+fixtures call a package-access static helper in a separate compilation unit.
 
 A third pair applies the same adversarial boundary to exact
 `java.nio.file.Path.of`/`Paths.get` construction followed by
@@ -1297,9 +1297,19 @@ A third pair applies the same adversarial boundary to exact
 `getFileName` or `getNameCount` call is therefore not accepted as a control.
 The matched control compares the same reduced `Path` with exact `Path.of("..")`
 before the sink. Its witnesses prove runtime parent escape, exact and nested
-parent rejection, and continued access to an allowed name. Both halves use the
-same private helper-return boundary, exercising helper summary and caller-side
-guard recognition together.
+parent rejection, and continued access to an allowed name. Both Spring fixtures
+use the same project-local cross-file helper boundary, exercising helper-file
+reduction evidence and caller-side guard recognition together.
+
+Cross-file summaries remain deliberately narrower than Java compilation. The
+caller and helper must share the nearest Maven project; the top-level owner must
+be unique and resolve through the same package, one exact single-type import,
+or its fully qualified name; and the method must be static and accessible.
+Calls across packages additionally require a public top-level type and public
+method. Exact official types, an unoverloaded symbol, a straight-line return,
+fixed arity, argument position, and value identity remain mandatory. Wildcard
+custom imports, duplicate owners, nested projects, inaccessible or instance
+methods, transformations, and ambiguity fail closed.
 
 The deterministic identity gate implements Java's compilation-unit import
 precedence. A single-type `Path` or `Paths` import remains exact even when

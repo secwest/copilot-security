@@ -1,6 +1,5 @@
 package example;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,12 +13,8 @@ public final class DocumentStore {
         this.contentRoot = contentRoot;
     }
 
-    private static String basename(String input) {
-        return new File(input).getName();
-    }
-
     public String read(String path) throws IOException {
-        String basename = basename(path);
+        String basename = DocumentNames.basename(path);
         if ("..".equals(basename)) {
             throw new SecurityException("parent path components are forbidden");
         }

@@ -314,12 +314,19 @@ interpreter that consumes the value.
   single-type import wins over a top-level same-package lookalike; a wildcard
   import does not. Exact or wildcard static `Path.of`/`Paths.get` imports are
   eligible only when no local method, qualified lookalike call, or competing
-  same-name static import can own the call. A same-file helper summary requires
-  one unoverloaded symbol, exact official `String`/`File` or `String`/`Path`
-  parameter and return types, a straight-line single return, exact argument
-  position and arity, and an unqualified, `this`-qualified, or owner-qualified
-  call. Branches, input transformations or reassignment, nested helpers,
-  foreign receivers, overloads, and lookalike types fail closed. Only fixed
+  same-name static import can own the call. A local helper summary requires one
+  unoverloaded symbol, exact official `String`/`File` or `String`/`Path`
+  parameter and return types, a straight-line single return, and exact argument
+  position and arity. Same-file calls must be unqualified, `this`-qualified, or
+  owner-qualified. Cross-file calls must stay in the nearest Maven project,
+  resolve exactly one top-level owner through the same package, one exact
+  single-type import, or a fully qualified name, and invoke a static accessible
+  method; another package additionally requires a public top-level type and
+  public method. Wildcard custom imports, duplicate owners, nested projects,
+  inaccessible or instance methods, branches, input transformations or
+  reassignment, nested helpers, foreign receivers, overloads, and lookalike
+  types fail closed. Reduction evidence remains at the helper return; a parent
+  rejection must dominate the caller-side result before the sink. Only fixed
   server-owned selection, a strict server-owned name allowlist, or a dominating
   fail-closed rejection of that exact reduced parent value is a strong lead;
   another reduction, logging, substring matching, or a post-sink check is not.

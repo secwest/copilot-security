@@ -1529,14 +1529,21 @@ method, qualified lookalike call, or competing same-name static import can own
 the call. Fully qualified factories remain independent of every simple-name
 shadow.
 
-Both basename specializations also follow exact same-file helper returns. A
+Both basename specializations also follow exact local helper returns. Every
 helper must have one unoverloaded symbol, exact official `String`/`File` or
-`String`/`Path` input and return types, a straight-line single return, exact
-fixed arity and argument position, and a bare, `this`, or owner-type call.
-Branches, transformations, reassignment, helper chains, foreign receivers, and
-lookalike types fail closed. The bundled exploit/control fixtures route both
-basename APIs through private helpers so this behavior is exercised by the
-strict executable benchmark rather than only unit fixtures.
+`String`/`Path` input and return types, a straight-line single return, and exact
+fixed arity, argument position, and value identity. Same-file calls may be
+bare, `this`-qualified, or owner-qualified. Cross-file calls must remain in the
+nearest Maven project, resolve exactly one top-level owner through the same
+package, an exact single-type import, or a fully qualified name, and invoke an
+accessible static method. Cross-package calls additionally require a public
+top-level type and public method. Wildcard custom imports, duplicate owners,
+nested projects, inaccessible or instance methods, branches, transformations,
+reassignment, helper chains, foreign receivers, and lookalike types fail
+closed. Evidence names the helper return while a parent rejection must still
+dominate the caller-side result before the sink. The four Spring basename
+fixtures cross this compilation-unit boundary, so the strict executable
+benchmark exercises it independently of the adversarial unit matrix.
 
 The basename controls are branch-sensitive. An exact comparison contributes a
 parent-rejection lead only when the equality is not negated or conditionally

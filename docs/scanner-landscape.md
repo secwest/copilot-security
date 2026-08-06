@@ -921,17 +921,26 @@ post-sink rejection fails closed. Even the exact rejection remains reviewer evid
 junctions, mounts, attacker-writable directories, races, platform semantics,
 tenant boundaries, and object authorization are separate questions.
 
-The specialization now follows a bounded same-file helper return as well. This
+The specialization now follows a bounded local helper return as well. This
 borrows the explicit input-to-return summary idea from CodeQL's
 [Java/Kotlin library modeling](https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-java-and-kotlin/),
 but keeps a stricter host boundary because no compiler database is available:
 one unoverloaded symbol, official parameter/return types, one straight-line
-return, exact fixed arity and argument position, and only bare, `this`, or exact
-owner-type calls. That conservative overload policy reflects the owner and
-applicability work required by [JLS 15.12](https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.12).
-Branches, transformations, reassignment, helper chains, arbitrary receivers,
-and lookalike types are rejected. Both Java basename benchmark pairs now cross
-this private-helper boundary in their Spring fixtures and JDK witnesses.
+return, and exact fixed arity, argument position, and value identity. Same-file
+calls may be bare, `this`-qualified, or exact-owner calls. Cross-file calls must
+stay in the nearest Maven project, resolve one top-level owner through the same
+package, an exact single-type import, or a fully qualified name, and invoke an
+accessible static method; cross-package use also requires a public top-level
+type and method. That conservative policy reflects the owner, accessibility,
+applicability, arity, and overload work required by
+[JLS 15.12](https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.12).
+Wildcard custom imports, duplicate owners, nested projects, inaccessible or
+instance methods, branches, transformations, reassignment, helper chains,
+arbitrary receivers, and lookalike types are rejected. Reduction evidence
+points to the helper file while any parent rejection remains caller-side. Both
+Java basename benchmark pairs now cross this compilation-unit boundary in
+their Spring fixtures; their dependency-free JDK witnesses retain the same
+runtime exploit/control proofs.
 
 The third pair closes the analogous `java.nio.file.Path.getFileName()` gap.
 Oracle [defines `getFileName`](<https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/file/Path.html#getFileName()>)
