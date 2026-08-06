@@ -122,6 +122,10 @@ describe("effectiveness benchmark", () => {
       ],
       ["python-xxe", "python-safe-xml"],
       ["javascript-prototype-pollution", "javascript-safe-preferences"],
+      [
+        "node-multi-hop-prototype-pollution",
+        "node-multi-hop-safe-prototype-map",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

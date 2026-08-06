@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains seventy-eight vulnerable/control pairs:
+The versioned corpus currently contains seventy-nine vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -95,7 +95,9 @@ identity-omitting hit bypasses a correctly tenant-scoped cold lookup with a
 trusted tenant-derived cache namespace and hit ownership check as the control,
 RSA-SHA256-verified SAML signed-versus-consumed assertion confusion with
 one-time request, issuer, destination, audience, recipient, lifetime, and
-signed-object-to-session binding as the control, prototype pollution, disabled
+signed-object-to-session binding as the control, prototype pollution including
+an HTTP value crossing three module boundaries into two nested computed object
+keys, paired with nested `Map` storage as the prototype-safe control, disabled
 TLS certificate verification,
 predictable security tokens, server-side template injection including typed Go
 `text/template` source-to-execution closure with registered-function capability
@@ -147,7 +149,7 @@ account state, paired with fixed `$match`, projection, mutation, and write
 destinations, plus later `Aggregate.append()` mutation that exposes a signing
 key through attacker-selected `$lookup` and projection stages, paired with an
 exact `$eq` match value and fixed public projection. Three runs per case
-produce 498 scans in the complete corpus.
+produce 504 scans in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -213,6 +215,21 @@ execution cases; and credit only direct or exact-`$eq` fixed-match values. Six
 executable witnesses prove secret disclosure and protected-state replacement
 on the vulnerable paths, and operator rejection, public projection,
 protected-state retention, and fixed destination on the controls.
+
+`node-prototype-pollution-manifest.json` isolates remote nested-key prototype
+pollution under perfect gates. The positive retains the Express body source,
+all nine ordered import/call/parameter propagators across three relative-module
+boundaries, the exact two-key assignment at `src/storage.js:4`, CWE-1321,
+validation, attack-path analysis, and code evidence. Its matched control keeps
+the same route and relay topology but represents both attacker-selected keys
+with nested `Map` instances. Deterministic regressions require source flow into
+two dynamic key positions and reject request data used only as the assigned
+value, one-level writes, a fixed first key, comparisons, compound assignments,
+`Map.get`/`Map.set`, and code-shaped strings. They also prove that an unrelated
+assignment earlier on the same line cannot hide a later exact sink. The
+executable witnesses demonstrate inherited `Object.prototype` authorization
+state on the vulnerable path and ordinary retained `__proto__` data with no
+prototype mutation on the control.
 
 `node-copilot-prompt-injection-manifest.json` isolates that SDK boundary under
 perfect single-run gates. The positive must retain the HTTP source, all six

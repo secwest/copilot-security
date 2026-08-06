@@ -1370,6 +1370,45 @@
       "expected": []
     },
     {
+      "id": "node-multi-hop-prototype-pollution",
+      "description": "An Express JSON patch crosses three relative-import boundaries into two nested computed property names, allowing __proto__ to reach Object.prototype and install an inherited authorization flag.",
+      "fixture": "fixtures/node-multi-hop-prototype-pollution",
+      "findingsPaths": [
+        "node-multi-hop-prototype-pollution/run-1/findings.json",
+        "node-multi-hop-prototype-pollution/run-2/findings.json",
+        "node-multi-hop-prototype-pollution/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-nested-computed-prototype-pollution",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-safe-prototype-map",
+      "description": "The same Express and three-relay topology stores both attacker-selected keys in nested Map instances, so special object prototype names remain ordinary data.",
+      "fixture": "fixtures/node-multi-hop-safe-prototype-map",
+      "findingsPaths": [
+        "node-multi-hop-safe-prototype-map/run-1/findings.json",
+        "node-multi-hop-safe-prototype-map/run-2/findings.json",
+        "node-multi-hop-safe-prototype-map/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-disabled-tls-verification",
       "description": "A settlement request sends a service credential and payment data with TLS certificate verification disabled.",
       "fixture": "fixtures/python-disabled-tls-verification",
