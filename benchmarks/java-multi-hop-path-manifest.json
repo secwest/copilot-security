@@ -79,7 +79,7 @@
     },
     {
       "id": "java-path-getfilename-path-traversal",
-      "description": "A Spring request reaches exact java.nio.file.Path.getFileName(), which preserves an exact parent component, before a java.nio.file.Files read.",
+      "description": "A Spring request reaches exact java.nio.file.Path.getFileName(), which preserves an exact parent component, and a decorative logging check does not dominate the later java.nio.file.Files read.",
       "fixture": "fixtures/java-path-getfilename-path-traversal",
       "findingsPaths": [
         "java-path-getfilename-path-traversal/run-1/findings.json"
@@ -91,8 +91,8 @@
           "locations": [
             {
               "path": "src/main/java/example/DocumentStore.java",
-              "startLine": 18,
-              "endLine": 18,
+              "startLine": 24,
+              "endLine": 24,
               "lineTolerance": 1
             }
           ],

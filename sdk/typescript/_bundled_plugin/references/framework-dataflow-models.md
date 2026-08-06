@@ -318,6 +318,11 @@ interpreter that consumes the value.
   server-owned selection, a strict server-owned name allowlist, or a dominating
   fail-closed rejection of that exact reduced parent value is a strong lead;
   another reduction, logging, substring matching, or a post-sink check is not.
+  Credit a branch rejection only when the exact equality is not negated or
+  conditionally conjoined, its matching branch itself unconditionally returns
+  or throws, that abrupt completion is not caught before the sink, and the
+  guard controls every path to that sink. Optional nesting and an unrelated
+  nearby `return` or `throw` are not controls.
 - Strong counterevidence is an exact server-owned file map or a dominating
   boundary that rejects absolute input, normalizes under the intended root,
   checks component-aware lexical containment, resolves the existing root and

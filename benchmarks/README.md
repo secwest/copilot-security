@@ -1307,6 +1307,16 @@ Exact and on-demand static imports of `Path.of` or `Paths.get` are accepted only
 without a local method declaration, qualified lookalike call, or competing
 same-name static import. Focused negative controls exercise each ambiguity.
 
+Control-flow identity is equally strict. The host credits the exact parent
+comparison only when its true branch itself completes abruptly with an
+unconditional `return` or `throw` and the check shares the sink's lexical block
+path. Negation, `&&`/`||` composition, optional nesting, a caught exception, a
+logging-only branch, and an unrelated nearby abrupt statement are rejected as
+controls. The vulnerable fixture includes the last adversarial shape: it logs
+the exact parent value and has a separate null-state throw before the read, but
+its witness still reads the parent secret. The safe fixture rejects the exact
+same value in the matching branch.
+
 ```powershell
 javac -d C:\security-benchmarks\java-path-vulnerable `
   benchmarks\witnesses\java-multi-hop-path-traversal\VulnerablePathWitness.java

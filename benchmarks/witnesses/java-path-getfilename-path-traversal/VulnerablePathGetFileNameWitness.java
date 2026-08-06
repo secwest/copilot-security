@@ -4,6 +4,12 @@ import java.nio.file.Path;
 public final class VulnerablePathGetFileNameWitness {
     private static String read(Path root, String requested) throws Exception {
         Path basename = Path.of(requested).getFileName();
+        if (Path.of("..").equals(basename)) {
+            System.getLogger(VulnerablePathGetFileNameWitness.class.getName()).log(System.Logger.Level.WARNING, "parent path requested");
+        }
+        if (root == null) {
+            throw new IllegalStateException("document root is unavailable");
+        }
         return Files.readString(root.resolve(basename).resolve("content.txt"));
     }
 

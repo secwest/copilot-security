@@ -929,20 +929,31 @@ exact `..` and escapes when resolved beneath a trusted root. The host requires
 exact imported or fully qualified `Path.of`/`Paths.get` identity, exact request
 reachability into that factory or a typed `Path` parameter, exact receiver or
 direct reduction, and exact result reachability to the existing typed sink. It
-now applies the Java 21 [shadowing rules](<https://docs.oracle.com/javase/specs/jls/se21/html/jls-6.html#jls-6.4.1>)
+now applies the Java 21 [shadowing rules](https://docs.oracle.com/javase/specs/jls/se21/html/jls-6.html#jls-6.4.1)
 across compilation units in the same package: a single-type import is
 authoritative, while an on-demand import loses to a same-package top-level
 `Path` or `Paths`. This approaches the resolved type and method identity exposed
-by [CodeQL's Java type model](<https://codeql.github.com/docs/codeql-language-guides/types-in-java/>),
+by [CodeQL's Java type model](https://codeql.github.com/docs/codeql-language-guides/types-in-java/),
 while remaining conservative without a compiler database. Nested and
 different-package names do not suppress the official binding. Exact and
 on-demand static `Path.of`/`Paths.get` imports are eligible only without a local
 method, qualified lookalike call, or competing same-name static import. It
 removes the previous generic `getFileName`/`getNameCount` candidate control and
 records only exact pre-sink equality with `Path.of("..")` or `Paths.get("..")`
-as a parent-rejection lead. Local `Path`/`Paths` lookalikes, another object's
+as a parent-rejection lead. That equality is now branch-sensitive: its matching
+branch must itself return or throw unconditionally, the condition cannot be
+negated or conditionally conjoined, the completion cannot be caught before the
+sink, and the guard must share the sink's lexical block path. This bounded
+control rule follows Java's distinction between normal and abrupt statement
+completion in [JLS Chapter 14](https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html)
+and the guard/dominance relation exposed by CodeQL's Java
+[Guards](https://codeql.github.com/codeql-standard-libraries/java/semmle/code/java/controlflow/Guards.qll/module.Guards.html)
+and [Dominance](https://codeql.github.com/codeql-standard-libraries/java/semmle/code/java/controlflow/Dominance.qll/module.Dominance.html)
+libraries. The host deliberately fails closed rather than claiming a complete
+compiler CFG. Local `Path`/`Paths` lookalikes, another object's
 method, fixed factory input, cleared results, unrelated parallel reductions,
-tests, logging, substring checks, and post-sink checks fail closed. Provider,
+tests, logging, optional nesting, unrelated nearby throws, substring checks,
+and post-sink checks fail closed. Provider,
 zero-element/null, volume, separator, link, mount, writable-directory, race,
 tenant, object, and concrete-effect proof remains independent.
 

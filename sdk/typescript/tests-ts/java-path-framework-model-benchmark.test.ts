@@ -369,7 +369,7 @@ describe("Spring Java path framework-model effectiveness benchmark", () => {
     expect(pathGetFileNameVulnerable[0]?.path).toBe(
       "src/main/java/example/DocumentStore.java",
     );
-    expect(pathGetFileNameVulnerable[0]?.frameworkModel?.sink.line).toBe(18);
+    expect(pathGetFileNameVulnerable[0]?.frameworkModel?.sink.line).toBe(24);
     expect(
       pathGetFileNameVulnerable[0]?.frameworkModel?.candidateControls.map(
         ({ kind }) => kind,
@@ -983,6 +983,136 @@ public final class DocumentController {
     }
   });
 
+  test("credits only branch-local dominating Path parent rejection", async () => {
+    const repository = await temporaryRepository();
+    const controller = (guard: string): string => `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class DocumentController {
+  private static void audit() {}
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Path.of(path).getFileName();
+    boolean strict = System.nanoTime() > 0;
+${guard}
+    return Files.readString(Path.of("documents").resolve(basename));
+  }
+}
+`;
+    const cases = new Map<string, { guard: string; controlled: boolean }>([
+      [
+        "dominant/DocumentController.java",
+        {
+          guard: `    if (Path.of("..").equals(basename)) {
+      audit();
+      throw new SecurityException("parent");
+    }`,
+          controlled: true,
+        },
+      ],
+      [
+        "negated/DocumentController.java",
+        {
+          guard: `    if (!Path.of("..").equals(basename)) {
+      throw new SecurityException("not parent");
+    }`,
+          controlled: false,
+        },
+      ],
+      [
+        "conjoined/DocumentController.java",
+        {
+          guard: `    if (Path.of("..").equals(basename) && strict) {
+      throw new SecurityException("conditional parent");
+    }`,
+          controlled: false,
+        },
+      ],
+      [
+        "nearby/DocumentController.java",
+        {
+          guard: `    if (Path.of("..").equals(basename)) {
+      audit();
+    }
+    if (strict) throw new SecurityException("unrelated");`,
+          controlled: false,
+        },
+      ],
+      [
+        "nested/DocumentController.java",
+        {
+          guard: `    if (strict) {
+      if (Path.of("..").equals(basename)) {
+        throw new SecurityException("optional parent");
+      }
+    }`,
+          controlled: false,
+        },
+      ],
+      [
+        "caught/DocumentController.java",
+        {
+          guard: `    try {
+      if (Path.of("..").equals(basename)) {
+        throw new SecurityException("caught parent");
+      }
+    } catch (SecurityException ignored) {
+      audit();
+    }`,
+          controlled: false,
+        },
+      ],
+    ]);
+    for (const [path, { guard }] of cases) {
+      await writeRepositoryFile(repository, path, controller(guard));
+    }
+    const longSwitchSelector = Array.from({ length: 220 }, () => "+ 0").join(
+      " ",
+    );
+    await writeRepositoryFile(
+      repository,
+      "switch-case/DocumentController.java",
+      `
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class DocumentController {
+  public String read(@RequestParam String path) throws Exception {
+    Path basename = Path.of(path).getFileName();
+    switch (path.length() ${longSwitchSelector}) {
+      case 1:
+        if (Path.of("..").equals(basename)) {
+          throw new SecurityException("different case");
+        }
+        return "short";
+      default:
+        return Files.readString(Path.of("documents").resolve(basename));
+    }
+  }
+}
+`,
+    );
+
+    const specialized = javaPathGetFileNameRecords(
+      await buildResidualRiskInventory(repository),
+    );
+    expect(specialized).toHaveLength(cases.size + 1);
+    const controls = new Map(
+      specialized.map((record) => [
+        record.path,
+        record.frameworkModel?.candidateControls.map(({ kind }) => kind),
+      ]),
+    );
+    for (const [path, { controlled }] of cases) {
+      expect(
+        controls.get(path)?.includes("parent-path-component-rejection"),
+      ).toBe(controlled);
+    }
+    expect(
+      controls
+        .get("switch-case/DocumentController.java")
+        ?.includes("parent-path-component-rejection"),
+    ).toBeFalse();
+  });
+
   test("rejects Path lookalikes, unrelated reductions, fixed values, tests, and reassignment", async () => {
     const repository = await temporaryRepository();
     await writeRepositoryFile(
@@ -1205,6 +1335,81 @@ public final class DocumentController {
       expect(controlKinds.get(path)).not.toContain(
         "parent-path-component-rejection",
       );
+    }
+  });
+
+  test("credits only branch-local dominating File parent rejection", async () => {
+    const repository = await temporaryRepository();
+    const controller = (guard: string): string => `
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+public final class DocumentController {
+  private static void audit() {}
+  public String read(@RequestParam String path) throws Exception {
+    String basename = new File(path).getName();
+    boolean strict = System.nanoTime() > 0;
+${guard}
+    return Files.readString(Path.of("documents").resolve(basename));
+  }
+}
+`;
+    const cases = new Map<string, { guard: string; controlled: boolean }>([
+      [
+        "dominant-file/DocumentController.java",
+        {
+          guard: `    if ("..".equals(basename)) {
+      audit();
+      return "rejected";
+    }`,
+          controlled: true,
+        },
+      ],
+      [
+        "negated-file/DocumentController.java",
+        {
+          guard: `    if (!"..".equals(basename)) {
+      throw new SecurityException("not parent");
+    }`,
+          controlled: false,
+        },
+      ],
+      [
+        "nearby-file/DocumentController.java",
+        {
+          guard: `    if ("..".equals(basename)) audit();
+    if (strict) throw new SecurityException("unrelated");`,
+          controlled: false,
+        },
+      ],
+      [
+        "nested-file/DocumentController.java",
+        {
+          guard: `    if (strict) {
+      if ("..".equals(basename)) throw new SecurityException("optional parent");
+    }`,
+          controlled: false,
+        },
+      ],
+    ]);
+    for (const [path, { guard }] of cases) {
+      await writeRepositoryFile(repository, path, controller(guard));
+    }
+
+    const specialized = javaFileGetNameRecords(
+      await buildResidualRiskInventory(repository),
+    );
+    expect(specialized).toHaveLength(cases.size);
+    const controls = new Map(
+      specialized.map((record) => [
+        record.path,
+        record.frameworkModel?.candidateControls.map(({ kind }) => kind),
+      ]),
+    );
+    for (const [path, { controlled }] of cases) {
+      expect(
+        controls.get(path)?.includes("parent-path-component-rejection"),
+      ).toBe(controlled);
     }
   });
 
@@ -1487,6 +1692,13 @@ public final class DocumentController {
     expect(prompt).toContain(
       "Exact or wildcard static imports of Path.of and Paths.get are eligible only without a local method declaration",
     );
+    expect(prompt).toContain(
+      "the exact equality is not negated or conditionally conjoined",
+    );
+    expect(prompt).toContain(
+      "the abrupt completion is not caught before the sink",
+    );
+    expect(prompt).toContain("an unrelated nearby return or throw");
     expect(prompt).toContain("A check on another reduction");
     expect(prompt).toContain("a check after the operation is insufficient");
   });

@@ -2429,6 +2429,190 @@ function javaTestOrExamplePath(path: string): boolean {
   );
 }
 
+function javaLexicalBlockContext(structuralLines: readonly string[]): {
+  paths: string[];
+  switchAncestors: boolean[];
+} {
+  const paths: string[] = [];
+  const switchAncestors: boolean[] = [];
+  const stack: Array<{ id: number; switchBlock: boolean }> = [];
+  let nextBlock = 1;
+  let word = "";
+  let awaitingSwitchParenthesis = false;
+  let switchParenthesisDepth: number | undefined;
+  for (const line of structuralLines) {
+    paths.push(stack.map(({ id }) => id).join("."));
+    switchAncestors.push(stack.some(({ switchBlock }) => switchBlock));
+    for (const character of line) {
+      if (/[A-Za-z0-9_$]/u.test(character)) {
+        word += character;
+        continue;
+      }
+      if (word === "switch" && switchParenthesisDepth === undefined) {
+        awaitingSwitchParenthesis = true;
+      }
+      word = "";
+      if (character === "(") {
+        if (awaitingSwitchParenthesis) {
+          switchParenthesisDepth = 1;
+          awaitingSwitchParenthesis = false;
+        } else if (switchParenthesisDepth !== undefined) {
+          switchParenthesisDepth += 1;
+        }
+      } else if (character === ")" && switchParenthesisDepth !== undefined) {
+        switchParenthesisDepth = Math.max(0, switchParenthesisDepth - 1);
+      }
+      if (character === "{") {
+        const switchBlock = switchParenthesisDepth !== undefined;
+        stack.push({
+          id: nextBlock,
+          switchBlock,
+        });
+        nextBlock += 1;
+        if (switchParenthesisDepth === 0) {
+          switchParenthesisDepth = undefined;
+        }
+      } else if (character === "}") {
+        stack.pop();
+      } else if (character === ";" && switchParenthesisDepth === undefined) {
+        awaitingSwitchParenthesis = false;
+      }
+    }
+    if (word === "switch" && switchParenthesisDepth === undefined) {
+      awaitingSwitchParenthesis = true;
+    }
+    word = "";
+  }
+  return { paths, switchAncestors };
+}
+
+function matchingStructuralBrace(value: string, open: number): number {
+  if (open < 0 || value[open] !== "{") return -1;
+  let depth = 0;
+  for (let index = open; index < value.length; index += 1) {
+    if (value[index] === "{") depth += 1;
+    else if (value[index] === "}") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function stripBalancedOuterParentheses(value: string): string {
+  let result = value.trim();
+  while (
+    result.startsWith("(") &&
+    matchingCallParenthesis(result, 0) === result.length - 1
+  ) {
+    result = result.slice(1, -1).trim();
+  }
+  return result;
+}
+
+function javaSimpleBranchCompletesAbruptly(
+  branch: string,
+  braced: boolean,
+): boolean {
+  const structural = cFamilyStructuralLines(branch.split(/\r?\n/u))
+    .join("\n")
+    .trim();
+  if (!braced) {
+    return /^(?:return\b[^;]*|throw\b[^;]+)\s*;/u.test(structural);
+  }
+  if (
+    structural === "" ||
+    /[{}]|->|\b(?:if|else|switch|try|catch|finally|for|while|do|synchronized)\b/u.test(
+      structural,
+    )
+  ) {
+    return false;
+  }
+  const statements = structural
+    .split(";")
+    .map((statement) => statement.trim())
+    .filter((statement) => statement !== "");
+  const finalStatement = statements.at(-1) ?? "";
+  return /^(?:return\b|throw\b)/u.test(finalStatement);
+}
+
+function javaDominatingEqualityRejection(
+  lines: readonly string[],
+  structuralLines: readonly string[],
+  startLine: number,
+  sinkLine: number,
+  identifiers: ReadonlySet<string>,
+  rejectedValuePattern: string,
+): number | undefined {
+  const blockContext = javaLexicalBlockContext(structuralLines);
+  const sinkIndex = sinkLine - 1;
+  const identifierPattern = [...identifiers]
+    .map((identifier) => escapeRegularExpression(identifier))
+    .join("|");
+  if (identifierPattern === "") return undefined;
+  const equality = new RegExp(
+    String.raw`^(?:(?:${identifierPattern})\s*\.\s*equals\s*\(\s*${rejectedValuePattern}\s*\)|${rejectedValuePattern}\s*\.\s*equals\s*\(\s*(?:${identifierPattern})\s*\))$`,
+    "u",
+  );
+
+  for (
+    let index = startLine;
+    index < Math.min(sinkIndex, structuralLines.length);
+    index += 1
+  ) {
+    const firstLine = structuralLines[index] ?? "";
+    const ifMatch = /\bif\s*\(/u.exec(firstLine);
+    if (
+      ifMatch === null ||
+      firstLine.slice(0, ifMatch.index).trim() !== "" ||
+      blockContext.paths[index] !== blockContext.paths[sinkIndex] ||
+      blockContext.switchAncestors[index] === true
+    ) {
+      continue;
+    }
+    const endIndex = Math.min(sinkIndex, index + 16);
+    const rawWindow = lines.slice(index, endIndex).join("\n");
+    const structuralWindow = structuralLines.slice(index, endIndex).join("\n");
+    const structuralIf = /\bif\s*\(/u.exec(structuralWindow);
+    if (structuralIf === null) continue;
+    const open = structuralWindow.indexOf("(", structuralIf.index);
+    const close = matchingCallParenthesis(structuralWindow, open);
+    if (open < 0 || close < 0) continue;
+    const condition = stripBalancedOuterParentheses(
+      rawWindow.slice(open + 1, close),
+    );
+    if (!equality.test(condition)) continue;
+
+    let consequent = close + 1;
+    while (/\s/u.test(structuralWindow[consequent] ?? "")) consequent += 1;
+    const braced = structuralWindow[consequent] === "{";
+    if (braced) {
+      const endBrace = matchingStructuralBrace(structuralWindow, consequent);
+      if (endBrace < 0) continue;
+      if (
+        javaSimpleBranchCompletesAbruptly(
+          rawWindow.slice(consequent + 1, endBrace),
+          true,
+        )
+      ) {
+        return index + 1;
+      }
+      continue;
+    }
+    const statementEnd = structuralWindow.indexOf(";", consequent);
+    if (
+      statementEnd >= 0 &&
+      javaSimpleBranchCompletesAbruptly(
+        rawWindow.slice(consequent, statementEnd + 1),
+        false,
+      )
+    ) {
+      return index + 1;
+    }
+  }
+  return undefined;
+}
+
 function javaFileGetNamePathBoundary(
   lines: readonly string[],
   sinkLine: number,
@@ -2563,35 +2747,17 @@ function javaFileGetNamePathBoundary(
       .filter(([, origin]) => reachingOrigins.has(origin))
       .map(([identifier]) => identifier),
   );
-  for (
-    let index = reductionLine;
-    index < Math.min(sinkLine - 1, method.endLine);
-    index += 1
-  ) {
-    const structural = structuralLines[index] ?? "";
-    const raw = lines[index] ?? "";
-    if (!/\bif\s*\(/u.test(structural)) continue;
-    const checked = [...basenameIdentifiers].some((identifier) => {
-      const escaped = escapeRegularExpression(identifier);
-      const structuralCheck = new RegExp(
-        String.raw`(?:\b${escaped}\s*\.\s*equals\s*\(|\.\s*equals\s*\(\s*${escaped}\s*\))`,
-        "u",
-      ).test(structural);
-      const rawCheck = new RegExp(
-        String.raw`(?:\b${escaped}\s*\.\s*equals\s*\(\s*"\.\."\s*\)|"\.\."\s*\.\s*equals\s*\(\s*${escaped}\s*\))`,
-        "u",
-      ).test(raw);
-      return structuralCheck && rawCheck;
-    });
-    if (!checked) continue;
-    const failClosed = structuralLines
-      .slice(index, Math.min(index + 4, sinkLine - 1))
-      .join("\n");
-    if (/\b(?:return|throw)\b/u.test(failClosed)) {
-      return { reductionLine, parentRejectionLine: index + 1 };
-    }
-  }
-  return { reductionLine };
+  const parentRejectionLine = javaDominatingEqualityRejection(
+    lines,
+    structuralLines,
+    reductionLine,
+    sinkLine,
+    basenameIdentifiers,
+    String.raw`"\.\."`,
+  );
+  return parentRejectionLine === undefined
+    ? { reductionLine }
+    : { reductionLine, parentRejectionLine };
 }
 
 function javaBraceSurface(
@@ -2999,36 +3165,17 @@ function javaPathGetFileNamePathBoundary(
       .map(([identifier]) => identifier),
   );
   const parentFactories = factoryTypes.join("|");
-  for (
-    let index = reductionLine;
-    index < Math.min(sinkLine - 1, method.endLine);
-    index += 1
-  ) {
-    const structural = structuralLines[index] ?? "";
-    const raw = (lines[index] ?? "").replace(/\s*\.\s*/gu, ".");
-    if (!/\bif\s*\(/u.test(structural)) continue;
-    const checked = [...basenameIdentifiers].some((identifier) => {
-      const escaped = escapeRegularExpression(identifier);
-      const structuralCheck = new RegExp(
-        String.raw`(?:\b${escaped}\s*\.\s*equals\s*\(|\.\s*equals\s*\(\s*${escaped}\s*\))`,
-        "u",
-      ).test(structural);
-      const parentPath = String.raw`(?:${parentFactories})\s*\(\s*"\.\."\s*\)`;
-      const rawCheck = new RegExp(
-        String.raw`(?:\b${escaped}\s*\.\s*equals\s*\(\s*${parentPath}\s*\)|${parentPath}\s*\.\s*equals\s*\(\s*${escaped}\s*\))`,
-        "u",
-      ).test(raw);
-      return structuralCheck && rawCheck;
-    });
-    if (!checked) continue;
-    const failClosed = structuralLines
-      .slice(index, Math.min(index + 4, sinkLine - 1))
-      .join("\n");
-    if (/\b(?:return|throw)\b/u.test(failClosed)) {
-      return { reductionLine, parentRejectionLine: index + 1 };
-    }
-  }
-  return { reductionLine };
+  const parentRejectionLine = javaDominatingEqualityRejection(
+    lines,
+    structuralLines,
+    reductionLine,
+    sinkLine,
+    basenameIdentifiers,
+    String.raw`(?:${parentFactories})\s*\(\s*"\.\."\s*\)`,
+  );
+  return parentRejectionLine === undefined
+    ? { reductionLine }
+    : { reductionLine, parentRejectionLine };
 }
 
 function nodeIpv4OnlyHostGuard(

@@ -1529,6 +1529,16 @@ method, qualified lookalike call, or competing same-name static import can own
 the call. Fully qualified factories remain independent of every simple-name
 shadow.
 
+The basename controls are branch-sensitive. An exact comparison contributes a
+parent-rejection lead only when the equality is not negated or conditionally
+conjoined, its matching branch itself unconditionally returns or throws, that
+abrupt completion is not caught before the sink, and the guard shares the
+sink's lexical block path. A logging-only check, optional nested check, or
+unrelated nearby `return`/`throw` remains an incomplete boundary. The positive
+`Path.getFileName()` fixture deliberately contains the exact `..` comparison,
+logs it, and then remains exploitable; the matched control terminates the exact
+branch.
+
 ```powershell
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/java-multi-hop-path-manifest.json `
