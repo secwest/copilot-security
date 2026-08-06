@@ -46,6 +46,9 @@ const MAX_FINDINGS_BYTES = 128 * 1024 * 1024;
 const MAX_JAVA_MAVEN_MODEL_DEPTH = 128;
 const MAX_NODE_PACKAGE_MANIFESTS = 512;
 const MAX_NODE_PACKAGE_MANIFEST_BYTES = 2 * 1024 * 1024;
+const MAX_NODE_PACKAGE_LOCKFILES = 128;
+const MAX_NODE_PACKAGE_LOCKFILE_BYTES = 16 * 1024 * 1024;
+const MAX_NODE_PACKAGE_LOCKFILE_BYTES_PER_FILE = 4 * 1024 * 1024;
 const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
 const MAX_EXCERPT_LINES = 16;
@@ -2318,7 +2321,7 @@ export async function buildResidualRiskInventory(
   }
 
   sourceFiles.push(
-    ...(await nearestNodePackageManifestSnapshots(
+    ...(await nearestNodePackageMetadataSnapshots(
       canonicalRepository,
       sourceFiles,
     )),
@@ -2424,12 +2427,109 @@ interface NodePrototypeCopySink {
 
 interface NodePrototypeMergeSink {
   sourceExpressions: string[];
+  kind:
+    | "vulnerable-lodash-recursive-merge"
+    | "lock-resolved-vulnerable-lodash-recursive-merge";
 }
 
 interface NodeRuntimeDependency {
   manifestPath: string;
   line: number;
   version: string;
+  proof: "manifest-exact" | "npm-lockfile";
+}
+
+function nodePackageLockResolvedVersion(
+  files: readonly SourceFileSnapshot[],
+  manifest: SourceFileSnapshot,
+  dependencyName: string,
+  declaration: string,
+): string | undefined {
+  const directory = posix.dirname(manifest.path);
+  const lockfile = ["npm-shrinkwrap.json", "package-lock.json"]
+    .map((name) =>
+      files.find(
+        (file) =>
+          file.path ===
+          (directory === "." ? name : posix.join(directory, name)),
+      ),
+    )
+    .find((file) => file !== undefined);
+  if (lockfile === undefined) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(lockfile.text) as unknown;
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+  const root = parsed as Record<string, unknown>;
+  if (root["lockfileVersion"] !== 2 && root["lockfileVersion"] !== 3) {
+    return undefined;
+  }
+  const packages = root["packages"];
+  if (
+    typeof packages !== "object" ||
+    packages === null ||
+    Array.isArray(packages)
+  ) {
+    return undefined;
+  }
+  const packageEntries = packages as Record<string, unknown>;
+  const rootPackage = packageEntries[""];
+  if (
+    typeof rootPackage !== "object" ||
+    rootPackage === null ||
+    Array.isArray(rootPackage)
+  ) {
+    return undefined;
+  }
+  const rootDeclarations = ["dependencies", "optionalDependencies"].flatMap(
+    (section) => {
+      const dependencies = (rootPackage as Record<string, unknown>)[section];
+      if (
+        typeof dependencies !== "object" ||
+        dependencies === null ||
+        Array.isArray(dependencies)
+      ) {
+        return [];
+      }
+      const version = (dependencies as Record<string, unknown>)[dependencyName];
+      return typeof version === "string" ? [version] : [];
+    },
+  );
+  if (
+    rootDeclarations.length === 0 ||
+    rootDeclarations.some((version) => version !== declaration)
+  ) {
+    return undefined;
+  }
+  const installedPackage = packageEntries[`node_modules/${dependencyName}`];
+  if (
+    typeof installedPackage !== "object" ||
+    installedPackage === null ||
+    Array.isArray(installedPackage)
+  ) {
+    return undefined;
+  }
+  const resolvedVersion = (installedPackage as Record<string, unknown>)[
+    "version"
+  ];
+  return typeof resolvedVersion === "string" &&
+    /^\d+\.\d+\.\d+$/u.test(resolvedVersion)
+    ? resolvedVersion
+    : undefined;
+}
+
+function nodeRegistrySemverDeclaration(declaration: string): boolean {
+  return (
+    declaration.length > 0 &&
+    declaration.length <= 256 &&
+    /[0-9xX*]/u.test(declaration) &&
+    /^[0-9xX*.^~<>=|\s-]+$/u.test(declaration)
+  );
 }
 
 function nodeRuntimeDependency(
@@ -2479,8 +2579,19 @@ function nodeRuntimeDependency(
   ) {
     return undefined;
   }
-  const version = declaredVersions[0]!;
-  if (!/^\d+\.\d+\.\d+$/u.test(version)) return undefined;
+  const declaration = declaredVersions[0]!;
+  const exactDeclaration = /^\d+\.\d+\.\d+$/u.test(declaration);
+  const version = exactDeclaration
+    ? declaration
+    : nodeRegistrySemverDeclaration(declaration)
+      ? nodePackageLockResolvedVersion(
+          files,
+          manifest,
+          dependencyName,
+          declaration,
+        )
+      : undefined;
+  if (version === undefined) return undefined;
   const escapedDependency = escapeRegularExpression(dependencyName);
   const line =
     manifest.lines.findIndex((candidate) =>
@@ -2490,6 +2601,7 @@ function nodeRuntimeDependency(
     manifestPath: manifest.path,
     line: Math.max(1, line),
     version,
+    proof: exactDeclaration ? "manifest-exact" : "npm-lockfile",
   };
 }
 
@@ -2605,7 +2717,15 @@ function nodePrototypeMergeSink(
       .slice(1)
       .map((expression) => expression.trim())
       .filter(Boolean);
-    if (sourceExpressions.length > 0) return { sourceExpressions };
+    if (sourceExpressions.length > 0) {
+      return {
+        sourceExpressions,
+        kind:
+          dependency.proof === "npm-lockfile"
+            ? "lock-resolved-vulnerable-lodash-recursive-merge"
+            : "vulnerable-lodash-recursive-merge",
+      };
+    }
   }
   return undefined;
 }
@@ -3288,6 +3408,7 @@ function frameworkDataflowRecords(
         nodeCopilotResolution?.input.kind ??
         aggregateSinkMetadata?.kind ??
         bulkSinkMetadata?.kind ??
+        nodePrototypeMerge?.kind ??
         sink.kind;
       const startLine = Math.max(1, effectiveSinkLine - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(
@@ -7523,6 +7644,9 @@ function javascriptFrameworkWrapperSummaries(
               declarationLine: wrapper.startLine,
               sink: {
                 ...sink,
+                ...(nodePrototypeMerge === undefined
+                  ? {}
+                  : { kind: nodePrototypeMerge.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}
@@ -16257,11 +16381,12 @@ async function discoverSourcePaths(repository: string): Promise<string[]> {
   return paths.sort((left, right) => left.localeCompare(right));
 }
 
-async function nearestNodePackageManifestSnapshots(
+async function nearestNodePackageMetadataSnapshots(
   repository: string,
   files: readonly SourceFileSnapshot[],
 ): Promise<SourceFileSnapshot[]> {
   const examined = new Map<string, SourceFileSnapshot | null>();
+  const existingBoundaries = new Set<string>();
   const selected = new Map<string, SourceFileSnapshot>();
   let totalBytes = 0;
   sourceFiles: for (const file of files) {
@@ -16279,6 +16404,10 @@ async function nearestNodePackageManifestSnapshots(
           : posix.join(directory, "package.json");
       let manifest = examined.get(manifestPath);
       if (manifest === undefined) {
+        const metadata = await lstat(resolve(repository, manifestPath)).catch(
+          () => null,
+        );
+        if (metadata !== null) existingBoundaries.add(manifestPath);
         const source = await readBoundedRepositoryFile(
           repository,
           manifestPath,
@@ -16306,13 +16435,56 @@ async function nearestNodePackageManifestSnapshots(
         selected.set(manifest.path, manifest);
         break;
       }
+      if (existingBoundaries.has(manifestPath)) break;
       if (directory === ".") break;
       const parent = posix.dirname(directory);
       if (parent === directory) break;
       directory = parent;
     }
   }
-  return [...selected.values()].sort((left, right) =>
+  const manifests = [...selected.values()].sort((left, right) =>
+    left.path.localeCompare(right.path),
+  );
+  const lockfiles: SourceFileSnapshot[] = [];
+  let lockfileBytes = 0;
+  for (const manifest of manifests) {
+    if (lockfiles.length >= MAX_NODE_PACKAGE_LOCKFILES) break;
+    const directory = posix.dirname(manifest.path);
+    let selectedPath: string | undefined;
+    for (const name of ["npm-shrinkwrap.json", "package-lock.json"] as const) {
+      const relativePath =
+        directory === "." ? name : posix.join(directory, name);
+      const metadata = await lstat(resolve(repository, relativePath)).catch(
+        () => null,
+      );
+      if (metadata !== null) {
+        selectedPath = relativePath;
+        break;
+      }
+    }
+    if (selectedPath === undefined) continue;
+    const source = await readBoundedRepositoryFile(
+      repository,
+      selectedPath,
+      MAX_NODE_PACKAGE_LOCKFILE_BYTES_PER_FILE,
+    );
+    if (
+      source === null ||
+      source.includes(0) ||
+      lockfileBytes + source.byteLength > MAX_NODE_PACKAGE_LOCKFILE_BYTES
+    ) {
+      continue;
+    }
+    lockfileBytes += source.byteLength;
+    const text = source.toString("utf8");
+    lockfiles.push({
+      path: selectedPath,
+      extension: ".json",
+      lines: text.split(/\r?\n/u),
+      text,
+    });
+  }
+  return [...manifests, ...lockfiles].sort((left, right) =>
     left.path.localeCompare(right.path),
   );
 }
@@ -16330,6 +16502,7 @@ function isSourcePath(path: string): boolean {
 async function readBoundedRepositoryFile(
   repository: string,
   relativePath: string,
+  maximumBytes = MAX_FILE_BYTES,
 ): Promise<Buffer | null> {
   const candidate = resolve(repository, relativePath);
   if (!isContainedRelativePath(relative(repository, candidate))) return null;
@@ -16338,7 +16511,7 @@ async function readBoundedRepositoryFile(
     metadata === null ||
     !metadata.isFile() ||
     metadata.isSymbolicLink() ||
-    metadata.size > MAX_FILE_BYTES
+    metadata.size > maximumBytes
   ) {
     return null;
   }

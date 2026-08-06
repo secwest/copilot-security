@@ -134,6 +134,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-lodash-merge-prototype-pollution",
         "node-multi-hop-patched-lodash-merge",
       ],
+      [
+        "node-multi-hop-locked-lodash-merge-prototype-pollution",
+        "node-multi-hop-locked-patched-lodash-merge",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],
