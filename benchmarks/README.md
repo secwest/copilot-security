@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains seventy-seven vulnerable/control pairs:
+The versioned corpus currently contains seventy-eight vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -136,7 +136,10 @@ parameter that crosses a typed service boundary into SQL grammar, paired with
 the same handler topology and a typed `SqlParameter`, plus Mongoose document
 selector injection where an object-valued Express field crosses three module
 boundaries into a Model query filter, paired with an exact `$eq` literal-value
-boundary. Three runs per case produce 462 scans in the complete corpus.
+boundary, plus Mongoose update-document injection where an Express patch
+crosses the same topology and selects `$unset` to remove an MFA secret, paired
+with one scalar beneath a fixed server-owned `$set` field. Three runs per case
+produce 468 scans in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -151,6 +154,19 @@ reassignment, malformed receiver factories, and inert synchronous returns.
 The executable witness evaluates representative MongoDB operator semantics:
 the vulnerable selector selects the administrator record, while the control
 rejects the operator object and retains literal lookup.
+
+`node-mongoose-update-manifest.json` isolates the Mongoose update-document
+boundary under the same perfect gates. The positive retains the HTTP source,
+all nine ordered import/call/parameter propagators, exact update position,
+CWE-943 and CWE-915 review choices, validation, attack-path analysis, and code
+evidence. Its control preserves the four-file topology but maps only
+`displayName` beneath a fixed `$set` field. Deterministic regressions distinguish
+update data from filters and options, require exact Model identity and query
+consumption, and reject replacements, one-argument calls, Model lookalikes,
+computed fields, spreads, complete objects beneath `$set`, and validators as a
+universal control. The executable witnesses prove MFA-secret deletion in the
+operator path and MFA preservation plus legitimate display-name change in the
+fixed-field path.
 
 `node-copilot-prompt-injection-manifest.json` isolates that SDK boundary under
 perfect single-run gates. The positive must retain the HTTP source, all six

@@ -94,7 +94,15 @@ replacement, projection, and options values are not filters. Exact `$eq` and
 official `mongoose.sanitizeFilter` boundaries are retained as counterevidence;
 same-named local helpers, casting, `strictQuery`, `runValidators`,
 `requireFilter`, authentication, and result limiting are not treated as
-selector sanitization. GitHub Copilot SDK prompt-injection rows require an exact named
+selector sanitization. Separate Mongoose update-document rows trace only
+argument one of executed Model `updateOne`, `updateMany`, `findOneAndUpdate`,
+and `findByIdAndUpdate` calls. Attacker-controlled operators and pipelines are
+reviewed as CWE-943 query-language injection, while field-only over-posting is
+reviewed as CWE-915 mass assignment. Only a tainted scalar beneath a fixed
+server-owned `$set` field is retained as strong counterevidence; complete
+objects beneath `$set`, computed keys, spreads, `sanitizeFilter`, casting,
+strict mode, and update validators do not establish a universal update
+boundary. GitHub Copilot SDK prompt-injection rows require an exact named
 `CopilotClient` import from `@github/copilot-sdk`, one constructed and
 non-reassigned client, and `createSession` or `resumeSession`. They preserve
 request data only when it reaches `systemMessage` content, customize-section
