@@ -1614,6 +1614,10 @@ interface JavaBasenameHelperSummary {
   projectRoot: string;
 }
 
+interface JavaBasenameProjectGraph {
+  directDependencies: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
 interface JavaBasenameOrigin {
   evidenceLine: number;
   evidencePath: string;
@@ -2384,8 +2388,13 @@ function javaFileGetNamePathBoundaryRecords(
   records: readonly ResidualRiskRecord[],
 ): ResidualRiskRecord[] {
   const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const projectGraph = javaBasenameProjectGraph(files);
   const packageTypes = javaPackageTypeIndex(files);
-  const helperSummaries = javaFileBasenameHelperSummaries(files, packageTypes);
+  const helperSummaries = javaFileBasenameHelperSummaries(
+    files,
+    packageTypes,
+    projectGraph,
+  );
   const emitted = new Set<string>();
   const specialized: ResidualRiskRecord[] = [];
   for (const record of records) {
@@ -2413,8 +2422,9 @@ function javaFileGetNamePathBoundaryRecords(
             propagator.symbol === undefined ? [] : [propagator.symbol],
           ),
       ),
-      javaSamePackageTopLevelTypes(packageTypes, files, sinkFile),
+      javaSamePackageTopLevelTypes(packageTypes, files, sinkFile, projectGraph),
       helperSummaries,
+      projectGraph,
     );
     if (boundary === undefined) continue;
     const key = `${framework.source.path}\0${framework.source.line}\0${framework.sink.path}\0${framework.sink.line}`;
@@ -2918,14 +2928,19 @@ function javaSingleTypeImports(lines: readonly string[]): string[] {
 function javaExternalHelperOwnerIsUnique(
   files: readonly SourceFileSnapshot[],
   summary: JavaBasenameHelperSummary,
+  sinkProjectRoot: string,
+  projectGraph: JavaBasenameProjectGraph,
 ): boolean {
+  const visibleRoots = javaBasenameVisibleProjectRoots(
+    projectGraph,
+    sinkProjectRoot,
+  );
   return (
     files.filter(
       (file) =>
         file.extension === ".java" &&
         !javaTestOrExamplePath(file.path) &&
-        javaBasenameProjectRootForPath(files, file.path) ===
-          summary.projectRoot &&
+        visibleRoots.has(javaBasenameProjectRootForPath(files, file.path)) &&
         javaPackageName(file.lines) === summary.packageName &&
         javaTopLevelTypeNames(file.lines).has(summary.ownerType),
     ).length === 1
@@ -2936,6 +2951,7 @@ function javaExactExternalBasenameHelperCall(
   expression: string,
   sinkFile: SourceFileSnapshot,
   files: readonly SourceFileSnapshot[],
+  projectGraph: JavaBasenameProjectGraph,
   summaries: readonly JavaBasenameHelperSummary[],
   stringInputs: ReadonlySet<string>,
   pathInputs: ReadonlySet<string>,
@@ -2950,10 +2966,21 @@ function javaExactExternalBasenameHelperCall(
   const matches = summaries.filter((summary) => {
     if (
       summary.sourcePath === sinkFile.path ||
-      summary.projectRoot !== sinkProjectRoot ||
+      !javaBasenameProjectCanRead(
+        projectGraph,
+        sinkProjectRoot,
+        summary.projectRoot,
+        sinkFile.path,
+        summary.sourcePath,
+      ) ||
       !summary.isStatic ||
       summary.access === "private" ||
-      !javaExternalHelperOwnerIsUnique(files, summary)
+      !javaExternalHelperOwnerIsUnique(
+        files,
+        summary,
+        sinkProjectRoot,
+        projectGraph,
+      )
     ) {
       return false;
     }
@@ -3031,6 +3058,7 @@ function javaFileGetNamePathBoundary(
   provenSinkParameters: ReadonlySet<string>,
   samePackageTopLevelTypes: ReadonlySet<string>,
   helperSummaries: readonly JavaBasenameHelperSummary[],
+  projectGraph: JavaBasenameProjectGraph,
 ): JavaBasenameBoundary | undefined {
   const lines = sinkFile.lines;
   const method = exportedJavaMethods(lines).find(
@@ -3130,6 +3158,7 @@ function javaFileGetNamePathBoundary(
         value,
         sinkFile,
         files,
+        projectGraph,
         helperSummaries,
         tainted,
         pathReceivers,
@@ -3306,15 +3335,25 @@ function javaSamePackageTopLevelTypes(
   index: ReadonlyMap<string, ReadonlySet<string>>,
   files: readonly SourceFileSnapshot[],
   sinkFile: SourceFileSnapshot,
+  projectGraph: JavaBasenameProjectGraph,
 ): ReadonlySet<string> {
   const projectRoot = javaBasenameProjectRootForPath(files, sinkFile.path);
-  const key = `${projectRoot}\0${javaPackageName(sinkFile.lines) ?? "<unnamed>"}`;
-  return index.get(key) ?? new Set<string>();
+  const packageName = javaPackageName(sinkFile.lines) ?? "<unnamed>";
+  const types = new Set<string>();
+  for (const visibleRoot of javaBasenameVisibleProjectRoots(
+    projectGraph,
+    projectRoot,
+  )) {
+    const key = `${visibleRoot}\0${packageName}`;
+    for (const type of index.get(key) ?? []) types.add(type);
+  }
+  return types;
 }
 
 function javaFileBasenameHelperSummaries(
   files: readonly SourceFileSnapshot[],
   packageTypes: ReadonlyMap<string, ReadonlySet<string>>,
+  projectGraph: JavaBasenameProjectGraph,
 ): JavaBasenameHelperSummary[] {
   return files.flatMap((file) => {
     if (file.extension !== ".java" || javaTestOrExamplePath(file.path)) {
@@ -3325,6 +3364,7 @@ function javaFileBasenameHelperSummaries(
       packageTypes,
       files,
       file,
+      projectGraph,
     );
     const fileSingleImported = /^\s*import\s+java\.io\.File\s*;/mu.test(
       structuralText,
@@ -3390,6 +3430,7 @@ function javaFileBasenameHelperSummaries(
 function javaPathBasenameHelperSummaries(
   files: readonly SourceFileSnapshot[],
   packageTypes: ReadonlyMap<string, ReadonlySet<string>>,
+  projectGraph: JavaBasenameProjectGraph,
 ): JavaBasenameHelperSummary[] {
   return files.flatMap((file) => {
     if (file.extension !== ".java" || javaTestOrExamplePath(file.path)) {
@@ -3401,6 +3442,7 @@ function javaPathBasenameHelperSummaries(
       packageTypes,
       files,
       file,
+      projectGraph,
     );
     const pathSingleImported = /^\s*import\s+java\.nio\.file\.Path\s*;/mu.test(
       structuralText,
@@ -3538,8 +3580,13 @@ function javaPathGetFileNamePathBoundaryRecords(
   records: readonly ResidualRiskRecord[],
 ): ResidualRiskRecord[] {
   const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const projectGraph = javaBasenameProjectGraph(files);
   const packageTypes = javaPackageTypeIndex(files);
-  const helperSummaries = javaPathBasenameHelperSummaries(files, packageTypes);
+  const helperSummaries = javaPathBasenameHelperSummaries(
+    files,
+    packageTypes,
+    projectGraph,
+  );
   const emitted = new Set<string>();
   const specialized: ResidualRiskRecord[] = [];
   for (const record of records) {
@@ -3567,8 +3614,9 @@ function javaPathGetFileNamePathBoundaryRecords(
             propagator.symbol === undefined ? [] : [propagator.symbol],
           ),
       ),
-      javaSamePackageTopLevelTypes(packageTypes, files, sinkFile),
+      javaSamePackageTopLevelTypes(packageTypes, files, sinkFile, projectGraph),
       helperSummaries,
+      projectGraph,
     );
     if (boundary === undefined) continue;
     const key = `${framework.source.path}\0${framework.source.line}\0${framework.sink.path}\0${framework.sink.line}`;
@@ -3629,6 +3677,7 @@ function javaPathGetFileNamePathBoundary(
   provenSinkParameters: ReadonlySet<string>,
   samePackageTopLevelTypes: ReadonlySet<string>,
   helperSummaries: readonly JavaBasenameHelperSummary[],
+  projectGraph: JavaBasenameProjectGraph,
 ): JavaBasenameBoundary | undefined {
   const lines = sinkFile.lines;
   const method = exportedJavaMethods(lines).find(
@@ -3787,6 +3836,7 @@ function javaPathGetFileNamePathBoundary(
         value,
         sinkFile,
         files,
+        projectGraph,
         helperSummaries,
         tainted,
         pathReceivers,
@@ -8536,6 +8586,241 @@ function javaBasenameProjectRootForPath(
       .map((file) => posix.dirname(file.path))
       .sort((left, right) => right.length - left.length)[0] ?? "."
   );
+}
+
+function javaBasenameVisibleProjectRoots(
+  graph: JavaBasenameProjectGraph,
+  projectRoot: string,
+): ReadonlySet<string> {
+  return new Set([
+    projectRoot,
+    ...(graph.directDependencies.get(projectRoot) ?? []),
+  ]);
+}
+
+function javaBasenameProjectCanRead(
+  graph: JavaBasenameProjectGraph,
+  callerRoot: string,
+  helperRoot: string,
+  callerPath: string,
+  helperPath: string,
+): boolean {
+  if (callerRoot === helperRoot) return true;
+  return (
+    graph.directDependencies.get(callerRoot)?.has(helperRoot) === true &&
+    javaConventionalGradleMainSource(callerRoot, callerPath) &&
+    javaConventionalGradleMainSource(helperRoot, helperPath)
+  );
+}
+
+function javaConventionalGradleMainSource(
+  projectRoot: string,
+  sourcePath: string,
+): boolean {
+  if (!pathWithinDirectory(sourcePath, projectRoot)) return false;
+  const relative =
+    projectRoot === "." ? sourcePath : sourcePath.slice(projectRoot.length + 1);
+  return /^src\/main\/java\/[^/]+(?:\/[^/]+)*\.java$/u.test(relative);
+}
+
+function javaGradleProjectPath(value: string): string | undefined {
+  const normalized = value.startsWith(":") ? value : `:${value}`;
+  return /^:[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)*$/u.test(normalized)
+    ? normalized
+    : undefined;
+}
+
+function javaLiteralGradleIncludePaths(
+  settingsFile: SourceFileSnapshot,
+): ReadonlySet<string> | undefined {
+  if (/(?:"""|'''|\$\/)/u.test(settingsFile.text)) return undefined;
+  const structuralLines = cFamilyStructuralLines(settingsFile.lines);
+  const structuralText = structuralLines.join("\n");
+  if (/\b(?:buildFileName|includeBuild|projectDir)\b/u.test(structuralText)) {
+    return undefined;
+  }
+  const quotedProject = String.raw`["'](:?[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)*)["']`;
+  const parenthesized = new RegExp(
+    String.raw`^\s*include\s*\(\s*(${quotedProject}(?:\s*,\s*${quotedProject})*)\s*\)\s*;?\s*$`,
+    "u",
+  );
+  const groovy = new RegExp(
+    String.raw`^\s*include\s+(${quotedProject}(?:\s*,\s*${quotedProject})*)\s*;?\s*$`,
+    "u",
+  );
+  const quotedValue = /["']([^"']+)["']/gu;
+  const paths = new Set<string>();
+  for (let index = 0; index < settingsFile.lines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    if (!/\binclude\b/u.test(structural)) continue;
+    if (!/^\s*include\b/u.test(structural)) return undefined;
+    const original = settingsFile.lines[index] ?? "";
+    const declaration = parenthesized.exec(original) ?? groovy.exec(original);
+    if (declaration === null) return undefined;
+    const list = declaration[1] ?? "";
+    const declared = [...list.matchAll(quotedValue)].flatMap((match) =>
+      match[1] === undefined ? [] : [match[1]],
+    );
+    if (declared.length === 0) return undefined;
+    for (const value of declared) {
+      const path = javaGradleProjectPath(value);
+      if (path === undefined || paths.has(path)) return undefined;
+      paths.add(path);
+    }
+  }
+  return paths;
+}
+
+function javaExactGradleBuildFile(
+  files: readonly SourceFileSnapshot[],
+  projectRoot: string,
+): SourceFileSnapshot | undefined {
+  const candidates = files.filter(
+    (file) =>
+      posix.dirname(file.path) === projectRoot &&
+      /^(?:build\.gradle|build\.gradle\.kts)$/iu.test(
+        posix.basename(file.path),
+      ),
+  );
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+function javaStructuralBraceDepthBefore(
+  structural: string,
+  before: number,
+): number {
+  let depth = 0;
+  for (const character of structural.slice(0, before)) {
+    if (character === "{") depth += 1;
+    else if (character === "}") depth = Math.max(0, depth - 1);
+  }
+  return depth;
+}
+
+function javaLiteralGradleCompileProjectDependencies(
+  buildFile: SourceFileSnapshot,
+): ReadonlySet<string> {
+  if (/(?:"""|'''|\$\/)/u.test(buildFile.text)) return new Set<string>();
+  const original = buildFile.lines.join("\n");
+  const structural = cFamilyStructuralLines(buildFile.lines).join("\n");
+  const paths = new Set<string>();
+  const blockStart = /\bdependencies\s*\{/gu;
+  const quotedProject = String.raw`["'](:[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)*)["']`;
+  const configuration = String.raw`(?:api|implementation|compileOnly|compileOnlyApi)`;
+  const parenthesized = new RegExp(
+    String.raw`^\s*${configuration}\s*\(\s*project\s*\(\s*${quotedProject}\s*\)\s*\)\s*;?\s*$`,
+    "u",
+  );
+  const groovy = new RegExp(
+    String.raw`^\s*${configuration}\s+project\s*\(\s*${quotedProject}\s*\)\s*;?\s*$`,
+    "u",
+  );
+  for (const match of structural.matchAll(blockStart)) {
+    if (
+      match.index === undefined ||
+      javaStructuralBraceDepthBefore(structural, match.index) !== 0
+    ) {
+      continue;
+    }
+    const open = structural.indexOf("{", match.index);
+    const close = matchingStructuralBrace(structural, open);
+    if (open < 0 || close < 0) continue;
+    const originalLines = original.slice(open + 1, close).split("\n");
+    const structuralLines = structural.slice(open + 1, close).split("\n");
+    let depth = 0;
+    for (let index = 0; index < structuralLines.length; index += 1) {
+      const structuralLine = structuralLines[index] ?? "";
+      if (
+        depth === 0 &&
+        new RegExp(String.raw`^\s*${configuration}\b`, "u").test(
+          structuralLine,
+        ) &&
+        /\bproject\s*\(/u.test(structuralLine)
+      ) {
+        const originalLine = originalLines[index] ?? "";
+        const declaration =
+          parenthesized.exec(originalLine) ?? groovy.exec(originalLine);
+        const path = declaration?.[1];
+        if (path !== undefined) paths.add(path);
+      }
+      for (const character of structuralLine) {
+        if (character === "{") depth += 1;
+        else if (character === "}") depth = Math.max(0, depth - 1);
+      }
+    }
+  }
+  return paths;
+}
+
+function javaBasenameProjectGraph(
+  files: readonly SourceFileSnapshot[],
+): JavaBasenameProjectGraph {
+  const settingsGroups = new Map<string, SourceFileSnapshot[]>();
+  for (const file of files) {
+    if (
+      !/^(?:settings\.gradle|settings\.gradle\.kts)$/iu.test(
+        posix.basename(file.path),
+      )
+    ) {
+      continue;
+    }
+    const root = posix.dirname(file.path);
+    const group = settingsGroups.get(root) ?? [];
+    group.push(file);
+    settingsGroups.set(root, group);
+  }
+  const builds: Array<ReadonlyMap<string, string>> = [];
+  for (const [settingsRoot, settingsFiles] of settingsGroups) {
+    if (settingsFiles.length !== 1) continue;
+    const included = javaLiteralGradleIncludePaths(settingsFiles[0]!);
+    if (included === undefined) continue;
+    const projects = new Map<string, string>();
+    if (javaExactGradleBuildFile(files, settingsRoot) !== undefined) {
+      projects.set(":", settingsRoot);
+    }
+    for (const projectPath of included) {
+      const segments = projectPath.slice(1).split(":");
+      const projectRoot = posix.join(settingsRoot, ...segments);
+      if (
+        javaExactGradleBuildFile(files, projectRoot) === undefined ||
+        [...projects.values()].includes(projectRoot)
+      ) {
+        continue;
+      }
+      projects.set(projectPath, projectRoot);
+    }
+    if (projects.size > 0) builds.push(projects);
+  }
+  const ownerCounts = new Map<string, number>();
+  for (const projects of builds) {
+    for (const root of projects.values()) {
+      ownerCounts.set(root, (ownerCounts.get(root) ?? 0) + 1);
+    }
+  }
+  const mutable = new Map<string, Set<string>>();
+  for (const projects of builds) {
+    for (const callerRoot of projects.values()) {
+      if (ownerCounts.get(callerRoot) !== 1) continue;
+      const buildFile = javaExactGradleBuildFile(files, callerRoot);
+      if (buildFile === undefined) continue;
+      for (const dependencyPath of javaLiteralGradleCompileProjectDependencies(
+        buildFile,
+      )) {
+        const dependencyRoot = projects.get(dependencyPath);
+        if (
+          dependencyRoot === undefined ||
+          dependencyRoot === callerRoot ||
+          ownerCounts.get(dependencyRoot) !== 1
+        ) {
+          continue;
+        }
+        const dependencies = mutable.get(callerRoot) ?? new Set<string>();
+        dependencies.add(dependencyRoot);
+        mutable.set(callerRoot, dependencies);
+      }
+    }
+  }
+  return { directDependencies: mutable };
 }
 
 function javaProjectBoundaryFile(path: string): boolean {

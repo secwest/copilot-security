@@ -1540,15 +1540,22 @@ fully qualified name, and invoke an accessible static method. Cross-package
 calls additionally require a public top-level type and public method. Gradle
 Groovy and Kotlin build scripts and settings files are exact boundary markers;
 the deepest ancestor wins, isolating sibling modules and nested composite
-builds. Wildcard custom imports, duplicate owners inside one module, undeclared
-sibling modules, inaccessible or instance methods, branches, transformations,
-reassignment, helper chains, foreign receivers, and lookalike types fail
-closed. Custom Gradle project directories/build filenames and declared
-cross-module dependencies are not inferred. Evidence names the helper return
-while a parent rejection must still dominate the caller-side result before the
-sink. The four Spring basename fixtures cross this compilation-unit boundary,
-so the strict executable benchmark exercises it independently of the
-adversarial unit matrix.
+builds. A conventional caller module may also read a helper from one direct
+module named by a literal `api`, `implementation`, `compileOnly`, or
+`compileOnlyApi` `project(":path")` dependency in its own top-level
+`dependencies` block. The project path must be included by one unique nearest
+settings build and map to the standard physical directory with exactly one
+`build.gradle` or `build.gradle.kts`; dependency direction is preserved.
+Wildcard custom imports, duplicate owners across the caller's visible modules,
+undeclared siblings, test/runtime-only or transitive dependencies, variables,
+nonstandard production source sets, custom project directories/build filenames,
+composite includes, ambiguous settings/build ownership, inaccessible or
+instance methods, branches, transformations, reassignment, helper chains,
+foreign receivers, and lookalike types fail closed. Evidence names the helper
+return while a parent rejection
+must still dominate the caller-side result before the sink. The four Spring
+basename fixtures cross this compilation-unit boundary, so the strict
+executable benchmark exercises it independently of the adversarial unit matrix.
 
 The basename controls are branch-sensitive. An exact comparison contributes a
 parent-rejection lead only when the equality is not negated or conditionally

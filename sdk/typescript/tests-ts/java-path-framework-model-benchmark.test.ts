@@ -1534,6 +1534,284 @@ public final class IncludedController {
     expect(javaFileGetNameRecords(inventory)).toHaveLength(0);
   });
 
+  test("follows only literal compile-time Gradle project dependencies for Java basename helpers", async () => {
+    const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "settings.gradle.kts",
+      `rootProject.name = "basename-dependencies"
+include("app", "api-app", "compile-only-app", "compile-only-api-app", "shared", "groovy-app", "libraries:filelib", "ambiguous-app", "duplicate", "nonstandard-app", "nonstandard-lib", "undeclared", "wrong-direction", "test-only", "runtime-only", "dynamic", "empty")
+`,
+    );
+    const builds = new Map<string, string>([
+      [
+        "app/build.gradle.kts",
+        `plugins { java }
+dependencies {
+  implementation(project(":shared"))
+}
+`,
+      ],
+      [
+        "api-app/build.gradle.kts",
+        `plugins { \`java-library\` }
+dependencies {
+  api(project(":shared"))
+}
+`,
+      ],
+      [
+        "compile-only-app/build.gradle",
+        `plugins { id 'java' }
+dependencies {
+  compileOnly project(':shared')
+}
+`,
+      ],
+      [
+        "compile-only-api-app/build.gradle.kts",
+        `plugins { \`java-library\` }
+dependencies {
+  compileOnlyApi(project(":shared"))
+}
+`,
+      ],
+      [
+        "groovy-app/build.gradle",
+        `plugins { id 'java' }
+dependencies {
+  implementation project(':libraries:filelib')
+}
+`,
+      ],
+      [
+        "shared/build.gradle.kts",
+        `plugins { java }
+dependencies {
+  implementation(project(":wrong-direction"))
+}
+`,
+      ],
+      ["libraries/filelib/build.gradle", "plugins { id 'java' }\n"],
+      [
+        "ambiguous-app/build.gradle.kts",
+        `plugins { java }
+dependencies {
+  implementation(project(":shared"))
+  implementation(project(":duplicate"))
+}
+`,
+      ],
+      ["duplicate/build.gradle.kts", "plugins { java }\n"],
+      [
+        "nonstandard-app/build.gradle.kts",
+        `plugins { java }
+dependencies {
+  implementation(project(":nonstandard-lib"))
+}
+`,
+      ],
+      ["nonstandard-lib/build.gradle.kts", "plugins { java }\n"],
+      ["undeclared/build.gradle.kts", "plugins { java }\n"],
+      ["wrong-direction/build.gradle.kts", "plugins { java }\n"],
+      [
+        "test-only/build.gradle.kts",
+        `plugins { java }
+dependencies {
+  testImplementation(project(":shared"))
+}
+`,
+      ],
+      [
+        "runtime-only/build.gradle",
+        `plugins { id 'java' }
+dependencies {
+  runtimeOnly project(':shared')
+}
+`,
+      ],
+      [
+        "dynamic/build.gradle.kts",
+        `plugins { java }
+val helperProject = ":shared"
+dependencies {
+  implementation(project(helperProject))
+}
+`,
+      ],
+    ]);
+    for (const [path, contents] of builds) {
+      await writeRepositoryFile(repository, path, contents);
+    }
+    await writeRepositoryFile(
+      repository,
+      "shared/src/main/java/shared/names/PathNames.java",
+      `
+package shared.names;
+public final class PathNames {
+  public static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "libraries/filelib/src/main/java/filelib/names/FileNames.java",
+      `
+package filelib.names;
+public final class FileNames {
+  public static String basename(String input) {
+    return new java.io.File(input).getName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "duplicate/src/main/java/shared/names/PathNames.java",
+      `
+package shared.names;
+public final class PathNames {
+  public static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "nonstandard-lib/code/relocated/names/PathNames.java",
+      `
+package relocated.names;
+public final class PathNames {
+  public static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    const pathController = (className: string): string => `
+package consumer;
+import shared.names.PathNames;
+public final class ${className} {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = PathNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`;
+    for (const [module, className] of [
+      ["app", "DeclaredController"],
+      ["api-app", "ApiController"],
+      ["compile-only-app", "CompileOnlyController"],
+      ["compile-only-api-app", "CompileOnlyApiController"],
+      ["ambiguous-app", "AmbiguousController"],
+      ["undeclared", "UndeclaredController"],
+      ["wrong-direction", "WrongDirectionController"],
+      ["test-only", "TestOnlyController"],
+      ["runtime-only", "RuntimeOnlyController"],
+      ["dynamic", "DynamicController"],
+    ] as const) {
+      await writeRepositoryFile(
+        repository,
+        `${module}/src/main/java/consumer/${className}.java`,
+        pathController(className),
+      );
+    }
+    await writeRepositoryFile(
+      repository,
+      "groovy-app/src/main/java/consumer/GroovyDeclaredController.java",
+      `
+package consumer;
+import filelib.names.FileNames;
+public final class GroovyDeclaredController {
+  public String read(@RequestParam String path) throws Exception {
+    String name = FileNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "nonstandard-app/src/main/java/consumer/NonstandardSourceController.java",
+      `
+package consumer;
+import relocated.names.PathNames;
+public final class NonstandardSourceController {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = PathNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "custom/settings.gradle.kts",
+      `include("app", "shared")
+project(":shared").projectDir = file("renamed-shared")
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "custom/app/build.gradle.kts",
+      `plugins { java }
+dependencies {
+  implementation(project(":shared"))
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "custom/renamed-shared/build.gradle.kts",
+      "plugins { java }\n",
+    );
+    await writeRepositoryFile(
+      repository,
+      "custom/renamed-shared/src/main/java/custom/names/PathNames.java",
+      `
+package custom.names;
+public final class PathNames {
+  public static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "custom/app/src/main/java/consumer/CustomLayoutController.java",
+      `
+package consumer;
+import custom.names.PathNames;
+public final class CustomLayoutController {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = PathNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(13);
+    expect(
+      javaPathGetFileNameRecords(inventory)
+        .map(({ path }) => path)
+        .sort(),
+    ).toEqual([
+      "api-app/src/main/java/consumer/ApiController.java",
+      "app/src/main/java/consumer/DeclaredController.java",
+      "compile-only-api-app/src/main/java/consumer/CompileOnlyApiController.java",
+      "compile-only-app/src/main/java/consumer/CompileOnlyController.java",
+    ]);
+    expect(javaFileGetNameRecords(inventory).map(({ path }) => path)).toEqual([
+      "groovy-app/src/main/java/consumer/GroovyDeclaredController.java",
+    ]);
+  });
+
   test("rejects ambiguous or transformed Path basename helpers", async () => {
     const repository = await temporaryRepository();
     const controller = (
@@ -2731,6 +3009,13 @@ public final class DocumentController {
     );
     expect(prompt).toContain(
       "an undeclared sibling module is not a source of helper code",
+    );
+    expect(prompt).toContain(
+      "a direct literal api, implementation, compileOnly, or compileOnlyApi project dependency",
+    );
+    expect(prompt).toContain("dependency direction matters");
+    expect(prompt).toContain(
+      "Do not infer test or runtime-only configurations, transitive reachability, variables, nonstandard production source sets, custom project mappings, composite builds, or ambiguous ownership",
     );
     expect(prompt).toContain(
       "the exact equality is not negated or conditionally conjoined",
