@@ -324,8 +324,14 @@ interpreter that consumes the value.
   a static accessible method; another package additionally requires a public
   top-level type and public method. `build.gradle`, `build.gradle.kts`,
   `settings.gradle`, and `settings.gradle.kts` establish Gradle boundaries; an
-  undeclared sibling module is not helper code. Wildcard custom imports,
-  duplicate owners inside one module, nested Maven or Gradle boundaries,
+  undeclared sibling module is not helper code. A direct Gradle edge requires a
+  literal compile-classpath project dependency under one unique conventional
+  settings build. A direct Maven reactor edge requires exact literal module
+  membership and GAV coordinates, absent/compile/provided scope, ordinary JAR
+  identity without a classifier, verified local-parent inheritance when used,
+  and conventional `src/main/java` endpoints. Dependency management,
+  properties, transitive paths, and overlapping reactors do not create edges.
+  Wildcard custom imports, duplicate owners inside one module, nested Maven or Gradle boundaries,
   inaccessible or instance methods, branches, input transformations or
   reassignment, nested helpers, foreign receivers, overloads, and lookalike
   types fail closed. Reduction evidence remains at the helper return; a parent

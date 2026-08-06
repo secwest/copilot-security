@@ -935,9 +935,15 @@ cross-package use also requires a public top-level type and method. Exact
 Gradle Groovy/Kotlin build scripts and settings files partition ordinary
 modules and nested composite builds, with the deepest ancestor winning. This
 prevents an unrelated sibling duplicate from suppressing a real local summary
-and prevents an undeclared sibling helper from supplying a call target. Custom
-project-directory/build-file mappings and declared cross-module dependencies
-remain outside the bounded proof. That conservative policy reflects the owner, accessibility,
+and prevents an undeclared sibling helper from supplying a call target. Direct
+Gradle compile-classpath project edges are recovered only from literal
+top-level declarations under one unique conventional settings build. Direct
+Maven reactor edges are recovered only when literal module membership, exact
+effective coordinates (including verified local-parent inheritance), a unique
+top-level dependency, compile/provided scope, ordinary JAR identity, and
+conventional production source roots all agree. Dependency management,
+properties, transitive paths, classifiers, overlapping reactors, and custom or
+dynamic layouts remain outside the bounded proof. That conservative policy reflects the owner, accessibility,
 applicability, arity, and overload work required by
 [JLS 15.12](https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.12).
 Wildcard custom imports, duplicate owners, nested projects, inaccessible or

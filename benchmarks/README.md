@@ -1313,14 +1313,23 @@ cross-module call is admitted only when the caller's own top-level
 `implementation`, `compileOnly`, or `compileOnlyApi` `project(":path")` edge,
 one unique nearest settings build includes that project path, and its
 conventional physical directory has exactly one standard build file. Calls
+across Maven reactor modules are admitted only for one direct top-level
+dependency whose literal `groupId`, `artifactId`, and `version` resolve to a
+unique reactor sibling, whose scope is absent/`compile`/`provided`, whose type
+is absent/`jar` with no classifier, and whose caller and helper remain under
+conventional `src/main/java`. Exact local-parent coordinate inheritance and
+literal nested module paths are supported; `dependencyManagement` alone is
+not a dependency edge. Calls
 across packages additionally require a public top-level type and public method.
 Exact official types, an unoverloaded symbol, a straight-line return, fixed
 arity, argument position, and value identity remain mandatory. Wildcard custom
 imports, duplicate owners across visible modules, undeclared or
 reverse-direction siblings, test/runtime-only or transitive configurations,
-dynamic paths, nonstandard production source sets, custom
+dynamic Gradle paths or Maven coordinates, managed-only Maven declarations,
+classified/non-JAR artifacts, nonstandard production source sets, custom
 project-directory/build-file mappings, composite builds, inaccessible or
-instance methods, transformations, and ambiguity fail closed.
+instance methods, transformations, overlapping reactors, and ambiguity fail
+closed.
 
 The deterministic identity gate implements Java's compilation-unit import
 precedence. A single-type `Path` or `Paths` import remains exact even when

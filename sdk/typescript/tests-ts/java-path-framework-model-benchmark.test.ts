@@ -1534,6 +1534,342 @@ public final class IncludedController {
     expect(javaFileGetNameRecords(inventory)).toHaveLength(0);
   });
 
+  test("follows only exact Maven reactor compile dependencies for Java basename helpers", async () => {
+    const repository = await temporaryRepository();
+    const modules = [
+      "clients/app",
+      "provided-app",
+      "file-app",
+      "shared",
+      "filelib",
+      "duplicate",
+      "undeclared",
+      "wrong-direction",
+      "test-only",
+      "runtime-only",
+      "version-mismatch",
+      "managed-only",
+      "ambiguous-app",
+      "nonstandard-app",
+      "nonstandard-lib",
+      "bridge",
+      "transitive-app",
+      "property-app",
+      "type-app",
+      "classifier-app",
+      "system-only",
+      "import-only",
+    ] as const;
+    await writeRepositoryFile(
+      repository,
+      "pom.xml",
+      `<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>net.secwest.benchmark</groupId>
+  <artifactId>basename-reactor</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <modules>
+${modules.map((module) => `    <module>${module}</module>`).join("\n")}
+  </modules>
+</project>
+`,
+    );
+    const dependency = (
+      artifactId: string,
+      scope?: string,
+      version = "1.0.0",
+    ): string => `<dependency>
+      <groupId>net.secwest.benchmark</groupId>
+      <artifactId>${artifactId}</artifactId>
+      <version>${version}</version>${
+        scope === undefined ? "" : `\n      <scope>${scope}</scope>`
+      }
+    </dependency>`;
+    const modulePom = (
+      artifactId: string,
+      body = "",
+      relativePath?: string,
+    ): string =>
+      `<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>net.secwest.benchmark</groupId>
+    <artifactId>basename-reactor</artifactId>
+    <version>1.0.0</version>
+${relativePath === undefined ? "" : `    <relativePath>${relativePath}</relativePath>\n`}
+  </parent>
+  <artifactId>${artifactId}</artifactId>
+${body}</project>
+`;
+    const dependencies = (...entries: string[]): string =>
+      `  <dependencies>\n${entries.map((entry) => `    ${entry}`).join("\n")}\n  </dependencies>\n`;
+    const poms = new Map<string, string>([
+      ["clients/app", dependencies(dependency("shared"))],
+      ["provided-app", dependencies(dependency("shared", "provided"))],
+      ["file-app", dependencies(dependency("filelib", "compile"))],
+      ["shared", dependencies(dependency("wrong-direction"))],
+      ["filelib", ""],
+      ["duplicate", ""],
+      ["undeclared", ""],
+      ["wrong-direction", ""],
+      ["test-only", dependencies(dependency("shared", "test"))],
+      ["runtime-only", dependencies(dependency("shared", "runtime"))],
+      [
+        "version-mismatch",
+        dependencies(dependency("shared", undefined, "2.0.0")),
+      ],
+      [
+        "managed-only",
+        `  <dependencyManagement>
+    <dependencies>
+      ${dependency("shared")}
+    </dependencies>
+  </dependencyManagement>
+`,
+      ],
+      [
+        "ambiguous-app",
+        dependencies(dependency("shared"), dependency("duplicate")),
+      ],
+      ["nonstandard-app", dependencies(dependency("nonstandard-lib"))],
+      ["nonstandard-lib", ""],
+      ["bridge", dependencies(dependency("shared"))],
+      ["transitive-app", dependencies(dependency("bridge"))],
+      [
+        "property-app",
+        dependencies(dependency("shared", undefined, "${revision}")),
+      ],
+      [
+        "type-app",
+        dependencies(`<dependency>
+      <groupId>net.secwest.benchmark</groupId>
+      <artifactId>shared</artifactId>
+      <version>1.0.0</version>
+      <type>test-jar</type>
+    </dependency>`),
+      ],
+      [
+        "classifier-app",
+        dependencies(`<dependency>
+      <groupId>net.secwest.benchmark</groupId>
+      <artifactId>shared</artifactId>
+      <version>1.0.0</version>
+      <classifier>tests</classifier>
+    </dependency>`),
+      ],
+      ["system-only", dependencies(dependency("shared", "system"))],
+      ["import-only", dependencies(dependency("shared", "import"))],
+    ]);
+    for (const [module, body] of poms) {
+      await writeRepositoryFile(
+        repository,
+        `${module}/pom.xml`,
+        modulePom(
+          module === "clients/app" ? "app" : module,
+          body,
+          module === "clients/app" ? "../../pom.xml" : undefined,
+        ),
+      );
+    }
+    await writeRepositoryFile(
+      repository,
+      "shared/src/main/java/shared/names/PathNames.java",
+      `
+package shared.names;
+public final class PathNames {
+  public static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "duplicate/src/main/java/shared/names/PathNames.java",
+      `
+package shared.names;
+public final class PathNames {
+  public static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "filelib/src/main/java/filelib/names/FileNames.java",
+      `
+package filelib.names;
+public final class FileNames {
+  public static String basename(String input) {
+    return new java.io.File(input).getName();
+  }
+}
+`,
+    );
+    await writeRepositoryFile(
+      repository,
+      "nonstandard-lib/code/relocated/names/PathNames.java",
+      `
+package relocated.names;
+public final class PathNames {
+  public static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+    );
+    const pathController = (
+      className: string,
+      packageName = "shared.names",
+    ): string => `
+package consumer;
+import ${packageName}.PathNames;
+public final class ${className} {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = PathNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`;
+    for (const [module, className, packageName] of [
+      ["clients/app", "DeclaredController", "shared.names"],
+      ["provided-app", "ProvidedController", "shared.names"],
+      ["undeclared", "UndeclaredController", "shared.names"],
+      ["wrong-direction", "WrongDirectionController", "shared.names"],
+      ["test-only", "TestOnlyController", "shared.names"],
+      ["runtime-only", "RuntimeOnlyController", "shared.names"],
+      ["version-mismatch", "VersionMismatchController", "shared.names"],
+      ["managed-only", "ManagedOnlyController", "shared.names"],
+      ["ambiguous-app", "AmbiguousController", "shared.names"],
+      ["nonstandard-app", "NonstandardController", "relocated.names"],
+      ["transitive-app", "TransitiveController", "shared.names"],
+      ["property-app", "PropertyController", "shared.names"],
+      ["type-app", "TypeController", "shared.names"],
+      ["classifier-app", "ClassifierController", "shared.names"],
+      ["system-only", "SystemController", "shared.names"],
+      ["import-only", "ImportController", "shared.names"],
+    ] as const) {
+      await writeRepositoryFile(
+        repository,
+        `${module}/src/main/java/consumer/${className}.java`,
+        pathController(className, packageName),
+      );
+    }
+    await writeRepositoryFile(
+      repository,
+      "file-app/src/main/java/consumer/FileDeclaredController.java",
+      `
+package consumer;
+import filelib.names.FileNames;
+public final class FileDeclaredController {
+  public String read(@RequestParam String path) throws Exception {
+    String name = FileNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+    );
+
+    const inventory = await buildResidualRiskInventory(repository);
+    expect(javaPathRecords(inventory)).toHaveLength(17);
+    expect(
+      javaPathGetFileNameRecords(inventory)
+        .map(({ path }) => path)
+        .sort(),
+    ).toEqual([
+      "clients/app/src/main/java/consumer/DeclaredController.java",
+      "provided-app/src/main/java/consumer/ProvidedController.java",
+    ]);
+    expect(javaFileGetNameRecords(inventory).map(({ path }) => path)).toEqual([
+      "file-app/src/main/java/consumer/FileDeclaredController.java",
+    ]);
+  });
+
+  test("rejects malformed Maven project models without losing the broad path hypothesis", async () => {
+    const validProject = (artifactId: string, body = ""): string =>
+      `<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>net.secwest.benchmark</groupId>
+  <artifactId>${artifactId}</artifactId>
+  <version>1.0.0</version>
+${body}</project>
+`;
+    const malformedRoots = [
+      `<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <groupId>net.secwest.benchmark</groupId>
+  <artifactId>missing-model-version</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <modules><module>app</module><module>shared</module></modules>
+</project>
+`,
+      `<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <?xml version="1.0"?>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>net.secwest.benchmark</groupId>
+  <artifactId>misplaced-declaration</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <modules><module>app</module><module>shared</module></modules>
+</project>
+`,
+    ];
+    for (const rootPom of malformedRoots) {
+      const repository = await temporaryRepository();
+      await writeRepositoryFile(repository, "pom.xml", rootPom);
+      await writeRepositoryFile(
+        repository,
+        "app/pom.xml",
+        validProject(
+          "app",
+          `  <dependencies>
+    <dependency>
+      <groupId>net.secwest.benchmark</groupId>
+      <artifactId>shared</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+  </dependencies>
+`,
+        ),
+      );
+      await writeRepositoryFile(
+        repository,
+        "shared/pom.xml",
+        validProject("shared"),
+      );
+      await writeRepositoryFile(
+        repository,
+        "shared/src/main/java/shared/names/PathNames.java",
+        `package shared.names;
+public final class PathNames {
+  public static java.nio.file.Path basename(String input) {
+    return java.nio.file.Path.of(input).getFileName();
+  }
+}
+`,
+      );
+      await writeRepositoryFile(
+        repository,
+        "app/src/main/java/consumer/MalformedModelController.java",
+        `package consumer;
+import shared.names.PathNames;
+public final class MalformedModelController {
+  public String read(@RequestParam String path) throws Exception {
+    java.nio.file.Path name = PathNames.basename(path);
+    return java.nio.file.Files.readString(java.nio.file.Path.of("documents").resolve(name));
+  }
+}
+`,
+      );
+
+      const inventory = await buildResidualRiskInventory(repository);
+      expect(javaPathRecords(inventory)).toHaveLength(1);
+      expect(javaPathGetFileNameRecords(inventory)).toHaveLength(0);
+    }
+  });
+
   test("follows only literal compile-time Gradle project dependencies for Java basename helpers", async () => {
     const repository = await temporaryRepository();
     await writeRepositoryFile(
@@ -3013,7 +3349,12 @@ public final class DocumentController {
     expect(prompt).toContain(
       "a direct literal api, implementation, compileOnly, or compileOnlyApi project dependency",
     );
-    expect(prompt).toContain("dependency direction matters");
+    expect(prompt).toContain(
+      "Across Maven reactor modules, accept only a direct literal dependency with exact groupId, artifactId, and version",
+    );
+    expect(prompt).toContain("absent, compile, or provided scope");
+    expect(prompt).toContain("dependencyManagement does not create an edge");
+    expect(prompt).toContain("Dependency direction matters");
     expect(prompt).toContain(
       "Do not infer test or runtime-only configurations, transitive reachability, variables, nonstandard production source sets, custom project mappings, composite builds, or ambiguous ownership",
     );

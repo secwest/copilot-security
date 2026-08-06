@@ -41,6 +41,7 @@ const MAX_FINDING_QUALITY_GAPS = 256;
 const MAX_INVENTORY_BYTES = 8 * 1024 * 1024;
 const MAX_COVERAGE_BYTES = 32 * 1024 * 1024;
 const MAX_FINDINGS_BYTES = 128 * 1024 * 1024;
+const MAX_JAVA_MAVEN_MODEL_DEPTH = 128;
 const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
 const MAX_EXCERPT_LINES = 16;
@@ -1616,6 +1617,46 @@ interface JavaBasenameHelperSummary {
 
 interface JavaBasenameProjectGraph {
   directDependencies: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
+interface JavaMavenXmlElement {
+  name: string;
+  children: JavaMavenXmlElement[];
+  text: string;
+}
+
+interface JavaMavenParent {
+  groupId: string;
+  artifactId: string;
+  version: string;
+  relativePath?: string;
+  localResolutionDisabled: boolean;
+}
+
+interface JavaMavenDependency {
+  groupId: string;
+  artifactId: string;
+  version: string;
+  scope?: string;
+  type?: string;
+  classifier?: string;
+}
+
+interface JavaMavenPom {
+  root: string;
+  groupId?: string;
+  artifactId: string;
+  version?: string;
+  packaging?: string;
+  parent?: JavaMavenParent;
+  modules: readonly string[];
+  dependencies: readonly JavaMavenDependency[];
+}
+
+interface JavaMavenCoordinates {
+  groupId: string;
+  artifactId: string;
+  version: string;
 }
 
 interface JavaBasenameOrigin {
@@ -8608,12 +8649,12 @@ function javaBasenameProjectCanRead(
   if (callerRoot === helperRoot) return true;
   return (
     graph.directDependencies.get(callerRoot)?.has(helperRoot) === true &&
-    javaConventionalGradleMainSource(callerRoot, callerPath) &&
-    javaConventionalGradleMainSource(helperRoot, helperPath)
+    javaConventionalJavaMainSource(callerRoot, callerPath) &&
+    javaConventionalJavaMainSource(helperRoot, helperPath)
   );
 }
 
-function javaConventionalGradleMainSource(
+function javaConventionalJavaMainSource(
   projectRoot: string,
   sourcePath: string,
 ): boolean {
@@ -8752,6 +8793,402 @@ function javaLiteralGradleCompileProjectDependencies(
   return paths;
 }
 
+function javaMavenXml(text: string): JavaMavenXmlElement | undefined {
+  const token =
+    /<!--[\s\S]*?-->|<\?xml(?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*\s*=\s*(?:"[^"<]*"|'[^'<]*'))*\s*\?>|<\/[A-Za-z][A-Za-z0-9.-]*\s*>|<[A-Za-z][A-Za-z0-9.-]*(?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*\s*=\s*(?:"[^"<]*"|'[^'<]*'))*\s*\/?>|[^<]+/gu;
+  const opening =
+    /^<([A-Za-z][A-Za-z0-9.-]*)(?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*\s*=\s*(?:"[^"<]*"|'[^'<]*'))*\s*(\/?)>$/u;
+  const closing = /^<\/([A-Za-z][A-Za-z0-9.-]*)\s*>$/u;
+  const stack: JavaMavenXmlElement[] = [];
+  let root: JavaMavenXmlElement | undefined;
+  let xmlDeclarationSeen = false;
+  let cursor = 0;
+  for (const match of text.matchAll(token)) {
+    if (match.index !== cursor) return undefined;
+    const value = match[0];
+    cursor += value.length;
+    if (value.startsWith("<!--")) continue;
+    if (value.includes("&")) return undefined;
+    if (value.startsWith("<?xml")) {
+      if (xmlDeclarationSeen || root !== undefined) return undefined;
+      xmlDeclarationSeen = true;
+      continue;
+    }
+    if (value.startsWith("</")) {
+      const name = closing.exec(value)?.[1];
+      if (name === undefined || stack.at(-1)?.name !== name) return undefined;
+      stack.pop();
+      continue;
+    }
+    if (value.startsWith("<")) {
+      const declaration = opening.exec(value);
+      const name = declaration?.[1];
+      if (name === undefined) return undefined;
+      const element: JavaMavenXmlElement = {
+        name,
+        children: [],
+        text: "",
+      };
+      const parent = stack.at(-1);
+      if (parent === undefined) {
+        if (root !== undefined) return undefined;
+        root = element;
+      } else {
+        parent.children.push(element);
+      }
+      if (declaration?.[2] !== "/") {
+        if (stack.length >= MAX_JAVA_MAVEN_MODEL_DEPTH) return undefined;
+        stack.push(element);
+      }
+      continue;
+    }
+    const current = stack.at(-1);
+    if (current === undefined) {
+      if (value.trim() !== "") return undefined;
+    } else {
+      current.text += value;
+    }
+  }
+  return cursor === text.length && stack.length === 0 ? root : undefined;
+}
+
+function javaMavenUniqueValue(
+  element: JavaMavenXmlElement,
+  name: string,
+): string | null | undefined {
+  const matches = element.children.filter((child) => child.name === name);
+  if (matches.length > 1) return null;
+  const match = matches[0];
+  if (match === undefined) return undefined;
+  if (match.children.length > 0) return null;
+  return match.text.trim();
+}
+
+function javaMavenLiteralCoordinate(value: string): boolean {
+  return /^[A-Za-z0-9_.+~-]+$/u.test(value);
+}
+
+function javaMavenDependency(
+  element: JavaMavenXmlElement,
+): JavaMavenDependency | undefined {
+  const groupId = javaMavenUniqueValue(element, "groupId");
+  const artifactId = javaMavenUniqueValue(element, "artifactId");
+  const version = javaMavenUniqueValue(element, "version");
+  const scope = javaMavenUniqueValue(element, "scope");
+  const type = javaMavenUniqueValue(element, "type");
+  const classifier = javaMavenUniqueValue(element, "classifier");
+  if (
+    groupId === undefined ||
+    groupId === null ||
+    artifactId === undefined ||
+    artifactId === null ||
+    version === undefined ||
+    version === null ||
+    scope === null ||
+    type === null ||
+    classifier === null ||
+    !javaMavenLiteralCoordinate(groupId) ||
+    !javaMavenLiteralCoordinate(artifactId) ||
+    !javaMavenLiteralCoordinate(version) ||
+    (scope !== undefined && !/^[A-Za-z]+$/u.test(scope)) ||
+    (type !== undefined && !/^[A-Za-z0-9_.-]+$/u.test(type)) ||
+    (classifier !== undefined && !javaMavenLiteralCoordinate(classifier))
+  ) {
+    return undefined;
+  }
+  return { groupId, artifactId, version, scope, type, classifier };
+}
+
+function javaMavenPom(file: SourceFileSnapshot): JavaMavenPom | undefined {
+  const project = javaMavenXml(file.text);
+  if (project?.name !== "project" || project.text.trim() !== "") {
+    return undefined;
+  }
+  const groupId = javaMavenUniqueValue(project, "groupId");
+  const artifactId = javaMavenUniqueValue(project, "artifactId");
+  const version = javaMavenUniqueValue(project, "version");
+  const packaging = javaMavenUniqueValue(project, "packaging");
+  const modelVersion = javaMavenUniqueValue(project, "modelVersion");
+  if (
+    modelVersion !== "4.0.0" ||
+    groupId === null ||
+    artifactId === undefined ||
+    artifactId === null ||
+    version === null ||
+    packaging === null ||
+    (groupId !== undefined && !javaMavenLiteralCoordinate(groupId)) ||
+    !javaMavenLiteralCoordinate(artifactId) ||
+    (version !== undefined && !javaMavenLiteralCoordinate(version)) ||
+    (packaging !== undefined && !/^[A-Za-z0-9_.-]+$/u.test(packaging))
+  ) {
+    return undefined;
+  }
+
+  const parentElements = project.children.filter(
+    (child) => child.name === "parent",
+  );
+  if (parentElements.length > 1) return undefined;
+  let parent: JavaMavenParent | undefined;
+  if (parentElements[0] !== undefined) {
+    const element = parentElements[0];
+    if (element.text.trim() !== "") return undefined;
+    const parentGroupId = javaMavenUniqueValue(element, "groupId");
+    const parentArtifactId = javaMavenUniqueValue(element, "artifactId");
+    const parentVersion = javaMavenUniqueValue(element, "version");
+    const relativePath = javaMavenUniqueValue(element, "relativePath");
+    if (
+      parentGroupId === undefined ||
+      parentGroupId === null ||
+      parentArtifactId === undefined ||
+      parentArtifactId === null ||
+      parentVersion === undefined ||
+      parentVersion === null ||
+      relativePath === null ||
+      !javaMavenLiteralCoordinate(parentGroupId) ||
+      !javaMavenLiteralCoordinate(parentArtifactId) ||
+      !javaMavenLiteralCoordinate(parentVersion)
+    ) {
+      return undefined;
+    }
+    parent = {
+      groupId: parentGroupId,
+      artifactId: parentArtifactId,
+      version: parentVersion,
+      relativePath: relativePath === "" ? undefined : relativePath,
+      localResolutionDisabled: relativePath === "",
+    };
+  }
+
+  const modulesElements = project.children.filter(
+    (child) => child.name === "modules",
+  );
+  if (modulesElements.length > 1) return undefined;
+  const modules: string[] = [];
+  if (modulesElements[0] !== undefined) {
+    const element = modulesElements[0];
+    if (element.text.trim() !== "" || packaging !== "pom") return undefined;
+    for (const child of element.children) {
+      const value = child.text.trim();
+      if (
+        child.name !== "module" ||
+        child.children.length > 0 ||
+        !/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/u.test(value) ||
+        value
+          .split("/")
+          .some((segment) => segment === "." || segment === "..") ||
+        modules.includes(value)
+      ) {
+        return undefined;
+      }
+      modules.push(value);
+    }
+  }
+
+  const dependenciesElements = project.children.filter(
+    (child) => child.name === "dependencies",
+  );
+  if (dependenciesElements.length > 1) return undefined;
+  const dependencies: JavaMavenDependency[] = [];
+  if (dependenciesElements[0] !== undefined) {
+    const element = dependenciesElements[0];
+    if (element.text.trim() !== "") return undefined;
+    for (const child of element.children) {
+      const dependency =
+        child.name === "dependency" && child.text.trim() === ""
+          ? javaMavenDependency(child)
+          : undefined;
+      if (dependency !== undefined) dependencies.push(dependency);
+    }
+  }
+  return {
+    root: posix.dirname(file.path),
+    groupId,
+    artifactId,
+    version,
+    packaging,
+    parent,
+    modules,
+    dependencies,
+  };
+}
+
+function javaMavenRepositoryPath(value: string): string | undefined {
+  const normalized = posix.normalize(value);
+  return normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("/")
+    ? undefined
+    : normalized;
+}
+
+function javaMavenParentRoot(
+  pom: JavaMavenPom,
+  poms: ReadonlyMap<string, JavaMavenPom>,
+): string | undefined {
+  if (pom.parent === undefined || pom.parent.localResolutionDisabled) {
+    return undefined;
+  }
+  const relativePath = pom.parent.relativePath ?? "../pom.xml";
+  if (
+    !/^(?:\.{1,2}|[A-Za-z0-9_.-]+)(?:\/(?:\.{1,2}|[A-Za-z0-9_.-]+))*\/pom\.xml$|^pom\.xml$/u.test(
+      relativePath,
+    )
+  ) {
+    return undefined;
+  }
+  const candidate = javaMavenRepositoryPath(posix.join(pom.root, relativePath));
+  if (candidate === undefined || posix.basename(candidate) !== "pom.xml") {
+    return undefined;
+  }
+  const root = posix.dirname(candidate);
+  return poms.has(root) ? root : undefined;
+}
+
+function javaMavenEffectiveCoordinates(
+  root: string,
+  poms: ReadonlyMap<string, JavaMavenPom>,
+  cache: Map<string, JavaMavenCoordinates | undefined>,
+  active = new Set<string>(),
+): JavaMavenCoordinates | undefined {
+  if (cache.has(root)) return cache.get(root);
+  if (active.has(root) || active.size >= MAX_JAVA_MAVEN_MODEL_DEPTH) {
+    return undefined;
+  }
+  const pom = poms.get(root);
+  if (pom === undefined) return undefined;
+  const nextActive = new Set(active).add(root);
+  const parentRoot = javaMavenParentRoot(pom, poms);
+  let inherited: JavaMavenCoordinates | undefined;
+  if (parentRoot !== undefined) {
+    inherited = javaMavenEffectiveCoordinates(
+      parentRoot,
+      poms,
+      cache,
+      nextActive,
+    );
+    if (
+      inherited === undefined ||
+      pom.parent === undefined ||
+      inherited.groupId !== pom.parent.groupId ||
+      inherited.artifactId !== pom.parent.artifactId ||
+      inherited.version !== pom.parent.version
+    ) {
+      cache.set(root, undefined);
+      return undefined;
+    }
+  }
+  const groupId = pom.groupId ?? inherited?.groupId;
+  const version = pom.version ?? inherited?.version;
+  const coordinates =
+    groupId === undefined || version === undefined
+      ? undefined
+      : { groupId, artifactId: pom.artifactId, version };
+  cache.set(root, coordinates);
+  return coordinates;
+}
+
+function javaMavenModuleRoot(
+  aggregatorRoot: string,
+  module: string,
+  poms: ReadonlyMap<string, JavaMavenPom>,
+): string | undefined {
+  const candidate = javaMavenRepositoryPath(posix.join(aggregatorRoot, module));
+  return candidate !== undefined && poms.has(candidate) ? candidate : undefined;
+}
+
+function javaMavenReactor(
+  root: string,
+  poms: ReadonlyMap<string, JavaMavenPom>,
+  active = new Set<string>(),
+): ReadonlySet<string> | undefined {
+  if (active.has(root) || active.size >= MAX_JAVA_MAVEN_MODEL_DEPTH) {
+    return undefined;
+  }
+  const pom = poms.get(root);
+  if (pom === undefined) return undefined;
+  const projects = new Set([root]);
+  const nextActive = new Set(active).add(root);
+  for (const module of pom.modules) {
+    const moduleRoot = javaMavenModuleRoot(root, module, poms);
+    if (moduleRoot === undefined) return undefined;
+    const nested = javaMavenReactor(moduleRoot, poms, nextActive);
+    if (nested === undefined) return undefined;
+    for (const project of nested) {
+      if (projects.has(project)) return undefined;
+      projects.add(project);
+    }
+  }
+  return projects;
+}
+
+function javaMavenCompileProjectDependencies(
+  files: readonly SourceFileSnapshot[],
+): ReadonlyMap<string, ReadonlySet<string>> {
+  const poms = new Map<string, JavaMavenPom>();
+  for (const file of files) {
+    if (posix.basename(file.path).toLowerCase() !== "pom.xml") continue;
+    const pom = javaMavenPom(file);
+    if (pom !== undefined) poms.set(pom.root, pom);
+  }
+  const moduleOwners = new Set<string>();
+  for (const pom of poms.values()) {
+    for (const module of pom.modules) {
+      const moduleRoot = javaMavenModuleRoot(pom.root, module, poms);
+      if (moduleRoot !== undefined) moduleOwners.add(moduleRoot);
+    }
+  }
+  const reactors: ReadonlySet<string>[] = [];
+  for (const pom of poms.values()) {
+    if (pom.modules.length === 0 || moduleOwners.has(pom.root)) continue;
+    const reactor = javaMavenReactor(pom.root, poms);
+    if (reactor !== undefined) reactors.push(reactor);
+  }
+  const ownerCounts = new Map<string, number>();
+  for (const reactor of reactors) {
+    for (const root of reactor) {
+      ownerCounts.set(root, (ownerCounts.get(root) ?? 0) + 1);
+    }
+  }
+  const coordinateCache = new Map<string, JavaMavenCoordinates | undefined>();
+  const dependencies = new Map<string, Set<string>>();
+  for (const reactor of reactors) {
+    if ([...reactor].some((root) => ownerCounts.get(root) !== 1)) continue;
+    const coordinates = new Map<string, JavaMavenCoordinates>();
+    for (const root of reactor) {
+      const value = javaMavenEffectiveCoordinates(root, poms, coordinateCache);
+      if (value !== undefined) coordinates.set(root, value);
+    }
+    for (const callerRoot of reactor) {
+      if (ownerCounts.get(callerRoot) !== 1) continue;
+      const caller = poms.get(callerRoot);
+      if (caller === undefined) continue;
+      for (const dependency of caller.dependencies) {
+        if (
+          ![undefined, "compile", "provided"].includes(dependency.scope) ||
+          ![undefined, "jar"].includes(dependency.type) ||
+          dependency.classifier !== undefined
+        ) {
+          continue;
+        }
+        const targets = [...coordinates].filter(
+          ([targetRoot, target]) =>
+            targetRoot !== callerRoot &&
+            ownerCounts.get(targetRoot) === 1 &&
+            target.groupId === dependency.groupId &&
+            target.artifactId === dependency.artifactId &&
+            target.version === dependency.version &&
+            [undefined, "jar"].includes(poms.get(targetRoot)?.packaging),
+        );
+        if (targets.length !== 1) continue;
+        const direct = dependencies.get(callerRoot) ?? new Set<string>();
+        direct.add(targets[0]![0]);
+        dependencies.set(callerRoot, direct);
+      }
+    }
+  }
+  return dependencies;
+}
+
 function javaBasenameProjectGraph(
   files: readonly SourceFileSnapshot[],
 ): JavaBasenameProjectGraph {
@@ -8819,6 +9256,13 @@ function javaBasenameProjectGraph(
         mutable.set(callerRoot, dependencies);
       }
     }
+  }
+  for (const [callerRoot, dependencies] of javaMavenCompileProjectDependencies(
+    files,
+  )) {
+    const direct = mutable.get(callerRoot) ?? new Set<string>();
+    for (const dependency of dependencies) direct.add(dependency);
+    mutable.set(callerRoot, direct);
   }
   return { directDependencies: mutable };
 }

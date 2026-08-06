@@ -1546,11 +1546,21 @@ module named by a literal `api`, `implementation`, `compileOnly`, or
 `dependencies` block. The project path must be included by one unique nearest
 settings build and map to the standard physical directory with exactly one
 `build.gradle` or `build.gradle.kts`; dependency direction is preserved.
+Likewise, a conventional Maven reactor caller may read one direct sibling
+whose exact literal `groupId`, `artifactId`, and `version` match a unique
+reactor module. The dependency must be in the caller's top-level
+`dependencies`, use the default/`compile` or `provided` scope, use the
+default/`jar` type without a classifier, and keep both endpoints under
+`src/main/java`. Literal nested module paths and exact local-parent
+`groupId`/`version` inheritance are supported; `dependencyManagement` alone
+does not establish an edge.
 Wildcard custom imports, duplicate owners across the caller's visible modules,
 undeclared siblings, test/runtime-only or transitive dependencies, variables,
 nonstandard production source sets, custom project directories/build filenames,
-composite includes, ambiguous settings/build ownership, inaccessible or
-instance methods, branches, transformations, reassignment, helper chains,
+composite includes, Maven property/interpolation or managed-only declarations,
+non-JAR/classified dependencies, ambiguous or overlapping reactor ownership,
+ambiguous settings/build ownership, inaccessible or instance methods, branches,
+transformations, reassignment, helper chains,
 foreign receivers, and lookalike types fail closed. Evidence names the helper
 return while a parent rejection
 must still dominate the caller-side result before the sink. The four Spring
