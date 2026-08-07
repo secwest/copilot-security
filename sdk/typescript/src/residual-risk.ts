@@ -660,6 +660,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-flat-unflatten-prototype-pollution",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]flat['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-flat-unflatten",
+        expression: /\b[A-Za-z_$][\w$]*(?:\s*\.\s*unflatten)?\s*\(/u,
+        cweIds: ["CWE-1321"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2517,6 +2543,11 @@ interface NodeJsonPathPlusSink {
     | "jsonpath-plus-native-eval";
 }
 
+interface NodeFlatUnflattenSink {
+  sourceExpression: string;
+  kind: "vulnerable-flat-unflatten" | "lock-resolved-vulnerable-flat-unflatten";
+}
+
 type NodePrototypeMergeDependencyName =
   | "lodash"
   | "lodash.merge"
@@ -3585,6 +3616,132 @@ function nodeJsonPathPlusSink(
   return undefined;
 }
 
+function nodeFlatVersionIsUnflattenVulnerable(version: string): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  if (major < 1) return true;
+  if (major === 1) return minor < 6 || (minor === 6 && patch < 2);
+  if (major === 2) return minor === 0 && patch < 2;
+  if (major === 3) return minor === 0 && patch === 0;
+  if (major === 4) {
+    return (minor === 0 && patch === 0) || (minor === 1 && patch === 0);
+  }
+  return major === 5 && minor === 0 && patch === 0;
+}
+
+function nodeFlatUnflattenSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeFlatUnflattenSink | undefined {
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: Array<{
+    kind: "direct" | "receiver";
+    local: string;
+    line: number;
+  }> = [];
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const defaultImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']flat["']/u.exec(code);
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']flat["']/u.exec(
+        code,
+      );
+    const commonjsReceiver =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']flat["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directMemberRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']flat["']\s*\)\s*\.\s*unflatten\s*;?\s*$/u.exec(
+        code,
+      );
+    const receiver =
+      defaultImport?.[1] ?? namespace?.[1] ?? commonjsReceiver?.[1];
+    if (receiver !== undefined) {
+      bindings.push({ kind: "receiver", local: receiver, line: index + 1 });
+    }
+    if (directMemberRequire?.[1] !== undefined) {
+      bindings.push({
+        kind: "direct",
+        local: directMemberRequire[1],
+        line: index + 1,
+      });
+    }
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "flat" &&
+      imported.imported === "unflatten" &&
+      /["']flat["']/u.test(codeLines[imported.line - 1] ?? "")
+    ) {
+      bindings.push({
+        kind: "direct",
+        local: imported.local,
+        line: imported.line,
+      });
+    }
+  }
+  const dependency = nodeRuntimeDependency(files, path, "flat");
+  if (
+    dependency === undefined ||
+    !nodeFlatVersionIsUnflattenVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escapedLocal = escapeRegularExpression(binding.local);
+    if (
+      binding.kind === "receiver" &&
+      structuralLines
+        .slice(binding.line, Math.max(binding.line, line))
+        .some((candidate) =>
+          new RegExp(
+            `\\b${escapedLocal}\\s*\\.\\s*unflatten\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+        )
+    ) {
+      continue;
+    }
+    const callee =
+      binding.kind === "receiver"
+        ? new RegExp(`\\b${escapedLocal}\\s*\\.\\s*unflatten\\s*\\(`, "u")
+        : new RegExp(`\\b${escapedLocal}\\s*\\(`, "u");
+    const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+    const sourceExpression = arguments_?.[0]?.trim() ?? "";
+    if (sourceExpression === "") continue;
+    return {
+      sourceExpression,
+      kind:
+        dependency.proof === "npm-lockfile"
+          ? "lock-resolved-vulnerable-flat-unflatten"
+          : "vulnerable-flat-unflatten",
+    };
+  }
+  return undefined;
+}
+
 function nodePrototypeCopySink(
   lines: readonly string[],
   line: number,
@@ -3696,7 +3853,8 @@ function frameworkDataflowRecords(
                 model.id === "node-http-object-authorization" ||
                 model.id === "node-copilot-system-prompt-injection" ||
                 model.id === "node-http-js-toml-prototype-pollution" ||
-                model.id === "node-http-jsonpath-plus-code-injection"
+                model.id === "node-http-jsonpath-plus-code-injection" ||
+                model.id === "node-http-flat-unflatten-prototype-pollution"
                 ? 64
                 : 8,
             )
@@ -3757,6 +3915,10 @@ function frameworkDataflowRecords(
       const nodeJsonPathPlus =
         model.id === "node-http-jsonpath-plus-code-injection"
           ? nodeJsonPathPlusSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeFlatUnflatten =
+        model.id === "node-http-flat-unflatten-prototype-pollution"
+          ? nodeFlatUnflattenSink(files, path, lines, sink.line)
           : undefined;
       const nodePathSink =
         model.id === "node-http-path"
@@ -3845,6 +4007,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-jsonpath-plus-code-injection" &&
         nodeJsonPathPlus === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-flat-unflatten-prototype-pollution" &&
+        nodeFlatUnflatten === undefined
       ) {
         continue;
       }
@@ -3989,7 +4157,8 @@ function frameworkDataflowRecords(
       const nodePackageVulnerabilitySourceExpression =
         nodePrototypeMerge?.sourceExpressions.join("\n") ??
         nodeJsToml?.sourceExpression ??
-        nodeJsonPathPlus?.sourceExpression;
+        nodeJsonPathPlus?.sourceExpression ??
+        nodeFlatUnflatten?.sourceExpression;
       const source =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -4289,6 +4458,7 @@ function frameworkDataflowRecords(
         aggregateSinkMetadata?.kind ??
         bulkSinkMetadata?.kind ??
         nodeJsonPathPlus?.kind ??
+        nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
         nodePrototypeMerge?.kind ??
         sink.kind;
@@ -8231,7 +8401,8 @@ function javascriptFrameworkWrapperSummaries(
               file.lines,
               model.sinks,
               model.id === "node-http-js-toml-prototype-pollution" ||
-                model.id === "node-http-jsonpath-plus-code-injection"
+                model.id === "node-http-jsonpath-plus-code-injection" ||
+                model.id === "node-http-flat-unflatten-prototype-pollution"
                 ? 64
                 : 32,
             );
@@ -8284,6 +8455,10 @@ function javascriptFrameworkWrapperSummaries(
           const nodeJsonPathPlus =
             model.id === "node-http-jsonpath-plus-code-injection"
               ? nodeJsonPathPlusSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeFlatUnflatten =
+            model.id === "node-http-flat-unflatten-prototype-pollution"
+              ? nodeFlatUnflattenSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -8350,6 +8525,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-flat-unflatten-prototype-pollution" &&
+            nodeFlatUnflatten === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -8389,6 +8570,7 @@ function javascriptFrameworkWrapperSummaries(
               : nodePrototypeMerge.sourceExpressions.join("\n")) ??
             nodeJsToml?.sourceExpression ??
             nodeJsonPathPlus?.sourceExpression ??
+            nodeFlatUnflatten?.sourceExpression ??
             (nodePrototypeCopy === undefined
               ? undefined
               : nodePrototypeCopy.sourceExpressions.join("\n")) ??
@@ -8562,6 +8744,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeJsonPathPlus === undefined
                   ? {}
                   : { kind: nodeJsonPathPlus.kind }),
+                ...(nodeFlatUnflatten === undefined
+                  ? {}
+                  : { kind: nodeFlatUnflatten.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}

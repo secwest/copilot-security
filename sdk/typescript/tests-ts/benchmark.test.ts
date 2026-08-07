@@ -186,6 +186,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-jsonpath-plus-rce",
         "node-multi-hop-patched-jsonpath-plus",
       ],
+      [
+        "node-multi-hop-flat-unflatten-prototype-pollution",
+        "node-multi-hop-patched-flat-unflatten",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

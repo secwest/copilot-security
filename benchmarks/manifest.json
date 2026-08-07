@@ -2655,6 +2655,45 @@
         "node-multi-hop-patched-jsonpath-plus/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-flat-unflatten-prototype-pollution",
+      "description": "An Express JSON object crosses three relative-import boundaries into flat.unflatten under an exact vulnerable 4.1.0 runtime pin. A delimited own __proto__ key reaches Object.prototype and supplies inherited authorization state to a fresh object.",
+      "fixture": "fixtures/node-multi-hop-flat-unflatten-prototype-pollution",
+      "findingsPaths": [
+        "node-multi-hop-flat-unflatten-prototype-pollution/run-1/findings.json",
+        "node-multi-hop-flat-unflatten-prototype-pollution/run-2/findings.json",
+        "node-multi-hop-flat-unflatten-prototype-pollution/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-flat-unflatten",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-flat-unflatten",
+      "description": "The matched Express source, three wrappers, and official unflatten call pin flat 4.1.1, whose path-expansion loop rejects __proto__ before it can reach Object.prototype.",
+      "fixture": "fixtures/node-multi-hop-patched-flat-unflatten",
+      "findingsPaths": [
+        "node-multi-hop-patched-flat-unflatten/run-1/findings.json",
+        "node-multi-hop-patched-flat-unflatten/run-2/findings.json",
+        "node-multi-hop-patched-flat-unflatten/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

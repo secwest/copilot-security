@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-flat-unflatten-prototype-pollution",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "flat": "4.1.0"
+  }
+}

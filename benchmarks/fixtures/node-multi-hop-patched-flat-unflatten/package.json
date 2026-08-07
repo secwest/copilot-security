@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-flat-unflatten",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "flat": "4.1.1"
+  }
+}
