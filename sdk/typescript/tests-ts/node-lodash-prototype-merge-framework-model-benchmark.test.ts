@@ -55,6 +55,8 @@ const caseIds = [
   "node-multi-hop-patched-deep-extend",
   "node-multi-hop-just-extend-prototype-pollution",
   "node-multi-hop-patched-just-extend",
+  "node-multi-hop-merge-options-prototype-pollution",
+  "node-multi-hop-patched-merge-options",
 ] as const;
 const temporaryPaths: string[] = [];
 
@@ -215,6 +217,14 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       requireCodeEvidence: true,
     });
     expect(manifest.cases[13]?.expected).toEqual([]);
+    expect(manifest.cases[14]?.expected[0]).toMatchObject({
+      cwe: ["CWE-1321"],
+      acceptableSeverities: ["critical", "high"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[15]?.expected).toEqual([]);
     expect(
       manifest.cases.every(({ findingsPaths }) => findingsPaths.length === 1),
     ).toBeTrue();
@@ -236,6 +246,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       deepExtendSafe,
       justExtendUnsafe,
       justExtendSafe,
+      mergeOptionsUnsafe,
+      mergeOptionsSafe,
     ] = (await Promise.all(
       caseIds.map(async (caseId) =>
         mergeRecords(
@@ -245,6 +257,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
         ),
       ),
     )) as [
+      FrameworkRecord[],
+      FrameworkRecord[],
       FrameworkRecord[],
       FrameworkRecord[],
       FrameworkRecord[],
@@ -275,6 +289,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(deepExtendSafe).toHaveLength(0);
     expect(justExtendUnsafe).toHaveLength(1);
     expect(justExtendSafe).toHaveLength(0);
+    expect(mergeOptionsUnsafe).toHaveLength(1);
+    expect(mergeOptionsSafe).toHaveLength(0);
     expect(unsafe[0]?.frameworkModel).toMatchObject({
       scope: "cross-file-multi-hop-wrapper",
       source: { path: "src/server.js", line: 8, kind: "http-request-field" },
@@ -376,6 +392,19 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(justExtendUnsafe[0]?.frameworkModel?.propagators).toEqual(
       unsafe[0]?.frameworkModel?.propagators,
     );
+    expect(mergeOptionsUnsafe[0]?.frameworkModel).toMatchObject({
+      scope: "cross-file-multi-hop-wrapper",
+      source: { path: "src/server.js", line: 8, kind: "http-request-field" },
+      sink: {
+        path: "src/storage.js",
+        line: 4,
+        kind: "vulnerable-merge-options-recursive-merge",
+        cweIds: ["CWE-1321"],
+      },
+    });
+    expect(mergeOptionsUnsafe[0]?.frameworkModel?.propagators).toEqual(
+      unsafe[0]?.frameworkModel?.propagators,
+    );
   });
 
   test("retains the vulnerable row under the repository cap", async () => {
@@ -424,6 +453,12 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     );
     expect(paths).not.toContain(
       "benchmarks/fixtures/node-multi-hop-patched-just-extend/src/storage.js",
+    );
+    expect(paths).toContain(
+      "benchmarks/fixtures/node-multi-hop-merge-options-prototype-pollution/src/storage.js",
+    );
+    expect(paths).not.toContain(
+      "benchmarks/fixtures/node-multi-hop-patched-merge-options/src/storage.js",
     );
   }, 60_000);
 
@@ -1221,6 +1256,114 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     ]);
   });
 
+  test("keeps every merge-options argument on its critical 1.0.1 boundary", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-merge-options-package-"),
+    );
+    temporaryPaths.push(repository);
+    const firstArgumentSource =
+      'import mergeOptions from "merge-options";\nexport function handler(request) { return mergeOptions(request.body); }\n';
+    const laterArgumentSource =
+      'const mergeOptions = require("merge-options");\nexport function handler(request) { return mergeOptions({ mode: "strict" }, request.body); }\n';
+
+    for (const [id, source, section, version] of [
+      ["exact-first", firstArgumentSource, "dependencies", "1.0.0"],
+      ["exact-require", laterArgumentSource, "optionalDependencies", "0.9.1"],
+    ] as const) {
+      await writeCase(
+        repository,
+        id,
+        source,
+        section,
+        version,
+        "merge-options",
+      );
+    }
+    await writeCase(
+      repository,
+      "locked-range",
+      laterArgumentSource,
+      "dependencies",
+      "^1.0.0",
+      "merge-options",
+    );
+    await writeNpmLock(repository, "locked-range", "^1.0.0", "1.0.0", {
+      dependencyName: "merge-options",
+    });
+
+    for (const [id, source, version, dependencyName] of [
+      ["fixed-boundary", firstArgumentSource, "1.0.1", "merge-options"],
+      ["later-minor", firstArgumentSource, "1.1.0", "merge-options"],
+      ["later-major", firstArgumentSource, "2.0.0", "merge-options"],
+      ["wrong-manifest", firstArgumentSource, "1.0.0", "deep-extend"],
+      [
+        "zero-arguments",
+        'import mergeOptions from "merge-options";\nexport function handler(request) { request.body; return mergeOptions(); }\n',
+        "1.0.0",
+        "merge-options",
+      ],
+      [
+        "namespace",
+        'import * as mergeOptions from "merge-options";\nexport function handler(request) { return mergeOptions(request.body); }\n',
+        "1.0.0",
+        "merge-options",
+      ],
+      [
+        "named",
+        'import { mergeOptions } from "merge-options";\nexport function handler(request) { return mergeOptions(request.body); }\n',
+        "1.0.0",
+        "merge-options",
+      ],
+      [
+        "reassigned",
+        'import mergeOptions from "merge-options";\nmergeOptions = helper;\nexport function handler(request) { return mergeOptions(request.body); }\n',
+        "1.0.0",
+        "merge-options",
+      ],
+    ] as const) {
+      await writeCase(
+        repository,
+        id,
+        source,
+        "dependencies",
+        version,
+        dependencyName,
+      );
+    }
+    await writeCase(
+      repository,
+      "locked-fixed",
+      laterArgumentSource,
+      "dependencies",
+      "^1.0.0",
+      "merge-options",
+    );
+    await writeNpmLock(repository, "locked-fixed", "^1.0.0", "1.0.1", {
+      dependencyName: "merge-options",
+    });
+
+    const records = mergeRecords(await buildResidualRiskInventory(repository));
+    expect(
+      records.map((record) => ({
+        path: record.path,
+        kind: record.frameworkModel?.sink.kind,
+      })),
+    ).toEqual([
+      {
+        path: "exact-first/handler.mjs",
+        kind: "vulnerable-merge-options-recursive-merge",
+      },
+      {
+        path: "exact-require/handler.mjs",
+        kind: "vulnerable-merge-options-recursive-merge",
+      },
+      {
+        path: "locked-range/handler.mjs",
+        kind: "lock-resolved-vulnerable-merge-options-recursive-merge",
+      },
+    ]);
+  });
+
   test("teaches version, recursion, manifest, and constructor.prototype proof", () => {
     const prompt = scanQualityGatePrompt("");
     expect(prompt).toContain("node-http-prototype-merge");
@@ -1242,6 +1385,10 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(prompt).toContain("4.0.0 remains vulnerable");
     expect(prompt).toContain("upstream-patched 4.0.1 boundary");
     expect(prompt).toContain("own destination property");
+    expect(prompt).toContain("merge-options");
+    expect(prompt).toContain("patched 1.0.1 boundary");
+    expect(prompt).toContain("argument zero is not a destination");
+    expect(prompt).toContain("defines own data properties");
     expect(prompt).toContain("source operands");
     expect(prompt).toContain("constructor.prototype");
     expect(prompt).toContain("CWE-1321");

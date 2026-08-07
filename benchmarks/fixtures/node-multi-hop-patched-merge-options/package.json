@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-merge-options",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "merge-options": "1.0.1"
+  }
+}

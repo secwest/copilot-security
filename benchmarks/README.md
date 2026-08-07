@@ -169,8 +169,10 @@ declaration for one merge family can authorize another. A sixth pair covers
 literal-recursive `just-extend` 4.0.0 and its 4.0.1 own-destination-property
 boundary; this deliberately follows the upstream repair and CodeQL rather
 than the reviewed advisory's stale claim that 4.0.0 was already patched.
-Three runs per case produce 348 scans across 58 exploit/control pairs in the
-complete corpus.
+A seventh package-isolated pair covers always-recursive `merge-options` 1.0.0
+and its patched 1.0.1 boundary. Every argument is a source because this API
+returns a new merged object rather than mutating argument zero. Three runs per
+case produce 354 scans across 59 exploit/control pairs in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -277,7 +279,9 @@ declaration and resolves 4.17.10. Further isolated pairs cover standalone
 `deep-extend`, plus literal-recursive `just-extend`, each with its own patched
 boundary and dependency-free witness. The `just-extend` control measures the
 upstream fix's global `Object.prototype` boundary through a fresh object while
-preserving target-local prototype replacement as separate review evidence.
+preserving target-local prototype replacement as separate review evidence. A
+further pair covers `merge-options`, including its argument-zero source
+semantics and patched own-data-property definition.
 Matched controls preserve each call and topology while selecting a patched
 version.
 Deterministic regressions accept official default, namespace, CommonJS,

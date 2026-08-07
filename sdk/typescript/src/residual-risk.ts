@@ -583,7 +583,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
     activation: [
-      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge|merge-deep|extend|deep-extend|just-extend)["']/u,
+      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge|merge-deep|extend|deep-extend|just-extend|merge-options)["']/u,
       /\b[A-Za-z_$][\w$]*(?:\s*\.\s*merge)?\s*\(/u,
     ],
     sources: [
@@ -2439,7 +2439,9 @@ interface NodePrototypeMergeSink {
     | "vulnerable-deep-extend-recursive-merge"
     | "lock-resolved-vulnerable-deep-extend-recursive-merge"
     | "vulnerable-just-extend-deep-merge"
-    | "lock-resolved-vulnerable-just-extend-deep-merge";
+    | "lock-resolved-vulnerable-just-extend-deep-merge"
+    | "vulnerable-merge-options-recursive-merge"
+    | "lock-resolved-vulnerable-merge-options-recursive-merge";
 }
 
 type NodePrototypeMergeDependencyName =
@@ -2448,7 +2450,8 @@ type NodePrototypeMergeDependencyName =
   | "merge-deep"
   | "extend"
   | "deep-extend"
-  | "just-extend";
+  | "just-extend"
+  | "merge-options";
 
 interface NodeRuntimeDependency {
   manifestPath: string;
@@ -2698,6 +2701,17 @@ function nodeJustExtendVersionIsPrototypePollutionVulnerable(
   return major < 4 || (major === 4 && minor === 0 && patch < 1);
 }
 
+function nodeMergeOptionsVersionIsPrototypePollutionVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return major < 1 || (major === 1 && minor === 0 && patch < 1);
+}
+
 function nodePrototypeMergeVersionIsVulnerable(
   dependencyName: NodePrototypeMergeDependencyName,
   version: string,
@@ -2717,6 +2731,8 @@ function nodePrototypeMergeVersionIsVulnerable(
       return nodeDeepExtendVersionIsPrototypePollutionVulnerable(version);
     case "just-extend":
       return nodeJustExtendVersionIsPrototypePollutionVulnerable(version);
+    case "merge-options":
+      return nodeMergeOptionsVersionIsPrototypePollutionVulnerable(version);
   }
 }
 
@@ -2750,6 +2766,10 @@ function nodePrototypeMergeSinkKind(
       return lockResolved
         ? "lock-resolved-vulnerable-just-extend-deep-merge"
         : "vulnerable-just-extend-deep-merge";
+    case "merge-options":
+      return lockResolved
+        ? "lock-resolved-vulnerable-merge-options-recursive-merge"
+        : "vulnerable-merge-options-recursive-merge";
   }
 }
 
@@ -2828,6 +2848,14 @@ function nodePrototypeMergeSink(
       /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']just-extend["']\s*\)/u.exec(
         structural,
       );
+    const mergeOptionsImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']merge-options["']/u.exec(
+        structural,
+      );
+    const mergeOptionsRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']merge-options["']\s*\)/u.exec(
+        structural,
+      );
     const receiver = defaultOrNamespace?.[1] ?? commonjsReceiver?.[1];
     const direct = directImport?.[1] ?? directRequire?.[1];
     if (receiver !== undefined) {
@@ -2889,6 +2917,16 @@ function nodePrototypeMergeSink(
         local: justExtendDirect,
         line: index + 1,
         dependencyName: "just-extend",
+      });
+    }
+    const mergeOptionsDirect =
+      mergeOptionsImport?.[1] ?? mergeOptionsRequire?.[1];
+    if (mergeOptionsDirect !== undefined) {
+      bindings.push({
+        kind: "direct",
+        local: mergeOptionsDirect,
+        line: index + 1,
+        dependencyName: "merge-options",
       });
     }
   }
@@ -2954,7 +2992,8 @@ function nodePrototypeMergeSink(
     const requiresDeepFlag =
       binding.dependencyName === "extend" ||
       binding.dependencyName === "just-extend";
-    const sourceOffset = requiresDeepFlag ? 2 : 1;
+    const sourceOffset =
+      binding.dependencyName === "merge-options" ? 0 : requiresDeepFlag ? 2 : 1;
     if (
       arguments_ === undefined ||
       arguments_.length <= sourceOffset ||
