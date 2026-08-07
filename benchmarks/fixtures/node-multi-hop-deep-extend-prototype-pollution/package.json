@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-deep-extend-prototype-pollution",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "deep-extend": "0.5.0"
+  }
+}

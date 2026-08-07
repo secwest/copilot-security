@@ -162,9 +162,11 @@ cannot authorize it, or vice versa. A further package-isolated pair covers the
 direct `merge-deep` callable at vulnerable 3.0.2 and its patched 3.0.3
 boundary. A fourth package-isolated pair covers only literal recursive
 `extend(true, target, ...sources)` calls at vulnerable 3.0.1 and its patched
-3.0.2 boundary; omitted, false, or dynamic deep flags remain negative. No
+3.0.2 boundary; omitted, false, or dynamic deep flags remain negative. A
+fifth package-isolated pair covers the always-recursive direct `deep-extend`
+callable at vulnerable 0.5.0 and its patched 0.5.1 property-read boundary. No
 declaration for one merge family can authorize another. Three runs per case
-produce 336 scans across 56 exploit/control pairs in the complete corpus.
+produce 342 scans across 57 exploit/control pairs in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -261,13 +263,16 @@ prototype replacement without claiming global `Object.prototype` mutation,
 and safe null-prototype retention of both defaults and hostile key data.
 
 `node-lodash-prototype-merge-manifest.json` isolates recursive third-party
-merge semantics under perfect gates. Its two positives retain the Express
-body source, all nine ordered propagators, the exact `lodash.merge()` source
-operand at `src/storage.js:4`, CWE-1321, validation, attack-path analysis, and
-code evidence. One uses a nearest runtime `package.json` pin of 4.17.10; the
-other uses `^4.17.0` plus an adjacent npm v3 lockfile that repeats the root
-declaration and resolves 4.17.10. Their matched controls preserve the calls
-and topology while exact or lock-resolved evidence selects patched 4.17.21.
+merge semantics under perfect gates. Its positives retain the Express body
+source, all nine ordered propagators, an exact source operand at
+`src/storage.js:4`, CWE-1321, validation, attack-path analysis, and code
+evidence. Core Lodash uses either a nearest runtime `package.json` pin of
+4.17.10 or `^4.17.0` plus an adjacent npm v3 lockfile that repeats the root
+declaration and resolves 4.17.10. Further isolated pairs cover standalone
+`lodash.merge`, `merge-deep`, literal-recursive `extend`, and always-recursive
+`deep-extend`, each with its own patched boundary and dependency-free witness.
+Matched controls preserve each call and topology while selecting a patched
+version.
 Deterministic regressions accept official default, namespace, CommonJS,
 destructured, subpath, and optional runtime bindings, plus fresh npm v2/v3
 resolution and shrinkwrap precedence. They reject patched resolution,

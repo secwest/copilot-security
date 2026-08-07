@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-deep-extend",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "deep-extend": "0.5.1"
+  }
+}

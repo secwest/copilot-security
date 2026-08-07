@@ -51,6 +51,8 @@ const caseIds = [
   "node-multi-hop-patched-merge-deep",
   "node-multi-hop-extend-deep-prototype-pollution",
   "node-multi-hop-patched-extend-deep",
+  "node-multi-hop-deep-extend-prototype-pollution",
+  "node-multi-hop-patched-deep-extend",
 ] as const;
 const temporaryPaths: string[] = [];
 
@@ -195,6 +197,14 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       requireCodeEvidence: true,
     });
     expect(manifest.cases[9]?.expected).toEqual([]);
+    expect(manifest.cases[10]?.expected[0]).toMatchObject({
+      cwe: ["CWE-1321"],
+      acceptableSeverities: ["critical", "high"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[11]?.expected).toEqual([]);
     expect(
       manifest.cases.every(({ findingsPaths }) => findingsPaths.length === 1),
     ).toBeTrue();
@@ -212,6 +222,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       mergeDeepSafe,
       extendUnsafe,
       extendSafe,
+      deepExtendUnsafe,
+      deepExtendSafe,
     ] = (await Promise.all(
       caseIds.map(async (caseId) =>
         mergeRecords(
@@ -221,6 +233,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
         ),
       ),
     )) as [
+      FrameworkRecord[],
+      FrameworkRecord[],
       FrameworkRecord[],
       FrameworkRecord[],
       FrameworkRecord[],
@@ -243,6 +257,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(mergeDeepSafe).toHaveLength(0);
     expect(extendUnsafe).toHaveLength(1);
     expect(extendSafe).toHaveLength(0);
+    expect(deepExtendUnsafe).toHaveLength(1);
+    expect(deepExtendSafe).toHaveLength(0);
     expect(unsafe[0]?.frameworkModel).toMatchObject({
       scope: "cross-file-multi-hop-wrapper",
       source: { path: "src/server.js", line: 8, kind: "http-request-field" },
@@ -318,6 +334,19 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(extendUnsafe[0]?.frameworkModel?.propagators).toEqual(
       unsafe[0]?.frameworkModel?.propagators,
     );
+    expect(deepExtendUnsafe[0]?.frameworkModel).toMatchObject({
+      scope: "cross-file-multi-hop-wrapper",
+      source: { path: "src/server.js", line: 8, kind: "http-request-field" },
+      sink: {
+        path: "src/storage.js",
+        line: 4,
+        kind: "vulnerable-deep-extend-recursive-merge",
+        cweIds: ["CWE-1321"],
+      },
+    });
+    expect(deepExtendUnsafe[0]?.frameworkModel?.propagators).toEqual(
+      unsafe[0]?.frameworkModel?.propagators,
+    );
   });
 
   test("retains the vulnerable row under the repository cap", async () => {
@@ -354,6 +383,12 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     );
     expect(paths).not.toContain(
       "benchmarks/fixtures/node-multi-hop-patched-extend-deep/src/storage.js",
+    );
+    expect(paths).toContain(
+      "benchmarks/fixtures/node-multi-hop-deep-extend-prototype-pollution/src/storage.js",
+    );
+    expect(paths).not.toContain(
+      "benchmarks/fixtures/node-multi-hop-patched-deep-extend/src/storage.js",
     );
   }, 60_000);
 
@@ -931,6 +966,107 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     ]);
   });
 
+  test("keeps deep-extend on its own critical 0.5.1 boundary", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-deep-extend-package-"),
+    );
+    temporaryPaths.push(repository);
+    const importSource =
+      'import deepExtend from "deep-extend";\nexport function handler(request) { return deepExtend({}, request.body); }\n';
+    const requireSource =
+      'const deepExtend = require("deep-extend");\nexport function handler(request) { return deepExtend({}, request.body); }\n';
+
+    for (const [id, source, section, version] of [
+      ["exact-import", importSource, "dependencies", "0.5.0"],
+      ["exact-require", requireSource, "optionalDependencies", "0.4.2"],
+    ] as const) {
+      await writeCase(repository, id, source, section, version, "deep-extend");
+    }
+    await writeCase(
+      repository,
+      "locked-range",
+      importSource,
+      "dependencies",
+      "^0.5.0",
+      "deep-extend",
+    );
+    await writeNpmLock(repository, "locked-range", "^0.5.0", "0.5.0", {
+      dependencyName: "deep-extend",
+    });
+
+    for (const [id, source, version, dependencyName] of [
+      ["fixed-boundary", importSource, "0.5.1", "deep-extend"],
+      ["later-minor", importSource, "0.6.0", "deep-extend"],
+      ["later-major", importSource, "1.0.0", "deep-extend"],
+      ["wrong-manifest", importSource, "0.5.0", "extend"],
+      [
+        "target-only",
+        'import deepExtend from "deep-extend";\nexport function handler(request) { return deepExtend(request.body, {}); }\n',
+        "0.5.0",
+        "deep-extend",
+      ],
+      [
+        "namespace",
+        'import * as deepExtend from "deep-extend";\nexport function handler(request) { return deepExtend({}, request.body); }\n',
+        "0.5.0",
+        "deep-extend",
+      ],
+      [
+        "named",
+        'import { deepExtend } from "deep-extend";\nexport function handler(request) { return deepExtend({}, request.body); }\n',
+        "0.5.0",
+        "deep-extend",
+      ],
+      [
+        "reassigned",
+        'import deepExtend from "deep-extend";\ndeepExtend = helper;\nexport function handler(request) { return deepExtend({}, request.body); }\n',
+        "0.5.0",
+        "deep-extend",
+      ],
+    ] as const) {
+      await writeCase(
+        repository,
+        id,
+        source,
+        "dependencies",
+        version,
+        dependencyName,
+      );
+    }
+    await writeCase(
+      repository,
+      "locked-fixed",
+      importSource,
+      "dependencies",
+      "^0.5.0",
+      "deep-extend",
+    );
+    await writeNpmLock(repository, "locked-fixed", "^0.5.0", "0.5.1", {
+      dependencyName: "deep-extend",
+    });
+
+    const records = mergeRecords(await buildResidualRiskInventory(repository));
+    expect(
+      records.map((record) => ({
+        path: record.path,
+        kind: record.frameworkModel?.sink.kind,
+      })),
+    ).toEqual([
+      {
+        path: "exact-import/handler.mjs",
+        kind: "vulnerable-deep-extend-recursive-merge",
+      },
+      {
+        path: "exact-require/handler.mjs",
+        kind: "vulnerable-deep-extend-recursive-merge",
+      },
+      {
+        path: "locked-range/handler.mjs",
+        kind: "lock-resolved-vulnerable-deep-extend-recursive-merge",
+      },
+    ]);
+  });
+
   test("teaches version, recursion, manifest, and constructor.prototype proof", () => {
     const prompt = scanQualityGatePrompt("");
     expect(prompt).toContain("node-http-prototype-merge");
@@ -946,6 +1082,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(prompt).toContain("extend(true, target, ...sources)");
     expect(prompt).toContain(">=1.1.3 <2.0.2");
     expect(prompt).toContain(">=3.0.0 <3.0.2");
+    expect(prompt).toContain("deep-extend");
+    expect(prompt).toContain("0.5.1");
     expect(prompt).toContain("source operands");
     expect(prompt).toContain("constructor.prototype");
     expect(prompt).toContain("CWE-1321");
