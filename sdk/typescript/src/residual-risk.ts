@@ -583,7 +583,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
     activation: [
-      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge)["']/u,
+      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge|merge-deep)["']/u,
       /\b[A-Za-z_$][\w$]*(?:\s*\.\s*merge)?\s*\(/u,
     ],
     sources: [
@@ -2431,7 +2431,9 @@ interface NodePrototypeMergeSink {
     | "vulnerable-lodash-recursive-merge"
     | "lock-resolved-vulnerable-lodash-recursive-merge"
     | "vulnerable-lodash-merge-package-recursive-merge"
-    | "lock-resolved-vulnerable-lodash-merge-package-recursive-merge";
+    | "lock-resolved-vulnerable-lodash-merge-package-recursive-merge"
+    | "vulnerable-merge-deep-recursive-merge"
+    | "lock-resolved-vulnerable-merge-deep-recursive-merge";
 }
 
 interface NodeRuntimeDependency {
@@ -2633,6 +2635,17 @@ function nodeLodashMergePackageVersionIsPrototypePollutionVulnerable(
   );
 }
 
+function nodeMergeDeepVersionIsPrototypePollutionVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return major < 3 || (major === 3 && minor === 0 && patch < 3);
+}
+
 function nodePrototypeMergeSink(
   files: readonly SourceFileSnapshot[],
   path: string,
@@ -2648,7 +2661,7 @@ function nodePrototypeMergeSink(
     kind: "direct" | "receiver";
     local: string;
     line: number;
-    dependencyName: "lodash" | "lodash.merge";
+    dependencyName: "lodash" | "lodash.merge" | "merge-deep";
   }> = [];
   for (let index = 0; index < codeLines.length; index += 1) {
     const structural = codeLines[index] ?? "";
@@ -2674,6 +2687,14 @@ function nodePrototypeMergeSink(
       );
     const packageRequire =
       /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']lodash\.merge["']\s*\)/u.exec(
+        structural,
+      );
+    const mergeDeepImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']merge-deep["']/u.exec(
+        structural,
+      );
+    const mergeDeepRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']merge-deep["']\s*\)/u.exec(
         structural,
       );
     const receiver = defaultOrNamespace?.[1] ?? commonjsReceiver?.[1];
@@ -2703,6 +2724,15 @@ function nodePrototypeMergeSink(
         dependencyName: "lodash.merge",
       });
     }
+    const mergeDeepDirect = mergeDeepImport?.[1] ?? mergeDeepRequire?.[1];
+    if (mergeDeepDirect !== undefined) {
+      bindings.push({
+        kind: "direct",
+        local: mergeDeepDirect,
+        line: index + 1,
+        dependencyName: "merge-deep",
+      });
+    }
   }
   for (const imported of importedJavascriptSymbols(lines)) {
     if (
@@ -2727,9 +2757,13 @@ function nodePrototypeMergeSink(
       dependency === undefined ||
       (binding.dependencyName === "lodash"
         ? !nodeLodashVersionIsPrototypePollutionVulnerable(dependency.version)
-        : !nodeLodashMergePackageVersionIsPrototypePollutionVulnerable(
-            dependency.version,
-          ))
+        : binding.dependencyName === "lodash.merge"
+          ? !nodeLodashMergePackageVersionIsPrototypePollutionVulnerable(
+              dependency.version,
+            )
+          : !nodeMergeDeepVersionIsPrototypePollutionVulnerable(
+              dependency.version,
+            ))
     ) {
       continue;
     }
@@ -2773,13 +2807,17 @@ function nodePrototypeMergeSink(
       return {
         sourceExpressions,
         kind:
-          binding.dependencyName === "lodash.merge"
+          binding.dependencyName === "merge-deep"
             ? dependency.proof === "npm-lockfile"
-              ? "lock-resolved-vulnerable-lodash-merge-package-recursive-merge"
-              : "vulnerable-lodash-merge-package-recursive-merge"
-            : dependency.proof === "npm-lockfile"
-              ? "lock-resolved-vulnerable-lodash-recursive-merge"
-              : "vulnerable-lodash-recursive-merge",
+              ? "lock-resolved-vulnerable-merge-deep-recursive-merge"
+              : "vulnerable-merge-deep-recursive-merge"
+            : binding.dependencyName === "lodash.merge"
+              ? dependency.proof === "npm-lockfile"
+                ? "lock-resolved-vulnerable-lodash-merge-package-recursive-merge"
+                : "vulnerable-lodash-merge-package-recursive-merge"
+              : dependency.proof === "npm-lockfile"
+                ? "lock-resolved-vulnerable-lodash-recursive-merge"
+                : "vulnerable-lodash-recursive-merge",
       };
     }
   }

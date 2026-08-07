@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-merge-deep",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "merge-deep": "3.0.3"
+  }
+}

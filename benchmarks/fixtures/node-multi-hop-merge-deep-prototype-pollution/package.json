@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-merge-deep-prototype-pollution",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "merge-deep": "3.0.2"
+  }
+}

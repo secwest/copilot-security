@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains fifty-four vulnerable/control pairs:
+The versioned corpus currently contains fifty-five vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -158,8 +158,10 @@ fresh npm lockfile resolves either vulnerable or patched Lodash, plus a
 separately versioned standalone `lodash.merge` callable pinned to vulnerable
 4.6.1 and paired with its patched 4.6.2 boundary. The standalone package must
 carry its own manifest or lockfile proof; a declaration for core `lodash`
-cannot authorize it, or vice versa. Three runs per case produce 324 scans in
-the complete corpus.
+cannot authorize it, or vice versa. A further package-isolated pair covers the
+direct `merge-deep` callable at vulnerable 3.0.2 and its patched 3.0.3
+boundary. No declaration for one merge family can authorize another. Three
+runs per case produce 330 scans in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
