@@ -2733,6 +2733,45 @@
         "node-multi-hop-patched-dset/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-object-path-prototype-pollution",
+      "description": "An Express JSON path crosses three relative-import boundaries into object-path 0.11.7 inherited-properties del. A __proto__.toString path deletes the built-in method from Object.prototype and breaks later object coercion.",
+      "fixture": "fixtures/node-multi-hop-object-path-prototype-pollution",
+      "findingsPaths": [
+        "node-multi-hop-object-path-prototype-pollution/run-1/findings.json",
+        "node-multi-hop-object-path-prototype-pollution/run-2/findings.json",
+        "node-multi-hop-object-path-prototype-pollution/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-object-path-inherited-del",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-object-path",
+      "description": "The matched Express source, wrappers, inherited receiver, target, and del call pin object-path 0.11.8, which rejects magic property access before deletion.",
+      "fixture": "fixtures/node-multi-hop-patched-object-path",
+      "findingsPaths": [
+        "node-multi-hop-patched-object-path/run-1/findings.json",
+        "node-multi-hop-patched-object-path/run-2/findings.json",
+        "node-multi-hop-patched-object-path/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

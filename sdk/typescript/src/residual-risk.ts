@@ -712,6 +712,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-object-path-prototype-pollution",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]object-path['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-object-path-method",
+        expression:
+          /\b[A-Za-z_$][\w$]*(?:\s*\.\s*(?:set|ensureExists|push|insert|empty|del))?\s*\(/u,
+        cweIds: ["CWE-1321"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2589,6 +2616,11 @@ interface NodeDsetSink {
   positions: NodeDsetSinkPosition[];
 }
 
+interface NodeObjectPathSink {
+  sourceExpression: string;
+  kind: string;
+}
+
 type NodePrototypeMergeDependencyName =
   | "lodash"
   | "lodash.merge"
@@ -4007,6 +4039,410 @@ function nodeDsetSink(
   return undefined;
 }
 
+type NodeObjectPathMethod =
+  | "set"
+  | "ensureExists"
+  | "push"
+  | "insert"
+  | "empty"
+  | "del";
+
+type NodeObjectPathMode = "legacy-default" | "default" | "inherited";
+
+interface NodeObjectPathApiBinding {
+  local: string;
+  line: number;
+  mode: NodeObjectPathMode;
+  bound: boolean;
+}
+
+interface NodeObjectPathMethodBinding {
+  local: string;
+  line: number;
+  mode: NodeObjectPathMode;
+  bound: boolean;
+  method: NodeObjectPathMethod;
+}
+
+const NODE_OBJECT_PATH_METHODS: readonly NodeObjectPathMethod[] = [
+  "set",
+  "ensureExists",
+  "push",
+  "insert",
+  "empty",
+  "del",
+];
+
+function nodeObjectPathVersionParts(
+  version: string,
+): [number, number, number] | undefined {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return undefined;
+  }
+  return parts as [number, number, number];
+}
+
+function nodeObjectPathRootMode(
+  version: string,
+): NodeObjectPathMode | undefined {
+  const parts = nodeObjectPathVersionParts(version);
+  if (parts === undefined || parts[0] !== 0) return undefined;
+  return parts[1] < 11 ? "legacy-default" : "default";
+}
+
+function nodeObjectPathHasInheritedMode(version: string): boolean {
+  const parts = nodeObjectPathVersionParts(version);
+  return parts !== undefined && parts[0] === 0 && parts[1] >= 11;
+}
+
+function nodeObjectPathMethodIsVulnerable(
+  version: string,
+  mode: NodeObjectPathMode,
+  method: NodeObjectPathMethod,
+): boolean {
+  const parts = nodeObjectPathVersionParts(version);
+  if (parts === undefined || parts[0] !== 0) return false;
+  const [, minor, patch] = parts;
+  if (mode === "legacy-default") {
+    if (minor >= 11) return false;
+    if (minor < 10) return method === "set";
+    return ["set", "ensureExists", "push", "insert"].includes(method);
+  }
+  if (mode !== "inherited" || minor !== 11) return false;
+  return method === "set" || method === "ensureExists" ? patch < 6 : patch < 8;
+}
+
+function nodeObjectPathSinkKind(
+  proof: NodeRuntimeDependency["proof"],
+  mode: NodeObjectPathMode,
+  method: NodeObjectPathMethod,
+): string {
+  const resolvedMethod = method === "ensureExists" ? "ensure-exists" : method;
+  const resolvedMode = mode === "inherited" ? "inherited" : "legacy";
+  return `${proof === "npm-lockfile" ? "lock-resolved-" : ""}vulnerable-object-path-${resolvedMode}-${resolvedMethod}`;
+}
+
+function nodeObjectPathTrueInheritedConfiguration(value: string): boolean {
+  return /(?:^|[{,])\s*includeInheritedProps\s*:\s*true\s*(?:[,}]|$)/u.test(
+    value,
+  );
+}
+
+function nodeObjectPathSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeObjectPathSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "object-path");
+  if (dependency === undefined) return undefined;
+  const rootMode = nodeObjectPathRootMode(dependency.version);
+  if (rootMode === undefined) return undefined;
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const apis: NodeObjectPathApiBinding[] = [];
+  const methods: NodeObjectPathMethodBinding[] = [];
+  const addApi = (binding: NodeObjectPathApiBinding): void => {
+    if (
+      !apis.some(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.line === binding.line &&
+          candidate.mode === binding.mode &&
+          candidate.bound === binding.bound,
+      )
+    ) {
+      apis.push(binding);
+    }
+  };
+  const addMethod = (binding: NodeObjectPathMethodBinding): void => {
+    if (
+      !methods.some(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.line === binding.line &&
+          candidate.mode === binding.mode &&
+          candidate.bound === binding.bound &&
+          candidate.method === binding.method,
+      )
+    ) {
+      methods.push(binding);
+    }
+  };
+
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const defaultImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']object-path["']/u.exec(
+        code,
+      );
+    const commonjs =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']object-path["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directInherited =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']object-path["']\s*\)\s*\.\s*withInheritedProps\s*;?\s*$/u.exec(
+        code,
+      );
+    const directMethod = new RegExp(
+      `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']object-path["']\\s*\\)\\s*\\.\\s*(${NODE_OBJECT_PATH_METHODS.join("|")})\\s*;?\\s*$`,
+      "u",
+    ).exec(code);
+    const root = defaultImport?.[1] ?? commonjs?.[1];
+    if (root !== undefined) {
+      addApi({ local: root, line: index + 1, mode: rootMode, bound: false });
+    }
+    if (
+      directInherited?.[1] !== undefined &&
+      nodeObjectPathHasInheritedMode(dependency.version)
+    ) {
+      addApi({
+        local: directInherited[1],
+        line: index + 1,
+        mode: "inherited",
+        bound: false,
+      });
+    }
+    if (
+      directMethod?.[1] !== undefined &&
+      NODE_OBJECT_PATH_METHODS.includes(directMethod[2] as NodeObjectPathMethod)
+    ) {
+      addMethod({
+        local: directMethod[1],
+        line: index + 1,
+        mode: rootMode,
+        bound: false,
+        method: directMethod[2] as NodeObjectPathMethod,
+      });
+    }
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (imported.moduleSpecifier !== "object-path") continue;
+    if (
+      imported.imported === "withInheritedProps" &&
+      nodeObjectPathHasInheritedMode(dependency.version)
+    ) {
+      addApi({
+        local: imported.local,
+        line: imported.line,
+        mode: "inherited",
+        bound: false,
+      });
+    } else if (
+      NODE_OBJECT_PATH_METHODS.includes(
+        imported.imported as NodeObjectPathMethod,
+      )
+    ) {
+      addMethod({
+        local: imported.local,
+        line: imported.line,
+        mode: rootMode,
+        bound: false,
+        method: imported.imported as NodeObjectPathMethod,
+      });
+    }
+  }
+
+  for (let pass = 0; pass < 3; pass += 1) {
+    for (let index = 0; index < codeLines.length; index += 1) {
+      const code = codeLines[index] ?? "";
+      for (const api of [...apis]) {
+        if (api.line >= index + 1 || api.bound) continue;
+        const escaped = escapeRegularExpression(api.local);
+        const inheritedAlias = new RegExp(
+          `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escaped}\\s*\\.\\s*withInheritedProps\\s*;?\\s*$`,
+          "u",
+        ).exec(code);
+        if (
+          inheritedAlias?.[1] !== undefined &&
+          nodeObjectPathHasInheritedMode(dependency.version)
+        ) {
+          addApi({
+            local: inheritedAlias[1],
+            line: index + 1,
+            mode: "inherited",
+            bound: false,
+          });
+        }
+        const configuredAlias = new RegExp(
+          `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escaped}\\s*\\.\\s*create\\s*\\(([\\s\\S]*)\\)\\s*;?\\s*$`,
+          "u",
+        ).exec(code);
+        if (
+          configuredAlias?.[1] !== undefined &&
+          configuredAlias[2] !== undefined &&
+          nodeObjectPathHasInheritedMode(dependency.version) &&
+          nodeObjectPathTrueInheritedConfiguration(configuredAlias[2])
+        ) {
+          addApi({
+            local: configuredAlias[1],
+            line: index + 1,
+            mode: "inherited",
+            bound: false,
+          });
+        }
+        const boundAlias = new RegExp(
+          `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escaped}\\s*\\((?!\\s*\\))([\\s\\S]*)\\)\\s*;?\\s*$`,
+          "u",
+        ).exec(code);
+        if (boundAlias?.[1] !== undefined) {
+          addApi({
+            local: boundAlias[1],
+            line: index + 1,
+            mode: api.mode,
+            bound: true,
+          });
+        }
+        const memberBinding = new RegExp(
+          `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escaped}\\s*\\.\\s*(${NODE_OBJECT_PATH_METHODS.join("|")})\\s*;?\\s*$`,
+          "u",
+        ).exec(code);
+        if (
+          memberBinding?.[1] !== undefined &&
+          NODE_OBJECT_PATH_METHODS.includes(
+            memberBinding[2] as NodeObjectPathMethod,
+          )
+        ) {
+          addMethod({
+            local: memberBinding[1],
+            line: index + 1,
+            mode: api.mode,
+            bound: api.bound,
+            method: memberBinding[2] as NodeObjectPathMethod,
+          });
+        }
+        const destructured = new RegExp(
+          `^\\s*(?:const|let|var)\\s*\\{\\s*(${NODE_OBJECT_PATH_METHODS.join("|")})(?:\\s*:\\s*([A-Za-z_$][\\w$]*))?\\s*\\}\\s*=\\s*${escaped}\\s*;?\\s*$`,
+          "u",
+        ).exec(code);
+        if (
+          destructured?.[1] !== undefined &&
+          NODE_OBJECT_PATH_METHODS.includes(
+            destructured[1] as NodeObjectPathMethod,
+          )
+        ) {
+          addMethod({
+            local: destructured[2] ?? destructured[1],
+            line: index + 1,
+            mode: api.mode,
+            bound: api.bound,
+            method: destructured[1] as NodeObjectPathMethod,
+          });
+        }
+      }
+    }
+  }
+
+  const bindingIsUsable = (binding: { local: string; line: number }): boolean =>
+    binding.line < line &&
+    wrapper?.parameters.includes(binding.local) !== true &&
+    !javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      line + 1,
+    );
+  for (const api of apis) {
+    if (!bindingIsUsable(api)) continue;
+    const escaped = escapeRegularExpression(api.local);
+    for (const method of NODE_OBJECT_PATH_METHODS) {
+      if (
+        !nodeObjectPathMethodIsVulnerable(dependency.version, api.mode, method)
+      ) {
+        continue;
+      }
+      if (
+        structuralLines
+          .slice(api.line, Math.max(api.line, line))
+          .some((candidate) =>
+            new RegExp(
+              `\\b${escaped}\\s*\\.\\s*${method}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+              "u",
+            ).test(candidate),
+          )
+      ) {
+        continue;
+      }
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        line,
+        new RegExp(`\\b${escaped}\\s*\\.\\s*${method}\\s*\\(`, "u"),
+      );
+      const sourceExpression = arguments_?.[api.bound ? 0 : 1]?.trim() ?? "";
+      if (sourceExpression === "") continue;
+      return {
+        sourceExpression,
+        kind: nodeObjectPathSinkKind(dependency.proof, api.mode, method),
+      };
+    }
+    if (
+      api.mode !== "default" ||
+      !nodeObjectPathHasInheritedMode(dependency.version)
+    ) {
+      continue;
+    }
+    for (const method of NODE_OBJECT_PATH_METHODS) {
+      if (
+        !nodeObjectPathMethodIsVulnerable(
+          dependency.version,
+          "inherited",
+          method,
+        )
+      ) {
+        continue;
+      }
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        line,
+        new RegExp(
+          `\\b${escaped}\\s*\\.\\s*withInheritedProps\\s*\\.\\s*${method}\\s*\\(`,
+          "u",
+        ),
+      );
+      const sourceExpression = arguments_?.[1]?.trim() ?? "";
+      if (sourceExpression === "") continue;
+      return {
+        sourceExpression,
+        kind: nodeObjectPathSinkKind(dependency.proof, "inherited", method),
+      };
+    }
+  }
+  for (const methodBinding of methods) {
+    if (
+      !bindingIsUsable(methodBinding) ||
+      !nodeObjectPathMethodIsVulnerable(
+        dependency.version,
+        methodBinding.mode,
+        methodBinding.method,
+      )
+    ) {
+      continue;
+    }
+    const escaped = escapeRegularExpression(methodBinding.local);
+    const arguments_ = javascriptCallArgumentsAtLine(
+      lines,
+      line,
+      new RegExp(`\\b${escaped}\\s*\\(`, "u"),
+    );
+    const sourceExpression =
+      arguments_?.[methodBinding.bound ? 0 : 1]?.trim() ?? "";
+    if (sourceExpression === "") continue;
+    return {
+      sourceExpression,
+      kind: nodeObjectPathSinkKind(
+        dependency.proof,
+        methodBinding.mode,
+        methodBinding.method,
+      ),
+    };
+  }
+  return undefined;
+}
+
 function nodePrototypeCopySink(
   lines: readonly string[],
   line: number,
@@ -4120,7 +4556,8 @@ function frameworkDataflowRecords(
                 model.id === "node-http-js-toml-prototype-pollution" ||
                 model.id === "node-http-jsonpath-plus-code-injection" ||
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
-                model.id === "node-http-dset-prototype-pollution"
+                model.id === "node-http-dset-prototype-pollution" ||
+                model.id === "node-http-object-path-prototype-pollution"
                 ? 64
                 : 8,
             )
@@ -4189,6 +4626,10 @@ function frameworkDataflowRecords(
       const nodeDset =
         model.id === "node-http-dset-prototype-pollution"
           ? nodeDsetSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeObjectPath =
+        model.id === "node-http-object-path-prototype-pollution"
+          ? nodeObjectPathSink(files, path, lines, sink.line)
           : undefined;
       const nodePathSink =
         model.id === "node-http-path"
@@ -4289,6 +4730,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-dset-prototype-pollution" &&
         nodeDset === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-object-path-prototype-pollution" &&
+        nodeObjectPath === undefined
       ) {
         continue;
       }
@@ -4450,7 +4897,8 @@ function frameworkDataflowRecords(
         nodePrototypeMerge?.sourceExpressions.join("\n") ??
         nodeJsToml?.sourceExpression ??
         nodeJsonPathPlus?.sourceExpression ??
-        nodeFlatUnflatten?.sourceExpression;
+        nodeFlatUnflatten?.sourceExpression ??
+        nodeObjectPath?.sourceExpression;
       const nonDsetSource =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -4754,6 +5202,7 @@ function frameworkDataflowRecords(
         aggregateSinkMetadata?.kind ??
         bulkSinkMetadata?.kind ??
         nodeDsetResolution?.position.kind ??
+        nodeObjectPath?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
@@ -8700,7 +9149,8 @@ function javascriptFrameworkWrapperSummaries(
               model.id === "node-http-js-toml-prototype-pollution" ||
                 model.id === "node-http-jsonpath-plus-code-injection" ||
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
-                model.id === "node-http-dset-prototype-pollution"
+                model.id === "node-http-dset-prototype-pollution" ||
+                model.id === "node-http-object-path-prototype-pollution"
                 ? 64
                 : 32,
             );
@@ -8761,6 +9211,10 @@ function javascriptFrameworkWrapperSummaries(
           const nodeDset =
             model.id === "node-http-dset-prototype-pollution"
               ? nodeDsetSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeObjectPath =
+            model.id === "node-http-object-path-prototype-pollution"
+              ? nodeObjectPathSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -8839,6 +9293,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-object-path-prototype-pollution" &&
+            nodeObjectPath === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -8879,6 +9339,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsToml?.sourceExpression ??
             nodeJsonPathPlus?.sourceExpression ??
             nodeFlatUnflatten?.sourceExpression ??
+            nodeObjectPath?.sourceExpression ??
             (nodeDset === undefined
               ? undefined
               : nodeDset.positions
@@ -9069,6 +9530,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(dsetSinkPosition === undefined
                   ? {}
                   : { kind: dsetSinkPosition.kind }),
+                ...(nodeObjectPath === undefined
+                  ? {}
+                  : { kind: nodeObjectPath.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}

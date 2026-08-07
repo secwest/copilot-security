@@ -194,6 +194,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-dset-prototype-pollution",
         "node-multi-hop-patched-dset",
       ],
+      [
+        "node-multi-hop-object-path-prototype-pollution",
+        "node-multi-hop-patched-object-path",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

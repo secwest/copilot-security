@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-object-path-prototype-pollution",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "object-path": "0.11.7"
+  }
+}
