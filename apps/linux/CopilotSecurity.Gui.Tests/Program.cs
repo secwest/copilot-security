@@ -76,12 +76,18 @@ static void TestHeadlessWindow()
         Dispatcher.UIThread.RunJobs();
 
         var shutdownRequested = false;
+        using var fallbackRequested = new ManualResetEventSlim();
         var smokeWindow = new MainWindow(platform);
-        App.ConfigureUiSmokeShutdown(smokeWindow, () => shutdownRequested = true);
+        App.ConfigureUiSmokeShutdown(
+            smokeWindow,
+            () => shutdownRequested = true,
+            fallbackRequested.Set,
+            TimeSpan.FromMilliseconds(25));
         smokeWindow.Show();
         Dispatcher.UIThread.RunJobs();
         Assert.True(shutdownRequested);
         Assert.False(smokeWindow.IsVisible);
+        Assert.True(fallbackRequested.Wait(TimeSpan.FromSeconds(1)));
     }
     finally
     {

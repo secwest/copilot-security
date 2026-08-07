@@ -26,26 +26,48 @@ public sealed partial class App : Application
             if (desktop.Args?.Contains("--ui-smoke-test", StringComparer.Ordinal) == true)
             {
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-                ConfigureUiSmokeShutdown(window, () => desktop.Shutdown(0));
+                ConfigureUiSmokeShutdown(
+                    window,
+                    () => desktop.Shutdown(0),
+                    () => Environment.Exit(0),
+                    TimeSpan.FromSeconds(5));
             }
         }
         base.OnFrameworkInitializationCompleted();
     }
 
-    public static void ConfigureUiSmokeShutdown(Window window, Action shutdown)
+    public static void ConfigureUiSmokeShutdown(
+        Window window,
+        Action shutdown,
+        Action forceExit,
+        TimeSpan fallbackDelay)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(shutdown);
-        window.Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+        ArgumentNullException.ThrowIfNull(forceExit);
+        if (fallbackDelay <= TimeSpan.Zero)
         {
-            try
+            throw new ArgumentOutOfRangeException(nameof(fallbackDelay));
+        }
+
+        window.Opened += (_, _) =>
+        {
+            _ = Task.Run(async () =>
             {
-                window.Close();
-            }
-            finally
+                await Task.Delay(fallbackDelay).ConfigureAwait(false);
+                forceExit();
+            });
+            Dispatcher.UIThread.Post(() =>
             {
-                shutdown();
-            }
-        });
+                try
+                {
+                    window.Close();
+                }
+                finally
+                {
+                    shutdown();
+                }
+            });
+        };
     }
 }
