@@ -295,6 +295,11 @@ ranges, literal deep flag, package-isolated dependency proof, and the shared
 the later reviewed below-0.4.8 plus exact-1.0.0 vulnerable union, its primitive
 target shift, and the completed 0.4.8/1.0.1 dangerous-key repair. This is a
 measured improvement over CodeQL's older below-0.4.7 package model.
+The next pair covers `merge.recursive`, the complete later-reviewed range below
+2.1.1, its optional clone-boolean call form, and the nested dangerous-key bypass
+left in both 1.2.1 and 2.1.0. The matched 2.1.1 control repeats the same
+pre-existing nested destination and proves that validation now also runs in the
+recursive helper. This extends CodeQL's older below-1.2.1 package boundary.
 Matched controls preserve each call and topology while selecting a patched
 version.
 Deterministic regressions accept official default, namespace, CommonJS,

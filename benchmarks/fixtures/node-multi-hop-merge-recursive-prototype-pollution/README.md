@@ -1,0 +1,3 @@
+# Multi-hop vulnerable merge.recursive call
+
+An Express JSON object crosses three relative-import wrappers into a source operand of `merge.recursive(target, ...sources)`. The nearest runtime manifest pins `merge` 2.1.0. Its outer merge loop rejects `__proto__`, `constructor`, and `prototype`, but the recursive helper does not repeat that validation, so a parser-produced dangerous key nested beneath a pre-existing destination object can still traverse into `Object.prototype`. The route demonstrates the resulting cross-object authorization effect through a fresh policy object. This case exercises the later reviewed range below 2.1.1, including releases omitted by CodeQL's older below-1.2.1 boundary.

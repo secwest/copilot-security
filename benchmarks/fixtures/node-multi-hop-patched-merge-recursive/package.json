@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-merge-recursive",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "merge": "2.1.1"
+  }
+}

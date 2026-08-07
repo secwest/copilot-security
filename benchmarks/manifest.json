@@ -2538,6 +2538,45 @@
         "node-multi-hop-patched-mixin-deep/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-merge-recursive-prototype-pollution",
+      "description": "An Express JSON object crosses three relative-import boundaries into a source operand of merge.recursive(target, ...sources) under a nearest runtime manifest pinned to vulnerable merge 2.1.0, whose outer dangerous-key filter is bypassed by a nested own __proto__ key beneath a pre-existing destination object because the recursive helper does not repeat the filter.",
+      "fixture": "fixtures/node-multi-hop-merge-recursive-prototype-pollution",
+      "findingsPaths": [
+        "node-multi-hop-merge-recursive-prototype-pollution/run-1/findings.json",
+        "node-multi-hop-merge-recursive-prototype-pollution/run-2/findings.json",
+        "node-multi-hop-merge-recursive-prototype-pollution/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-merge-recursive-merge",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-merge-recursive",
+      "description": "The same Express, three-relay, nested destination, and merge.recursive topology pins merge 2.1.1, whose completed repair rejects __proto__, constructor, and prototype inside the recursive helper as well as the outer loop.",
+      "fixture": "fixtures/node-multi-hop-patched-merge-recursive",
+      "findingsPaths": [
+        "node-multi-hop-patched-merge-recursive/run-1/findings.json",
+        "node-multi-hop-patched-merge-recursive/run-2/findings.json",
+        "node-multi-hop-patched-merge-recursive/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

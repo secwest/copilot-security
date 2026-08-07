@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-merge-recursive-prototype-pollution",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "merge": "2.1.0"
+  }
+}

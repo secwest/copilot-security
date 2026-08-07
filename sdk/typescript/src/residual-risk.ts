@@ -583,7 +583,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
     activation: [
-      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge|merge-deep|extend|deep-extend|just-extend|merge-options|node\.extend|assign-deep|mixin-deep)["']/u,
+      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge|merge-deep|merge|extend|deep-extend|just-extend|merge-options|node\.extend|assign-deep|mixin-deep)["']/u,
       /\b[A-Za-z_$][\w$]*(?:\s*\.\s*merge)?\s*\(/u,
     ],
     sources: [
@@ -2447,7 +2447,9 @@ interface NodePrototypeMergeSink {
     | "vulnerable-assign-deep-recursive-merge"
     | "lock-resolved-vulnerable-assign-deep-recursive-merge"
     | "vulnerable-mixin-deep-recursive-merge"
-    | "lock-resolved-vulnerable-mixin-deep-recursive-merge";
+    | "lock-resolved-vulnerable-mixin-deep-recursive-merge"
+    | "vulnerable-merge-recursive-merge"
+    | "lock-resolved-vulnerable-merge-recursive-merge";
 }
 
 type NodePrototypeMergeDependencyName =
@@ -2460,7 +2462,8 @@ type NodePrototypeMergeDependencyName =
   | "merge-options"
   | "node.extend"
   | "assign-deep"
-  | "mixin-deep";
+  | "mixin-deep"
+  | "merge";
 
 interface NodeRuntimeDependency {
   manifestPath: string;
@@ -2763,6 +2766,19 @@ function nodeMixinDeepVersionIsPrototypePollutionVulnerable(
   return vulnerableBeforeOneFix || vulnerableTwoRelease;
 }
 
+function nodeMergeVersionIsPrototypePollutionVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    major < 2 || (major === 2 && (minor < 1 || (minor === 1 && patch < 1)))
+  );
+}
+
 function nodePrototypeMergeVersionIsVulnerable(
   dependencyName: NodePrototypeMergeDependencyName,
   version: string,
@@ -2790,6 +2806,8 @@ function nodePrototypeMergeVersionIsVulnerable(
       return nodeAssignDeepVersionIsPrototypePollutionVulnerable(version);
     case "mixin-deep":
       return nodeMixinDeepVersionIsPrototypePollutionVulnerable(version);
+    case "merge":
+      return nodeMergeVersionIsPrototypePollutionVulnerable(version);
   }
 }
 
@@ -2839,6 +2857,10 @@ function nodePrototypeMergeSinkKind(
       return lockResolved
         ? "lock-resolved-vulnerable-mixin-deep-recursive-merge"
         : "vulnerable-mixin-deep-recursive-merge";
+    case "merge":
+      return lockResolved
+        ? "lock-resolved-vulnerable-merge-recursive-merge"
+        : "vulnerable-merge-recursive-merge";
   }
 }
 
@@ -2858,6 +2880,7 @@ function nodePrototypeMergeSink(
     local: string;
     line: number;
     dependencyName: NodePrototypeMergeDependencyName;
+    member?: "merge" | "recursive";
   }> = [];
   for (let index = 0; index < codeLines.length; index += 1) {
     const structural = codeLines[index] ?? "";
@@ -2949,6 +2972,18 @@ function nodePrototypeMergeSink(
       /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']mixin-deep["']\s*\)/u.exec(
         structural,
       );
+    const mergeReceiverImport =
+      /^\s*import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s+["']merge["']/u.exec(
+        structural,
+      );
+    const mergeReceiverRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']merge["']\s*\)/u.exec(
+        structural,
+      );
+    const mergeRecursiveRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']merge["']\s*\)\s*\.\s*recursive\b/u.exec(
+        structural,
+      );
     const receiver = defaultOrNamespace?.[1] ?? commonjsReceiver?.[1];
     const direct = directImport?.[1] ?? directRequire?.[1];
     if (receiver !== undefined) {
@@ -2957,6 +2992,7 @@ function nodePrototypeMergeSink(
         local: receiver,
         line: index + 1,
         dependencyName: "lodash",
+        member: "merge",
       });
     }
     if (direct !== undefined) {
@@ -3049,6 +3085,25 @@ function nodePrototypeMergeSink(
         dependencyName: "mixin-deep",
       });
     }
+    const mergeReceiver = mergeReceiverImport?.[1] ?? mergeReceiverRequire?.[1];
+    if (mergeReceiver !== undefined) {
+      bindings.push({
+        kind: "receiver",
+        local: mergeReceiver,
+        line: index + 1,
+        dependencyName: "merge",
+        member: "recursive",
+      });
+    }
+    const mergeRecursiveDirect = mergeRecursiveRequire?.[1];
+    if (mergeRecursiveDirect !== undefined) {
+      bindings.push({
+        kind: "direct",
+        local: mergeRecursiveDirect,
+        line: index + 1,
+        dependencyName: "merge",
+      });
+    }
   }
   for (const imported of importedJavascriptSymbols(lines)) {
     if (
@@ -3060,6 +3115,17 @@ function nodePrototypeMergeSink(
         local: imported.local,
         line: imported.line,
         dependencyName: "lodash",
+      });
+    }
+    if (
+      imported.moduleSpecifier === "merge" &&
+      imported.imported === "recursive"
+    ) {
+      bindings.push({
+        kind: "direct",
+        local: imported.local,
+        line: imported.line,
+        dependencyName: "merge",
       });
     }
   }
@@ -3091,13 +3157,14 @@ function nodePrototypeMergeSink(
       continue;
     }
     const escapedLocal = escapeRegularExpression(binding.local);
+    const escapedMember = escapeRegularExpression(binding.member ?? "merge");
     if (
       binding.kind === "receiver" &&
       structuralLines
         .slice(binding.line, Math.max(binding.line, line))
         .some((candidate) =>
           new RegExp(
-            `\\b${escapedLocal}\\s*\\.\\s*merge\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            `\\b${escapedLocal}\\s*\\.\\s*${escapedMember}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
             "u",
           ).test(candidate),
         )
@@ -3106,7 +3173,10 @@ function nodePrototypeMergeSink(
     }
     const callee =
       binding.kind === "receiver"
-        ? new RegExp(`\\b${escapedLocal}\\s*\\.\\s*merge\\s*\\(`, "u")
+        ? new RegExp(
+            `\\b${escapedLocal}\\s*\\.\\s*${escapedMember}\\s*\\(`,
+            "u",
+          )
         : new RegExp(`\\b${escapedLocal}\\s*\\(`, "u");
     const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
     const requiresDeepFlag =
