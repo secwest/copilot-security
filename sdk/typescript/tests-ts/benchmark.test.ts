@@ -210,6 +210,7 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-axios-prototype-gadget-chain",
         "node-multi-hop-patched-axios-prototype-gadget-chain",
       ],
+      ["node-multi-hop-tmp-path-traversal", "node-multi-hop-patched-tmp"],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

@@ -794,6 +794,43 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-tmp-path-traversal",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]tmp['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-tmp-path-traversal",
+        expression:
+          /\b[A-Za-z_$][\w$]*(?:\s*\.\s*(?:file|fileSync|dir|dirSync))?\s*\(/u,
+        cweIds: ["CWE-22"],
+      },
+    ],
+    controls: [
+      {
+        kind: "temporary-name-component-basename",
+        expression: /\bpath\s*\.\s*basename\s*\(/u,
+      },
+      {
+        kind: "temporary-name-component-allowlist",
+        expression:
+          /\b(?:allowlist|allowedPrefix|allowedPostfix|safePrefix|safePostfix|validateTmp|validateTemporary)\b|\.test\s*\(/iu,
+      },
+    ],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2686,6 +2723,11 @@ interface NodeLodashDeleteSink {
 }
 
 interface NodeImmutablePrototypeSink {
+  sourceExpressions: string[];
+  kind: string;
+}
+
+interface NodeTmpPathSink {
   sourceExpressions: string[];
   kind: string;
 }
@@ -5138,6 +5180,223 @@ function nodeImmutablePrototypeSink(
   return undefined;
 }
 
+type NodeTmpCreatorMethod = "file" | "fileSync" | "dir" | "dirSync";
+
+interface NodeTmpBinding {
+  kind: "direct" | "receiver";
+  local: string;
+  line: number;
+  method?: NodeTmpCreatorMethod;
+}
+
+function nodeTmpVersionIsPathTraversalVulnerable(version: string): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return major === 0 && (minor < 2 || (minor === 2 && patch < 6));
+}
+
+function nodeTmpMethodName(method: NodeTmpCreatorMethod): string {
+  return method.replace(/([a-z])([A-Z])/gu, "$1-$2").toLowerCase();
+}
+
+function nodeTmpSinkKind(
+  method: NodeTmpCreatorMethod,
+  dependency: NodeRuntimeDependency,
+): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  return `${lockPrefix}vulnerable-tmp-${nodeTmpMethodName(method)}-path-traversal`;
+}
+
+const NODE_TMP_PATH_OPTIONS = ["prefix", "postfix", "template", "dir"] as const;
+
+function nodeTmpOptionSourceExpressions(
+  lines: readonly string[],
+  line: number,
+  expression: string,
+): string[] {
+  const original = expression.trim();
+  if (original === "") return [];
+  const resolved =
+    resolveJavascriptExpression(lines, original, line)?.value.trim() ??
+    original;
+  if (!resolved.startsWith("{") || !resolved.endsWith("}")) {
+    return /^(?:undefined|null|true|false|[+-]?\d+(?:\.\d+)?|['"`][\s\S]*['"`]|(?:async\s+)?(?:function\b|\([^)]*\)\s*=>))/u.test(
+      resolved,
+    )
+      ? []
+      : [original];
+  }
+  const entries = splitJavascriptArguments(resolved.slice(1, -1));
+  const explicitlyDefinedAfter = (start: number): Set<string> => {
+    const found = new Set<string>();
+    for (const entry of entries.slice(start + 1)) {
+      for (const option of NODE_TMP_PATH_OPTIONS) {
+        if (
+          new RegExp(
+            `^\\s*(?:${option}|['"]${option}['"])\\s*(?::|$)`,
+            "u",
+          ).test(entry)
+        ) {
+          found.add(option);
+        }
+      }
+    }
+    return found;
+  };
+  const sources: string[] = [];
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]?.trim() ?? "";
+    const spread = /^\.\.\.([\s\S]+)$/u.exec(entry)?.[1]?.trim();
+    if (spread !== undefined) {
+      if (explicitlyDefinedAfter(index).size < NODE_TMP_PATH_OPTIONS.length) {
+        sources.push(spread);
+      }
+      continue;
+    }
+    for (const option of NODE_TMP_PATH_OPTIONS) {
+      const value = javascriptObjectPropertyValue(`{${entry}}`, option);
+      if (value !== undefined) sources.push(value);
+    }
+  }
+  return [...new Set(sources.filter(Boolean))];
+}
+
+function nodeTmpPathSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeTmpPathSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "tmp");
+  if (
+    dependency === undefined ||
+    !nodeTmpVersionIsPathTraversalVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: NodeTmpBinding[] = [];
+  const addBinding = (binding: NodeTmpBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.kind === binding.kind &&
+          candidate.local === binding.local &&
+          candidate.line === binding.line &&
+          candidate.method === binding.method,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+  const methodPattern = "file|fileSync|dir|dirSync";
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)(?:\s*,\s*\{[^}]*\})?\s+from\s+['"]tmp['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]tmp['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]tmp['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directMember = new RegExp(
+      `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*['"]tmp['"]\\s*\\)\\s*\\.\\s*(${methodPattern})\\s*;?\\s*$`,
+      "u",
+    ).exec(code);
+    if (receiver?.[1] !== undefined) {
+      addBinding({
+        kind: "receiver",
+        local: receiver[1],
+        line: index + 1,
+      });
+    }
+    if (directMember?.[1] !== undefined && directMember[2] !== undefined) {
+      addBinding({
+        kind: "direct",
+        local: directMember[1],
+        line: index + 1,
+        method: directMember[2] as NodeTmpCreatorMethod,
+      });
+    }
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "tmp" &&
+      new RegExp(`^(?:${methodPattern})$`, "u").test(imported.imported)
+    ) {
+      addBinding({
+        kind: "direct",
+        local: imported.local,
+        line: imported.line,
+        method: imported.imported as NodeTmpCreatorMethod,
+      });
+    }
+  }
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const methods: readonly NodeTmpCreatorMethod[] =
+      binding.method === undefined
+        ? ["file", "fileSync", "dir", "dirSync"]
+        : [binding.method];
+    for (const method of methods) {
+      const escaped = escapeRegularExpression(binding.local);
+      if (
+        binding.kind === "receiver" &&
+        structuralLines
+          .slice(binding.line, Math.max(binding.line, line))
+          .some((candidate) =>
+            new RegExp(
+              `\\b${escaped}\\s*\\.\\s*${method}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+              "u",
+            ).test(candidate),
+          )
+      ) {
+        continue;
+      }
+      const callee =
+        binding.kind === "receiver"
+          ? new RegExp(`\\b${escaped}\\s*\\.\\s*${method}\\s*\\(`, "u")
+          : new RegExp(`\\b${escaped}\\s*\\(`, "u");
+      const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+      const options = arguments_?.[0];
+      if (options === undefined) continue;
+      const sourceExpressions = nodeTmpOptionSourceExpressions(
+        lines,
+        line,
+        options,
+      );
+      if (sourceExpressions.length === 0) continue;
+      return {
+        sourceExpressions,
+        kind: nodeTmpSinkKind(method, dependency),
+      };
+    }
+  }
+  return undefined;
+}
+
 function nodePrototypeCopySink(
   lines: readonly string[],
   line: number,
@@ -5254,7 +5513,8 @@ function frameworkDataflowRecords(
                 model.id === "node-http-dset-prototype-pollution" ||
                 model.id === "node-http-object-path-prototype-pollution" ||
                 model.id === "node-http-lodash-prototype-deletion" ||
-                model.id === "node-http-immutable-prototype-replacement"
+                model.id === "node-http-immutable-prototype-replacement" ||
+                model.id === "node-http-tmp-path-traversal"
                 ? 64
                 : 8,
             )
@@ -5335,6 +5595,10 @@ function frameworkDataflowRecords(
       const nodeImmutablePrototype =
         model.id === "node-http-immutable-prototype-replacement"
           ? nodeImmutablePrototypeSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeTmpPath =
+        model.id === "node-http-tmp-path-traversal"
+          ? nodeTmpPathSink(files, path, lines, sink.line)
           : undefined;
       const nodePathSink =
         model.id === "node-http-path"
@@ -5453,6 +5717,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-immutable-prototype-replacement" &&
         nodeImmutablePrototype === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-tmp-path-traversal" &&
+        nodeTmpPath === undefined
       ) {
         continue;
       }
@@ -5617,7 +5887,8 @@ function frameworkDataflowRecords(
         nodeFlatUnflatten?.sourceExpression ??
         nodeObjectPath?.sourceExpression ??
         nodeLodashDelete?.sourceExpressions.join("\n") ??
-        nodeImmutablePrototype?.sourceExpressions.join("\n");
+        nodeImmutablePrototype?.sourceExpressions.join("\n") ??
+        nodeTmpPath?.sourceExpressions.join("\n");
       const nonDsetSource =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -5924,6 +6195,7 @@ function frameworkDataflowRecords(
         nodeObjectPath?.kind ??
         nodeLodashDelete?.kind ??
         nodeImmutablePrototype?.kind ??
+        nodeTmpPath?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
@@ -10303,7 +10575,8 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-dset-prototype-pollution" ||
                 model.id === "node-http-object-path-prototype-pollution" ||
                 model.id === "node-http-lodash-prototype-deletion" ||
-                model.id === "node-http-immutable-prototype-replacement"
+                model.id === "node-http-immutable-prototype-replacement" ||
+                model.id === "node-http-tmp-path-traversal"
                 ? 64
                 : 32,
             );
@@ -10381,6 +10654,10 @@ function javascriptFrameworkWrapperSummaries(
                   file.lines,
                   sink.line,
                 )
+              : undefined;
+          const nodeTmpPath =
+            model.id === "node-http-tmp-path-traversal"
+              ? nodeTmpPathSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -10477,6 +10754,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-tmp-path-traversal" &&
+            nodeTmpPath === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -10520,6 +10803,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeObjectPath?.sourceExpression ??
             nodeLodashDelete?.sourceExpressions.join("\n") ??
             nodeImmutablePrototype?.sourceExpressions.join("\n") ??
+            nodeTmpPath?.sourceExpressions.join("\n") ??
             (nodeDset === undefined
               ? undefined
               : nodeDset.positions
@@ -10719,6 +11003,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeImmutablePrototype === undefined
                   ? {}
                   : { kind: nodeImmutablePrototype.kind }),
+                ...(nodeTmpPath === undefined
+                  ? {}
+                  : { kind: nodeTmpPath.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}

@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-tmp",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "tmp": "0.2.6"
+  }
+}

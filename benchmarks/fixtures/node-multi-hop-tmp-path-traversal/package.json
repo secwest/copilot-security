@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-tmp-path-traversal",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "tmp": "0.2.5"
+  }
+}

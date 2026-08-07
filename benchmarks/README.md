@@ -377,6 +377,26 @@ stage, `proxy:false` prevents routing but can still leave inherited validator
 denial of service, so it is recorded as counterevidence rather than automatic
 suppression.
 
+`node-tmp-path-traversal-manifest.json` measures a current package/API/option
+boundary that generic filesystem sinks miss. The positive sends an Express
+query prefix through three relative-import wrappers into `tmp.fileSync` 0.2.5;
+the `../` component escapes the intended temporary root before protected export
+content is written through the returned descriptor. The topology-identical
+0.2.6 control retains the source, creator, option, and write while measuring the
+upstream relative-component rejection. Deterministic regressions cover default,
+namespace, TypeScript import-equals, named and destructured creators, direct
+CommonJS members, and CommonJS receivers; asynchronous and synchronous file and
+directory creation; `prefix`, `postfix`, `template`, `dir`, and unresolved
+option spreads; exact and fresh declaration-consistent npm v2/v3 proof;
+candidate basename and allowlist controls; cross-file wrappers; and dense call
+sites. Patched, development-only, wrong-package, wrong-method, fixed-option,
+fully overwritten spread, reassigned, shadowed, lockfile-free, inconsistent,
+and v1-lock cases remain negative. Dependency-free witnesses reproduce actual
+directory escape and protected-content placement without claiming a chosen
+filename overwrite, then prove the repaired prefix rejection. A separate live
+matrix confirms both prefix traversal and the older sibling-prefix `dir`
+containment bypass under 0.2.5 and their rejection under 0.2.6.
+
 `node-js-toml-prototype-pollution-manifest.json` broadens the measured parser
 surface beyond recursive merge helpers. Its positive sends an Express TOML body
 through three relative-import wrappers into the official `js-toml.load(text)`

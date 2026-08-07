@@ -2889,6 +2889,45 @@
         "node-multi-hop-patched-axios-prototype-gadget-chain/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-tmp-path-traversal",
+      "description": "An Express query prefix crosses three relative-import boundaries into tmp 0.2.5 fileSync, escapes the intended temporary root, and places protected export content in the adjacent directory.",
+      "fixture": "fixtures/node-multi-hop-tmp-path-traversal",
+      "findingsPaths": [
+        "node-multi-hop-tmp-path-traversal/run-1/findings.json",
+        "node-multi-hop-tmp-path-traversal/run-2/findings.json",
+        "node-multi-hop-tmp-path-traversal/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-tmp-prefix-path-traversal",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-tmp",
+      "description": "The matched Express source, wrappers, creator API, option position, and export write pin tmp 0.2.6, which rejects relative prefix components before creation.",
+      "fixture": "fixtures/node-multi-hop-patched-tmp",
+      "findingsPaths": [
+        "node-multi-hop-patched-tmp/run-1/findings.json",
+        "node-multi-hop-patched-tmp/run-2/findings.json",
+        "node-multi-hop-patched-tmp/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }
