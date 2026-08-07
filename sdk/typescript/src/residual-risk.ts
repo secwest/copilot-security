@@ -831,6 +831,42 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-postcss-source-map-traversal",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]postcss['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|data|files|form|json|params|query)\b|\bctx\.(?:params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-request-body",
+        expression:
+          /\b(?:req|request)\.(?:arrayBuffer|blob|formData|json|text)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-postcss-source-map-load",
+        expression: /\.\s*(?:parse|process)\s*\(|\b[A-Za-z_$][\w$]*\s*\(/u,
+        cweIds: ["CWE-22"],
+      },
+    ],
+    controls: [
+      {
+        kind: "postcss-source-map-loading-disabled",
+        expression: /\bmap\s*:\s*false\b|\bprev\s*:\s*false\b/u,
+      },
+      {
+        kind: "postcss-source-map-output-boundary",
+        expression:
+          /\b(?:result|output)\s*\.\s*map\b|\b(?:res|response)\.(?:json|send)\s*\(/iu,
+      },
+    ],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2728,6 +2764,11 @@ interface NodeImmutablePrototypeSink {
 }
 
 interface NodeTmpPathSink {
+  sourceExpressions: string[];
+  kind: string;
+}
+
+interface NodePostcssSourceMapSink {
   sourceExpressions: string[];
   kind: string;
 }
@@ -5397,6 +5438,274 @@ function nodeTmpPathSink(
   return undefined;
 }
 
+type NodePostcssOperation = "parse" | "process";
+
+interface NodePostcssBinding {
+  kind: "parse" | "processor" | "root";
+  local: string;
+  line: number;
+}
+
+function nodePostcssVersionIsSourceMapTraversalVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    major < 8 || (major === 8 && (minor < 5 || (minor === 5 && patch <= 17)))
+  );
+}
+
+function nodePostcssMapLoadingDisabled(
+  lines: readonly string[],
+  line: number,
+  options: string | undefined,
+): boolean {
+  if (options === undefined) return false;
+  const resolvedOptions =
+    resolveJavascriptExpression(lines, options.trim(), line)?.value.trim() ??
+    options.trim();
+  if (!resolvedOptions.startsWith("{") || !resolvedOptions.endsWith("}")) {
+    return false;
+  }
+  const map = javascriptObjectPropertyValue(resolvedOptions, "map");
+  if (map === undefined) return false;
+  const resolvedMap =
+    resolveJavascriptExpression(lines, map.trim(), line)?.value.trim() ??
+    map.trim();
+  if (resolvedMap === "false") return true;
+  if (!resolvedMap.startsWith("{") || !resolvedMap.endsWith("}")) return false;
+  const previous = javascriptObjectPropertyValue(resolvedMap, "prev");
+  if (previous === undefined) return false;
+  return (
+    (resolveJavascriptExpression(lines, previous.trim(), line)?.value.trim() ??
+      previous.trim()) === "false"
+  );
+}
+
+function nodePostcssSinkKind(
+  operation: NodePostcssOperation,
+  dependency: NodeRuntimeDependency,
+): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  return `${lockPrefix}vulnerable-postcss-${operation}-source-map-traversal`;
+}
+
+function javascriptCompositeCallArgumentsAtLine(
+  lines: readonly string[],
+  line: number,
+  callee: RegExp,
+): string[] | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const original = javascriptCodeLinesWithoutComments(callLines).join("\n");
+  const structural = javascriptStructuralLines(callLines).join("\n");
+  const match = callee.exec(original.split("\n", 1)[0] ?? "");
+  if (match === null) return undefined;
+  const relativeOpen = match[0].lastIndexOf("(");
+  if (relativeOpen < 0) return undefined;
+  const open = match.index + relativeOpen;
+  const close = matchingCallParenthesis(structural, open);
+  if (close < 0) return undefined;
+  return splitJavascriptArguments(original.slice(open + 1, close));
+}
+
+function nodePostcssSourceMapSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodePostcssSourceMapSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "postcss");
+  if (
+    dependency === undefined ||
+    !nodePostcssVersionIsSourceMapTraversalVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: NodePostcssBinding[] = [];
+  const addBinding = (binding: NodePostcssBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.kind === binding.kind &&
+          candidate.local === binding.local &&
+          candidate.line === binding.line,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s+['"]postcss['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]postcss['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]postcss['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directParse =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]postcss['"]\s*\)\s*\.\s*parse\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      addBinding({ kind: "root", local: receiver[1], line: index + 1 });
+    }
+    if (directParse?.[1] !== undefined) {
+      addBinding({ kind: "parse", local: directParse[1], line: index + 1 });
+    }
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "postcss" &&
+      imported.imported === "parse"
+    ) {
+      addBinding({ kind: "parse", local: imported.local, line: imported.line });
+    }
+  }
+  for (const root of bindings.filter((binding) => binding.kind === "root")) {
+    const escaped = escapeRegularExpression(root.local);
+    for (
+      let index = root.line;
+      index < Math.min(codeLines.length, line);
+      index += 1
+    ) {
+      const processor = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escaped}\\s*\\(`,
+        "u",
+      ).exec(codeLines[index] ?? "");
+      if (processor?.[1] !== undefined) {
+        addBinding({ kind: "processor", local: processor[1], line: index + 1 });
+      }
+    }
+  }
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escaped = escapeRegularExpression(binding.local);
+    const candidates: Array<{
+      operation: NodePostcssOperation;
+      callee: RegExp;
+      composite?: boolean;
+    }> =
+      binding.kind === "parse"
+        ? [
+            {
+              operation: "parse",
+              callee: new RegExp(`\\b${escaped}\\s*\\(`, "u"),
+            },
+          ]
+        : binding.kind === "processor"
+          ? [
+              {
+                operation: "process",
+                callee: new RegExp(
+                  `\\b${escaped}\\s*\\.\\s*process\\s*\\(`,
+                  "u",
+                ),
+              },
+            ]
+          : [
+              {
+                operation: "parse",
+                callee: new RegExp(`\\b${escaped}\\s*\\.\\s*parse\\s*\\(`, "u"),
+              },
+              {
+                operation: "process",
+                callee: new RegExp(
+                  `\\b${escaped}\\s*\\([^;]*?\\)\\s*\\.\\s*process\\s*\\(`,
+                  "u",
+                ),
+                composite: true,
+              },
+            ];
+    for (const candidate of candidates) {
+      if (
+        binding.kind === "root" &&
+        candidate.operation === "parse" &&
+        javascriptStructuralLines(lines)
+          .slice(binding.line, Math.max(binding.line, line))
+          .some((structural) =>
+            new RegExp(
+              `\\b${escaped}\\s*\\.\\s*parse\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+              "u",
+            ).test(structural),
+          )
+      ) {
+        continue;
+      }
+      const arguments_ = candidate.composite
+        ? javascriptCompositeCallArgumentsAtLine(lines, line, candidate.callee)
+        : javascriptCallArgumentsAtLine(lines, line, candidate.callee);
+      const source = arguments_?.[0]?.trim();
+      if (
+        source === undefined ||
+        source === "" ||
+        nodePostcssMapLoadingDisabled(lines, line, arguments_?.[1])
+      ) {
+        continue;
+      }
+      return {
+        sourceExpressions: [source],
+        kind: nodePostcssSinkKind(candidate.operation, dependency),
+      };
+    }
+  }
+  const direct = [
+    {
+      operation: "parse" as const,
+      callee: /\brequire\s*\(\s*['"]postcss['"]\s*\)\s*\.\s*parse\s*\(/u,
+      composite: true,
+    },
+    {
+      operation: "process" as const,
+      callee:
+        /\brequire\s*\(\s*['"]postcss['"]\s*\)\s*\([^;]*?\)\s*\.\s*process\s*\(/u,
+      composite: true,
+    },
+  ];
+  for (const candidate of direct) {
+    const arguments_ = javascriptCompositeCallArgumentsAtLine(
+      lines,
+      line,
+      candidate.callee,
+    );
+    const source = arguments_?.[0]?.trim();
+    if (
+      source !== undefined &&
+      source !== "" &&
+      !nodePostcssMapLoadingDisabled(lines, line, arguments_?.[1])
+    ) {
+      return {
+        sourceExpressions: [source],
+        kind: nodePostcssSinkKind(candidate.operation, dependency),
+      };
+    }
+  }
+  return undefined;
+}
+
 function nodePrototypeCopySink(
   lines: readonly string[],
   line: number,
@@ -5514,7 +5823,8 @@ function frameworkDataflowRecords(
                 model.id === "node-http-object-path-prototype-pollution" ||
                 model.id === "node-http-lodash-prototype-deletion" ||
                 model.id === "node-http-immutable-prototype-replacement" ||
-                model.id === "node-http-tmp-path-traversal"
+                model.id === "node-http-tmp-path-traversal" ||
+                model.id === "node-http-postcss-source-map-traversal"
                 ? 64
                 : 8,
             )
@@ -5599,6 +5909,10 @@ function frameworkDataflowRecords(
       const nodeTmpPath =
         model.id === "node-http-tmp-path-traversal"
           ? nodeTmpPathSink(files, path, lines, sink.line)
+          : undefined;
+      const nodePostcssSourceMap =
+        model.id === "node-http-postcss-source-map-traversal"
+          ? nodePostcssSourceMapSink(files, path, lines, sink.line)
           : undefined;
       const nodePathSink =
         model.id === "node-http-path"
@@ -5723,6 +6037,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-tmp-path-traversal" &&
         nodeTmpPath === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-postcss-source-map-traversal" &&
+        nodePostcssSourceMap === undefined
       ) {
         continue;
       }
@@ -5888,7 +6208,8 @@ function frameworkDataflowRecords(
         nodeObjectPath?.sourceExpression ??
         nodeLodashDelete?.sourceExpressions.join("\n") ??
         nodeImmutablePrototype?.sourceExpressions.join("\n") ??
-        nodeTmpPath?.sourceExpressions.join("\n");
+        nodeTmpPath?.sourceExpressions.join("\n") ??
+        nodePostcssSourceMap?.sourceExpressions.join("\n");
       const nonDsetSource =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -6196,6 +6517,7 @@ function frameworkDataflowRecords(
         nodeLodashDelete?.kind ??
         nodeImmutablePrototype?.kind ??
         nodeTmpPath?.kind ??
+        nodePostcssSourceMap?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
@@ -10576,7 +10898,8 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-object-path-prototype-pollution" ||
                 model.id === "node-http-lodash-prototype-deletion" ||
                 model.id === "node-http-immutable-prototype-replacement" ||
-                model.id === "node-http-tmp-path-traversal"
+                model.id === "node-http-tmp-path-traversal" ||
+                model.id === "node-http-postcss-source-map-traversal"
                 ? 64
                 : 32,
             );
@@ -10658,6 +10981,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeTmpPath =
             model.id === "node-http-tmp-path-traversal"
               ? nodeTmpPathSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodePostcssSourceMap =
+            model.id === "node-http-postcss-source-map-traversal"
+              ? nodePostcssSourceMapSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -10760,6 +11092,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-postcss-source-map-traversal" &&
+            nodePostcssSourceMap === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -10804,6 +11142,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeLodashDelete?.sourceExpressions.join("\n") ??
             nodeImmutablePrototype?.sourceExpressions.join("\n") ??
             nodeTmpPath?.sourceExpressions.join("\n") ??
+            nodePostcssSourceMap?.sourceExpressions.join("\n") ??
             (nodeDset === undefined
               ? undefined
               : nodeDset.positions
@@ -11006,6 +11345,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeTmpPath === undefined
                   ? {}
                   : { kind: nodeTmpPath.kind }),
+                ...(nodePostcssSourceMap === undefined
+                  ? {}
+                  : { kind: nodePostcssSourceMap.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}

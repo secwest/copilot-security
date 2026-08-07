@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-postcss-source-map-traversal",
+      "description": "An Express CSS body crosses three wrappers into PostCSS 8.5.17 process, whose default previous-map loader reads an external .map and returns protected sourcesContent.",
+      "fixture": "fixtures/node-multi-hop-postcss-source-map-traversal",
+      "findingsPaths": [
+        "node-multi-hop-postcss-source-map-traversal/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-postcss-previous-map-path-traversal",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-postcss",
+      "description": "The matched Express source, wrappers, process call, options, and returned map pin PostCSS 8.5.18, whose default loader rejects paths outside the from directory.",
+      "fixture": "fixtures/node-multi-hop-patched-postcss",
+      "findingsPaths": ["node-multi-hop-patched-postcss/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

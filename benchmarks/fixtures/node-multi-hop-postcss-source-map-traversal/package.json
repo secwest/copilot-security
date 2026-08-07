@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-postcss-source-map-traversal",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "postcss": "8.5.17"
+  }
+}

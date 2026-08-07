@@ -397,6 +397,26 @@ filename overwrite, then prove the repaired prefix rejection. A separate live
 matrix confirms both prefix traversal and the older sibling-prefix `dir`
 containment bypass under 0.2.5 and their rejection under 0.2.6.
 
+`node-postcss-source-map-traversal-manifest.json` measures PostCSS's implicit
+previous-source-map file load. The positive sends an Express CSS body through
+three relative-import wrappers into `postcss([]).process` 8.5.17 with an
+ordinary fixed `from` path; a hostile final `sourceMappingURL` traverses to an
+external `.map`, and returned `result.map` exposes its `sourcesContent`. The
+topology-identical 8.5.18 control measures the upstream same-directory
+containment check. Exact regressions cover root and named parse bindings,
+default/namespace/CommonJS roots, direct CommonJS parse, processor variables,
+parse and process operations, exact and fresh npm v2/v3 resolution, and typed
+cross-file flow. Exact `map: false` and `map: { prev: false }`, patched or
+development-only versions, fixed CSS, wrong packages, reassignment, shadowing,
+lockfile-free ranges, inconsistent locks, and v1 locks remain negative. The
+review boundary requires a final non-inline `.map` annotation, an external or
+absolute resolved path, a valid source map, and a concrete `result.map` or
+`sourcesContent` disclosure channel; it does not promote a file load into code
+execution or claim non-`.map` reads on 8.5.12 through 8.5.17. Dependency-free
+witnesses reproduce the disclosure and repaired containment, while an isolated
+real-package matrix confirms vulnerable 8.5.17, patched 8.5.18, `map: false`,
+and the repaired release's explicit `unsafeMap: true` opt-out.
+
 `node-js-toml-prototype-pollution-manifest.json` broadens the measured parser
 surface beyond recursive merge helpers. Its positive sends an Express TOML body
 through three relative-import wrappers into the official `js-toml.load(text)`

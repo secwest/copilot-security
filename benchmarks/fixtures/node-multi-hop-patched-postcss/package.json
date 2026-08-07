@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-postcss",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "postcss": "8.5.18"
+  }
+}
