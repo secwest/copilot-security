@@ -61,6 +61,8 @@ const caseIds = [
   "node-multi-hop-patched-node-extend",
   "node-multi-hop-assign-deep-prototype-pollution",
   "node-multi-hop-patched-assign-deep",
+  "node-multi-hop-mixin-deep-prototype-pollution",
+  "node-multi-hop-patched-mixin-deep",
 ] as const;
 const temporaryPaths: string[] = [];
 
@@ -245,6 +247,14 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       requireCodeEvidence: true,
     });
     expect(manifest.cases[19]?.expected).toEqual([]);
+    expect(manifest.cases[20]?.expected[0]).toMatchObject({
+      cwe: ["CWE-1321"],
+      acceptableSeverities: ["critical", "high"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[21]?.expected).toEqual([]);
     expect(
       manifest.cases.every(({ findingsPaths }) => findingsPaths.length === 1),
     ).toBeTrue();
@@ -272,6 +282,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       nodeExtendSafe,
       assignDeepUnsafe,
       assignDeepSafe,
+      mixinDeepUnsafe,
+      mixinDeepSafe,
     ] = (await Promise.all(
       caseIds.map(async (caseId) =>
         mergeRecords(
@@ -281,6 +293,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
         ),
       ),
     )) as [
+      FrameworkRecord[],
+      FrameworkRecord[],
       FrameworkRecord[],
       FrameworkRecord[],
       FrameworkRecord[],
@@ -323,6 +337,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(nodeExtendSafe).toHaveLength(0);
     expect(assignDeepUnsafe).toHaveLength(1);
     expect(assignDeepSafe).toHaveLength(0);
+    expect(mixinDeepUnsafe).toHaveLength(1);
+    expect(mixinDeepSafe).toHaveLength(0);
     expect(unsafe[0]?.frameworkModel).toMatchObject({
       scope: "cross-file-multi-hop-wrapper",
       source: { path: "src/server.js", line: 8, kind: "http-request-field" },
@@ -463,6 +479,19 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(assignDeepUnsafe[0]?.frameworkModel?.propagators).toEqual(
       unsafe[0]?.frameworkModel?.propagators,
     );
+    expect(mixinDeepUnsafe[0]?.frameworkModel).toMatchObject({
+      scope: "cross-file-multi-hop-wrapper",
+      source: { path: "src/server.js", line: 8, kind: "http-request-field" },
+      sink: {
+        path: "src/storage.js",
+        line: 4,
+        kind: "vulnerable-mixin-deep-recursive-merge",
+        cweIds: ["CWE-1321"],
+      },
+    });
+    expect(mixinDeepUnsafe[0]?.frameworkModel?.propagators).toEqual(
+      unsafe[0]?.frameworkModel?.propagators,
+    );
   });
 
   test("retains the vulnerable row under the repository cap", async () => {
@@ -529,6 +558,12 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     );
     expect(paths).not.toContain(
       "benchmarks/fixtures/node-multi-hop-patched-assign-deep/src/storage.js",
+    );
+    expect(paths).toContain(
+      "benchmarks/fixtures/node-multi-hop-mixin-deep-prototype-pollution/src/storage.js",
+    );
+    expect(paths).not.toContain(
+      "benchmarks/fixtures/node-multi-hop-patched-mixin-deep/src/storage.js",
     );
   }, 60_000);
 
@@ -1675,6 +1710,130 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     ]);
   });
 
+  test("models mixin-deep's complete reviewed union and exact callable semantics", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-mixin-deep-package-"),
+    );
+    temporaryPaths.push(repository);
+    const importSource =
+      'import mixinDeep from "mixin-deep";\nexport function handler(request) { return mixinDeep({}, request.body); }\n';
+    const requireSource =
+      'const mixinDeep = require("mixin-deep");\nexport function handler(request) { return mixinDeep({ mode: "strict" }, request.body); }\n';
+
+    for (const [id, source, section, version] of [
+      ["exact-zero-line", importSource, "dependencies", "0.1.1"],
+      ["exact-one-incomplete", requireSource, "optionalDependencies", "1.3.1"],
+      ["exact-two-release", importSource, "dependencies", "2.0.0"],
+      [
+        "exact-primitive-target",
+        'import mixinDeep from "mixin-deep";\nexport function handler(request) { return mixinDeep(0, request.body); }\n',
+        "dependencies",
+        "2.0.0",
+      ],
+    ] as const) {
+      await writeCase(repository, id, source, section, version, "mixin-deep");
+    }
+    await writeCase(
+      repository,
+      "locked-range",
+      requireSource,
+      "dependencies",
+      "^2.0.0",
+      "mixin-deep",
+    );
+    await writeNpmLock(repository, "locked-range", "^2.0.0", "2.0.0", {
+      dependencyName: "mixin-deep",
+    });
+
+    for (const [id, source, version, dependencyName] of [
+      ["fixed-one-boundary", importSource, "1.3.2", "mixin-deep"],
+      ["later-one", importSource, "1.4.0", "mixin-deep"],
+      ["fixed-two-boundary", importSource, "2.0.1", "mixin-deep"],
+      ["later-two", importSource, "2.1.0", "mixin-deep"],
+      ["later-major", importSource, "3.0.0", "mixin-deep"],
+      ["wrong-manifest", importSource, "2.0.0", "assign-deep"],
+      [
+        "target-only",
+        'import mixinDeep from "mixin-deep";\nexport function handler(request) { return mixinDeep(request.body, {}); }\n',
+        "2.0.0",
+        "mixin-deep",
+      ],
+      [
+        "no-source",
+        'import mixinDeep from "mixin-deep";\nexport function handler(request) { request.body; return mixinDeep({}); }\n',
+        "2.0.0",
+        "mixin-deep",
+      ],
+      [
+        "namespace",
+        'import * as mixinDeep from "mixin-deep";\nexport function handler(request) { return mixinDeep({}, request.body); }\n',
+        "2.0.0",
+        "mixin-deep",
+      ],
+      [
+        "named",
+        'import { mixinDeep } from "mixin-deep";\nexport function handler(request) { return mixinDeep({}, request.body); }\n',
+        "2.0.0",
+        "mixin-deep",
+      ],
+      [
+        "reassigned",
+        'import mixinDeep from "mixin-deep";\nmixinDeep = helper;\nexport function handler(request) { return mixinDeep({}, request.body); }\n',
+        "2.0.0",
+        "mixin-deep",
+      ],
+    ] as const) {
+      await writeCase(
+        repository,
+        id,
+        source,
+        "dependencies",
+        version,
+        dependencyName,
+      );
+    }
+    await writeCase(
+      repository,
+      "locked-fixed",
+      requireSource,
+      "dependencies",
+      "^1.3.0",
+      "mixin-deep",
+    );
+    await writeNpmLock(repository, "locked-fixed", "^1.3.0", "1.3.2", {
+      dependencyName: "mixin-deep",
+    });
+
+    const records = mergeRecords(await buildResidualRiskInventory(repository));
+    expect(
+      records.map((record) => ({
+        path: record.path,
+        kind: record.frameworkModel?.sink.kind,
+      })),
+    ).toEqual([
+      {
+        path: "exact-one-incomplete/handler.mjs",
+        kind: "vulnerable-mixin-deep-recursive-merge",
+      },
+      {
+        path: "exact-primitive-target/handler.mjs",
+        kind: "vulnerable-mixin-deep-recursive-merge",
+      },
+      {
+        path: "exact-two-release/handler.mjs",
+        kind: "vulnerable-mixin-deep-recursive-merge",
+      },
+      {
+        path: "exact-zero-line/handler.mjs",
+        kind: "vulnerable-mixin-deep-recursive-merge",
+      },
+      {
+        path: "locked-range/handler.mjs",
+        kind: "lock-resolved-vulnerable-mixin-deep-recursive-merge",
+      },
+    ]);
+  });
+
   test("teaches version, recursion, manifest, and constructor.prototype proof", () => {
     const prompt = scanQualityGatePrompt("");
     expect(prompt).toContain("node-http-prototype-merge");
@@ -1712,6 +1871,16 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(prompt).toContain("block constructor and prototype");
     expect(prompt).toContain("mutation-before-throw ordering");
     expect(prompt).toContain("application error boundary");
+    expect(prompt).toContain("mixin-deep");
+    expect(prompt).toContain("below 1.3.2, plus exactly 2.0.0");
+    expect(prompt).toContain("primitive target does not shift");
+    expect(prompt).toContain(
+      "Published 2.0.0 has no transitive object predicate",
+    );
+    expect(prompt).toContain(
+      "installed is-extendable and is-plain-object behavior",
+    );
+    expect(prompt).toContain("advisory-range membership alone is not proof");
     expect(prompt).toContain("source operands");
     expect(prompt).toContain("constructor.prototype");
     expect(prompt).toContain("CWE-1321");

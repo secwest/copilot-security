@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-mixin-deep",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "mixin-deep": "2.0.1"
+  }
+}

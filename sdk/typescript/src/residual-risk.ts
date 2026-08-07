@@ -583,7 +583,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
     activation: [
-      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge|merge-deep|extend|deep-extend|just-extend|merge-options|node\.extend|assign-deep)["']/u,
+      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge|merge-deep|extend|deep-extend|just-extend|merge-options|node\.extend|assign-deep|mixin-deep)["']/u,
       /\b[A-Za-z_$][\w$]*(?:\s*\.\s*merge)?\s*\(/u,
     ],
     sources: [
@@ -2445,7 +2445,9 @@ interface NodePrototypeMergeSink {
     | "vulnerable-node-extend-deep-merge"
     | "lock-resolved-vulnerable-node-extend-deep-merge"
     | "vulnerable-assign-deep-recursive-merge"
-    | "lock-resolved-vulnerable-assign-deep-recursive-merge";
+    | "lock-resolved-vulnerable-assign-deep-recursive-merge"
+    | "vulnerable-mixin-deep-recursive-merge"
+    | "lock-resolved-vulnerable-mixin-deep-recursive-merge";
 }
 
 type NodePrototypeMergeDependencyName =
@@ -2457,7 +2459,8 @@ type NodePrototypeMergeDependencyName =
   | "just-extend"
   | "merge-options"
   | "node.extend"
-  | "assign-deep";
+  | "assign-deep"
+  | "mixin-deep";
 
 interface NodeRuntimeDependency {
   manifestPath: string;
@@ -2746,6 +2749,20 @@ function nodeAssignDeepVersionIsPrototypePollutionVulnerable(
   return vulnerableZeroLine || vulnerableOneRelease;
 }
 
+function nodeMixinDeepVersionIsPrototypePollutionVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  const vulnerableBeforeOneFix =
+    major < 1 || (major === 1 && (minor < 3 || (minor === 3 && patch < 2)));
+  const vulnerableTwoRelease = major === 2 && minor === 0 && patch === 0;
+  return vulnerableBeforeOneFix || vulnerableTwoRelease;
+}
+
 function nodePrototypeMergeVersionIsVulnerable(
   dependencyName: NodePrototypeMergeDependencyName,
   version: string,
@@ -2771,6 +2788,8 @@ function nodePrototypeMergeVersionIsVulnerable(
       return nodeNodeExtendVersionIsPrototypePollutionVulnerable(version);
     case "assign-deep":
       return nodeAssignDeepVersionIsPrototypePollutionVulnerable(version);
+    case "mixin-deep":
+      return nodeMixinDeepVersionIsPrototypePollutionVulnerable(version);
   }
 }
 
@@ -2816,6 +2835,10 @@ function nodePrototypeMergeSinkKind(
       return lockResolved
         ? "lock-resolved-vulnerable-assign-deep-recursive-merge"
         : "vulnerable-assign-deep-recursive-merge";
+    case "mixin-deep":
+      return lockResolved
+        ? "lock-resolved-vulnerable-mixin-deep-recursive-merge"
+        : "vulnerable-mixin-deep-recursive-merge";
   }
 }
 
@@ -2918,6 +2941,14 @@ function nodePrototypeMergeSink(
       /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']assign-deep["']\s*\)/u.exec(
         structural,
       );
+    const mixinDeepImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']mixin-deep["']/u.exec(
+        structural,
+      );
+    const mixinDeepRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']mixin-deep["']\s*\)/u.exec(
+        structural,
+      );
     const receiver = defaultOrNamespace?.[1] ?? commonjsReceiver?.[1];
     const direct = directImport?.[1] ?? directRequire?.[1];
     if (receiver !== undefined) {
@@ -3007,6 +3038,15 @@ function nodePrototypeMergeSink(
         local: assignDeepDirect,
         line: index + 1,
         dependencyName: "assign-deep",
+      });
+    }
+    const mixinDeepDirect = mixinDeepImport?.[1] ?? mixinDeepRequire?.[1];
+    if (mixinDeepDirect !== undefined) {
+      bindings.push({
+        kind: "direct",
+        local: mixinDeepDirect,
+        line: index + 1,
+        dependencyName: "mixin-deep",
       });
     }
   }
