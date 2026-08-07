@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-lodash-unset-prototype-deletion",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "lodash": "4.17.23"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-lodash-unset-prototype-deletion",
+      "description": "An Express JSON path crosses three relative-import boundaries into core Lodash 4.17.23 unset. An array-wrapped __proto__ segment deletes Object.prototype.toString and breaks later object coercion.",
+      "fixture": "fixtures/node-multi-hop-lodash-unset-prototype-deletion",
+      "findingsPaths": [
+        "node-multi-hop-lodash-unset-prototype-deletion/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-lodash-array-path-prototype-deletion",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-lodash-unset",
+      "description": "The matched Express source, wrappers, Lodash subpath, target, and unset call pin current Lodash 4.18.1, which normalizes and rejects magic non-terminal segments before deletion.",
+      "fixture": "fixtures/node-multi-hop-patched-lodash-unset",
+      "findingsPaths": [
+        "node-multi-hop-patched-lodash-unset/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

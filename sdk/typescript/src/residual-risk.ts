@@ -739,6 +739,34 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-lodash-prototype-deletion",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [
+      /["'](?:lodash(?:-es|\.unset)?|lodash(?:-es)?\/(?:unset|omit)(?:\.js)?)["']/u,
+    ],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-lodash-prototype-deletion",
+        expression: /\b[A-Za-z_$][\w$]*(?:\s*\.\s*(?:unset|omit))?\s*\(/u,
+        cweIds: ["CWE-1321"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2621,6 +2649,11 @@ interface NodeObjectPathSink {
   kind: string;
 }
 
+interface NodeLodashDeleteSink {
+  sourceExpressions: string[];
+  kind: string;
+}
+
 type NodePrototypeMergeDependencyName =
   | "lodash"
   | "lodash.merge"
@@ -4443,6 +4476,276 @@ function nodeObjectPathSink(
   return undefined;
 }
 
+type NodeLodashDeleteDependency =
+  | "lodash"
+  | "lodash-es"
+  | "lodash-amd"
+  | "lodash.unset";
+
+type NodeLodashDeleteMethod = "unset" | "omit";
+
+interface NodeLodashDeleteBinding {
+  kind: "direct" | "receiver";
+  local: string;
+  line: number;
+  dependencyName: NodeLodashDeleteDependency;
+  method?: NodeLodashDeleteMethod;
+  allowWrapperParameter?: boolean;
+}
+
+function nodeLodashDeleteVersionParts(
+  version: string,
+): [number, number, number] | undefined {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return undefined;
+  }
+  return parts as [number, number, number];
+}
+
+function nodeLodashDeleteVersionIsVulnerable(version: string): boolean {
+  const parts = nodeLodashDeleteVersionParts(version);
+  if (parts === undefined) return false;
+  const [major, minor] = parts;
+  return major === 4 && minor < 18;
+}
+
+function nodeLodashDeleteRequiresArrayBypass(version: string): boolean {
+  const parts = nodeLodashDeleteVersionParts(version);
+  return (
+    parts !== undefined && parts[0] === 4 && parts[1] === 17 && parts[2] === 23
+  );
+}
+
+function nodeLodashDeleteSinkKind(
+  dependencyName: NodeLodashDeleteDependency,
+  method: NodeLodashDeleteMethod,
+  dependency: NodeRuntimeDependency,
+): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  const arrayPath = nodeLodashDeleteRequiresArrayBypass(dependency.version)
+    ? "array-path-"
+    : "";
+  const packageAndMethod =
+    dependencyName === "lodash.unset"
+      ? "lodash-unset-package"
+      : `${dependencyName}-${method}`;
+  return `${lockPrefix}vulnerable-${packageAndMethod}-${arrayPath}prototype-deletion`;
+}
+
+function nodeLodashDeleteSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeLodashDeleteSink | undefined {
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: NodeLodashDeleteBinding[] = [];
+  const addBinding = (binding: NodeLodashDeleteBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.kind === binding.kind &&
+          candidate.local === binding.local &&
+          candidate.line === binding.line &&
+          candidate.dependencyName === binding.dependencyName &&
+          candidate.method === binding.method,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiverImport =
+      /^\s*import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)(?:\s*,\s*\{[^}]*\})?\s+from\s+["'](lodash|lodash-es)["']/u.exec(
+        code,
+      );
+    const receiverRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']lodash["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directSubpath =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["'](lodash|lodash-es)\/(unset|omit)(?:\.js)?["']/u.exec(
+        code,
+      );
+    const directSubpathRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']lodash\/(unset|omit)(?:\.js)?["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directMemberRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']lodash["']\s*\)\s*\.\s*(unset|omit)\s*;?\s*$/u.exec(
+        code,
+      );
+    const standaloneImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']lodash\.unset["']/u.exec(
+        code,
+      );
+    const standaloneRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']lodash\.unset["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const amdReceiver =
+      /\b(?:define|require)\s*\(\s*\[\s*["']lodash["']\s*\]\s*,\s*function\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/u.exec(
+        code,
+      );
+    if (receiverImport?.[1] !== undefined && receiverImport[2] !== undefined) {
+      addBinding({
+        kind: "receiver",
+        local: receiverImport[1],
+        line: index + 1,
+        dependencyName: receiverImport[2] as "lodash" | "lodash-es",
+      });
+    }
+    if (receiverRequire?.[1] !== undefined) {
+      addBinding({
+        kind: "receiver",
+        local: receiverRequire[1],
+        line: index + 1,
+        dependencyName: "lodash",
+      });
+    }
+    if (
+      directSubpath?.[1] !== undefined &&
+      directSubpath[2] !== undefined &&
+      directSubpath[3] !== undefined
+    ) {
+      addBinding({
+        kind: "direct",
+        local: directSubpath[1],
+        line: index + 1,
+        dependencyName: directSubpath[2] as "lodash" | "lodash-es",
+        method: directSubpath[3] as NodeLodashDeleteMethod,
+      });
+    }
+    if (
+      directSubpathRequire?.[1] !== undefined &&
+      directSubpathRequire[2] !== undefined
+    ) {
+      addBinding({
+        kind: "direct",
+        local: directSubpathRequire[1],
+        line: index + 1,
+        dependencyName: "lodash",
+        method: directSubpathRequire[2] as NodeLodashDeleteMethod,
+      });
+    }
+    if (
+      directMemberRequire?.[1] !== undefined &&
+      directMemberRequire[2] !== undefined
+    ) {
+      addBinding({
+        kind: "direct",
+        local: directMemberRequire[1],
+        line: index + 1,
+        dependencyName: "lodash",
+        method: directMemberRequire[2] as NodeLodashDeleteMethod,
+      });
+    }
+    const standalone = standaloneImport?.[1] ?? standaloneRequire?.[1];
+    if (standalone !== undefined) {
+      addBinding({
+        kind: "direct",
+        local: standalone,
+        line: index + 1,
+        dependencyName: "lodash.unset",
+        method: "unset",
+      });
+    }
+    if (amdReceiver?.[1] !== undefined) {
+      addBinding({
+        kind: "receiver",
+        local: amdReceiver[1],
+        line: index + 1,
+        dependencyName: "lodash-amd",
+        allowWrapperParameter: true,
+      });
+    }
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      (imported.moduleSpecifier === "lodash" ||
+        imported.moduleSpecifier === "lodash-es") &&
+      (imported.imported === "unset" || imported.imported === "omit")
+    ) {
+      addBinding({
+        kind: "direct",
+        local: imported.local,
+        line: imported.line,
+        dependencyName: imported.moduleSpecifier,
+        method: imported.imported,
+      });
+    }
+  }
+  for (const binding of bindings) {
+    const dependency = nodeRuntimeDependency(
+      files,
+      path,
+      binding.dependencyName,
+    );
+    if (
+      dependency === undefined ||
+      !nodeLodashDeleteVersionIsVulnerable(dependency.version) ||
+      binding.line >= line ||
+      (!binding.allowWrapperParameter &&
+        wrapper?.parameters.includes(binding.local) === true) ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escaped = escapeRegularExpression(binding.local);
+    const methods: readonly NodeLodashDeleteMethod[] =
+      binding.method === undefined ? ["unset", "omit"] : [binding.method];
+    for (const method of methods) {
+      if (
+        binding.kind === "receiver" &&
+        structuralLines
+          .slice(binding.line, Math.max(binding.line, line))
+          .some((candidate) =>
+            new RegExp(
+              `\\b${escaped}\\s*\\.\\s*${method}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+              "u",
+            ).test(candidate),
+          )
+      ) {
+        continue;
+      }
+      const callee =
+        binding.kind === "receiver"
+          ? new RegExp(`\\b${escaped}\\s*\\.\\s*${method}\\s*\\(`, "u")
+          : new RegExp(`\\b${escaped}\\s*\\(`, "u");
+      const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+      const sourceExpressions =
+        method === "omit"
+          ? (arguments_ ?? [])
+              .slice(1)
+              .map((value) => value.trim())
+              .filter(Boolean)
+          : [arguments_?.[1]?.trim() ?? ""].filter(Boolean);
+      if (sourceExpressions.length === 0) continue;
+      return {
+        sourceExpressions,
+        kind: nodeLodashDeleteSinkKind(
+          binding.dependencyName,
+          method,
+          dependency,
+        ),
+      };
+    }
+  }
+  return undefined;
+}
+
 function nodePrototypeCopySink(
   lines: readonly string[],
   line: number,
@@ -4557,7 +4860,8 @@ function frameworkDataflowRecords(
                 model.id === "node-http-jsonpath-plus-code-injection" ||
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
                 model.id === "node-http-dset-prototype-pollution" ||
-                model.id === "node-http-object-path-prototype-pollution"
+                model.id === "node-http-object-path-prototype-pollution" ||
+                model.id === "node-http-lodash-prototype-deletion"
                 ? 64
                 : 8,
             )
@@ -4630,6 +4934,10 @@ function frameworkDataflowRecords(
       const nodeObjectPath =
         model.id === "node-http-object-path-prototype-pollution"
           ? nodeObjectPathSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeLodashDelete =
+        model.id === "node-http-lodash-prototype-deletion"
+          ? nodeLodashDeleteSink(files, path, lines, sink.line)
           : undefined;
       const nodePathSink =
         model.id === "node-http-path"
@@ -4736,6 +5044,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-object-path-prototype-pollution" &&
         nodeObjectPath === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-lodash-prototype-deletion" &&
+        nodeLodashDelete === undefined
       ) {
         continue;
       }
@@ -4898,7 +5212,8 @@ function frameworkDataflowRecords(
         nodeJsToml?.sourceExpression ??
         nodeJsonPathPlus?.sourceExpression ??
         nodeFlatUnflatten?.sourceExpression ??
-        nodeObjectPath?.sourceExpression;
+        nodeObjectPath?.sourceExpression ??
+        nodeLodashDelete?.sourceExpressions.join("\n");
       const nonDsetSource =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -5203,6 +5518,7 @@ function frameworkDataflowRecords(
         bulkSinkMetadata?.kind ??
         nodeDsetResolution?.position.kind ??
         nodeObjectPath?.kind ??
+        nodeLodashDelete?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
@@ -9150,7 +9466,8 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-jsonpath-plus-code-injection" ||
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
                 model.id === "node-http-dset-prototype-pollution" ||
-                model.id === "node-http-object-path-prototype-pollution"
+                model.id === "node-http-object-path-prototype-pollution" ||
+                model.id === "node-http-lodash-prototype-deletion"
                 ? 64
                 : 32,
             );
@@ -9215,6 +9532,10 @@ function javascriptFrameworkWrapperSummaries(
           const nodeObjectPath =
             model.id === "node-http-object-path-prototype-pollution"
               ? nodeObjectPathSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeLodashDelete =
+            model.id === "node-http-lodash-prototype-deletion"
+              ? nodeLodashDeleteSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -9299,6 +9620,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-lodash-prototype-deletion" &&
+            nodeLodashDelete === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -9340,6 +9667,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsonPathPlus?.sourceExpression ??
             nodeFlatUnflatten?.sourceExpression ??
             nodeObjectPath?.sourceExpression ??
+            nodeLodashDelete?.sourceExpressions.join("\n") ??
             (nodeDset === undefined
               ? undefined
               : nodeDset.positions
@@ -9533,6 +9861,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeObjectPath === undefined
                   ? {}
                   : { kind: nodeObjectPath.kind }),
+                ...(nodeLodashDelete === undefined
+                  ? {}
+                  : { kind: nodeLodashDelete.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}

@@ -312,6 +312,24 @@ malformed JSON, and oversized metadata. Dependency-free witnesses isolate
 `constructor.prototype` traversal and the patched dangerous-key boundary
 without installing a vulnerable package.
 
+`node-lodash-prototype-deletion-manifest.json` measures Lodash's distinct
+`unset`/`omit` deletion primitive rather than folding it into recursive merge.
+The positive sends an Express JSON path through the same three relative-import
+wrappers to core `lodash/unset.js` under the incomplete 4.17.23 repair. An
+array-wrapped `__proto__` segment survives the string-only guard, reaches
+`Object.prototype`, deletes `toString`, and breaks later object coercion. The
+matched control pins current 4.18.1, which normalizes every segment and rejects
+non-terminal magic-property traversal. Deterministic regressions cover core
+Lodash receivers and named, destructured, or subpath methods; `lodash-es`;
+RequireJS/AMD receivers backed by `lodash-amd`; and the directly callable
+`lodash.unset` package. They preserve `unset` argument one and every `omit`
+path operand after the target, distinguish pre-fix string paths from the
+4.17.23 nested-array bypass, retain exact versus fresh npm v2/v3 lock
+provenance, and reject patched or pre-API releases, target-only data, read-only
+methods, reassignment, shadowing, unsafe metadata, and the separately published
+`lodash.omit` package. Dependency-free witnesses prove both deletion plus
+cleanup and the completed pre-access guard.
+
 `node-js-toml-prototype-pollution-manifest.json` broadens the measured parser
 surface beyond recursive merge helpers. Its positive sends an Express TOML body
 through three relative-import wrappers into the official `js-toml.load(text)`

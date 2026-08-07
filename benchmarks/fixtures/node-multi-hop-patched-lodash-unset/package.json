@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-lodash-unset",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "lodash": "4.18.1"
+  }
+}

@@ -198,6 +198,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-object-path-prototype-pollution",
         "node-multi-hop-patched-object-path",
       ],
+      [
+        "node-multi-hop-lodash-unset-prototype-deletion",
+        "node-multi-hop-patched-lodash-unset",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],
