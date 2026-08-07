@@ -25,9 +25,27 @@ public sealed partial class App : Application
             };
             if (desktop.Args?.Contains("--ui-smoke-test", StringComparer.Ordinal) == true)
             {
-                window.Opened += (_, _) => DispatcherTimer.RunOnce(window.Close, TimeSpan.FromSeconds(1));
+                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                ConfigureUiSmokeShutdown(window, () => desktop.Shutdown(0));
             }
         }
         base.OnFrameworkInitializationCompleted();
+    }
+
+    public static void ConfigureUiSmokeShutdown(Window window, Action shutdown)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        ArgumentNullException.ThrowIfNull(shutdown);
+        window.Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                window.Close();
+            }
+            finally
+            {
+                shutdown();
+            }
+        });
     }
 }

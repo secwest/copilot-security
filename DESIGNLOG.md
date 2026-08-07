@@ -2,6 +2,14 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-06 — Make real X11 smoke shutdown explicit and testable
+
+**Observed failure.** Hosted Linux GUI run [`31134089022`](https://github.com/secwest/copilot-security/actions/runs/31134089022) passed scanner packaging, locked restore, build, 7/7 core tests, 3/3 shared tests, 2/2 Linux headless tests, self-contained publish, and non-graphical startup. Its only failure was `timeout 20s xvfb-run ... --ui-smoke-test`: the real Avalonia window opened, but the one-second `DispatcherTimer` close path did not terminate the classic desktop lifetime, so the watchdog returned 124 and Xvfb teardown produced a secondary X I/O error. The equivalent local WSL probe had passed, identifying timing/lifetime nondeterminism rather than a scanner or archive defect.
+
+**Decision.** Keep the external 20-second deadline unchanged. In UI-smoke mode, select `ShutdownMode.OnExplicitShutdown`, attach to the real window `Opened` event, post the close operation to the UI dispatcher, and call lifetime `Shutdown(0)` in a `finally` block. Closing still runs `MainWindow.OnClosed` and disposes its view model; explicit shutdown no longer relies on platform-specific inference from the last window. Expose only the small close/shutdown scheduler needed by the Linux test project.
+
+**Regression evidence.** The existing headless surface test now configures the production UI-smoke scheduler, opens a second real headless window, drains dispatcher work, and requires both the shutdown callback and a non-visible window. Locked WSL restore and warning-free build pass, both Linux tests pass, self-contained publish succeeds, and the published binary completes five consecutive X11/Xvfb UI-smoke launches under the unchanged timeout. This focused repair is pushed separately so hosted Linux can re-run it without conflating the result with scanner-model changes.
+
 ## 2026-08-06 — Add merge-deep through exact package and version proof
 
 **Decision.** Add the direct callable exported by `merge-deep` to `node-http-prototype-merge`, but preserve a third independent package identity and version line. Accept default ESM imports and direct CommonJS assignments only when the matching nearest runtime dependency resolves below 3.0.3 and remote data reaches a source operand. Emit `vulnerable-merge-deep-recursive-merge` or `lock-resolved-vulnerable-merge-deep-recursive-merge` so exact metadata and lock resolution remain visible. Reject the patched boundary, wrong-package declarations, namespace/named import guesses, reassignment, and target-only data.

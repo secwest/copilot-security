@@ -7,7 +7,7 @@ using Secwest.CopilotSecurity.Gui.Linux;
 
 var failures = new List<string>();
 Run("non-graphical application smoke contract", TestProgramSmoke);
-Run("headless Linux window loads complete scanner surface", TestHeadlessWindow);
+Run("headless Linux window loads the scanner surface and exits UI smoke", TestHeadlessWindow);
 Console.WriteLine($"{2 - failures.Count}/2 tests passed");
 return failures.Count == 0 ? 0 : 1;
 
@@ -74,6 +74,14 @@ static void TestHeadlessWindow()
 
         window.Close();
         Dispatcher.UIThread.RunJobs();
+
+        var shutdownRequested = false;
+        var smokeWindow = new MainWindow(platform);
+        App.ConfigureUiSmokeShutdown(smokeWindow, () => shutdownRequested = true);
+        smokeWindow.Show();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(shutdownRequested);
+        Assert.False(smokeWindow.IsVisible);
     }
     finally
     {
@@ -86,6 +94,11 @@ static class Assert
     public static void True(bool condition)
     {
         if (!condition) throw new InvalidOperationException("Expected true.");
+    }
+
+    public static void False(bool condition)
+    {
+        if (condition) throw new InvalidOperationException("Expected false.");
     }
 
     public static void NotNull(object? value)
