@@ -160,8 +160,11 @@ separately versioned standalone `lodash.merge` callable pinned to vulnerable
 carry its own manifest or lockfile proof; a declaration for core `lodash`
 cannot authorize it, or vice versa. A further package-isolated pair covers the
 direct `merge-deep` callable at vulnerable 3.0.2 and its patched 3.0.3
-boundary. No declaration for one merge family can authorize another. Three
-runs per case produce 330 scans in the complete corpus.
+boundary. A fourth package-isolated pair covers only literal recursive
+`extend(true, target, ...sources)` calls at vulnerable 3.0.1 and its patched
+3.0.2 boundary; omitted, false, or dynamic deep flags remain negative. No
+declaration for one merge family can authorize another. Three runs per case
+produce 336 scans across 56 exploit/control pairs in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all

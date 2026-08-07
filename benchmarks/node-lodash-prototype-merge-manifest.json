@@ -154,6 +154,41 @@
         "node-multi-hop-patched-merge-deep/run-1/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-extend-deep-prototype-pollution",
+      "description": "An Express JSON object crosses three relative-import boundaries into a source operand of extend(true, target, ...sources) under a nearest runtime manifest pinned to vulnerable version 3.0.1, allowing constructor.prototype traversal to modify Object.prototype and supply inherited authorization state.",
+      "fixture": "fixtures/node-multi-hop-extend-deep-prototype-pollution",
+      "findingsPaths": [
+        "node-multi-hop-extend-deep-prototype-pollution/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-extend-deep-merge",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-extend-deep",
+      "description": "The same Express and three-relay topology reaches extend(true, target, ...sources), but the nearest runtime manifest pins patched version 3.0.2 and therefore excludes the historical vulnerable-version model.",
+      "fixture": "fixtures/node-multi-hop-patched-extend-deep",
+      "findingsPaths": [
+        "node-multi-hop-patched-extend-deep/run-1/findings.json"
+      ],
+      "expected": []
     }
   ]
 }
