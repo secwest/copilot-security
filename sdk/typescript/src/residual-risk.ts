@@ -634,6 +634,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-jsonpath-plus-code-injection",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/["']jsonpath-plus["']/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-jsonpath-plus-eval",
+        expression: /\b[A-Za-z_$][\w$]*(?:\s*\.\s*JSONPath)?\s*\(/u,
+        cweIds: ["CWE-94"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2483,6 +2509,14 @@ interface NodeJsTomlSink {
   kind: "vulnerable-js-toml-load" | "lock-resolved-vulnerable-js-toml-load";
 }
 
+interface NodeJsonPathPlusSink {
+  sourceExpression: string;
+  kind:
+    | "vulnerable-jsonpath-plus-safe-eval"
+    | "lock-resolved-vulnerable-jsonpath-plus-safe-eval"
+    | "jsonpath-plus-native-eval";
+}
+
 type NodePrototypeMergeDependencyName =
   | "lodash"
   | "lodash.merge"
@@ -2596,7 +2630,7 @@ function nodeRegistrySemverDeclaration(declaration: string): boolean {
   );
 }
 
-function nodeRuntimeDependency(
+function nodeRuntimeDependencyUncached(
   files: readonly SourceFileSnapshot[],
   sourcePath: string,
   dependencyName: string,
@@ -2667,6 +2701,32 @@ function nodeRuntimeDependency(
     version,
     proof: exactDeclaration ? "manifest-exact" : "npm-lockfile",
   };
+}
+
+const NODE_RUNTIME_DEPENDENCY_CACHE = new WeakMap<
+  readonly SourceFileSnapshot[],
+  Map<string, NodeRuntimeDependency | null>
+>();
+
+function nodeRuntimeDependency(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  dependencyName: string,
+): NodeRuntimeDependency | undefined {
+  let cache = NODE_RUNTIME_DEPENDENCY_CACHE.get(files);
+  if (cache === undefined) {
+    cache = new Map<string, NodeRuntimeDependency | null>();
+    NODE_RUNTIME_DEPENDENCY_CACHE.set(files, cache);
+  }
+  const key = `${sourcePath}\u0000${dependencyName}`;
+  if (cache.has(key)) return cache.get(key) ?? undefined;
+  const dependency = nodeRuntimeDependencyUncached(
+    files,
+    sourcePath,
+    dependencyName,
+  );
+  cache.set(key, dependency ?? null);
+  return dependency;
 }
 
 function nodeLodashVersionIsPrototypePollutionVulnerable(
@@ -3370,6 +3430,161 @@ function nodeJsTomlSink(
   return undefined;
 }
 
+function nodeJsonPathPlusVersionIsSafeEvalVulnerable(version: string): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor] = parts as [number, number, number];
+  return major < 10 || (major === 10 && minor < 4);
+}
+
+function nodeJsonPathPlusEvalMode(
+  lines: readonly string[],
+  expression: string | undefined,
+  line: number,
+): "safe" | "native" | "disabled" | "unknown" {
+  if (expression === undefined) return "safe";
+  const resolved =
+    resolveJavascriptExpression(lines, expression, line)?.value ?? expression;
+  const value = resolved.trim();
+  if (value === "false") return "disabled";
+  if (/^(?:true|undefined|["']safe["'])$/u.test(value)) return "safe";
+  if (/^["']native["']$/u.test(value)) return "native";
+  return "unknown";
+}
+
+function nodeJsonPathPlusSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeJsonPathPlusSink | undefined {
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: Array<{
+    kind: "direct" | "receiver";
+    local: string;
+    line: number;
+  }> = [];
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']jsonpath-plus["']/u.exec(
+        code,
+      );
+    const commonjsReceiver =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']jsonpath-plus["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directMemberRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']jsonpath-plus["']\s*\)\s*\.\s*JSONPath\s*;?\s*$/u.exec(
+        code,
+      );
+    const receiver = namespace?.[1] ?? commonjsReceiver?.[1];
+    if (receiver !== undefined) {
+      bindings.push({ kind: "receiver", local: receiver, line: index + 1 });
+    }
+    if (directMemberRequire?.[1] !== undefined) {
+      bindings.push({
+        kind: "direct",
+        local: directMemberRequire[1],
+        line: index + 1,
+      });
+    }
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "jsonpath-plus" &&
+      imported.imported === "JSONPath" &&
+      /["']jsonpath-plus["']/u.test(codeLines[imported.line - 1] ?? "")
+    ) {
+      bindings.push({
+        kind: "direct",
+        local: imported.local,
+        line: imported.line,
+      });
+    }
+  }
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escapedLocal = escapeRegularExpression(binding.local);
+    if (
+      binding.kind === "receiver" &&
+      structuralLines
+        .slice(binding.line, Math.max(binding.line, line))
+        .some((candidate) =>
+          new RegExp(
+            `\\b${escapedLocal}\\s*\\.\\s*JSONPath\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+        )
+    ) {
+      continue;
+    }
+    const callee =
+      binding.kind === "receiver"
+        ? new RegExp(`\\b${escapedLocal}\\s*\\.\\s*JSONPath\\s*\\(`, "u")
+        : new RegExp(`\\b${escapedLocal}\\s*\\(`, "u");
+    const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+    if (arguments_ === undefined || arguments_.length === 0) continue;
+    const first =
+      resolveJavascriptExpression(lines, arguments_[0] ?? "", line)?.value ??
+      arguments_[0] ??
+      "";
+    const objectPath = javascriptObjectPropertyValue(first, "path");
+    const positionalOptions =
+      objectPath === undefined &&
+      first.trim().startsWith("{") &&
+      first.trim().endsWith("}") &&
+      arguments_.length >= 2;
+    const sourceExpression = (
+      objectPath ??
+      (positionalOptions ? arguments_[1] : arguments_[0]) ??
+      ""
+    ).trim();
+    if (sourceExpression === "") continue;
+    const evalExpression =
+      objectPath !== undefined || positionalOptions
+        ? javascriptObjectPropertyValue(first, "eval")
+        : undefined;
+    const evalMode = nodeJsonPathPlusEvalMode(lines, evalExpression, line);
+    if (evalMode === "disabled" || evalMode === "unknown") continue;
+    if (evalMode === "native") {
+      return { sourceExpression, kind: "jsonpath-plus-native-eval" };
+    }
+    const dependency = nodeRuntimeDependency(files, path, "jsonpath-plus");
+    if (
+      dependency === undefined ||
+      !nodeJsonPathPlusVersionIsSafeEvalVulnerable(dependency.version)
+    ) {
+      continue;
+    }
+    return {
+      sourceExpression,
+      kind:
+        dependency.proof === "npm-lockfile"
+          ? "lock-resolved-vulnerable-jsonpath-plus-safe-eval"
+          : "vulnerable-jsonpath-plus-safe-eval",
+    };
+  }
+  return undefined;
+}
+
 function nodePrototypeCopySink(
   lines: readonly string[],
   line: number,
@@ -3480,7 +3695,8 @@ function frameworkDataflowRecords(
               model.id === "node-http-ssrf" ||
                 model.id === "node-http-object-authorization" ||
                 model.id === "node-copilot-system-prompt-injection" ||
-                model.id === "node-http-js-toml-prototype-pollution"
+                model.id === "node-http-js-toml-prototype-pollution" ||
+                model.id === "node-http-jsonpath-plus-code-injection"
                 ? 64
                 : 8,
             )
@@ -3537,6 +3753,10 @@ function frameworkDataflowRecords(
       const nodeJsToml =
         model.id === "node-http-js-toml-prototype-pollution"
           ? nodeJsTomlSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeJsonPathPlus =
+        model.id === "node-http-jsonpath-plus-code-injection"
+          ? nodeJsonPathPlusSink(files, path, lines, sink.line)
           : undefined;
       const nodePathSink =
         model.id === "node-http-path"
@@ -3619,6 +3839,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-js-toml-prototype-pollution" &&
         nodeJsToml === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-jsonpath-plus-code-injection" &&
+        nodeJsonPathPlus === undefined
       ) {
         continue;
       }
@@ -3760,16 +3986,17 @@ function frameworkDataflowRecords(
               }))
               .find((candidate) => candidate.source !== undefined)
           : undefined;
-      const nodePackagePollutionSourceExpression =
+      const nodePackageVulnerabilitySourceExpression =
         nodePrototypeMerge?.sourceExpressions.join("\n") ??
-        nodeJsToml?.sourceExpression;
+        nodeJsToml?.sourceExpression ??
+        nodeJsonPathPlus?.sourceExpression;
       const source =
-        nodePackagePollutionSourceExpression !== undefined
+        nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
               lines,
               sources,
               sink.line,
-              nodePackagePollutionSourceExpression,
+              nodePackageVulnerabilitySourceExpression,
               model.sources,
             )
           : model.id === "node-http-prototype-copy" &&
@@ -4061,6 +4288,7 @@ function frameworkDataflowRecords(
         nodeCopilotResolution?.input.kind ??
         aggregateSinkMetadata?.kind ??
         bulkSinkMetadata?.kind ??
+        nodeJsonPathPlus?.kind ??
         nodeJsToml?.kind ??
         nodePrototypeMerge?.kind ??
         sink.kind;
@@ -8002,7 +8230,10 @@ function javascriptFrameworkWrapperSummaries(
           : matchingJavascriptModelLines(
               file.lines,
               model.sinks,
-              model.id === "node-http-js-toml-prototype-pollution" ? 64 : 32,
+              model.id === "node-http-js-toml-prototype-pollution" ||
+                model.id === "node-http-jsonpath-plus-code-injection"
+                ? 64
+                : 32,
             );
       const controls =
         model.id === "node-http-object-authorization" ||
@@ -8049,6 +8280,10 @@ function javascriptFrameworkWrapperSummaries(
           const nodeJsToml =
             model.id === "node-http-js-toml-prototype-pollution"
               ? nodeJsTomlSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeJsonPathPlus =
+            model.id === "node-http-jsonpath-plus-code-injection"
+              ? nodeJsonPathPlusSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -8109,6 +8344,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-jsonpath-plus-code-injection" &&
+            nodeJsonPathPlus === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -8147,6 +8388,7 @@ function javascriptFrameworkWrapperSummaries(
               ? undefined
               : nodePrototypeMerge.sourceExpressions.join("\n")) ??
             nodeJsToml?.sourceExpression ??
+            nodeJsonPathPlus?.sourceExpression ??
             (nodePrototypeCopy === undefined
               ? undefined
               : nodePrototypeCopy.sourceExpressions.join("\n")) ??
@@ -8317,6 +8559,9 @@ function javascriptFrameworkWrapperSummaries(
                   ? {}
                   : { kind: nodePrototypeMerge.kind }),
                 ...(nodeJsToml === undefined ? {} : { kind: nodeJsToml.kind }),
+                ...(nodeJsonPathPlus === undefined
+                  ? {}
+                  : { kind: nodeJsonPathPlus.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}

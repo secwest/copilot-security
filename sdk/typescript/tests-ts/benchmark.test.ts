@@ -182,6 +182,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-js-toml-prototype-pollution",
         "node-multi-hop-patched-js-toml",
       ],
+      [
+        "node-multi-hop-jsonpath-plus-rce",
+        "node-multi-hop-patched-jsonpath-plus",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

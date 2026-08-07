@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-jsonpath-plus",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "jsonpath-plus": "10.4.0"
+  }
+}

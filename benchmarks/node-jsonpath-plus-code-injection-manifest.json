@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-jsonpath-plus-rce",
+      "description": "An Express query-string JSONPath crosses three relative-import boundaries into the official JSONPath safe evaluator under an exact vulnerable 10.3.0 runtime pin. The evaluator permits an accessor-lookup chain that recovers Function and executes in the host process.",
+      "fixture": "fixtures/node-multi-hop-jsonpath-plus-rce",
+      "findingsPaths": ["node-multi-hop-jsonpath-plus-rce/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "node-vulnerable-jsonpath-plus-safe-eval",
+          "cwe": ["CWE-94"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-jsonpath-plus",
+      "description": "The matched Express source, three wrappers, static JSON document, and official API call pin jsonpath-plus 10.4.0, whose safe evaluator blocks the accessor lookup bypass and recovered Function constructor.",
+      "fixture": "fixtures/node-multi-hop-patched-jsonpath-plus",
+      "findingsPaths": [
+        "node-multi-hop-patched-jsonpath-plus/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}
