@@ -686,6 +686,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-dset-prototype-pollution",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]dset(?:\/merge)?['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-dset-path",
+        expression: /\b[A-Za-z_$][\w$]*(?:\s*\.\s*dset)?\s*\(/u,
+        cweIds: ["CWE-1321"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2548,6 +2574,21 @@ interface NodeFlatUnflattenSink {
   kind: "vulnerable-flat-unflatten" | "lock-resolved-vulnerable-flat-unflatten";
 }
 
+interface NodeDsetSinkPosition {
+  expression: string;
+  kind:
+    | "vulnerable-dset-path"
+    | "lock-resolved-vulnerable-dset-path"
+    | "vulnerable-dset-merge-path"
+    | "lock-resolved-vulnerable-dset-merge-path"
+    | "vulnerable-dset-merge-value"
+    | "lock-resolved-vulnerable-dset-merge-value";
+}
+
+interface NodeDsetSink {
+  positions: NodeDsetSinkPosition[];
+}
+
 type NodePrototypeMergeDependencyName =
   | "lodash"
   | "lodash.merge"
@@ -3742,6 +3783,230 @@ function nodeFlatUnflattenSink(
   return undefined;
 }
 
+function nodeDsetVersionParts(
+  version: string,
+): [number, number, number] | undefined {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return undefined;
+  }
+  return parts as [number, number, number];
+}
+
+function nodeDsetVersionIsPathVulnerable(version: string): boolean {
+  const parts = nodeDsetVersionParts(version);
+  if (parts === undefined) return false;
+  const [major, minor, patch] = parts;
+  return (
+    major < 3 || (major === 3 && (minor < 1 || (minor === 1 && patch < 4)))
+  );
+}
+
+function nodeDsetVersionIsMergeValueVulnerable(version: string): boolean {
+  const parts = nodeDsetVersionParts(version);
+  if (parts === undefined) return false;
+  const [major, minor, patch] = parts;
+  return major === 3 && minor === 1 && patch < 2;
+}
+
+function nodeDsetVersionHasMergeMode(version: string): boolean {
+  const parts = nodeDsetVersionParts(version);
+  if (parts === undefined) return false;
+  const [major, minor] = parts;
+  return major > 3 || (major === 3 && minor >= 1);
+}
+
+function nodeDsetSinkKind(
+  proof: NodeRuntimeDependency["proof"],
+  mode: "set" | "merge",
+  position: "path" | "value",
+): NodeDsetSinkPosition["kind"] {
+  if (mode === "merge" && position === "value") {
+    return proof === "npm-lockfile"
+      ? "lock-resolved-vulnerable-dset-merge-value"
+      : "vulnerable-dset-merge-value";
+  }
+  if (mode === "merge") {
+    return proof === "npm-lockfile"
+      ? "lock-resolved-vulnerable-dset-merge-path"
+      : "vulnerable-dset-merge-path";
+  }
+  return proof === "npm-lockfile"
+    ? "lock-resolved-vulnerable-dset-path"
+    : "vulnerable-dset-path";
+}
+
+function nodeDsetSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeDsetSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "dset");
+  if (
+    dependency === undefined ||
+    !nodeDsetVersionIsPathVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const versionParts = nodeDsetVersionParts(dependency.version)!;
+  const legacyDirectExport = versionParts[0] < 3;
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: Array<{
+    kind: "direct" | "receiver";
+    local: string;
+    line: number;
+    mode: "set" | "merge";
+  }> = [];
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const defaultImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["'](dset)["']/u.exec(code);
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["'](dset(?:\/merge)?)["']/u.exec(
+        code,
+      );
+    const commonjs =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["'](dset(?:\/merge)?)["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directMemberRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["'](dset(?:\/merge)?)["']\s*\)\s*\.\s*dset\s*;?\s*$/u.exec(
+        code,
+      );
+    if (legacyDirectExport && defaultImport?.[1] !== undefined) {
+      bindings.push({
+        kind: "direct",
+        local: defaultImport[1],
+        line: index + 1,
+        mode: "set",
+      });
+    }
+    if (namespace?.[1] !== undefined && !legacyDirectExport) {
+      const mode = namespace[2] === "dset/merge" ? "merge" : "set";
+      if (mode === "set" || nodeDsetVersionHasMergeMode(dependency.version)) {
+        bindings.push({
+          kind: "receiver",
+          local: namespace[1],
+          line: index + 1,
+          mode,
+        });
+      }
+    }
+    if (commonjs?.[1] !== undefined) {
+      const mode = commonjs[2] === "dset/merge" ? "merge" : "set";
+      if (legacyDirectExport && mode === "set") {
+        bindings.push({
+          kind: "direct",
+          local: commonjs[1],
+          line: index + 1,
+          mode,
+        });
+      } else if (
+        !legacyDirectExport &&
+        (mode === "set" || nodeDsetVersionHasMergeMode(dependency.version))
+      ) {
+        bindings.push({
+          kind: "receiver",
+          local: commonjs[1],
+          line: index + 1,
+          mode,
+        });
+      }
+    }
+    if (directMemberRequire?.[1] !== undefined && !legacyDirectExport) {
+      const mode = directMemberRequire[2] === "dset/merge" ? "merge" : "set";
+      if (mode === "set" || nodeDsetVersionHasMergeMode(dependency.version)) {
+        bindings.push({
+          kind: "direct",
+          local: directMemberRequire[1],
+          line: index + 1,
+          mode,
+        });
+      }
+    }
+  }
+  if (!legacyDirectExport) {
+    for (const imported of importedJavascriptSymbols(lines)) {
+      if (
+        (imported.moduleSpecifier === "dset" ||
+          imported.moduleSpecifier === "dset/merge") &&
+        imported.imported === "dset" &&
+        /["']dset(?:\/merge)?["']/u.test(codeLines[imported.line - 1] ?? "")
+      ) {
+        const mode =
+          imported.moduleSpecifier === "dset/merge" ? "merge" : "set";
+        if (mode === "set" || nodeDsetVersionHasMergeMode(dependency.version)) {
+          bindings.push({
+            kind: "direct",
+            local: imported.local,
+            line: imported.line,
+            mode,
+          });
+        }
+      }
+    }
+  }
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escapedLocal = escapeRegularExpression(binding.local);
+    if (
+      binding.kind === "receiver" &&
+      structuralLines
+        .slice(binding.line, Math.max(binding.line, line))
+        .some((candidate) =>
+          new RegExp(
+            `\\b${escapedLocal}\\s*\\.\\s*dset\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+        )
+    ) {
+      continue;
+    }
+    const callee =
+      binding.kind === "receiver"
+        ? new RegExp(`\\b${escapedLocal}\\s*\\.\\s*dset\\s*\\(`, "u")
+        : new RegExp(`\\b${escapedLocal}\\s*\\(`, "u");
+    const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+    const pathExpression = arguments_?.[1]?.trim() ?? "";
+    if (pathExpression === "") continue;
+    const positions: NodeDsetSinkPosition[] = [
+      {
+        expression: pathExpression,
+        kind: nodeDsetSinkKind(dependency.proof, binding.mode, "path"),
+      },
+    ];
+    const valueExpression = arguments_?.[2]?.trim() ?? "";
+    if (
+      binding.mode === "merge" &&
+      valueExpression !== "" &&
+      nodeDsetVersionIsMergeValueVulnerable(dependency.version)
+    ) {
+      positions.push({
+        expression: valueExpression,
+        kind: nodeDsetSinkKind(dependency.proof, binding.mode, "value"),
+      });
+    }
+    return { positions };
+  }
+  return undefined;
+}
+
 function nodePrototypeCopySink(
   lines: readonly string[],
   line: number,
@@ -3854,7 +4119,8 @@ function frameworkDataflowRecords(
                 model.id === "node-copilot-system-prompt-injection" ||
                 model.id === "node-http-js-toml-prototype-pollution" ||
                 model.id === "node-http-jsonpath-plus-code-injection" ||
-                model.id === "node-http-flat-unflatten-prototype-pollution"
+                model.id === "node-http-flat-unflatten-prototype-pollution" ||
+                model.id === "node-http-dset-prototype-pollution"
                 ? 64
                 : 8,
             )
@@ -3919,6 +4185,10 @@ function frameworkDataflowRecords(
       const nodeFlatUnflatten =
         model.id === "node-http-flat-unflatten-prototype-pollution"
           ? nodeFlatUnflattenSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeDset =
+        model.id === "node-http-dset-prototype-pollution"
+          ? nodeDsetSink(files, path, lines, sink.line)
           : undefined;
       const nodePathSink =
         model.id === "node-http-path"
@@ -4013,6 +4283,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-flat-unflatten-prototype-pollution" &&
         nodeFlatUnflatten === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-dset-prototype-pollution" &&
+        nodeDset === undefined
       ) {
         continue;
       }
@@ -4154,12 +4430,28 @@ function frameworkDataflowRecords(
               }))
               .find((candidate) => candidate.source !== undefined)
           : undefined;
+      const nodeDsetResolution =
+        model.id === "node-http-dset-prototype-pollution" &&
+        nodeDset !== undefined
+          ? nodeDset.positions
+              .map((position) => ({
+                position,
+                source: modeledObjectLookupSource(
+                  lines,
+                  sources,
+                  sink.line,
+                  position.expression,
+                  model.sources,
+                ),
+              }))
+              .find((candidate) => candidate.source !== undefined)
+          : undefined;
       const nodePackageVulnerabilitySourceExpression =
         nodePrototypeMerge?.sourceExpressions.join("\n") ??
         nodeJsToml?.sourceExpression ??
         nodeJsonPathPlus?.sourceExpression ??
         nodeFlatUnflatten?.sourceExpression;
-      const source =
+      const nonDsetSource =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
               lines,
@@ -4338,6 +4630,10 @@ function frameworkDataflowRecords(
                                                 sources,
                                                 sink.line,
                                               );
+      const source =
+        model.id === "node-http-dset-prototype-pollution"
+          ? nodeDsetResolution?.source
+          : nonDsetSource;
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -4457,6 +4753,7 @@ function frameworkDataflowRecords(
         nodeCopilotResolution?.input.kind ??
         aggregateSinkMetadata?.kind ??
         bulkSinkMetadata?.kind ??
+        nodeDsetResolution?.position.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
@@ -8402,7 +8699,8 @@ function javascriptFrameworkWrapperSummaries(
               model.sinks,
               model.id === "node-http-js-toml-prototype-pollution" ||
                 model.id === "node-http-jsonpath-plus-code-injection" ||
-                model.id === "node-http-flat-unflatten-prototype-pollution"
+                model.id === "node-http-flat-unflatten-prototype-pollution" ||
+                model.id === "node-http-dset-prototype-pollution"
                 ? 64
                 : 32,
             );
@@ -8459,6 +8757,10 @@ function javascriptFrameworkWrapperSummaries(
           const nodeFlatUnflatten =
             model.id === "node-http-flat-unflatten-prototype-pollution"
               ? nodeFlatUnflattenSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeDset =
+            model.id === "node-http-dset-prototype-pollution"
+              ? nodeDsetSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -8531,6 +8833,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-dset-prototype-pollution" &&
+            nodeDset === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -8571,6 +8879,11 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsToml?.sourceExpression ??
             nodeJsonPathPlus?.sourceExpression ??
             nodeFlatUnflatten?.sourceExpression ??
+            (nodeDset === undefined
+              ? undefined
+              : nodeDset.positions
+                  .map(({ expression }) => expression)
+                  .join("\n")) ??
             (nodePrototypeCopy === undefined
               ? undefined
               : nodePrototypeCopy.sourceExpressions.join("\n")) ??
@@ -8721,6 +9034,12 @@ function javascriptFrameworkWrapperSummaries(
               aggregateSinkPosition === undefined
                 ? undefined
                 : nodeMongooseAggregateSinkMetadata(aggregateSinkPosition);
+            const dsetSinkPosition = nodeDset?.positions.find((position) =>
+              lineReferencesIdentifier(
+                position.expression,
+                wrapper.parameters[parameterIndex]!,
+              ),
+            );
             const copilotInput = nodeCopilotSink?.inputs.find(
               ({ expression }) =>
                 lineReferencesIdentifier(
@@ -8747,6 +9066,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeFlatUnflatten === undefined
                   ? {}
                   : { kind: nodeFlatUnflatten.kind }),
+                ...(dsetSinkPosition === undefined
+                  ? {}
+                  : { kind: dsetSinkPosition.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}

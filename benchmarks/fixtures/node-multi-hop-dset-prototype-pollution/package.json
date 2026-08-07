@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-dset-prototype-pollution",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "dset": "3.1.3"
+  }
+}

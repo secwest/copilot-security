@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-dset-prototype-pollution",
+      "description": "An Express JSON path crosses three relative-import boundaries into dset under an exact vulnerable 3.1.3 runtime pin. A nested-array __proto__ segment bypasses the pre-coercion comparison and reaches Object.prototype.",
+      "fixture": "fixtures/node-multi-hop-dset-prototype-pollution",
+      "findingsPaths": [
+        "node-multi-hop-dset-prototype-pollution/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-dset-path",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-dset",
+      "description": "The matched Express source, three wrappers, target, value, and official dset call pin 3.1.4, which coerces every path segment before rejecting dangerous keys.",
+      "fixture": "fixtures/node-multi-hop-patched-dset",
+      "findingsPaths": ["node-multi-hop-patched-dset/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

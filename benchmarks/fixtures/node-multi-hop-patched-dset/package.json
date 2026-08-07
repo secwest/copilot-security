@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-dset",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "dset": "3.1.4"
+  }
+}

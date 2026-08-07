@@ -190,6 +190,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-flat-unflatten-prototype-pollution",
         "node-multi-hop-patched-flat-unflatten",
       ],
+      [
+        "node-multi-hop-dset-prototype-pollution",
+        "node-multi-hop-patched-dset",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],
