@@ -224,6 +224,41 @@
         "node-multi-hop-patched-deep-extend/run-1/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-just-extend-prototype-pollution",
+      "description": "An Express JSON object crosses three relative-import boundaries into a source operand of extend(true, target, ...sources) under a nearest runtime manifest pinned to vulnerable just-extend 4.0.0, allowing an own __proto__ property to recurse through the inherited destination into Object.prototype and supply authorization state to a fresh object.",
+      "fixture": "fixtures/node-multi-hop-just-extend-prototype-pollution",
+      "findingsPaths": [
+        "node-multi-hop-just-extend-prototype-pollution/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-just-extend-deep-merge",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-just-extend",
+      "description": "The same Express and three-relay topology reaches extend(true, target, ...sources), but the nearest runtime manifest pins just-extend 4.0.1, whose own-property destination check prevents traversal into global Object.prototype and excludes the historical vulnerable-version model.",
+      "fixture": "fixtures/node-multi-hop-patched-just-extend",
+      "findingsPaths": [
+        "node-multi-hop-patched-just-extend/run-1/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

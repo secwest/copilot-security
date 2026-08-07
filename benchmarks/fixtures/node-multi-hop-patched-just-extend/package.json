@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-just-extend",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "just-extend": "4.0.1"
+  }
+}

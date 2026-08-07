@@ -154,6 +154,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-deep-extend-prototype-pollution",
         "node-multi-hop-patched-deep-extend",
       ],
+      [
+        "node-multi-hop-just-extend-prototype-pollution",
+        "node-multi-hop-patched-just-extend",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

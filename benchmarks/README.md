@@ -165,8 +165,12 @@ boundary. A fourth package-isolated pair covers only literal recursive
 3.0.2 boundary; omitted, false, or dynamic deep flags remain negative. A
 fifth package-isolated pair covers the always-recursive direct `deep-extend`
 callable at vulnerable 0.5.0 and its patched 0.5.1 property-read boundary. No
-declaration for one merge family can authorize another. Three runs per case
-produce 342 scans across 57 exploit/control pairs in the complete corpus.
+declaration for one merge family can authorize another. A sixth pair covers
+literal-recursive `just-extend` 4.0.0 and its 4.0.1 own-destination-property
+boundary; this deliberately follows the upstream repair and CodeQL rather
+than the reviewed advisory's stale claim that 4.0.0 was already patched.
+Three runs per case produce 348 scans across 58 exploit/control pairs in the
+complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -270,7 +274,10 @@ evidence. Core Lodash uses either a nearest runtime `package.json` pin of
 4.17.10 or `^4.17.0` plus an adjacent npm v3 lockfile that repeats the root
 declaration and resolves 4.17.10. Further isolated pairs cover standalone
 `lodash.merge`, `merge-deep`, literal-recursive `extend`, and always-recursive
-`deep-extend`, each with its own patched boundary and dependency-free witness.
+`deep-extend`, plus literal-recursive `just-extend`, each with its own patched
+boundary and dependency-free witness. The `just-extend` control measures the
+upstream fix's global `Object.prototype` boundary through a fresh object while
+preserving target-local prototype replacement as separate review evidence.
 Matched controls preserve each call and topology while selecting a patched
 version.
 Deterministic regressions accept official default, namespace, CommonJS,

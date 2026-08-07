@@ -583,7 +583,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
     activation: [
-      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge|merge-deep|extend|deep-extend)["']/u,
+      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge|merge-deep|extend|deep-extend|just-extend)["']/u,
       /\b[A-Za-z_$][\w$]*(?:\s*\.\s*merge)?\s*\(/u,
     ],
     sources: [
@@ -2437,7 +2437,9 @@ interface NodePrototypeMergeSink {
     | "vulnerable-extend-deep-merge"
     | "lock-resolved-vulnerable-extend-deep-merge"
     | "vulnerable-deep-extend-recursive-merge"
-    | "lock-resolved-vulnerable-deep-extend-recursive-merge";
+    | "lock-resolved-vulnerable-deep-extend-recursive-merge"
+    | "vulnerable-just-extend-deep-merge"
+    | "lock-resolved-vulnerable-just-extend-deep-merge";
 }
 
 type NodePrototypeMergeDependencyName =
@@ -2445,7 +2447,8 @@ type NodePrototypeMergeDependencyName =
   | "lodash.merge"
   | "merge-deep"
   | "extend"
-  | "deep-extend";
+  | "deep-extend"
+  | "just-extend";
 
 interface NodeRuntimeDependency {
   manifestPath: string;
@@ -2684,6 +2687,17 @@ function nodeDeepExtendVersionIsPrototypePollutionVulnerable(
   return major === 0 && (minor < 5 || (minor === 5 && patch < 1));
 }
 
+function nodeJustExtendVersionIsPrototypePollutionVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return major < 4 || (major === 4 && minor === 0 && patch < 1);
+}
+
 function nodePrototypeMergeVersionIsVulnerable(
   dependencyName: NodePrototypeMergeDependencyName,
   version: string,
@@ -2701,6 +2715,8 @@ function nodePrototypeMergeVersionIsVulnerable(
       return nodeExtendVersionIsPrototypePollutionVulnerable(version);
     case "deep-extend":
       return nodeDeepExtendVersionIsPrototypePollutionVulnerable(version);
+    case "just-extend":
+      return nodeJustExtendVersionIsPrototypePollutionVulnerable(version);
   }
 }
 
@@ -2730,6 +2746,10 @@ function nodePrototypeMergeSinkKind(
       return lockResolved
         ? "lock-resolved-vulnerable-deep-extend-recursive-merge"
         : "vulnerable-deep-extend-recursive-merge";
+    case "just-extend":
+      return lockResolved
+        ? "lock-resolved-vulnerable-just-extend-deep-merge"
+        : "vulnerable-just-extend-deep-merge";
   }
 }
 
@@ -2800,6 +2820,14 @@ function nodePrototypeMergeSink(
       /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']deep-extend["']\s*\)/u.exec(
         structural,
       );
+    const justExtendImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']just-extend["']/u.exec(
+        structural,
+      );
+    const justExtendRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']just-extend["']\s*\)/u.exec(
+        structural,
+      );
     const receiver = defaultOrNamespace?.[1] ?? commonjsReceiver?.[1];
     const direct = directImport?.[1] ?? directRequire?.[1];
     if (receiver !== undefined) {
@@ -2852,6 +2880,15 @@ function nodePrototypeMergeSink(
         local: deepExtendDirect,
         line: index + 1,
         dependencyName: "deep-extend",
+      });
+    }
+    const justExtendDirect = justExtendImport?.[1] ?? justExtendRequire?.[1];
+    if (justExtendDirect !== undefined) {
+      bindings.push({
+        kind: "direct",
+        local: justExtendDirect,
+        line: index + 1,
+        dependencyName: "just-extend",
       });
     }
   }
@@ -2914,11 +2951,14 @@ function nodePrototypeMergeSink(
         ? new RegExp(`\\b${escapedLocal}\\s*\\.\\s*merge\\s*\\(`, "u")
         : new RegExp(`\\b${escapedLocal}\\s*\\(`, "u");
     const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
-    const sourceOffset = binding.dependencyName === "extend" ? 2 : 1;
+    const requiresDeepFlag =
+      binding.dependencyName === "extend" ||
+      binding.dependencyName === "just-extend";
+    const sourceOffset = requiresDeepFlag ? 2 : 1;
     if (
       arguments_ === undefined ||
       arguments_.length <= sourceOffset ||
-      (binding.dependencyName === "extend" && arguments_[0]?.trim() !== "true")
+      (requiresDeepFlag && arguments_[0]?.trim() !== "true")
     ) {
       continue;
     }
