@@ -10,6 +10,8 @@ This log records consequential implementation decisions, their evidence, and the
 
 **Regression evidence.** The existing headless surface test now configures the production UI-smoke scheduler, opens a second real headless window, drains dispatcher work, and requires both the shutdown callback and a non-visible window. Locked WSL restore and warning-free build pass, both Linux tests pass, self-contained publish succeeds, and the published binary completes five consecutive X11/Xvfb UI-smoke launches under the unchanged timeout. This focused repair is pushed separately so hosted Linux can re-run it without conflating the result with scanner-model changes.
 
+**Hosted confirmation.** Repair checkpoint `193571271d1bd595256514e9dcbaa2cb04b33707` passes [`linux-gui-ci` run `31135258027`](https://github.com/secwest/copilot-security/actions/runs/31135258027). The formerly failing real X11 startup step passes under the unchanged watchdog, archive assembly and retention complete, and the full job succeeds in 2 minutes 23 seconds.
+
 ## 2026-08-06 — Add merge-deep through exact package and version proof
 
 **Decision.** Add the direct callable exported by `merge-deep` to `node-http-prototype-merge`, but preserve a third independent package identity and version line. Accept default ESM imports and direct CommonJS assignments only when the matching nearest runtime dependency resolves below 3.0.3 and remote data reaches a source operand. Emit `vulnerable-merge-deep-recursive-merge` or `lock-resolved-vulnerable-merge-deep-recursive-merge` so exact metadata and lock resolution remain visible. Reject the patched boundary, wrong-package declarations, namespace/named import guesses, reassignment, and target-only data.
