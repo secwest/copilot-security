@@ -350,6 +350,33 @@ v1 locks, and stale metadata remain negative. Dependency-free witnesses prove
 the inherited authorization effect, own-property absence, global-prototype
 invariance, and repaired rejection.
 
+`node-axios-prototype-gadget-chain-manifest.json` measures a cross-component
+prototype-pollution attack path rather than another isolated sink. The positive
+sends an Express JSON object through three wrappers into Lodash 4.17.10,
+installs an object-valued `Object.prototype.proxy`, and then reaches an Axios
+1.17.0 instance. Its ordinary immutable-style request interceptor returns
+`{ ...config }`, changing Axios's initially null-prototype configuration back
+into a normal object before a protected outbound request and exposing the
+inherited proxy gadget. The matched control retains the source, wrappers,
+merge, interceptor, and request topology while pinning Lodash 4.17.11 and Axios
+1.18.0, closing both prerequisites. Deterministic regressions cover the direct
+Axios 0.19.0–0.31.0 and 1.0.0–1.15.1 stages; the interceptor-rematerialization
+0.31.1–0.32.x and 1.15.2–1.17.x stages; ESM, namespace, and CommonJS bindings;
+root and created instances; spread and `Object.assign` copies; exact and fresh
+npm v2/v3 lock proof; identity interceptors; own `proxy:false` boundaries;
+reassignment, shadowing, development-only and wrong-package declarations;
+local-only prototype replacement; repaired upstream primitives; and candidate
+density. Dependency-free witnesses prove the object-valued global write,
+null-prototype loss, inherited proxy selection, protected request material,
+both repairs, and cleanup. Live isolated loopback matrices separately confirm
+that the attacker proxy receives the absolute URL and authorization material on
+1.15.1 directly and on 1.17.0 after a plain-object interceptor, while 1.15.2's
+direct path, identity interception, own post-hardening `proxy:false`, 1.18.0,
+1.19.0, and patched Lodash remain on the intended target. On the pre-hardening
+stage, `proxy:false` prevents routing but can still leave inherited validator
+denial of service, so it is recorded as counterevidence rather than automatic
+suppression.
+
 `node-js-toml-prototype-pollution-manifest.json` broadens the measured parser
 surface beyond recursive merge helpers. Its positive sends an Express TOML body
 through three relative-import wrappers into the official `js-toml.load(text)`

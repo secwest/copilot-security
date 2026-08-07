@@ -2850,6 +2850,45 @@
         "node-multi-hop-patched-immutable/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-axios-prototype-gadget-chain",
+      "description": "An Express JSON object crosses three relative-import boundaries into exact vulnerable Lodash merge, installs an object-valued Object.prototype.proxy, and reaches an exact vulnerable Axios instance whose request interceptor rematerializes null-prototype configuration before a protected outbound request.",
+      "fixture": "fixtures/node-multi-hop-axios-prototype-gadget-chain",
+      "findingsPaths": [
+        "node-multi-hop-axios-prototype-gadget-chain/run-1/findings.json",
+        "node-multi-hop-axios-prototype-gadget-chain/run-2/findings.json",
+        "node-multi-hop-axios-prototype-gadget-chain/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-axios-prototype-gadget-chain",
+          "cwe": ["CWE-1321", "CWE-441"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 13,
+              "endLine": 13,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-axios-prototype-gadget-chain",
+      "description": "The identical request, wrapper, merge, interceptor, and outbound-call topology pins Lodash 4.17.11 and Axios 1.18.0, closing both the global prototype write and post-interceptor inherited-proxy boundary.",
+      "fixture": "fixtures/node-multi-hop-patched-axios-prototype-gadget-chain",
+      "findingsPaths": [
+        "node-multi-hop-patched-axios-prototype-gadget-chain/run-1/findings.json",
+        "node-multi-hop-patched-axios-prototype-gadget-chain/run-2/findings.json",
+        "node-multi-hop-patched-axios-prototype-gadget-chain/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

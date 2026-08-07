@@ -2540,13 +2540,17 @@ export async function buildResidualRiskInventory(
   records.push(...goPgxSqlInjectionRecords(sourceFiles));
   records.push(...goPgconnSqlInjectionRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
+  records.push(...nodeAxiosPrototypeGadgetChainRecords(sourceFiles, records));
   records.push(
     ...nodeIpv6TransitionIncompleteGuardRecords(sourceFiles, records),
   );
   records.push(...javaFileGetNamePathBoundaryRecords(sourceFiles, records));
   records.push(...javaPathGetFileNamePathBoundaryRecords(sourceFiles, records));
 
-  return selectResidualRiskRecords(records, MAX_SIGNALS)
+  return selectResidualRiskRecords(
+    nodeAxiosConsolidatedPrototypeGadgetRecords(records),
+    MAX_SIGNALS,
+  )
     .map(({ priority: _priority, excerpt, sourceExcerpt, ...record }) =>
       JSON.stringify({
         ...record,
@@ -5973,6 +5977,436 @@ function frameworkDataflowRecords(
     }
   }
   return records;
+}
+
+type NodeAxiosPrototypeGadgetStage =
+  | "direct-prototype-gadget"
+  | "interceptor-proxy-gadget";
+
+interface NodeAxiosPrototypeGadgetUse {
+  dependency: NodeRuntimeDependency;
+  file: SourceFileSnapshot;
+  interceptorLine?: number;
+  ownProxyDisabled: Array<{ kind: string; line: number }>;
+  receiver: string;
+  sink: NodeHttpUrlSink;
+  sinkKind: string;
+  sinkLine: number;
+  stage: NodeAxiosPrototypeGadgetStage;
+}
+
+function nodeAxiosPrototypeGadgetStage(
+  version: string,
+): NodeAxiosPrototypeGadgetStage | undefined {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return undefined;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  if (
+    (major === 0 &&
+      (minor > 19 || minor === 19) &&
+      (minor < 31 || (minor === 31 && patch < 1))) ||
+    (major === 1 && (minor < 15 || (minor === 15 && patch < 2)))
+  ) {
+    return "direct-prototype-gadget";
+  }
+  if (
+    (major === 0 &&
+      (minor > 31 || (minor === 31 && patch >= 1)) &&
+      minor < 33) ||
+    (major === 1 && (minor > 15 || (minor === 15 && patch >= 2)) && minor < 18)
+  ) {
+    return "interceptor-proxy-gadget";
+  }
+  return undefined;
+}
+
+function nodeAxiosPrototypePollutionCanSupplyObject(
+  framework: NonNullable<ResidualRiskRecord["frameworkModel"]>,
+): boolean {
+  return (
+    framework.id === "node-http-prototype-merge" ||
+    framework.id === "node-http-js-toml-prototype-pollution" ||
+    framework.id === "node-http-flat-unflatten-prototype-pollution" ||
+    (framework.id === "node-http-dset-prototype-pollution" &&
+      framework.sink.kind.endsWith("vulnerable-dset-merge-value"))
+  );
+}
+
+function nodeAxiosOwnProxyDisabledControls(
+  lines: readonly string[],
+  sink: NodeHttpUrlSink,
+): Array<{ kind: string; line: number }> {
+  return nodeAxiosConfigurationControls(lines, sink, [
+    {
+      kind: "own-axios-proxy-disabled",
+      expression: /(?:^|[{,])\s*(?:proxy|["']proxy["'])\s*:\s*false\b/u,
+    },
+  ]);
+}
+
+function nodeAxiosInterceptorReturnExpression(
+  callback: string,
+): { parameter: string; value: string } | undefined {
+  const arrow =
+    /^\s*(?:async\s+)?(?:\(\s*([A-Za-z_$][\w$]*)\s*\)|([A-Za-z_$][\w$]*))\s*=>\s*([\s\S]+)$/u.exec(
+      callback,
+    );
+  if (arrow !== null) {
+    const parameter = arrow[1] ?? arrow[2];
+    let value = arrow[3]?.trim() ?? "";
+    if (parameter === undefined || value === "") return undefined;
+    if (value.startsWith("{")) {
+      const returned = /\breturn\s+([\s\S]+?);?\s*\}\s*$/u.exec(value)?.[1];
+      if (returned === undefined) return undefined;
+      value = returned.trim();
+    }
+    while (value.startsWith("(") && value.endsWith(")")) {
+      const close = matchingCallParenthesis(value, 0);
+      if (close !== value.length - 1) break;
+      value = value.slice(1, -1).trim();
+    }
+    return { parameter, value };
+  }
+  const classic =
+    /^\s*(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{([\s\S]+)\}\s*$/u.exec(
+      callback,
+    );
+  if (classic?.[1] === undefined || classic[2] === undefined) return undefined;
+  const returned = /\breturn\s+([\s\S]+?);?\s*$/u.exec(classic[2])?.[1];
+  return returned === undefined
+    ? undefined
+    : { parameter: classic[1], value: returned.trim() };
+}
+
+function nodeAxiosPlainObjectCopy(
+  returnValue: string,
+  parameter: string,
+): { rematerializes: boolean; ownsProxyFalse: boolean } {
+  const escapedParameter = escapeRegularExpression(parameter);
+  const object = javascriptCompositePrefix(returnValue, "{", "}");
+  if (object !== undefined && object.length === returnValue.trim().length) {
+    const entries = javascriptDelimitedEntries(object.slice(1, -1));
+    const rematerializes = entries.some((entry) =>
+      new RegExp(`^\.\.\.\s*${escapedParameter}\s*$`, "u").test(entry.value),
+    );
+    const proxy = javascriptObjectPropertyValue(object, "proxy");
+    return {
+      rematerializes,
+      ownsProxyFalse: /^false$/u.test(proxy?.trim() ?? ""),
+    };
+  }
+  const assign = /^Object\s*\.\s*assign\s*\(([\s\S]*)\)\s*$/u.exec(
+    returnValue.trim(),
+  );
+  if (assign?.[1] === undefined) {
+    return { rematerializes: false, ownsProxyFalse: false };
+  }
+  const arguments_ = splitJavascriptArguments(assign[1]);
+  const target = arguments_[0]?.trim() ?? "";
+  const normalTarget =
+    /^\{\s*\}$/u.test(target) ||
+    /^Object\s*\.\s*create\s*\(\s*Object\s*\.\s*prototype\s*\)$/u.test(target);
+  const rematerializes =
+    normalTarget &&
+    arguments_
+      .slice(1)
+      .some((argument) =>
+        new RegExp(`^${escapedParameter}$`, "u").test(argument.trim()),
+      );
+  const ownsProxyFalse = arguments_.slice(1).some((argument) => {
+    const proxy = javascriptObjectPropertyValue(argument, "proxy");
+    return /^false$/u.test(proxy?.trim() ?? "");
+  });
+  return { rematerializes, ownsProxyFalse };
+}
+
+function nodeAxiosRematerializingInterceptorLine(
+  lines: readonly string[],
+  receiver: string,
+  beforeLine: number,
+): number | undefined {
+  const callee = new RegExp(
+    `\\b${escapeRegularExpression(receiver)}\\s*\\.\\s*interceptors\\s*\\.\\s*request\\s*\\.\\s*use\\s*\\(`,
+    "u",
+  );
+  let selected: number | undefined;
+  for (let line = 1; line < beforeLine; line += 1) {
+    const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+    const callbackExpression = arguments_?.[0]?.trim();
+    if (callbackExpression === undefined || callbackExpression === "") continue;
+    const callback = resolveJavascriptExpression(
+      lines,
+      callbackExpression,
+      line,
+    );
+    if (callback === undefined) continue;
+    const returned = nodeAxiosInterceptorReturnExpression(callback.value);
+    if (returned === undefined) continue;
+    const copy = nodeAxiosPlainObjectCopy(returned.value, returned.parameter);
+    if (copy.rematerializes && !copy.ownsProxyFalse) selected = line;
+  }
+  return selected;
+}
+
+function nodeAxiosPrototypeGadgetUses(
+  files: readonly SourceFileSnapshot[],
+): NodeAxiosPrototypeGadgetUse[] {
+  const uses: NodeAxiosPrototypeGadgetUse[] = [];
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !/["']axios["']/u.test(file.text)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "axios");
+    if (dependency === undefined) continue;
+    const stage = nodeAxiosPrototypeGadgetStage(dependency.version);
+    if (stage === undefined) continue;
+    const bindings = javascriptAxiosBindings(file.lines);
+    const structuralLines = javascriptStructuralLines(file.lines);
+    for (const [receiver, binding] of bindings) {
+      const call = new RegExp(
+        `\\b${escapeRegularExpression(receiver)}\\s*(?:\\.\\s*(?:delete|get|head|options|patch|post|put|request))?\\s*(?:<[^;(){}]+>)?\\s*\\(`,
+        "u",
+      );
+      for (let index = 0; index < structuralLines.length; index += 1) {
+        const sinkLine = index + 1;
+        if (
+          sinkLine <= binding.declarationLine ||
+          !call.test(structuralLines[index] ?? "")
+        ) {
+          continue;
+        }
+        const sink = nodeAxiosUrlArgument(file.lines, sinkLine);
+        if (
+          sink?.axiosReceiver !== receiver ||
+          javascriptAxiosReceiverShadowedInExport(
+            file.lines,
+            sinkLine,
+            receiver,
+          )
+        ) {
+          continue;
+        }
+        const ownProxyDisabled = nodeAxiosOwnProxyDisabledControls(
+          file.lines,
+          sink,
+        );
+        const interceptorLine =
+          stage === "interceptor-proxy-gadget"
+            ? nodeAxiosRematerializingInterceptorLine(
+                file.lines,
+                receiver,
+                sinkLine,
+              )
+            : undefined;
+        if (
+          stage === "interceptor-proxy-gadget" &&
+          (interceptorLine === undefined || ownProxyDisabled.length > 0)
+        ) {
+          continue;
+        }
+        const lockResolved = dependency.proof === "npm-lockfile";
+        uses.push({
+          dependency,
+          file,
+          ...(interceptorLine === undefined ? {} : { interceptorLine }),
+          ownProxyDisabled,
+          receiver,
+          sink,
+          sinkKind: `${lockResolved ? "lock-resolved-" : ""}vulnerable-axios-${stage}`,
+          sinkLine,
+          stage,
+        });
+        if (uses.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) return uses;
+      }
+    }
+  }
+  return uses;
+}
+
+function nodeAxiosPrototypeGadgetChainRecords(
+  files: readonly SourceFileSnapshot[],
+  records: readonly ResidualRiskRecord[],
+): ResidualRiskRecord[] {
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const uses = nodeAxiosPrototypeGadgetUses(files);
+  if (uses.length === 0) return [];
+  const specialized: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const record of records) {
+    const framework = record.frameworkModel;
+    if (
+      framework === undefined ||
+      !nodeAxiosPrototypePollutionCanSupplyObject(framework) ||
+      javascriptTestOrExamplePath(framework.sink.path)
+    ) {
+      continue;
+    }
+    const sourceBoundary = nodeRuntimeDependency(
+      files,
+      framework.sink.path,
+      "axios",
+    );
+    if (sourceBoundary === undefined) continue;
+    for (const use of uses) {
+      if (
+        use.dependency.manifestPath !== sourceBoundary.manifestPath ||
+        use.dependency.version !== sourceBoundary.version ||
+        use.dependency.proof !== sourceBoundary.proof
+      ) {
+        continue;
+      }
+      const key = [
+        framework.source.path,
+        framework.source.line,
+        framework.sink.path,
+        framework.sink.line,
+        use.file.path,
+        use.sinkLine,
+        use.stage,
+      ].join("\0");
+      if (emitted.has(key)) continue;
+      emitted.add(key);
+      const startLine = Math.max(1, use.sinkLine - CONTEXT_LINES_BEFORE);
+      const endLine = Math.min(
+        use.file.lines.length,
+        use.sinkLine + CONTEXT_LINES_AFTER,
+      );
+      const sourceFile = filesByPath.get(framework.source.path);
+      const sourceStart = Math.max(1, framework.source.line - 2);
+      const sourceEnd = Math.min(
+        sourceFile?.lines.length ?? framework.source.line,
+        framework.source.line + 2,
+      );
+      const candidateControls = [
+        ...framework.candidateControls,
+        ...use.ownProxyDisabled.map((control) => ({
+          ...control,
+          path: use.file.path,
+        })),
+      ].filter(
+        (control, index, all) =>
+          all.findIndex(
+            (candidate) =>
+              candidate.kind === control.kind &&
+              candidate.path === control.path &&
+              candidate.line === control.line,
+          ) === index,
+      );
+      specialized.push({
+        path: use.file.path,
+        line: use.sinkLine,
+        categories: [
+          "framework-dataflow:node-http-axios-prototype-gadget-chain",
+          "framework-cross-component-attack-chain",
+          `modeled-source:${framework.source.kind}`,
+          `modeled-state-write:${framework.sink.kind}`,
+          `modeled-sink:${use.sinkKind}`,
+          ...candidateControls.map(
+            (control) => `candidate-control:${control.kind}`,
+          ),
+        ],
+        priority: 124,
+        startLine,
+        endLine,
+        excerpt: sourceExcerpt(use.file.lines, startLine, endLine),
+        sourceExcerpt:
+          sourceFile === undefined
+            ? record.sourceExcerpt
+            : sourceExcerpt(sourceFile.lines, sourceStart, sourceEnd),
+        frameworkModel: {
+          schemaVersion: "1.2",
+          id: "node-http-axios-prototype-gadget-chain",
+          language: "javascript-typescript",
+          scope: framework.scope,
+          source: framework.source,
+          sink: {
+            kind: use.sinkKind,
+            path: use.file.path,
+            line: use.sinkLine,
+            cweIds: ["CWE-1321", "CWE-441"],
+          },
+          propagators: [
+            ...framework.propagators,
+            {
+              kind: "prototype-pollution-state-write",
+              path: framework.sink.path,
+              line: framework.sink.line,
+              symbol: framework.sink.kind,
+            },
+            {
+              kind: "axios-runtime-dependency",
+              path: use.dependency.manifestPath,
+              line: use.dependency.line,
+              symbol: `axios@${use.dependency.version}:${use.dependency.proof}`,
+            },
+            ...(use.interceptorLine === undefined
+              ? []
+              : [
+                  {
+                    kind: "axios-request-interceptor-rematerialization",
+                    path: use.file.path,
+                    line: use.interceptorLine,
+                    symbol: use.receiver,
+                  },
+                ]),
+            {
+              kind: "shared-object-prototype-state",
+              path: use.file.path,
+              line: use.sinkLine,
+              symbol: "Object.prototype.proxy",
+            },
+          ],
+          candidateControls,
+        },
+      });
+      if (specialized.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) {
+        return specialized;
+      }
+    }
+  }
+  return specialized;
+}
+
+function nodeAxiosConsolidatedPrototypeGadgetRecords(
+  records: readonly ResidualRiskRecord[],
+): ResidualRiskRecord[] {
+  const superseded = new Set<string>();
+  for (const record of records) {
+    const framework = record.frameworkModel;
+    if (framework?.id !== "node-http-axios-prototype-gadget-chain") continue;
+    for (const propagator of framework.propagators) {
+      if (propagator.kind !== "prototype-pollution-state-write") continue;
+      superseded.add(
+        [
+          framework.source.path,
+          framework.source.line,
+          propagator.path,
+          propagator.line,
+          propagator.symbol ?? "",
+        ].join("\0"),
+      );
+    }
+  }
+  if (superseded.size === 0) return [...records];
+  return records.filter((record) => {
+    const framework = record.frameworkModel;
+    if (framework === undefined) return true;
+    return !superseded.has(
+      [
+        framework.source.path,
+        framework.source.line,
+        framework.sink.path,
+        framework.sink.line,
+        framework.sink.kind,
+      ].join("\0"),
+    );
+  });
 }
 
 function nodeIpv6TransitionIncompleteGuardRecords(

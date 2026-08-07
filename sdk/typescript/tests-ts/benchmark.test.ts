@@ -206,6 +206,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-immutable-prototype-replacement",
         "node-multi-hop-patched-immutable",
       ],
+      [
+        "node-multi-hop-axios-prototype-gadget-chain",
+        "node-multi-hop-patched-axios-prototype-gadget-chain",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],
