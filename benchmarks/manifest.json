@@ -2577,6 +2577,45 @@
         "node-multi-hop-patched-merge-recursive/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-js-toml-prototype-pollution",
+      "description": "An Express TOML body crosses three relative-import boundaries into the official js-toml load(text) parser under an exact vulnerable 1.0.1 runtime pin. A parser-produced [__proto__] table reuses Object.prototype and supplies inherited authorization state to a fresh object.",
+      "fixture": "fixtures/node-multi-hop-js-toml-prototype-pollution",
+      "findingsPaths": [
+        "node-multi-hop-js-toml-prototype-pollution/run-1/findings.json",
+        "node-multi-hop-js-toml-prototype-pollution/run-2/findings.json",
+        "node-multi-hop-js-toml-prototype-pollution/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-js-toml-load",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-js-toml",
+      "description": "The matched Express source, three wrappers, and official load(text) call pin js-toml 1.0.2, whose null-prototype root and nested parser objects retain hostile table names as data without reaching Object.prototype.",
+      "fixture": "fixtures/node-multi-hop-patched-js-toml",
+      "findingsPaths": [
+        "node-multi-hop-patched-js-toml/run-1/findings.json",
+        "node-multi-hop-patched-js-toml/run-2/findings.json",
+        "node-multi-hop-patched-js-toml/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

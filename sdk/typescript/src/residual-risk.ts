@@ -608,6 +608,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-js-toml-prototype-pollution",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/["']js-toml["']/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-js-toml-load",
+        expression: /\b[A-Za-z_$][\w$]*(?:\s*\.\s*load)?\s*\(/u,
+        cweIds: ["CWE-1321"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2452,6 +2478,11 @@ interface NodePrototypeMergeSink {
     | "lock-resolved-vulnerable-merge-recursive-merge";
 }
 
+interface NodeJsTomlSink {
+  sourceExpression: string;
+  kind: "vulnerable-js-toml-load" | "lock-resolved-vulnerable-js-toml-load";
+}
+
 type NodePrototypeMergeDependencyName =
   | "lodash"
   | "lodash.merge"
@@ -3221,6 +3252,124 @@ function nodePrototypeMergeSink(
   return undefined;
 }
 
+function nodeJsTomlVersionIsPrototypePollutionVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return major < 1 || (major === 1 && minor === 0 && patch < 2);
+}
+
+function nodeJsTomlSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeJsTomlSink | undefined {
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: Array<{
+    kind: "direct" | "receiver";
+    local: string;
+    line: number;
+  }> = [];
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']js-toml["']/u.exec(
+        code,
+      );
+    const commonjsReceiver =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']js-toml["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directMemberRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']js-toml["']\s*\)\s*\.\s*load\s*;?\s*$/u.exec(
+        code,
+      );
+    const receiver = namespace?.[1] ?? commonjsReceiver?.[1];
+    if (receiver !== undefined) {
+      bindings.push({ kind: "receiver", local: receiver, line: index + 1 });
+    }
+    if (directMemberRequire?.[1] !== undefined) {
+      bindings.push({
+        kind: "direct",
+        local: directMemberRequire[1],
+        line: index + 1,
+      });
+    }
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "js-toml" &&
+      imported.imported === "load" &&
+      /["']js-toml["']/u.test(codeLines[imported.line - 1] ?? "")
+    ) {
+      bindings.push({
+        kind: "direct",
+        local: imported.local,
+        line: imported.line,
+      });
+    }
+  }
+  const dependency = nodeRuntimeDependency(files, path, "js-toml");
+  if (
+    dependency === undefined ||
+    !nodeJsTomlVersionIsPrototypePollutionVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escapedLocal = escapeRegularExpression(binding.local);
+    if (
+      binding.kind === "receiver" &&
+      structuralLines
+        .slice(binding.line, Math.max(binding.line, line))
+        .some((candidate) =>
+          new RegExp(
+            `\\b${escapedLocal}\\s*\\.\\s*load\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+        )
+    ) {
+      continue;
+    }
+    const callee =
+      binding.kind === "receiver"
+        ? new RegExp(`\\b${escapedLocal}\\s*\\.\\s*load\\s*\\(`, "u")
+        : new RegExp(`\\b${escapedLocal}\\s*\\(`, "u");
+    const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+    const sourceExpression = arguments_?.[0]?.trim() ?? "";
+    if (sourceExpression === "") continue;
+    return {
+      sourceExpression,
+      kind:
+        dependency.proof === "npm-lockfile"
+          ? "lock-resolved-vulnerable-js-toml-load"
+          : "vulnerable-js-toml-load",
+    };
+  }
+  return undefined;
+}
+
 function nodePrototypeCopySink(
   lines: readonly string[],
   line: number,
@@ -3330,7 +3479,8 @@ function frameworkDataflowRecords(
               model.sinks,
               model.id === "node-http-ssrf" ||
                 model.id === "node-http-object-authorization" ||
-                model.id === "node-copilot-system-prompt-injection"
+                model.id === "node-copilot-system-prompt-injection" ||
+                model.id === "node-http-js-toml-prototype-pollution"
                 ? 64
                 : 8,
             )
@@ -3383,6 +3533,10 @@ function frameworkDataflowRecords(
       const nodePrototypeMerge =
         model.id === "node-http-prototype-merge"
           ? nodePrototypeMergeSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeJsToml =
+        model.id === "node-http-js-toml-prototype-pollution"
+          ? nodeJsTomlSink(files, path, lines, sink.line)
           : undefined;
       const nodePathSink =
         model.id === "node-http-path"
@@ -3459,6 +3613,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-prototype-merge" &&
         nodePrototypeMerge === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-js-toml-prototype-pollution" &&
+        nodeJsToml === undefined
       ) {
         continue;
       }
@@ -3600,14 +3760,16 @@ function frameworkDataflowRecords(
               }))
               .find((candidate) => candidate.source !== undefined)
           : undefined;
+      const nodePackagePollutionSourceExpression =
+        nodePrototypeMerge?.sourceExpressions.join("\n") ??
+        nodeJsToml?.sourceExpression;
       const source =
-        model.id === "node-http-prototype-merge" &&
-        nodePrototypeMerge !== undefined
+        nodePackagePollutionSourceExpression !== undefined
           ? modeledObjectLookupSource(
               lines,
               sources,
               sink.line,
-              nodePrototypeMerge.sourceExpressions.join("\n"),
+              nodePackagePollutionSourceExpression,
               model.sources,
             )
           : model.id === "node-http-prototype-copy" &&
@@ -3899,6 +4061,7 @@ function frameworkDataflowRecords(
         nodeCopilotResolution?.input.kind ??
         aggregateSinkMetadata?.kind ??
         bulkSinkMetadata?.kind ??
+        nodeJsToml?.kind ??
         nodePrototypeMerge?.kind ??
         sink.kind;
       const startLine = Math.max(1, effectiveSinkLine - CONTEXT_LINES_BEFORE);
@@ -7836,7 +7999,11 @@ function javascriptFrameworkWrapperSummaries(
       const sinks =
         model.id === "node-http-path"
           ? exactFilesystemPathSinkLines(file.lines, model.id, 32)
-          : matchingJavascriptModelLines(file.lines, model.sinks, 32);
+          : matchingJavascriptModelLines(
+              file.lines,
+              model.sinks,
+              model.id === "node-http-js-toml-prototype-pollution" ? 64 : 32,
+            );
       const controls =
         model.id === "node-http-object-authorization" ||
         model.id === "node-http-mongoose-nosql" ||
@@ -7878,6 +8045,10 @@ function javascriptFrameworkWrapperSummaries(
           const nodePrototypeMerge =
             model.id === "node-http-prototype-merge"
               ? nodePrototypeMergeSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeJsToml =
+            model.id === "node-http-js-toml-prototype-pollution"
+              ? nodeJsTomlSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -7932,6 +8103,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-js-toml-prototype-pollution" &&
+            nodeJsToml === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -7969,6 +8146,7 @@ function javascriptFrameworkWrapperSummaries(
             (nodePrototypeMerge === undefined
               ? undefined
               : nodePrototypeMerge.sourceExpressions.join("\n")) ??
+            nodeJsToml?.sourceExpression ??
             (nodePrototypeCopy === undefined
               ? undefined
               : nodePrototypeCopy.sourceExpressions.join("\n")) ??
@@ -8138,6 +8316,7 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodePrototypeMerge === undefined
                   ? {}
                   : { kind: nodePrototypeMerge.kind }),
+                ...(nodeJsToml === undefined ? {} : { kind: nodeJsToml.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}

@@ -178,6 +178,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-merge-recursive-prototype-pollution",
         "node-multi-hop-patched-merge-recursive",
       ],
+      [
+        "node-multi-hop-js-toml-prototype-pollution",
+        "node-multi-hop-patched-js-toml",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

@@ -312,6 +312,23 @@ malformed JSON, and oversized metadata. Dependency-free witnesses isolate
 `constructor.prototype` traversal and the patched dangerous-key boundary
 without installing a vulnerable package.
 
+`node-js-toml-prototype-pollution-manifest.json` broadens the measured parser
+surface beyond recursive merge helpers. Its positive sends an Express TOML body
+through three relative-import wrappers into the official `js-toml.load(text)`
+API under an exact 1.0.1 runtime pin. The hostile `[__proto__]` table reuses
+`Object.prototype`, and the following assignment becomes inherited
+authorization state on a fresh object. The matched 1.0.2 control preserves the
+source, call, and topology while measuring the upstream repair: null-prototype
+root, inline-table, array-of-tables, and nested objects retain hostile names as
+data without reaching built-in prototypes. Deterministic regressions accept
+named, aliased, destructured, namespace, CommonJS receiver, and direct-member
+bindings plus exact 0.x/1.0.0/1.0.1 pins and fresh npm v2/v3 vulnerable lock
+resolution. They reject 1.0.2+, default-import guesses, wrong members or
+packages, argument-position confusion, absent sources, reassignment and
+shadowing, development-only declarations, lockfile-free ranges, patched or
+inconsistent resolution, and v1 locks. The dependency-free witness proves both
+the vulnerable inherited-object effect and the patched null-prototype invariant.
+
 `node-copilot-prompt-injection-manifest.json` isolates that SDK boundary under
 perfect single-run gates. The positive must retain the HTTP source, all six
 ordered import/call/parameter propagators, exact trusted-content sink,

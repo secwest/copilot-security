@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-js-toml-prototype-pollution",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "js-toml": "1.0.1"
+  }
+}

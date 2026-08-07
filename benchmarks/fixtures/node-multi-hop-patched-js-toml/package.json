@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-js-toml",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "js-toml": "1.0.2"
+  }
+}
