@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-node-extend",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "node.extend": "2.0.1"
+  }
+}
