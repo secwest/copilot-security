@@ -59,6 +59,8 @@ const caseIds = [
   "node-multi-hop-patched-merge-options",
   "node-multi-hop-node-extend-prototype-pollution",
   "node-multi-hop-patched-node-extend",
+  "node-multi-hop-assign-deep-prototype-pollution",
+  "node-multi-hop-patched-assign-deep",
 ] as const;
 const temporaryPaths: string[] = [];
 
@@ -235,6 +237,14 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       requireCodeEvidence: true,
     });
     expect(manifest.cases[17]?.expected).toEqual([]);
+    expect(manifest.cases[18]?.expected[0]).toMatchObject({
+      cwe: ["CWE-1321"],
+      acceptableSeverities: ["critical", "high"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[19]?.expected).toEqual([]);
     expect(
       manifest.cases.every(({ findingsPaths }) => findingsPaths.length === 1),
     ).toBeTrue();
@@ -260,6 +270,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
       mergeOptionsSafe,
       nodeExtendUnsafe,
       nodeExtendSafe,
+      assignDeepUnsafe,
+      assignDeepSafe,
     ] = (await Promise.all(
       caseIds.map(async (caseId) =>
         mergeRecords(
@@ -269,6 +281,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
         ),
       ),
     )) as [
+      FrameworkRecord[],
+      FrameworkRecord[],
       FrameworkRecord[],
       FrameworkRecord[],
       FrameworkRecord[],
@@ -307,6 +321,8 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(mergeOptionsSafe).toHaveLength(0);
     expect(nodeExtendUnsafe).toHaveLength(1);
     expect(nodeExtendSafe).toHaveLength(0);
+    expect(assignDeepUnsafe).toHaveLength(1);
+    expect(assignDeepSafe).toHaveLength(0);
     expect(unsafe[0]?.frameworkModel).toMatchObject({
       scope: "cross-file-multi-hop-wrapper",
       source: { path: "src/server.js", line: 8, kind: "http-request-field" },
@@ -434,6 +450,19 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(nodeExtendUnsafe[0]?.frameworkModel?.propagators).toEqual(
       unsafe[0]?.frameworkModel?.propagators,
     );
+    expect(assignDeepUnsafe[0]?.frameworkModel).toMatchObject({
+      scope: "cross-file-multi-hop-wrapper",
+      source: { path: "src/server.js", line: 8, kind: "http-request-field" },
+      sink: {
+        path: "src/storage.js",
+        line: 4,
+        kind: "vulnerable-assign-deep-recursive-merge",
+        cweIds: ["CWE-1321"],
+      },
+    });
+    expect(assignDeepUnsafe[0]?.frameworkModel?.propagators).toEqual(
+      unsafe[0]?.frameworkModel?.propagators,
+    );
   });
 
   test("retains the vulnerable row under the repository cap", async () => {
@@ -494,6 +523,12 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     );
     expect(paths).not.toContain(
       "benchmarks/fixtures/node-multi-hop-patched-node-extend/src/storage.js",
+    );
+    expect(paths).toContain(
+      "benchmarks/fixtures/node-multi-hop-assign-deep-prototype-pollution/src/storage.js",
+    );
+    expect(paths).not.toContain(
+      "benchmarks/fixtures/node-multi-hop-patched-assign-deep/src/storage.js",
     );
   }, 60_000);
 
@@ -1526,6 +1561,120 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     ]);
   });
 
+  test("covers assign-deep's later reviewed range beyond the older CodeQL boundary", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-assign-deep-package-"),
+    );
+    temporaryPaths.push(repository);
+    const importSource =
+      'import assignDeep from "assign-deep";\nexport function handler(request) { return assignDeep({}, request.body); }\n';
+    const requireSource =
+      'const assignDeep = require("assign-deep");\nexport function handler(request) { return assignDeep({ mode: "strict" }, request.body); }\n';
+
+    for (const [id, source, section, version] of [
+      ["exact-pre-fix", importSource, "dependencies", "0.4.6"],
+      ["exact-reviewed-gap", requireSource, "optionalDependencies", "0.4.7"],
+      ["exact-one-release", importSource, "dependencies", "1.0.0"],
+    ] as const) {
+      await writeCase(repository, id, source, section, version, "assign-deep");
+    }
+    await writeCase(
+      repository,
+      "locked-range",
+      requireSource,
+      "dependencies",
+      "^0.4.0",
+      "assign-deep",
+    );
+    await writeNpmLock(repository, "locked-range", "^0.4.0", "0.4.7", {
+      dependencyName: "assign-deep",
+    });
+
+    for (const [id, source, version, dependencyName] of [
+      ["fixed-zero-boundary", importSource, "0.4.8", "assign-deep"],
+      ["safe-zero-gap", importSource, "0.5.0", "assign-deep"],
+      ["fixed-one-boundary", importSource, "1.0.1", "assign-deep"],
+      ["later-one", importSource, "1.1.0", "assign-deep"],
+      ["later-major", importSource, "2.0.0", "assign-deep"],
+      ["wrong-manifest", importSource, "0.4.7", "deep-extend"],
+      [
+        "target-only",
+        'import assignDeep from "assign-deep";\nexport function handler(request) { return assignDeep(request.body, {}); }\n',
+        "0.4.7",
+        "assign-deep",
+      ],
+      [
+        "primitive-target-shift",
+        'import assignDeep from "assign-deep";\nexport function handler(request) { return assignDeep(0, request.body); }\n',
+        "1.0.0",
+        "assign-deep",
+      ],
+      [
+        "namespace",
+        'import * as assignDeep from "assign-deep";\nexport function handler(request) { return assignDeep({}, request.body); }\n',
+        "0.4.7",
+        "assign-deep",
+      ],
+      [
+        "named",
+        'import { assignDeep } from "assign-deep";\nexport function handler(request) { return assignDeep({}, request.body); }\n',
+        "0.4.7",
+        "assign-deep",
+      ],
+      [
+        "reassigned",
+        'import assignDeep from "assign-deep";\nassignDeep = helper;\nexport function handler(request) { return assignDeep({}, request.body); }\n',
+        "0.4.7",
+        "assign-deep",
+      ],
+    ] as const) {
+      await writeCase(
+        repository,
+        id,
+        source,
+        "dependencies",
+        version,
+        dependencyName,
+      );
+    }
+    await writeCase(
+      repository,
+      "locked-fixed",
+      requireSource,
+      "dependencies",
+      "^1.0.0",
+      "assign-deep",
+    );
+    await writeNpmLock(repository, "locked-fixed", "^1.0.0", "1.0.1", {
+      dependencyName: "assign-deep",
+    });
+
+    const records = mergeRecords(await buildResidualRiskInventory(repository));
+    expect(
+      records.map((record) => ({
+        path: record.path,
+        kind: record.frameworkModel?.sink.kind,
+      })),
+    ).toEqual([
+      {
+        path: "exact-one-release/handler.mjs",
+        kind: "vulnerable-assign-deep-recursive-merge",
+      },
+      {
+        path: "exact-pre-fix/handler.mjs",
+        kind: "vulnerable-assign-deep-recursive-merge",
+      },
+      {
+        path: "exact-reviewed-gap/handler.mjs",
+        kind: "vulnerable-assign-deep-recursive-merge",
+      },
+      {
+        path: "locked-range/handler.mjs",
+        kind: "lock-resolved-vulnerable-assign-deep-recursive-merge",
+      },
+    ]);
+  });
+
   test("teaches version, recursion, manifest, and constructor.prototype proof", () => {
     const prompt = scanQualityGatePrompt("");
     expect(prompt).toContain("node-http-prototype-merge");
@@ -1556,6 +1705,13 @@ describe("Node version-aware Lodash prototype-merge framework model", () => {
     expect(prompt).toContain("1.1.7 through 1.x");
     expect(prompt).toContain("2.0.1 or later");
     expect(prompt).toContain("read __proto__ only when it is an own property");
+    expect(prompt).toContain("assign-deep");
+    expect(prompt).toContain("below 0.4.8, plus exactly 1.0.0");
+    expect(prompt).toContain("older CodeQL boundary below 0.4.7");
+    expect(prompt).toContain("primitive target shifts the next operand");
+    expect(prompt).toContain("block constructor and prototype");
+    expect(prompt).toContain("mutation-before-throw ordering");
+    expect(prompt).toContain("application error boundary");
     expect(prompt).toContain("source operands");
     expect(prompt).toContain("constructor.prototype");
     expect(prompt).toContain("CWE-1321");

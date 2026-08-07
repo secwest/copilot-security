@@ -583,7 +583,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
     activation: [
-      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge|merge-deep|extend|deep-extend|just-extend|merge-options|node\.extend)["']/u,
+      /["'](?:lodash(?:\/merge(?:\.js)?)?|lodash\.merge|merge-deep|extend|deep-extend|just-extend|merge-options|node\.extend|assign-deep)["']/u,
       /\b[A-Za-z_$][\w$]*(?:\s*\.\s*merge)?\s*\(/u,
     ],
     sources: [
@@ -2443,7 +2443,9 @@ interface NodePrototypeMergeSink {
     | "vulnerable-merge-options-recursive-merge"
     | "lock-resolved-vulnerable-merge-options-recursive-merge"
     | "vulnerable-node-extend-deep-merge"
-    | "lock-resolved-vulnerable-node-extend-deep-merge";
+    | "lock-resolved-vulnerable-node-extend-deep-merge"
+    | "vulnerable-assign-deep-recursive-merge"
+    | "lock-resolved-vulnerable-assign-deep-recursive-merge";
 }
 
 type NodePrototypeMergeDependencyName =
@@ -2454,7 +2456,8 @@ type NodePrototypeMergeDependencyName =
   | "deep-extend"
   | "just-extend"
   | "merge-options"
-  | "node.extend";
+  | "node.extend"
+  | "assign-deep";
 
 interface NodeRuntimeDependency {
   manifestPath: string;
@@ -2729,6 +2732,20 @@ function nodeNodeExtendVersionIsPrototypePollutionVulnerable(
   return vulnerableLegacyLine || vulnerableTwoLine;
 }
 
+function nodeAssignDeepVersionIsPrototypePollutionVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  const vulnerableZeroLine =
+    major === 0 && (minor < 4 || (minor === 4 && patch < 8));
+  const vulnerableOneRelease = major === 1 && minor === 0 && patch === 0;
+  return vulnerableZeroLine || vulnerableOneRelease;
+}
+
 function nodePrototypeMergeVersionIsVulnerable(
   dependencyName: NodePrototypeMergeDependencyName,
   version: string,
@@ -2752,6 +2769,8 @@ function nodePrototypeMergeVersionIsVulnerable(
       return nodeMergeOptionsVersionIsPrototypePollutionVulnerable(version);
     case "node.extend":
       return nodeNodeExtendVersionIsPrototypePollutionVulnerable(version);
+    case "assign-deep":
+      return nodeAssignDeepVersionIsPrototypePollutionVulnerable(version);
   }
 }
 
@@ -2793,6 +2812,10 @@ function nodePrototypeMergeSinkKind(
       return lockResolved
         ? "lock-resolved-vulnerable-node-extend-deep-merge"
         : "vulnerable-node-extend-deep-merge";
+    case "assign-deep":
+      return lockResolved
+        ? "lock-resolved-vulnerable-assign-deep-recursive-merge"
+        : "vulnerable-assign-deep-recursive-merge";
   }
 }
 
@@ -2887,6 +2910,14 @@ function nodePrototypeMergeSink(
       /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']node\.extend["']\s*\)/u.exec(
         structural,
       );
+    const assignDeepImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']assign-deep["']/u.exec(
+        structural,
+      );
+    const assignDeepRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']assign-deep["']\s*\)/u.exec(
+        structural,
+      );
     const receiver = defaultOrNamespace?.[1] ?? commonjsReceiver?.[1];
     const direct = directImport?.[1] ?? directRequire?.[1];
     if (receiver !== undefined) {
@@ -2969,6 +3000,15 @@ function nodePrototypeMergeSink(
         dependencyName: "node.extend",
       });
     }
+    const assignDeepDirect = assignDeepImport?.[1] ?? assignDeepRequire?.[1];
+    if (assignDeepDirect !== undefined) {
+      bindings.push({
+        kind: "direct",
+        local: assignDeepDirect,
+        line: index + 1,
+        dependencyName: "assign-deep",
+      });
+    }
   }
   for (const imported of importedJavascriptSymbols(lines)) {
     if (
@@ -3033,8 +3073,20 @@ function nodePrototypeMergeSink(
       binding.dependencyName === "extend" ||
       binding.dependencyName === "just-extend" ||
       binding.dependencyName === "node.extend";
+    const firstArgument = arguments_?.[0]?.trim() ?? "";
+    const assignDeepPrimitiveTarget =
+      binding.dependencyName === "assign-deep" &&
+      /^(?:null|undefined|true|false|[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?n?|["'][\s\S]*["'])$/u.test(
+        firstArgument,
+      );
     const sourceOffset =
-      binding.dependencyName === "merge-options" ? 0 : requiresDeepFlag ? 2 : 1;
+      binding.dependencyName === "merge-options"
+        ? 0
+        : requiresDeepFlag
+          ? 2
+          : assignDeepPrimitiveTarget
+            ? 2
+            : 1;
     if (
       arguments_ === undefined ||
       arguments_.length <= sourceOffset ||

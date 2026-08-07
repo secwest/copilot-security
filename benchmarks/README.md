@@ -174,8 +174,12 @@ and its patched 1.0.1 boundary. Every argument is a source because this API
 returns a new merged object rather than mutating argument zero. An eighth pair
 covers literal-recursive `node.extend` at the disjoint vulnerable 2.0.0 release
 and patched 2.0.1 boundary; the model also covers releases below 1.1.7 while
-keeping the intervening and later safe versions negative. Three runs per case
-produce 360 scans across 60 exploit/control pairs in the complete corpus.
+keeping the intervening and later safe versions negative. A ninth pair covers
+always-recursive `assign-deep` 0.4.7 and its completed 0.4.8 repair. This pair
+deliberately exceeds CodeQL's older below-0.4.7 model: the later reviewed
+advisory also covers 0.4.7 and exactly 1.0.0 because blocking only `__proto__`
+left `constructor.prototype` traversal reachable. Three runs per case produce
+366 scans across 61 exploit/control pairs in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -287,7 +291,10 @@ further pair covers `merge-options`, including its argument-zero source
 semantics and patched own-data-property definition. The final pair covers the
 direct `node.extend` callable, its below-1.1.7 plus exact-2.0.0 vulnerable
 ranges, literal deep flag, package-isolated dependency proof, and the shared
-1.1.7/2.0.1 own-property repair.
+1.1.7/2.0.1 own-property repair. The final pair covers direct `assign-deep`,
+the later reviewed below-0.4.8 plus exact-1.0.0 vulnerable union, its primitive
+target shift, and the completed 0.4.8/1.0.1 dangerous-key repair. This is a
+measured improvement over CodeQL's older below-0.4.7 package model.
 Matched controls preserve each call and topology while selecting a patched
 version.
 Deterministic regressions accept official default, namespace, CommonJS,

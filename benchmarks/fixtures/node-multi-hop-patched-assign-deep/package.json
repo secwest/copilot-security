@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-assign-deep",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "assign-deep": "0.4.8"
+  }
+}
