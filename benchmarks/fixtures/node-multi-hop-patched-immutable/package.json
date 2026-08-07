@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-immutable",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "immutable": "5.1.5"
+  }
+}

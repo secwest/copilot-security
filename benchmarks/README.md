@@ -330,6 +330,26 @@ methods, reassignment, shadowing, unsafe metadata, and the separately published
 `lodash.omit` package. Dependency-free witnesses prove both deletion plus
 cleanup and the completed pre-access guard.
 
+`node-immutable-prototype-replacement-manifest.json` measures Immutable.js
+plain-object prototype replacement without mislabeling it as global pollution.
+The positive sends an Express JSON profile update through three relative-import
+wrappers into 5.1.4 `mergeDeep`; copying an own `__proto__` key makes `admin` an
+inherited property of the returned profile and changes the authorization branch
+while leaving `Object.prototype` unchanged. The topology-identical 5.1.5
+control measures the shared magic-key repair. Deterministic regressions cover
+named, aliased, destructured, namespace, interoperable default, CommonJS, and
+direct-member bindings; all functional merge, set, and update surfaces; direct
+and locally retained `Map`/`fromJS` conversions; the 3.8.3, 4.3.8, and 5.1.5
+repair boundaries; and exact versus fresh npm v2/v3 lock provenance. They retain
+argument zero for copying functional merges, exclude merger callbacks, preserve
+key/path positions, and admit remote values only under a literal magic key.
+Patched or unavailable API branches, safe fixed-key values, wrong/read-only
+packages and methods, unconnected same-line expressions, reassignment,
+shadowing, development-only declarations, lockfile-free ranges, inconsistent or
+v1 locks, and stale metadata remain negative. Dependency-free witnesses prove
+the inherited authorization effect, own-property absence, global-prototype
+invariance, and repaired rejection.
+
 `node-js-toml-prototype-pollution-manifest.json` broadens the measured parser
 surface beyond recursive merge helpers. Its positive sends an Express TOML body
 through three relative-import wrappers into the official `js-toml.load(text)`

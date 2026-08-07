@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-immutable-prototype-replacement",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "immutable": "5.1.4"
+  }
+}

@@ -202,6 +202,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-lodash-unset-prototype-deletion",
         "node-multi-hop-patched-lodash-unset",
       ],
+      [
+        "node-multi-hop-immutable-prototype-replacement",
+        "node-multi-hop-patched-immutable",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

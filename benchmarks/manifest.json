@@ -2811,6 +2811,45 @@
         "node-multi-hop-patched-lodash-unset/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-immutable-prototype-replacement",
+      "description": "An Express JSON profile update crosses three relative-import boundaries into Immutable.js 5.1.4 mergeDeep. An own __proto__ key replaces only the returned profile's prototype and supplies an inherited admin authorization field.",
+      "fixture": "fixtures/node-multi-hop-immutable-prototype-replacement",
+      "findingsPaths": [
+        "node-multi-hop-immutable-prototype-replacement/run-1/findings.json",
+        "node-multi-hop-immutable-prototype-replacement/run-2/findings.json",
+        "node-multi-hop-immutable-prototype-replacement/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-immutable-returned-profile-prototype-replacement",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-immutable",
+      "description": "The matched Express source, wrappers, profile target, and mergeDeep source pin Immutable.js 5.1.5, which rejects magic keys across plain-object operations.",
+      "fixture": "fixtures/node-multi-hop-patched-immutable",
+      "findingsPaths": [
+        "node-multi-hop-patched-immutable/run-1/findings.json",
+        "node-multi-hop-patched-immutable/run-2/findings.json",
+        "node-multi-hop-patched-immutable/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-immutable-prototype-replacement",
+      "description": "An Express JSON profile update crosses three wrappers into Immutable.js 5.1.4 mergeDeep, replaces only the returned profile's prototype, and supplies an inherited admin authorization field.",
+      "fixture": "fixtures/node-multi-hop-immutable-prototype-replacement",
+      "findingsPaths": [
+        "node-multi-hop-immutable-prototype-replacement/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-immutable-returned-profile-prototype-replacement",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-immutable",
+      "description": "The matched Express source, wrappers, profile target, and mergeDeep source pin Immutable.js 5.1.5, which rejects magic keys across plain-object operations.",
+      "fixture": "fixtures/node-multi-hop-patched-immutable",
+      "findingsPaths": ["node-multi-hop-patched-immutable/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

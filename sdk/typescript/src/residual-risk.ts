@@ -767,6 +767,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-immutable-prototype-replacement",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]immutable['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-immutable-prototype-replacement",
+        expression:
+          /\b[A-Za-z_$][\w$]*(?:\s*\.\s*(?:merge|mergeWith|mergeDeep|mergeDeepWith|set|setIn|update|updateIn|Map|fromJS|toJS|toObject))?\s*\(/u,
+        cweIds: ["CWE-1321"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2650,6 +2677,11 @@ interface NodeObjectPathSink {
 }
 
 interface NodeLodashDeleteSink {
+  sourceExpressions: string[];
+  kind: string;
+}
+
+interface NodeImmutablePrototypeSink {
   sourceExpressions: string[];
   kind: string;
 }
@@ -4746,6 +4778,362 @@ function nodeLodashDeleteSink(
   return undefined;
 }
 
+type NodeImmutablePrototypeMethod =
+  | "merge"
+  | "mergeWith"
+  | "mergeDeep"
+  | "mergeDeepWith"
+  | "set"
+  | "setIn"
+  | "update"
+  | "updateIn"
+  | "Map"
+  | "fromJS";
+
+type NodeImmutableFunctionalMethod = Exclude<
+  NodeImmutablePrototypeMethod,
+  "Map" | "fromJS"
+>;
+
+interface NodeImmutablePrototypeBinding {
+  kind: "direct" | "receiver";
+  local: string;
+  line: number;
+  method?: NodeImmutablePrototypeMethod;
+}
+
+function nodeImmutablePrototypeVersionParts(
+  version: string,
+): [number, number, number] | undefined {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return undefined;
+  }
+  return parts as [number, number, number];
+}
+
+function nodeImmutablePrototypeVersionIsVulnerable(
+  version: string,
+  surface: "conversion" | "functional",
+): boolean {
+  const parts = nodeImmutablePrototypeVersionParts(version);
+  if (parts === undefined) return false;
+  const [major, minor, patch] = parts;
+  if (surface === "conversion" && major < 3) return true;
+  if (surface === "conversion" && major === 3) {
+    return minor < 8 || (minor === 8 && patch < 3);
+  }
+  if (major === 4) return minor < 3 || (minor === 3 && patch < 8);
+  if (major === 5) return minor < 1 || (minor === 1 && patch < 5);
+  return false;
+}
+
+function nodeImmutablePrototypeMethodName(method: string): string {
+  return method.replace(/([a-z])([A-Z])/gu, "$1-$2").toLowerCase();
+}
+
+function nodeImmutablePrototypeSinkKind(
+  method: string,
+  dependency: NodeRuntimeDependency,
+): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  return `${lockPrefix}vulnerable-immutable-${nodeImmutablePrototypeMethodName(method)}-prototype-replacement`;
+}
+
+function nodeImmutableLiteralMagicPath(expression: string): boolean {
+  return /(?:^|[\s[,(])['"]__proto__['"](?:$|[\s\]),])/u.test(
+    expression.trim(),
+  );
+}
+
+function nodeImmutablePrototypeSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeImmutablePrototypeSink | undefined {
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: NodeImmutablePrototypeBinding[] = [];
+  const addBinding = (binding: NodeImmutablePrototypeBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.kind === binding.kind &&
+          candidate.local === binding.local &&
+          candidate.line === binding.line &&
+          candidate.method === binding.method,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+  const methodPattern =
+    "merge|mergeWith|mergeDeep|mergeDeepWith|set|setIn|update|updateIn|Map|fromJS";
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiverImport =
+      /^\s*import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)(?:\s*,\s*\{[^}]*\})?\s+from\s+['"]immutable['"]/u.exec(
+        code,
+      );
+    const receiverRequire =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]immutable['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directMemberRequire = new RegExp(
+      `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*['"]immutable['"]\\s*\\)\\s*\\.\\s*(${methodPattern})\\s*;?\\s*$`,
+      "u",
+    ).exec(code);
+    if (receiverImport?.[1] !== undefined) {
+      addBinding({
+        kind: "receiver",
+        local: receiverImport[1],
+        line: index + 1,
+      });
+    }
+    if (receiverRequire?.[1] !== undefined) {
+      addBinding({
+        kind: "receiver",
+        local: receiverRequire[1],
+        line: index + 1,
+      });
+    }
+    if (
+      directMemberRequire?.[1] !== undefined &&
+      directMemberRequire[2] !== undefined
+    ) {
+      addBinding({
+        kind: "direct",
+        local: directMemberRequire[1],
+        line: index + 1,
+        method: directMemberRequire[2] as NodeImmutablePrototypeMethod,
+      });
+    }
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "immutable" &&
+      new RegExp(`^(?:${methodPattern})$`, "u").test(imported.imported)
+    ) {
+      addBinding({
+        kind: "direct",
+        local: imported.local,
+        line: imported.line,
+        method: imported.imported as NodeImmutablePrototypeMethod,
+      });
+    }
+  }
+  const dependency = nodeRuntimeDependency(files, path, "immutable");
+  if (dependency === undefined) return undefined;
+  const bindingIsUsable = (
+    binding: NodeImmutablePrototypeBinding,
+    endLine = line,
+  ): boolean =>
+    binding.line < endLine &&
+    wrapper?.parameters.includes(binding.local) !== true &&
+    !javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      endLine + 1,
+    );
+  const receiverMemberIsReassigned = (
+    binding: NodeImmutablePrototypeBinding,
+    method: NodeImmutablePrototypeMethod,
+    endLine = line,
+  ): boolean => {
+    if (binding.kind !== "receiver") return false;
+    const escaped = escapeRegularExpression(binding.local);
+    return structuralLines
+      .slice(binding.line, Math.max(binding.line, endLine))
+      .some((candidate) =>
+        new RegExp(
+          `\\b${escaped}\\s*\\.\\s*${method}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+          "u",
+        ).test(candidate),
+      );
+  };
+  const conversionMethods = ["Map", "fromJS"] as const;
+  const conversions = ["toJS", "toObject"] as const;
+  if (
+    nodeImmutablePrototypeVersionIsVulnerable(dependency.version, "conversion")
+  ) {
+    for (const binding of bindings) {
+      if (!bindingIsUsable(binding)) continue;
+      const constructors: readonly ("Map" | "fromJS")[] =
+        binding.method === "Map" || binding.method === "fromJS"
+          ? [binding.method]
+          : binding.kind === "receiver"
+            ? conversionMethods
+            : [];
+      for (const constructor of constructors) {
+        if (receiverMemberIsReassigned(binding, constructor)) continue;
+        const escaped = escapeRegularExpression(binding.local);
+        const constructorText =
+          binding.kind === "receiver"
+            ? `${escaped}\\s*\\.\\s*${constructor}`
+            : escaped;
+        const constructorCallee = new RegExp(
+          `\\b${constructorText}\\s*\\(`,
+          "u",
+        );
+        const directArguments = javascriptCallArgumentsAtLine(
+          lines,
+          line,
+          constructorCallee,
+        );
+        if (directArguments !== undefined) {
+          const code = structuralLines[line - 1] ?? "";
+          const conversion = conversions.find((candidate) =>
+            new RegExp(
+              `\\b${constructorText}\\s*\\((?:[^()]|\\([^()]*\\))*\\)\\s*\\.\\s*${candidate}\\s*\\(`,
+              "u",
+            ).test(code),
+          );
+          if (conversion !== undefined) {
+            const sourceExpressions = directArguments
+              .map((value) => value.trim())
+              .filter(Boolean);
+            if (sourceExpressions.length > 0) {
+              return {
+                sourceExpressions,
+                kind: nodeImmutablePrototypeSinkKind(
+                  `${constructor}-${conversion}`,
+                  dependency,
+                ),
+              };
+            }
+          }
+        }
+        for (
+          let originLine = binding.line + 1;
+          originLine < line;
+          originLine += 1
+        ) {
+          const originCode = structuralLines[originLine - 1] ?? "";
+          const assignment = new RegExp(
+            `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${
+              binding.kind === "receiver"
+                ? `${escaped}\\s*\\.\\s*${constructor}`
+                : escaped
+            }\\s*\\(`,
+            "u",
+          ).exec(originCode);
+          if (assignment?.[1] === undefined) continue;
+          const valueLocal = assignment[1];
+          const valueEscaped = escapeRegularExpression(valueLocal);
+          if (
+            !conversions.some((conversion) =>
+              new RegExp(
+                `\\b${valueEscaped}\\s*\\.\\s*${conversion}\\s*\\(`,
+                "u",
+              ).test(structuralLines[line - 1] ?? ""),
+            ) ||
+            javascriptIdentifierReassignedBetween(
+              lines,
+              valueLocal,
+              originLine,
+              line + 1,
+            )
+          ) {
+            continue;
+          }
+          const originArguments = javascriptCallArgumentsAtLine(
+            lines,
+            originLine,
+            constructorCallee,
+          );
+          const sourceExpressions = (originArguments ?? [])
+            .map((value) => value.trim())
+            .filter(Boolean);
+          if (sourceExpressions.length === 0) continue;
+          const conversion = conversions.find((candidate) =>
+            new RegExp(
+              `\\b${valueEscaped}\\s*\\.\\s*${candidate}\\s*\\(`,
+              "u",
+            ).test(structuralLines[line - 1] ?? ""),
+          );
+          if (conversion !== undefined) {
+            return {
+              sourceExpressions,
+              kind: nodeImmutablePrototypeSinkKind(
+                `${constructor}-${conversion}`,
+                dependency,
+              ),
+            };
+          }
+        }
+      }
+    }
+  }
+  if (
+    !nodeImmutablePrototypeVersionIsVulnerable(dependency.version, "functional")
+  ) {
+    return undefined;
+  }
+  for (const binding of bindings) {
+    if (!bindingIsUsable(binding)) continue;
+    const methods: readonly NodeImmutableFunctionalMethod[] =
+      binding.method !== undefined &&
+      binding.method !== "Map" &&
+      binding.method !== "fromJS"
+        ? [binding.method]
+        : binding.kind === "receiver"
+          ? [
+              "merge",
+              "mergeWith",
+              "mergeDeep",
+              "mergeDeepWith",
+              "set",
+              "setIn",
+              "update",
+              "updateIn",
+            ]
+          : [];
+    for (const method of methods) {
+      if (receiverMemberIsReassigned(binding, method)) continue;
+      const escaped = escapeRegularExpression(binding.local);
+      const callee =
+        binding.kind === "receiver"
+          ? new RegExp(`\\b${escaped}\\s*\\.\\s*${method}\\s*\\(`, "u")
+          : new RegExp(`\\b${escaped}\\s*\\(`, "u");
+      const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+      if (arguments_ === undefined) continue;
+      let sourceExpressions: string[];
+      if (method === "merge" || method === "mergeDeep") {
+        sourceExpressions = arguments_
+          .map((value) => value.trim())
+          .filter(Boolean);
+      } else if (method === "mergeWith" || method === "mergeDeepWith") {
+        sourceExpressions = arguments_
+          .slice(1)
+          .map((value) => value.trim())
+          .filter(Boolean);
+      } else {
+        sourceExpressions = arguments_
+          .slice(0, 2)
+          .map((value) => value.trim())
+          .filter(Boolean);
+        const pathExpression = arguments_[1]?.trim() ?? "";
+        if (nodeImmutableLiteralMagicPath(pathExpression)) {
+          const valueExpression = arguments_[2]?.trim();
+          if (valueExpression) sourceExpressions.push(valueExpression);
+        }
+      }
+      if (sourceExpressions.length === 0) continue;
+      return {
+        sourceExpressions,
+        kind: nodeImmutablePrototypeSinkKind(method, dependency),
+      };
+    }
+  }
+  return undefined;
+}
+
 function nodePrototypeCopySink(
   lines: readonly string[],
   line: number,
@@ -4861,7 +5249,8 @@ function frameworkDataflowRecords(
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
                 model.id === "node-http-dset-prototype-pollution" ||
                 model.id === "node-http-object-path-prototype-pollution" ||
-                model.id === "node-http-lodash-prototype-deletion"
+                model.id === "node-http-lodash-prototype-deletion" ||
+                model.id === "node-http-immutable-prototype-replacement"
                 ? 64
                 : 8,
             )
@@ -4938,6 +5327,10 @@ function frameworkDataflowRecords(
       const nodeLodashDelete =
         model.id === "node-http-lodash-prototype-deletion"
           ? nodeLodashDeleteSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeImmutablePrototype =
+        model.id === "node-http-immutable-prototype-replacement"
+          ? nodeImmutablePrototypeSink(files, path, lines, sink.line)
           : undefined;
       const nodePathSink =
         model.id === "node-http-path"
@@ -5050,6 +5443,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-lodash-prototype-deletion" &&
         nodeLodashDelete === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-immutable-prototype-replacement" &&
+        nodeImmutablePrototype === undefined
       ) {
         continue;
       }
@@ -5213,7 +5612,8 @@ function frameworkDataflowRecords(
         nodeJsonPathPlus?.sourceExpression ??
         nodeFlatUnflatten?.sourceExpression ??
         nodeObjectPath?.sourceExpression ??
-        nodeLodashDelete?.sourceExpressions.join("\n");
+        nodeLodashDelete?.sourceExpressions.join("\n") ??
+        nodeImmutablePrototype?.sourceExpressions.join("\n");
       const nonDsetSource =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -5519,6 +5919,7 @@ function frameworkDataflowRecords(
         nodeDsetResolution?.position.kind ??
         nodeObjectPath?.kind ??
         nodeLodashDelete?.kind ??
+        nodeImmutablePrototype?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
@@ -9467,7 +9868,8 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
                 model.id === "node-http-dset-prototype-pollution" ||
                 model.id === "node-http-object-path-prototype-pollution" ||
-                model.id === "node-http-lodash-prototype-deletion"
+                model.id === "node-http-lodash-prototype-deletion" ||
+                model.id === "node-http-immutable-prototype-replacement"
                 ? 64
                 : 32,
             );
@@ -9536,6 +9938,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeLodashDelete =
             model.id === "node-http-lodash-prototype-deletion"
               ? nodeLodashDeleteSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeImmutablePrototype =
+            model.id === "node-http-immutable-prototype-replacement"
+              ? nodeImmutablePrototypeSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -9626,6 +10037,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-immutable-prototype-replacement" &&
+            nodeImmutablePrototype === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -9668,6 +10085,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeFlatUnflatten?.sourceExpression ??
             nodeObjectPath?.sourceExpression ??
             nodeLodashDelete?.sourceExpressions.join("\n") ??
+            nodeImmutablePrototype?.sourceExpressions.join("\n") ??
             (nodeDset === undefined
               ? undefined
               : nodeDset.positions
@@ -9864,6 +10282,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeLodashDelete === undefined
                   ? {}
                   : { kind: nodeLodashDelete.kind }),
+                ...(nodeImmutablePrototype === undefined
+                  ? {}
+                  : { kind: nodeImmutablePrototype.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}
