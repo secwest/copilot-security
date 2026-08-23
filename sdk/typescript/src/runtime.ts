@@ -1,6 +1,6 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { constants, type Stats } from "node:fs";
+import { constants, createWriteStream, type Stats } from "node:fs";
 import {
   chmod,
   cp,
@@ -36,8 +36,9 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { crc32 } from "node:zlib";
 import { setTimeout as delay } from "node:timers/promises";
-import extractZip from "extract-zip";
+import { pipeline } from "node:stream/promises";
 import { parse } from "smol-toml";
+import { fromBufferPromise, type Entry } from "yauzl";
 import {
   CopilotSecurityError,
   OutputDirectoryError,
@@ -56,6 +57,7 @@ export const MARKETPLACE_NAME = "copilot-security-sdk";
 export const PLUGIN_NAME = "copilot-security";
 
 const MAX_ZIP_ENTRIES = 4_096;
+const MAX_ZIP_ARCHIVE_SIZE = 256 * 1024 * 1024;
 const MAX_ZIP_CENTRAL_DIRECTORY = 16 * 1024 * 1024;
 const MAX_ZIP_ENTRY_SIZE = 128 * 1024 * 1024;
 const MAX_ZIP_EXPANDED_SIZE = 512 * 1024 * 1024;
@@ -1752,56 +1754,10 @@ export async function extractPluginZip(
   );
   try {
     throwIfSignalAborted(signal);
-    await rejectBackslashZipNames(archivePath, signal);
-    let expandedSize = 0;
-    const paths = new Set<string>();
-    const checksums: Array<{ path: string; checksum: number }> = [];
-    await extractZip(archivePath, {
-      dir: staging,
-      defaultDirMode: 0o700,
-      defaultFileMode: 0o600,
-      onEntry(entry, archive) {
-        throwIfSignalAborted(signal);
-        if (archive.entryCount > MAX_ZIP_ENTRIES) {
-          throw new PluginBootstrapError(
-            `Plugin ZIP contains too many entries: ${archive.entryCount}.`,
-          );
-        }
-        const path = safeArchivePath(entry.fileName);
-        const collisionKey = path.toLowerCase();
-        if (paths.has(collisionKey)) {
-          throw new PluginBootstrapError(
-            `Plugin ZIP contains a duplicate path: ${entry.fileName}`,
-          );
-        }
-        paths.add(collisionKey);
-        if (((entry.externalFileAttributes >>> 16) & 0o170000) === 0o120000) {
-          throw new PluginBootstrapError(
-            `Plugin ZIP contains an unsafe path: ${entry.fileName}`,
-          );
-        }
-        if (entry.uncompressedSize > MAX_ZIP_ENTRY_SIZE) {
-          throw new PluginBootstrapError(
-            `Plugin ZIP entry exceeds the safety limit: ${entry.fileName}`,
-          );
-        }
-        expandedSize += entry.uncompressedSize;
-        if (expandedSize > MAX_ZIP_EXPANDED_SIZE) {
-          throw new PluginBootstrapError(
-            "Plugin ZIP expanded size exceeds the safety limit.",
-          );
-        }
-        const mode = (entry.externalFileAttributes >>> 16) & 0o170000;
-        const directory =
-          entry.fileName.endsWith("/") ||
-          mode === 0o040000 ||
-          (entry.versionMadeBy >>> 8 === 0 &&
-            entry.externalFileAttributes === 16);
-        if (!directory) {
-          checksums.push({ path, checksum: entry.crc32 >>> 0 });
-        }
-      },
-    });
+    const archiveBytes = await readPluginArchive(archivePath, signal);
+    validateRawZipDirectory(archiveBytes);
+    const checksums = await validatePluginZipEntries(archiveBytes, signal);
+    await extractValidatedPluginZip(archiveBytes, staging, signal);
     for (const { path, checksum } of checksums) {
       throwIfSignalAborted(signal);
       const bytes = await readFile(join(staging, ...path.split("/")));
@@ -1826,91 +1782,233 @@ export async function extractPluginZip(
   }
 }
 
-async function rejectBackslashZipNames(
+async function readPluginArchive(
   path: string,
   signal?: AbortSignal,
-): Promise<void> {
-  const handle = await open(path, "r");
+): Promise<Buffer> {
+  const expected = await lstat(path);
+  if (
+    !expected.isFile() ||
+    expected.isSymbolicLink() ||
+    expected.size < 22 ||
+    expected.size > MAX_ZIP_ARCHIVE_SIZE
+  ) {
+    throw new PluginBootstrapError(
+      "Plugin ZIP must be a bounded regular file.",
+    );
+  }
+  const handle = await open(
+    path,
+    constants.O_RDONLY |
+      (process.platform === "win32"
+        ? 0
+        : constants.O_NOFOLLOW | constants.O_NONBLOCK),
+  );
   try {
-    const metadata = await handle.stat();
-    if (!metadata.isFile() || metadata.size < 22) {
-      throw new Error("missing end of central directory");
-    }
-    const tailSize = Math.min(metadata.size, 65_557);
-    const tail = await readExactly(
-      handle,
-      tailSize,
-      metadata.size - tailSize,
-      signal,
-    );
-    let end = tail.byteLength - 22;
-    while (
-      end >= 0 &&
-      (tail.readUInt32LE(end) !== 0x06054b50 ||
-        end + 22 + tail.readUInt16LE(end + 20) !== tail.byteLength)
-    ) {
-      end -= 1;
-    }
-    if (end < 0) throw new Error("missing end of central directory");
-    const entries = tail.readUInt16LE(end + 10);
-    const centralSize = tail.readUInt32LE(end + 12);
-    const centralOffset = tail.readUInt32LE(end + 16);
-    if (
-      entries === 0xffff ||
-      centralSize === 0xffffffff ||
-      centralOffset === 0xffffffff
-    ) {
-      throw new Error("unsupported ZIP64 archive");
-    }
-    if (entries > MAX_ZIP_ENTRIES) {
+    const opened = await handle.stat();
+    if (!samePluginFile(expected, opened)) {
       throw new PluginBootstrapError(
-        `Plugin ZIP contains too many entries: ${entries}.`,
+        "Plugin ZIP changed before it could be read.",
       );
     }
-    if (centralSize > MAX_ZIP_CENTRAL_DIRECTORY) {
+    const bytes = await readExactly(handle, expected.size, 0, signal);
+    if (!samePluginFile(expected, await handle.stat())) {
       throw new PluginBootstrapError(
-        "Plugin ZIP central directory exceeds the safety limit.",
+        "Plugin ZIP changed while it was being read.",
       );
     }
-    const endOffset = metadata.size - tailSize + end;
-    if (centralOffset + centralSize > endOffset) {
-      throw new Error("invalid central directory bounds");
-    }
-    const central = await readExactly(
-      handle,
-      centralSize,
-      centralOffset,
-      signal,
-    );
-    let offset = 0;
-    for (let index = 0; index < entries; index += 1) {
-      if (
-        offset + 46 > central.byteLength ||
-        central.readUInt32LE(offset) !== 0x02014b50
-      ) {
-        throw new Error("invalid central directory");
-      }
-      const nameLength = central.readUInt16LE(offset + 28);
-      const extraLength = central.readUInt16LE(offset + 30);
-      const commentLength = central.readUInt16LE(offset + 32);
-      const nameStart = offset + 46;
-      const nameEnd = nameStart + nameLength;
-      if (nameEnd > central.byteLength) {
-        throw new Error("invalid central directory name");
-      }
-      if (central.subarray(nameStart, nameEnd).includes(0x5c)) {
-        throw new PluginBootstrapError(
-          "Plugin ZIP contains a backslash-qualified path.",
-        );
-      }
-      offset = nameEnd + extraLength + commentLength;
-    }
-    if (offset !== central.byteLength) {
-      throw new Error("invalid central directory size");
-    }
+    return bytes;
   } finally {
     await handle.close();
   }
+}
+
+function validateRawZipDirectory(archive: Buffer): void {
+  const tailSize = Math.min(archive.byteLength, 65_557);
+  const tailStart = archive.byteLength - tailSize;
+  const tail = archive.subarray(tailStart);
+  let end = tail.byteLength - 22;
+  while (
+    end >= 0 &&
+    (tail.readUInt32LE(end) !== 0x06054b50 ||
+      end + 22 + tail.readUInt16LE(end + 20) !== tail.byteLength)
+  ) {
+    end -= 1;
+  }
+  if (end < 0) throw new Error("missing end of central directory");
+  const entries = tail.readUInt16LE(end + 10);
+  const centralSize = tail.readUInt32LE(end + 12);
+  const centralOffset = tail.readUInt32LE(end + 16);
+  if (
+    entries === 0xffff ||
+    centralSize === 0xffffffff ||
+    centralOffset === 0xffffffff
+  ) {
+    throw new Error("unsupported ZIP64 archive");
+  }
+  if (entries > MAX_ZIP_ENTRIES) {
+    throw new PluginBootstrapError(
+      `Plugin ZIP contains too many entries: ${entries}.`,
+    );
+  }
+  if (centralSize > MAX_ZIP_CENTRAL_DIRECTORY) {
+    throw new PluginBootstrapError(
+      "Plugin ZIP central directory exceeds the safety limit.",
+    );
+  }
+  const endOffset = tailStart + end;
+  if (centralOffset + centralSize > endOffset) {
+    throw new Error("invalid central directory bounds");
+  }
+  const central = archive.subarray(centralOffset, centralOffset + centralSize);
+  let offset = 0;
+  for (let index = 0; index < entries; index += 1) {
+    if (
+      offset + 46 > central.byteLength ||
+      central.readUInt32LE(offset) !== 0x02014b50
+    ) {
+      throw new Error("invalid central directory");
+    }
+    const nameLength = central.readUInt16LE(offset + 28);
+    const extraLength = central.readUInt16LE(offset + 30);
+    const commentLength = central.readUInt16LE(offset + 32);
+    const nameStart = offset + 46;
+    const nameEnd = nameStart + nameLength;
+    if (nameEnd > central.byteLength) {
+      throw new Error("invalid central directory name");
+    }
+    if (central.subarray(nameStart, nameEnd).includes(0x5c)) {
+      throw new PluginBootstrapError(
+        "Plugin ZIP contains a backslash-qualified path.",
+      );
+    }
+    offset = nameEnd + extraLength + commentLength;
+  }
+  if (offset !== central.byteLength) {
+    throw new Error("invalid central directory size");
+  }
+}
+
+interface ValidatedZipEntry {
+  path: string;
+  directory: boolean;
+  checksum: number;
+}
+
+async function validatePluginZipEntries(
+  archive: Buffer,
+  signal?: AbortSignal,
+): Promise<Array<{ path: string; checksum: number }>> {
+  const zip = await fromBufferPromise(archive, {
+    strictFileNames: true,
+    validateEntrySizes: true,
+  });
+  if (zip.entryCount > MAX_ZIP_ENTRIES) {
+    throw new PluginBootstrapError(
+      `Plugin ZIP contains too many entries: ${zip.entryCount}.`,
+    );
+  }
+  let expandedSize = 0;
+  const entries = new Map<string, ValidatedZipEntry>();
+  for await (const entry of zip.eachEntry()) {
+    throwIfSignalAborted(signal);
+    const path = safeArchivePath(entry.fileName);
+    const collisionKey = path.toLowerCase();
+    if (entries.has(collisionKey)) {
+      throw new PluginBootstrapError(
+        `Plugin ZIP contains a duplicate path: ${entry.fileName}`,
+      );
+    }
+    const directory = isZipDirectory(entry);
+    const mode = (entry.externalFileAttributes >>> 16) & 0o170000;
+    if (
+      mode === 0o120000 ||
+      (mode !== 0 && mode !== 0o040000 && mode !== 0o100000)
+    ) {
+      throw new PluginBootstrapError(
+        `Plugin ZIP contains an unsafe path: ${entry.fileName}`,
+      );
+    }
+    if (entry.isEncrypted() || !entry.canDecodeFileData()) {
+      throw new PluginBootstrapError(
+        `Plugin ZIP contains an unsupported entry: ${entry.fileName}`,
+      );
+    }
+    if (
+      entry.uncompressedSize > MAX_ZIP_ENTRY_SIZE ||
+      (directory && entry.uncompressedSize !== 0)
+    ) {
+      throw new PluginBootstrapError(
+        `Plugin ZIP entry exceeds the safety limit: ${entry.fileName}`,
+      );
+    }
+    expandedSize += entry.uncompressedSize;
+    if (expandedSize > MAX_ZIP_EXPANDED_SIZE) {
+      throw new PluginBootstrapError(
+        "Plugin ZIP expanded size exceeds the safety limit.",
+      );
+    }
+    entries.set(collisionKey, {
+      path,
+      directory,
+      checksum: entry.crc32 >>> 0,
+    });
+  }
+  for (const entry of entries.values()) {
+    const parts = entry.path.toLowerCase().split("/");
+    for (let length = 1; length < parts.length; length += 1) {
+      const parent = entries.get(parts.slice(0, length).join("/"));
+      if (parent !== undefined && !parent.directory) {
+        throw new PluginBootstrapError(
+          `Plugin ZIP contains a conflicting path: ${entry.path}`,
+        );
+      }
+    }
+  }
+  return [...entries.values()]
+    .filter((entry) => !entry.directory && !entry.path.startsWith("__MACOSX/"))
+    .map(({ path, checksum }) => ({ path, checksum }));
+}
+
+async function extractValidatedPluginZip(
+  archive: Buffer,
+  destination: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const zip = await fromBufferPromise(archive, {
+    strictFileNames: true,
+    validateEntrySizes: true,
+  });
+  for await (const entry of zip.eachEntry()) {
+    throwIfSignalAborted(signal);
+    const path = safeArchivePath(entry.fileName);
+    if (entry.fileName.startsWith("__MACOSX/")) continue;
+    const output = join(destination, ...path.split("/"));
+    if (isZipDirectory(entry)) {
+      await mkdir(output, { recursive: true, mode: 0o700 });
+      continue;
+    }
+    await mkdir(dirname(output), { recursive: true, mode: 0o700 });
+    const input = await zip.openReadStreamPromise(entry);
+    const writer = createWriteStream(output, {
+      flags: "wx",
+      mode: 0o600,
+    });
+    if (signal === undefined) {
+      await pipeline(input, writer);
+    } else {
+      await pipeline(input, writer, { signal });
+    }
+  }
+}
+
+function isZipDirectory(entry: Entry): boolean {
+  const mode = (entry.externalFileAttributes >>> 16) & 0o170000;
+  return (
+    entry.fileName.endsWith("/") ||
+    mode === 0o040000 ||
+    (entry.versionMadeBy >>> 8 === 0 && entry.externalFileAttributes === 16)
+  );
 }
 
 export async function resolvePluginPath(
