@@ -32,8 +32,8 @@ const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_CANDIDATES = 4_096;
 const MAX_SIGNALS = 96;
 const MAX_SIGNALS_PER_FILE = MAX_SIGNALS;
-const MAX_FRAMEWORK_CROSS_FILE_RECORDS = 64;
-const MAX_FRAMEWORK_MULTI_HOP_RECORDS = 64;
+const MAX_FRAMEWORK_CROSS_FILE_RECORDS = 128;
+const MAX_FRAMEWORK_MULTI_HOP_RECORDS = 128;
 const MAX_RELATIVE_IMPORT_RELAY_LAYERS = 2;
 const MAX_TYPED_SERVICE_RELAY_LAYERS = 2;
 const MAX_WRAPPER_FUNCTION_LINES = 160;
@@ -682,6 +682,58 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         expression:
           /(?:\b[A-Za-z_$][\w$]*(?:\s*\.\s*default)?|\brequire\s*\(\s*["']jsonata["']\s*\))\s*\(/u,
         cweIds: ["CWE-94"],
+      },
+    ],
+    controls: [],
+  },
+  {
+    id: "node-http-vm2-host-proto-sandbox-escape",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/["']vm2["']/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-vm2-host-proto-mutator-sandbox-escape",
+        expression: /\.\s*run\s*\(/u,
+        cweIds: ["CWE-94", "CWE-693"],
+      },
+    ],
+    controls: [],
+  },
+  {
+    id: "node-http-vm2-wildcard-builtin-host-exposure",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/["']vm2["']/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-vm2-wildcard-builtin-host-exposure",
+        expression: /\.\s*run\s*\(/u,
+        cweIds: ["CWE-200", "CWE-285"],
       },
     ],
     controls: [],
@@ -3175,6 +3227,16 @@ interface NodeJsonataExpressionSink {
   dependency: NodeRuntimeDependency;
 }
 
+interface NodeVm2SandboxSink {
+  sourceExpression: string;
+  kind:
+    | "vulnerable-vm2-host-proto-mutator-sandbox-escape"
+    | "lock-resolved-vulnerable-vm2-host-proto-mutator-sandbox-escape"
+    | "vulnerable-vm2-wildcard-builtin-host-exposure"
+    | "lock-resolved-vulnerable-vm2-wildcard-builtin-host-exposure";
+  dependency: NodeRuntimeDependency;
+}
+
 interface NodeFlatUnflattenSink {
   sourceExpression: string;
   kind: "vulnerable-flat-unflatten" | "lock-resolved-vulnerable-flat-unflatten";
@@ -4901,6 +4963,512 @@ function nodeJsonataExpressionSink(
         dependency.proof === "npm-lockfile"
           ? "lock-resolved-vulnerable-jsonata-expression-sandbox-escape"
           : "vulnerable-jsonata-expression-sandbox-escape",
+      dependency,
+    };
+  }
+  return undefined;
+}
+
+type NodeVm2ConstructorName = "VM" | "NodeVM" | "VMScript";
+
+interface NodeVm2BindingProtection {
+  local: string;
+  line: number;
+  member?: NodeVm2ConstructorName;
+}
+
+interface NodeVm2ConstructorBinding {
+  constructorName: NodeVm2ConstructorName;
+  local: string;
+  member?: NodeVm2ConstructorName;
+  line: number;
+  protections: NodeVm2BindingProtection[];
+}
+
+interface NodeVm2InstanceBinding {
+  constructorName: "VM" | "NodeVM";
+  local: string;
+  line: number;
+  optionsExpression: string;
+}
+
+type NodeVm2Model = "host-proto" | "wildcard-builtins";
+
+function nodeVm2VersionIsSandboxEscapeVulnerable(version: string): boolean {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return (
+    major < 3 || (major === 3 && (minor < 11 || (minor === 11 && patch <= 5)))
+  );
+}
+
+function nodeVm2ConstructorPattern(binding: NodeVm2ConstructorBinding): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.member === undefined
+    ? local
+    : `${local}\\s*\\.\\s*${binding.member}`;
+}
+
+function nodeVm2ConstructorBindings(
+  lines: readonly string[],
+): NodeVm2ConstructorBinding[] {
+  const bindings: NodeVm2ConstructorBinding[] = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "vm2" &&
+        (binding.imported === "VM" ||
+          binding.imported === "NodeVM" ||
+          binding.imported === "VMScript"),
+    )
+    .map((binding) => ({
+      constructorName: binding.imported as NodeVm2ConstructorName,
+      local: binding.local,
+      line: binding.line,
+      protections: [{ local: binding.local, line: binding.line }],
+    }));
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const original = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']vm2["']/u.exec(
+        original,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']vm2["']/u.exec(original) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']vm2["']\s*\)/u.exec(
+        original,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']vm2["']\s*\)\s*;?\s*$/u.exec(
+        original,
+      );
+    if (receiver?.[1] !== undefined) {
+      for (const constructorName of ["VM", "NodeVM", "VMScript"] as const) {
+        bindings.push({
+          constructorName,
+          local: receiver[1],
+          member: constructorName,
+          line: index + 1,
+          protections: [
+            { local: receiver[1], line: index + 1, member: constructorName },
+          ],
+        });
+      }
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']vm2["']\s*\)\s*\.\s*(VM|NodeVM|VMScript)\s*;?\s*$/u.exec(
+        original,
+      );
+    if (direct?.[1] !== undefined && direct[2] !== undefined) {
+      bindings.push({
+        constructorName: direct[2] as NodeVm2ConstructorName,
+        local: direct[1],
+        line: index + 1,
+        protections: [{ local: direct[1], line: index + 1 }],
+      });
+    }
+  }
+
+  const structuralLines = javascriptStructuralLines(lines);
+  const originals = [...bindings];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const code = structuralLines[index] ?? "";
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${nodeVm2ConstructorPattern(origin)}\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      if (alias?.[1] === undefined) continue;
+      bindings.push({
+        constructorName: origin.constructorName,
+        local: alias[1],
+        line: index + 1,
+        protections: [
+          ...origin.protections,
+          { local: alias[1], line: index + 1 },
+        ],
+      });
+    }
+  }
+
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.constructorName === binding.constructorName &&
+          candidate.local === binding.local &&
+          candidate.member === binding.member &&
+          candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeVm2BindingUsable(
+  lines: readonly string[],
+  binding: NodeVm2ConstructorBinding,
+  useLine: number,
+): boolean {
+  if (binding.line >= useLine) return false;
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      useLine >= candidate.startLine && useLine <= candidate.endLine,
+  );
+  const structural = javascriptStructuralLines(lines);
+  const code = javascriptCodeLinesWithoutComments(lines);
+  for (const protection of binding.protections) {
+    if (
+      wrapper?.parameters.includes(protection.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        protection.local,
+        protection.line,
+        useLine + 1,
+      )
+    ) {
+      return false;
+    }
+    if (protection.member === undefined) continue;
+    const local = escapeRegularExpression(protection.local);
+    const member = protection.member;
+    const replacement = new RegExp(
+      `\\b${local}\\s*\\.\\s*${member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+      "u",
+    );
+    const define = new RegExp(
+      `\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${local}\\s*,\\s*["']${member}["']`,
+      "u",
+    );
+    if (
+      structural
+        .slice(protection.line, Math.max(protection.line, useLine))
+        .some(
+          (candidate, offset) =>
+            replacement.test(candidate) ||
+            define.test(code[protection.line + offset] ?? ""),
+        )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function nodeVm2InstanceBindings(
+  lines: readonly string[],
+  sinkLine: number,
+  bindings: readonly NodeVm2ConstructorBinding[],
+): NodeVm2InstanceBinding[] {
+  const structural = javascriptStructuralLines(lines);
+  const instances: NodeVm2InstanceBinding[] = [];
+  for (let index = 0; index < Math.min(lines.length, sinkLine); index += 1) {
+    const code = structural[index] ?? "";
+    for (const binding of bindings) {
+      if (
+        binding.constructorName === "VMScript" ||
+        !nodeVm2BindingUsable(lines, binding, index + 1)
+      ) {
+        continue;
+      }
+      const constructorPattern = nodeVm2ConstructorPattern(binding);
+      const declaration = new RegExp(
+        `(?:^|[;{])\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*new\\s+${constructorPattern}\\s*\\(`,
+        "u",
+      ).exec(code);
+      if (declaration?.[1] === undefined) continue;
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        index + 1,
+        new RegExp(`\\bnew\\s+${constructorPattern}\\s*\\(`, "u"),
+      );
+      if (arguments_ === undefined) continue;
+      instances.push({
+        constructorName: binding.constructorName,
+        local: declaration[1],
+        line: index + 1,
+        optionsExpression: arguments_[0]?.trim() ?? "",
+      });
+    }
+  }
+  return instances;
+}
+
+function nodeVm2InstanceUsable(
+  lines: readonly string[],
+  instance: NodeVm2InstanceBinding,
+  sinkLine: number,
+): boolean {
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  if (
+    wrapper?.parameters.includes(instance.local) === true ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      instance.local,
+      instance.line,
+      sinkLine + 1,
+    )
+  ) {
+    return false;
+  }
+  const escaped = escapeRegularExpression(instance.local);
+  const replacement = new RegExp(
+    `\\b${escaped}\\s*\\.\\s*run\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+    "u",
+  );
+  const define = new RegExp(
+    `\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${escaped}\\s*,\\s*["']run["']`,
+    "u",
+  );
+  const structural = javascriptStructuralLines(lines);
+  const code = javascriptCodeLinesWithoutComments(lines);
+  return !structural
+    .slice(instance.line, Math.max(instance.line, sinkLine))
+    .some(
+      (candidate, offset) =>
+        replacement.test(candidate) ||
+        define.test(code[instance.line + offset] ?? ""),
+    );
+}
+
+function nodeVm2VMScriptSourceExpression(
+  lines: readonly string[],
+  sinkLine: number,
+  expression: string,
+  bindings: readonly NodeVm2ConstructorBinding[],
+): string {
+  const resolved = resolveJavascriptExpression(lines, expression, sinkLine);
+  if (resolved === undefined) return expression;
+  for (const binding of bindings) {
+    if (
+      binding.constructorName !== "VMScript" ||
+      !nodeVm2BindingUsable(lines, binding, resolved.line)
+    ) {
+      continue;
+    }
+    const pattern = new RegExp(
+      `^\\s*new\\s+${nodeVm2ConstructorPattern(binding)}\\s*\\(`,
+      "u",
+    );
+    const match = pattern.exec(resolved.value);
+    if (match === null) continue;
+    const open = resolved.value.indexOf("(", match.index);
+    const close = matchingCallParenthesis(resolved.value, open);
+    if (open < 0 || close < 0) continue;
+    const arguments_ = splitJavascriptArguments(
+      resolved.value.slice(open + 1, close),
+    );
+    if (arguments_[0]?.trim() !== "") return arguments_[0]!.trim();
+  }
+  return expression;
+}
+
+function nodeVm2WildcardBuiltinsEnabled(
+  lines: readonly string[],
+  instance: NodeVm2InstanceBinding,
+): boolean {
+  if (instance.optionsExpression === "") return false;
+  const options = resolveJavascriptExpression(
+    lines,
+    instance.optionsExpression,
+    instance.line,
+  );
+  if (options === undefined) return false;
+  const requireExpression = javascriptObjectPropertyValue(
+    options.value,
+    "require",
+  );
+  if (requireExpression === undefined) return false;
+  const requireOptions = resolveJavascriptExpression(
+    lines,
+    requireExpression,
+    options.line,
+  );
+  if (requireOptions === undefined) return false;
+  const builtinExpression = javascriptObjectPropertyValue(
+    requireOptions.value,
+    "builtin",
+  );
+  if (builtinExpression === undefined) return false;
+  const builtin = resolveJavascriptExpression(
+    lines,
+    builtinExpression,
+    requireOptions.line,
+  );
+  if (builtin === undefined) return false;
+  const builtinEntries = javascriptArrayEntries(builtin).map(({ value }) =>
+    value.trim().replace(/^(["'])([\s\S]*)\1$/u, "$2"),
+  );
+  if (!builtinEntries.includes("*")) return false;
+  if (builtinEntries.includes("-os") && builtinEntries.includes("-dns")) {
+    return false;
+  }
+
+  const boundedReplacementKeys = new Set<string>();
+  for (const property of ["mock", "override"] as const) {
+    const replacementExpression = javascriptObjectPropertyValue(
+      requireOptions.value,
+      property,
+    );
+    if (replacementExpression === undefined) continue;
+    const replacement = resolveJavascriptExpression(
+      lines,
+      replacementExpression,
+      requireOptions.line,
+    );
+    if (replacement === undefined) continue;
+    for (const entry of javascriptObjectEntries(replacement)) {
+      if (
+        (entry.key === "os" || entry.key === "dns") &&
+        nodeVm2BuiltinReplacementIsBounded(lines, entry.value, entry.line)
+      ) {
+        boundedReplacementKeys.add(entry.key);
+      }
+    }
+  }
+  return !(
+    boundedReplacementKeys.has("os") && boundedReplacementKeys.has("dns")
+  );
+}
+
+function nodeVm2BuiltinReplacementIsBounded(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): boolean {
+  const replacement = resolveJavascriptExpression(lines, expression, line);
+  if (replacement === undefined) return false;
+  const value = replacement.value.trim();
+  if (!value.startsWith("{") || !value.endsWith("}")) return false;
+  return javascriptObjectEntries(replacement).every((entry) =>
+    /^(?:undefined|null|true|false|[+-]?\d+(?:\.\d+)?|["'`][\s\S]*["'`])$/u.test(
+      entry.value.trim(),
+    ),
+  );
+}
+
+function nodeVm2SandboxSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+  model: NodeVm2Model,
+): NodeVm2SandboxSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "vm2");
+  if (
+    dependency === undefined ||
+    !nodeVm2VersionIsSandboxEscapeVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const bindings = nodeVm2ConstructorBindings(lines);
+  const instances = nodeVm2InstanceBindings(lines, line, bindings);
+  for (const instance of instances) {
+    if (
+      (model === "host-proto" && instance.constructorName !== "VM") ||
+      (model === "wildcard-builtins" &&
+        (instance.constructorName !== "NodeVM" ||
+          !nodeVm2WildcardBuiltinsEnabled(lines, instance))) ||
+      !nodeVm2InstanceUsable(lines, instance, line)
+    ) {
+      continue;
+    }
+    const arguments_ = javascriptCallArgumentsAtLine(
+      lines,
+      line,
+      new RegExp(
+        `\\b${escapeRegularExpression(instance.local)}\\s*\\.\\s*run\\s*\\(`,
+        "u",
+      ),
+    );
+    const source = arguments_?.[0]?.trim() ?? "";
+    if (source === "") continue;
+    const sourceExpression = nodeVm2VMScriptSourceExpression(
+      lines,
+      line,
+      source,
+      bindings,
+    );
+    const lockResolved = dependency.proof === "npm-lockfile";
+    return {
+      sourceExpression,
+      kind:
+        model === "host-proto"
+          ? lockResolved
+            ? "lock-resolved-vulnerable-vm2-host-proto-mutator-sandbox-escape"
+            : "vulnerable-vm2-host-proto-mutator-sandbox-escape"
+          : lockResolved
+            ? "lock-resolved-vulnerable-vm2-wildcard-builtin-host-exposure"
+            : "vulnerable-vm2-wildcard-builtin-host-exposure",
+      dependency,
+    };
+  }
+
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const original = javascriptCodeLinesWithoutComments(callLines).join("\n");
+  const structural = javascriptStructuralLines(callLines).join("\n");
+  const firstLine = structural.split("\n", 1)[0] ?? "";
+  const requiredConstructor = model === "host-proto" ? "VM" : "NodeVM";
+  for (const binding of bindings) {
+    if (
+      binding.constructorName !== requiredConstructor ||
+      !nodeVm2BindingUsable(lines, binding, line)
+    ) {
+      continue;
+    }
+    const constructor = new RegExp(
+      `\\bnew\\s+${nodeVm2ConstructorPattern(binding)}\\s*\\(`,
+      "u",
+    ).exec(firstLine);
+    if (constructor === null) continue;
+    const optionsOpen = structural.indexOf("(", constructor.index);
+    const optionsClose = matchingCallParenthesis(structural, optionsOpen);
+    if (optionsOpen < 0 || optionsClose < 0) continue;
+    const suffix = structural.slice(optionsClose + 1);
+    const run = /^\s*\)?\s*\.\s*run\s*\(/u.exec(suffix);
+    if (run === null) continue;
+    const runOpen = optionsClose + 1 + run.index + run[0].lastIndexOf("(");
+    const runClose = matchingCallParenthesis(structural, runOpen);
+    if (runOpen < 0 || runClose < 0) continue;
+    const arguments_ = splitJavascriptArguments(
+      original.slice(runOpen + 1, runClose),
+    );
+    const source = arguments_[0]?.trim() ?? "";
+    if (source === "") continue;
+    const immediate: NodeVm2InstanceBinding = {
+      constructorName: requiredConstructor,
+      local: "",
+      line,
+      optionsExpression: original.slice(optionsOpen + 1, optionsClose).trim(),
+    };
+    if (
+      model === "wildcard-builtins" &&
+      !nodeVm2WildcardBuiltinsEnabled(lines, immediate)
+    ) {
+      continue;
+    }
+    const sourceExpression = nodeVm2VMScriptSourceExpression(
+      lines,
+      line,
+      source,
+      bindings,
+    );
+    const lockResolved = dependency.proof === "npm-lockfile";
+    return {
+      sourceExpression,
+      kind:
+        model === "host-proto"
+          ? lockResolved
+            ? "lock-resolved-vulnerable-vm2-host-proto-mutator-sandbox-escape"
+            : "vulnerable-vm2-host-proto-mutator-sandbox-escape"
+          : lockResolved
+            ? "lock-resolved-vulnerable-vm2-wildcard-builtin-host-exposure"
+            : "vulnerable-vm2-wildcard-builtin-host-exposure",
       dependency,
     };
   }
@@ -10385,7 +10953,9 @@ function frameworkDataflowRecords(
       continue;
     }
     if (
-      model.id === "node-http-jsonata-expression-rce" &&
+      (model.id === "node-http-jsonata-expression-rce" ||
+        model.id === "node-http-vm2-host-proto-sandbox-escape" ||
+        model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
       javascriptTestOrExamplePath(path)
     ) {
       continue;
@@ -10526,6 +11096,19 @@ function frameworkDataflowRecords(
       const nodeJsonataExpression =
         model.id === "node-http-jsonata-expression-rce"
           ? nodeJsonataExpressionSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeVm2Sandbox =
+        model.id === "node-http-vm2-host-proto-sandbox-escape" ||
+        model.id === "node-http-vm2-wildcard-builtin-host-exposure"
+          ? nodeVm2SandboxSink(
+              files,
+              path,
+              lines,
+              sink.line,
+              model.id === "node-http-vm2-host-proto-sandbox-escape"
+                ? "host-proto"
+                : "wildcard-builtins",
+            )
           : undefined;
       const nodeFlatUnflatten =
         model.id === "node-http-flat-unflatten-prototype-pollution"
@@ -10700,6 +11283,13 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-jsonata-expression-rce" &&
         nodeJsonataExpression === undefined
+      ) {
+        continue;
+      }
+      if (
+        (model.id === "node-http-vm2-host-proto-sandbox-escape" ||
+          model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
+        nodeVm2Sandbox === undefined
       ) {
         continue;
       }
@@ -10982,6 +11572,7 @@ function frameworkDataflowRecords(
         nodeJsToml?.sourceExpression ??
         nodeJsonPathPlus?.sourceExpression ??
         nodeJsonataExpression?.sourceExpression ??
+        nodeVm2Sandbox?.sourceExpression ??
         nodeFlatUnflatten?.sourceExpression ??
         nodeObjectPath?.sourceExpression ??
         nodeLodashDelete?.sourceExpressions.join("\n") ??
@@ -11343,6 +11934,7 @@ function frameworkDataflowRecords(
         nodeTarMemberSelection?.kind ??
         nodeTarDecompressionDos?.kind ??
         nodeFastifyStatic?.kind ??
+        nodeVm2Sandbox?.kind ??
         nodeJsonataExpression?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
@@ -11389,6 +11981,16 @@ function frameworkDataflowRecords(
               sinkPattern.cweIds,
           },
           propagators: [
+            ...(nodeVm2Sandbox === undefined
+              ? []
+              : [
+                  {
+                    kind: "vm2-runtime-dependency",
+                    path: nodeVm2Sandbox.dependency.manifestPath,
+                    line: nodeVm2Sandbox.dependency.line,
+                    symbol: `vm2@${nodeVm2Sandbox.dependency.version}:${nodeVm2Sandbox.dependency.proof}:${model.id === "node-http-vm2-host-proto-sandbox-escape" ? "host-proto-mutator-sandbox-escape" : "wildcard-builtin-host-exposure"}`,
+                  },
+                ]),
             ...(nodeJsonataExpression === undefined
               ? []
               : [
@@ -18876,7 +19478,9 @@ function javascriptFrameworkWrapperSummaries(
         continue;
       }
       if (
-        model.id === "node-http-jsonata-expression-rce" &&
+        (model.id === "node-http-jsonata-expression-rce" ||
+          model.id === "node-http-vm2-host-proto-sandbox-escape" ||
+          model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
         javascriptTestOrExamplePath(file.path)
       ) {
         continue;
@@ -18984,6 +19588,19 @@ function javascriptFrameworkWrapperSummaries(
                   file.path,
                   file.lines,
                   sink.line,
+                )
+              : undefined;
+          const nodeVm2Sandbox =
+            model.id === "node-http-vm2-host-proto-sandbox-escape" ||
+            model.id === "node-http-vm2-wildcard-builtin-host-exposure"
+              ? nodeVm2SandboxSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                  model.id === "node-http-vm2-host-proto-sandbox-escape"
+                    ? "host-proto"
+                    : "wildcard-builtins",
                 )
               : undefined;
           const nodeFlatUnflatten =
@@ -19152,6 +19769,13 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            (model.id === "node-http-vm2-host-proto-sandbox-escape" ||
+              model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
+            nodeVm2Sandbox === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-flat-unflatten-prototype-pollution" &&
             nodeFlatUnflatten === undefined
           ) {
@@ -19287,6 +19911,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsToml?.sourceExpression ??
             nodeJsonPathPlus?.sourceExpression ??
             nodeJsonataExpression?.sourceExpression ??
+            nodeVm2Sandbox?.sourceExpression ??
             nodeFlatUnflatten?.sourceExpression ??
             nodeObjectPath?.sourceExpression ??
             nodeLodashDelete?.sourceExpressions.join("\n") ??
@@ -19500,6 +20125,9 @@ function javascriptFrameworkWrapperSummaries(
                       kind: nodeJsonataExpression.kind,
                       line: nodeJsonataExpression.sinkLine,
                     }),
+                ...(nodeVm2Sandbox === undefined
+                  ? {}
+                  : { kind: nodeVm2Sandbox.kind }),
                 ...(nodeFlatUnflatten === undefined
                   ? {}
                   : { kind: nodeFlatUnflatten.kind }),
@@ -19569,7 +20197,8 @@ function javascriptFrameworkWrapperSummaries(
                   sinkPattern.cweIds,
               },
               controls: wrapperControls.slice(0, 8),
-              ...(nodeJsonataExpression === undefined &&
+              ...(nodeVm2Sandbox === undefined &&
+              nodeJsonataExpression === undefined &&
               nodeNodemailerRaw === undefined &&
               nodeBraceExpansionDos === undefined &&
               nodeNanoidSizeDos === undefined &&
@@ -19578,6 +20207,16 @@ function javascriptFrameworkWrapperSummaries(
                 ? {}
                 : {
                     propagators: [
+                      ...(nodeVm2Sandbox === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "vm2-runtime-dependency",
+                              path: nodeVm2Sandbox.dependency.manifestPath,
+                              line: nodeVm2Sandbox.dependency.line,
+                              symbol: `vm2@${nodeVm2Sandbox.dependency.version}:${nodeVm2Sandbox.dependency.proof}:${model.id === "node-http-vm2-host-proto-sandbox-escape" ? "host-proto-mutator-sandbox-escape" : "wildcard-builtin-host-exposure"}`,
+                            },
+                          ]),
                       ...(nodeJsonataExpression === undefined
                         ? []
                         : [

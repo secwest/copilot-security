@@ -245,6 +245,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-patched-jsonata-expression",
       ],
       [
+        "node-multi-hop-vm2-sandbox-escape",
+        "node-multi-hop-repaired-vm2-sandbox",
+      ],
+      [
         "node-multi-hop-postcss-source-map-traversal",
         "node-multi-hop-patched-postcss",
       ],

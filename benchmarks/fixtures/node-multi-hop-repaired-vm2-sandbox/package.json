@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-repaired-vm2-sandbox",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "vm2": "3.11.6"
+  }
+}

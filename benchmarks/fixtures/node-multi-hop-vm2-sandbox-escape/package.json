@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-vm2-sandbox-escape",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "vm2": "3.11.5"
+  }
+}

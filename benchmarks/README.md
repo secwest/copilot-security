@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains ninety-three vulnerable/control pairs:
+The versioned corpus currently contains ninety-four vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -188,7 +188,7 @@ Decoder API. The latest pair reaches the same state through the public
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case now produce 552 scans across 92 exploit/control pairs in the complete
+per case now produce 564 scans across 94 exploit/control pairs in the complete
 corpus. The added industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size
@@ -548,6 +548,29 @@ development-only packages, unresolved ranges, stale/v1 locks, test/example
 code, and repaired or prerelease versions remain negative. The bounded witness
 returns only `process.version`: 2.2.0 recovers the host `Function` constructor,
 whereas 2.2.1 rejects the same expression with `T1006`.
+
+`node-vm2-sandbox-escape-manifest.json` measures application reachability for
+[GHSA-cfcw-xp6x-25gj / CVE-2026-47698](https://github.com/advisories/GHSA-cfcw-xp6x-25gj)
+rather than treating vm2 package membership as proof of host compromise. The
+positive carries an Express body field through three relative-import wrappers
+into an official `VM.run` under exact 3.11.5 production proof. The
+source-identical control changes only vm2 to 3.11.6. Regressions cover named
+and aliased constructors, namespace/default and TypeScript import-equals
+receivers, CommonJS destructures/receivers/direct members, one-hop constructor
+aliases, assigned and immediate instances, `VMScript` source preservation,
+exact and fresh declaration-consistent npm v2/v3 locks, and same-file or
+multi-hop reachability. A second precision model covers
+[GHSA-m5w8-4gq2-6f8x](https://github.com/advisories/GHSA-m5w8-4gq2-6f8x)
+only when attacker code reaches `NodeVM.run` with a statically proven wildcard
+builtin allowlist and either `os` or `dns` remains exposed. Complete
+`-os`/`-dns` cutouts, demonstrably inert literal replacements for both modules,
+package-only
+use, trusted code, NodeVM without wildcard builtins, local lookalikes,
+reassigned or replaced capabilities, unresolved/development-only/stale/v1
+dependency evidence, tests/examples, repaired versions, and prereleases remain
+negative. The bounded witness recovers only `process.version`: 3.11.5 crosses
+the host-prototype boundary, while 3.11.6 stops the same chain without a shell,
+filesystem access, network request, listener, or process-state mutation.
 
 `node-tar-decompression-dos-manifest.json` measures application reachability
 for [GHSA-23hp-3jrh-7fpw / CVE-2026-59873](https://github.com/advisories/GHSA-23hp-3jrh-7fpw).

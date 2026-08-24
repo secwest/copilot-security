@@ -3747,6 +3747,45 @@
         "node-multi-hop-patched-jsonata-expression/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-vm2-sandbox-escape",
+      "description": "An Express body field crosses three relative-import boundaries into official vm2 VM.run under an exact vulnerable 3.11.5 runtime pin. A bounded host-prototype-mutator witness recovers only process.version.",
+      "fixture": "fixtures/node-multi-hop-vm2-sandbox-escape",
+      "findingsPaths": [
+        "node-multi-hop-vm2-sandbox-escape/run-1/findings.json",
+        "node-multi-hop-vm2-sandbox-escape/run-2/findings.json",
+        "node-multi-hop-vm2-sandbox-escape/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-vm2-host-proto-sandbox-escape",
+          "cwe": ["CWE-94", "CWE-693"],
+          "locations": [
+            {
+              "path": "src/sandbox.js",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-repaired-vm2-sandbox",
+      "description": "The source-identical control changes only vm2 to 3.11.6, which blocks the reviewed dangerous-host-prototype-mutator and wildcard-builtin chains.",
+      "fixture": "fixtures/node-multi-hop-repaired-vm2-sandbox",
+      "findingsPaths": [
+        "node-multi-hop-repaired-vm2-sandbox/run-1/findings.json",
+        "node-multi-hop-repaired-vm2-sandbox/run-2/findings.json",
+        "node-multi-hop-repaired-vm2-sandbox/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }
