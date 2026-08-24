@@ -285,6 +285,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-repaired-sequelize-oracle-query",
       ],
       [
+        "node-multi-hop-shell-quote-object-token-command-injection",
+        "node-multi-hop-repaired-shell-quote-object-token",
+      ],
+      [
         "node-multi-hop-tar-member-selection-recursion",
         "node-multi-hop-patched-tar-member-selection",
       ],

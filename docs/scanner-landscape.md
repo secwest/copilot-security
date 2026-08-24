@@ -46,6 +46,35 @@ that dissimilar products can be reduced to one score.
 | [Gitleaks](https://github.com/gitleaks/gitleaks)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Git-patch history scanning, full redaction, stable fingerprints, baselines, and scoped allowlists make high-volume secret findings manageable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Scan bounded reachable Git blobs locally through a trusted executable, deduplicate revision occurrences, use expiring justified keyed baselines, and never persist or display raw secret material.                                                                                                                                                                                                                                                                                                                                                                    |
 | [GitHub SARIF support](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Stable rule IDs, relative paths, locations, severity/precision metadata, and partial fingerprints support interoperable alert tracking.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Normalize relative paths and rule metadata, but hash source documents locally and omit imported fingerprints because they may contain arbitrary or sensitive producer data.                                                                                                                                                                                                                                                                                                                                                                                           |
 
+## Implemented: shell-quote object-token sanitizer-bypass reachability
+
+GHSA-w7jw-789q-3m8p demonstrates why an escaping-library alert is neither a
+generic command-injection finding nor sufficient evidence by itself. The
+affected serializer fails only for an attacker-shaped object token whose `op`
+contains a line terminator. The quoted result must then reach a command-string
+boundary or a real POSIX interpreter; ordinary string quoting and shell-free
+argument-vector execution remain safe from this defect.
+
+Copilot Security closes that conjunction as one auditable path. It proves an
+official `shell-quote` binding and affected production resolution, exact
+object-token construction either directly or from a `parse()` environment
+callback, propagation of the serialized result, and official Node process
+dispatch with an actual POSIX shell. The paired 1.8.3/1.8.4 fixture runs only
+`pwd` in `/tmp` on Ubuntu/WSL and checks serialization without shell execution
+on Windows. Comment and glob objects were tested separately and deliberately
+excluded because they do not preserve the advisory's attacker value.
+
+Current public CodeQL source contains no advisory or CVE reference; its
+inspected `shell-quote` examples parse into shell-free `execFileSync` argument
+vectors. Public Semgrep rules contain no advisory, CVE, or package reference.
+The first comparison-scanner search found no advisory or CVE and one package
+reference before GitHub throttled later queries, while local snapshots predate
+the advisory. These results establish the searched boundary, not a permanent
+claim about remote scanner coverage. Review remains effect-bounded: the model
+establishes CWE-77/CWE-78 command execution reachability, but filesystem,
+network, credential, persistence, or privilege impact requires separate
+evidence of the injected command and execution identity.
+
 ## Implemented: reachable Sequelize Oracle escaping advisory model
 
 GHSA-v8fg-2rw7-q452 is a useful example of the gap between dependency

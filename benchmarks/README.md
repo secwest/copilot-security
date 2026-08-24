@@ -188,7 +188,7 @@ Decoder API. The latest pair reaches the same state through the public
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case now produce 594 scans across 99 exploit/control pairs in the complete
+per case now produce 600 scans across 100 exploit/control pairs in the complete
 corpus. The added industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size
@@ -608,6 +608,28 @@ and test/example paths remain negative. The shared witness executes only the
 advisory's benign `echo y` sentinel on Windows. Linux imports the installed
 package's published Windows CMD escape function and checks the exact string
 boundary without invoking a shell.
+
+`node-shell-quote-object-token-command-injection-manifest.json` measures
+application reachability for
+[GHSA-w7jw-789q-3m8p / CVE-2026-9277](https://github.com/advisories/GHSA-w7jw-789q-3m8p),
+not merely an affected `shell-quote` dependency. The positive sends an Express
+query value through three relative-import wrappers, assigns it to the exact
+`op` property of an object token, passes that token to official `quote()`, and
+dispatches the exact serialized result through official `execSync` under
+1.8.3 production proof. The source-identical control changes only
+`shell-quote` and its lock to 1.8.4. Regressions cover named and aliased,
+namespace/default, TypeScript import-equals, CommonJS destructured/receiver/
+direct-member, inline `require()`, and stable one-hop bindings; direct object
+construction and `parse()` environment callbacks; `exec`/`execSync`, explicit
+POSIX interpreter `-c`/`-lc`, and shell-enabled `spawn`/`execFile` dispatch;
+the exact affected range; and fresh declaration-consistent npm v2/v3 locks.
+Ordinary strings, fixed operators, glob/comment objects, parse-only use,
+unused output, shell-free argv execution, unsupported flags, repaired or
+prerelease versions, wrong/development-only packages, unresolved/stale/v1
+metadata, lookalikes, reassignment, replaced capabilities, and test/example
+paths remain negative. The shared witness is side-effect-free: Ubuntu/WSL runs
+only `pwd` through `/bin/sh -c` in `/tmp`, where 1.8.3 executes the retained
+second line and 1.8.4 rejects the token; Windows checks serialization only.
 
 `node-decompress-archive-escape-manifest.json` measures application
 reachability for

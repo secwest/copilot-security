@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-shell-quote-object-token-command-injection",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "shell-quote": "1.8.3"
+  }
+}

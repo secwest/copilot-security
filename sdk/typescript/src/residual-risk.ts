@@ -767,6 +767,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-shell-quote-object-token-command-injection",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]shell-quote['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-shell-quote-object-token-line-terminator-command-injection",
+        expression:
+          /(?:\b[A-Za-z_$][\w$]*(?:\s*\.\s*quote)?|\brequire\s*\(\s*["']shell-quote["']\s*\)\s*\.\s*quote)\s*\(/u,
+        cweIds: ["CWE-77", "CWE-78"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-velocity-template-rce",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3407,6 +3434,16 @@ interface NodeShescapeCommandSink {
     | "vulnerable-shescape-cmd-parenthesis-injection"
     | "lock-resolved-vulnerable-shescape-cmd-parenthesis-injection";
   dependency: NodeRuntimeDependency;
+}
+
+interface NodeShellQuoteCommandSink {
+  sourceExpression: string;
+  sinkLine: number;
+  kind:
+    | "vulnerable-shell-quote-object-token-line-terminator-command-injection"
+    | "lock-resolved-vulnerable-shell-quote-object-token-line-terminator-command-injection";
+  dependency: NodeRuntimeDependency;
+  route: "direct-object-token" | "env-function-object-token";
 }
 
 interface NodeVelocityTemplateSink {
@@ -7075,6 +7112,544 @@ function nodeShescapeCommandSink(
     const sinkLine = nodeShescapeDispatchLine(lines, line, callee);
     if (sinkLine !== undefined) {
       return { sourceExpression, sinkLine, kind, dependency };
+    }
+  }
+  return undefined;
+}
+
+type NodeShellQuoteMethod = "quote" | "parse";
+
+interface NodeShellQuoteFunctionBinding {
+  method: NodeShellQuoteMethod;
+  local: string;
+  receiverMember?: NodeShellQuoteMethod;
+  line: number;
+  protections: NodeShescapeBindingProtection[];
+}
+
+function nodeShellQuoteVersionIsObjectTokenInjectionVulnerable(
+  version: string,
+): boolean {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return major === 1 && minor >= 1 && (minor < 8 || (minor === 8 && patch < 4));
+}
+
+function nodeShellQuoteFunctionBindings(
+  lines: readonly string[],
+  method: NodeShellQuoteMethod,
+): NodeShellQuoteFunctionBinding[] {
+  const bindings: NodeShellQuoteFunctionBinding[] = importedJavascriptSymbols(
+    lines,
+  )
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "shell-quote" &&
+        binding.imported === method,
+    )
+    .map((binding) => ({
+      method,
+      local: binding.local,
+      line: binding.line,
+      protections: [{ local: binding.local, line: binding.line }],
+    }));
+  const structural = javascriptStructuralLines(lines);
+  for (let index = 0; index < structural.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']shell-quote["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']shell-quote["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']shell-quote["']\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']shell-quote["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      bindings.push({
+        method,
+        local: receiver[1],
+        receiverMember: method,
+        line: index + 1,
+        protections: [{ local: receiver[1], line: index + 1, member: method }],
+      });
+    }
+    const direct = new RegExp(
+      `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']shell-quote["']\\s*\\)\\s*\\.\\s*${method}\\s*;?\\s*$`,
+      "u",
+    ).exec(code);
+    if (direct?.[1] !== undefined) {
+      bindings.push({
+        method,
+        local: direct[1],
+        line: index + 1,
+        protections: [{ local: direct[1], line: index + 1 }],
+      });
+    }
+    const destructured = new RegExp(
+      `^\\s*(?:const|let|var)\\s*\\{\\s*${method}(?:\\s*:\\s*([A-Za-z_$][\\w$]*))?\\s*\\}\\s*=\\s*require\\s*\\(\\s*["']shell-quote["']\\s*\\)\\s*;?\\s*$`,
+      "u",
+    ).exec(code);
+    if (destructured !== null) {
+      bindings.push({
+        method,
+        local: destructured[1] ?? method,
+        line: index + 1,
+        protections: [{ local: destructured[1] ?? method, line: index + 1 }],
+      });
+    }
+    const namedAlias = new RegExp(
+      `^\\s*import\\s*\\{\\s*${method}\\s+as\\s+([A-Za-z_$][\\w$]*)\\s*\\}\\s*from\\s*["']shell-quote["']`,
+      "u",
+    ).exec(code);
+    if (namedAlias?.[1] !== undefined) {
+      bindings.push({
+        method,
+        local: namedAlias[1],
+        line: index + 1,
+        protections: [{ local: namedAlias[1], line: index + 1 }],
+      });
+    }
+  }
+  const originals = [...bindings];
+  for (let index = 0; index < structural.length; index += 1) {
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${nodePackageBindingPattern(origin)}\\s*;?\\s*$`,
+        "u",
+      ).exec(structural[index] ?? "");
+      if (alias?.[1] === undefined) continue;
+      bindings.push({
+        method,
+        local: alias[1],
+        line: index + 1,
+        protections: [
+          ...origin.protections,
+          { local: alias[1], line: index + 1 },
+        ],
+      });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.method === binding.method &&
+          candidate.local === binding.local &&
+          candidate.receiverMember === binding.receiverMember &&
+          candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeShellQuoteDynamicTokenValue(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): string | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  const value = resolved.value.trim();
+  if (
+    /^(?:undefined|null|true|false|[+-]?\d+(?:\.\d+)?|["'][\s\S]*["']|`[^$`]*`)$/u.test(
+      value,
+    )
+  ) {
+    return undefined;
+  }
+  return expression.trim();
+}
+
+function nodeShellQuoteObjectTokenSource(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): string | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  const entries = javascriptObjectEntries(resolved);
+  if (entries.length === 0) return undefined;
+  const operator = entries.find((entry) => entry.key === "op");
+  if (operator !== undefined) {
+    const operatorValue = resolveJavascriptExpression(
+      lines,
+      operator.value,
+      operator.line,
+    );
+    if (
+      operatorValue !== undefined &&
+      /^(["'])glob\1$/u.test(operatorValue.value.trim())
+    ) {
+      return undefined;
+    }
+    const source = nodeShellQuoteDynamicTokenValue(
+      lines,
+      operator.value,
+      operator.line,
+    );
+    if (source !== undefined) return source;
+  }
+  return undefined;
+}
+
+function nodeShellQuoteDirectObjectTokenSource(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): string | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  for (const entry of javascriptArrayEntries(resolved)) {
+    const source = nodeShellQuoteObjectTokenSource(
+      lines,
+      entry.value,
+      entry.line,
+    );
+    if (source !== undefined) return source;
+  }
+  return undefined;
+}
+
+function nodeShellQuoteCallbackReturnExpression(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): JavascriptResolvedExpression | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  const arrow =
+    /^\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*([\s\S]+)$/u.exec(
+      resolved.value,
+    );
+  if (arrow?.[1] !== undefined) {
+    let value = arrow[1].trim();
+    if (value.startsWith("(") && value.endsWith(")")) {
+      const close = matchingCallParenthesis(value, 0);
+      if (close === value.length - 1) {
+        return { line: resolved.line, value: value.slice(1, -1).trim() };
+      }
+    }
+    if (value.startsWith("{")) {
+      const returned = /\breturn\s+([\s\S]+?);?\s*\}\s*$/u.exec(value)?.[1];
+      if (returned === undefined) return undefined;
+      value = returned.trim();
+    }
+    return value === "" ? undefined : { line: resolved.line, value };
+  }
+  const classic =
+    /^\s*(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\([^)]*\)\s*\{([\s\S]+)\}\s*$/u.exec(
+      resolved.value,
+    );
+  if (classic?.[1] === undefined) return undefined;
+  const returned = /\breturn\s+([\s\S]+?);?\s*$/u.exec(classic[1])?.[1];
+  return returned === undefined
+    ? undefined
+    : { line: resolved.line, value: returned.trim() };
+}
+
+function nodeShellQuoteParseEnvSource(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  parseBindings: readonly NodeShellQuoteFunctionBinding[],
+): string | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  const candidates: Array<{
+    pattern: RegExp;
+    protections?: readonly NodeShescapeBindingProtection[];
+  }> = parseBindings.map((binding) => ({
+    pattern: new RegExp(`\\b${nodePackageBindingPattern(binding)}\\s*\\(`, "u"),
+    protections: binding.protections,
+  }));
+  candidates.push({
+    pattern: /\brequire\s*\(\s*["']shell-quote["']\s*\)\s*\.\s*parse\s*\(/u,
+  });
+  for (const candidate of candidates) {
+    if (
+      candidate.protections !== undefined &&
+      !nodePackageBindingUsable(lines, candidate.protections, resolved.line)
+    ) {
+      continue;
+    }
+    const arguments_ =
+      javascriptCallArgumentsAtLine(lines, resolved.line, candidate.pattern) ??
+      javascriptRawCallArgumentsAtLine(lines, resolved.line, candidate.pattern);
+    const callback = arguments_?.[1]?.trim() ?? "";
+    if (callback === "") continue;
+    const returned = nodeShellQuoteCallbackReturnExpression(
+      lines,
+      callback,
+      resolved.line,
+    );
+    if (returned === undefined) continue;
+    const source = nodeShellQuoteObjectTokenSource(
+      lines,
+      returned.value,
+      returned.line,
+    );
+    if (source !== undefined) return source;
+  }
+  return undefined;
+}
+
+function nodeShellQuoteSource(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  parseBindings: readonly NodeShellQuoteFunctionBinding[],
+):
+  | {
+      expression: string;
+      route: NodeShellQuoteCommandSink["route"];
+    }
+  | undefined {
+  const envSource = nodeShellQuoteParseEnvSource(
+    lines,
+    expression,
+    line,
+    parseBindings,
+  );
+  if (envSource !== undefined) {
+    return { expression: envSource, route: "env-function-object-token" };
+  }
+  const directSource = nodeShellQuoteDirectObjectTokenSource(
+    lines,
+    expression,
+    line,
+  );
+  return directSource === undefined
+    ? undefined
+    : { expression: directSource, route: "direct-object-token" };
+}
+
+function nodeShellQuoteStaticString(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): string | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  const match = /^(["'`])([^"'`$]*)\1$/u.exec(resolved.value.trim());
+  return match?.[2];
+}
+
+function nodeShellQuotePosixShell(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): boolean {
+  const value = nodeShellQuoteStaticString(lines, expression, line);
+  return value !== undefined && /(?:^|[\\/])(?:ba|da|z|k)?sh$/iu.test(value);
+}
+
+function nodeShellQuoteOptionsUsePosixShell(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): boolean {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return false;
+  const shell = javascriptObjectPropertyValue(resolved.value, "shell");
+  if (shell === undefined) return false;
+  const value = resolveJavascriptExpression(lines, shell, resolved.line);
+  if (value?.value.trim() === "true") return true;
+  return nodeShellQuotePosixShell(lines, shell, resolved.line);
+}
+
+function nodeShellQuoteDispatchValues(
+  lines: readonly string[],
+  line: number,
+  binding: NodeChildProcessShellBinding,
+): string[] | undefined {
+  if (!nodePackageBindingUsable(lines, binding.protections, line)) {
+    return undefined;
+  }
+  const callee = new RegExp(
+    `\\b${nodePackageBindingPattern(binding)}\\s*\\(`,
+    "u",
+  );
+  const arguments_ =
+    javascriptCallArgumentsAtLine(lines, line, callee) ??
+    javascriptRawCallArgumentsAtLine(lines, line, callee);
+  if (arguments_ === undefined || arguments_.length === 0) return undefined;
+  if (binding.method === "exec" || binding.method === "execSync") {
+    return [arguments_[0] ?? ""];
+  }
+  const executable = arguments_[0] ?? "";
+  const argumentList = arguments_[1] ?? "";
+  if (nodeShellQuotePosixShell(lines, executable, line)) {
+    const resolved = resolveJavascriptExpression(lines, argumentList, line);
+    if (resolved === undefined) return undefined;
+    const entries = javascriptArrayEntries(resolved);
+    for (let index = 0; index + 1 < entries.length; index += 1) {
+      const flag = nodeShellQuoteStaticString(
+        lines,
+        entries[index]!.value,
+        entries[index]!.line,
+      );
+      if (flag === "-c" || flag === "-lc") {
+        return [entries[index + 1]!.value];
+      }
+    }
+    return undefined;
+  }
+  const optionsIndex = arguments_.length >= 3 ? 2 : 1;
+  const options = arguments_[optionsIndex] ?? "";
+  if (!nodeShellQuoteOptionsUsePosixShell(lines, options, line)) {
+    return undefined;
+  }
+  return arguments_.slice(0, optionsIndex);
+}
+
+function nodeShellQuoteDispatchLine(
+  lines: readonly string[],
+  quoteLine: number,
+  quoteCallee: RegExp,
+  rawCall = false,
+): number | undefined {
+  const bindings = nodeChildProcessShellBindings(lines);
+  for (const binding of bindings) {
+    const values = nodeShellQuoteDispatchValues(lines, quoteLine, binding);
+    if (
+      values !== undefined &&
+      (values.some((value) => quoteCallee.test(value)) ||
+        quoteCallee.test(
+          javascriptCodeBeforeComment(lines[quoteLine - 1] ?? ""),
+        ))
+    ) {
+      return quoteLine;
+    }
+  }
+  const span = nodeVelocityCallSpan(lines, quoteLine, quoteCallee, rawCall);
+  if (span === undefined) return undefined;
+  const declaration =
+    /(?:^|\n|[;{])\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;]+)?\s*=\s*$/u.exec(
+      span.prefix,
+    );
+  if (declaration?.[1] === undefined) return undefined;
+  const quoted = declaration[1];
+  if (!/^\s*;?\s*$/u.test(span.suffix.split("\n", 1)[0] ?? "")) {
+    return undefined;
+  }
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      quoteLine >= candidate.startLine && quoteLine <= candidate.endLine,
+  );
+  const lastLine = Math.min(lines.length, wrapper?.endLine ?? quoteLine + 64);
+  for (
+    let candidateLine = span.closeLine + 1;
+    candidateLine <= lastLine;
+    candidateLine += 1
+  ) {
+    if (
+      javascriptIdentifierReassignedBetween(
+        lines,
+        quoted,
+        quoteLine,
+        candidateLine + 1,
+      )
+    ) {
+      return undefined;
+    }
+    for (const binding of bindings) {
+      const values = nodeShellQuoteDispatchValues(
+        lines,
+        candidateLine,
+        binding,
+      );
+      if (
+        values?.some((value) =>
+          nodeExpressionTransitivelyReferences(
+            lines,
+            value,
+            quoted,
+            candidateLine,
+          ),
+        ) === true
+      ) {
+        return candidateLine;
+      }
+    }
+  }
+  return undefined;
+}
+
+function nodeShellQuoteCommandSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeShellQuoteCommandSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const dependency = nodeRuntimeDependency(files, path, "shell-quote");
+  if (
+    dependency === undefined ||
+    !nodeShellQuoteVersionIsObjectTokenInjectionVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const kind =
+    dependency.proof === "npm-lockfile"
+      ? "lock-resolved-vulnerable-shell-quote-object-token-line-terminator-command-injection"
+      : "vulnerable-shell-quote-object-token-line-terminator-command-injection";
+  const parseBindings = nodeShellQuoteFunctionBindings(lines, "parse");
+  const quoteBindings = nodeShellQuoteFunctionBindings(lines, "quote");
+  const candidates: Array<{
+    pattern: RegExp;
+    protections?: readonly NodeShescapeBindingProtection[];
+    rawCall?: boolean;
+  }> = quoteBindings.map((binding) => ({
+    pattern: new RegExp(`\\b${nodePackageBindingPattern(binding)}\\s*\\(`, "u"),
+    protections: binding.protections,
+  }));
+  candidates.push({
+    pattern: /\brequire\s*\(\s*["']shell-quote["']\s*\)\s*\.\s*quote\s*\(/u,
+    rawCall: true,
+  });
+  for (const candidate of candidates) {
+    if (
+      candidate.protections !== undefined &&
+      !nodePackageBindingUsable(lines, candidate.protections, line)
+    ) {
+      continue;
+    }
+    const arguments_ =
+      javascriptCallArgumentsAtLine(lines, line, candidate.pattern) ??
+      javascriptRawCallArgumentsAtLine(lines, line, candidate.pattern);
+    const tokenExpression = arguments_?.[0]?.trim() ?? "";
+    if (tokenExpression === "") continue;
+    const source = nodeShellQuoteSource(
+      lines,
+      tokenExpression,
+      line,
+      parseBindings,
+    );
+    if (source === undefined) continue;
+    const sinkLine = nodeShellQuoteDispatchLine(
+      lines,
+      line,
+      candidate.pattern,
+      candidate.rawCall,
+    );
+    if (sinkLine !== undefined) {
+      return {
+        sourceExpression: source.expression,
+        sinkLine,
+        kind,
+        dependency,
+        route: source.route,
+      };
     }
   }
   return undefined;
@@ -13295,6 +13870,7 @@ function frameworkDataflowRecords(
         model.id === "node-http-sequelize-oracle-sql-injection" ||
         model.id === "node-http-liquidjs-template-rce" ||
         model.id === "node-http-shescape-cmd-injection" ||
+        model.id === "node-http-shell-quote-object-token-command-injection" ||
         model.id === "node-http-velocity-template-rce" ||
         model.id === "node-http-vm2-host-proto-sandbox-escape" ||
         model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
@@ -13317,7 +13893,8 @@ function frameworkDataflowRecords(
       continue;
     }
     const rawMatchedSources = JAVASCRIPT_EXTENSIONS.has(extension)
-      ? model.id === "node-http-shescape-cmd-injection"
+      ? model.id === "node-http-shescape-cmd-injection" ||
+        model.id === "node-http-shell-quote-object-token-command-injection"
         ? matchingJavascriptTemplateAwareModelLines(lines, model.sources, 16)
         : matchingJavascriptModelLines(lines, model.sources, 16)
       : PYTHON_EXTENSIONS.has(extension)
@@ -13349,7 +13926,8 @@ function frameworkDataflowRecords(
       model.id === "node-http-path" || model.id === "python-web-path"
         ? exactFilesystemPathSinkLines(lines, model.id, 32)
         : JAVASCRIPT_EXTENSIONS.has(extension)
-          ? model.id === "node-http-shescape-cmd-injection"
+          ? model.id === "node-http-shescape-cmd-injection" ||
+            model.id === "node-http-shell-quote-object-token-command-injection"
             ? matchingJavascriptTemplateAwareModelLines(lines, model.sinks, 64)
             : matchingJavascriptModelLines(
                 lines,
@@ -13363,6 +13941,8 @@ function frameworkDataflowRecords(
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
                   model.id === "node-http-liquidjs-template-rce" ||
                   model.id === "node-http-shescape-cmd-injection" ||
+                  model.id ===
+                    "node-http-shell-quote-object-token-command-injection" ||
                   model.id === "node-http-velocity-template-rce" ||
                   model.id === "node-http-flat-unflatten-prototype-pollution" ||
                   model.id === "node-http-dset-prototype-pollution" ||
@@ -13461,6 +14041,10 @@ function frameworkDataflowRecords(
       const nodeShescapeCommand =
         model.id === "node-http-shescape-cmd-injection"
           ? nodeShescapeCommandSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeShellQuoteCommand =
+        model.id === "node-http-shell-quote-object-token-command-injection"
+          ? nodeShellQuoteCommandSink(files, path, lines, sink.line)
           : undefined;
       const nodeVelocityTemplate =
         model.id === "node-http-velocity-template-rce"
@@ -13674,6 +14258,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-shescape-cmd-injection" &&
         nodeShescapeCommand === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-shell-quote-object-token-command-injection" &&
+        nodeShellQuoteCommand === undefined
       ) {
         continue;
       }
@@ -13978,6 +14568,7 @@ function frameworkDataflowRecords(
         nodeSequelizeOracle?.sourceExpression ??
         nodeLiquidJsTemplate?.sourceExpression ??
         nodeShescapeCommand?.sourceExpression ??
+        nodeShellQuoteCommand?.sourceExpression ??
         nodeVelocityTemplate?.sourceExpression ??
         nodeVm2Sandbox?.sourceExpression ??
         nodeFlatUnflatten?.sourceExpression ??
@@ -14316,6 +14907,7 @@ function frameworkDataflowRecords(
         nodeJsonataExpression?.sinkLine ??
         nodeLiquidJsTemplate?.sinkLine ??
         nodeShescapeCommand?.sinkLine ??
+        nodeShellQuoteCommand?.sinkLine ??
         nodeVelocityTemplate?.sinkLine ??
         nodeNanoidSizeDos?.sinkLine ??
         nodeSocketIoServerDos?.sinkLine ??
@@ -14351,6 +14943,7 @@ function frameworkDataflowRecords(
         nodeSequelizeOracle?.kind ??
         nodeLiquidJsTemplate?.kind ??
         nodeShescapeCommand?.kind ??
+        nodeShellQuoteCommand?.kind ??
         nodeVelocityTemplate?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
@@ -14435,6 +15028,16 @@ function frameworkDataflowRecords(
                     path: nodeShescapeCommand.dependency.manifestPath,
                     line: nodeShescapeCommand.dependency.line,
                     symbol: `shescape@${nodeShescapeCommand.dependency.version}:${nodeShescapeCommand.dependency.proof}:cmd-parenthesis-injection`,
+                  },
+                ]),
+            ...(nodeShellQuoteCommand === undefined
+              ? []
+              : [
+                  {
+                    kind: "shell-quote-runtime-dependency",
+                    path: nodeShellQuoteCommand.dependency.manifestPath,
+                    line: nodeShellQuoteCommand.dependency.line,
+                    symbol: `shell-quote@${nodeShellQuoteCommand.dependency.version}:${nodeShellQuoteCommand.dependency.proof}:${nodeShellQuoteCommand.route}`,
                   },
                 ]),
             ...(nodeJsonataExpression === undefined
@@ -21954,6 +22557,7 @@ function javascriptFrameworkWrapperSummaries(
           model.id === "node-http-sequelize-oracle-sql-injection" ||
           model.id === "node-http-liquidjs-template-rce" ||
           model.id === "node-http-shescape-cmd-injection" ||
+          model.id === "node-http-shell-quote-object-token-command-injection" ||
           model.id === "node-http-velocity-template-rce" ||
           model.id === "node-http-vm2-host-proto-sandbox-escape" ||
           model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
@@ -21983,7 +22587,9 @@ function javascriptFrameworkWrapperSummaries(
       const sinks =
         model.id === "node-http-path"
           ? exactFilesystemPathSinkLines(file.lines, model.id, 32)
-          : model.id === "node-http-shescape-cmd-injection"
+          : model.id === "node-http-shescape-cmd-injection" ||
+              model.id ===
+                "node-http-shell-quote-object-token-command-injection"
             ? matchingJavascriptTemplateAwareModelLines(
                 file.lines,
                 model.sinks,
@@ -21998,6 +22604,8 @@ function javascriptFrameworkWrapperSummaries(
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
                   model.id === "node-http-liquidjs-template-rce" ||
                   model.id === "node-http-shescape-cmd-injection" ||
+                  model.id ===
+                    "node-http-shell-quote-object-token-command-injection" ||
                   model.id === "node-http-velocity-template-rce" ||
                   model.id === "node-http-flat-unflatten-prototype-pollution" ||
                   model.id === "node-http-dset-prototype-pollution" ||
@@ -22094,6 +22702,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeShescapeCommand =
             model.id === "node-http-shescape-cmd-injection"
               ? nodeShescapeCommandSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeShellQuoteCommand =
+            model.id === "node-http-shell-quote-object-token-command-injection"
+              ? nodeShellQuoteCommandSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
               : undefined;
           const nodeVelocityTemplate =
             model.id === "node-http-velocity-template-rce"
@@ -22310,6 +22927,13 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id ===
+              "node-http-shell-quote-object-token-command-injection" &&
+            nodeShellQuoteCommand === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-velocity-template-rce" &&
             nodeVelocityTemplate === undefined
           ) {
@@ -22467,6 +23091,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeSequelizeOracle?.sourceExpression ??
             nodeLiquidJsTemplate?.sourceExpression ??
             nodeShescapeCommand?.sourceExpression ??
+            nodeShellQuoteCommand?.sourceExpression ??
             nodeVelocityTemplate?.sourceExpression ??
             nodeVm2Sandbox?.sourceExpression ??
             nodeFlatUnflatten?.sourceExpression ??
@@ -22698,6 +23323,12 @@ function javascriptFrameworkWrapperSummaries(
                       kind: nodeShescapeCommand.kind,
                       line: nodeShescapeCommand.sinkLine,
                     }),
+                ...(nodeShellQuoteCommand === undefined
+                  ? {}
+                  : {
+                      kind: nodeShellQuoteCommand.kind,
+                      line: nodeShellQuoteCommand.sinkLine,
+                    }),
                 ...(nodeVelocityTemplate === undefined
                   ? {}
                   : {
@@ -22784,6 +23415,7 @@ function javascriptFrameworkWrapperSummaries(
               nodeSequelizeOracle === undefined &&
               nodeLiquidJsTemplate === undefined &&
               nodeShescapeCommand === undefined &&
+              nodeShellQuoteCommand === undefined &&
               nodeVelocityTemplate === undefined &&
               nodeNodemailerRaw === undefined &&
               nodeBraceExpansionDos === undefined &&
@@ -22824,6 +23456,17 @@ function javascriptFrameworkWrapperSummaries(
                               path: nodeShescapeCommand.dependency.manifestPath,
                               line: nodeShescapeCommand.dependency.line,
                               symbol: `shescape@${nodeShescapeCommand.dependency.version}:${nodeShescapeCommand.dependency.proof}:cmd-parenthesis-injection`,
+                            },
+                          ]),
+                      ...(nodeShellQuoteCommand === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "shell-quote-runtime-dependency",
+                              path: nodeShellQuoteCommand.dependency
+                                .manifestPath,
+                              line: nodeShellQuoteCommand.dependency.line,
+                              symbol: `shell-quote@${nodeShellQuoteCommand.dependency.version}:${nodeShellQuoteCommand.dependency.proof}:${nodeShellQuoteCommand.route}`,
                             },
                           ]),
                       ...(nodeVm2Sandbox === undefined

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "1.0",
+  "name": "shell-quote object-token command-injection benchmark",
+  "description": "Measures whether explicit remote shell-quote object operators reach a real POSIX shell under affected and repaired package versions.",
+  "thresholds": {
+    "completionRate": 1,
+    "precision": 1,
+    "recall": 1,
+    "stability": 1,
+    "validationRate": 1,
+    "attackPathRate": 1,
+    "codeEvidenceRate": 1,
+    "severityAccuracy": 1,
+    "falsePositiveRate": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-shell-quote-object-token-command-injection",
+      "description": "An Express query value crosses three relative imports into shell-quote 1.8.3 as an object-token op and the quoted result reaches /bin/sh -c.",
+      "fixture": "fixtures/node-multi-hop-shell-quote-object-token-command-injection",
+      "findingsPaths": [
+        "node-multi-hop-shell-quote-object-token-command-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-reachable-shell-quote-object-token-command-injection",
+          "cwe": ["CWE-77", "CWE-78"],
+          "locations": [
+            {
+              "path": "src/runner.js",
+              "startLine": 6,
+              "endLine": 6,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-repaired-shell-quote-object-token",
+      "description": "The source-identical control upgrades only shell-quote to 1.8.4, which rejects the remote op before shell dispatch.",
+      "fixture": "fixtures/node-multi-hop-repaired-shell-quote-object-token",
+      "findingsPaths": [
+        "node-multi-hop-repaired-shell-quote-object-token/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}
