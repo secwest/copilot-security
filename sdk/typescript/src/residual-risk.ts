@@ -899,6 +899,35 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-fastify-static-route-guard-bypass",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]@fastify\/static['"]/u],
+    sources: [
+      {
+        kind: "protected-static-route-guard",
+        expression: /\.\s*(?:all|get|head|route)\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-fastify-static-route-guard-bypass",
+        expression: /\.\s*register\s*\(/u,
+        cweIds: ["CWE-22"],
+      },
+    ],
+    controls: [
+      {
+        kind: "fastify-static-allowed-path-filter",
+        expression: /\ballowedPath\b/u,
+      },
+      {
+        kind: "fastify-static-wildcard-serving-disabled",
+        expression: /\b(?:serve|wildcard)\s*:\s*false\b/u,
+      },
+    ],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2808,6 +2837,12 @@ interface NodePostcssSourceMapSink {
 interface NodeExtractZipSink {
   sourceExpression: string;
   kind: string;
+}
+
+interface NodeFastifyStaticSink {
+  kind: string;
+  source: { kind: "protected-static-route-guard"; line: number };
+  controls: Array<{ kind: string; line: number }>;
 }
 
 type NodePrototypeMergeDependencyName =
@@ -5909,6 +5944,293 @@ function nodeExtractZipSink(
   return undefined;
 }
 
+interface NodeFastifyBinding {
+  local: string;
+  line: number;
+}
+
+interface NodeFastifyGuard {
+  line: number;
+  receiver: string;
+}
+
+function nodeFastifyStaticVersionIsRouteGuardBypassVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    major < 10 || (major === 10 && (minor < 1 || (minor === 1 && patch === 0)))
+  );
+}
+
+function nodeStaticString(expression: string | undefined): string | undefined {
+  const value = expression?.trim();
+  if (value === undefined || value.length < 2) return undefined;
+  const quote = value[0];
+  if (
+    (quote !== '"' && quote !== "'" && quote !== "`") ||
+    value.at(-1) !== quote
+  ) {
+    return undefined;
+  }
+  const inner = value.slice(1, -1);
+  if (inner.includes("\\") || (quote === "`" && inner.includes("${"))) {
+    return undefined;
+  }
+  return inner;
+}
+
+function nodeFastifyGuardMarker(value: string): boolean {
+  return /\b(?:401|403|Unauthorized|Forbidden|auth(?:enticate|orize|entication|orization)?|guard|permission|preHandler|onRequest|requireUser|verifyUser)\b/iu.test(
+    value,
+  );
+}
+
+function nodeFastifyProtectedRouteGuard(
+  lines: readonly string[],
+  requiredReceiver: string,
+): NodeFastifyGuard | undefined {
+  const structuralLines = javascriptStructuralLines(lines);
+  const escapedReceiver = escapeRegularExpression(requiredReceiver);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const simple = new RegExp(
+      `\\b${escapedReceiver}\\s*\\.\\s*(all|get|head)\\s*\\(`,
+      "u",
+    ).exec(structural);
+    if (simple?.[1] !== undefined) {
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        index + 1,
+        new RegExp(`\\b${escapedReceiver}\\s*\\.\\s*${simple[1]}\\s*\\(`, "u"),
+      );
+      const route = nodeStaticString(arguments_?.[0]);
+      if (
+        route !== undefined &&
+        route.startsWith("/") &&
+        route !== "/*" &&
+        route.endsWith("/*") &&
+        nodeFastifyGuardMarker(arguments_?.slice(1).join("\n") ?? "")
+      ) {
+        return { line: index + 1, receiver: requiredReceiver };
+      }
+    }
+    const routeCall = new RegExp(
+      `\\b${escapedReceiver}\\s*\\.\\s*route\\s*\\(`,
+      "u",
+    );
+    if (!routeCall.test(structural)) continue;
+    const arguments_ = javascriptCallArgumentsAtLine(
+      lines,
+      index + 1,
+      routeCall,
+    );
+    const optionsExpression = arguments_?.[0]?.trim();
+    if (optionsExpression === undefined) continue;
+    const options =
+      resolveJavascriptExpression(
+        lines,
+        optionsExpression,
+        index + 1,
+      )?.value.trim() ?? optionsExpression;
+    const route = nodeStaticString(
+      javascriptObjectPropertyValue(options, "url"),
+    );
+    if (
+      route !== undefined &&
+      route.startsWith("/") &&
+      route !== "/*" &&
+      route.endsWith("/*") &&
+      nodeFastifyGuardMarker(options)
+    ) {
+      return { line: index + 1, receiver: requiredReceiver };
+    }
+  }
+  return undefined;
+}
+
+function nodeFastifyInstanceLine(
+  lines: readonly string[],
+  receiver: string,
+  throughLine: number,
+): number | undefined {
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const factoryBindings: NodeFastifyBinding[] = [];
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const binding =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]fastify['"]/u.exec(code) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]fastify['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]fastify['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (binding?.[1] !== undefined) {
+      factoryBindings.push({ local: binding[1], line: index + 1 });
+    }
+  }
+  const escapedReceiver = escapeRegularExpression(receiver);
+  for (
+    let index = 0;
+    index < Math.min(codeLines.length, throughLine);
+    index += 1
+  ) {
+    const code = codeLines[index] ?? "";
+    const direct = new RegExp(
+      `^\\s*(?:const|let|var)\\s+${escapedReceiver}\\s*=\\s*require\\s*\\(\\s*['\"]fastify['\"]\\s*\\)\\s*\\(`,
+      "u",
+    ).test(code);
+    const factory = factoryBindings.find((binding) => {
+      const escapedFactory = escapeRegularExpression(binding.local);
+      return (
+        binding.line <= index + 1 &&
+        new RegExp(
+          `^\\s*(?:const|let|var)\\s+${escapedReceiver}\\s*=\\s*${escapedFactory}\\s*\\(`,
+          "u",
+        ).test(code)
+      );
+    });
+    if (!direct && factory === undefined) continue;
+    if (
+      javascriptIdentifierReassignedBetween(
+        lines,
+        receiver,
+        index + 1,
+        throughLine + 1,
+      )
+    ) {
+      return undefined;
+    }
+    return index + 1;
+  }
+  return undefined;
+}
+
+function nodeFastifyStaticSinkKind(dependency: NodeRuntimeDependency): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  return `${lockPrefix}vulnerable-fastify-static-route-guard-bypass`;
+}
+
+function nodeFastifyStaticSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeFastifyStaticSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "@fastify/static");
+  if (
+    dependency === undefined ||
+    !nodeFastifyStaticVersionIsRouteGuardBypassVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const structural = javascriptStructuralLines(lines)[line - 1] ?? "";
+  const register = /\b([A-Za-z_$][\w$]*)\s*\.\s*register\s*\(/u.exec(
+    structural,
+  );
+  const receiver = register?.[1];
+  if (receiver === undefined) return undefined;
+  const instanceLine = nodeFastifyInstanceLine(lines, receiver, line);
+  if (instanceLine === undefined) return undefined;
+  const arguments_ = javascriptCallArgumentsAtLine(
+    lines,
+    line,
+    new RegExp(
+      `\\b${escapeRegularExpression(receiver)}\\s*\\.\\s*register\\s*\\(`,
+      "u",
+    ),
+  );
+  const pluginExpression = arguments_?.[0]?.trim();
+  const optionsExpression = arguments_?.[1]?.trim();
+  if (pluginExpression === undefined || optionsExpression === undefined) {
+    return undefined;
+  }
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const bindings: NodeFastifyBinding[] = [];
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const binding =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]@fastify\/static['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]@fastify\/static['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]@fastify\/static['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (binding?.[1] !== undefined) {
+      bindings.push({ local: binding[1], line: index + 1 });
+    }
+  }
+  const direct = /^require\s*\(\s*['"]@fastify\/static['"]\s*\)$/u.test(
+    pluginExpression,
+  );
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const binding = bindings.find(
+    (candidate) =>
+      candidate.local === pluginExpression &&
+      candidate.line < line &&
+      wrapper?.parameters.includes(candidate.local) !== true &&
+      !javascriptIdentifierReassignedBetween(
+        lines,
+        candidate.local,
+        candidate.line,
+        line + 1,
+      ),
+  );
+  if (!direct && binding === undefined) return undefined;
+  const options =
+    resolveJavascriptExpression(lines, optionsExpression, line)?.value.trim() ??
+    optionsExpression;
+  const controls: Array<{ kind: string; line: number }> = [];
+  if (options.startsWith("{") && options.endsWith("}")) {
+    if (javascriptObjectPropertyValue(options, "root") === undefined) {
+      return undefined;
+    }
+    if (
+      javascriptObjectPropertyValue(options, "serve")?.trim() === "false" ||
+      javascriptObjectPropertyValue(options, "wildcard")?.trim() === "false"
+    ) {
+      return undefined;
+    }
+    if (javascriptObjectPropertyValue(options, "allowedPath") !== undefined) {
+      controls.push({ kind: "fastify-static-allowed-path-filter", line });
+    }
+  } else if (
+    /^(?:undefined|null|true|false|[+-]?\d+(?:\.\d+)?|['"`][\s\S]*['"`])$/u.test(
+      options,
+    )
+  ) {
+    return undefined;
+  }
+  const guard = nodeFastifyProtectedRouteGuard(lines, receiver);
+  if (guard === undefined) return undefined;
+  if (
+    javascriptIdentifierReassignedBetween(
+      lines,
+      receiver,
+      instanceLine,
+      Math.max(line, guard.line) + 1,
+    )
+  ) {
+    return undefined;
+  }
+  return {
+    kind: nodeFastifyStaticSinkKind(dependency),
+    source: { kind: "protected-static-route-guard", line: guard.line },
+    controls,
+  };
+}
+
 function nodePrototypeCopySink(
   lines: readonly string[],
   line: number,
@@ -6028,7 +6350,8 @@ function frameworkDataflowRecords(
                 model.id === "node-http-immutable-prototype-replacement" ||
                 model.id === "node-http-tmp-path-traversal" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
-                model.id === "node-http-extract-zip-symlink-traversal"
+                model.id === "node-http-extract-zip-symlink-traversal" ||
+                model.id === "node-http-fastify-static-route-guard-bypass"
                 ? 64
                 : 8,
             )
@@ -6121,6 +6444,10 @@ function frameworkDataflowRecords(
       const nodeExtractZip =
         model.id === "node-http-extract-zip-symlink-traversal"
           ? nodeExtractZipSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeFastifyStatic =
+        model.id === "node-http-fastify-static-route-guard-bypass"
+          ? nodeFastifyStaticSink(files, path, lines, sink.line)
           : undefined;
       const nodePathSink =
         model.id === "node-http-path"
@@ -6257,6 +6584,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-extract-zip-symlink-traversal" &&
         nodeExtractZip === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-fastify-static-route-guard-bypass" &&
+        nodeFastifyStatic === undefined
       ) {
         continue;
       }
@@ -6605,9 +6938,11 @@ function frameworkDataflowRecords(
                                                 sink.line,
                                               );
       const source =
-        model.id === "node-http-dset-prototype-pollution"
-          ? nodeDsetResolution?.source
-          : nonDsetSource;
+        model.id === "node-http-fastify-static-route-guard-bypass"
+          ? nodeFastifyStatic?.source
+          : model.id === "node-http-dset-prototype-pollution"
+            ? nodeDsetResolution?.source
+            : nonDsetSource;
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -6654,6 +6989,10 @@ function frameworkDataflowRecords(
               nodeMongooseAggregate,
               sink.line,
             )
+          : []),
+        ...(model.id === "node-http-fastify-static-route-guard-bypass" &&
+        nodeFastifyStatic !== undefined
+          ? nodeFastifyStatic.controls
           : []),
         ...(model.id === "aspnet-http-object-authorization" &&
         dotnetObjectSink !== undefined
@@ -6734,6 +7073,7 @@ function frameworkDataflowRecords(
         nodeTmpPath?.kind ??
         nodePostcssSourceMap?.kind ??
         nodeExtractZip?.kind ??
+        nodeFastifyStatic?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
@@ -11099,6 +11439,9 @@ function javascriptFrameworkWrapperSummaries(
           model.id === "node-http-mongoose-aggregate") &&
         !nodeMongooseHasOfficialFactoryBinding(file.lines)
       ) {
+        continue;
+      }
+      if (model.id === "node-http-fastify-static-route-guard-bypass") {
         continue;
       }
       const sinks =

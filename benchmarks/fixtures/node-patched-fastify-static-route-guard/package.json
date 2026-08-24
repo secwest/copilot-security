@@ -1,0 +1,9 @@
+{
+  "name": "node-patched-fastify-static-route-guard",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@fastify/static": "10.1.1",
+    "fastify": "5.12.1"
+  }
+}

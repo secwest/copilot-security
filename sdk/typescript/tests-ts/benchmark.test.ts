@@ -219,6 +219,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-extract-zip-symlink-traversal",
         "node-multi-hop-safe-extract-zip",
       ],
+      [
+        "node-fastify-static-route-guard-bypass",
+        "node-patched-fastify-static-route-guard",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

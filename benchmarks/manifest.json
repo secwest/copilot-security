@@ -3006,6 +3006,45 @@
         "node-multi-hop-safe-extract-zip/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-fastify-static-route-guard-bypass",
+      "description": "A non-leading raw or encoded parent segment misses a denied Fastify route, reaches the @fastify/static 10.1.0 catch-all, and normalizes to a protected file beneath the configured root.",
+      "fixture": "fixtures/node-fastify-static-route-guard-bypass",
+      "findingsPaths": [
+        "node-fastify-static-route-guard-bypass/run-1/findings.json",
+        "node-fastify-static-route-guard-bypass/run-2/findings.json",
+        "node-fastify-static-route-guard-bypass/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-fastify-static-protected-route-bypass",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 8,
+              "endLine": 8,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-patched-fastify-static-route-guard",
+      "description": "The source-identical control upgrades only @fastify/static to 10.1.1, which rejects decoded parent segments before route-prefix stripping and static path normalization.",
+      "fixture": "fixtures/node-patched-fastify-static-route-guard",
+      "findingsPaths": [
+        "node-patched-fastify-static-route-guard/run-1/findings.json",
+        "node-patched-fastify-static-route-guard/run-2/findings.json",
+        "node-patched-fastify-static-route-guard/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }
