@@ -1,0 +1,11 @@
+{
+  "name": "node-multi-hop-patched-socketio-parser",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node witness.mjs"
+  },
+  "dependencies": {
+    "socket.io-parser": "4.2.7"
+  }
+}

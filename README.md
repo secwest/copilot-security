@@ -1851,8 +1851,12 @@ catastrophic-backtracking regular-expression denial of service with a bounded
 linear validator as the control. It now includes AES-GCM key/nonce reuse that
 recovers victim plaintext from a chosen plaintext and two public ciphertexts,
 paired with fresh per-envelope HKDF data keys and profile-bound authenticated
-data even though the visible nonce repeats. Each of the 98 cases is scanned
-three times, producing 294 scans that measure both accuracy and model variance.
+data even though the visible nonce repeats. The package-backed availability
+lanes now include persistent `socket.io-parser` zero-attachment state: the
+affected fixture retains every later binary frame, while the source-identical
+repaired fixture rejects the impossible packet before retaining state. Each of
+the 170 cases in 85 exploit/control pairs is scanned three times, producing 510
+scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild
 the selected manifest and report from the sealed campaign receipts.

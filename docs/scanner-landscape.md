@@ -1366,6 +1366,32 @@ on Windows and Linux. The next useful improvement is explicit two-track
 correlation so independently propagated raw and recipient values can be
 accepted only when both paths close at the same call.
 
+## Implemented: persistent Socket.IO parser state reachability
+
+The reviewed [Socket.IO parser zero-attachment advisory](https://github.com/advisories/GHSA-2m8v-j782-fhvr)
+describes a pre-callback memory-retention defect in `socket.io-parser`. An
+affected decoder accepts and emits a binary packet declaring zero attachments,
+but leaves its reconstructor alive. Every later binary frame is appended before
+the completion comparison, so the buffer count can never return to zero.
+Official CodeQL has no `socket.io-parser` or `maxAttachments` reference; its
+Socket.IO models begin at server/client event objects after parsing. Current
+public Semgrep rules and the reviewed reference scanner also have no matching
+model. Dependency-only scanners can identify an affected package, but cannot
+prove that remote frames reach a persistent decoder instance.
+
+Copilot Security therefore requires the complete path: an exact affected
+production resolution, an official Decoder binding, a module-scope persistent
+instance, and remote input at that instance's unmodified `add` method. It
+rejects request-local decoders because their state cannot retain later frames,
+as well as patched branches, fixed packets, Encoder calls, unresolved or
+development dependencies, reassignment, replaced members, shadows, and tests.
+The source-identical 4.2.6/4.2.7 pair and real package witnesses validate all
+three upstream repair branches. In the accepted bounded witness, 4.2.6 retains
+2,048 distinct 4 KiB frames (8 MiB), while 4.2.7 rejects the initial
+`50-["evt"]` packet with `Illegal attachments` and retains nothing on both
+Windows and Linux. `maxAttachments` does not repair the invalid zero-count
+state; upgrade is the supported remedy.
+
 ## Implemented: exact brace-expansion work-amplification reachability
 
 The reviewed [brace-expansion intermediate-array advisory](https://github.com/advisories/GHSA-rgw5-rvv9-x895)

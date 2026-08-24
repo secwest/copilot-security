@@ -909,6 +909,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-socketio-parser-zero-attachment-dos",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]socket\.io-parser['"]/u],
+    sources: [
+      {
+        kind: "http-request-socket-packet",
+        expression:
+          /\b(?:req|request)\.(?:body|data|files|form|json|params|query)\b|\bctx\.(?:params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-request-body",
+        expression:
+          /\b(?:req|request)\.(?:arrayBuffer|blob|formData|json|text)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-socketio-parser-zero-attachment-dos",
+        expression: /\.\s*add\s*\(/u,
+        cweIds: ["CWE-400", "CWE-20", "CWE-754"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-postcss-source-map-traversal",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2991,6 +3017,12 @@ interface NodeBraceExpansionDosSink {
   sourceExpression: string;
   kind: string;
   controls: Array<{ kind: string; line: number }>;
+  dependency: NodeRuntimeDependency;
+}
+
+interface NodeSocketIoParserDosSink {
+  sourceExpression: string;
+  kind: string;
   dependency: NodeRuntimeDependency;
 }
 
@@ -6433,6 +6465,206 @@ function nodeBraceExpansionDosSink(
   return result(inline);
 }
 
+type NodeSocketIoParserBinding = {
+  local: string;
+  line: number;
+  member?: "Decoder";
+};
+
+function nodeSocketIoParserVersionIsVulnerable(version: string): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  if (major < 3) return true;
+  if (major === 3) {
+    if (minor < 3) return true;
+    if (minor === 3) return patch < 6;
+    return minor === 4 && patch < 5;
+  }
+  return major === 4 && (minor < 2 || (minor === 2 && patch < 7));
+}
+
+function javascriptModuleScopeLine(
+  structuralLines: readonly string[],
+  line: number,
+): boolean {
+  let depth = 0;
+  for (const code of structuralLines.slice(0, Math.max(0, line - 1))) {
+    for (const character of code) {
+      if (character === "{") depth += 1;
+      if (character === "}") depth = Math.max(0, depth - 1);
+    }
+  }
+  return depth === 0;
+}
+
+function nodeSocketIoParserDosSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeSocketIoParserDosSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const dependency = nodeRuntimeDependency(files, path, "socket.io-parser");
+  if (
+    dependency === undefined ||
+    !nodeSocketIoParserVersionIsVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: NodeSocketIoParserBinding[] = [];
+  const addBinding = (binding: NodeSocketIoParserBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.member === binding.member &&
+          candidate.line === binding.line,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s+['"]socket\.io-parser['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]socket\.io-parser['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]socket\.io-parser['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      addBinding({ local: receiver[1], line: index + 1, member: "Decoder" });
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]socket\.io-parser['"]\s*\)\s*\.\s*Decoder\s*;?\s*$/u.exec(
+        code,
+      );
+    if (direct?.[1] !== undefined) {
+      addBinding({ local: direct[1], line: index + 1 });
+    }
+    const destructured =
+      /^\s*(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require\s*\(\s*['"]socket\.io-parser['"]\s*\)/u.exec(
+        code,
+      )?.[1];
+    if (destructured !== undefined) {
+      for (const entry of destructured.split(",")) {
+        const match = /^\s*Decoder(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*$/u.exec(
+          entry,
+        );
+        if (match !== null) {
+          addBinding({ local: match[1] ?? "Decoder", line: index + 1 });
+        }
+      }
+    }
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "socket.io-parser" &&
+      imported.imported === "Decoder"
+    ) {
+      addBinding({ local: imported.local, line: imported.line });
+    }
+  }
+
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    if (
+      binding.member !== undefined &&
+      structuralLines
+        .slice(binding.line, Math.max(binding.line, line - 1))
+        .some((candidate) =>
+          new RegExp(
+            `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*Decoder\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+        )
+    ) {
+      continue;
+    }
+    const constructor =
+      binding.member === undefined
+        ? escapeRegularExpression(binding.local)
+        : `${escapeRegularExpression(binding.local)}\\s*\\.\\s*Decoder`;
+    const instancePattern = new RegExp(
+      `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*new\\s+${constructor}\\s*\\(`,
+      "u",
+    );
+    for (
+      let index = binding.line;
+      index < Math.min(line, codeLines.length);
+      index += 1
+    ) {
+      const instance = instancePattern.exec(codeLines[index] ?? "");
+      if (
+        instance?.[1] === undefined ||
+        !javascriptModuleScopeLine(structuralLines, index + 1)
+      ) {
+        continue;
+      }
+      const local = instance[1];
+      if (
+        wrapper?.parameters.includes(local) === true ||
+        javascriptIdentifierReassignedBetween(
+          lines,
+          local,
+          index + 1,
+          line + 1,
+        ) ||
+        structuralLines
+          .slice(index + 1, Math.max(index + 1, line - 1))
+          .some((candidate) =>
+            new RegExp(
+              `\\b${escapeRegularExpression(local)}\\s*\\.\\s*add\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+              "u",
+            ).test(candidate),
+          )
+      ) {
+        continue;
+      }
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        line,
+        new RegExp(
+          `\\b${escapeRegularExpression(local)}\\s*\\.\\s*add\\s*\\(`,
+          "u",
+        ),
+      );
+      const sourceExpression = arguments_?.[0]?.trim();
+      if (sourceExpression !== undefined && sourceExpression !== "") {
+        return {
+          sourceExpression,
+          kind: `${dependency.proof === "npm-lockfile" ? "lock-resolved-" : ""}vulnerable-socketio-parser-zero-attachment-dos`,
+          dependency,
+        };
+      }
+    }
+  }
+  return undefined;
+}
+
 type NodePostcssOperation = "parse" | "process";
 
 interface NodePostcssBinding {
@@ -7698,6 +7930,7 @@ function frameworkDataflowRecords(
                 model.id === "node-http-tmp-path-traversal" ||
                 model.id === "node-http-js-yaml-parser-dos" ||
                 model.id === "node-http-brace-expansion-dos" ||
+                model.id === "node-http-socketio-parser-zero-attachment-dos" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
                 model.id === "node-http-tar-linkpath-traversal" ||
@@ -7800,6 +8033,10 @@ function frameworkDataflowRecords(
       const nodeBraceExpansionDos =
         model.id === "node-http-brace-expansion-dos"
           ? nodeBraceExpansionDosSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeSocketIoParserDos =
+        model.id === "node-http-socketio-parser-zero-attachment-dos"
+          ? nodeSocketIoParserDosSink(files, path, lines, sink.line)
           : undefined;
       const nodePostcssSourceMap =
         model.id === "node-http-postcss-source-map-traversal"
@@ -7962,6 +8199,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-brace-expansion-dos" &&
         nodeBraceExpansionDos === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-socketio-parser-zero-attachment-dos" &&
+        nodeSocketIoParserDos === undefined
       ) {
         continue;
       }
@@ -8161,6 +8404,7 @@ function frameworkDataflowRecords(
         nodeNodemailerRaw?.sourceExpression ??
         nodeJsYamlParserDos?.sourceExpression ??
         nodeBraceExpansionDos?.sourceExpression ??
+        nodeSocketIoParserDos?.sourceExpression ??
         nodePostcssSourceMap?.sourceExpressions.join("\n") ??
         nodeExtractZip?.sourceExpression ??
         nodeTarLink?.sourceExpressions.join("\n") ??
@@ -8489,6 +8733,7 @@ function frameworkDataflowRecords(
         nodeNodemailerRaw?.kind ??
         nodeJsYamlParserDos?.kind ??
         nodeBraceExpansionDos?.kind ??
+        nodeSocketIoParserDos?.kind ??
         nodePostcssSourceMap?.kind ??
         nodeExtractZip?.kind ??
         nodeTarLink?.kind ??
@@ -8557,6 +8802,16 @@ function frameworkDataflowRecords(
                     path: nodeBraceExpansionDos.dependency.manifestPath,
                     line: nodeBraceExpansionDos.dependency.line,
                     symbol: `brace-expansion@${nodeBraceExpansionDos.dependency.version}:${nodeBraceExpansionDos.dependency.proof}:unbounded-intermediate-dos`,
+                  },
+                ]),
+            ...(nodeSocketIoParserDos === undefined
+              ? []
+              : [
+                  {
+                    kind: "socketio-parser-runtime-dependency",
+                    path: nodeSocketIoParserDos.dependency.manifestPath,
+                    line: nodeSocketIoParserDos.dependency.line,
+                    symbol: `socket.io-parser@${nodeSocketIoParserDos.dependency.version}:${nodeSocketIoParserDos.dependency.proof}:zero-attachment-buffer-retention`,
                   },
                 ]),
           ],
@@ -14053,6 +14308,7 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-tmp-path-traversal" ||
                 model.id === "node-http-js-yaml-parser-dos" ||
                 model.id === "node-http-brace-expansion-dos" ||
+                model.id === "node-http-socketio-parser-zero-attachment-dos" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
                 model.id === "node-http-tar-linkpath-traversal" ||
@@ -14151,6 +14407,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeBraceExpansionDos =
             model.id === "node-http-brace-expansion-dos"
               ? nodeBraceExpansionDosSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
+              : undefined;
+          const nodeSocketIoParserDos =
+            model.id === "node-http-socketio-parser-zero-attachment-dos"
+              ? nodeSocketIoParserDosSink(
                   files,
                   file.path,
                   file.lines,
@@ -14303,6 +14568,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-socketio-parser-zero-attachment-dos" &&
+            nodeSocketIoParserDos === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-postcss-source-map-traversal" &&
             nodePostcssSourceMap === undefined
           ) {
@@ -14373,6 +14644,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeNodemailerRaw?.sourceExpression ??
             nodeJsYamlParserDos?.sourceExpression ??
             nodeBraceExpansionDos?.sourceExpression ??
+            nodeSocketIoParserDos?.sourceExpression ??
             nodePostcssSourceMap?.sourceExpressions.join("\n") ??
             nodeExtractZip?.sourceExpression ??
             nodeTarLink?.sourceExpressions.join("\n") ??
@@ -14596,6 +14868,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeBraceExpansionDos === undefined
                   ? {}
                   : { kind: nodeBraceExpansionDos.kind }),
+                ...(nodeSocketIoParserDos === undefined
+                  ? {}
+                  : { kind: nodeSocketIoParserDos.kind }),
                 ...(nodePostcssSourceMap === undefined
                   ? {}
                   : { kind: nodePostcssSourceMap.kind }),
@@ -14627,7 +14902,8 @@ function javascriptFrameworkWrapperSummaries(
               },
               controls: wrapperControls.slice(0, 8),
               ...(nodeNodemailerRaw === undefined &&
-              nodeBraceExpansionDos === undefined
+              nodeBraceExpansionDos === undefined &&
+              nodeSocketIoParserDos === undefined
                 ? {}
                 : {
                     propagators: [
@@ -14650,6 +14926,17 @@ function javascriptFrameworkWrapperSummaries(
                                 .manifestPath,
                               line: nodeBraceExpansionDos.dependency.line,
                               symbol: `brace-expansion@${nodeBraceExpansionDos.dependency.version}:${nodeBraceExpansionDos.dependency.proof}:unbounded-intermediate-dos`,
+                            },
+                          ]),
+                      ...(nodeSocketIoParserDos === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "socketio-parser-runtime-dependency",
+                              path: nodeSocketIoParserDos.dependency
+                                .manifestPath,
+                              line: nodeSocketIoParserDos.dependency.line,
+                              symbol: `socket.io-parser@${nodeSocketIoParserDos.dependency.version}:${nodeSocketIoParserDos.dependency.proof}:zero-attachment-buffer-retention`,
                             },
                           ]),
                     ],

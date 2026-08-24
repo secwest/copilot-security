@@ -3396,6 +3396,45 @@
         "node-multi-hop-patched-brace-expansion/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-socketio-parser-dos",
+      "description": "A request-controlled packet crosses three wrappers into a persistent socket.io-parser 4.2.6 Decoder whose zero-attachment reconstructor retains every later binary frame.",
+      "fixture": "fixtures/node-multi-hop-socketio-parser-dos",
+      "findingsPaths": [
+        "node-multi-hop-socketio-parser-dos/run-1/findings.json",
+        "node-multi-hop-socketio-parser-dos/run-2/findings.json",
+        "node-multi-hop-socketio-parser-dos/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-socketio-parser-zero-attachment-dos",
+          "cwe": ["CWE-400", "CWE-20", "CWE-754"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 6,
+              "endLine": 6,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-socketio-parser",
+      "description": "The source-identical control upgrades only socket.io-parser to 4.2.7, which rejects the impossible zero-attachment binary packet before retaining parser state.",
+      "fixture": "fixtures/node-multi-hop-patched-socketio-parser",
+      "findingsPaths": [
+        "node-multi-hop-patched-socketio-parser/run-1/findings.json",
+        "node-multi-hop-patched-socketio-parser/run-2/findings.json",
+        "node-multi-hop-patched-socketio-parser/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

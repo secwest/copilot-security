@@ -220,6 +220,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-patched-brace-expansion",
       ],
       [
+        "node-multi-hop-socketio-parser-dos",
+        "node-multi-hop-patched-socketio-parser",
+      ],
+      [
         "node-multi-hop-postcss-source-map-traversal",
         "node-multi-hop-patched-postcss",
       ],
