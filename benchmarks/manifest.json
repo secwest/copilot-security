@@ -3123,6 +3123,45 @@
         "node-multi-hop-patched-tar-member-selection/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-js-yaml-exponential-dos",
+      "description": "An attacker-controlled YAML body crosses three wrappers into js-yaml 5.2.1 load(), whose nested flow-pair key reparsing can consume exponential synchronous CPU from a sub-200-byte payload.",
+      "fixture": "fixtures/node-multi-hop-js-yaml-exponential-dos",
+      "findingsPaths": [
+        "node-multi-hop-js-yaml-exponential-dos/run-1/findings.json",
+        "node-multi-hop-js-yaml-exponential-dos/run-2/findings.json",
+        "node-multi-hop-js-yaml-exponential-dos/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "js-yaml-exponential-flow-pair-dos",
+          "cwe": ["CWE-400", "CWE-407"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-js-yaml-flow-parser",
+      "description": "The source-identical control upgrades only js-yaml to 5.2.2, which reuses the parsed key events instead of reparsing nested flow-pair keys.",
+      "fixture": "fixtures/node-multi-hop-patched-js-yaml-flow-parser",
+      "findingsPaths": [
+        "node-multi-hop-patched-js-yaml-flow-parser/run-1/findings.json",
+        "node-multi-hop-patched-js-yaml-flow-parser/run-2/findings.json",
+        "node-multi-hop-patched-js-yaml-flow-parser/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

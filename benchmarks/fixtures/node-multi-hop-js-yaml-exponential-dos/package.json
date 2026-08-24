@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-js-yaml-exponential-dos",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "js-yaml": "5.2.1"
+  }
+}

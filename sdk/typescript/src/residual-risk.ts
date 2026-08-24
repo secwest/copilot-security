@@ -831,6 +831,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-js-yaml-parser-dos",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]js-yaml['"]/u],
+    sources: [
+      {
+        kind: "http-request-yaml",
+        expression:
+          /\b(?:req|request)\.(?:body|data|files|form|json|params|query)\b|\bctx\.(?:params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-request-body",
+        expression:
+          /\b(?:req|request)\.(?:arrayBuffer|blob|formData|json|text)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-js-yaml-parser-dos",
+        expression:
+          /\.\s*(?:load|loadAll|safeLoad|safeLoadAll)\s*\(|\b[A-Za-z_$][\w$]*\s*\(/u,
+        cweIds: ["CWE-400", "CWE-407"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-postcss-source-map-traversal",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2883,6 +2910,11 @@ interface NodeImmutablePrototypeSink {
 
 interface NodeTmpPathSink {
   sourceExpressions: string[];
+  kind: string;
+}
+
+interface NodeJsYamlParserDosSink {
+  sourceExpression: string;
   kind: string;
 }
 
@@ -5577,6 +5609,215 @@ function nodeTmpPathSink(
   return undefined;
 }
 
+type NodeJsYamlParserDosCause = "quadratic-merge" | "exponential-flow";
+type NodeJsYamlLoaderMethod = "load" | "loadAll" | "safeLoad" | "safeLoadAll";
+
+interface NodeJsYamlBinding {
+  local: string;
+  line: number;
+  method?: NodeJsYamlLoaderMethod;
+}
+
+function nodeJsYamlParserDosCause(
+  version: string,
+): NodeJsYamlParserDosCause | undefined {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return undefined;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  if ((major === 3 && minor < 15) || (major === 4 && minor < 3)) {
+    return "quadratic-merge";
+  }
+  if (major === 5 && (minor < 2 || (minor === 2 && patch <= 1))) {
+    return "exponential-flow";
+  }
+  return undefined;
+}
+
+function nodeJsYamlSinkKind(
+  cause: NodeJsYamlParserDosCause,
+  method: NodeJsYamlLoaderMethod,
+  dependency: NodeRuntimeDependency,
+): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  return `${lockPrefix}vulnerable-js-yaml-${method}-${cause}-dos`;
+}
+
+function nodeJsYamlParserDosSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeJsYamlParserDosSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "js-yaml");
+  const cause =
+    dependency === undefined
+      ? undefined
+      : nodeJsYamlParserDosCause(dependency.version);
+  if (dependency === undefined || cause === undefined) return undefined;
+
+  const major = Number(dependency.version.split(".", 1)[0]);
+  const methods: readonly NodeJsYamlLoaderMethod[] =
+    major === 3
+      ? ["load", "loadAll", "safeLoad", "safeLoadAll"]
+      : ["load", "loadAll"];
+  const methodPattern = methods.join("|");
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: NodeJsYamlBinding[] = [];
+  const addBinding = (binding: NodeJsYamlBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.method === binding.method &&
+          candidate.line === binding.line,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s+['"]js-yaml['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]js-yaml['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]js-yaml['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      addBinding({ local: receiver[1], line: index + 1 });
+    }
+
+    const directMember = new RegExp(
+      `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*['"]js-yaml['"]\\s*\\)\\s*\\.\\s*(${methodPattern})\\s*;?\\s*$`,
+      "u",
+    ).exec(code);
+    if (directMember?.[1] !== undefined && directMember[2] !== undefined) {
+      addBinding({
+        local: directMember[1],
+        line: index + 1,
+        method: directMember[2] as NodeJsYamlLoaderMethod,
+      });
+    }
+
+    const destructured =
+      /^\s*(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require\s*\(\s*['"]js-yaml['"]\s*\)/u.exec(
+        code,
+      )?.[1];
+    if (destructured !== undefined) {
+      for (const entry of destructured.split(",")) {
+        const match = new RegExp(
+          `^\\s*(${methodPattern})(?:\\s*:\\s*([A-Za-z_$][\\w$]*))?\\s*$`,
+          "u",
+        ).exec(entry);
+        if (match?.[1] !== undefined) {
+          addBinding({
+            local: match[2] ?? match[1],
+            line: index + 1,
+            method: match[1] as NodeJsYamlLoaderMethod,
+          });
+        }
+      }
+    }
+  }
+
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "js-yaml" &&
+      new RegExp(`^(?:${methodPattern})$`, "u").test(imported.imported)
+    ) {
+      addBinding({
+        local: imported.local,
+        line: imported.line,
+        method: imported.imported as NodeJsYamlLoaderMethod,
+      });
+    }
+  }
+
+  const tryCall = (
+    method: NodeJsYamlLoaderMethod,
+    callee: RegExp,
+  ): NodeJsYamlParserDosSink | undefined => {
+    const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+    const sourceExpression = arguments_?.[0]?.trim();
+    return sourceExpression === undefined || sourceExpression === ""
+      ? undefined
+      : {
+          sourceExpression,
+          kind: nodeJsYamlSinkKind(cause, method, dependency),
+        };
+  };
+
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escaped = escapeRegularExpression(binding.local);
+    const bindingMethods =
+      binding.method === undefined ? methods : [binding.method];
+    for (const method of bindingMethods) {
+      if (
+        binding.method === undefined &&
+        structuralLines
+          .slice(binding.line, Math.max(binding.line, line - 1))
+          .some((candidate) =>
+            new RegExp(
+              `\\b${escaped}\\s*\\.\\s*${method}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+              "u",
+            ).test(candidate),
+          )
+      ) {
+        continue;
+      }
+      const callee =
+        binding.method === undefined
+          ? new RegExp(`\\b${escaped}\\s*\\.\\s*${method}\\s*\\(`, "u")
+          : new RegExp(`\\b${escaped}\\s*\\(`, "u");
+      const result = tryCall(method, callee);
+      if (result !== undefined) return result;
+    }
+  }
+
+  for (const method of methods) {
+    const arguments_ = javascriptCompositeCallArgumentsAtLine(
+      lines,
+      line,
+      new RegExp(
+        `\\brequire\\s*\\(\\s*['"]js-yaml['"]\\s*\\)\\s*\\.\\s*${method}\\s*\\(`,
+        "u",
+      ),
+    );
+    const sourceExpression = arguments_?.[0]?.trim();
+    if (sourceExpression !== undefined && sourceExpression !== "") {
+      return {
+        sourceExpression,
+        kind: nodeJsYamlSinkKind(cause, method, dependency),
+      };
+    }
+  }
+  return undefined;
+}
+
 type NodePostcssOperation = "parse" | "process";
 
 interface NodePostcssBinding {
@@ -6840,6 +7081,7 @@ function frameworkDataflowRecords(
                 model.id === "node-http-lodash-prototype-deletion" ||
                 model.id === "node-http-immutable-prototype-replacement" ||
                 model.id === "node-http-tmp-path-traversal" ||
+                model.id === "node-http-js-yaml-parser-dos" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
                 model.id === "node-http-tar-linkpath-traversal" ||
@@ -6929,6 +7171,10 @@ function frameworkDataflowRecords(
       const nodeTmpPath =
         model.id === "node-http-tmp-path-traversal"
           ? nodeTmpPathSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeJsYamlParserDos =
+        model.id === "node-http-js-yaml-parser-dos"
+          ? nodeJsYamlParserDosSink(files, path, lines, sink.line)
           : undefined;
       const nodePostcssSourceMap =
         model.id === "node-http-postcss-source-map-traversal"
@@ -7073,6 +7319,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-tmp-path-traversal" &&
         nodeTmpPath === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-js-yaml-parser-dos" &&
+        nodeJsYamlParserDos === undefined
       ) {
         continue;
       }
@@ -7269,6 +7521,7 @@ function frameworkDataflowRecords(
         nodeLodashDelete?.sourceExpressions.join("\n") ??
         nodeImmutablePrototype?.sourceExpressions.join("\n") ??
         nodeTmpPath?.sourceExpressions.join("\n") ??
+        nodeJsYamlParserDos?.sourceExpression ??
         nodePostcssSourceMap?.sourceExpressions.join("\n") ??
         nodeExtractZip?.sourceExpression ??
         nodeTarLink?.sourceExpressions.join("\n") ??
@@ -7586,6 +7839,7 @@ function frameworkDataflowRecords(
         nodeLodashDelete?.kind ??
         nodeImmutablePrototype?.kind ??
         nodeTmpPath?.kind ??
+        nodeJsYamlParserDos?.kind ??
         nodePostcssSourceMap?.kind ??
         nodeExtractZip?.kind ??
         nodeTarLink?.kind ??
@@ -11975,6 +12229,7 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-lodash-prototype-deletion" ||
                 model.id === "node-http-immutable-prototype-replacement" ||
                 model.id === "node-http-tmp-path-traversal" ||
+                model.id === "node-http-js-yaml-parser-dos" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
                 model.id === "node-http-tar-linkpath-traversal" ||
@@ -12060,6 +12315,10 @@ function javascriptFrameworkWrapperSummaries(
           const nodeTmpPath =
             model.id === "node-http-tmp-path-traversal"
               ? nodeTmpPathSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeJsYamlParserDos =
+            model.id === "node-http-js-yaml-parser-dos"
+              ? nodeJsYamlParserDosSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodePostcssSourceMap =
             model.id === "node-http-postcss-source-map-traversal"
@@ -12189,6 +12448,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-js-yaml-parser-dos" &&
+            nodeJsYamlParserDos === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-postcss-source-map-traversal" &&
             nodePostcssSourceMap === undefined
           ) {
@@ -12256,6 +12521,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeLodashDelete?.sourceExpressions.join("\n") ??
             nodeImmutablePrototype?.sourceExpressions.join("\n") ??
             nodeTmpPath?.sourceExpressions.join("\n") ??
+            nodeJsYamlParserDos?.sourceExpression ??
             nodePostcssSourceMap?.sourceExpressions.join("\n") ??
             nodeExtractZip?.sourceExpression ??
             nodeTarLink?.sourceExpressions.join("\n") ??
@@ -12462,6 +12728,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeTmpPath === undefined
                   ? {}
                   : { kind: nodeTmpPath.kind }),
+                ...(nodeJsYamlParserDos === undefined
+                  ? {}
+                  : { kind: nodeJsYamlParserDos.kind }),
                 ...(nodePostcssSourceMap === undefined
                   ? {}
                   : { kind: nodePostcssSourceMap.kind }),

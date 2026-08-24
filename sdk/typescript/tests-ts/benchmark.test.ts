@@ -231,6 +231,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-tar-member-selection-recursion",
         "node-multi-hop-patched-tar-member-selection",
       ],
+      [
+        "node-multi-hop-js-yaml-exponential-dos",
+        "node-multi-hop-patched-js-yaml-flow-parser",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],
