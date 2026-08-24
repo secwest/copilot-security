@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-keystone-negative-take-max-take-bypass",
+      "description": "A queryable Keystone 6.5.2 list sets graphql.maxTake to 3, but a GraphQL take of -5 bypasses the positive-only comparison and reaches Prisma.",
+      "fixture": "fixtures/node-keystone-negative-take-max-take-bypass",
+      "findingsPaths": [
+        "node-keystone-negative-take-max-take-bypass/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "keystone-negative-take-max-take-bypass",
+          "cwe": ["CWE-20", "CWE-770"],
+          "locations": [
+            {
+              "path": "src/schema.js",
+              "startLine": 8,
+              "endLine": 8,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-keystone-patched-negative-take-max-take",
+      "description": "The source-identical control changes only @keystone-6/core to 6.5.3, which applies maxTake to the absolute take magnitude before Prisma.",
+      "fixture": "fixtures/node-keystone-patched-negative-take-max-take",
+      "findingsPaths": [
+        "node-keystone-patched-negative-take-max-take/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

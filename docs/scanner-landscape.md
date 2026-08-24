@@ -1436,6 +1436,27 @@ witness prove the 1017.97:1 completion-versus-abort boundary. The same work also
 tightens shared npm lock proof so simple caret and tilde declarations cannot
 resolve below their declared minimum.
 
+## Implemented: exported Keystone list-limit reachability
+
+The reviewed [Keystone negative-take advisory](https://github.com/advisories/GHSA-cqmq-8755-7xvh)
+describes a signed-pagination error in `@keystone-6/core` through 6.5.2. The
+resolver compares a requested `take` directly with `graphql.maxTake`, allowing
+a negative magnitude greater than the configured limit. Version 6.5.3 applies
+the limit to `Math.abs(take ?? Infinity)`. Authenticated source searches found
+no advisory identifier, `maxTake`, or `@keystone-6/core` application model in
+CodeQL, public Semgrep rules, or the comparison scanner repository.
+
+Copilot Security binds affected production resolution to an official list with
+a finite positive limit inside a default/CommonJS-exported Keystone runtime
+configuration. It resolves named, namespace, TypeScript, CommonJS, direct, and
+relative-list forms while rejecting inert package presence, unexported configs,
+patched or unresolved versions, replaced bindings, nonpositive limits, omitted
+queries, and statically deny-all access. Dynamic access rules and infrastructure
+budgets remain validation questions rather than being credited as repairs. A
+source-identical 6.5.2/6.5.3 pair and installed-package public-context witness
+prove that `take: -5` crosses `maxTake: 3` only on the affected build, without a
+listener or database.
+
 ## Benchmark acceptance criteria
 
 An integration is useful only when its comparative campaign demonstrates all

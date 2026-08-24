@@ -1,0 +1,8 @@
+{
+  "name": "node-keystone-patched-negative-take-max-take",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@keystone-6/core": "6.5.3"
+  }
+}

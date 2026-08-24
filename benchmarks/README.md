@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains ninety vulnerable/control pairs:
+The versioned corpus currently contains ninety-three vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -565,6 +565,21 @@ bounded witness constructs an 8,390,144-byte tar whose gzip form is 8,242
 bytes: 7.5.18 processes the 1017.97:1 expansion, while 7.5.19 aborts at an
 observed ratio of 1001.88 before the complete archive is parsed. No payload is
 extracted.
+
+`node-keystone-negative-take-bypass-manifest.json` measures the configured
+limit bypass in [GHSA-cqmq-8755-7xvh / CVE-2026-63421](https://github.com/advisories/GHSA-cqmq-8755-7xvh).
+The positive exports a Keystone 6.5.2 configuration with a queryable list and
+`graphql.maxTake: 3`; the source-identical control changes only
+`@keystone-6/core` to 6.5.3. Regressions cover named aliases,
+namespace/default and TypeScript import-equals receivers, CommonJS destructures
+and receivers, direct requires, exported configuration aliases and wrappers,
+relative list modules, list-option aliases, exact and fresh npm v2/v3 runtime
+proof, factory reassignment, receiver-member replacement, local lookalikes,
+unexported configurations, unresolved or nonpositive limits, query omission,
+and statically deny-all query access. The bounded witness calls Keystone's real
+GraphQL resolver through its public context API with an in-memory Prisma test
+double and no listener or database: 6.5.2 passes `-5` to Prisma and returns five
+rows, while 6.5.3 returns `KS_LIMITS_EXCEEDED` before Prisma.
 
 `node-postcss-source-map-traversal-manifest.json` measures PostCSS's implicit
 previous-source-map file load. The positive sends an Express CSS body through

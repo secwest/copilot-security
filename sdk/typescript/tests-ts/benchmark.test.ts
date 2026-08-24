@@ -269,6 +269,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-patched-tar-decompression",
       ],
       [
+        "node-keystone-negative-take-max-take-bypass",
+        "node-keystone-patched-negative-take-max-take",
+      ],
+      [
         "node-multi-hop-js-yaml-exponential-dos",
         "node-multi-hop-patched-js-yaml-flow-parser",
       ],

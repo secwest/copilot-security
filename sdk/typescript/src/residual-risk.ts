@@ -1077,6 +1077,35 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-keystone-graphql-negative-take-bypass",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]@keystone-6\/core['"]/u],
+    sources: [
+      {
+        kind: "untrusted-keystone-graphql-negative-take",
+        expression: /\b(?:config|list)\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-keystone-graphql-negative-take-max-take-bypass",
+        expression: /\bmaxTake\s*:/u,
+        cweIds: ["CWE-20", "CWE-770"],
+      },
+    ],
+    controls: [
+      {
+        kind: "keystone-list-query-omission",
+        expression: /\bomit\s*:/u,
+      },
+      {
+        kind: "keystone-list-query-access-control",
+        expression: /\baccess\s*:/u,
+      },
+    ],
+  },
+  {
     id: "node-http-postcss-source-map-traversal",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3017,6 +3046,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeOpcuaCrossFileServerDosRecords(sourceFiles));
   records.push(...nodeOpcuaCrossFileServerAuthRecords(sourceFiles));
   records.push(...nodeAuthJsConfigurationErrorFailOpenRecords(sourceFiles));
+  records.push(...nodeKeystoneNegativeTakeBypassRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
   records.push(...nodeAxiosPrototypeGadgetChainRecords(sourceFiles, records));
   records.push(
@@ -10360,7 +10390,11 @@ function frameworkDataflowRecords(
     ) {
       continue;
     }
-    if (model.id === "node-authjs-configuration-error-fail-open") continue;
+    if (
+      model.id === "node-authjs-configuration-error-fail-open" ||
+      model.id === "node-keystone-graphql-negative-take-bypass"
+    )
+      continue;
     if (
       (model.id === "node-http-mongoose-nosql" ||
         model.id === "node-http-mongoose-update" ||
@@ -15744,6 +15778,637 @@ function nodeAuthJsConfigurationErrorFailOpenRecords(
   return records;
 }
 
+type NodeKeystoneFactoryMember = "config" | "list";
+
+interface NodeKeystoneFactoryBinding {
+  line: number;
+  local: string;
+  receiver: boolean;
+}
+
+interface NodeKeystoneFactoryCall {
+  argument: string;
+  argumentLine: number;
+  bindingLine: number;
+  symbol: string;
+}
+
+interface NodeKeystoneExportedConfig {
+  call: NodeKeystoneFactoryCall;
+  exposureLine: number;
+}
+
+interface NodeKeystoneListsObject {
+  file: SourceFileSnapshot;
+  value: JavascriptResolvedExpression;
+  importLine?: number;
+  importedSymbol?: string;
+}
+
+function nodeKeystoneVersionHasNegativeTakeBypass(version: string): boolean {
+  if (version.includes("-") || version.includes("+")) return false;
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    major < 6 || (major === 6 && (minor < 5 || (minor === 5 && patch <= 2)))
+  );
+}
+
+function nodeKeystoneFactoryBindings(
+  lines: readonly string[],
+  member: NodeKeystoneFactoryMember,
+): NodeKeystoneFactoryBinding[] {
+  const bindings: NodeKeystoneFactoryBinding[] = importedJavascriptSymbols(
+    lines,
+  )
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "@keystone-6/core" &&
+        binding.imported === member,
+    )
+    .map((binding) => ({
+      line: binding.line,
+      local: binding.local,
+      receiver: false,
+    }));
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]@keystone-6\/core['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]@keystone-6\/core['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]@keystone-6\/core['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]@keystone-6\/core['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      bindings.push({ line: index + 1, local: receiver[1], receiver: true });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.receiver === binding.receiver &&
+          candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeKeystoneReceiverMemberReplaced(
+  lines: readonly string[],
+  binding: NodeKeystoneFactoryBinding,
+  member: NodeKeystoneFactoryMember,
+  callLine: number,
+): boolean {
+  if (!binding.receiver) return false;
+  const replacement = new RegExp(
+    `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*${member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+    "u",
+  );
+  return javascriptStructuralLines(lines)
+    .slice(binding.line, Math.max(binding.line, callLine - 1))
+    .some((line) => replacement.test(line));
+}
+
+function nodeKeystoneFactoryCall(
+  file: SourceFileSnapshot,
+  expression: string,
+  expressionLine: number,
+  member: NodeKeystoneFactoryMember,
+): NodeKeystoneFactoryCall | undefined {
+  const bindings = nodeKeystoneFactoryBindings(file.lines, member);
+  const candidates: Array<{
+    binding?: NodeKeystoneFactoryBinding;
+    match: RegExpExecArray;
+    symbol: string;
+  }> = [];
+  for (const binding of bindings) {
+    const escaped = escapeRegularExpression(binding.local);
+    const pattern = binding.receiver
+      ? new RegExp(`\\b${escaped}\\s*\\.\\s*${member}\\s*\\(`, "u")
+      : new RegExp(`(?<![.$\\w])${escaped}(?:\\s*<[^;({]+>)?\\s*\\(`, "u");
+    const match = pattern.exec(expression);
+    if (match !== null) {
+      candidates.push({
+        binding,
+        match,
+        symbol: binding.receiver ? `${binding.local}.${member}` : binding.local,
+      });
+    }
+  }
+  const direct = new RegExp(
+    `\\brequire\\s*\\(\\s*['"]@keystone-6/core['"]\\s*\\)\\s*\\.\\s*${member}\\s*\\(`,
+    "u",
+  ).exec(expression);
+  if (direct !== null) {
+    candidates.push({
+      match: direct,
+      symbol: `require(@keystone-6/core).${member}`,
+    });
+  }
+  candidates.sort((left, right) => left.match.index - right.match.index);
+  for (const candidate of candidates) {
+    const open = candidate.match.index + candidate.match[0].lastIndexOf("(");
+    const close = matchingCallParenthesis(expression, open);
+    if (open < 0 || close < 0) continue;
+    const body = expression.slice(open + 1, close);
+    const arguments_ = splitJavascriptArguments(body);
+    const argument = arguments_[0]?.trim();
+    if (argument === undefined || argument === "") continue;
+    const leading = body.indexOf(argument);
+    const argumentLine =
+      expressionLine +
+      (expression.slice(0, open + 1 + Math.max(0, leading)).match(/\n/gu)
+        ?.length ?? 0);
+    const callLine =
+      expressionLine +
+      (expression.slice(0, candidate.match.index).match(/\n/gu)?.length ?? 0);
+    if (
+      candidate.binding !== undefined &&
+      (candidate.binding.line >= callLine ||
+        javascriptIdentifierReassignedBetween(
+          file.lines,
+          candidate.binding.local,
+          candidate.binding.line,
+          callLine + 1,
+        ) ||
+        nodeKeystoneReceiverMemberReplaced(
+          file.lines,
+          candidate.binding,
+          member,
+          callLine,
+        ))
+    ) {
+      continue;
+    }
+    return {
+      argument,
+      argumentLine,
+      bindingLine: candidate.binding?.line ?? callLine,
+      symbol: candidate.symbol,
+    };
+  }
+  return undefined;
+}
+
+function nodeKeystoneExportedConfigs(
+  file: SourceFileSnapshot,
+): NodeKeystoneExportedConfig[] {
+  const structural = javascriptStructuralLines(file.lines);
+  const original = javascriptCodeLinesWithoutComments(file.lines);
+  const configs: NodeKeystoneExportedConfig[] = [];
+  for (let index = 0; index < structural.length; index += 1) {
+    const first = structural[index] ?? "";
+    const chunk = original
+      .slice(index, Math.min(original.length, index + 64))
+      .join("\n");
+    const direct =
+      /^\s*export\s+default\s+/u.exec(first) ??
+      /^\s*(?:module\s*\.\s*exports|exports\s*\.\s*default)\s*=\s*/u.exec(
+        first,
+      );
+    if (direct !== null) {
+      const prefix =
+        /^\s*export\s+default\s+/u.exec(chunk) ??
+        /^\s*(?:module\s*\.\s*exports|exports\s*\.\s*default)\s*=\s*/u.exec(
+          chunk,
+        );
+      if (prefix !== null) {
+        const call = nodeKeystoneFactoryCall(
+          file,
+          chunk.slice(prefix[0].length),
+          index + 1,
+          "config",
+        );
+        if (call !== undefined) {
+          configs.push({ call, exposureLine: index + 1 });
+          continue;
+        }
+      }
+    }
+    const declaration =
+      /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;]+)?\s*=\s*/u.exec(
+        first,
+      );
+    if (declaration?.[1] === undefined) continue;
+    const completeDeclaration = new RegExp(
+      `^\\s*(?:export\\s+)?(?:const|let|var)\\s+${escapeRegularExpression(declaration[1])}(?:\\s*:[^=;]+)?\\s*=\\s*`,
+      "u",
+    ).exec(chunk);
+    if (completeDeclaration === null) continue;
+    const call = nodeKeystoneFactoryCall(
+      file,
+      chunk.slice(completeDeclaration[0].length),
+      index + 1,
+      "config",
+    );
+    if (call === undefined) continue;
+    const escaped = escapeRegularExpression(declaration[1]);
+    for (
+      let candidate = index + 1;
+      candidate < structural.length;
+      candidate += 1
+    ) {
+      const line = structural[candidate] ?? "";
+      if (
+        !new RegExp(
+          `^\\s*(?:export\\s+default\\s+[^;]*\\b${escaped}\\b|(?:module\\s*\\.\\s*exports|exports\\s*\\.\\s*default)\\s*=\\s*[^;]*\\b${escaped}\\b)`,
+          "u",
+        ).test(line)
+      ) {
+        continue;
+      }
+      if (
+        !javascriptIdentifierReassignedBetween(
+          file.lines,
+          declaration[1],
+          index + 1,
+          candidate + 2,
+        )
+      ) {
+        configs.push({ call, exposureLine: candidate + 1 });
+      }
+      break;
+    }
+  }
+  return configs.filter(
+    (config, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.call.argumentLine === config.call.argumentLine &&
+          candidate.exposureLine === config.exposureLine,
+      ) === index,
+  );
+}
+
+function nodeKeystoneExportedSymbol(
+  file: SourceFileSnapshot,
+  symbol: string,
+): boolean {
+  const escaped = escapeRegularExpression(symbol);
+  return javascriptStructuralLines(file.lines).some((line) =>
+    new RegExp(
+      `^\\s*(?:export\\s+(?:(?:const|let|var)\\s+${escaped}\\b|\\{[^}]*\\b${escaped}\\b)|exports\\s*\\.\\s*${escaped}\\s*=|module\\s*\\.\\s*exports\\s*=\\s*\\{[^}]*\\b${escaped}\\b)`,
+      "u",
+    ).test(line),
+  );
+}
+
+function nodeKeystoneListsObject(
+  files: readonly SourceFileSnapshot[],
+  configFile: SourceFileSnapshot,
+  entry: JavascriptPropertyEntry,
+): NodeKeystoneListsObject | undefined {
+  const resolved = resolveJavascriptExpression(
+    configFile.lines,
+    entry.value,
+    entry.line,
+  );
+  if (resolved !== undefined && javascriptObjectEntries(resolved).length > 0) {
+    return { file: configFile, value: resolved };
+  }
+  if (!/^[A-Za-z_$][\w$]*$/u.test(entry.value.trim())) return undefined;
+  const local = entry.value.trim();
+  const imported = importedJavascriptSymbols(configFile.lines).find(
+    (binding) =>
+      binding.local === local &&
+      (binding.moduleSpecifier.startsWith(".") ||
+        binding.moduleSpecifier.startsWith("/")),
+  );
+  if (imported === undefined) return undefined;
+  const knownPaths = new Map(
+    files.map((file) => [modelPathComparisonKey(file.path), file.path]),
+  );
+  const importedPath = resolveRelativeModelImport(
+    configFile.path,
+    imported.moduleSpecifier,
+    knownPaths,
+  );
+  const importedFile = files.find((file) => file.path === importedPath);
+  if (
+    importedFile === undefined ||
+    !nodeKeystoneExportedSymbol(importedFile, imported.imported)
+  ) {
+    return undefined;
+  }
+  const importedValue = resolveJavascriptExpression(
+    importedFile.lines,
+    imported.imported,
+    importedFile.lines.length + 1,
+  );
+  if (
+    importedValue === undefined ||
+    javascriptObjectEntries(importedValue).length === 0
+  ) {
+    return undefined;
+  }
+  return {
+    file: importedFile,
+    value: importedValue,
+    importLine: imported.line,
+    importedSymbol: imported.imported,
+  };
+}
+
+function nodeKeystoneLiteralTrue(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): boolean {
+  return (
+    resolveJavascriptExpression(lines, expression, line)?.value.trim() ===
+    "true"
+  );
+}
+
+function nodeKeystoneQueryOmitted(
+  file: SourceFileSnapshot,
+  graphql: JavascriptResolvedExpression,
+): boolean {
+  const omit = javascriptObjectEntries(graphql).find(
+    (entry) => entry.key === "omit",
+  );
+  if (omit === undefined) return false;
+  if (nodeKeystoneLiteralTrue(file.lines, omit.value, omit.line)) return true;
+  const resolved = resolveJavascriptExpression(
+    file.lines,
+    omit.value,
+    omit.line,
+  );
+  if (resolved === undefined) return false;
+  if (/^\[\s*['"]query['"]\s*(?:,|\])/u.test(resolved.value.trim())) {
+    return true;
+  }
+  const query = javascriptObjectEntries(resolved).find(
+    (entry) => entry.key === "query",
+  );
+  return (
+    query !== undefined &&
+    nodeKeystoneLiteralTrue(file.lines, query.value, query.line)
+  );
+}
+
+function nodeKeystoneQueryDefinitelyDenied(
+  file: SourceFileSnapshot,
+  access: JavascriptPropertyEntry | undefined,
+): boolean {
+  if (access === undefined) return false;
+  const raw = access.value.trim();
+  if (/^[A-Za-z_$][\w$]*$/u.test(raw)) {
+    const imported = importedJavascriptSymbols(file.lines).find(
+      (binding) =>
+        binding.local === raw &&
+        binding.imported === "denyAll" &&
+        binding.moduleSpecifier === "@keystone-6/core/access",
+    );
+    if (
+      imported !== undefined &&
+      !javascriptIdentifierReassignedBetween(
+        file.lines,
+        raw,
+        imported.line,
+        access.line + 1,
+      )
+    ) {
+      return true;
+    }
+  }
+  const resolved = resolveJavascriptExpression(file.lines, raw, access.line);
+  if (resolved === undefined) return false;
+  const operation = javascriptObjectEntries(resolved).find(
+    (entry) => entry.key === "operation",
+  );
+  if (operation === undefined) return false;
+  const operations = resolveJavascriptExpression(
+    file.lines,
+    operation.value,
+    operation.line,
+  );
+  if (operations === undefined) return false;
+  const query = javascriptObjectEntries(operations).find(
+    (entry) => entry.key === "query",
+  );
+  if (query === undefined) return false;
+  const value =
+    resolveJavascriptExpression(
+      file.lines,
+      query.value,
+      query.line,
+    )?.value.trim() ?? query.value.trim();
+  return (
+    value === "false" ||
+    /^(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*false\b/u.test(
+      value,
+    ) ||
+    /^function\b[\s\S]*\breturn\s+false\b/u.test(value)
+  );
+}
+
+function nodeKeystoneNegativeTakeBypassRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const configFile of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(configFile.extension) ||
+      javascriptTestOrExamplePath(configFile.path) ||
+      !configFile.text.includes("@keystone-6/core")
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(
+      files,
+      configFile.path,
+      "@keystone-6/core",
+    );
+    if (
+      dependency === undefined ||
+      !nodeKeystoneVersionHasNegativeTakeBypass(dependency.version)
+    ) {
+      continue;
+    }
+    for (const exported of nodeKeystoneExportedConfigs(configFile)) {
+      const config = resolveJavascriptExpression(
+        configFile.lines,
+        exported.call.argument,
+        exported.call.argumentLine,
+      );
+      if (config === undefined) continue;
+      const listsEntry = javascriptObjectEntries(config).find(
+        (entry) => entry.key === "lists",
+      );
+      if (listsEntry === undefined) continue;
+      const lists = nodeKeystoneListsObject(files, configFile, listsEntry);
+      if (lists === undefined) continue;
+      for (const listEntry of javascriptObjectEntries(lists.value)) {
+        const listExpression = resolveJavascriptExpression(
+          lists.file.lines,
+          listEntry.value,
+          listEntry.line,
+        ) ?? { line: listEntry.line, value: listEntry.value };
+        const listCall = nodeKeystoneFactoryCall(
+          lists.file,
+          listExpression.value,
+          listExpression.line,
+          "list",
+        );
+        if (listCall === undefined) continue;
+        const listConfig = resolveJavascriptExpression(
+          lists.file.lines,
+          listCall.argument,
+          listCall.argumentLine,
+        );
+        if (listConfig === undefined) continue;
+        const listProperties = javascriptObjectEntries(listConfig);
+        const access = listProperties.find((entry) => entry.key === "access");
+        if (nodeKeystoneQueryDefinitelyDenied(lists.file, access)) continue;
+        const graphqlEntry = listProperties.find(
+          (entry) => entry.key === "graphql",
+        );
+        if (graphqlEntry === undefined) continue;
+        const graphql = resolveJavascriptExpression(
+          lists.file.lines,
+          graphqlEntry.value,
+          graphqlEntry.line,
+        );
+        if (
+          graphql === undefined ||
+          nodeKeystoneQueryOmitted(lists.file, graphql)
+        ) {
+          continue;
+        }
+        const maxTake = javascriptObjectEntries(graphql).find(
+          (entry) => entry.key === "maxTake",
+        );
+        if (maxTake === undefined) continue;
+        const maxTakeValue =
+          resolveJavascriptExpression(
+            lists.file.lines,
+            maxTake.value,
+            maxTake.line,
+          )?.value.trim() ?? maxTake.value.trim();
+        if (!/^[1-9]\d*$/u.test(maxTakeValue)) continue;
+        const numericMaxTake = Number(maxTakeValue);
+        if (!Number.isSafeInteger(numericMaxTake)) continue;
+        const key = `${lists.file.path}\0${maxTake.line}\0${configFile.path}\0${exported.exposureLine}`;
+        if (emitted.has(key)) continue;
+        emitted.add(key);
+        const prefix =
+          dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+        const sinkKind = `${prefix}vulnerable-keystone-graphql-negative-take-max-take-bypass`;
+        const sinkStart = Math.max(1, maxTake.line - CONTEXT_LINES_BEFORE);
+        const sinkEnd = Math.min(
+          lists.file.lines.length,
+          maxTake.line + CONTEXT_LINES_AFTER,
+        );
+        const sourceStart = Math.max(1, exported.exposureLine - 2);
+        const sourceEnd = Math.min(
+          configFile.lines.length,
+          exported.exposureLine + 2,
+        );
+        records.push({
+          path: lists.file.path,
+          line: maxTake.line,
+          categories: [
+            "framework-dataflow:node-keystone-graphql-negative-take-bypass",
+            configFile.path === lists.file.path
+              ? "framework-same-file-keystone-config"
+              : "framework-cross-file-keystone-config",
+            "modeled-source:untrusted-keystone-graphql-negative-take",
+            `modeled-sink:${sinkKind}`,
+          ],
+          priority: 120,
+          startLine: sinkStart,
+          endLine: sinkEnd,
+          excerpt: sourceExcerpt(lists.file.lines, sinkStart, sinkEnd),
+          sourceExcerpt: sourceExcerpt(
+            configFile.lines,
+            sourceStart,
+            sourceEnd,
+          ),
+          frameworkModel: {
+            schemaVersion: "1.2",
+            id: "node-keystone-graphql-negative-take-bypass",
+            language: "javascript-typescript",
+            scope:
+              configFile.path === lists.file.path ? "same-file" : "cross-file",
+            source: {
+              kind: "untrusted-keystone-graphql-negative-take",
+              path: configFile.path,
+              line: exported.exposureLine,
+            },
+            sink: {
+              kind: sinkKind,
+              path: lists.file.path,
+              line: maxTake.line,
+              cweIds: ["CWE-20", "CWE-770"],
+            },
+            propagators: [
+              {
+                kind: "official-keystone-config-factory",
+                path: configFile.path,
+                line: exported.call.bindingLine,
+                symbol: exported.call.symbol,
+              },
+              {
+                kind: "exported-keystone-runtime-config",
+                path: configFile.path,
+                line: exported.exposureLine,
+                symbol: "default Keystone configuration",
+              },
+              ...(lists.importLine === undefined
+                ? []
+                : [
+                    {
+                      kind: "relative-keystone-lists-import",
+                      path: configFile.path,
+                      line: lists.importLine,
+                      symbol: lists.importedSymbol,
+                    },
+                  ]),
+              {
+                kind: "official-keystone-list-factory",
+                path: lists.file.path,
+                line: listCall.bindingLine,
+                symbol: listCall.symbol,
+              },
+              {
+                kind: "keystone-runtime-dependency",
+                path: dependency.manifestPath,
+                line: dependency.line,
+                symbol: `@keystone-6/core@${dependency.version}:${dependency.proof}:negative-take-max-take-bypass`,
+              },
+            ],
+            candidateControls:
+              access === undefined
+                ? []
+                : [
+                    {
+                      kind: "keystone-list-query-access-control",
+                      path: lists.file.path,
+                      line: access.line,
+                    },
+                  ],
+          },
+        });
+      }
+    }
+  }
+  return records;
+}
+
 function frameworkCrossFileDataflowRecords(
   files: readonly SourceFileSnapshot[],
 ): ResidualRiskRecord[] {
@@ -18230,7 +18895,8 @@ function javascriptFrameworkWrapperSummaries(
         model.id === "node-socketio-server-transitive-parser-dos" ||
         model.id === "node-opcua-server-nonce-cache-dos" ||
         model.id === "node-opcua-server-username-token-nonce-bypass" ||
-        model.id === "node-authjs-configuration-error-fail-open"
+        model.id === "node-authjs-configuration-error-fail-open" ||
+        model.id === "node-keystone-graphql-negative-take-bypass"
       ) {
         continue;
       }

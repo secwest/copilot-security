@@ -1,0 +1,8 @@
+{
+  "name": "node-keystone-negative-take-max-take-bypass",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@keystone-6/core": "6.5.2"
+  }
+}
