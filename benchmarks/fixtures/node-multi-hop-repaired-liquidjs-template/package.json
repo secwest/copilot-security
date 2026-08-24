@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-repaired-liquidjs-template",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "liquidjs": "10.26.0"
+  }
+}

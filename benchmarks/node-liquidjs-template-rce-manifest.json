@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-liquidjs-template-rce",
+      "description": "An Express query-string template crosses three relative-import boundaries into an official LiquidJS engine under exact vulnerable 10.25.7 provenance. Inherited Object.prototype filter resolution exposes the engine internals and host Function constructor.",
+      "fixture": "fixtures/node-multi-hop-liquidjs-template-rce",
+      "findingsPaths": [
+        "node-multi-hop-liquidjs-template-rce/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-liquidjs-inherited-filter-rce",
+          "cwe": ["CWE-94"],
+          "locations": [
+            {
+              "path": "src/renderer.js",
+              "startLine": 6,
+              "endLine": 6,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-repaired-liquidjs-template",
+      "description": "The source-identical control changes only liquidjs to 10.26.0, whose null-prototype filter and tag registries prevent inherited Object.prototype names from becoming callable template capabilities.",
+      "fixture": "fixtures/node-multi-hop-repaired-liquidjs-template",
+      "findingsPaths": [
+        "node-multi-hop-repaired-liquidjs-template/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

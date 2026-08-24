@@ -1876,7 +1876,11 @@ the repaired version maps it to `null` and denies it. The current JSONata pair
 then carries a request-controlled expression through three wrappers into a
 compiled expression's `evaluate()` call. Exact 2.2.0 recovers the host
 `Function` constructor in a bounded witness, while source-identical 2.2.1
-rejects the chain before host access. The Velocity.js pair carries a remote
+rejects the chain before host access. The LiquidJS pair carries a remote
+template through the same wrapper depth into official `parseAndRender`: exact
+10.25.7 resolves inherited `valueOf` as a filter and returns only the host
+`process.version`, while source-identical 10.26.0 uses null-prototype filter
+and tag registries and returns `false`. The Velocity.js pair carries a remote
 template through the same wrapper depth into official `render`: exact 2.1.6
 follows inherited `constructor.constructor` to the host `Function` constructor,
 while source-identical 2.1.7 blocks the property read with its shared prototype
@@ -1888,8 +1892,8 @@ remote code through the same wrapper depth into an official `VM.run`: exact
 3.11.5 recovers only the host `process.version` with a bounded non-shell
 witness, while source-identical 3.11.6 blocks the dangerous-prototype chain.
 The scanner separately recognizes `NodeVM.run` with wildcard builtins only
-when `os` or `dns` remains exposed. Each of the 190 cases in 95 exploit/control
-pairs is scanned three times, producing 570
+when `os` or `dns` remains exposed. Each of the 192 cases in 96 exploit/control
+pairs is scanned three times, producing 576
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

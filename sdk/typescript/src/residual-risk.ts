@@ -30,10 +30,10 @@ const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
 const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_CANDIDATES = 4_096;
-const MAX_SIGNALS = 128;
+const MAX_SIGNALS = 256;
 const MAX_SIGNALS_PER_FILE = MAX_SIGNALS;
-const MAX_FRAMEWORK_CROSS_FILE_RECORDS = 128;
-const MAX_FRAMEWORK_MULTI_HOP_RECORDS = 128;
+const MAX_FRAMEWORK_CROSS_FILE_RECORDS = MAX_SIGNALS;
+const MAX_FRAMEWORK_MULTI_HOP_RECORDS = MAX_SIGNALS;
 const MAX_RELATIVE_IMPORT_RELAY_LAYERS = 2;
 const MAX_TYPED_SERVICE_RELAY_LAYERS = 2;
 const MAX_WRAPPER_FUNCTION_LINES = 160;
@@ -681,6 +681,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         kind: "vulnerable-jsonata-expression-sandbox-escape",
         expression:
           /(?:\b[A-Za-z_$][\w$]*(?:\s*\.\s*default)?|\brequire\s*\(\s*["']jsonata["']\s*\))\s*\(/u,
+        cweIds: ["CWE-94"],
+      },
+    ],
+    controls: [],
+  },
+  {
+    id: "node-http-liquidjs-template-rce",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/["']liquidjs["']/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-liquidjs-inherited-filter-rce",
+        expression: /\.\s*(?:parseAndRender(?:Sync)?|parse)\s*\(/u,
         cweIds: ["CWE-94"],
       },
     ],
@@ -3254,6 +3280,15 @@ interface NodeJsonataExpressionSink {
   dependency: NodeRuntimeDependency;
 }
 
+interface NodeLiquidJsTemplateSink {
+  sourceExpression: string;
+  sinkLine: number;
+  kind:
+    | "vulnerable-liquidjs-inherited-filter-rce"
+    | "lock-resolved-vulnerable-liquidjs-inherited-filter-rce";
+  dependency: NodeRuntimeDependency;
+}
+
 interface NodeVelocityTemplateSink {
   sourceExpression: string;
   sinkLine: number;
@@ -5457,6 +5492,401 @@ function nodeVelocityTemplateSink(
     );
     if (sinkLine !== undefined) {
       return { sourceExpression, sinkLine, kind, dependency };
+    }
+  }
+  return undefined;
+}
+
+interface NodeLiquidJsBindingProtection {
+  local: string;
+  line: number;
+  member?: "Liquid";
+}
+
+interface NodeLiquidJsConstructorBinding {
+  local: string;
+  receiverMember?: "Liquid";
+  line: number;
+  protections: NodeLiquidJsBindingProtection[];
+}
+
+interface NodeLiquidJsInstanceBinding {
+  local: string;
+  line: number;
+  protections: NodeLiquidJsBindingProtection[];
+}
+
+function nodeLiquidJsVersionIsTemplateRceVulnerable(version: string): boolean {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor] = match.slice(1, 3).map(Number) as [number, number];
+  return major < 10 || (major === 10 && minor < 26);
+}
+
+function nodeLiquidJsConstructorPattern(
+  binding: NodeLiquidJsConstructorBinding,
+): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.receiverMember === undefined
+    ? local
+    : `${local}\\s*\\.\\s*Liquid`;
+}
+
+function nodeLiquidJsConstructorBindings(
+  lines: readonly string[],
+): NodeLiquidJsConstructorBinding[] {
+  const bindings: NodeLiquidJsConstructorBinding[] = importedJavascriptSymbols(
+    lines,
+  )
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "liquidjs" && binding.imported === "Liquid",
+    )
+    .map((binding) => ({
+      local: binding.local,
+      line: binding.line,
+      protections: [{ local: binding.local, line: binding.line }],
+    }));
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const original = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']liquidjs["']/u.exec(
+        original,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']liquidjs["']/u.exec(
+        original,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']liquidjs["']\s*\)/u.exec(
+        original,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']liquidjs["']\s*\)\s*;?\s*$/u.exec(
+        original,
+      );
+    if (receiver?.[1] !== undefined) {
+      bindings.push({
+        local: receiver[1],
+        receiverMember: "Liquid",
+        line: index + 1,
+        protections: [
+          { local: receiver[1], line: index + 1, member: "Liquid" },
+        ],
+      });
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']liquidjs["']\s*\)\s*\.\s*Liquid\s*;?\s*$/u.exec(
+        original,
+      );
+    if (direct?.[1] !== undefined) {
+      bindings.push({
+        local: direct[1],
+        line: index + 1,
+        protections: [{ local: direct[1], line: index + 1 }],
+      });
+    }
+  }
+
+  const structuralLines = javascriptStructuralLines(lines);
+  const originals = [...bindings];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const code = structuralLines[index] ?? "";
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${nodeLiquidJsConstructorPattern(origin)}\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      if (alias?.[1] === undefined) continue;
+      bindings.push({
+        local: alias[1],
+        line: index + 1,
+        protections: [
+          ...origin.protections,
+          { local: alias[1], line: index + 1 },
+        ],
+      });
+    }
+  }
+
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.receiverMember === binding.receiverMember &&
+          candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeLiquidJsProtectionUsable(
+  lines: readonly string[],
+  protections: readonly NodeLiquidJsBindingProtection[],
+  useLine: number,
+): boolean {
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      useLine >= candidate.startLine && useLine <= candidate.endLine,
+  );
+  const structural = javascriptStructuralLines(lines);
+  const code = javascriptCodeLinesWithoutComments(lines);
+  for (const protection of protections) {
+    if (
+      protection.line >= useLine ||
+      wrapper?.parameters.includes(protection.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        protection.local,
+        protection.line,
+        useLine + 1,
+      )
+    ) {
+      return false;
+    }
+    if (protection.member === undefined) continue;
+    const local = escapeRegularExpression(protection.local);
+    const replacement = new RegExp(
+      `\\b${local}\\s*\\.\\s*${protection.member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+      "u",
+    );
+    const define = new RegExp(
+      `\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${local}\\s*,\\s*["']${protection.member}["']`,
+      "u",
+    );
+    if (
+      structural
+        .slice(protection.line, Math.max(protection.line, useLine))
+        .some(
+          (candidate, offset) =>
+            replacement.test(candidate) ||
+            define.test(code[protection.line + offset] ?? ""),
+        )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function nodeLiquidJsInstanceBindings(
+  lines: readonly string[],
+  constructors: readonly NodeLiquidJsConstructorBinding[],
+): NodeLiquidJsInstanceBinding[] {
+  const structuralLines = javascriptStructuralLines(lines);
+  const instances: NodeLiquidJsInstanceBinding[] = [];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const code = structuralLines[index] ?? "";
+    for (const constructor of constructors) {
+      if (
+        !nodeLiquidJsProtectionUsable(lines, constructor.protections, index + 1)
+      ) {
+        continue;
+      }
+      const declaration = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*new\\s+${nodeLiquidJsConstructorPattern(constructor)}\\s*\\(`,
+        "u",
+      ).exec(code);
+      if (declaration?.[1] === undefined) continue;
+      instances.push({
+        local: declaration[1],
+        line: index + 1,
+        protections: [{ local: declaration[1], line: index + 1 }],
+      });
+    }
+  }
+
+  const originals = [...instances];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const code = structuralLines[index] ?? "";
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapeRegularExpression(origin.local)}\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      if (alias?.[1] === undefined) continue;
+      instances.push({
+        local: alias[1],
+        line: index + 1,
+        protections: [
+          ...origin.protections,
+          { local: alias[1], line: index + 1 },
+        ],
+      });
+    }
+  }
+  return instances.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.local === binding.local && candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeLiquidJsInstanceUsable(
+  lines: readonly string[],
+  binding: NodeLiquidJsInstanceBinding,
+  useLine: number,
+): boolean {
+  if (!nodeLiquidJsProtectionUsable(lines, binding.protections, useLine)) {
+    return false;
+  }
+  const structural = javascriptStructuralLines(lines);
+  const code = javascriptCodeLinesWithoutComments(lines);
+  for (const protection of binding.protections) {
+    const local = escapeRegularExpression(protection.local);
+    const replacement = new RegExp(
+      `\\b${local}\\s*\\.\\s*(?:parseAndRender(?:Sync)?|parse|render(?:Sync)?)\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+      "u",
+    );
+    const define = new RegExp(
+      `\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${local}\\s*,\\s*["'](?:parseAndRender(?:Sync)?|parse|render(?:Sync)?)["']`,
+      "u",
+    );
+    if (
+      structural
+        .slice(protection.line, Math.max(protection.line, useLine))
+        .some(
+          (candidate, offset) =>
+            replacement.test(candidate) ||
+            define.test(code[protection.line + offset] ?? ""),
+        )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function nodeLiquidJsParsedTemplateRenderLine(
+  lines: readonly string[],
+  parseLine: number,
+  instance: NodeLiquidJsInstanceBinding,
+): { sourceExpression: string; sinkLine: number } | undefined {
+  const local = escapeRegularExpression(instance.local);
+  const renderCallee = new RegExp(
+    `\\b${local}\\s*\\.\\s*(?:render|renderSync)\\s*\\(`,
+    "u",
+  );
+  const renderArguments = javascriptCallArgumentsAtLine(
+    lines,
+    parseLine,
+    renderCallee,
+  );
+  if (renderArguments?.[0] !== undefined) {
+    const nestedParse = new RegExp(`\\b${local}\\s*\\.\\s*parse\\s*\\(`, "u");
+    const parseArguments = javascriptCallArgumentsAtLine(
+      [renderArguments[0]],
+      1,
+      nestedParse,
+    );
+    const sourceExpression = parseArguments?.[0]?.trim() ?? "";
+    if (sourceExpression !== "") {
+      return { sourceExpression, sinkLine: parseLine };
+    }
+  }
+
+  const parseCallee = new RegExp(`\\b${local}\\s*\\.\\s*parse\\s*\\(`, "u");
+  const parseArguments = javascriptCallArgumentsAtLine(
+    lines,
+    parseLine,
+    parseCallee,
+  );
+  const sourceExpression = parseArguments?.[0]?.trim() ?? "";
+  if (sourceExpression === "") return undefined;
+  const span = nodeVelocityCallSpan(lines, parseLine, parseCallee);
+  if (span === undefined) return undefined;
+  const declaration =
+    /(?:^|\n|[;{])\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;]+)?\s*=\s*$/u.exec(
+      span.prefix,
+    );
+  if (declaration?.[1] === undefined) return undefined;
+  const parsed = declaration[1];
+  if (!/^\s*;?\s*$/u.test(span.suffix.split("\n", 1)[0] ?? "")) {
+    return undefined;
+  }
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      parseLine >= candidate.startLine && parseLine <= candidate.endLine,
+  );
+  const lastLine = Math.min(lines.length, wrapper?.endLine ?? parseLine + 64);
+  for (
+    let candidateLine = span.closeLine + 1;
+    candidateLine <= lastLine;
+    candidateLine += 1
+  ) {
+    if (
+      javascriptIdentifierReassignedBetween(
+        lines,
+        parsed,
+        parseLine,
+        candidateLine + 1,
+      ) ||
+      !nodeLiquidJsInstanceUsable(lines, instance, candidateLine)
+    ) {
+      return undefined;
+    }
+    const arguments_ = javascriptCallArgumentsAtLine(
+      lines,
+      candidateLine,
+      renderCallee,
+    );
+    if (arguments_?.[0]?.trim() === parsed) {
+      return { sourceExpression, sinkLine: candidateLine };
+    }
+  }
+  return undefined;
+}
+
+function nodeLiquidJsTemplateSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeLiquidJsTemplateSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "liquidjs");
+  if (
+    dependency === undefined ||
+    !nodeLiquidJsVersionIsTemplateRceVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const kind =
+    dependency.proof === "npm-lockfile"
+      ? "lock-resolved-vulnerable-liquidjs-inherited-filter-rce"
+      : "vulnerable-liquidjs-inherited-filter-rce";
+  const constructors = nodeLiquidJsConstructorBindings(lines);
+  const instances = nodeLiquidJsInstanceBindings(lines, constructors);
+  for (const instance of instances) {
+    if (!nodeLiquidJsInstanceUsable(lines, instance, line)) continue;
+    const local = escapeRegularExpression(instance.local);
+    for (const method of ["parseAndRender", "parseAndRenderSync"] as const) {
+      const callee = new RegExp(`\\b${local}\\s*\\.\\s*${method}\\s*\\(`, "u");
+      const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+      const sourceExpression = arguments_?.[0]?.trim() ?? "";
+      if (sourceExpression !== "") {
+        return { sourceExpression, sinkLine: line, kind, dependency };
+      }
+    }
+    const parsed = nodeLiquidJsParsedTemplateRenderLine(lines, line, instance);
+    if (parsed !== undefined) {
+      return { ...parsed, kind, dependency };
+    }
+  }
+
+  for (const constructor of constructors) {
+    if (!nodeLiquidJsProtectionUsable(lines, constructor.protections, line)) {
+      continue;
+    }
+    const callee = new RegExp(
+      `\\bnew\\s+${nodeLiquidJsConstructorPattern(constructor)}\\s*\\([^)]*\\)\\s*\\.\\s*parseAndRender(?:Sync)?\\s*\\(`,
+      "u",
+    );
+    const arguments_ = javascriptRawCallArgumentsAtLine(lines, line, callee);
+    const sourceExpression = arguments_?.[0]?.trim() ?? "";
+    if (sourceExpression !== "") {
+      return { sourceExpression, sinkLine: line, kind, dependency };
     }
   }
   return undefined;
@@ -11447,6 +11877,7 @@ function frameworkDataflowRecords(
     }
     if (
       (model.id === "node-http-jsonata-expression-rce" ||
+        model.id === "node-http-liquidjs-template-rce" ||
         model.id === "node-http-velocity-template-rce" ||
         model.id === "node-http-vm2-host-proto-sandbox-escape" ||
         model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
@@ -11508,6 +11939,7 @@ function frameworkDataflowRecords(
                 model.id === "node-http-js-toml-prototype-pollution" ||
                 model.id === "node-http-jsonpath-plus-code-injection" ||
                 model.id === "node-http-jsonata-expression-rce" ||
+                model.id === "node-http-liquidjs-template-rce" ||
                 model.id === "node-http-velocity-template-rce" ||
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
                 model.id === "node-http-dset-prototype-pollution" ||
@@ -11591,6 +12023,10 @@ function frameworkDataflowRecords(
       const nodeJsonataExpression =
         model.id === "node-http-jsonata-expression-rce"
           ? nodeJsonataExpressionSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeLiquidJsTemplate =
+        model.id === "node-http-liquidjs-template-rce"
+          ? nodeLiquidJsTemplateSink(files, path, lines, sink.line)
           : undefined;
       const nodeVelocityTemplate =
         model.id === "node-http-velocity-template-rce"
@@ -11782,6 +12218,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-jsonata-expression-rce" &&
         nodeJsonataExpression === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-liquidjs-template-rce" &&
+        nodeLiquidJsTemplate === undefined
       ) {
         continue;
       }
@@ -12077,6 +12519,7 @@ function frameworkDataflowRecords(
         nodeJsToml?.sourceExpression ??
         nodeJsonPathPlus?.sourceExpression ??
         nodeJsonataExpression?.sourceExpression ??
+        nodeLiquidJsTemplate?.sourceExpression ??
         nodeVelocityTemplate?.sourceExpression ??
         nodeVm2Sandbox?.sourceExpression ??
         nodeFlatUnflatten?.sourceExpression ??
@@ -12412,6 +12855,7 @@ function frameworkDataflowRecords(
         nodeCopilotResolution?.input.line ??
         nodeMongooseAggregateResolution?.position.line ??
         nodeJsonataExpression?.sinkLine ??
+        nodeLiquidJsTemplate?.sinkLine ??
         nodeVelocityTemplate?.sinkLine ??
         nodeNanoidSizeDos?.sinkLine ??
         nodeSocketIoServerDos?.sinkLine ??
@@ -12443,6 +12887,7 @@ function frameworkDataflowRecords(
         nodeFastifyStatic?.kind ??
         nodeVm2Sandbox?.kind ??
         nodeJsonataExpression?.kind ??
+        nodeLiquidJsTemplate?.kind ??
         nodeVelocityTemplate?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
@@ -12507,6 +12952,16 @@ function frameworkDataflowRecords(
                     path: nodeVm2Sandbox.dependency.manifestPath,
                     line: nodeVm2Sandbox.dependency.line,
                     symbol: `vm2@${nodeVm2Sandbox.dependency.version}:${nodeVm2Sandbox.dependency.proof}:${model.id === "node-http-vm2-host-proto-sandbox-escape" ? "host-proto-mutator-sandbox-escape" : "wildcard-builtin-host-exposure"}`,
+                  },
+                ]),
+            ...(nodeLiquidJsTemplate === undefined
+              ? []
+              : [
+                  {
+                    kind: "liquidjs-runtime-dependency",
+                    path: nodeLiquidJsTemplate.dependency.manifestPath,
+                    line: nodeLiquidJsTemplate.dependency.line,
+                    symbol: `liquidjs@${nodeLiquidJsTemplate.dependency.version}:${nodeLiquidJsTemplate.dependency.proof}:inherited-filter-rce`,
                   },
                 ]),
             ...(nodeJsonataExpression === undefined
@@ -19997,6 +20452,7 @@ function javascriptFrameworkWrapperSummaries(
       }
       if (
         (model.id === "node-http-jsonata-expression-rce" ||
+          model.id === "node-http-liquidjs-template-rce" ||
           model.id === "node-http-velocity-template-rce" ||
           model.id === "node-http-vm2-host-proto-sandbox-escape" ||
           model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
@@ -20032,6 +20488,7 @@ function javascriptFrameworkWrapperSummaries(
               model.id === "node-http-js-toml-prototype-pollution" ||
                 model.id === "node-http-jsonpath-plus-code-injection" ||
                 model.id === "node-http-jsonata-expression-rce" ||
+                model.id === "node-http-liquidjs-template-rce" ||
                 model.id === "node-http-velocity-template-rce" ||
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
                 model.id === "node-http-dset-prototype-pollution" ||
@@ -20104,6 +20561,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeJsonataExpression =
             model.id === "node-http-jsonata-expression-rce"
               ? nodeJsonataExpressionSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
+              : undefined;
+          const nodeLiquidJsTemplate =
+            model.id === "node-http-liquidjs-template-rce"
+              ? nodeLiquidJsTemplateSink(
                   files,
                   file.path,
                   file.lines,
@@ -20298,6 +20764,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-liquidjs-template-rce" &&
+            nodeLiquidJsTemplate === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-velocity-template-rce" &&
             nodeVelocityTemplate === undefined
           ) {
@@ -20446,6 +20918,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsToml?.sourceExpression ??
             nodeJsonPathPlus?.sourceExpression ??
             nodeJsonataExpression?.sourceExpression ??
+            nodeLiquidJsTemplate?.sourceExpression ??
             nodeVelocityTemplate?.sourceExpression ??
             nodeVm2Sandbox?.sourceExpression ??
             nodeFlatUnflatten?.sourceExpression ??
@@ -20661,6 +21134,12 @@ function javascriptFrameworkWrapperSummaries(
                       kind: nodeJsonataExpression.kind,
                       line: nodeJsonataExpression.sinkLine,
                     }),
+                ...(nodeLiquidJsTemplate === undefined
+                  ? {}
+                  : {
+                      kind: nodeLiquidJsTemplate.kind,
+                      line: nodeLiquidJsTemplate.sinkLine,
+                    }),
                 ...(nodeVelocityTemplate === undefined
                   ? {}
                   : {
@@ -20741,6 +21220,7 @@ function javascriptFrameworkWrapperSummaries(
               controls: wrapperControls.slice(0, 8),
               ...(nodeVm2Sandbox === undefined &&
               nodeJsonataExpression === undefined &&
+              nodeLiquidJsTemplate === undefined &&
               nodeVelocityTemplate === undefined &&
               nodeNodemailerRaw === undefined &&
               nodeBraceExpansionDos === undefined &&
@@ -20759,6 +21239,17 @@ function javascriptFrameworkWrapperSummaries(
                                 .manifestPath,
                               line: nodeVelocityTemplate.dependency.line,
                               symbol: `velocityjs@${nodeVelocityTemplate.dependency.version}:${nodeVelocityTemplate.dependency.proof}:prototype-property-read-rce`,
+                            },
+                          ]),
+                      ...(nodeLiquidJsTemplate === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "liquidjs-runtime-dependency",
+                              path: nodeLiquidJsTemplate.dependency
+                                .manifestPath,
+                              line: nodeLiquidJsTemplate.dependency.line,
+                              symbol: `liquidjs@${nodeLiquidJsTemplate.dependency.version}:${nodeLiquidJsTemplate.dependency.proof}:inherited-filter-rce`,
                             },
                           ]),
                       ...(nodeVm2Sandbox === undefined
@@ -29345,7 +29836,13 @@ function selectResidualRiskRecords(
     selectedRecords.add(record);
   };
 
-  const representedCategories = new Set<string>();
+  for (const record of ranked) {
+    if (record.frameworkModel !== undefined) add(record);
+  }
+
+  const representedCategories = new Set(
+    selected.flatMap((record) => record.categories),
+  );
   for (const record of ranked) {
     if (
       record.categories.some((category) => !representedCategories.has(category))

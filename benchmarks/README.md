@@ -188,7 +188,7 @@ Decoder API. The latest pair reaches the same state through the public
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case now produce 570 scans across 95 exploit/control pairs in the complete
+per case now produce 576 scans across 96 exploit/control pairs in the complete
 corpus. The added industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size
@@ -548,6 +548,27 @@ development-only packages, unresolved ranges, stale/v1 locks, test/example
 code, and repaired or prerelease versions remain negative. The bounded witness
 returns only `process.version`: 2.2.0 recovers the host `Function` constructor,
 whereas 2.2.1 rejects the same expression with `T1006`.
+
+`node-liquidjs-template-rce-manifest.json` measures application reachability
+for [GHSA-gf2q-c269-pqgc / CVE-2026-45618](https://github.com/advisories/GHSA-gf2q-c269-pqgc),
+not merely an affected LiquidJS dependency. The positive sends an Express
+query template through three relative-import wrappers into official
+`parseAndRender` under exact 10.25.7 production proof. The source-identical
+control changes only `liquidjs` to 10.26.0, whose null-prototype filter and tag
+registries prevent inherited `Object.prototype` names from becoming template
+capabilities. Regressions cover official named and aliased constructors;
+namespace/default and TypeScript import-equals receivers; CommonJS
+destructures, receivers, and direct members; stable one-hop constructor and
+instance aliases; immediate parse-and-render calls; retained and nested
+parse-to-render closures on the same instance; synchronous variants; and
+fresh declaration-consistent npm v2/v3 locks. Trusted fixed templates with
+remote context, package-only and parse-only use, different-instance rendering,
+local lookalikes, replaced or reassigned capabilities, development-only
+packages, unresolved/stale/v1 metadata, test/example code, 10.26.0+, and
+prereleases remain negative. The shared witness never invokes a shell,
+listener, filesystem API, or network API: 10.25.7 returns only
+`process.version` through inherited `valueOf` filter resolution, while 10.26.0
+returns `false` for the identical template.
 
 `node-velocity-template-rce-manifest.json` measures application reachability
 for [GHSA-7gfh-x38p-prh3 / CVE-2026-73649](https://github.com/advisories/GHSA-7gfh-x38p-prh3),

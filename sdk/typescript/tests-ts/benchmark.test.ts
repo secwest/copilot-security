@@ -245,6 +245,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-patched-jsonata-expression",
       ],
       [
+        "node-multi-hop-liquidjs-template-rce",
+        "node-multi-hop-repaired-liquidjs-template",
+      ],
+      [
         "node-multi-hop-velocity-template-rce",
         "node-multi-hop-repaired-velocity-template",
       ],
