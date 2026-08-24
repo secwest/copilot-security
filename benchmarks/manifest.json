@@ -3162,6 +3162,45 @@
         "node-multi-hop-patched-js-yaml-flow-parser/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-js-yaml-omap-dos",
+      "description": "An attacker-controlled YAML body crosses three wrappers into js-yaml 4.3.0 load(), whose default-schema !!omap resolver performs quadratic duplicate-key scans.",
+      "fixture": "fixtures/node-multi-hop-js-yaml-omap-dos",
+      "findingsPaths": [
+        "node-multi-hop-js-yaml-omap-dos/run-1/findings.json",
+        "node-multi-hop-js-yaml-omap-dos/run-2/findings.json",
+        "node-multi-hop-js-yaml-omap-dos/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "js-yaml-quadratic-omap-dos",
+          "cwe": ["CWE-400", "CWE-407"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-js-yaml-omap",
+      "description": "The source-identical control upgrades only js-yaml to 4.3.1, which replaces growing !!omap duplicate-key scans with constant-time own-key tracking.",
+      "fixture": "fixtures/node-multi-hop-patched-js-yaml-omap",
+      "findingsPaths": [
+        "node-multi-hop-patched-js-yaml-omap/run-1/findings.json",
+        "node-multi-hop-patched-js-yaml-omap/run-2/findings.json",
+        "node-multi-hop-patched-js-yaml-omap/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

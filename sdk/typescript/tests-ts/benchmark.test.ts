@@ -235,6 +235,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-js-yaml-exponential-dos",
         "node-multi-hop-patched-js-yaml-flow-parser",
       ],
+      [
+        "node-multi-hop-js-yaml-omap-dos",
+        "node-multi-hop-patched-js-yaml-omap",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

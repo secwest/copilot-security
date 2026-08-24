@@ -68,7 +68,7 @@ async function writeCase(
 }
 
 describe("js-yaml parser denial-of-service framework model", () => {
-  test("supports official loader bindings and distinguishes both parser defects", async () => {
+  test("supports official loader bindings and distinguishes all parser defects", async () => {
     const root = await repository();
     const cases = [
       [
@@ -88,6 +88,18 @@ describe("js-yaml parser denial-of-service framework model", () => {
         "3.14.2",
         'import yaml = require("js-yaml");\nyaml.safeLoad(req.body.yaml);',
         "vulnerable-js-yaml-safeLoad-quadratic-merge-dos",
+      ],
+      [
+        "legacy-omap-v3",
+        "3.15.0",
+        'import { safeLoadAll as parseAll } from "js-yaml";\nparseAll(req.body.yaml);',
+        "vulnerable-js-yaml-safeLoadAll-quadratic-omap-dos",
+      ],
+      [
+        "legacy-omap-v4",
+        "4.3.0",
+        'const yaml = require("js-yaml");\nyaml.load(req.body.yaml);',
+        "vulnerable-js-yaml-load-quadratic-omap-dos",
       ],
       [
         "named",
@@ -137,8 +149,8 @@ describe("js-yaml parser denial-of-service framework model", () => {
       'import * as yaml from "js-yaml";\nyaml.load(req.body.yaml);';
     await Promise.all([
       writeCase(root, "pre-v3", source, { version: "2.1.3" }),
-      writeCase(root, "v3-fixed", source, { version: "3.15.0" }),
-      writeCase(root, "v4-fixed", source, { version: "4.3.0" }),
+      writeCase(root, "v3-fixed", source, { version: "3.15.1" }),
+      writeCase(root, "v4-fixed", source, { version: "4.3.1" }),
       writeCase(root, "v5-fixed", source, { version: "5.2.2" }),
       writeCase(
         root,
@@ -230,6 +242,16 @@ describe("js-yaml parser denial-of-service framework model", () => {
       "fixtures",
       "node-multi-hop-patched-js-yaml-flow-parser",
     );
+    const omapVulnerable = join(
+      benchmarkRoot,
+      "fixtures",
+      "node-multi-hop-js-yaml-omap-dos",
+    );
+    const omapPatched = join(
+      benchmarkRoot,
+      "fixtures",
+      "node-multi-hop-patched-js-yaml-omap",
+    );
     const vulnerableRecords = records(
       await buildResidualRiskInventory(vulnerable),
     );
@@ -241,6 +263,17 @@ describe("js-yaml parser denial-of-service framework model", () => {
       "vulnerable-js-yaml-load-exponential-flow-dos",
     );
     expect(vulnerableRecords[0]?.frameworkModel?.propagators).toHaveLength(9);
+    const omapRecords = records(
+      await buildResidualRiskInventory(omapVulnerable),
+    );
+    expect(omapRecords).toHaveLength(1);
+    expect(records(await buildResidualRiskInventory(omapPatched))).toEqual([]);
+    expect(omapRecords[0]?.frameworkModel?.source.line).toBe(7);
+    expect(omapRecords[0]?.frameworkModel?.sink.line).toBe(4);
+    expect(omapRecords[0]?.frameworkModel?.sink.kind).toBe(
+      "vulnerable-js-yaml-load-quadratic-omap-dos",
+    );
+    expect(omapRecords[0]?.frameworkModel?.propagators).toHaveLength(9);
     for (const path of [
       join("src", "server.js"),
       join("src", "gateway.js"),
@@ -249,6 +282,9 @@ describe("js-yaml parser denial-of-service framework model", () => {
     ]) {
       expect(await readFile(join(vulnerable, path), "utf8")).toBe(
         await readFile(join(patched, path), "utf8"),
+      );
+      expect(await readFile(join(omapVulnerable, path), "utf8")).toBe(
+        await readFile(join(omapPatched, path), "utf8"),
       );
     }
 
@@ -268,6 +304,8 @@ describe("js-yaml parser denial-of-service framework model", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([
       "node-multi-hop-js-yaml-exponential-dos",
       "node-multi-hop-patched-js-yaml-flow-parser",
+      "node-multi-hop-js-yaml-omap-dos",
+      "node-multi-hop-patched-js-yaml-omap",
     ]);
     expect(manifest.thresholds["minPrecision"]).toBe(1);
     expect(manifest.thresholds["minRecall"]).toBe(1);
@@ -275,12 +313,17 @@ describe("js-yaml parser denial-of-service framework model", () => {
     expect(manifest.cases[0]?.findingsPaths).toHaveLength(1);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
+    expect(manifest.cases[2]?.findingsPaths).toHaveLength(1);
+    expect(manifest.cases[2]?.expected).toHaveLength(1);
+    expect(manifest.cases[3]?.expected).toEqual([]);
   });
 
   test("teaches distinct grammar, mitigation, and impact boundaries", () => {
     const prompt = scanQualityGatePrompt("inventory-row");
     expect(prompt).toContain("node-http-js-yaml-parser-dos rows");
     expect(prompt).toContain("quadratic merge-chain family");
+    expect(prompt).toContain("quadratic omap family");
+    expect(prompt).toContain("Versions 3.15.1 and 4.3.1");
     expect(prompt).toContain("exponential flow-pair family");
     expect(prompt).toContain("maxDepth:100 is not protection");
     expect(prompt).toContain("CWE-400/CWE-407 availability impact");

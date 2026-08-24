@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-js-yaml-omap",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "js-yaml": "4.3.1"
+  }
+}

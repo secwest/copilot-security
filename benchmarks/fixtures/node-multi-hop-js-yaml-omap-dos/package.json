@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-js-yaml-omap-dos",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "js-yaml": "4.3.0"
+  }
+}

@@ -5609,7 +5609,10 @@ function nodeTmpPathSink(
   return undefined;
 }
 
-type NodeJsYamlParserDosCause = "quadratic-merge" | "exponential-flow";
+type NodeJsYamlParserDosCause =
+  | "quadratic-merge"
+  | "quadratic-omap"
+  | "exponential-flow";
 type NodeJsYamlLoaderMethod = "load" | "loadAll" | "safeLoad" | "safeLoadAll";
 
 interface NodeJsYamlBinding {
@@ -5628,6 +5631,12 @@ function nodeJsYamlParserDosCause(
   const [major, minor, patch] = parts as [number, number, number];
   if ((major === 3 && minor < 15) || (major === 4 && minor < 3)) {
     return "quadratic-merge";
+  }
+  if (
+    (major === 3 && minor === 15 && patch === 0) ||
+    (major === 4 && minor === 3 && patch === 0)
+  ) {
+    return "quadratic-omap";
   }
   if (major === 5 && (minor < 2 || (minor === 2 && patch <= 1))) {
     return "exponential-flow";
