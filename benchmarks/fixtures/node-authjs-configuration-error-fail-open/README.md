@@ -7,6 +7,6 @@ deployment configuration failure. On this release, the middleware callback
 receives the server's JSON error body as a truthy auth object and permits the
 unauthenticated request.
 
-Install the locked dependencies and run `node examples/witness.mjs`. The witness uses a
+Install the locked dependencies and run `bun examples/witness.mjs`. The witness uses a
 synthetic request, opens no listener, performs no outbound request, and reports
 the observed auth shape and allow/deny status.
