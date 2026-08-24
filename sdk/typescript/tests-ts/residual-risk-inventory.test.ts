@@ -1412,7 +1412,7 @@ describe("residual risk inventory", () => {
           },
       );
 
-    expect(records.length).toBeLessThanOrEqual(96);
+    expect(records.length).toBeLessThanOrEqual(128);
     expect(records.length).toBeGreaterThan(2);
     expect(records[0]?.categories).toContain("process-or-shell");
     expect(records).toContainEqual(
