@@ -687,6 +687,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-velocity-template-rce",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/["']velocityjs["']/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-velocity-template-property-read-rce",
+        expression:
+          /(?:\b[A-Za-z_$][\w$]*(?:\s*\.\s*(?:render|parse))?|\brequire\s*\(\s*["']velocityjs["']\s*\)\s*\.\s*(?:render|parse))\s*\(/u,
+        cweIds: ["CWE-94"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-vm2-host-proto-sandbox-escape",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3227,6 +3254,15 @@ interface NodeJsonataExpressionSink {
   dependency: NodeRuntimeDependency;
 }
 
+interface NodeVelocityTemplateSink {
+  sourceExpression: string;
+  sinkLine: number;
+  kind:
+    | "vulnerable-velocity-template-property-read-rce"
+    | "lock-resolved-vulnerable-velocity-template-property-read-rce";
+  dependency: NodeRuntimeDependency;
+}
+
 interface NodeVm2SandboxSink {
   sourceExpression: string;
   kind:
@@ -4965,6 +5001,463 @@ function nodeJsonataExpressionSink(
           : "vulnerable-jsonata-expression-sandbox-escape",
       dependency,
     };
+  }
+  return undefined;
+}
+
+type NodeVelocityMember = "render" | "parse" | "Compile";
+
+interface NodeVelocityBindingProtection {
+  local: string;
+  line: number;
+  member?: NodeVelocityMember;
+}
+
+interface NodeVelocityBinding {
+  member: NodeVelocityMember;
+  local: string;
+  receiverMember?: NodeVelocityMember;
+  line: number;
+  protections: NodeVelocityBindingProtection[];
+}
+
+interface NodeVelocityCallSpan {
+  structural: string;
+  matchIndex: number;
+  close: number;
+  closeLine: number;
+  prefix: string;
+  suffix: string;
+}
+
+function nodeVelocityVersionIsTemplateRceVulnerable(version: string): boolean {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return (
+    major < 2 || (major === 2 && (minor < 1 || (minor === 1 && patch <= 6)))
+  );
+}
+
+function nodeVelocityBindingPattern(binding: NodeVelocityBinding): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.receiverMember === undefined
+    ? local
+    : `${local}\\s*\\.\\s*${binding.receiverMember}`;
+}
+
+function nodeVelocityBindings(lines: readonly string[]): NodeVelocityBinding[] {
+  const members = new Set<NodeVelocityMember>(["render", "parse", "Compile"]);
+  const bindings: NodeVelocityBinding[] = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "velocityjs" &&
+        members.has(binding.imported as NodeVelocityMember),
+    )
+    .map((binding) => ({
+      member: binding.imported as NodeVelocityMember,
+      local: binding.local,
+      line: binding.line,
+      protections: [{ local: binding.local, line: binding.line }],
+    }));
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const original = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']velocityjs["']/u.exec(
+        original,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']velocityjs["']/u.exec(
+        original,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']velocityjs["']\s*\)/u.exec(
+        original,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']velocityjs["']\s*\)\s*;?\s*$/u.exec(
+        original,
+      );
+    if (receiver?.[1] !== undefined) {
+      for (const member of members) {
+        bindings.push({
+          member,
+          local: receiver[1],
+          receiverMember: member,
+          line: index + 1,
+          protections: [{ local: receiver[1], line: index + 1, member }],
+        });
+      }
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']velocityjs["']\s*\)\s*\.\s*(render|parse|Compile)\s*;?\s*$/u.exec(
+        original,
+      );
+    if (direct?.[1] !== undefined && direct[2] !== undefined) {
+      bindings.push({
+        member: direct[2] as NodeVelocityMember,
+        local: direct[1],
+        line: index + 1,
+        protections: [{ local: direct[1], line: index + 1 }],
+      });
+    }
+  }
+
+  const structuralLines = javascriptStructuralLines(lines);
+  const originals = [...bindings];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const code = structuralLines[index] ?? "";
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${nodeVelocityBindingPattern(origin)}\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      if (alias?.[1] === undefined) continue;
+      bindings.push({
+        member: origin.member,
+        local: alias[1],
+        line: index + 1,
+        protections: [
+          ...origin.protections,
+          { local: alias[1], line: index + 1 },
+        ],
+      });
+    }
+  }
+
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.member === binding.member &&
+          candidate.local === binding.local &&
+          candidate.receiverMember === binding.receiverMember &&
+          candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeVelocityBindingUsable(
+  lines: readonly string[],
+  binding: NodeVelocityBinding,
+  useLine: number,
+): boolean {
+  if (binding.line >= useLine) return false;
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      useLine >= candidate.startLine && useLine <= candidate.endLine,
+  );
+  const structural = javascriptStructuralLines(lines);
+  const code = javascriptCodeLinesWithoutComments(lines);
+  for (const protection of binding.protections) {
+    if (
+      wrapper?.parameters.includes(protection.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        protection.local,
+        protection.line,
+        useLine + 1,
+      )
+    ) {
+      return false;
+    }
+    if (protection.member === undefined) continue;
+    const local = escapeRegularExpression(protection.local);
+    const replacement = new RegExp(
+      `\\b${local}\\s*\\.\\s*${protection.member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+      "u",
+    );
+    const define = new RegExp(
+      `\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${local}\\s*,\\s*["']${protection.member}["']`,
+      "u",
+    );
+    if (
+      structural
+        .slice(protection.line, Math.max(protection.line, useLine))
+        .some(
+          (candidate, offset) =>
+            replacement.test(candidate) ||
+            define.test(code[protection.line + offset] ?? ""),
+        )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function nodeVelocityCallSpan(
+  lines: readonly string[],
+  line: number,
+  callee: RegExp,
+  rawCall = false,
+): NodeVelocityCallSpan | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const structural = (
+    rawCall
+      ? javascriptCodeLinesWithoutComments(callLines)
+      : javascriptStructuralLines(callLines)
+  ).join("\n");
+  const match = callee.exec(structural.split("\n", 1)[0] ?? "");
+  if (match === null) return undefined;
+  const open = rawCall
+    ? match.index + match[0].lastIndexOf("(")
+    : structural.indexOf("(", match.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  return {
+    structural,
+    matchIndex: match.index,
+    close,
+    closeLine:
+      line + (structural.slice(0, close + 1).match(/\n/gu)?.length ?? 0),
+    prefix: structural.slice(0, match.index),
+    suffix: structural.slice(close + 1),
+  };
+}
+
+function nodeVelocityCompiledRenderLine(
+  lines: readonly string[],
+  compileLine: number,
+  callee: RegExp,
+): number | undefined {
+  const span = nodeVelocityCallSpan(lines, compileLine, callee);
+  if (span === undefined) return undefined;
+  const immediate = /^\s*\.\s*render\s*\(/u.exec(span.suffix);
+  if (immediate !== null) {
+    return (
+      span.closeLine +
+      (span.suffix.slice(0, immediate[0].lastIndexOf("render")).match(/\n/gu)
+        ?.length ?? 0)
+    );
+  }
+
+  const declaration =
+    /(?:^|\n|[;{])\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;]+)?\s*=\s*$/u.exec(
+      span.prefix,
+    );
+  if (declaration?.[1] === undefined) return undefined;
+  const compiled = declaration[1];
+  if (!/^\s*;?\s*$/u.test(span.suffix.split("\n", 1)[0] ?? "")) {
+    return undefined;
+  }
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      compileLine >= candidate.startLine && compileLine <= candidate.endLine,
+  );
+  const lastLine = Math.min(lines.length, wrapper?.endLine ?? compileLine + 64);
+  const escaped = escapeRegularExpression(compiled);
+  const render = new RegExp(`\\b${escaped}\\s*\\.\\s*render\\s*\\(`, "u");
+  const replacement = new RegExp(
+    `\\b${escaped}\\s*\\.\\s*render\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+    "u",
+  );
+  const define = new RegExp(
+    `\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${escaped}\\s*,\\s*["']render["']`,
+    "u",
+  );
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (
+    let candidateLine = span.closeLine + 1;
+    candidateLine <= lastLine;
+    candidateLine += 1
+  ) {
+    if (
+      javascriptIdentifierReassignedBetween(
+        lines,
+        compiled,
+        compileLine,
+        candidateLine + 1,
+      ) ||
+      structuralLines
+        .slice(compileLine, candidateLine)
+        .some(
+          (value, offset) =>
+            replacement.test(value) ||
+            define.test(codeLines[compileLine + offset] ?? ""),
+        )
+    ) {
+      return undefined;
+    }
+    const candidate = structuralLines
+      .slice(candidateLine - 1, Math.min(lastLine, candidateLine + 1))
+      .join("\n");
+    const match = render.exec(candidate);
+    if (match !== null) {
+      const memberOffset = match[0].lastIndexOf("render");
+      return (
+        candidateLine +
+        (candidate
+          .slice(0, match.index + Math.max(0, memberOffset))
+          .match(/\n/gu)?.length ?? 0)
+      );
+    }
+  }
+  return undefined;
+}
+
+function nodeVelocityParsedTemplateRenderLine(
+  lines: readonly string[],
+  parseLine: number,
+  parseCallee: RegExp,
+  compileBindings: readonly NodeVelocityBinding[],
+  rawCall = false,
+): number | undefined {
+  const span = nodeVelocityCallSpan(lines, parseLine, parseCallee, rawCall);
+  if (span === undefined) return undefined;
+  for (const binding of compileBindings) {
+    if (!nodeVelocityBindingUsable(lines, binding, parseLine)) continue;
+    const constructor = nodeVelocityBindingPattern(binding);
+    if (
+      new RegExp(`\\bnew\\s+${constructor}\\s*\\(\\s*$`, "u").test(span.prefix)
+    ) {
+      const render = /^\s*\)\s*\.\s*render\s*\(/u.exec(span.suffix);
+      if (render !== null) {
+        return (
+          span.closeLine +
+          (span.suffix.slice(0, render[0].lastIndexOf("render")).match(/\n/gu)
+            ?.length ?? 0)
+        );
+      }
+    }
+  }
+
+  const declaration =
+    /(?:^|\n|[;{])\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;]+)?\s*=\s*$/u.exec(
+      span.prefix,
+    );
+  if (declaration?.[1] === undefined) return undefined;
+  const parsed = declaration[1];
+  if (!/^\s*;?\s*$/u.test(span.suffix.split("\n", 1)[0] ?? "")) {
+    return undefined;
+  }
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      parseLine >= candidate.startLine && parseLine <= candidate.endLine,
+  );
+  const lastLine = Math.min(lines.length, wrapper?.endLine ?? parseLine + 64);
+  for (
+    let compileLine = span.closeLine + 1;
+    compileLine <= lastLine;
+    compileLine += 1
+  ) {
+    if (
+      javascriptIdentifierReassignedBetween(
+        lines,
+        parsed,
+        parseLine,
+        compileLine + 1,
+      )
+    ) {
+      return undefined;
+    }
+    for (const binding of compileBindings) {
+      if (!nodeVelocityBindingUsable(lines, binding, compileLine)) continue;
+      const constructor = nodeVelocityBindingPattern(binding);
+      const callee = new RegExp(`\\bnew\\s+${constructor}\\s*\\(`, "u");
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        compileLine,
+        callee,
+      );
+      if (arguments_?.[0]?.trim() !== parsed) continue;
+      const renderLine = nodeVelocityCompiledRenderLine(
+        lines,
+        compileLine,
+        callee,
+      );
+      if (renderLine !== undefined) return renderLine;
+    }
+  }
+  return undefined;
+}
+
+function nodeVelocityTemplateSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeVelocityTemplateSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "velocityjs");
+  if (
+    dependency === undefined ||
+    !nodeVelocityVersionIsTemplateRceVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const bindings = nodeVelocityBindings(lines);
+  const renderBindings = bindings.filter(({ member }) => member === "render");
+  const parseBindings = bindings.filter(({ member }) => member === "parse");
+  const compileBindings = bindings.filter(({ member }) => member === "Compile");
+  const kind =
+    dependency.proof === "npm-lockfile"
+      ? "lock-resolved-vulnerable-velocity-template-property-read-rce"
+      : "vulnerable-velocity-template-property-read-rce";
+
+  for (const binding of renderBindings) {
+    if (!nodeVelocityBindingUsable(lines, binding, line)) continue;
+    const callee = new RegExp(
+      `\\b${nodeVelocityBindingPattern(binding)}\\s*\\(`,
+      "u",
+    );
+    const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+    const sourceExpression = arguments_?.[0]?.trim() ?? "";
+    if (sourceExpression !== "") {
+      return { sourceExpression, sinkLine: line, kind, dependency };
+    }
+  }
+  const directRender =
+    /\brequire\s*\(\s*["']velocityjs["']\s*\)\s*\.\s*render\s*\(/u;
+  const directRenderArguments = javascriptRawCallArgumentsAtLine(
+    lines,
+    line,
+    directRender,
+  );
+  const directRenderSource = directRenderArguments?.[0]?.trim() ?? "";
+  if (directRenderSource !== "") {
+    return {
+      sourceExpression: directRenderSource,
+      sinkLine: line,
+      kind,
+      dependency,
+    };
+  }
+
+  const parseCandidates: Array<{
+    callee: RegExp;
+    rawCall: boolean;
+    usable: boolean;
+  }> = parseBindings.map((binding) => ({
+    callee: new RegExp(`\\b${nodeVelocityBindingPattern(binding)}\\s*\\(`, "u"),
+    rawCall: false,
+    usable: nodeVelocityBindingUsable(lines, binding, line),
+  }));
+  parseCandidates.push({
+    callee: /\brequire\s*\(\s*["']velocityjs["']\s*\)\s*\.\s*parse\s*\(/u,
+    rawCall: true,
+    usable: true,
+  });
+  for (const candidate of parseCandidates) {
+    if (!candidate.usable) continue;
+    const arguments_ = candidate.rawCall
+      ? javascriptRawCallArgumentsAtLine(lines, line, candidate.callee)
+      : javascriptCallArgumentsAtLine(lines, line, candidate.callee);
+    const sourceExpression = arguments_?.[0]?.trim() ?? "";
+    if (sourceExpression === "") continue;
+    const sinkLine = nodeVelocityParsedTemplateRenderLine(
+      lines,
+      line,
+      candidate.callee,
+      compileBindings,
+      candidate.rawCall,
+    );
+    if (sinkLine !== undefined) {
+      return { sourceExpression, sinkLine, kind, dependency };
+    }
   }
   return undefined;
 }
@@ -10954,6 +11447,7 @@ function frameworkDataflowRecords(
     }
     if (
       (model.id === "node-http-jsonata-expression-rce" ||
+        model.id === "node-http-velocity-template-rce" ||
         model.id === "node-http-vm2-host-proto-sandbox-escape" ||
         model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
       javascriptTestOrExamplePath(path)
@@ -11014,6 +11508,7 @@ function frameworkDataflowRecords(
                 model.id === "node-http-js-toml-prototype-pollution" ||
                 model.id === "node-http-jsonpath-plus-code-injection" ||
                 model.id === "node-http-jsonata-expression-rce" ||
+                model.id === "node-http-velocity-template-rce" ||
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
                 model.id === "node-http-dset-prototype-pollution" ||
                 model.id === "node-http-object-path-prototype-pollution" ||
@@ -11096,6 +11591,10 @@ function frameworkDataflowRecords(
       const nodeJsonataExpression =
         model.id === "node-http-jsonata-expression-rce"
           ? nodeJsonataExpressionSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeVelocityTemplate =
+        model.id === "node-http-velocity-template-rce"
+          ? nodeVelocityTemplateSink(files, path, lines, sink.line)
           : undefined;
       const nodeVm2Sandbox =
         model.id === "node-http-vm2-host-proto-sandbox-escape" ||
@@ -11283,6 +11782,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-jsonata-expression-rce" &&
         nodeJsonataExpression === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-velocity-template-rce" &&
+        nodeVelocityTemplate === undefined
       ) {
         continue;
       }
@@ -11572,6 +12077,7 @@ function frameworkDataflowRecords(
         nodeJsToml?.sourceExpression ??
         nodeJsonPathPlus?.sourceExpression ??
         nodeJsonataExpression?.sourceExpression ??
+        nodeVelocityTemplate?.sourceExpression ??
         nodeVm2Sandbox?.sourceExpression ??
         nodeFlatUnflatten?.sourceExpression ??
         nodeObjectPath?.sourceExpression ??
@@ -11906,6 +12412,7 @@ function frameworkDataflowRecords(
         nodeCopilotResolution?.input.line ??
         nodeMongooseAggregateResolution?.position.line ??
         nodeJsonataExpression?.sinkLine ??
+        nodeVelocityTemplate?.sinkLine ??
         nodeNanoidSizeDos?.sinkLine ??
         nodeSocketIoServerDos?.sinkLine ??
         nodeOpcuaServerDos?.sinkLine ??
@@ -11936,6 +12443,7 @@ function frameworkDataflowRecords(
         nodeFastifyStatic?.kind ??
         nodeVm2Sandbox?.kind ??
         nodeJsonataExpression?.kind ??
+        nodeVelocityTemplate?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
@@ -11981,6 +12489,16 @@ function frameworkDataflowRecords(
               sinkPattern.cweIds,
           },
           propagators: [
+            ...(nodeVelocityTemplate === undefined
+              ? []
+              : [
+                  {
+                    kind: "velocityjs-runtime-dependency",
+                    path: nodeVelocityTemplate.dependency.manifestPath,
+                    line: nodeVelocityTemplate.dependency.line,
+                    symbol: `velocityjs@${nodeVelocityTemplate.dependency.version}:${nodeVelocityTemplate.dependency.proof}:prototype-property-read-rce`,
+                  },
+                ]),
             ...(nodeVm2Sandbox === undefined
               ? []
               : [
@@ -19479,6 +19997,7 @@ function javascriptFrameworkWrapperSummaries(
       }
       if (
         (model.id === "node-http-jsonata-expression-rce" ||
+          model.id === "node-http-velocity-template-rce" ||
           model.id === "node-http-vm2-host-proto-sandbox-escape" ||
           model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
         javascriptTestOrExamplePath(file.path)
@@ -19513,6 +20032,7 @@ function javascriptFrameworkWrapperSummaries(
               model.id === "node-http-js-toml-prototype-pollution" ||
                 model.id === "node-http-jsonpath-plus-code-injection" ||
                 model.id === "node-http-jsonata-expression-rce" ||
+                model.id === "node-http-velocity-template-rce" ||
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
                 model.id === "node-http-dset-prototype-pollution" ||
                 model.id === "node-http-object-path-prototype-pollution" ||
@@ -19584,6 +20104,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeJsonataExpression =
             model.id === "node-http-jsonata-expression-rce"
               ? nodeJsonataExpressionSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
+              : undefined;
+          const nodeVelocityTemplate =
+            model.id === "node-http-velocity-template-rce"
+              ? nodeVelocityTemplateSink(
                   files,
                   file.path,
                   file.lines,
@@ -19769,6 +20298,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-velocity-template-rce" &&
+            nodeVelocityTemplate === undefined
+          ) {
+            continue;
+          }
+          if (
             (model.id === "node-http-vm2-host-proto-sandbox-escape" ||
               model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
             nodeVm2Sandbox === undefined
@@ -19911,6 +20446,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsToml?.sourceExpression ??
             nodeJsonPathPlus?.sourceExpression ??
             nodeJsonataExpression?.sourceExpression ??
+            nodeVelocityTemplate?.sourceExpression ??
             nodeVm2Sandbox?.sourceExpression ??
             nodeFlatUnflatten?.sourceExpression ??
             nodeObjectPath?.sourceExpression ??
@@ -20125,6 +20661,12 @@ function javascriptFrameworkWrapperSummaries(
                       kind: nodeJsonataExpression.kind,
                       line: nodeJsonataExpression.sinkLine,
                     }),
+                ...(nodeVelocityTemplate === undefined
+                  ? {}
+                  : {
+                      kind: nodeVelocityTemplate.kind,
+                      line: nodeVelocityTemplate.sinkLine,
+                    }),
                 ...(nodeVm2Sandbox === undefined
                   ? {}
                   : { kind: nodeVm2Sandbox.kind }),
@@ -20199,6 +20741,7 @@ function javascriptFrameworkWrapperSummaries(
               controls: wrapperControls.slice(0, 8),
               ...(nodeVm2Sandbox === undefined &&
               nodeJsonataExpression === undefined &&
+              nodeVelocityTemplate === undefined &&
               nodeNodemailerRaw === undefined &&
               nodeBraceExpansionDos === undefined &&
               nodeNanoidSizeDos === undefined &&
@@ -20207,6 +20750,17 @@ function javascriptFrameworkWrapperSummaries(
                 ? {}
                 : {
                     propagators: [
+                      ...(nodeVelocityTemplate === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "velocityjs-runtime-dependency",
+                              path: nodeVelocityTemplate.dependency
+                                .manifestPath,
+                              line: nodeVelocityTemplate.dependency.line,
+                              symbol: `velocityjs@${nodeVelocityTemplate.dependency.version}:${nodeVelocityTemplate.dependency.proof}:prototype-property-read-rce`,
+                            },
+                          ]),
                       ...(nodeVm2Sandbox === undefined
                         ? []
                         : [

@@ -3749,6 +3749,45 @@
       "expected": []
     },
     {
+      "id": "node-multi-hop-velocity-template-rce",
+      "description": "An Express query-string template crosses three relative-import boundaries into official Velocity.js render under an exact vulnerable 2.1.6 runtime pin. A crafted property-reference chain can recover Function and execute in the host process.",
+      "fixture": "fixtures/node-multi-hop-velocity-template-rce",
+      "findingsPaths": [
+        "node-multi-hop-velocity-template-rce/run-1/findings.json",
+        "node-multi-hop-velocity-template-rce/run-2/findings.json",
+        "node-multi-hop-velocity-template-rce/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-velocity-template-property-read-rce",
+          "cwe": ["CWE-94"],
+          "locations": [
+            {
+              "path": "src/renderer.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-repaired-velocity-template",
+      "description": "The source-identical control changes only velocityjs to 2.1.7, whose shared prototype guard blocks dangerous property reads throughout reference, index, and method resolution.",
+      "fixture": "fixtures/node-multi-hop-repaired-velocity-template",
+      "findingsPaths": [
+        "node-multi-hop-repaired-velocity-template/run-1/findings.json",
+        "node-multi-hop-repaired-velocity-template/run-2/findings.json",
+        "node-multi-hop-repaired-velocity-template/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "node-multi-hop-vm2-sandbox-escape",
       "description": "An Express body field crosses three relative-import boundaries into official vm2 VM.run under an exact vulnerable 3.11.5 runtime pin. A bounded host-prototype-mutator witness recovers only process.version.",
       "fixture": "fixtures/node-multi-hop-vm2-sandbox-escape",

@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-repaired-velocity-template",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "velocityjs": "2.1.7"
+  }
+}

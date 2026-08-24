@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains ninety-four vulnerable/control pairs:
+The versioned corpus currently contains ninety-five vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -188,7 +188,7 @@ Decoder API. The latest pair reaches the same state through the public
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case now produce 564 scans across 94 exploit/control pairs in the complete
+per case now produce 570 scans across 95 exploit/control pairs in the complete
 corpus. The added industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size
@@ -548,6 +548,26 @@ development-only packages, unresolved ranges, stale/v1 locks, test/example
 code, and repaired or prerelease versions remain negative. The bounded witness
 returns only `process.version`: 2.2.0 recovers the host `Function` constructor,
 whereas 2.2.1 rejects the same expression with `T1006`.
+
+`node-velocity-template-rce-manifest.json` measures application reachability
+for [GHSA-7gfh-x38p-prh3 / CVE-2026-73649](https://github.com/advisories/GHSA-7gfh-x38p-prh3),
+not merely an affected Velocity.js dependency. The positive sends an Express
+query template through three relative-import wrappers into official `render`
+under exact 2.1.6 production proof. The source-identical control changes only
+`velocityjs` to 2.1.7, whose shared guard rejects dangerous property reads in
+references, indexes, methods, and assignments. Regressions cover official
+named and aliased `render`, `parse`, and `Compile` bindings; namespace/default
+and TypeScript import-equals receivers; CommonJS destructures, receivers, and
+direct members; direct-require rendering; stable one-hop aliases; direct
+rendering and complete parse-to-Compile-to-render paths; multiline calls; and
+fresh declaration-consistent npm v2/v3 locks. Trusted fixed templates with
+remote context, package-only use, parse-only and compile-without-render flows,
+local lookalikes, default-call guesses, replaced or reassigned capabilities,
+development-only packages, unresolved/stale/v1 metadata, test/example code,
+2.1.7+, and prereleases remain negative. The shared witness never invokes a
+shell, listener, filesystem API, or network API: 2.1.6 returns only
+`process.version` through `constructor.constructor`, while 2.1.7 leaves the
+final `$r` reference unresolved.
 
 `node-vm2-sandbox-escape-manifest.json` measures application reachability for
 [GHSA-cfcw-xp6x-25gj / CVE-2026-47698](https://github.com/advisories/GHSA-cfcw-xp6x-25gj)
