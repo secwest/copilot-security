@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-nodemailer-raw-access",
+      "description": "An attacker-controlled raw message and recipient cross three wrappers into a Nodemailer 9.0.0 transporter whose file and URL deny policies are omitted from the raw root node.",
+      "fixture": "fixtures/node-multi-hop-nodemailer-raw-access",
+      "findingsPaths": [
+        "node-multi-hop-nodemailer-raw-access/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-nodemailer-raw-access-policy-bypass",
+          "cwe": ["CWE-73", "CWE-918", "CWE-200"],
+          "locations": [
+            {
+              "path": "src/mailer.js",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-nodemailer-raw-access",
+      "description": "The source-identical control upgrades only Nodemailer to 9.0.1, which threads both deny policies into the raw root node before content resolution.",
+      "fixture": "fixtures/node-multi-hop-patched-nodemailer-raw-access",
+      "findingsPaths": [
+        "node-multi-hop-patched-nodemailer-raw-access/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

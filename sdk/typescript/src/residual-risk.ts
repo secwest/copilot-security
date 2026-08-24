@@ -831,6 +831,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-nodemailer-raw-access-policy-bypass",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]nodemailer['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-nodemailer-raw-access-policy-bypass",
+        expression: /\.\s*sendMail\s*\(/u,
+        cweIds: ["CWE-73", "CWE-918", "CWE-200"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-js-yaml-parser-dos",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2426,6 +2452,12 @@ interface FrameworkWrapperSummary {
   declarationLine: number;
   sink: { kind: string; line: number; cweIds: readonly string[] };
   controls: Array<{ kind: string; line: number }>;
+  propagators?: Array<{
+    kind: string;
+    path: string;
+    line: number;
+    symbol?: string;
+  }>;
 }
 
 interface FrameworkRelaySummary {
@@ -2914,6 +2946,15 @@ interface NodeImmutablePrototypeSink {
 interface NodeTmpPathSink {
   sourceExpressions: string[];
   kind: string;
+}
+
+interface NodeNodemailerRawSink {
+  sourceExpression: string;
+  recipientExpression: string;
+  kind: string;
+  cweIds: string[];
+  controls: Array<{ kind: string; line: number }>;
+  dependency: NodeRuntimeDependency;
 }
 
 interface NodeJsYamlParserDosSink {
@@ -5612,6 +5653,317 @@ function nodeTmpPathSink(
   return undefined;
 }
 
+interface NodeNodemailerFactoryBinding {
+  kind: "direct" | "receiver";
+  local: string;
+  line: number;
+}
+
+function nodeNodemailerVersionIsRawAccessPolicyVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return major < 9 || (major === 9 && minor === 0 && patch === 0);
+}
+
+function nodeNodemailerFactoryBindings(
+  lines: readonly string[],
+): NodeNodemailerFactoryBinding[] {
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const bindings: NodeNodemailerFactoryBinding[] = [];
+  const add = (binding: NodeNodemailerFactoryBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.kind === binding.kind &&
+          candidate.local === binding.local &&
+          candidate.line === binding.line,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)(?:\s*,\s*\{[^}]*\})?\s+from\s+['"]nodemailer['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]nodemailer['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]nodemailer['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directMember =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]nodemailer['"]\s*\)\s*\.\s*createTransport\s*;?\s*$/u.exec(
+        code,
+      );
+    const destructured =
+      /^\s*(?:const|let|var)\s*\{\s*createTransport(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*\}\s*=\s*require\s*\(\s*['"]nodemailer['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      add({ kind: "receiver", local: receiver[1], line: index + 1 });
+    }
+    if (directMember?.[1] !== undefined) {
+      add({ kind: "direct", local: directMember[1], line: index + 1 });
+    }
+    if (destructured !== null) {
+      add({
+        kind: "direct",
+        local: destructured[1] ?? "createTransport",
+        line: index + 1,
+      });
+    }
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "nodemailer" &&
+      imported.imported === "createTransport"
+    ) {
+      add({ kind: "direct", local: imported.local, line: imported.line });
+    }
+  }
+  return bindings;
+}
+
+function nodeNodemailerObjectExpression(
+  lines: readonly string[],
+  expression: string | undefined,
+  beforeLine: number,
+): string | undefined {
+  if (expression === undefined) return undefined;
+  const resolved =
+    resolveJavascriptExpression(lines, expression, beforeLine)?.value.trim() ??
+    expression.trim();
+  if (
+    !resolved.startsWith("{") ||
+    !resolved.endsWith("}") ||
+    /(?:^|[,{}])\s*\.\.\./u.test(resolved)
+  ) {
+    return undefined;
+  }
+  return resolved;
+}
+
+function nodeNodemailerRawSinkKind(
+  dependency: NodeRuntimeDependency,
+  filePolicy: boolean,
+  urlPolicy: boolean,
+): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  const effect =
+    filePolicy && urlPolicy ? "file-url" : filePolicy ? "file" : "url";
+  return `${lockPrefix}vulnerable-nodemailer-raw-${effect}-access-policy-bypass`;
+}
+
+function nodeNodemailerRawSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeNodemailerRawSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const dependency = nodeRuntimeDependency(files, path, "nodemailer");
+  if (
+    dependency === undefined ||
+    !nodeNodemailerVersionIsRawAccessPolicyVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structural = structuralLines[line - 1] ?? "";
+  const send = /\b([A-Za-z_$][\w$]*)\s*\.\s*sendMail\s*\(/u.exec(structural);
+  const transport = send?.[1];
+  if (transport === undefined) return undefined;
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  if (wrapper?.parameters.includes(transport) === true) return undefined;
+  const sendArguments = javascriptCallArgumentsAtLine(
+    lines,
+    line,
+    new RegExp(
+      `\\b${escapeRegularExpression(transport)}\\s*\\.\\s*sendMail\\s*\\(`,
+      "u",
+    ),
+  );
+  const message = nodeNodemailerObjectExpression(
+    lines,
+    sendArguments?.[0],
+    line,
+  );
+  if (message === undefined) return undefined;
+  const rawExpression = javascriptObjectPropertyValue(message, "raw")?.trim();
+  const recipientExpression = javascriptObjectPropertyValue(
+    message,
+    "to",
+  )?.trim();
+  if (
+    rawExpression === undefined ||
+    rawExpression === "" ||
+    recipientExpression === undefined ||
+    recipientExpression === ""
+  ) {
+    return undefined;
+  }
+  const sharedRemoteParameter = wrapper?.parameters.find(
+    (parameter) =>
+      lineReferencesIdentifier(rawExpression, parameter) &&
+      lineReferencesIdentifier(recipientExpression, parameter),
+  );
+  if (sharedRemoteParameter === undefined) return undefined;
+
+  const bindings = nodeNodemailerFactoryBindings(lines);
+  let creationLine: number | undefined;
+  let transportOptions: string | undefined;
+  const escapedTransport = escapeRegularExpression(transport);
+  for (let index = 0; index < line - 1; index += 1) {
+    const declaration = new RegExp(
+      `^\\s*(?:const|let|var)\\s+${escapedTransport}\\s*=\\s*`,
+      "u",
+    );
+    if (!declaration.test(structuralLines[index] ?? "")) continue;
+    const candidates: Array<{
+      callee: RegExp;
+      binding?: NodeNodemailerFactoryBinding;
+    }> = [
+      {
+        callee:
+          /\brequire\s*\(\s*['"]nodemailer['"]\s*\)\s*\.\s*createTransport\s*\(/u,
+      },
+      ...bindings.map((binding) => ({
+        binding,
+        callee:
+          binding.kind === "receiver"
+            ? new RegExp(
+                `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*createTransport\\s*\\(`,
+                "u",
+              )
+            : new RegExp(
+                `\\b${escapeRegularExpression(binding.local)}\\s*\\(`,
+                "u",
+              ),
+      })),
+    ];
+    for (const candidate of candidates) {
+      const candidateLine =
+        candidate.binding === undefined
+          ? codeLines[index] ?? ""
+          : structuralLines[index] ?? "";
+      if (!candidate.callee.test(candidateLine)) continue;
+      if (
+        candidate.binding !== undefined &&
+        (candidate.binding.line > index + 1 ||
+          wrapper?.parameters.includes(candidate.binding.local) === true ||
+          javascriptIdentifierReassignedBetween(
+            lines,
+            candidate.binding.local,
+            candidate.binding.line,
+            index + 2,
+          ) ||
+          (candidate.binding.kind === "receiver" &&
+            structuralLines
+              .slice(candidate.binding.line, index + 1)
+              .some((candidateLine) =>
+                new RegExp(
+                  `\\b${escapeRegularExpression(candidate.binding!.local)}\\s*\\.\\s*createTransport\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+                  "u",
+                ).test(candidateLine),
+              )))
+      ) {
+        continue;
+      }
+      const arguments_ =
+        candidate.binding === undefined
+          ? javascriptCallArgumentsAtLine(
+              lines,
+              index + 1,
+              /\bcreateTransport\s*\(/u,
+            )
+          : javascriptCallArgumentsAtLine(lines, index + 1, candidate.callee);
+      creationLine = index + 1;
+      transportOptions = nodeNodemailerObjectExpression(
+        lines,
+        arguments_?.[0],
+        creationLine,
+      );
+      break;
+    }
+    if (creationLine !== undefined) break;
+  }
+  if (
+    creationLine === undefined ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      transport,
+      creationLine,
+      line + 1,
+    ) ||
+    structuralLines
+      .slice(creationLine, line)
+      .some((candidate) =>
+        new RegExp(
+          `\\b${escapedTransport}\\s*\\.\\s*sendMail\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+          "u",
+        ).test(candidate),
+      )
+  ) {
+    return undefined;
+  }
+  const transporterFilePolicy =
+    javascriptObjectPropertyValue(
+      transportOptions ?? "",
+      "disableFileAccess",
+    )?.trim() === "true";
+  const transporterUrlPolicy =
+    javascriptObjectPropertyValue(
+      transportOptions ?? "",
+      "disableUrlAccess",
+    )?.trim() === "true";
+  const messageFilePolicy =
+    javascriptObjectPropertyValue(message, "disableFileAccess")?.trim() ===
+    "true";
+  const messageUrlPolicy =
+    javascriptObjectPropertyValue(message, "disableUrlAccess")?.trim() ===
+    "true";
+  const filePolicy = transporterFilePolicy || messageFilePolicy;
+  const urlPolicy = transporterUrlPolicy || messageUrlPolicy;
+  if (!filePolicy && !urlPolicy) return undefined;
+  const controls: Array<{ kind: string; line: number }> = [];
+  if (filePolicy) {
+    controls.push({
+      kind: "nodemailer-disable-file-access-policy",
+      line: messageFilePolicy ? line : creationLine,
+    });
+  }
+  if (urlPolicy) {
+    controls.push({
+      kind: "nodemailer-disable-url-access-policy",
+      line: messageUrlPolicy ? line : creationLine,
+    });
+  }
+  return {
+    sourceExpression: rawExpression,
+    recipientExpression,
+    kind: nodeNodemailerRawSinkKind(dependency, filePolicy, urlPolicy),
+    cweIds: [
+      ...(filePolicy ? ["CWE-73"] : []),
+      ...(urlPolicy ? ["CWE-918"] : []),
+      "CWE-200",
+    ],
+    controls,
+    dependency,
+  };
+}
+
 type NodeJsYamlParserDosCause =
   | "quadratic-merge"
   | "quadratic-omap"
@@ -7098,6 +7450,7 @@ function frameworkDataflowRecords(
                 model.id === "node-http-extract-zip-symlink-traversal" ||
                 model.id === "node-http-tar-linkpath-traversal" ||
                 model.id === "node-http-tar-member-selection-recursion" ||
+                model.id === "node-http-nodemailer-raw-access-policy-bypass" ||
                 model.id === "node-http-fastify-static-route-guard-bypass"
                 ? 64
                 : 8,
@@ -7183,6 +7536,10 @@ function frameworkDataflowRecords(
       const nodeTmpPath =
         model.id === "node-http-tmp-path-traversal"
           ? nodeTmpPathSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeNodemailerRaw =
+        model.id === "node-http-nodemailer-raw-access-policy-bypass"
+          ? nodeNodemailerRawSink(files, path, lines, sink.line)
           : undefined;
       const nodeJsYamlParserDos =
         model.id === "node-http-js-yaml-parser-dos"
@@ -7331,6 +7688,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-tmp-path-traversal" &&
         nodeTmpPath === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-nodemailer-raw-access-policy-bypass" &&
+        nodeNodemailerRaw === undefined
       ) {
         continue;
       }
@@ -7533,6 +7896,7 @@ function frameworkDataflowRecords(
         nodeLodashDelete?.sourceExpressions.join("\n") ??
         nodeImmutablePrototype?.sourceExpressions.join("\n") ??
         nodeTmpPath?.sourceExpressions.join("\n") ??
+        nodeNodemailerRaw?.sourceExpression ??
         nodeJsYamlParserDos?.sourceExpression ??
         nodePostcssSourceMap?.sourceExpressions.join("\n") ??
         nodeExtractZip?.sourceExpression ??
@@ -7774,6 +8138,10 @@ function frameworkDataflowRecords(
         nodeFastifyStatic !== undefined
           ? nodeFastifyStatic.controls
           : []),
+        ...(model.id === "node-http-nodemailer-raw-access-policy-bypass" &&
+        nodeNodemailerRaw !== undefined
+          ? nodeNodemailerRaw.controls
+          : []),
         ...(model.id === "aspnet-http-object-authorization" &&
         dotnetObjectSink !== undefined
           ? dotnetObjectAuthorizationControls(
@@ -7851,6 +8219,7 @@ function frameworkDataflowRecords(
         nodeLodashDelete?.kind ??
         nodeImmutablePrototype?.kind ??
         nodeTmpPath?.kind ??
+        nodeNodemailerRaw?.kind ??
         nodeJsYamlParserDos?.kind ??
         nodePostcssSourceMap?.kind ??
         nodeExtractZip?.kind ??
@@ -7898,9 +8267,20 @@ function frameworkDataflowRecords(
             cweIds:
               aggregateSinkMetadata?.cweIds ??
               bulkSinkMetadata?.cweIds ??
+              nodeNodemailerRaw?.cweIds ??
               sinkPattern.cweIds,
           },
-          propagators: [],
+          propagators:
+            nodeNodemailerRaw === undefined
+              ? []
+              : [
+                  {
+                    kind: "nodemailer-runtime-dependency",
+                    path: nodeNodemailerRaw.dependency.manifestPath,
+                    line: nodeNodemailerRaw.dependency.line,
+                    symbol: `nodemailer@${nodeNodemailerRaw.dependency.version}:${nodeNodemailerRaw.dependency.proof}:raw-access-policy-bypass`,
+                  },
+                ],
           candidateControls: nearbyControls.map((control) => ({
             ...control,
             path,
@@ -11411,6 +11791,7 @@ function frameworkDirectCrossFileDataflowRecords(
                   line: summary.declarationLine,
                   symbol: summary.parameter,
                 },
+                ...(summary.propagators ?? []),
               ],
               candidateControls: summary.controls.map((control) => ({
                 ...control,
@@ -12161,6 +12542,7 @@ function frameworkMultiHopDataflowRecords(
                   line: sinkSummary.declarationLine,
                   symbol: sinkSummary.parameter,
                 },
+                ...(sinkSummary.propagators ?? []),
               ],
               candidateControls,
             },
@@ -13394,7 +13776,8 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
                 model.id === "node-http-tar-linkpath-traversal" ||
-                model.id === "node-http-tar-member-selection-recursion"
+                model.id === "node-http-tar-member-selection-recursion" ||
+                model.id === "node-http-nodemailer-raw-access-policy-bypass"
                 ? 64
                 : 32,
             );
@@ -13476,6 +13859,10 @@ function javascriptFrameworkWrapperSummaries(
           const nodeTmpPath =
             model.id === "node-http-tmp-path-traversal"
               ? nodeTmpPathSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeNodemailerRaw =
+            model.id === "node-http-nodemailer-raw-access-policy-bypass"
+              ? nodeNodemailerRawSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodeJsYamlParserDos =
             model.id === "node-http-js-yaml-parser-dos"
@@ -13609,6 +13996,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-nodemailer-raw-access-policy-bypass" &&
+            nodeNodemailerRaw === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-js-yaml-parser-dos" &&
             nodeJsYamlParserDos === undefined
           ) {
@@ -13682,6 +14075,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeLodashDelete?.sourceExpressions.join("\n") ??
             nodeImmutablePrototype?.sourceExpressions.join("\n") ??
             nodeTmpPath?.sourceExpressions.join("\n") ??
+            nodeNodemailerRaw?.sourceExpression ??
             nodeJsYamlParserDos?.sourceExpression ??
             nodePostcssSourceMap?.sourceExpressions.join("\n") ??
             nodeExtractZip?.sourceExpression ??
@@ -13809,6 +14203,10 @@ function javascriptFrameworkWrapperSummaries(
                   sink.line,
                 )
               : []),
+            ...(model.id === "node-http-nodemailer-raw-access-policy-bypass" &&
+            nodeNodemailerRaw !== undefined
+              ? nodeNodemailerRaw.controls
+              : []),
           ].filter(
             (control, index, all) =>
               all.findIndex(
@@ -13889,6 +14287,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeTmpPath === undefined
                   ? {}
                   : { kind: nodeTmpPath.kind }),
+                ...(nodeNodemailerRaw === undefined
+                  ? {}
+                  : { kind: nodeNodemailerRaw.kind }),
                 ...(nodeJsYamlParserDos === undefined
                   ? {}
                   : { kind: nodeJsYamlParserDos.kind }),
@@ -13918,9 +14319,22 @@ function javascriptFrameworkWrapperSummaries(
                 cweIds:
                   aggregateSinkMetadata?.cweIds ??
                   bulkSinkMetadata?.cweIds ??
+                  nodeNodemailerRaw?.cweIds ??
                   sinkPattern.cweIds,
               },
               controls: wrapperControls.slice(0, 8),
+              ...(nodeNodemailerRaw === undefined
+                ? {}
+                : {
+                    propagators: [
+                      {
+                        kind: "nodemailer-runtime-dependency",
+                        path: nodeNodemailerRaw.dependency.manifestPath,
+                        line: nodeNodemailerRaw.dependency.line,
+                        symbol: `nodemailer@${nodeNodemailerRaw.dependency.version}:${nodeNodemailerRaw.dependency.proof}:raw-access-policy-bypass`,
+                      },
+                    ],
+                  }),
             });
           }
         }

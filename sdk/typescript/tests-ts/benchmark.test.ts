@@ -212,6 +212,10 @@ describe("effectiveness benchmark", () => {
       ],
       ["node-multi-hop-tmp-path-traversal", "node-multi-hop-patched-tmp"],
       [
+        "node-multi-hop-nodemailer-raw-access",
+        "node-multi-hop-patched-nodemailer-raw-access",
+      ],
+      [
         "node-multi-hop-postcss-source-map-traversal",
         "node-multi-hop-patched-postcss",
       ],

@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains fifty-five vulnerable/control pairs:
+The versioned corpus currently contains eighty-three vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -179,7 +179,7 @@ always-recursive `assign-deep` 0.4.7 and its completed 0.4.8 repair. This pair
 deliberately exceeds CodeQL's older below-0.4.7 model: the later reviewed
 advisory also covers 0.4.7 and exactly 1.0.0 because blocking only `__proto__`
 left `constructor.prototype` traversal reachable. Three runs per case produce
-366 scans across 61 exploit/control pairs in the complete corpus.
+498 scans across 83 exploit/control pairs in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -396,6 +396,26 @@ directory escape and protected-content placement without claiming a chosen
 filename overwrite, then prove the repaired prefix rejection. A separate live
 matrix confirms both prefix traversal and the older sibling-prefix `dir`
 containment bypass under 0.2.5 and their rejection under 0.2.6.
+
+`node-nodemailer-raw-access-manifest.json` measures the application-level
+policy bypass in GHSA-p6gq-j5cr-w38f rather than treating dependency presence as
+reachability. The positive carries one attacker-controlled message object
+through three relative-import wrappers into a Nodemailer 9.0.0 transporter;
+that same proven object supplies both message-level `raw` and `to`, while the
+transporter explicitly sets `disableFileAccess` and `disableUrlAccess`. The
+source-identical 9.0.1 control measures the repair that threads both flags into
+the raw root MIME node. Regressions cover default, namespace, TypeScript
+import-equals, named and destructured factories, CommonJS receivers and direct
+members, inline require, transporter-level and message-level policies, separate
+file and URL effects, exact and fresh npm v2/v3 resolution, and multi-hop
+dependency provenance. Ordinary attachments, fixed raw data or recipients,
+split uncorrelated source parameters, replaceable object spreads, missing or
+false flags, patched, development-only, wrong-package, lockfile-free,
+inconsistent, reassigned, shadowed, lookalike, non-sendMail, and test-only cases
+remain negative. Package-backed witnesses use only a benign temporary sentinel
+and loopback listener: 9.0.0 delivers both sentinel bodies while its ordinary
+attachment control fails with `EFILEACCESS`; 9.0.1 rejects the raw variants
+with `EFILEACCESS` and `EURLACCESS`.
 
 `node-postcss-source-map-traversal-manifest.json` measures PostCSS's implicit
 previous-source-map file load. The positive sends an Express CSS body through

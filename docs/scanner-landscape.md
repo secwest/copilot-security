@@ -1341,6 +1341,31 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
    no shell, no network by default, and SARIF-only handoff. Keep analyzer
    installation and licensing outside the core scanner.
 
+## Implemented: correlated Nodemailer raw-message policy bypass
+
+The reviewed [Nodemailer raw-root advisory](https://github.com/nodemailer/nodemailer/security/advisories/GHSA-p6gq-j5cr-w38f)
+provides a useful example of why dependency and sink recognition are not enough.
+Nodemailer through 9.0.0 omits its documented file/URL deny flags only while
+constructing a message-level `raw` root. The official
+[CodeQL email-client model](https://github.com/github/codeql/blob/main/javascript/ql/lib/semmle/javascript/EmailClients.qll)
+recognizes Nodemailer delivery but exposes text, HTML, addressing, and subject
+fields rather than `raw` or the deny-policy boundary. Authenticated current
+source searches found no `disableFileAccess` implementation in CodeQL, no
+Nodemailer model in the public Semgrep rules, and no Nodemailer model in the
+reference scanner.
+
+Copilot Security therefore adds a narrow application model instead of a
+package alert. It requires exact vulnerable production resolution, official
+factory and transporter identity, literal enabled policy, one proven remote
+message object supplying both `raw` and `to`, and exact `sendMail` consumption.
+It preserves distinct file-disclosure and full-response-SSRF taxonomies and
+keeps uncorrelated parameters negative. The paired 9.0.0/9.0.1 benchmark and
+real temporary-file/loopback witnesses verify both effects, the ordinary
+attachment policy control, the repaired errors, source identity, and cleanup
+on Windows and Linux. The next useful improvement is explicit two-track
+correlation so independently propagated raw and recipient values can be
+accepted only when both paths close at the same call.
+
 ## Benchmark acceptance criteria
 
 An integration is useful only when its comparative campaign demonstrates all
