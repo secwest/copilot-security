@@ -216,6 +216,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-patched-nodemailer-raw-access",
       ],
       [
+        "node-multi-hop-brace-expansion-dos",
+        "node-multi-hop-patched-brace-expansion",
+      ],
+      [
         "node-multi-hop-postcss-source-map-traversal",
         "node-multi-hop-patched-postcss",
       ],

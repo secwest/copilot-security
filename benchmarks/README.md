@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains eighty-three vulnerable/control pairs:
+The versioned corpus currently contains eighty-four vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -178,8 +178,12 @@ keeping the intervening and later safe versions negative. A ninth pair covers
 always-recursive `assign-deep` 0.4.7 and its completed 0.4.8 repair. This pair
 deliberately exceeds CodeQL's older below-0.4.7 model: the later reviewed
 advisory also covers 0.4.7 and exactly 1.0.0 because blocking only `__proto__`
-left `constructor.prototype` traversal reachable. Three runs per case produce
-498 scans across 83 exploit/control pairs in the complete corpus.
+left `constructor.prototype` traversal reachable. The newest pair carries a
+remote brace pattern through three wrappers into `brace-expansion` 5.0.8 and
+pairs it with source-identical 5.0.9, measuring whether result and character
+bounds apply while padded sequences and comma alternatives are constructed.
+Three runs per case produce
+504 scans across 84 exploit/control pairs in the complete corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -416,6 +420,25 @@ remain negative. Package-backed witnesses use only a benign temporary sentinel
 and loopback listener: 9.0.0 delivers both sentinel bodies while its ordinary
 attachment control fails with `EFILEACCESS`; 9.0.1 rejects the raw variants
 with `EFILEACCESS` and `EURLACCESS`.
+
+`node-brace-expansion-dos-manifest.json` measures reachable synchronous work,
+not a dependency alert. The positive carries one Express query pattern through
+three relative-import wrappers into the official named `expand` API on 5.0.8;
+the source-identical 5.0.9 control measures cumulative limits inside padded
+sequence and comma-alternative construction. Deterministic regressions cover
+callable CommonJS/default releases 1.x and 2.x, default ESM plus CommonJS
+`.default` releases 3.x and 4.x, named `expand` release 5.x, every repaired
+branch boundary, exact and fresh declaration-consistent npm v2/v3 proof,
+candidate literal `max` plus `maxLength` evidence, wrapper flow, and dependency
+provenance. Fixed patterns, unavailable major-line APIs, patched,
+development-only, wrong-package, lockfile-free, inconsistent/v1-lock,
+reassigned, member-replaced, shadowed, lookalike, and test-only cases remain
+negative. Spread-bearing option objects receive no control credit, while an
+explicit spread-free literal bound pair remains incomplete-control evidence.
+The package-backed witness uses a bounded padded sequence: affected 5.0.8 and
+repaired 5.0.9 return byte-identical 3,996,999-character output, while the
+patched release avoids generating the discarded 100,000-element intermediate
+sequence.
 
 `node-postcss-source-map-traversal-manifest.json` measures PostCSS's implicit
 previous-source-map file load. The positive sends an Express CSS body through

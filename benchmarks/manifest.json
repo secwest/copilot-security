@@ -3357,6 +3357,45 @@
         "node-multi-hop-patched-fast-uri-encoded-dot-path/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-brace-expansion-dos",
+      "description": "A request-controlled brace pattern crosses three wrappers into brace-expansion 5.0.8, whose output bounds do not constrain padded-sequence and comma-alternative intermediate work.",
+      "fixture": "fixtures/node-multi-hop-brace-expansion-dos",
+      "findingsPaths": [
+        "node-multi-hop-brace-expansion-dos/run-1/findings.json",
+        "node-multi-hop-brace-expansion-dos/run-2/findings.json",
+        "node-multi-hop-brace-expansion-dos/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-brace-expansion-intermediate-dos",
+          "cwe": ["CWE-400", "CWE-407"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-brace-expansion",
+      "description": "The source-identical control upgrades only brace-expansion to 5.0.9, which applies work bounds while building both intermediate structures.",
+      "fixture": "fixtures/node-multi-hop-patched-brace-expansion",
+      "findingsPaths": [
+        "node-multi-hop-patched-brace-expansion/run-1/findings.json",
+        "node-multi-hop-patched-brace-expansion/run-2/findings.json",
+        "node-multi-hop-patched-brace-expansion/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

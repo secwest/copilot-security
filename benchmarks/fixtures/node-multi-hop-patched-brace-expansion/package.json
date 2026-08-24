@@ -1,0 +1,11 @@
+{
+  "name": "node-multi-hop-patched-brace-expansion",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node witness.mjs"
+  },
+  "dependencies": {
+    "brace-expansion": "5.0.9"
+  }
+}

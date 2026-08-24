@@ -884,6 +884,31 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-brace-expansion-dos",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]brace-expansion['"]/u],
+    sources: [
+      {
+        kind: "http-request-pattern",
+        expression:
+          /\b(?:req|request)\.(?:body|data|form|json|params|query)\b|\bctx\.(?:params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-request-body",
+        expression: /\b(?:req|request)\.(?:formData|json|text)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-brace-expansion-dos",
+        expression: /\.\s*(?:default|expand)\s*\(|\b[A-Za-z_$][\w$]*\s*\(/u,
+        cweIds: ["CWE-400", "CWE-407"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-postcss-source-map-traversal",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2960,6 +2985,13 @@ interface NodeNodemailerRawSink {
 interface NodeJsYamlParserDosSink {
   sourceExpression: string;
   kind: string;
+}
+
+interface NodeBraceExpansionDosSink {
+  sourceExpression: string;
+  kind: string;
+  controls: Array<{ kind: string; line: number }>;
+  dependency: NodeRuntimeDependency;
 }
 
 interface NodePostcssSourceMapSink {
@@ -6182,6 +6214,225 @@ function nodeJsYamlParserDosSink(
   return undefined;
 }
 
+type NodeBraceExpansionBinding = {
+  local: string;
+  line: number;
+  member?: "default" | "expand";
+};
+
+function nodeBraceExpansionVersionIsVulnerable(version: string): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  if (major === 0) return true;
+  if (major === 1) return minor < 1 || (minor === 1 && patch < 18);
+  if (major === 2) return minor < 1 || (minor === 1 && patch < 4);
+  if (major === 3) return minor === 0 && patch < 6;
+  if (major === 4) return true;
+  return major === 5 && minor === 0 && patch < 9;
+}
+
+function nodeBraceExpansionControls(
+  arguments_: readonly string[],
+  line: number,
+): Array<{ kind: string; line: number }> {
+  const options = arguments_[1]?.trim();
+  if (
+    options === undefined ||
+    !options.startsWith("{") ||
+    !options.endsWith("}") ||
+    splitJavascriptArguments(options.slice(1, -1)).some((entry) =>
+      /^\s*\.\.\./u.test(entry),
+    )
+  ) {
+    return [];
+  }
+  const max = javascriptObjectPropertyValue(options, "max");
+  const maxLength = javascriptObjectPropertyValue(options, "maxLength");
+  if (
+    max === undefined ||
+    maxLength === undefined ||
+    !/^[1-9][0-9]*$/u.test(max) ||
+    !/^[1-9][0-9]*$/u.test(maxLength) ||
+    !Number.isSafeInteger(Number(max)) ||
+    !Number.isSafeInteger(Number(maxLength))
+  ) {
+    return [];
+  }
+  return [{ kind: "brace-expansion-explicit-work-bounds", line }];
+}
+
+function nodeBraceExpansionSinkKind(dependency: NodeRuntimeDependency): string {
+  const prefix = dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  return `${prefix}vulnerable-brace-expansion-unbounded-intermediate-dos`;
+}
+
+function nodeBraceExpansionDosSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeBraceExpansionDosSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const dependency = nodeRuntimeDependency(files, path, "brace-expansion");
+  if (
+    dependency === undefined ||
+    !nodeBraceExpansionVersionIsVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const major = Number(dependency.version.split(".", 1)[0]);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: NodeBraceExpansionBinding[] = [];
+  const addBinding = (binding: NodeBraceExpansionBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.member === binding.member &&
+          candidate.line === binding.line,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const defaultImport =
+      major <= 4
+        ? /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]brace-expansion['"]/u.exec(
+            code,
+          )
+        : null;
+    if (defaultImport?.[1] !== undefined) {
+      addBinding({ local: defaultImport[1], line: index + 1 });
+    }
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]brace-expansion['"]/u.exec(
+        code,
+      );
+    if (namespace?.[1] !== undefined) {
+      addBinding({
+        local: namespace[1],
+        line: index + 1,
+        member: major <= 4 ? "default" : "expand",
+      });
+    }
+    const requireReceiver =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]brace-expansion['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]brace-expansion['"]\s*\)/u.exec(
+        code,
+      );
+    if (requireReceiver?.[1] !== undefined) {
+      addBinding({
+        local: requireReceiver[1],
+        line: index + 1,
+        ...(major <= 2
+          ? {}
+          : {
+              member: major <= 4 ? ("default" as const) : ("expand" as const),
+            }),
+      });
+    }
+    const directMember =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]brace-expansion['"]\s*\)\s*\.\s*(default|expand)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (
+      directMember?.[1] !== undefined &&
+      directMember[2] === (major <= 4 ? "default" : "expand") &&
+      !(major <= 2 && directMember[2] === "default")
+    ) {
+      addBinding({ local: directMember[1], line: index + 1 });
+    }
+  }
+
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "brace-expansion" &&
+      imported.imported === (major <= 4 ? "default" : "expand") &&
+      !(
+        major <= 2 &&
+        imported.imported === "default" &&
+        codeLines[imported.line - 1]?.includes("require")
+      )
+    ) {
+      addBinding({ local: imported.local, line: imported.line });
+    }
+  }
+
+  const result = (
+    arguments_: readonly string[] | undefined,
+  ): NodeBraceExpansionDosSink | undefined => {
+    const sourceExpression = arguments_?.[0]?.trim();
+    return sourceExpression === undefined || sourceExpression === ""
+      ? undefined
+      : {
+          sourceExpression,
+          kind: nodeBraceExpansionSinkKind(dependency),
+          controls: nodeBraceExpansionControls(arguments_ ?? [], line),
+          dependency,
+        };
+  };
+
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    if (
+      binding.member !== undefined &&
+      structuralLines
+        .slice(binding.line, Math.max(binding.line, line - 1))
+        .some((candidate) =>
+          new RegExp(
+            `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*${binding.member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+        )
+    ) {
+      continue;
+    }
+    const escaped = escapeRegularExpression(binding.local);
+    const callee =
+      binding.member === undefined
+        ? new RegExp(`\\b${escaped}\\s*\\(`, "u")
+        : new RegExp(`\\b${escaped}\\s*\\.\\s*${binding.member}\\s*\\(`, "u");
+    const found = result(javascriptCallArgumentsAtLine(lines, line, callee));
+    if (found !== undefined) return found;
+  }
+
+  const member = major <= 2 ? undefined : major <= 4 ? "default" : "expand";
+  const inline = javascriptCompositeCallArgumentsAtLine(
+    lines,
+    line,
+    member === undefined
+      ? /\brequire\s*\(\s*['"]brace-expansion['"]\s*\)\s*\(/u
+      : new RegExp(
+          `\\brequire\\s*\\(\\s*['"]brace-expansion['"]\\s*\\)\\s*\\.\\s*${member}\\s*\\(`,
+          "u",
+        ),
+  );
+  return result(inline);
+}
+
 type NodePostcssOperation = "parse" | "process";
 
 interface NodePostcssBinding {
@@ -7446,6 +7697,7 @@ function frameworkDataflowRecords(
                 model.id === "node-http-immutable-prototype-replacement" ||
                 model.id === "node-http-tmp-path-traversal" ||
                 model.id === "node-http-js-yaml-parser-dos" ||
+                model.id === "node-http-brace-expansion-dos" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
                 model.id === "node-http-tar-linkpath-traversal" ||
@@ -7544,6 +7796,10 @@ function frameworkDataflowRecords(
       const nodeJsYamlParserDos =
         model.id === "node-http-js-yaml-parser-dos"
           ? nodeJsYamlParserDosSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeBraceExpansionDos =
+        model.id === "node-http-brace-expansion-dos"
+          ? nodeBraceExpansionDosSink(files, path, lines, sink.line)
           : undefined;
       const nodePostcssSourceMap =
         model.id === "node-http-postcss-source-map-traversal"
@@ -7700,6 +7956,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-js-yaml-parser-dos" &&
         nodeJsYamlParserDos === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-brace-expansion-dos" &&
+        nodeBraceExpansionDos === undefined
       ) {
         continue;
       }
@@ -7898,6 +8160,7 @@ function frameworkDataflowRecords(
         nodeTmpPath?.sourceExpressions.join("\n") ??
         nodeNodemailerRaw?.sourceExpression ??
         nodeJsYamlParserDos?.sourceExpression ??
+        nodeBraceExpansionDos?.sourceExpression ??
         nodePostcssSourceMap?.sourceExpressions.join("\n") ??
         nodeExtractZip?.sourceExpression ??
         nodeTarLink?.sourceExpressions.join("\n") ??
@@ -8142,6 +8405,10 @@ function frameworkDataflowRecords(
         nodeNodemailerRaw !== undefined
           ? nodeNodemailerRaw.controls
           : []),
+        ...(model.id === "node-http-brace-expansion-dos" &&
+        nodeBraceExpansionDos !== undefined
+          ? nodeBraceExpansionDos.controls
+          : []),
         ...(model.id === "aspnet-http-object-authorization" &&
         dotnetObjectSink !== undefined
           ? dotnetObjectAuthorizationControls(
@@ -8221,6 +8488,7 @@ function frameworkDataflowRecords(
         nodeTmpPath?.kind ??
         nodeNodemailerRaw?.kind ??
         nodeJsYamlParserDos?.kind ??
+        nodeBraceExpansionDos?.kind ??
         nodePostcssSourceMap?.kind ??
         nodeExtractZip?.kind ??
         nodeTarLink?.kind ??
@@ -8270,8 +8538,8 @@ function frameworkDataflowRecords(
               nodeNodemailerRaw?.cweIds ??
               sinkPattern.cweIds,
           },
-          propagators:
-            nodeNodemailerRaw === undefined
+          propagators: [
+            ...(nodeNodemailerRaw === undefined
               ? []
               : [
                   {
@@ -8280,7 +8548,18 @@ function frameworkDataflowRecords(
                     line: nodeNodemailerRaw.dependency.line,
                     symbol: `nodemailer@${nodeNodemailerRaw.dependency.version}:${nodeNodemailerRaw.dependency.proof}:raw-access-policy-bypass`,
                   },
-                ],
+                ]),
+            ...(nodeBraceExpansionDos === undefined
+              ? []
+              : [
+                  {
+                    kind: "brace-expansion-runtime-dependency",
+                    path: nodeBraceExpansionDos.dependency.manifestPath,
+                    line: nodeBraceExpansionDos.dependency.line,
+                    symbol: `brace-expansion@${nodeBraceExpansionDos.dependency.version}:${nodeBraceExpansionDos.dependency.proof}:unbounded-intermediate-dos`,
+                  },
+                ]),
+          ],
           candidateControls: nearbyControls.map((control) => ({
             ...control,
             path,
@@ -13773,6 +14052,7 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-immutable-prototype-replacement" ||
                 model.id === "node-http-tmp-path-traversal" ||
                 model.id === "node-http-js-yaml-parser-dos" ||
+                model.id === "node-http-brace-expansion-dos" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
                 model.id === "node-http-tar-linkpath-traversal" ||
@@ -13867,6 +14147,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeJsYamlParserDos =
             model.id === "node-http-js-yaml-parser-dos"
               ? nodeJsYamlParserDosSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeBraceExpansionDos =
+            model.id === "node-http-brace-expansion-dos"
+              ? nodeBraceExpansionDosSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
               : undefined;
           const nodePostcssSourceMap =
             model.id === "node-http-postcss-source-map-traversal"
@@ -14008,6 +14297,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-brace-expansion-dos" &&
+            nodeBraceExpansionDos === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-postcss-source-map-traversal" &&
             nodePostcssSourceMap === undefined
           ) {
@@ -14077,6 +14372,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeTmpPath?.sourceExpressions.join("\n") ??
             nodeNodemailerRaw?.sourceExpression ??
             nodeJsYamlParserDos?.sourceExpression ??
+            nodeBraceExpansionDos?.sourceExpression ??
             nodePostcssSourceMap?.sourceExpressions.join("\n") ??
             nodeExtractZip?.sourceExpression ??
             nodeTarLink?.sourceExpressions.join("\n") ??
@@ -14207,6 +14503,10 @@ function javascriptFrameworkWrapperSummaries(
             nodeNodemailerRaw !== undefined
               ? nodeNodemailerRaw.controls
               : []),
+            ...(model.id === "node-http-brace-expansion-dos" &&
+            nodeBraceExpansionDos !== undefined
+              ? nodeBraceExpansionDos.controls
+              : []),
           ].filter(
             (control, index, all) =>
               all.findIndex(
@@ -14293,6 +14593,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeJsYamlParserDos === undefined
                   ? {}
                   : { kind: nodeJsYamlParserDos.kind }),
+                ...(nodeBraceExpansionDos === undefined
+                  ? {}
+                  : { kind: nodeBraceExpansionDos.kind }),
                 ...(nodePostcssSourceMap === undefined
                   ? {}
                   : { kind: nodePostcssSourceMap.kind }),
@@ -14323,16 +14626,32 @@ function javascriptFrameworkWrapperSummaries(
                   sinkPattern.cweIds,
               },
               controls: wrapperControls.slice(0, 8),
-              ...(nodeNodemailerRaw === undefined
+              ...(nodeNodemailerRaw === undefined &&
+              nodeBraceExpansionDos === undefined
                 ? {}
                 : {
                     propagators: [
-                      {
-                        kind: "nodemailer-runtime-dependency",
-                        path: nodeNodemailerRaw.dependency.manifestPath,
-                        line: nodeNodemailerRaw.dependency.line,
-                        symbol: `nodemailer@${nodeNodemailerRaw.dependency.version}:${nodeNodemailerRaw.dependency.proof}:raw-access-policy-bypass`,
-                      },
+                      ...(nodeNodemailerRaw === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "nodemailer-runtime-dependency",
+                              path: nodeNodemailerRaw.dependency.manifestPath,
+                              line: nodeNodemailerRaw.dependency.line,
+                              symbol: `nodemailer@${nodeNodemailerRaw.dependency.version}:${nodeNodemailerRaw.dependency.proof}:raw-access-policy-bypass`,
+                            },
+                          ]),
+                      ...(nodeBraceExpansionDos === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "brace-expansion-runtime-dependency",
+                              path: nodeBraceExpansionDos.dependency
+                                .manifestPath,
+                              line: nodeBraceExpansionDos.dependency.line,
+                              symbol: `brace-expansion@${nodeBraceExpansionDos.dependency.version}:${nodeBraceExpansionDos.dependency.proof}:unbounded-intermediate-dos`,
+                            },
+                          ]),
                     ],
                   }),
             });

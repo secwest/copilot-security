@@ -1366,6 +1366,29 @@ on Windows and Linux. The next useful improvement is explicit two-track
 correlation so independently propagated raw and recipient values can be
 accepted only when both paths close at the same call.
 
+## Implemented: exact brace-expansion work-amplification reachability
+
+The reviewed [brace-expansion intermediate-array advisory](https://github.com/advisories/GHSA-rgw5-rvv9-x895)
+closes two availability paths that bypassed the package's earlier cumulative
+output-length check: comma alternatives could accumulate an unbounded
+intermediate array, and padded numeric sequences could perform maximum-element
+work without the intended `maxLength` constraint. Official CodeQL currently
+contains six `brace-expansion` references, all attribution for adapted regular-
+expression tests, and no `EXPANSION_MAX_LENGTH` reference. Current public
+Semgrep rules contain neither string. The reviewed reference scanner recognizes
+only its repaired lockfile version and has no application model.
+
+Copilot Security binds the advisory to an actual request-to-expansion path and
+the export contract of the installed major line: callable 1.x/2.x,
+default/`.default` 3.x/4.x, or named/`.expand` 5.x. It rejects wrong APIs,
+unresolved or nonproduction dependencies, fixed data, replaced bindings,
+shadows, and tests. Explicit literal `max` and `maxLength` values remain visible
+as incomplete control evidence rather than suppressing a bypass finding. The
+5.0.8/5.0.9 source-identical benchmark and bounded witness prove the same 999
+outputs and 3,996,999 characters while measuring 1,769.885 ms versus 25.389 ms.
+This adds a reachable CWE-400/CWE-407 path that dependency-only scanning cannot
+establish and that generic regular-expression complexity rules do not express.
+
 ## Benchmark acceptance criteria
 
 An integration is useful only when its comparative campaign demonstrates all
