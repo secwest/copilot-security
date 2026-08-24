@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-patched-ip-address-leading-zero",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ip-address": "10.3.1"
+  }
+}

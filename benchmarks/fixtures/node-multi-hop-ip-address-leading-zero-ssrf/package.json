@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-ip-address-leading-zero-ssrf",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ip-address": "10.3.0"
+  }
+}

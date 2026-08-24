@@ -3201,6 +3201,45 @@
         "node-multi-hop-patched-js-yaml-omap/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-ip-address-leading-zero-ssrf",
+      "description": "A remote URL crosses three wrappers into an ip-address 10.3.0 private-range guard whose decimal interpretation disagrees with the network consumer's octal host.",
+      "fixture": "fixtures/node-multi-hop-ip-address-leading-zero-ssrf",
+      "findingsPaths": [
+        "node-multi-hop-ip-address-leading-zero-ssrf/run-1/findings.json",
+        "node-multi-hop-ip-address-leading-zero-ssrf/run-2/findings.json",
+        "node-multi-hop-ip-address-leading-zero-ssrf/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "ip-address-leading-zero-ssrf",
+          "cwe": ["CWE-918", "CWE-20"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-ip-address-leading-zero",
+      "description": "The source-identical control upgrades only ip-address to 10.3.1, which rejects ambiguous leading-zero octets before classification.",
+      "fixture": "fixtures/node-multi-hop-patched-ip-address-leading-zero",
+      "findingsPaths": [
+        "node-multi-hop-patched-ip-address-leading-zero/run-1/findings.json",
+        "node-multi-hop-patched-ip-address-leading-zero/run-2/findings.json",
+        "node-multi-hop-patched-ip-address-leading-zero/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

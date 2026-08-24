@@ -239,6 +239,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-js-yaml-omap-dos",
         "node-multi-hop-patched-js-yaml-omap",
       ],
+      [
+        "node-multi-hop-ip-address-leading-zero-ssrf",
+        "node-multi-hop-patched-ip-address-leading-zero",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

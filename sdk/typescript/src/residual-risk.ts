@@ -2762,6 +2762,7 @@ export async function buildResidualRiskInventory(
   records.push(
     ...nodeIpv6TransitionIncompleteGuardRecords(sourceFiles, records),
   );
+  records.push(...nodeIpAddressLeadingZeroSsrfRecords(sourceFiles, records));
   records.push(...javaFileGetNamePathBoundaryRecords(sourceFiles, records));
   records.push(...javaPathGetFileNamePathBoundaryRecords(sourceFiles, records));
 
@@ -8409,6 +8410,296 @@ function nodeIpv6TransitionIncompleteGuardRecords(
                 candidate.line === control.line,
             ) === index,
         ),
+      },
+    });
+  }
+  return specialized;
+}
+
+interface NodeIpAddressBinding {
+  kind: "direct" | "receiver";
+  local: string;
+  line: number;
+}
+
+function nodeIpAddressVersionIsVulnerable(version: string): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    (major > 3 || (major === 3 && minor >= 2)) &&
+    (major < 10 ||
+      (major === 10 && (minor < 3 || (minor === 3 && patch === 0))))
+  );
+}
+
+function nodeIpAddressLeadingZeroGuard(
+  lines: readonly string[],
+  wrapper: ExportedJavascriptFunction,
+  sinkLine: number,
+  sinkExpression: string,
+  version: string,
+): { line: number; method: string } | undefined {
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const aliases = new Set(
+    javascriptExpressionIdentifiers(sinkExpression).filter(
+      (identifier) =>
+        !["fetch", "get", "got", "http", "https", "request", "undici"].includes(
+          identifier,
+        ),
+    ),
+  );
+  if (aliases.size === 0) return undefined;
+  for (
+    let index = wrapper.startLine - 1;
+    index < Math.min(sinkLine - 1, wrapper.endLine);
+    index += 1
+  ) {
+    const assignment =
+      /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/u.exec(
+        structuralLines[index] ?? "",
+      );
+    if (
+      assignment?.[1] !== undefined &&
+      assignment[2] !== undefined &&
+      [...aliases].some((identifier) =>
+        lineReferencesIdentifier(assignment[2]!, identifier),
+      ) &&
+      /\b(?:host|hostname|new\s+URL|parse)\b|\.\s*(?:host|hostname)\b/iu.test(
+        assignment[2],
+      )
+    ) {
+      aliases.add(assignment[1]);
+    }
+  }
+  for (
+    let index = wrapper.startLine - 1;
+    index < Math.min(sinkLine - 1, wrapper.endLine);
+    index += 1
+  ) {
+    const code = codeLines[index] ?? "";
+    if (
+      !code.includes("^0\\d") ||
+      ![...aliases].some((identifier) =>
+        lineReferencesIdentifier(code, identifier),
+      )
+    ) {
+      continue;
+    }
+    const rejectionWindow = codeLines
+      .slice(index, Math.min(index + 5, sinkLine - 1))
+      .join("\n");
+    if (/\b(?:throw|return)\b/u.test(rejectionWindow)) return undefined;
+  }
+
+  const bindings: NodeIpAddressBinding[] = [];
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "ip-address" &&
+      imported.imported === "Address4"
+    ) {
+      bindings.push({
+        kind: "direct",
+        local: imported.local,
+        line: imported.line,
+      });
+    }
+  }
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]ip-address['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]ip-address['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]ip-address['"]\s*\)/u.exec(
+        code,
+      );
+    const destructured =
+      /^\s*(?:const|let|var)\s*\{\s*Address4(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*\}\s*=\s*require\s*\(\s*['"]ip-address['"]\s*\)/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      bindings.push({ kind: "receiver", local: receiver[1], line: index + 1 });
+    }
+    if (destructured !== null) {
+      bindings.push({
+        kind: "direct",
+        local: destructured[1] ?? "Address4",
+        line: index + 1,
+      });
+    }
+  }
+
+  const modernClassifiers =
+    /\.\s*(isPrivate|isLoopback|isLinkLocal|isCGNAT)\s*\(\s*\)/u;
+  const versionParts = version.split(".").map(Number);
+  const hasModernClassifiers =
+    (versionParts[0] ?? 0) > 10 ||
+    ((versionParts[0] ?? 0) === 10 && (versionParts[1] ?? 0) >= 2);
+  for (const binding of bindings) {
+    if (
+      binding.line >= sinkLine ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        sinkLine,
+      )
+    ) {
+      continue;
+    }
+    const escaped = escapeRegularExpression(binding.local);
+    const constructors =
+      binding.kind === "direct"
+        ? [`${escaped}`]
+        : [
+            `${escaped}\\s*\\.\\s*Address4`,
+            `${escaped}\\s*\\.\\s*v4\\s*\\.\\s*Address`,
+          ];
+    for (const constructor of constructors) {
+      const addressAliases = new Set<string>();
+      for (
+        let index = wrapper.startLine - 1;
+        index < Math.min(sinkLine - 1, wrapper.endLine);
+        index += 1
+      ) {
+        const structural = structuralLines[index] ?? "";
+        const declaration = new RegExp(
+          `\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*new\\s+${constructor}\\s*\\(([^)]*)\\)`,
+          "u",
+        ).exec(structural);
+        if (
+          declaration?.[1] !== undefined &&
+          declaration[2] !== undefined &&
+          [...aliases].some((identifier) =>
+            lineReferencesIdentifier(declaration[2]!, identifier),
+          )
+        ) {
+          addressAliases.add(declaration[1]);
+        }
+        if (!/\bif\s*\(/u.test(structural)) continue;
+        const window = structuralLines
+          .slice(index, Math.min(index + 5, sinkLine - 1))
+          .join("\n");
+        const codeWindow = codeLines
+          .slice(index, Math.min(index + 5, sinkLine - 1))
+          .join("\n");
+        if (!/\b(?:throw|return)\b/u.test(window)) continue;
+        const inlineRemote = [...aliases].some((identifier) =>
+          new RegExp(
+            `new\\s+${constructor}\\s*\\([^)]*\\b${escapeRegularExpression(identifier)}\\b[^)]*\\)`,
+            "u",
+          ).test(window),
+        );
+        const addressReference = [...addressAliases].some((identifier) =>
+          lineReferencesIdentifier(window, identifier),
+        );
+        if (!inlineRemote && !addressReference) continue;
+        const modern = hasModernClassifiers
+          ? modernClassifiers.exec(window)?.[1]
+          : undefined;
+        if (modern !== undefined) return { line: index + 1, method: modern };
+        if (
+          /\.\s*isInSubnet\s*\(/u.test(window) &&
+          /10\.0\.0\.0\s*\/\s*8/u.test(codeWindow)
+        ) {
+          return { line: index + 1, method: "isInSubnet" };
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+function nodeIpAddressLeadingZeroSsrfRecords(
+  files: readonly SourceFileSnapshot[],
+  records: readonly ResidualRiskRecord[],
+): ResidualRiskRecord[] {
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const emitted = new Set<string>();
+  const specialized: ResidualRiskRecord[] = [];
+  for (const record of records) {
+    const framework = record.frameworkModel;
+    if (framework?.id !== "node-http-ssrf") continue;
+    const sinkFile = filesByPath.get(framework.sink.path);
+    if (
+      sinkFile === undefined ||
+      !JAVASCRIPT_EXTENSIONS.has(sinkFile.extension) ||
+      javascriptTestOrExamplePath(sinkFile.path)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(
+      files,
+      sinkFile.path,
+      "ip-address",
+    );
+    if (
+      dependency === undefined ||
+      !nodeIpAddressVersionIsVulnerable(dependency.version)
+    ) {
+      continue;
+    }
+    const sink =
+      nodeNativeHttpUrlArgument(sinkFile.lines, framework.sink.line) ??
+      nodeHttpUrlSink(sinkFile.lines, framework.sink.line);
+    if (sink?.urlExpression === undefined) continue;
+    const wrapper = exportedJavascriptFunctions(sinkFile.lines).find(
+      (candidate) =>
+        framework.sink.line >= candidate.startLine &&
+        framework.sink.line <= candidate.endLine,
+    );
+    if (wrapper === undefined) continue;
+    const guard = nodeIpAddressLeadingZeroGuard(
+      sinkFile.lines,
+      wrapper,
+      framework.sink.line,
+      sink.urlExpression,
+      dependency.version,
+    );
+    if (guard === undefined) continue;
+    const key = `${framework.source.path}\0${framework.source.line}\0${framework.sink.path}\0${framework.sink.line}`;
+    if (emitted.has(key)) continue;
+    emitted.add(key);
+    specialized.push({
+      ...record,
+      categories: [
+        "framework-dataflow:node-ssrf-ip-address-leading-zero-guard-bypass",
+        `modeled-source:${framework.source.kind}`,
+        `modeled-sink:${framework.sink.kind}`,
+        "broken-control:decimal-octal-ipv4-parser-disagreement",
+      ],
+      priority: Math.max(record.priority, 121),
+      frameworkModel: {
+        ...framework,
+        id: "node-ssrf-ip-address-leading-zero-guard-bypass",
+        sink: { ...framework.sink, cweIds: ["CWE-918", "CWE-20"] },
+        propagators: [
+          ...framework.propagators,
+          {
+            kind: "ip-address-runtime-dependency",
+            path: dependency.manifestPath,
+            line: dependency.line,
+            symbol: `ip-address@${dependency.version}:${dependency.proof}`,
+          },
+        ],
+        candidateControls: [
+          ...framework.candidateControls.filter(
+            (control) =>
+              control.kind !== "network-address-validation-or-pinning",
+          ),
+          {
+            kind: `vulnerable-ip-address-leading-zero-${guard.method}-guard`,
+            path: sinkFile.path,
+            line: guard.line,
+          },
+        ],
       },
     });
   }
