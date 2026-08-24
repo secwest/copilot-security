@@ -227,6 +227,7 @@ describe("effectiveness benchmark", () => {
         "node-socketio-server-transitive-parser-dos",
         "node-socketio-server-transitive-patched-parser",
       ],
+      ["node-multi-hop-nanoid-size-dos", "node-multi-hop-patched-nanoid-size"],
       [
         "node-multi-hop-postcss-source-map-traversal",
         "node-multi-hop-patched-postcss",

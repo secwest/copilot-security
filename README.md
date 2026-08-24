@@ -1857,8 +1857,11 @@ affected fixture retains every later binary frame, while the source-identical
 repaired fixture rejects the impossible packet before retaining state. A second
 pair exercises the ordinary public `socket.io` Server surface with identical
 4.8.3 application source and parent dependency: only the npm-locked transitive
-parser changes from vulnerable 4.2.6 to repaired 4.2.7. Each of the 172 cases
-in 86 exploit/control pairs is scanned three times, producing 516 scans that
+parser changes from vulnerable 4.2.6 to repaired 4.2.7. The newest pair carries
+a request-controlled numeric ID size through three wrappers into
+`nanoid/non-secure` 5.1.15; its source-identical 5.1.16 twin proves that the
+negative-size decrement loop terminates after the repair. Each of the 174 cases
+in 87 exploit/control pairs is scanned three times, producing 522 scans that
 measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

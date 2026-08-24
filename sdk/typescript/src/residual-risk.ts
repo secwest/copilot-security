@@ -909,6 +909,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-nanoid-size-dos",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]nanoid(?:\/non-secure)?['"]/u],
+    sources: [
+      {
+        kind: "http-request-id-size",
+        expression:
+          /\b(?:req|request)\.(?:body|data|form|json|params|query)\b|\bctx\.(?:params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-request-body",
+        expression: /\b(?:req|request)\.(?:formData|json|text)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-nanoid-size-infinite-loop",
+        expression:
+          /\.\s*(?:nanoid|customAlphabet|customRandom)\s*\(|\b[A-Za-z_$][\w$]*\s*\(/u,
+        cweIds: ["CWE-835", "CWE-400"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-socketio-parser-zero-attachment-dos",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3039,6 +3065,13 @@ interface NodeBraceExpansionDosSink {
   sourceExpression: string;
   kind: string;
   controls: Array<{ kind: string; line: number }>;
+  dependency: NodeRuntimeDependency;
+}
+
+interface NodeNanoidSizeDosSink {
+  sourceExpression: string;
+  sinkLine: number;
+  kind: string;
   dependency: NodeRuntimeDependency;
 }
 
@@ -6711,6 +6744,671 @@ function nodeBraceExpansionDosSink(
   return result(inline);
 }
 
+type NodeNanoidApi = "nanoid" | "customAlphabet" | "customRandom";
+type NodeNanoidModule = "main" | "non-secure";
+
+interface NodeNanoidBinding {
+  local: string;
+  line: number;
+  module: NodeNanoidModule;
+  api?: NodeNanoidApi;
+  legacyCall?: "direct" | "default-member";
+}
+
+interface NodeNanoidFactory {
+  generator: string;
+  line: number;
+  module: NodeNanoidModule;
+  api: "customAlphabet" | "customRandom";
+  arguments: string[];
+}
+
+interface NodeNanoidImmediateFactoryCall {
+  factoryArguments: string[];
+  callArguments: string[];
+}
+
+function nodeNanoidVersionParts(
+  version: string,
+): [number, number, number] | undefined {
+  const parts = version.split(".").map(Number);
+  return parts.length === 3 &&
+    parts.every((part) => Number.isSafeInteger(part) && part >= 0)
+    ? (parts as [number, number, number])
+    : undefined;
+}
+
+function nodeNanoidNegativeSizeVulnerable(version: string): boolean {
+  const parts = nodeNanoidVersionParts(version);
+  if (parts === undefined) return false;
+  const [major, minor, patch] = parts;
+  if (major < 3) return true;
+  if (major === 3) return minor < 3 || (minor === 3 && patch < 16);
+  if (major === 4) return true;
+  return major === 5 && (minor < 1 || (minor === 1 && patch < 16));
+}
+
+function nodeNanoidZeroDefaultSizeVulnerable(version: string): boolean {
+  const parts = nodeNanoidVersionParts(version);
+  if (parts === undefined) return false;
+  const [major, minor, patch] = parts;
+  if (major < 3) return false;
+  if (major === 3) return minor < 3 || (minor === 3 && patch < 17);
+  if (major === 4) return true;
+  return major === 5 && (minor < 1 || (minor === 1 && patch < 6));
+}
+
+function nodeNanoidBindings(lines: readonly string[]): NodeNanoidBinding[] {
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const bindings: NodeNanoidBinding[] = [];
+  const add = (binding: NodeNanoidBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.line === binding.line &&
+          candidate.module === binding.module &&
+          candidate.api === binding.api &&
+          candidate.legacyCall === binding.legacyCall,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+  const moduleFor = (specifier: string): NodeNanoidModule | undefined =>
+    specifier === "nanoid"
+      ? "main"
+      : specifier === "nanoid/non-secure"
+        ? "non-secure"
+        : undefined;
+
+  for (const imported of importedJavascriptSymbols(lines)) {
+    const module = moduleFor(imported.moduleSpecifier);
+    if (
+      module !== undefined &&
+      /^(?:nanoid|customAlphabet|customRandom)$/u.test(imported.imported) &&
+      !(module === "non-secure" && imported.imported === "customRandom")
+    ) {
+      add({
+        local: imported.local,
+        line: imported.line,
+        module,
+        api: imported.imported as NodeNanoidApi,
+      });
+    }
+  }
+
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const legacyDefault =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]nanoid\/non-secure['"]/u.exec(
+        code,
+      );
+    if (legacyDefault?.[1] !== undefined) {
+      add({
+        local: legacyDefault[1],
+        line: index + 1,
+        module: "non-secure",
+        legacyCall: "direct",
+      });
+    }
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"](nanoid(?:\/non-secure)?)['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"](nanoid(?:\/non-secure)?)['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"](nanoid(?:\/non-secure)?)['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    const receiverModule =
+      receiver?.[2] === undefined ? undefined : moduleFor(receiver[2]);
+    if (receiver?.[1] !== undefined && receiverModule !== undefined) {
+      add({
+        local: receiver[1],
+        line: index + 1,
+        module: receiverModule,
+        legacyCall:
+          receiverModule === "non-secure"
+            ? /^\s*import\s+\*/u.test(code)
+              ? "default-member"
+              : "direct"
+            : undefined,
+      });
+    }
+
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"](nanoid(?:\/non-secure)?)['"]\s*\)\s*\.\s*(nanoid|customAlphabet|customRandom)\s*;?\s*$/u.exec(
+        code,
+      );
+    const directModule =
+      direct?.[2] === undefined ? undefined : moduleFor(direct[2]);
+    if (
+      direct?.[1] !== undefined &&
+      direct?.[3] !== undefined &&
+      directModule !== undefined &&
+      !(directModule === "non-secure" && direct[3] === "customRandom")
+    ) {
+      add({
+        local: direct[1],
+        line: index + 1,
+        module: directModule,
+        api: direct[3] as NodeNanoidApi,
+      });
+    }
+
+    const destructured =
+      /^\s*(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require\s*\(\s*['"](nanoid(?:\/non-secure)?)['"]\s*\)/u.exec(
+        code,
+      );
+    const destructuredModule =
+      destructured?.[2] === undefined ? undefined : moduleFor(destructured[2]);
+    if (destructured?.[1] !== undefined && destructuredModule !== undefined) {
+      for (const entry of destructured[1].split(",")) {
+        const match =
+          /^\s*(nanoid|customAlphabet|customRandom)(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*$/u.exec(
+            entry,
+          );
+        if (
+          match?.[1] !== undefined &&
+          !(destructuredModule === "non-secure" && match[1] === "customRandom")
+        ) {
+          add({
+            local: match[2] ?? match[1],
+            line: index + 1,
+            module: destructuredModule,
+            api: match[1] as NodeNanoidApi,
+          });
+        }
+      }
+    }
+  }
+  return bindings;
+}
+
+function nodeNanoidBindingCall(
+  lines: readonly string[],
+  line: number,
+  binding: NodeNanoidBinding,
+  api: NodeNanoidApi,
+): string[] | undefined {
+  if (binding.api !== undefined && binding.api !== api) return undefined;
+  const escaped = escapeRegularExpression(binding.local);
+  return javascriptCallArgumentsAtLine(
+    lines,
+    line,
+    binding.api === undefined
+      ? new RegExp(`\\b${escaped}\\s*\\.\\s*${api}\\s*\\(`, "u")
+      : new RegExp(`\\b${escaped}\\s*\\(`, "u"),
+  );
+}
+
+function nodeNanoidLegacyBindingCall(
+  lines: readonly string[],
+  line: number,
+  binding: NodeNanoidBinding,
+): string[] | undefined {
+  if (binding.legacyCall === undefined) return undefined;
+  const escaped = escapeRegularExpression(binding.local);
+  return javascriptCallArgumentsAtLine(
+    lines,
+    line,
+    binding.legacyCall === "direct"
+      ? new RegExp(`\\b${escaped}\\s*\\(`, "u")
+      : new RegExp(`\\b${escaped}\\s*\\.\\s*default\\s*\\(`, "u"),
+  );
+}
+
+function nodeNanoidBindingUsable(
+  lines: readonly string[],
+  structuralLines: readonly string[],
+  binding: NodeNanoidBinding,
+  api: NodeNanoidApi,
+  line: number,
+  wrapperParameters: readonly string[],
+): boolean {
+  if (
+    binding.line >= line ||
+    wrapperParameters.includes(binding.local) ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      line + 1,
+    )
+  ) {
+    return false;
+  }
+  return !(
+    binding.api === undefined &&
+    structuralLines
+      .slice(binding.line, Math.max(binding.line, line - 1))
+      .some((candidate) =>
+        new RegExp(
+          `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*${api}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+          "u",
+        ).test(candidate),
+      )
+  );
+}
+
+function nodeNanoidImmediatelyInvokedFactoryCall(
+  lines: readonly string[],
+  line: number,
+  callee: RegExp,
+): NodeNanoidImmediateFactoryCall | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const original = javascriptCodeLinesWithoutComments(callLines).join("\n");
+  const structural = javascriptStructuralLines(callLines).join("\n");
+  const match = callee.exec(original.split("\n", 1)[0] ?? "");
+  if (match === null) return undefined;
+  const relativeOpen = match[0].lastIndexOf("(");
+  if (relativeOpen < 0) return undefined;
+  const factoryOpen = match.index + relativeOpen;
+  const factoryClose = matchingCallParenthesis(structural, factoryOpen);
+  if (factoryClose < 0) return undefined;
+  const invocation = /^\s*\(/u.exec(structural.slice(factoryClose + 1));
+  if (invocation === null) return undefined;
+  const callOpen = factoryClose + 1 + invocation[0].lastIndexOf("(");
+  const callClose = matchingCallParenthesis(structural, callOpen);
+  if (callClose < 0) return undefined;
+  return {
+    factoryArguments: splitJavascriptArguments(
+      original.slice(factoryOpen + 1, factoryClose),
+    ),
+    callArguments: splitJavascriptArguments(
+      original.slice(callOpen + 1, callClose),
+    ),
+  };
+}
+
+function nodeNanoidGeneratorUsesFactoryDefault(
+  callArguments: readonly string[],
+): boolean {
+  const first = callArguments[0]?.trim() ?? "";
+  return (
+    callArguments.length === 0 ||
+    first === "" ||
+    /^(?:undefined|void\s+(?:0|\([^)]*\)))$/u.test(first)
+  );
+}
+
+function nodeNanoidSizeTriggerRejected(
+  lines: readonly string[],
+  sourceExpression: string,
+  sinkLine: number,
+  cause: "negative-non-secure-size" | "zero-custom-default-size",
+): boolean {
+  const identifier = sourceExpression.trim();
+  if (!/^[A-Za-z_$][\w$]*$/u.test(identifier)) return false;
+  const escaped = escapeRegularExpression(identifier);
+  const start = Math.max(0, sinkLine - 17);
+  const structural = javascriptStructuralLines(lines)
+    .slice(start, Math.max(start, sinkLine - 1))
+    .join("\n");
+  const rejectEffect = String.raw`(?:throw\b|return\b)`;
+  if (cause === "negative-non-secure-size") {
+    return new RegExp(
+      `\\bif\\s*\\(\\s*${escaped}\\s*<\\s*0\\s*\\)\\s*(?:\\{[^}]*${rejectEffect}|${rejectEffect})`,
+      "su",
+    ).test(structural);
+  }
+  const integerCheck = String.raw`!\s*Number\s*\.\s*isInteger\s*\(\s*${escaped}\s*\)`;
+  const lowerBound = String.raw`${escaped}\s*<=\s*0`;
+  return new RegExp(
+    `\\bif\\s*\\(\\s*(?:${integerCheck}\\s*\\|\\|\\s*${lowerBound}|${lowerBound}\\s*\\|\\|\\s*${integerCheck})\\s*\\)\\s*(?:\\{[^}]*${rejectEffect}|${rejectEffect})`,
+    "su",
+  ).test(structural);
+}
+
+function nodeNanoidSizeDosSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeNanoidSizeDosSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const dependency = nodeRuntimeDependency(files, path, "nanoid");
+  if (dependency === undefined) return undefined;
+  const dependencyMajor = nodeNanoidVersionParts(dependency.version)?.[0];
+  if (dependencyMajor === undefined) return undefined;
+  const structuralLines = javascriptStructuralLines(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const wrapperParameters = wrapper?.parameters ?? [];
+  const bindings = nodeNanoidBindings(lines);
+  const prefix = dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  const result = (
+    sourceExpression: string | undefined,
+    sinkLine: number,
+    cause: "negative-non-secure-size" | "zero-custom-default-size",
+  ): NodeNanoidSizeDosSink | undefined =>
+    sourceExpression === undefined ||
+    sourceExpression.trim() === "" ||
+    nodeNanoidSizeTriggerRejected(lines, sourceExpression, sinkLine, cause)
+      ? undefined
+      : {
+          sourceExpression: sourceExpression.trim(),
+          sinkLine,
+          kind: `${prefix}vulnerable-nanoid-${cause}-infinite-loop`,
+          dependency,
+        };
+
+  if (nodeNanoidNegativeSizeVulnerable(dependency.version)) {
+    if (dependencyMajor < 3) {
+      for (const binding of bindings) {
+        if (
+          binding.module !== "non-secure" ||
+          binding.legacyCall === undefined ||
+          !nodeNanoidBindingUsable(
+            lines,
+            structuralLines,
+            binding,
+            "nanoid",
+            line,
+            wrapperParameters,
+          ) ||
+          (binding.legacyCall === "default-member" &&
+            structuralLines
+              .slice(binding.line, Math.max(binding.line, line - 1))
+              .some((candidate) =>
+                new RegExp(
+                  `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*default\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+                  "u",
+                ).test(candidate),
+              ))
+        ) {
+          continue;
+        }
+        const direct = result(
+          nodeNanoidLegacyBindingCall(lines, line, binding)?.[0],
+          line,
+          "negative-non-secure-size",
+        );
+        if (direct !== undefined) return direct;
+      }
+      const inlineLegacy = javascriptCompositeCallArgumentsAtLine(
+        lines,
+        line,
+        /\brequire\s*\(\s*['"]nanoid\/non-secure['"]\s*\)\s*\(/u,
+      );
+      const legacy = result(
+        inlineLegacy?.[0],
+        line,
+        "negative-non-secure-size",
+      );
+      if (legacy !== undefined) return legacy;
+    }
+    for (const binding of bindings) {
+      if (
+        dependencyMajor < 3 ||
+        binding.module !== "non-secure" ||
+        (binding.api !== undefined && binding.api !== "nanoid") ||
+        !nodeNanoidBindingUsable(
+          lines,
+          structuralLines,
+          binding,
+          "nanoid",
+          line,
+          wrapperParameters,
+        )
+      ) {
+        continue;
+      }
+      const direct = result(
+        nodeNanoidBindingCall(lines, line, binding, "nanoid")?.[0],
+        line,
+        "negative-non-secure-size",
+      );
+      if (direct !== undefined) return direct;
+    }
+    const inline = javascriptCompositeCallArgumentsAtLine(
+      lines,
+      line,
+      /\brequire\s*\(\s*['"]nanoid\/non-secure['"]\s*\)\s*\.\s*nanoid\s*\(/u,
+    );
+    const direct = result(inline?.[0], line, "negative-non-secure-size");
+    if (direct !== undefined) return direct;
+  }
+
+  for (const binding of bindings) {
+    for (const api of ["customAlphabet", "customRandom"] as const) {
+      if (
+        dependencyMajor < 3 ||
+        (binding.api !== undefined && binding.api !== api) ||
+        (binding.module === "non-secure" && api === "customRandom") ||
+        !nodeNanoidBindingUsable(
+          lines,
+          structuralLines,
+          binding,
+          api,
+          line,
+          wrapperParameters,
+        )
+      ) {
+        continue;
+      }
+      const escaped = escapeRegularExpression(binding.local);
+      const immediate = nodeNanoidImmediatelyInvokedFactoryCall(
+        lines,
+        line,
+        binding.api === undefined
+          ? new RegExp(`\\b${escaped}\\s*\\.\\s*${api}\\s*\\(`, "u")
+          : new RegExp(`\\b${escaped}\\s*\\(`, "u"),
+      );
+      if (immediate === undefined) continue;
+      if (
+        binding.module === "non-secure" &&
+        nodeNanoidNegativeSizeVulnerable(dependency.version)
+      ) {
+        const found = result(
+          nodeNanoidGeneratorUsesFactoryDefault(immediate.callArguments)
+            ? immediate.factoryArguments[1]
+            : immediate.callArguments[0],
+          line,
+          "negative-non-secure-size",
+        );
+        if (found !== undefined) return found;
+      }
+      if (
+        binding.module === "main" &&
+        nodeNanoidZeroDefaultSizeVulnerable(dependency.version) &&
+        nodeNanoidGeneratorUsesFactoryDefault(immediate.callArguments)
+      ) {
+        const found = result(
+          immediate.factoryArguments[1],
+          line,
+          "zero-custom-default-size",
+        );
+        if (found !== undefined) return found;
+      }
+    }
+  }
+
+  for (const [specifier, module] of [
+    ["nanoid", "main"],
+    ["nanoid/non-secure", "non-secure"],
+  ] as const) {
+    for (const api of ["customAlphabet", "customRandom"] as const) {
+      if (
+        dependencyMajor < 3 ||
+        (module === "non-secure" && api === "customRandom")
+      ) {
+        continue;
+      }
+      const immediate = nodeNanoidImmediatelyInvokedFactoryCall(
+        lines,
+        line,
+        new RegExp(
+          `\\brequire\\s*\\(\\s*['"]${escapeRegularExpression(specifier)}['"]\\s*\\)\\s*\\.\\s*${api}\\s*\\(`,
+          "u",
+        ),
+      );
+      if (immediate === undefined) continue;
+      if (
+        module === "non-secure" &&
+        nodeNanoidNegativeSizeVulnerable(dependency.version)
+      ) {
+        const found = result(
+          nodeNanoidGeneratorUsesFactoryDefault(immediate.callArguments)
+            ? immediate.factoryArguments[1]
+            : immediate.callArguments[0],
+          line,
+          "negative-non-secure-size",
+        );
+        if (found !== undefined) return found;
+      }
+      if (
+        module === "main" &&
+        nodeNanoidZeroDefaultSizeVulnerable(dependency.version) &&
+        nodeNanoidGeneratorUsesFactoryDefault(immediate.callArguments)
+      ) {
+        const found = result(
+          immediate.factoryArguments[1],
+          line,
+          "zero-custom-default-size",
+        );
+        if (found !== undefined) return found;
+      }
+    }
+  }
+
+  const factories: NodeNanoidFactory[] = [];
+  const addFactory = (factory: NodeNanoidFactory): void => {
+    if (
+      !factories.some(
+        (candidate) =>
+          candidate.generator === factory.generator &&
+          candidate.line === factory.line &&
+          candidate.module === factory.module &&
+          candidate.api === factory.api,
+      )
+    ) {
+      factories.push(factory);
+    }
+  };
+  for (let factoryLine = 1; factoryLine < line; factoryLine += 1) {
+    const declaration = /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/u.exec(
+      structuralLines[factoryLine - 1] ?? "",
+    );
+    if (declaration?.[1] === undefined) continue;
+    for (const binding of bindings) {
+      for (const api of ["customAlphabet", "customRandom"] as const) {
+        if (
+          dependencyMajor < 3 ||
+          (binding.api !== undefined && binding.api !== api) ||
+          (binding.module === "non-secure" && api === "customRandom") ||
+          !nodeNanoidBindingUsable(
+            lines,
+            structuralLines,
+            binding,
+            api,
+            factoryLine,
+            wrapperParameters,
+          )
+        ) {
+          continue;
+        }
+        const arguments_ = nodeNanoidBindingCall(
+          lines,
+          factoryLine,
+          binding,
+          api,
+        );
+        if (arguments_ !== undefined) {
+          addFactory({
+            generator: declaration[1],
+            line: factoryLine,
+            module: binding.module,
+            api,
+            arguments: arguments_,
+          });
+        }
+      }
+    }
+    const code = structuralLines[factoryLine - 1] ?? "";
+    for (const [specifier, module] of [
+      ["nanoid", "main"],
+      ["nanoid/non-secure", "non-secure"],
+    ] as const) {
+      for (const api of ["customAlphabet", "customRandom"] as const) {
+        if (
+          dependencyMajor < 3 ||
+          (module === "non-secure" && api === "customRandom")
+        ) {
+          continue;
+        }
+        const arguments_ = javascriptCompositeCallArgumentsAtLine(
+          lines,
+          factoryLine,
+          new RegExp(
+            `\\brequire\\s*\\(\\s*['"]${escapeRegularExpression(specifier)}['"]\\s*\\)\\s*\\.\\s*${api}\\s*\\(`,
+            "u",
+          ),
+        );
+        if (arguments_ !== undefined && /\brequire\s*\(/u.test(code)) {
+          addFactory({
+            generator: declaration[1],
+            line: factoryLine,
+            module,
+            api,
+            arguments: arguments_,
+          });
+        }
+      }
+    }
+  }
+
+  for (const factory of factories) {
+    if (
+      javascriptIdentifierReassignedBetween(
+        lines,
+        factory.generator,
+        factory.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const callArguments = javascriptCallArgumentsAtLine(
+      lines,
+      line,
+      new RegExp(
+        `\\b${escapeRegularExpression(factory.generator)}\\s*\\(`,
+        "u",
+      ),
+    );
+    if (callArguments === undefined) continue;
+    if (
+      factory.module === "non-secure" &&
+      nodeNanoidNegativeSizeVulnerable(dependency.version)
+    ) {
+      const sourceExpression = nodeNanoidGeneratorUsesFactoryDefault(
+        callArguments,
+      )
+        ? factory.arguments[1]
+        : callArguments[0];
+      const found = result(sourceExpression, line, "negative-non-secure-size");
+      if (found !== undefined) return found;
+    }
+    if (
+      factory.module === "main" &&
+      nodeNanoidZeroDefaultSizeVulnerable(dependency.version) &&
+      nodeNanoidGeneratorUsesFactoryDefault(callArguments)
+    ) {
+      const found = result(
+        factory.arguments[1],
+        line,
+        "zero-custom-default-size",
+      );
+      if (found !== undefined) return found;
+    }
+  }
+  return undefined;
+}
+
 type NodeSocketIoParserBinding = {
   local: string;
   line: number;
@@ -8512,6 +9210,7 @@ function frameworkDataflowRecords(
                 model.id === "node-http-tmp-path-traversal" ||
                 model.id === "node-http-js-yaml-parser-dos" ||
                 model.id === "node-http-brace-expansion-dos" ||
+                model.id === "node-http-nanoid-size-dos" ||
                 model.id === "node-http-socketio-parser-zero-attachment-dos" ||
                 model.id === "node-socketio-server-transitive-parser-dos" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
@@ -8616,6 +9315,10 @@ function frameworkDataflowRecords(
       const nodeBraceExpansionDos =
         model.id === "node-http-brace-expansion-dos"
           ? nodeBraceExpansionDosSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeNanoidSizeDos =
+        model.id === "node-http-nanoid-size-dos"
+          ? nodeNanoidSizeDosSink(files, path, lines, sink.line)
           : undefined;
       const nodeSocketIoParserDos =
         model.id === "node-http-socketio-parser-zero-attachment-dos"
@@ -8786,6 +9489,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-brace-expansion-dos" &&
         nodeBraceExpansionDos === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-nanoid-size-dos" &&
+        nodeNanoidSizeDos === undefined
       ) {
         continue;
       }
@@ -8997,6 +9706,7 @@ function frameworkDataflowRecords(
         nodeNodemailerRaw?.sourceExpression ??
         nodeJsYamlParserDos?.sourceExpression ??
         nodeBraceExpansionDos?.sourceExpression ??
+        nodeNanoidSizeDos?.sourceExpression ??
         nodeSocketIoParserDos?.sourceExpression ??
         nodePostcssSourceMap?.sourceExpressions.join("\n") ??
         nodeExtractZip?.sourceExpression ??
@@ -9315,6 +10025,7 @@ function frameworkDataflowRecords(
       const effectiveSinkLine =
         nodeCopilotResolution?.input.line ??
         nodeMongooseAggregateResolution?.position.line ??
+        nodeNanoidSizeDos?.sinkLine ??
         nodeSocketIoServerDos?.sinkLine ??
         sink.line;
       const effectiveSinkKind =
@@ -9329,6 +10040,7 @@ function frameworkDataflowRecords(
         nodeNodemailerRaw?.kind ??
         nodeJsYamlParserDos?.kind ??
         nodeBraceExpansionDos?.kind ??
+        nodeNanoidSizeDos?.kind ??
         nodeSocketIoParserDos?.kind ??
         nodeSocketIoServerDos?.kind ??
         nodePostcssSourceMap?.kind ??
@@ -9399,6 +10111,16 @@ function frameworkDataflowRecords(
                     path: nodeBraceExpansionDos.dependency.manifestPath,
                     line: nodeBraceExpansionDos.dependency.line,
                     symbol: `brace-expansion@${nodeBraceExpansionDos.dependency.version}:${nodeBraceExpansionDos.dependency.proof}:unbounded-intermediate-dos`,
+                  },
+                ]),
+            ...(nodeNanoidSizeDos === undefined
+              ? []
+              : [
+                  {
+                    kind: "nanoid-runtime-dependency",
+                    path: nodeNanoidSizeDos.dependency.manifestPath,
+                    line: nodeNanoidSizeDos.dependency.line,
+                    symbol: `nanoid@${nodeNanoidSizeDos.dependency.version}:${nodeNanoidSizeDos.dependency.proof}:${nodeNanoidSizeDos.kind.includes("negative-non-secure") ? "non-secure-negative-size-infinite-loop" : "custom-zero-default-size-infinite-loop"}`,
                   },
                 ]),
             ...(nodeSocketIoParserDos === undefined
@@ -14924,6 +15646,7 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-tmp-path-traversal" ||
                 model.id === "node-http-js-yaml-parser-dos" ||
                 model.id === "node-http-brace-expansion-dos" ||
+                model.id === "node-http-nanoid-size-dos" ||
                 model.id === "node-http-socketio-parser-zero-attachment-dos" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
@@ -15028,6 +15751,10 @@ function javascriptFrameworkWrapperSummaries(
                   file.lines,
                   sink.line,
                 )
+              : undefined;
+          const nodeNanoidSizeDos =
+            model.id === "node-http-nanoid-size-dos"
+              ? nodeNanoidSizeDosSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodeSocketIoParserDos =
             model.id === "node-http-socketio-parser-zero-attachment-dos"
@@ -15184,6 +15911,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-nanoid-size-dos" &&
+            nodeNanoidSizeDos === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-socketio-parser-zero-attachment-dos" &&
             nodeSocketIoParserDos === undefined
           ) {
@@ -15260,6 +15993,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeNodemailerRaw?.sourceExpression ??
             nodeJsYamlParserDos?.sourceExpression ??
             nodeBraceExpansionDos?.sourceExpression ??
+            nodeNanoidSizeDos?.sourceExpression ??
             nodeSocketIoParserDos?.sourceExpression ??
             nodePostcssSourceMap?.sourceExpressions.join("\n") ??
             nodeExtractZip?.sourceExpression ??
@@ -15484,6 +16218,12 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeBraceExpansionDos === undefined
                   ? {}
                   : { kind: nodeBraceExpansionDos.kind }),
+                ...(nodeNanoidSizeDos === undefined
+                  ? {}
+                  : {
+                      kind: nodeNanoidSizeDos.kind,
+                      line: nodeNanoidSizeDos.sinkLine,
+                    }),
                 ...(nodeSocketIoParserDos === undefined
                   ? {}
                   : { kind: nodeSocketIoParserDos.kind }),
@@ -15519,6 +16259,7 @@ function javascriptFrameworkWrapperSummaries(
               controls: wrapperControls.slice(0, 8),
               ...(nodeNodemailerRaw === undefined &&
               nodeBraceExpansionDos === undefined &&
+              nodeNanoidSizeDos === undefined &&
               nodeSocketIoParserDos === undefined
                 ? {}
                 : {
@@ -15542,6 +16283,16 @@ function javascriptFrameworkWrapperSummaries(
                                 .manifestPath,
                               line: nodeBraceExpansionDos.dependency.line,
                               symbol: `brace-expansion@${nodeBraceExpansionDos.dependency.version}:${nodeBraceExpansionDos.dependency.proof}:unbounded-intermediate-dos`,
+                            },
+                          ]),
+                      ...(nodeNanoidSizeDos === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "nanoid-runtime-dependency",
+                              path: nodeNanoidSizeDos.dependency.manifestPath,
+                              line: nodeNanoidSizeDos.dependency.line,
+                              symbol: `nanoid@${nodeNanoidSizeDos.dependency.version}:${nodeNanoidSizeDos.dependency.proof}:${nodeNanoidSizeDos.kind.includes("negative-non-secure") ? "non-secure-negative-size-infinite-loop" : "custom-zero-default-size-infinite-loop"}`,
                             },
                           ]),
                       ...(nodeSocketIoParserDos === undefined

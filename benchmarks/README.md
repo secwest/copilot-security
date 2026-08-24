@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains eighty-six vulnerable/control pairs:
+The versioned corpus currently contains eighty-seven vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -185,8 +185,10 @@ bounds apply while padded sequences and comma alternatives are constructed.
 The next pair exercises persistent `socket.io-parser` state through its direct
 Decoder API. The latest pair reaches the same state through the public
 `socket.io` Server: application source and `socket.io@4.8.3` stay identical,
-while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. Three runs
-per case produce 516 scans across 86 exploit/control pairs in the complete
+while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
+pair carries a remote negative size through three wrappers into
+`nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
+per case produce 522 scans across 87 exploit/control pairs in the complete
 corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
@@ -443,6 +445,23 @@ The package-backed witness uses a bounded padded sequence: affected 5.0.8 and
 repaired 5.0.9 return byte-identical 3,996,999-character output, while the
 patched release avoids generating the discarded 100,000-element intermediate
 sequence.
+
+`node-nanoid-size-dos-manifest.json` measures the two reviewed generator-loop
+causes without turning package presence into a finding. The canonical positive
+carries a numeric request size through three wrappers into
+`nanoid/non-secure.nanoid` 5.1.15; the source-identical 5.1.16 control changes
+only the package repair boundary. A kill-bounded child witness requires 5.1.15
+to remain CPU-bound and 5.1.16 to return the empty string. Deterministic
+regressions separately cover the main package's `customAlphabet` and
+`customRandom` zero-default factory defect, the Node-specific 3.3.17 and 5.1.6
+repairs, the non-secure 3.3.16 and 5.1.16 repairs, official ESM, namespace,
+TypeScript import-equals, CommonJS and direct bindings, exact and fresh npm
+lock proof, and a typed cross-file path. Main-package `nanoid`, a zero passed
+only to a positive-default generator, uninvoked factories, fixed values,
+patched or development-only packages, unresolved ranges, replacement,
+shadowing, and test/example paths remain negative. The zero-default control
+requires both integer validation and a positive bound because `NaN` also
+collapses the factory's random step to zero.
 
 `node-postcss-source-map-traversal-manifest.json` measures PostCSS's implicit
 previous-source-map file load. The positive sends an Express CSS body through

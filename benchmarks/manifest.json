@@ -3474,6 +3474,45 @@
         "node-socketio-server-transitive-patched-parser/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-nanoid-size-dos",
+      "description": "A request-controlled negative ID size crosses three wrappers into nanoid/non-secure 5.1.15 and occupies the event loop indefinitely.",
+      "fixture": "fixtures/node-multi-hop-nanoid-size-dos",
+      "findingsPaths": [
+        "node-multi-hop-nanoid-size-dos/run-1/findings.json",
+        "node-multi-hop-nanoid-size-dos/run-2/findings.json",
+        "node-multi-hop-nanoid-size-dos/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-nanoid-negative-size-infinite-loop",
+          "cwe": ["CWE-835", "CWE-400"],
+          "locations": [
+            {
+              "path": "src/storage.mjs",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-nanoid-size",
+      "description": "The source-identical control upgrades only nanoid to 5.1.16, whose non-secure decrement loop terminates for negative sizes.",
+      "fixture": "fixtures/node-multi-hop-patched-nanoid-size",
+      "findingsPaths": [
+        "node-multi-hop-patched-nanoid-size/run-1/findings.json",
+        "node-multi-hop-patched-nanoid-size/run-2/findings.json",
+        "node-multi-hop-patched-nanoid-size/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

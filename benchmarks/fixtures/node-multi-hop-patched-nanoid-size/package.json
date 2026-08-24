@@ -1,0 +1,11 @@
+{
+  "name": "node-multi-hop-patched-nanoid-size",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node witness.mjs"
+  },
+  "dependencies": {
+    "nanoid": "5.1.16"
+  }
+}

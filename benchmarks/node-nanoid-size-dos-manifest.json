@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-nanoid-size-dos",
+      "description": "A request-controlled negative ID size crosses three wrappers into nanoid/non-secure 5.1.15 and occupies the event loop indefinitely.",
+      "fixture": "fixtures/node-multi-hop-nanoid-size-dos",
+      "findingsPaths": ["node-multi-hop-nanoid-size-dos/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "node-nanoid-negative-size-infinite-loop",
+          "cwe": ["CWE-835", "CWE-400"],
+          "locations": [
+            {
+              "path": "src/storage.mjs",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-nanoid-size",
+      "description": "The source-identical control upgrades only nanoid to 5.1.16, whose non-secure decrement loop terminates for negative sizes.",
+      "fixture": "fixtures/node-multi-hop-patched-nanoid-size",
+      "findingsPaths": [
+        "node-multi-hop-patched-nanoid-size/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}
