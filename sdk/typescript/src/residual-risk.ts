@@ -2763,6 +2763,7 @@ export async function buildResidualRiskInventory(
     ...nodeIpv6TransitionIncompleteGuardRecords(sourceFiles, records),
   );
   records.push(...nodeIpAddressLeadingZeroSsrfRecords(sourceFiles, records));
+  records.push(...nodeFastUriHostPolicyConfusionRecords(sourceFiles, records));
   records.push(...javaFileGetNamePathBoundaryRecords(sourceFiles, records));
   records.push(...javaPathGetFileNamePathBoundaryRecords(sourceFiles, records));
 
@@ -8696,6 +8697,439 @@ function nodeIpAddressLeadingZeroSsrfRecords(
           ),
           {
             kind: `vulnerable-ip-address-leading-zero-${guard.method}-guard`,
+            path: sinkFile.path,
+            line: guard.line,
+          },
+        ],
+      },
+    });
+  }
+  return specialized;
+}
+
+type NodeFastUriHostPolicyCause = "authority-introducer" | "literal-backslash";
+
+interface NodeFastUriBinding {
+  kind: "direct" | "receiver";
+  local: string;
+  member: "parse" | "resolve";
+  line: number;
+}
+
+interface NodeFastUriGuard {
+  cause: NodeFastUriHostPolicyCause;
+  line: number;
+}
+
+function nodeFastUriVersionIsVulnerable(
+  version: string,
+  cause: NodeFastUriHostPolicyCause,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  if (cause === "literal-backslash") {
+    return (
+      (major === 2 &&
+        (minor > 3 || (minor === 3 && patch >= 1)) &&
+        (minor < 4 || (minor === 4 && patch <= 2))) ||
+      (major === 3 && (minor < 1 || (minor === 1 && patch <= 3))) ||
+      (major === 4 && (minor < 1 || (minor === 1 && patch === 0)))
+    );
+  }
+  return (
+    major < 2 ||
+    (major === 2 && (minor < 4 || (minor === 4 && patch < 4))) ||
+    (major === 3 && (minor < 1 || (minor === 1 && patch < 5))) ||
+    (major === 4 && (minor < 1 || (minor === 1 && patch < 2)))
+  );
+}
+
+function nodeFastUriBindings(lines: readonly string[]): NodeFastUriBinding[] {
+  const bindings: NodeFastUriBinding[] = [];
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "fast-uri" &&
+      (imported.imported === "parse" || imported.imported === "resolve")
+    ) {
+      bindings.push({
+        kind: "direct",
+        local: imported.local,
+        member: imported.imported,
+        line: imported.line,
+      });
+    }
+  }
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]fast-uri['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]fast-uri['"]/u.exec(code) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]fast-uri['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]fast-uri['"]\s*\)/u.exec(
+        code,
+      );
+    if (receiver?.[1] === undefined) continue;
+    for (const member of ["parse", "resolve"] as const) {
+      bindings.push({
+        kind: "receiver",
+        local: receiver[1],
+        member,
+        line: index + 1,
+      });
+    }
+  }
+  return bindings;
+}
+
+function nodeFastUriCallArguments(
+  structural: string,
+  binding: NodeFastUriBinding,
+): string[] | undefined {
+  const escaped = escapeRegularExpression(binding.local);
+  const expression =
+    binding.kind === "direct"
+      ? new RegExp(`\\b${escaped}\\s*\\(`, "u")
+      : new RegExp(`\\b${escaped}\\s*\\.\\s*${binding.member}\\s*\\(`, "u");
+  const call = expression.exec(structural);
+  if (call?.index === undefined) return undefined;
+  const open = structural.indexOf("(", call.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  return splitJavascriptArguments(structural.slice(open + 1, close)).map(
+    (argument) => argument.trim(),
+  );
+}
+
+function nodeJavascriptExpressionKey(expression: string): string {
+  return javascriptStructuralLines(expression.split(/\r?\n/u))
+    .join("")
+    .replace(/\s+/gu, "");
+}
+
+function nodeStaticUrlHostname(
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+): string | undefined {
+  let value = expression.trim();
+  const identifier = /^([A-Za-z_$][\w$]*)$/u.exec(value)?.[1];
+  if (identifier !== undefined) {
+    const initializer = javascriptVariableInitializer(
+      lines,
+      identifier,
+      beforeLine,
+    );
+    if (initializer === undefined) return undefined;
+    value = initializer.value.trim();
+  }
+  const literal =
+    /^(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)')$/u.exec(value);
+  const raw = literal?.[1] ?? literal?.[2];
+  if (raw === undefined || /\\/u.test(raw)) return undefined;
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.hostname
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function nodeFastUriFailClosedAllowlistGuard(
+  structuralLines: readonly string[],
+  codeLines: readonly string[],
+  hostExpression: string,
+  expectedHost: string | undefined,
+  startLine: number,
+  sinkLine: number,
+): number | undefined {
+  const escapedExpression = escapeRegularExpression(
+    nodeJavascriptExpressionKey(hostExpression),
+  );
+  for (
+    let index = startLine - 1;
+    index < Math.min(sinkLine - 1, structuralLines.length);
+    index += 1
+  ) {
+    const code = (codeLines[index] ?? "").replace(/\s+/gu, "");
+    const comparison = new RegExp(
+      `(?:${escapedExpression}(?:!==|!=)(["'])([^"']+)\\1|(["'])([^"']+)\\3(?:!==|!=)${escapedExpression})`,
+      "u",
+    ).exec(code);
+    const comparedHost = comparison?.[2] ?? comparison?.[4];
+    if (
+      comparedHost === undefined ||
+      (expectedHost !== undefined && comparedHost !== expectedHost)
+    ) {
+      continue;
+    }
+    const window = structuralLines
+      .slice(index, Math.min(index + 5, sinkLine - 1))
+      .join("\n");
+    const codeWindow = codeLines
+      .slice(index, Math.min(index + 5, sinkLine - 1))
+      .join("\n");
+    if (/\bif\s*\(/u.test(window) && /\b(?:throw|return)\b/u.test(codeWindow)) {
+      return index + 1;
+    }
+  }
+  return undefined;
+}
+
+function nodeWhatwgResolutionArguments(
+  expression: string,
+): [string, string] | undefined {
+  const structural = javascriptStructuralLines(expression.split(/\r?\n/u)).join(
+    "\n",
+  );
+  const call = /\bnew\s+URL\s*\(/u.exec(structural);
+  if (call?.index === undefined) return undefined;
+  const open = structural.indexOf("(", call.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  const arguments_ = splitJavascriptArguments(
+    structural.slice(open + 1, close),
+  ).map((argument) => argument.trim());
+  return arguments_.length === 2 ? [arguments_[0]!, arguments_[1]!] : undefined;
+}
+
+function nodeFastUriHostPolicyGuard(
+  lines: readonly string[],
+  wrapper: ExportedJavascriptFunction,
+  sinkLine: number,
+  sinkExpression: string,
+  version: string,
+): NodeFastUriGuard | undefined {
+  const remoteParameters = wrapper.parameters.filter((parameter) =>
+    lineReferencesIdentifier(sinkExpression, parameter),
+  );
+  if (remoteParameters.length !== 1) return undefined;
+  const remote = remoteParameters[0]!;
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const bindings = nodeFastUriBindings(lines).filter(
+    (binding) =>
+      binding.line < sinkLine &&
+      !javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        sinkLine,
+      ),
+  );
+  const parseBindings = bindings.filter(
+    (binding) => binding.member === "parse",
+  );
+
+  const whatwgArguments = nodeWhatwgResolutionArguments(sinkExpression);
+  if (
+    whatwgArguments !== undefined &&
+    lineReferencesIdentifier(whatwgArguments[0], remote) &&
+    nodeFastUriVersionIsVulnerable(version, "authority-introducer")
+  ) {
+    const baseKey = nodeJavascriptExpressionKey(whatwgArguments[1]);
+    const baseHost = nodeStaticUrlHostname(lines, whatwgArguments[1], sinkLine);
+    if (baseHost !== undefined) {
+      for (
+        let index = wrapper.startLine - 1;
+        index < sinkLine - 1;
+        index += 1
+      ) {
+        const structural = structuralLines[index] ?? "";
+        const declaration =
+          /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/u.exec(
+            structural,
+          );
+        if (declaration?.[1] === undefined || declaration[2] === undefined) {
+          continue;
+        }
+        for (const resolveBinding of bindings.filter(
+          (binding) => binding.member === "resolve",
+        )) {
+          const arguments_ = nodeFastUriCallArguments(
+            declaration[2],
+            resolveBinding,
+          );
+          if (
+            arguments_?.length !== 2 ||
+            nodeJavascriptExpressionKey(arguments_[0]!) !== baseKey ||
+            !lineReferencesIdentifier(arguments_[1]!, remote)
+          ) {
+            continue;
+          }
+          const resolvedUrl = declaration[1];
+          for (
+            let parseIndex = index;
+            parseIndex < sinkLine - 1;
+            parseIndex += 1
+          ) {
+            const parseDeclaration =
+              /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/u.exec(
+                structuralLines[parseIndex] ?? "",
+              );
+            if (
+              parseDeclaration?.[1] === undefined ||
+              parseDeclaration[2] === undefined
+            ) {
+              continue;
+            }
+            for (const parseBinding of parseBindings) {
+              const parseArguments = nodeFastUriCallArguments(
+                parseDeclaration[2],
+                parseBinding,
+              );
+              if (
+                parseArguments?.length !== 1 ||
+                !lineReferencesIdentifier(parseArguments[0]!, resolvedUrl)
+              ) {
+                continue;
+              }
+              const inlineHost = /\.\s*host\b/u.test(parseDeclaration[2]);
+              const hostExpression = inlineHost
+                ? parseDeclaration[1]
+                : `${parseDeclaration[1]}.host`;
+              const guardLine = nodeFastUriFailClosedAllowlistGuard(
+                structuralLines,
+                codeLines,
+                hostExpression,
+                baseHost,
+                parseIndex + 1,
+                sinkLine,
+              );
+              if (guardLine !== undefined) {
+                return { cause: "authority-introducer", line: guardLine };
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (
+    nodeJavascriptExpressionKey(sinkExpression) ===
+      nodeJavascriptExpressionKey(remote) &&
+    nodeFastUriVersionIsVulnerable(version, "literal-backslash")
+  ) {
+    for (let index = wrapper.startLine - 1; index < sinkLine - 1; index += 1) {
+      const declaration =
+        /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/u.exec(
+          structuralLines[index] ?? "",
+        );
+      if (declaration?.[1] === undefined || declaration[2] === undefined) {
+        continue;
+      }
+      for (const parseBinding of parseBindings) {
+        const parseArguments = nodeFastUriCallArguments(
+          declaration[2],
+          parseBinding,
+        );
+        if (
+          parseArguments?.length !== 1 ||
+          !lineReferencesIdentifier(parseArguments[0]!, remote)
+        ) {
+          continue;
+        }
+        const inlineHost = /\.\s*host\b/u.test(declaration[2]);
+        const hostExpression = inlineHost
+          ? declaration[1]
+          : `${declaration[1]}.host`;
+        const guardLine = nodeFastUriFailClosedAllowlistGuard(
+          structuralLines,
+          codeLines,
+          hostExpression,
+          undefined,
+          index + 1,
+          sinkLine,
+        );
+        if (guardLine !== undefined) {
+          return { cause: "literal-backslash", line: guardLine };
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+function nodeFastUriHostPolicyConfusionRecords(
+  files: readonly SourceFileSnapshot[],
+  records: readonly ResidualRiskRecord[],
+): ResidualRiskRecord[] {
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const emitted = new Set<string>();
+  const specialized: ResidualRiskRecord[] = [];
+  for (const record of records) {
+    const framework = record.frameworkModel;
+    if (framework?.id !== "node-http-ssrf") continue;
+    const sinkFile = filesByPath.get(framework.sink.path);
+    if (
+      sinkFile === undefined ||
+      !JAVASCRIPT_EXTENSIONS.has(sinkFile.extension) ||
+      javascriptTestOrExamplePath(sinkFile.path)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, sinkFile.path, "fast-uri");
+    if (dependency === undefined) continue;
+    const sink =
+      nodeNativeHttpUrlArgument(sinkFile.lines, framework.sink.line) ??
+      nodeHttpUrlSink(sinkFile.lines, framework.sink.line);
+    if (sink?.urlExpression === undefined) continue;
+    const wrapper = exportedJavascriptFunctions(sinkFile.lines).find(
+      (candidate) =>
+        framework.sink.line >= candidate.startLine &&
+        framework.sink.line <= candidate.endLine,
+    );
+    if (wrapper === undefined) continue;
+    const guard = nodeFastUriHostPolicyGuard(
+      sinkFile.lines,
+      wrapper,
+      framework.sink.line,
+      sink.urlExpression,
+      dependency.version,
+    );
+    if (guard === undefined) continue;
+    const key = `${framework.source.path}\0${framework.source.line}\0${framework.sink.path}\0${framework.sink.line}`;
+    if (emitted.has(key)) continue;
+    emitted.add(key);
+    specialized.push({
+      ...record,
+      categories: [
+        "framework-dataflow:node-ssrf-fast-uri-host-policy-confusion",
+        `modeled-source:${framework.source.kind}`,
+        `modeled-sink:${framework.sink.kind}`,
+        `broken-control:fast-uri-${guard.cause}-parser-disagreement`,
+      ],
+      priority: Math.max(record.priority, 122),
+      frameworkModel: {
+        ...framework,
+        id: "node-ssrf-fast-uri-host-policy-confusion",
+        sink: { ...framework.sink, cweIds: ["CWE-918", "CWE-436"] },
+        propagators: [
+          ...framework.propagators,
+          {
+            kind: "fast-uri-runtime-dependency",
+            path: dependency.manifestPath,
+            line: dependency.line,
+            symbol: `fast-uri@${dependency.version}:${dependency.proof}:${guard.cause}`,
+          },
+        ],
+        candidateControls: [
+          ...framework.candidateControls.filter(
+            (control) =>
+              control.kind !== "network-address-validation-or-pinning",
+          ),
+          {
+            kind: `vulnerable-fast-uri-${guard.cause}-host-guard`,
             path: sinkFile.path,
             line: guard.line,
           },

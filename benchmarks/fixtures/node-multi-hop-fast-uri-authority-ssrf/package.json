@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-fast-uri-authority-ssrf",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fast-uri": "4.1.1"
+  }
+}

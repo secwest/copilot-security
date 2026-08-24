@@ -243,6 +243,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-ip-address-leading-zero-ssrf",
         "node-multi-hop-patched-ip-address-leading-zero",
       ],
+      [
+        "node-multi-hop-fast-uri-authority-ssrf",
+        "node-multi-hop-patched-fast-uri-authority",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

@@ -3240,6 +3240,45 @@
         "node-multi-hop-patched-ip-address-leading-zero/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-fast-uri-authority-ssrf",
+      "description": "A remote relative URL crosses three wrappers into a fast-uri 4.1.1 resolve/parse host allowlist whose authority-introducer interpretation disagrees with the WHATWG network consumer.",
+      "fixture": "fixtures/node-multi-hop-fast-uri-authority-ssrf",
+      "findingsPaths": [
+        "node-multi-hop-fast-uri-authority-ssrf/run-1/findings.json",
+        "node-multi-hop-fast-uri-authority-ssrf/run-2/findings.json",
+        "node-multi-hop-fast-uri-authority-ssrf/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "fast-uri-authority-introducer-ssrf",
+          "cwe": ["CWE-918", "CWE-436"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-fast-uri-authority",
+      "description": "The source-identical control upgrades only fast-uri to 4.1.2, which rejects malformed backslash authority introducers before policy resolution.",
+      "fixture": "fixtures/node-multi-hop-patched-fast-uri-authority",
+      "findingsPaths": [
+        "node-multi-hop-patched-fast-uri-authority/run-1/findings.json",
+        "node-multi-hop-patched-fast-uri-authority/run-2/findings.json",
+        "node-multi-hop-patched-fast-uri-authority/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }
