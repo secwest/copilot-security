@@ -935,6 +935,28 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-socketio-server-transitive-parser-dos",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]socket\.io['"]/u],
+    sources: [
+      {
+        kind: "untrusted-socketio-network-packet",
+        expression:
+          /\.\s*(?:attach|listen)\s*\(|\bnew\s+[A-Za-z_$][\w$]*(?:\s*\.\s*Server)?\s*\(|\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*(?:require\s*\(\s*['"]socket\.io['"]\s*\)|[A-Za-z_$][\w$]*)\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "transitive-vulnerable-socketio-server-parser-dos",
+        expression:
+          /\bnew\s+[A-Za-z_$][\w$]*(?:\s*\.\s*Server)?\s*\(|\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*(?:require\s*\(\s*['"]socket\.io['"]\s*\)|[A-Za-z_$][\w$]*)\s*\(/u,
+        cweIds: ["CWE-400", "CWE-20", "CWE-754"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-postcss-source-map-traversal",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3026,6 +3048,13 @@ interface NodeSocketIoParserDosSink {
   dependency: NodeRuntimeDependency;
 }
 
+interface NodeSocketIoServerDosSink {
+  source: { kind: "untrusted-socketio-network-packet"; line: number };
+  sinkLine: number;
+  kind: string;
+  dependency: NodeLockedTransitiveDependency;
+}
+
 interface NodePostcssSourceMapSink {
   sourceExpressions: string[];
   kind: string;
@@ -3070,6 +3099,223 @@ interface NodeRuntimeDependency {
   line: number;
   version: string;
   proof: "manifest-exact" | "npm-lockfile";
+}
+
+interface NodeLockedTransitiveDependency {
+  parent: NodeRuntimeDependency;
+  child: NodeRuntimeDependency;
+  childDeclaration: string;
+}
+
+function nodeSimpleSemverDeclarationIncludes(
+  declaration: string,
+  version: string,
+): boolean {
+  const resolved = version.split(".").map(Number);
+  if (
+    resolved.length !== 3 ||
+    resolved.some((part) => !Number.isSafeInteger(part))
+  ) {
+    return false;
+  }
+  const exact = /^(\d+)\.(\d+)\.(\d+)$/u.exec(declaration);
+  const tilde = /^~(\d+)\.(\d+)\.(\d+)$/u.exec(declaration);
+  const caret = /^\^(\d+)\.(\d+)\.(\d+)$/u.exec(declaration);
+  const match = exact ?? tilde ?? caret;
+  if (match === null) return false;
+  const minimum = match.slice(1).map(Number) as [number, number, number];
+  const current = resolved as [number, number, number];
+  const atLeastMinimum =
+    current[0] > minimum[0] ||
+    (current[0] === minimum[0] &&
+      (current[1] > minimum[1] ||
+        (current[1] === minimum[1] && current[2] >= minimum[2])));
+  if (!atLeastMinimum) return false;
+  if (exact !== null)
+    return current.every((part, index) => part === minimum[index]);
+  if (tilde !== null) {
+    return current[0] === minimum[0] && current[1] === minimum[1];
+  }
+  if (minimum[0] > 0) return current[0] === minimum[0];
+  if (minimum[1] > 0) {
+    return current[0] === 0 && current[1] === minimum[1];
+  }
+  return current[0] === 0 && current[1] === 0 && current[2] === minimum[2];
+}
+
+function nodeLockedTransitiveDependency(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  parentName: string,
+  childName: string,
+): NodeLockedTransitiveDependency | undefined {
+  const parent = nodeRuntimeDependency(files, sourcePath, parentName);
+  if (parent === undefined) return undefined;
+  const manifest = files.find((file) => file.path === parent.manifestPath);
+  if (manifest === undefined) return undefined;
+  let manifestRoot: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(manifest.text) as unknown;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      return undefined;
+    }
+    manifestRoot = parsed as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+  const declarations = ["dependencies", "optionalDependencies"].flatMap(
+    (section) => {
+      const dependencies = manifestRoot[section];
+      if (
+        typeof dependencies !== "object" ||
+        dependencies === null ||
+        Array.isArray(dependencies)
+      ) {
+        return [];
+      }
+      const value = (dependencies as Record<string, unknown>)[parentName];
+      return typeof value === "string" ? [value] : [];
+    },
+  );
+  if (
+    declarations.length === 0 ||
+    declarations.some((value) => value !== declarations[0])
+  ) {
+    return undefined;
+  }
+  const declaration = declarations[0]!;
+  const directory = posix.dirname(manifest.path);
+  const lockfile = ["npm-shrinkwrap.json", "package-lock.json"]
+    .map((name) =>
+      files.find(
+        (file) =>
+          file.path ===
+          (directory === "." ? name : posix.join(directory, name)),
+      ),
+    )
+    .find((file) => file !== undefined);
+  if (lockfile === undefined) return undefined;
+  let lockRoot: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(lockfile.text) as unknown;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      return undefined;
+    }
+    lockRoot = parsed as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+  if (lockRoot["lockfileVersion"] !== 2 && lockRoot["lockfileVersion"] !== 3) {
+    return undefined;
+  }
+  const packages = lockRoot["packages"];
+  if (
+    typeof packages !== "object" ||
+    packages === null ||
+    Array.isArray(packages)
+  ) {
+    return undefined;
+  }
+  const entries = packages as Record<string, unknown>;
+  const rootPackage = entries[""];
+  const installedParent = entries[`node_modules/${parentName}`];
+  if (
+    typeof rootPackage !== "object" ||
+    rootPackage === null ||
+    Array.isArray(rootPackage) ||
+    typeof installedParent !== "object" ||
+    installedParent === null ||
+    Array.isArray(installedParent)
+  ) {
+    return undefined;
+  }
+  const lockedRootDeclarations = [
+    "dependencies",
+    "optionalDependencies",
+  ].flatMap((section) => {
+    const dependencies = (rootPackage as Record<string, unknown>)[section];
+    if (
+      typeof dependencies !== "object" ||
+      dependencies === null ||
+      Array.isArray(dependencies)
+    ) {
+      return [];
+    }
+    const value = (dependencies as Record<string, unknown>)[parentName];
+    return typeof value === "string" ? [value] : [];
+  });
+  if (
+    lockedRootDeclarations.length === 0 ||
+    lockedRootDeclarations.some((value) => value !== declaration)
+  ) {
+    return undefined;
+  }
+  const parentEntry = installedParent as Record<string, unknown>;
+  const parentVersion = parentEntry["version"];
+  if (
+    typeof parentVersion !== "string" ||
+    parentVersion !== parent.version ||
+    !/^\d+\.\d+\.\d+$/u.test(parentVersion)
+  ) {
+    return undefined;
+  }
+  const parentDependencies = parentEntry["dependencies"];
+  if (
+    typeof parentDependencies !== "object" ||
+    parentDependencies === null ||
+    Array.isArray(parentDependencies)
+  ) {
+    return undefined;
+  }
+  const childDeclaration = (parentDependencies as Record<string, unknown>)[
+    childName
+  ];
+  if (typeof childDeclaration !== "string") return undefined;
+  const childPaths = [
+    `node_modules/${parentName}/node_modules/${childName}`,
+    `node_modules/${childName}`,
+  ];
+  const childPath = childPaths.find(
+    (candidate) => entries[candidate] !== undefined,
+  );
+  if (childPath === undefined) return undefined;
+  const installedChild = entries[childPath];
+  if (
+    typeof installedChild !== "object" ||
+    installedChild === null ||
+    Array.isArray(installedChild)
+  ) {
+    return undefined;
+  }
+  const childVersion = (installedChild as Record<string, unknown>)["version"];
+  if (
+    typeof childVersion !== "string" ||
+    !nodeSimpleSemverDeclarationIncludes(childDeclaration, childVersion)
+  ) {
+    return undefined;
+  }
+  const line =
+    lockfile.lines.findIndex((candidate) =>
+      candidate.includes(`"${childPath}"`),
+    ) + 1;
+  return {
+    parent,
+    child: {
+      manifestPath: lockfile.path,
+      line: Math.max(1, line),
+      version: childVersion,
+      proof: "npm-lockfile",
+    },
+    childDeclaration,
+  };
 }
 
 function nodePackageLockResolvedVersion(
@@ -6665,6 +6911,342 @@ function nodeSocketIoParserDosSink(
   return undefined;
 }
 
+type NodeSocketIoServerBinding = {
+  local: string;
+  line: number;
+  member?: "Server";
+  callable?: true;
+};
+
+function nodeSocketIoDefaultParserOptions(
+  expression: string | undefined,
+): boolean {
+  if (expression === undefined || expression.trim() === "") return true;
+  const value = expression.trim();
+  if (!value.startsWith("{") || !value.endsWith("}")) return false;
+  const body = value.slice(1, -1);
+  if (/\.\.\./u.test(body)) return false;
+  return splitJavascriptArguments(body).every((entry) => {
+    const property = entry.trim();
+    if (property === "") return true;
+    if (property.startsWith("[")) return false;
+    return !/^(?:parser|["']parser["'])(?:\s*:|\s*$)/u.test(property);
+  });
+}
+
+function nodeSocketIoListeningTargetLine(
+  lines: readonly string[],
+  targetExpression: string,
+  referenceLine: number,
+): number | undefined {
+  const target = targetExpression.trim();
+  if (!/^[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)?$/u.test(target)) {
+    return undefined;
+  }
+  const normalized = target.replace(/\s+/gu, "");
+  const candidates = [normalized];
+  if (normalized.endsWith(".server")) {
+    candidates.push(normalized.slice(0, -".server".length));
+  }
+  const structuralLines = javascriptStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    if (
+      candidates.some((candidate) =>
+        new RegExp(
+          `\\b${escapeRegularExpression(candidate).replaceAll("\\.", "\\s*\\.\\s*")}\\s*\\.\\s*listen\\s*\\(`,
+          "u",
+        ).test(structuralLines[index] ?? ""),
+      )
+    ) {
+      const listeningLine = index + 1;
+      const base = normalized.split(".", 1)[0]!;
+      if (
+        javascriptIdentifierReassignedBetween(
+          lines,
+          base,
+          Math.min(referenceLine, listeningLine),
+          Math.max(referenceLine, listeningLine) + 1,
+        )
+      ) {
+        continue;
+      }
+      return listeningLine;
+    }
+  }
+  return undefined;
+}
+
+function nodeSocketIoServerExposure(
+  lines: readonly string[],
+  instance: string,
+  constructorLine: number,
+  constructorArguments: readonly string[],
+): { line: number } | undefined {
+  const directTarget = constructorArguments[0]?.trim();
+  const optionsOnly = directTarget?.startsWith("{") === true;
+  if (constructorArguments.length > 2) return undefined;
+  if (optionsOnly) {
+    if (!nodeSocketIoDefaultParserOptions(directTarget)) return undefined;
+  } else if (directTarget !== undefined && directTarget !== "") {
+    if (!nodeSocketIoDefaultParserOptions(constructorArguments[1])) {
+      return undefined;
+    }
+    if (/^(?:\d+|["']\d+["'])$/u.test(directTarget)) {
+      return { line: constructorLine };
+    }
+    const listeningLine = nodeSocketIoListeningTargetLine(
+      lines,
+      directTarget,
+      constructorLine,
+    );
+    if (listeningLine === undefined) return undefined;
+    return { line: listeningLine };
+  }
+
+  const escapedInstance = escapeRegularExpression(instance);
+  for (let index = constructorLine; index < lines.length; index += 1) {
+    const structural = javascriptStructuralLines([lines[index] ?? ""])[0] ?? "";
+    const call = new RegExp(
+      `\\b${escapedInstance}\\s*\\.\\s*(?:attach|listen)\\s*\\(`,
+      "u",
+    );
+    if (!call.test(structural)) continue;
+    if (
+      javascriptIdentifierReassignedBetween(
+        lines,
+        instance,
+        constructorLine,
+        index + 2,
+      )
+    ) {
+      return undefined;
+    }
+    const arguments_ = javascriptCallArgumentsAtLine(lines, index + 1, call);
+    const target = arguments_?.[0]?.trim();
+    if (
+      target === undefined ||
+      target === "" ||
+      (arguments_?.length ?? 0) > 2
+    ) {
+      return undefined;
+    }
+    if (!nodeSocketIoDefaultParserOptions(arguments_?.[1])) return undefined;
+    if (/^(?:\d+|["']\d+["'])$/u.test(target)) return { line: index + 1 };
+    const listeningLine = nodeSocketIoListeningTargetLine(
+      lines,
+      target,
+      index + 1,
+    );
+    return listeningLine === undefined ? undefined : { line: listeningLine };
+  }
+  return undefined;
+}
+
+function nodeSocketIoServerDosSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeSocketIoServerDosSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const dependency = nodeLockedTransitiveDependency(
+    files,
+    path,
+    "socket.io",
+    "socket.io-parser",
+  );
+  if (
+    dependency === undefined ||
+    !nodeSocketIoParserVersionIsVulnerable(dependency.child.version)
+  ) {
+    return undefined;
+  }
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const bindings: NodeSocketIoServerBinding[] = [];
+  const addBinding = (binding: NodeSocketIoServerBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.member === binding.member &&
+          candidate.callable === binding.callable &&
+          candidate.line === binding.line,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+  const resultForInvocation = (
+    instance: string,
+    invocation: RegExp,
+    preserveModuleLiteral = false,
+  ): NodeSocketIoServerDosSink | undefined => {
+    if (
+      structuralLines.some(
+        (candidate, index) =>
+          index >= line &&
+          new RegExp(
+            `\\b${escapeRegularExpression(instance)}\\s*\\.\\s*_parser\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+      )
+    ) {
+      return undefined;
+    }
+    const arguments_ = preserveModuleLiteral
+      ? javascriptRawCallArgumentsAtLine(lines, line, invocation)
+      : javascriptCallArgumentsAtLine(lines, line, invocation);
+    if (arguments_ === undefined) return undefined;
+    const exposure = nodeSocketIoServerExposure(
+      lines,
+      instance,
+      line,
+      arguments_,
+    );
+    if (exposure === undefined) return undefined;
+    if (
+      javascriptIdentifierReassignedBetween(
+        lines,
+        instance,
+        line,
+        Math.max(line, exposure.line) + 2,
+      )
+    ) {
+      return undefined;
+    }
+    return {
+      source: {
+        kind: "untrusted-socketio-network-packet",
+        line: exposure.line,
+      },
+      sinkLine: line,
+      kind: "lock-resolved-transitive-vulnerable-socketio-server-parser-dos",
+      dependency,
+    };
+  };
+  const directCallable =
+    /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]socket\.io['"]\s*\)\s*\(/u.exec(
+      codeLines[line - 1] ?? "",
+    );
+  if (directCallable?.[1] !== undefined) {
+    const result = resultForInvocation(
+      directCallable[1],
+      /\brequire\s*\(\s*['"]socket\.io['"]\s*\)\s*\(/u,
+      true,
+    );
+    if (result !== undefined) return result;
+  }
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "socket.io" &&
+      imported.imported === "Server"
+    ) {
+      addBinding({ local: imported.local, line: imported.line });
+    }
+  }
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]socket\.io['"]/u.exec(
+        code,
+      );
+    if (namespace?.[1] !== undefined) {
+      addBinding({ local: namespace[1], line: index + 1, member: "Server" });
+    }
+    const defaultInterop =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]socket\.io['"]/u.exec(code);
+    if (defaultInterop?.[1] !== undefined) {
+      addBinding({
+        local: defaultInterop[1],
+        line: index + 1,
+        member: "Server",
+      });
+      addBinding({
+        local: defaultInterop[1],
+        line: index + 1,
+        callable: true,
+      });
+    }
+    const importEquals =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]socket\.io['"]\s*\)/u.exec(
+        code,
+      );
+    if (importEquals?.[1] !== undefined) {
+      addBinding({
+        local: importEquals[1],
+        line: index + 1,
+        member: "Server",
+      });
+      addBinding({
+        local: importEquals[1],
+        line: index + 1,
+        callable: true,
+      });
+    }
+    const commonjs =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]socket\.io['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (commonjs?.[1] !== undefined) {
+      addBinding({ local: commonjs[1], line: index + 1, member: "Server" });
+      addBinding({ local: commonjs[1], line: index + 1, callable: true });
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]socket\.io['"]\s*\)\s*\.\s*Server\s*;?\s*$/u.exec(
+        code,
+      );
+    if (direct?.[1] !== undefined) {
+      addBinding({ local: direct[1], line: index + 1 });
+    }
+  }
+
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    if (
+      binding.member !== undefined &&
+      structuralLines
+        .slice(binding.line, Math.max(binding.line, line - 1))
+        .some((candidate) =>
+          new RegExp(
+            `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*Server\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+        )
+    ) {
+      continue;
+    }
+    const constructor =
+      binding.member === undefined
+        ? escapeRegularExpression(binding.local)
+        : `${escapeRegularExpression(binding.local)}\\s*\\.\\s*Server`;
+    const invocation =
+      binding.callable === true ? constructor : `new\\s+${constructor}`;
+    const declaration = new RegExp(
+      `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${invocation}\\s*\\(`,
+      "u",
+    );
+    const match = declaration.exec(codeLines[line - 1] ?? "");
+    if (match?.[1] === undefined) continue;
+    const result = resultForInvocation(
+      match[1],
+      new RegExp(`\\b${invocation}\\s*\\(`, "u"),
+    );
+    if (result !== undefined) return result;
+  }
+  return undefined;
+}
+
 type NodePostcssOperation = "parse" | "process";
 
 interface NodePostcssBinding {
@@ -7931,6 +8513,7 @@ function frameworkDataflowRecords(
                 model.id === "node-http-js-yaml-parser-dos" ||
                 model.id === "node-http-brace-expansion-dos" ||
                 model.id === "node-http-socketio-parser-zero-attachment-dos" ||
+                model.id === "node-socketio-server-transitive-parser-dos" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
                 model.id === "node-http-tar-linkpath-traversal" ||
@@ -8037,6 +8620,10 @@ function frameworkDataflowRecords(
       const nodeSocketIoParserDos =
         model.id === "node-http-socketio-parser-zero-attachment-dos"
           ? nodeSocketIoParserDosSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeSocketIoServerDos =
+        model.id === "node-socketio-server-transitive-parser-dos"
+          ? nodeSocketIoServerDosSink(files, path, lines, sink.line)
           : undefined;
       const nodePostcssSourceMap =
         model.id === "node-http-postcss-source-map-traversal"
@@ -8205,6 +8792,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-socketio-parser-zero-attachment-dos" &&
         nodeSocketIoParserDos === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-socketio-server-transitive-parser-dos" &&
+        nodeSocketIoServerDos === undefined
       ) {
         continue;
       }
@@ -8591,9 +9184,11 @@ function frameworkDataflowRecords(
       const source =
         model.id === "node-http-fastify-static-route-guard-bypass"
           ? nodeFastifyStatic?.source
-          : model.id === "node-http-dset-prototype-pollution"
-            ? nodeDsetResolution?.source
-            : nonDsetSource;
+          : model.id === "node-socketio-server-transitive-parser-dos"
+            ? nodeSocketIoServerDos?.source
+            : model.id === "node-http-dset-prototype-pollution"
+              ? nodeDsetResolution?.source
+              : nonDsetSource;
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -8720,6 +9315,7 @@ function frameworkDataflowRecords(
       const effectiveSinkLine =
         nodeCopilotResolution?.input.line ??
         nodeMongooseAggregateResolution?.position.line ??
+        nodeSocketIoServerDos?.sinkLine ??
         sink.line;
       const effectiveSinkKind =
         nodeCopilotResolution?.input.kind ??
@@ -8734,6 +9330,7 @@ function frameworkDataflowRecords(
         nodeJsYamlParserDos?.kind ??
         nodeBraceExpansionDos?.kind ??
         nodeSocketIoParserDos?.kind ??
+        nodeSocketIoServerDos?.kind ??
         nodePostcssSourceMap?.kind ??
         nodeExtractZip?.kind ??
         nodeTarLink?.kind ??
@@ -8812,6 +9409,22 @@ function frameworkDataflowRecords(
                     path: nodeSocketIoParserDos.dependency.manifestPath,
                     line: nodeSocketIoParserDos.dependency.line,
                     symbol: `socket.io-parser@${nodeSocketIoParserDos.dependency.version}:${nodeSocketIoParserDos.dependency.proof}:zero-attachment-buffer-retention`,
+                  },
+                ]),
+            ...(nodeSocketIoServerDos === undefined
+              ? []
+              : [
+                  {
+                    kind: "socketio-server-runtime-dependency",
+                    path: nodeSocketIoServerDos.dependency.parent.manifestPath,
+                    line: nodeSocketIoServerDos.dependency.parent.line,
+                    symbol: `socket.io@${nodeSocketIoServerDos.dependency.parent.version}:${nodeSocketIoServerDos.dependency.parent.proof}:server-network-parser-exposure`,
+                  },
+                  {
+                    kind: "socketio-parser-transitive-runtime-dependency",
+                    path: nodeSocketIoServerDos.dependency.child.manifestPath,
+                    line: nodeSocketIoServerDos.dependency.child.line,
+                    symbol: `socket.io-parser@${nodeSocketIoServerDos.dependency.child.version}:${nodeSocketIoServerDos.dependency.child.proof}:${nodeSocketIoServerDos.dependency.childDeclaration}:zero-attachment-buffer-retention`,
                   },
                 ]),
           ],
@@ -14289,7 +14902,10 @@ function javascriptFrameworkWrapperSummaries(
       ) {
         continue;
       }
-      if (model.id === "node-http-fastify-static-route-guard-bypass") {
+      if (
+        model.id === "node-http-fastify-static-route-guard-bypass" ||
+        model.id === "node-socketio-server-transitive-parser-dos"
+      ) {
         continue;
       }
       const sinks =
@@ -16234,6 +16850,23 @@ function javascriptCallArgumentsAtLine(
   const open = structural.indexOf("(", match.index);
   const close = matchingCallParenthesis(structural, open);
   if (open < 0 || close < 0) return undefined;
+  return splitJavascriptArguments(original.slice(open + 1, close));
+}
+
+function javascriptRawCallArgumentsAtLine(
+  lines: readonly string[],
+  line: number,
+  callee: RegExp,
+): string[] | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const original = javascriptCodeLinesWithoutComments(callLines).join("\n");
+  const match = callee.exec(original.split("\n", 1)[0] ?? "");
+  if (match === null) return undefined;
+  const relativeOpen = match[0].lastIndexOf("(");
+  if (relativeOpen < 0) return undefined;
+  const open = match.index + relativeOpen;
+  const close = matchingCallParenthesis(original, open);
+  if (close < 0) return undefined;
   return splitJavascriptArguments(original.slice(open + 1, close));
 }
 

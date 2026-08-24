@@ -1854,9 +1854,12 @@ paired with fresh per-envelope HKDF data keys and profile-bound authenticated
 data even though the visible nonce repeats. The package-backed availability
 lanes now include persistent `socket.io-parser` zero-attachment state: the
 affected fixture retains every later binary frame, while the source-identical
-repaired fixture rejects the impossible packet before retaining state. Each of
-the 170 cases in 85 exploit/control pairs is scanned three times, producing 510
-scans that measure both accuracy and model variance.
+repaired fixture rejects the impossible packet before retaining state. A second
+pair exercises the ordinary public `socket.io` Server surface with identical
+4.8.3 application source and parent dependency: only the npm-locked transitive
+parser changes from vulnerable 4.2.6 to repaired 4.2.7. Each of the 172 cases
+in 86 exploit/control pairs is scanned three times, producing 516 scans that
+measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild
 the selected manifest and report from the sealed campaign receipts.

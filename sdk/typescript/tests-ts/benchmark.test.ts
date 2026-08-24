@@ -224,6 +224,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-patched-socketio-parser",
       ],
       [
+        "node-socketio-server-transitive-parser-dos",
+        "node-socketio-server-transitive-patched-parser",
+      ],
+      [
         "node-multi-hop-postcss-source-map-traversal",
         "node-multi-hop-patched-postcss",
       ],

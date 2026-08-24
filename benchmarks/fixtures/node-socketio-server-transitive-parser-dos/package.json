@@ -1,0 +1,8 @@
+{
+  "name": "socketio-server-transitive-parser-witness",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "socket.io": "4.8.3"
+  }
+}

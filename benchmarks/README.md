@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains eighty-four vulnerable/control pairs:
+The versioned corpus currently contains eighty-six vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -182,8 +182,12 @@ left `constructor.prototype` traversal reachable. The newest pair carries a
 remote brace pattern through three wrappers into `brace-expansion` 5.0.8 and
 pairs it with source-identical 5.0.9, measuring whether result and character
 bounds apply while padded sequences and comma alternatives are constructed.
-Three runs per case produce
-504 scans across 84 exploit/control pairs in the complete corpus.
+The next pair exercises persistent `socket.io-parser` state through its direct
+Decoder API. The latest pair reaches the same state through the public
+`socket.io` Server: application source and `socket.io@4.8.3` stay identical,
+while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. Three runs
+per case produce 516 scans across 86 exploit/control pairs in the complete
+corpus.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all

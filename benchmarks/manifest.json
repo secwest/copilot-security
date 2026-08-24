@@ -3435,6 +3435,45 @@
         "node-multi-hop-patched-socketio-parser/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-socketio-server-transitive-parser-dos",
+      "description": "A public Socket.IO 4.8.3 server resolves vulnerable socket.io-parser 4.2.6 transitively and retains every binary WebSocket frame after the crafted zero-attachment packet.",
+      "fixture": "fixtures/node-socketio-server-transitive-parser-dos",
+      "findingsPaths": [
+        "node-socketio-server-transitive-parser-dos/run-1/findings.json",
+        "node-socketio-server-transitive-parser-dos/run-2/findings.json",
+        "node-socketio-server-transitive-parser-dos/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-socketio-server-transitive-parser-dos",
+          "cwe": ["CWE-400", "CWE-20", "CWE-754"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-socketio-server-transitive-patched-parser",
+      "description": "The source- and parent-identical control resolves repaired socket.io-parser 4.2.7 from its lockfile, rejects the packet, closes the client, and retains no binary frames.",
+      "fixture": "fixtures/node-socketio-server-transitive-patched-parser",
+      "findingsPaths": [
+        "node-socketio-server-transitive-patched-parser/run-1/findings.json",
+        "node-socketio-server-transitive-patched-parser/run-2/findings.json",
+        "node-socketio-server-transitive-patched-parser/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }
