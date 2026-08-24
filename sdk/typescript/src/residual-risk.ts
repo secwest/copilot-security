@@ -899,6 +899,37 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-tar-linkpath-traversal",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]tar['"]/u],
+    sources: [
+      {
+        kind: "http-uploaded-tar-path",
+        expression:
+          /\b(?:req|request)\.(?:body|file|files|params|query)\b|\bctx\.(?:params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "http-request-archive-stream",
+        expression: /\b(?:req|request)\s*\.\s*pipe\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-node-tar-linkpath-traversal",
+        expression:
+          /\b[A-Za-z_$][\w$]*(?:\s*\.\s*(?:x|extract))?\s*\(|\brequire\s*\(\s*['"]tar['"]\s*\)\s*\.\s*(?:x|extract)\s*\(/u,
+        cweIds: ["CWE-22", "CWE-59"],
+      },
+    ],
+    controls: [
+      {
+        kind: "node-tar-link-entry-filter",
+        expression: /\bfilter\b|\b(?:Link|SymbolicLink)\b/u,
+      },
+    ],
+  },
+  {
     id: "node-http-fastify-static-route-guard-bypass",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2836,6 +2867,11 @@ interface NodePostcssSourceMapSink {
 
 interface NodeExtractZipSink {
   sourceExpression: string;
+  kind: string;
+}
+
+interface NodeTarLinkSink {
+  sourceExpressions: string[];
   kind: string;
 }
 
@@ -5944,6 +5980,220 @@ function nodeExtractZipSink(
   return undefined;
 }
 
+interface NodeTarBinding {
+  local: string;
+  line: number;
+  receiver: boolean;
+}
+
+function nodeTarVersionIsLinkpathTraversalVulnerable(version: string): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    major < 7 || (major === 7 && (minor < 5 || (minor === 5 && patch <= 10)))
+  );
+}
+
+function nodeTarFilterRejectsLinks(
+  lines: readonly string[],
+  line: number,
+  expression: string,
+): boolean {
+  const callback =
+    resolveJavascriptExpression(lines, expression.trim(), line)?.value.trim() ??
+    expression.trim();
+  if (
+    !/["']Link["']/u.test(callback) ||
+    !/["']SymbolicLink["']/u.test(callback) ||
+    !/\.\s*type\b/u.test(callback)
+  ) {
+    return false;
+  }
+  const rejectsByInequality =
+    /\.\s*type\s*!==?\s*["']Link["'][\s\S]{0,160}&&[\s\S]{0,160}\.\s*type\s*!==?\s*["']SymbolicLink["']|\.\s*type\s*!==?\s*["']SymbolicLink["'][\s\S]{0,160}&&[\s\S]{0,160}\.\s*type\s*!==?\s*["']Link["']/u.test(
+      callback,
+    );
+  const rejectsByBranch =
+    /(?:\.\s*type\s*===?\s*["']Link["'][\s\S]{0,160}\|\|[\s\S]{0,160}\.\s*type\s*===?\s*["']SymbolicLink["']|\.\s*type\s*===?\s*["']SymbolicLink["'][\s\S]{0,160}\|\|[\s\S]{0,160}\.\s*type\s*===?\s*["']Link["'])[\s\S]{0,160}\breturn\s+false\b/u.test(
+      callback,
+    );
+  const rejectsByCollection =
+    /!\s*\[[^\]]*["']Link["'][^\]]*["']SymbolicLink["'][^\]]*\]\s*\.\s*includes\s*\(\s*[A-Za-z_$][\w$]*\s*\.\s*type\s*\)|!\s*\[[^\]]*["']SymbolicLink["'][^\]]*["']Link["'][^\]]*\]\s*\.\s*includes\s*\(\s*[A-Za-z_$][\w$]*\s*\.\s*type\s*\)|\bif\s*\(\s*\[[^\]]*["']Link["'][^\]]*["']SymbolicLink["'][^\]]*\]\s*\.\s*includes\s*\(\s*[A-Za-z_$][\w$]*\s*\.\s*type\s*\)\s*\)\s*(?:\{[\s\S]{0,120})?\breturn\s+false\b|\bif\s*\(\s*\[[^\]]*["']SymbolicLink["'][^\]]*["']Link["'][^\]]*\]\s*\.\s*includes\s*\(\s*[A-Za-z_$][\w$]*\s*\.\s*type\s*\)\s*\)\s*(?:\{[\s\S]{0,120})?\breturn\s+false\b/u.test(
+      callback,
+    );
+  return rejectsByInequality || rejectsByBranch || rejectsByCollection;
+}
+
+function nodeTarOptions(
+  lines: readonly string[],
+  line: number,
+  expression: string | undefined,
+): { sourceExpressions: string[]; rejectsLinks: boolean } | undefined {
+  if (expression === undefined || expression.trim() === "") return undefined;
+  const original = expression.trim();
+  const resolved =
+    resolveJavascriptExpression(lines, original, line)?.value.trim() ??
+    original;
+  if (!resolved.startsWith("{") || !resolved.endsWith("}")) {
+    if (
+      /^(?:undefined|null|true|false|[+-]?\d+(?:\.\d+)?|['"`][\s\S]*['"`])$/u.test(
+        resolved,
+      )
+    ) {
+      return undefined;
+    }
+    return { sourceExpressions: [original], rejectsLinks: false };
+  }
+  const file = javascriptObjectPropertyValue(resolved, "file")?.trim();
+  const filter = javascriptObjectPropertyValue(resolved, "filter")?.trim();
+  return {
+    sourceExpressions: file === undefined || file === "" ? [] : [file],
+    rejectsLinks:
+      filter !== undefined && nodeTarFilterRejectsLinks(lines, line, filter),
+  };
+}
+
+function nodeTarStreamSource(
+  lines: readonly string[],
+  line: number,
+): string | undefined {
+  const structural = javascriptStructuralLines(lines)[line - 1] ?? "";
+  const match =
+    /\b((?:req|request)(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*\.\s*pipe\s*\(/iu.exec(
+      structural,
+    );
+  return match?.[1] === undefined ? undefined : `${match[1]}.pipe(`;
+}
+
+function nodeTarSinkKind(dependency: NodeRuntimeDependency): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  return `${lockPrefix}vulnerable-node-tar-linkpath-traversal`;
+}
+
+function nodeTarLinkSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeTarLinkSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "tar");
+  if (
+    dependency === undefined ||
+    !nodeTarVersionIsLinkpathTraversalVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const bindings: NodeTarBinding[] = [];
+  const addBinding = (binding: NodeTarBinding): void => {
+    if (!bindings.some((candidate) => candidate.local === binding.local)) {
+      bindings.push(binding);
+    }
+  };
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]tar['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]tar['"]/u.exec(code) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]tar['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]tar['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      addBinding({ local: receiver[1], line: index + 1, receiver: true });
+    }
+    const namedImport = /^\s*import\s*\{([^}]+)\}\s*from\s*['"]tar['"]/u.exec(
+      code,
+    )?.[1];
+    if (namedImport !== undefined) {
+      for (const entry of namedImport.split(",")) {
+        const match =
+          /^\s*(?:x|extract)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*$/u.exec(entry);
+        if (match !== null) {
+          addBinding({
+            local: match[1] ?? entry.trim(),
+            line: index + 1,
+            receiver: false,
+          });
+        }
+      }
+    }
+    const destructured =
+      /^\s*(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require\s*\(\s*['"]tar['"]\s*\)/u.exec(
+        code,
+      )?.[1];
+    if (destructured !== undefined) {
+      for (const entry of destructured.split(",")) {
+        const match =
+          /^\s*(?:x|extract)(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*$/u.exec(entry);
+        if (match !== null) {
+          addBinding({
+            local: match[1] ?? entry.trim(),
+            line: index + 1,
+            receiver: false,
+          });
+        }
+      }
+    }
+  }
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const tryArguments = (
+    arguments_: string[] | undefined,
+  ): NodeTarLinkSink | undefined => {
+    const options = nodeTarOptions(lines, line, arguments_?.[0]);
+    if (options === undefined || options.rejectsLinks) return undefined;
+    const stream = nodeTarStreamSource(lines, line);
+    const sourceExpressions = [
+      ...options.sourceExpressions,
+      ...(stream === undefined ? [] : [stream]),
+    ].filter(
+      (value, index, all) => value !== "" && all.indexOf(value) === index,
+    );
+    return sourceExpressions.length === 0
+      ? undefined
+      : { sourceExpressions, kind: nodeTarSinkKind(dependency) };
+  };
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escaped = escapeRegularExpression(binding.local);
+    const callee = binding.receiver
+      ? new RegExp(`\\b${escaped}\\s*\\.\\s*(?:x|extract)\\s*\\(`, "u")
+      : new RegExp(`\\b${escaped}\\s*\\(`, "u");
+    const result = tryArguments(
+      javascriptCallArgumentsAtLine(lines, line, callee),
+    );
+    if (result !== undefined) return result;
+  }
+  return tryArguments(
+    javascriptCompositeCallArgumentsAtLine(
+      lines,
+      line,
+      /\brequire\s*\(\s*['"]tar['"]\s*\)\s*\.\s*(?:x|extract)\s*\(/u,
+    ),
+  );
+}
+
 interface NodeFastifyBinding {
   local: string;
   line: number;
@@ -6351,6 +6601,7 @@ function frameworkDataflowRecords(
                 model.id === "node-http-tmp-path-traversal" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
+                model.id === "node-http-tar-linkpath-traversal" ||
                 model.id === "node-http-fastify-static-route-guard-bypass"
                 ? 64
                 : 8,
@@ -6444,6 +6695,10 @@ function frameworkDataflowRecords(
       const nodeExtractZip =
         model.id === "node-http-extract-zip-symlink-traversal"
           ? nodeExtractZipSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeTarLink =
+        model.id === "node-http-tar-linkpath-traversal"
+          ? nodeTarLinkSink(files, path, lines, sink.line)
           : undefined;
       const nodeFastifyStatic =
         model.id === "node-http-fastify-static-route-guard-bypass"
@@ -6584,6 +6839,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-extract-zip-symlink-traversal" &&
         nodeExtractZip === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-tar-linkpath-traversal" &&
+        nodeTarLink === undefined
       ) {
         continue;
       }
@@ -6757,7 +7018,8 @@ function frameworkDataflowRecords(
         nodeImmutablePrototype?.sourceExpressions.join("\n") ??
         nodeTmpPath?.sourceExpressions.join("\n") ??
         nodePostcssSourceMap?.sourceExpressions.join("\n") ??
-        nodeExtractZip?.sourceExpression;
+        nodeExtractZip?.sourceExpression ??
+        nodeTarLink?.sourceExpressions.join("\n");
       const nonDsetSource =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -7073,6 +7335,7 @@ function frameworkDataflowRecords(
         nodeTmpPath?.kind ??
         nodePostcssSourceMap?.kind ??
         nodeExtractZip?.kind ??
+        nodeTarLink?.kind ??
         nodeFastifyStatic?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
@@ -11459,7 +11722,8 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-immutable-prototype-replacement" ||
                 model.id === "node-http-tmp-path-traversal" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
-                model.id === "node-http-extract-zip-symlink-traversal"
+                model.id === "node-http-extract-zip-symlink-traversal" ||
+                model.id === "node-http-tar-linkpath-traversal"
                 ? 64
                 : 32,
             );
@@ -11554,6 +11818,10 @@ function javascriptFrameworkWrapperSummaries(
           const nodeExtractZip =
             model.id === "node-http-extract-zip-symlink-traversal"
               ? nodeExtractZipSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeTarLink =
+            model.id === "node-http-tar-linkpath-traversal"
+              ? nodeTarLinkSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -11668,6 +11936,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-tar-linkpath-traversal" &&
+            nodeTarLink === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -11714,6 +11988,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeTmpPath?.sourceExpressions.join("\n") ??
             nodePostcssSourceMap?.sourceExpressions.join("\n") ??
             nodeExtractZip?.sourceExpression ??
+            nodeTarLink?.sourceExpressions.join("\n") ??
             (nodeDset === undefined
               ? undefined
               : nodeDset.positions
@@ -11922,6 +12197,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeExtractZip === undefined
                   ? {}
                   : { kind: nodeExtractZip.kind }),
+                ...(nodeTarLink === undefined
+                  ? {}
+                  : { kind: nodeTarLink.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}
