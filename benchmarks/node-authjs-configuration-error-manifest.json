@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-authjs-configuration-error-fail-open",
+      "description": "An unauthenticated request reaches an official next-auth 5.0.0-beta.31 middleware wrapper whose bare request.auth truthiness gate treats a server-configuration error object as an authenticated session.",
+      "fixture": "fixtures/node-authjs-configuration-error-fail-open",
+      "findingsPaths": [
+        "node-authjs-configuration-error-fail-open/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "authjs-configuration-error-fail-open",
+          "cwe": ["CWE-636", "CWE-285"],
+          "locations": [
+            {
+              "path": "src/middleware.ts",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-authjs-configuration-error-fail-closed",
+      "description": "The source-identical control upgrades only next-auth to 5.0.0-beta.32, which maps every non-successful session response to null before the authorization callback.",
+      "fixture": "fixtures/node-authjs-configuration-error-fail-closed",
+      "findingsPaths": [
+        "node-authjs-configuration-error-fail-closed/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

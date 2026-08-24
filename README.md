@@ -1868,8 +1868,12 @@ nonces, while the repaired build evicts it at its 50,000-entry ceiling. A
 second node-opcua pair configures a real application `userManager`: 2.165.2
 accepts one encrypted username token under two different session nonces and
 passes a forged empty password to the manager, while source-identical 2.166.0
-rejects both nonce violations before the manager is called. Each of the 178
-cases in 89 exploit/control pairs is scanned three times, producing 534
+rejects both nonce violations before the manager is called. The newest pair
+uses an official Auth.js middleware wrapper and changes only `next-auth`
+5.0.0-beta.31 to 5.0.0-beta.32. A real provider-configuration error becomes a
+truthy auth object and permits the unauthenticated request on beta.31, while
+the repaired version maps it to `null` and denies it. Each of the 180 cases in
+90 exploit/control pairs is scanned three times, producing 540
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

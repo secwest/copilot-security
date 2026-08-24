@@ -1023,6 +1023,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-authjs-configuration-error-fail-open",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]next-auth['"]/u],
+    sources: [
+      {
+        kind: "unauthenticated-authjs-request-during-configuration-error",
+        expression: /\b[A-Za-z_$][\w$]*\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-next-auth-truthy-error-object-authorization-decision",
+        expression:
+          /(?:!!|!|\bBoolean\s*\()\s*(?:[A-Za-z_$][\w$]*\s*\.\s*)?auth\b/u,
+        cweIds: ["CWE-636", "CWE-285"],
+      },
+    ],
+    controls: [
+      {
+        kind: "authjs-concrete-session-user-check",
+        expression:
+          /\bauth\s*(?:\?\.|\.)\s*user\b|\bauth\s*(?:\?\.|\.)\s*session\b/u,
+      },
+    ],
+  },
+  {
     id: "node-http-postcss-source-map-traversal",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2930,6 +2957,7 @@ export async function buildResidualRiskInventory(
   records.push(...goPgconnSqlInjectionRecords(sourceFiles));
   records.push(...nodeOpcuaCrossFileServerDosRecords(sourceFiles));
   records.push(...nodeOpcuaCrossFileServerAuthRecords(sourceFiles));
+  records.push(...nodeAuthJsConfigurationErrorFailOpenRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
   records.push(...nodeAxiosPrototypeGadgetChainRecords(sourceFiles, records));
   records.push(
@@ -3190,6 +3218,18 @@ interface NodeRuntimeDependency {
   proof: "manifest-exact" | "npm-lockfile";
 }
 
+function nodeExactSemver(version: string): boolean {
+  const match =
+    /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.exec(
+      version,
+    );
+  return (
+    match !== null &&
+    (match[1] === undefined ||
+      match[1].split(".").every((identifier) => !/^0\d+$/u.test(identifier)))
+  );
+}
+
 interface NodeLockedTransitiveDependency {
   parent: NodeRuntimeDependency;
   child: NodeRuntimeDependency;
@@ -3352,7 +3392,7 @@ function nodeLockedTransitiveDependency(
   if (
     typeof parentVersion !== "string" ||
     parentVersion !== parent.version ||
-    !/^\d+\.\d+\.\d+$/u.test(parentVersion)
+    !nodeExactSemver(parentVersion)
   ) {
     return undefined;
   }
@@ -3485,8 +3525,7 @@ function nodePackageLockResolvedVersion(
   const resolvedVersion = (installedPackage as Record<string, unknown>)[
     "version"
   ];
-  return typeof resolvedVersion === "string" &&
-    /^\d+\.\d+\.\d+$/u.test(resolvedVersion)
+  return typeof resolvedVersion === "string" && nodeExactSemver(resolvedVersion)
     ? resolvedVersion
     : undefined;
 }
@@ -3496,7 +3535,7 @@ function nodeRegistrySemverDeclaration(declaration: string): boolean {
     declaration.length > 0 &&
     declaration.length <= 256 &&
     /[0-9xX*]/u.test(declaration) &&
-    /^[0-9xX*.^~<>=|\s-]+$/u.test(declaration)
+    /^[0-9A-Za-zxX*.^~<>=|+\s-]+$/u.test(declaration)
   );
 }
 
@@ -3548,7 +3587,7 @@ function nodeRuntimeDependencyUncached(
     return undefined;
   }
   const declaration = declaredVersions[0]!;
-  const exactDeclaration = /^\d+\.\d+\.\d+$/u.test(declaration);
+  const exactDeclaration = nodeExactSemver(declaration);
   const version = exactDeclaration
     ? declaration
     : nodeRegistrySemverDeclaration(declaration)
@@ -9695,6 +9734,7 @@ function frameworkDataflowRecords(
     ) {
       continue;
     }
+    if (model.id === "node-authjs-configuration-error-fail-open") continue;
     if (
       (model.id === "node-http-mongoose-nosql" ||
         model.id === "node-http-mongoose-update" ||
@@ -14107,6 +14147,931 @@ function nodeHasCompleteIpv6TransitionCanonicalization(
   return mapped && nat64 && sixToFour && extractsEmbeddedAddress;
 }
 
+interface NodeAuthJsFactoryBinding {
+  local: string;
+  line: number;
+  member?: "default";
+}
+
+interface NodeAuthJsWrapperBinding {
+  dependency: NodeRuntimeDependency;
+  exported: boolean;
+  factory: NodeAuthJsFactoryBinding;
+  factoryLine: number;
+  file: SourceFileSnapshot;
+  line: number;
+  symbol: string;
+}
+
+interface NodeAuthJsWrapperUse {
+  binding: NodeAuthJsWrapperBinding;
+  exposureLine?: number;
+  file: SourceFileSnapshot;
+  importLine?: number;
+  importedSymbol?: string;
+  local: string;
+}
+
+interface NodeAuthJsFailOpenDecision {
+  sinkFile?: SourceFileSnapshot;
+  sinkLine: number;
+  sourceLine: number;
+}
+
+function nodeAuthJsVersionHasConfigurationErrorFailOpen(
+  version: string,
+): boolean {
+  const match = /^5\.0\.0-beta\.(\d+)$/u.exec(version);
+  return match !== null && Number(match[1]) <= 31;
+}
+
+function nodeAuthJsFactoryBindings(
+  lines: readonly string[],
+): NodeAuthJsFactoryBinding[] {
+  const bindings: NodeAuthJsFactoryBinding[] = [];
+  const add = (binding: NodeAuthJsFactoryBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.line === binding.line &&
+          candidate.member === binding.member,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const defaultImport =
+      /^\s*import\s+(?!type\b)([A-Za-z_$][\w$]*)(?:\s*,\s*\{[^}]*\})?\s+from\s+['"]next-auth['"]/u.exec(
+        code,
+      );
+    if (defaultImport?.[1] !== undefined) {
+      add({ local: defaultImport[1], line: index + 1 });
+    }
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]next-auth['"]/u.exec(
+        code,
+      );
+    if (namespace?.[1] !== undefined) {
+      add({ local: namespace[1], line: index + 1, member: "default" });
+    }
+    const importEquals =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]next-auth['"]\s*\)/u.exec(
+        code,
+      );
+    if (importEquals?.[1] !== undefined) {
+      add({ local: importEquals[1], line: index + 1, member: "default" });
+    }
+    const commonJs =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]next-auth['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (commonJs?.[1] !== undefined) {
+      add({ local: commonJs[1], line: index + 1, member: "default" });
+    }
+    const commonJsDefault =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]next-auth['"]\s*\)\s*\.\s*default\s*;?\s*$/u.exec(
+        code,
+      );
+    if (commonJsDefault?.[1] !== undefined) {
+      add({ local: commonJsDefault[1], line: index + 1 });
+    }
+    const destructuredDefault =
+      /^\s*(?:const|let|var)\s*\{\s*default\s*:\s*([A-Za-z_$][\w$]*)\s*\}\s*=\s*require\s*\(\s*['"]next-auth['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (destructuredDefault?.[1] !== undefined) {
+      add({ local: destructuredDefault[1], line: index + 1 });
+    }
+  }
+  return bindings;
+}
+
+function nodeAuthJsGeneratedWrapperBindings(
+  files: readonly SourceFileSnapshot[],
+): NodeAuthJsWrapperBinding[] {
+  const wrappers: NodeAuthJsWrapperBinding[] = [];
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !/['"]next-auth['"]/u.test(file.text)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "next-auth");
+    if (
+      dependency === undefined ||
+      !nodeAuthJsVersionHasConfigurationErrorFailOpen(dependency.version)
+    ) {
+      continue;
+    }
+    const structuralLines = javascriptStructuralLines(file.lines);
+    for (const factory of nodeAuthJsFactoryBindings(file.lines)) {
+      const receiver =
+        factory.member === undefined
+          ? escapeRegularExpression(factory.local)
+          : `${escapeRegularExpression(factory.local)}\\s*\\.\\s*default`;
+      for (
+        let index = factory.line;
+        index < structuralLines.length;
+        index += 1
+      ) {
+        if (
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            factory.local,
+            factory.line,
+            index + 2,
+          )
+        ) {
+          break;
+        }
+        const declaration = structuralLines
+          .slice(index, Math.min(structuralLines.length, index + 13))
+          .join("\n");
+        const destructured = new RegExp(
+          `^\\s*(export\\s+)?(?:const|let|var)\\s*\\{([\\s\\S]*?)\\}\\s*=\\s*${receiver}\\s*\\(`,
+          "u",
+        ).exec(declaration);
+        if (destructured !== null) {
+          for (const rawBinding of splitJavascriptArguments(
+            destructured[2] ?? "",
+          )) {
+            const parsed = /^\s*auth(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*$/u.exec(
+              rawBinding,
+            );
+            if (parsed === null) continue;
+            wrappers.push({
+              dependency,
+              exported: destructured[1] !== undefined,
+              factory,
+              factoryLine: factory.line,
+              file,
+              line: index + 1,
+              symbol: parsed[1] ?? "auth",
+            });
+          }
+        }
+
+        const member = new RegExp(
+          `^\\s*(export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${receiver}\\s*\\(`,
+          "u",
+        ).exec(declaration);
+        if (member?.[2] !== undefined) {
+          const open = declaration.indexOf(
+            "(",
+            member.index + member[0].length - 1,
+          );
+          const close = matchingCallParenthesis(declaration, open);
+          if (
+            open >= 0 &&
+            close >= 0 &&
+            /^\s*\.\s*auth\b/u.test(declaration.slice(close + 1))
+          ) {
+            wrappers.push({
+              dependency,
+              exported: member[1] !== undefined,
+              factory,
+              factoryLine: factory.line,
+              file,
+              line: index + 1,
+              symbol: member[2],
+            });
+          }
+        }
+
+        const commonJsMember = new RegExp(
+          `^\\s*(?:module\\.)?exports\\.([A-Za-z_$][\\w$]*)\\s*=\\s*${receiver}\\s*\\(`,
+          "u",
+        ).exec(declaration);
+        if (commonJsMember?.[1] !== undefined) {
+          const commonJsOpen = declaration.indexOf(
+            "(",
+            commonJsMember.index + commonJsMember[0].length - 1,
+          );
+          const commonJsClose = matchingCallParenthesis(
+            declaration,
+            commonJsOpen,
+          );
+          if (
+            commonJsOpen >= 0 &&
+            commonJsClose >= 0 &&
+            /^\s*\.\s*auth\b/u.test(declaration.slice(commonJsClose + 1))
+          ) {
+            wrappers.push({
+              dependency,
+              exported: true,
+              factory,
+              factoryLine: factory.line,
+              file,
+              line: index + 1,
+              symbol: commonJsMember[1],
+            });
+          }
+        }
+      }
+    }
+  }
+  return wrappers.filter(
+    (wrapper, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.file.path === wrapper.file.path &&
+          candidate.line === wrapper.line &&
+          candidate.symbol === wrapper.symbol,
+      ) === index,
+  );
+}
+
+function nodeAuthJsAliasImportTarget(
+  moduleSpecifier: string,
+  wrappers: readonly NodeAuthJsWrapperBinding[],
+  importedSymbol: string,
+  manifestPath: string,
+): NodeAuthJsWrapperBinding | undefined {
+  const prefix = ["@/", "~/"].find((candidate) =>
+    moduleSpecifier.startsWith(candidate),
+  );
+  if (prefix === undefined) return undefined;
+  const suffix = moduleSpecifier.slice(prefix.length).replaceAll("\\", "/");
+  if (
+    suffix === "" ||
+    suffix === "." ||
+    suffix.includes("..") ||
+    posix.isAbsolute(suffix)
+  ) {
+    return undefined;
+  }
+  const matches = wrappers.filter((wrapper) => {
+    if (
+      !wrapper.exported ||
+      wrapper.symbol !== importedSymbol ||
+      wrapper.dependency.manifestPath !== manifestPath
+    ) {
+      return false;
+    }
+    const extension = posix.extname(wrapper.file.path);
+    const stem =
+      extension === ""
+        ? wrapper.file.path
+        : wrapper.file.path.slice(0, -extension.length);
+    return stem === suffix || stem.endsWith(`/${suffix}`);
+  });
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function nodeAuthJsImportedWrapperBinding(
+  callerPath: string,
+  moduleSpecifier: string,
+  importedSymbol: string,
+  manifestPath: string,
+  knownPaths: ReadonlyMap<string, string>,
+  wrappers: readonly NodeAuthJsWrapperBinding[],
+): NodeAuthJsWrapperBinding | undefined {
+  const relativePath = resolveRelativeModelImport(
+    callerPath,
+    moduleSpecifier,
+    knownPaths,
+  );
+  return (
+    wrappers.find(
+      (candidate) =>
+        candidate.exported &&
+        candidate.dependency.manifestPath === manifestPath &&
+        candidate.file.path === relativePath &&
+        candidate.symbol === importedSymbol,
+    ) ??
+    nodeAuthJsAliasImportTarget(
+      moduleSpecifier,
+      wrappers,
+      importedSymbol,
+      manifestPath,
+    )
+  );
+}
+
+function nodeAuthJsWrapperUses(
+  files: readonly SourceFileSnapshot[],
+  wrappers: readonly NodeAuthJsWrapperBinding[],
+): NodeAuthJsWrapperUse[] {
+  const knownPaths = new Map(
+    files.map((file) => [modelPathComparisonKey(file.path), file.path]),
+  );
+  const uses: NodeAuthJsWrapperUse[] = [];
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const structuralLines = javascriptStructuralLines(file.lines);
+    const codeLines = javascriptCodeLinesWithoutComments(file.lines);
+    for (const binding of wrappers.filter(
+      (candidate) => candidate.file.path === file.path,
+    )) {
+      uses.push({ binding, file, local: binding.symbol });
+    }
+    for (const imported of importedJavascriptSymbols(file.lines)) {
+      const callerDependency = nodeRuntimeDependency(
+        files,
+        file.path,
+        "next-auth",
+      );
+      if (callerDependency === undefined) continue;
+      const binding = nodeAuthJsImportedWrapperBinding(
+        file.path,
+        imported.moduleSpecifier,
+        imported.imported,
+        callerDependency.manifestPath,
+        knownPaths,
+        wrappers,
+      );
+      if (binding === undefined) continue;
+      if (
+        callerDependency.manifestPath !== binding.dependency.manifestPath ||
+        callerDependency.version !== binding.dependency.version
+      ) {
+        continue;
+      }
+      uses.push({
+        binding,
+        exposureLine:
+          structuralLines.findIndex((line, index) => {
+            if (index + 1 <= imported.line) return false;
+            const local = escapeRegularExpression(imported.local);
+            return (
+              new RegExp(
+                `^\\s*export\\s*\\{\\s*${local}\\s+as\\s+(?:proxy|middleware|default)\\s*\\}`,
+                "u",
+              ).test(line) ||
+              new RegExp(
+                `^\\s*export\\s+default\\s+${local}\\s*;?\\s*$`,
+                "u",
+              ).test(line) ||
+              new RegExp(
+                `^\\s*export\\s+(?:const|let|var)\\s+(?:proxy|middleware)\\s*=\\s*${local}\\s*;?\\s*$`,
+                "u",
+              ).test(line)
+            );
+          }) + 1 || undefined,
+        file,
+        importLine: imported.line,
+        importedSymbol: imported.imported,
+        local: imported.local,
+      });
+    }
+    for (let index = 0; index < structuralLines.length; index += 1) {
+      const reexport =
+        /^\s*export\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/u.exec(
+          codeLines[index] ?? "",
+        );
+      if (reexport === null) continue;
+      const callerDependency = nodeRuntimeDependency(
+        files,
+        file.path,
+        "next-auth",
+      );
+      if (callerDependency === undefined) continue;
+      for (const rawBinding of splitJavascriptArguments(reexport[1] ?? "")) {
+        const exported =
+          /^\s*([A-Za-z_$][\w$]*)\s+as\s+(proxy|middleware|default)\s*$/u.exec(
+            rawBinding,
+          );
+        if (exported?.[1] === undefined) continue;
+        const binding = nodeAuthJsImportedWrapperBinding(
+          file.path,
+          reexport[2]!,
+          exported[1],
+          callerDependency.manifestPath,
+          knownPaths,
+          wrappers,
+        );
+        if (
+          binding === undefined ||
+          callerDependency.version !== binding.dependency.version
+        ) {
+          continue;
+        }
+        uses.push({
+          binding,
+          exposureLine: index + 1,
+          file,
+          importLine: index + 1,
+          importedSymbol: exported[1],
+          local: exported[2]!,
+        });
+      }
+    }
+  }
+  return uses.filter(
+    (use, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.file.path === use.file.path &&
+          candidate.local === use.local &&
+          candidate.binding.file.path === use.binding.file.path &&
+          candidate.binding.line === use.binding.line,
+      ) === index,
+  );
+}
+
+function nodeAuthJsFirstCallArgument(
+  lines: readonly string[],
+  line: number,
+  callee: RegExp,
+): JavascriptResolvedExpression | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 95));
+  const original = javascriptCodeLinesWithoutComments(callLines).join("\n");
+  const structural = javascriptStructuralLines(callLines).join("\n");
+  const firstLine = structural.split("\n", 1)[0] ?? "";
+  const match = callee.exec(firstLine);
+  if (match === null) return undefined;
+  const open = structural.indexOf("(", match.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  const argumentText = original.slice(open + 1, close);
+  const first = javascriptDelimitedEntries(argumentText)[0];
+  if (first === undefined) return undefined;
+  const prefix = original.slice(0, open + 1 + first.offset);
+  return {
+    line: line + (prefix.match(/\n/gu)?.length ?? 0),
+    value: first.value,
+  };
+}
+
+function nodeAuthJsAuthorizedCallbackFailOpenDecision(
+  binding: NodeAuthJsWrapperBinding,
+): number | undefined {
+  const receiver =
+    binding.factory.member === undefined
+      ? escapeRegularExpression(binding.factory.local)
+      : `${escapeRegularExpression(binding.factory.local)}\\s*\\.\\s*default`;
+  const configArgument = nodeAuthJsFirstCallArgument(
+    binding.file.lines,
+    binding.line,
+    new RegExp(`\\b${receiver}\\s*\\(`, "u"),
+  );
+  if (configArgument === undefined) return undefined;
+  const config = resolveJavascriptExpression(
+    binding.file.lines,
+    configArgument.value,
+    configArgument.line,
+  );
+  if (config === undefined) return undefined;
+  const callbacksEntry = javascriptObjectEntries(config).find(
+    (entry) => entry.key === "callbacks",
+  );
+  if (callbacksEntry === undefined) return undefined;
+  const callbacks = resolveJavascriptExpression(
+    binding.file.lines,
+    callbacksEntry.value,
+    callbacksEntry.line,
+  );
+  if (callbacks === undefined) return undefined;
+  const text = javascriptCodeLinesWithoutComments(
+    callbacks.value.split(/\r?\n/u),
+  ).join("\n");
+  const property = /\bauthorized\s*:\s*/u.exec(text);
+  const method = /(?:^|[,{\n])\s*(?:async\s+)?authorized\s*\(/u.exec(text);
+  let start: number;
+  if (
+    property !== null &&
+    (method === null || property.index <= method.index)
+  ) {
+    start = property.index + property[0].length;
+  } else if (method !== null) {
+    const authorizedOffset = method[0].indexOf("authorized");
+    start = method.index + Math.max(0, authorizedOffset);
+  } else {
+    return undefined;
+  }
+  const callbackEntry = javascriptDelimitedEntries(text.slice(start))[0];
+  if (callbackEntry === undefined) return undefined;
+  const callbackStart = start + callbackEntry.offset;
+  return nodeAuthJsCallbackFailOpenDecision(
+    {
+      line:
+        callbacks.line +
+        (text.slice(0, callbackStart).match(/\n/gu)?.length ?? 0),
+      value: callbackEntry.value,
+    },
+    true,
+  );
+}
+
+function nodeAuthJsCallbackParameters(callback: string):
+  | {
+      authIdentifiers: string[];
+      requestIdentifier?: string;
+    }
+  | undefined {
+  const destructured =
+    /^\s*(?:async\s*)?(?:\(\s*)?\{([^}]*)\}(?:\s*\))?(?:\s*:\s*[^=]+)?\s*=>/u.exec(
+      callback,
+    ) ??
+    /^\s*(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*\{([^}]*)\}/u.exec(
+      callback,
+    ) ??
+    /^\s*(?:async\s+)?authorized\s*\(\s*\{([^}]*)\}/u.exec(callback);
+  if (destructured !== null) {
+    const auth = splitJavascriptArguments(destructured[1] ?? "")
+      .map((binding) =>
+        /^\s*auth(?:\s*:\s*([A-Za-z_$][\w$]*))?(?:\s*=.*)?\s*$/u.exec(binding),
+      )
+      .find((candidate) => candidate !== null);
+    if (auth === undefined || auth === null) return undefined;
+    return { authIdentifiers: [auth[1] ?? "auth"] };
+  }
+  const identifier =
+    /^\s*(?:async\s*)?\(\s*([A-Za-z_$][\w$]*)(?:\s*\??\s*:\s*[^,)]+)?[^)]*\)\s*=>/u.exec(
+      callback,
+    ) ??
+    /^\s*(?:async\s*)?([A-Za-z_$][\w$]*)\s*=>/u.exec(callback) ??
+    /^\s*(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*([A-Za-z_$][\w$]*)/u.exec(
+      callback,
+    );
+  return identifier?.[1] === undefined
+    ? undefined
+    : { authIdentifiers: [], requestIdentifier: identifier[1] };
+}
+
+function nodeAuthJsConditionHasConsequence(
+  lines: readonly string[],
+  index: number,
+  matchEnd: number,
+): boolean {
+  const action =
+    /\breturn\b|\b(?:NextResponse|Response)\s*\.\s*(?:next|redirect|rewrite)\s*\(|\bnew\s+Response\s*\(|\b(?:redirect|rewrite|notFound|unauthorized)\s*\(/u;
+  const sameLine = lines[index]?.slice(matchEnd) ?? "";
+  if (action.test(sameLine)) return true;
+  if (sameLine.trim() !== "" && sameLine.trim() !== "{") return false;
+  const structural = javascriptStructuralLines(lines);
+  let statementLine = index + 1;
+  while (
+    statementLine < lines.length &&
+    (structural[statementLine] ?? "").trim() === ""
+  ) {
+    statementLine += 1;
+  }
+  if (statementLine >= lines.length) return false;
+  const firstStatement = structural[statementLine] ?? "";
+  if (!firstStatement.trimStart().startsWith("{")) {
+    return action.test(lines[statementLine] ?? "");
+  }
+  const endLine = javascriptFunctionEndLine(lines, statementLine);
+  return action.test(lines.slice(statementLine, endLine).join("\n"));
+}
+
+function nodeAuthJsCallbackFailOpenDecision(
+  callback: JavascriptResolvedExpression,
+  booleanReturnIsAuthorization = false,
+): number | undefined {
+  const parameters = nodeAuthJsCallbackParameters(callback.value);
+  if (parameters === undefined) return undefined;
+  const lines = javascriptCodeLinesWithoutComments(
+    callback.value.split(/\r?\n/u),
+  );
+  const authIdentifiers = new Set(parameters.authIdentifiers);
+  if (parameters.requestIdentifier !== undefined) {
+    const request = escapeRegularExpression(parameters.requestIdentifier);
+    for (const line of lines) {
+      const destructured = new RegExp(
+        `\\b(?:const|let|var)\\s*\\{\\s*auth(?:\\s*:\\s*([A-Za-z_$][\\w$]*))?[^}]*\\}\\s*=\\s*${request}\\b`,
+        "u",
+      ).exec(line);
+      if (destructured !== null) {
+        authIdentifiers.add(destructured[1] ?? "auth");
+      }
+      const alias = new RegExp(
+        `\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${request}\\s*\\.\\s*auth\\b`,
+        "u",
+      ).exec(line);
+      if (alias?.[1] !== undefined) authIdentifiers.add(alias[1]);
+    }
+  }
+  const references = [
+    ...(parameters.requestIdentifier === undefined
+      ? []
+      : [
+          `${escapeRegularExpression(parameters.requestIdentifier)}\\s*\\.\\s*auth`,
+        ]),
+    ...[...authIdentifiers].map(escapeRegularExpression),
+  ];
+  if (references.length === 0) return undefined;
+  const reference = `(?:${references.join("|")})\\b(?!\\s*(?:\\?\\.|\\.)\\s*[A-Za-z_$])`;
+  const truthTest = new RegExp(
+    `(?:!!\\s*${reference}|!(?!=)\\s*${reference}|\\bBoolean\\s*\\(\\s*${reference}\\s*\\))`,
+    "u",
+  );
+  const condition = new RegExp(
+    `\\bif\\s*\\(\\s*!{0,2}\\s*${reference}(?:\\s*[!=]==?\\s*(?:null|undefined))?\\s*\\)`,
+    "u",
+  );
+  const ternary = new RegExp(`${reference}\\s*\\?`, "u");
+  const responseAction =
+    /\b(?:NextResponse|Response)\s*\.\s*(?:next|redirect|rewrite)\s*\(|\bnew\s+Response\s*\(|\b(?:redirect|rewrite|notFound|unauthorized)\s*\(/u;
+  const aliases = new Map<string, number>();
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const assignment = new RegExp(
+      `\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(?:!!\\s*${reference}|\\bBoolean\\s*\\(\\s*${reference}\\s*\\))`,
+      "u",
+    ).exec(line);
+    if (assignment?.[1] !== undefined) aliases.set(assignment[1], index);
+    const conditionMatch = condition.exec(line);
+    const window = lines
+      .slice(index, Math.min(lines.length, index + 7))
+      .join("\n");
+    if (
+      (booleanReturnIsAuthorization &&
+        ((/\breturn\b/u.test(line) && truthTest.test(line)) ||
+          new RegExp(`=>\\s*${truthTest.source}`, "u").test(line))) ||
+      (conditionMatch !== null &&
+        nodeAuthJsConditionHasConsequence(
+          lines,
+          index,
+          conditionMatch.index + conditionMatch[0].length,
+        )) ||
+      (ternary.test(line) && responseAction.test(window))
+    ) {
+      return callback.line + index;
+    }
+  }
+  for (const [alias, assignmentLine] of aliases) {
+    const aliasCondition = new RegExp(
+      `\\bif\\s*\\(\\s*!{0,2}\\s*${escapeRegularExpression(alias)}\\b[^)]*\\)`,
+      "u",
+    );
+    const aliasTernary = new RegExp(
+      `\\b${escapeRegularExpression(alias)}\\s*\\?`,
+      "u",
+    );
+    for (
+      let index = assignmentLine + 1;
+      index < Math.min(lines.length, assignmentLine + 17);
+      index += 1
+    ) {
+      const line = lines[index] ?? "";
+      const conditionMatch = aliasCondition.exec(line);
+      if (
+        booleanReturnIsAuthorization &&
+        new RegExp(
+          `\\breturn\\s+!?${escapeRegularExpression(alias)}\\b`,
+          "u",
+        ).test(line)
+      ) {
+        return callback.line + assignmentLine;
+      }
+      if (
+        conditionMatch !== null &&
+        nodeAuthJsConditionHasConsequence(
+          lines,
+          index,
+          conditionMatch.index + conditionMatch[0].length,
+        )
+      ) {
+        return callback.line + assignmentLine;
+      }
+      if (
+        aliasTernary.test(line) &&
+        responseAction.test(
+          lines.slice(index, Math.min(lines.length, index + 7)).join("\n"),
+        )
+      ) {
+        return callback.line + assignmentLine;
+      }
+    }
+  }
+  return undefined;
+}
+
+function nodeAuthJsNoArgumentFailOpenDecision(
+  lines: readonly string[],
+  local: string,
+  bindingLine: number,
+): NodeAuthJsFailOpenDecision[] {
+  const decisions: NodeAuthJsFailOpenDecision[] = [];
+  const structuralLines = javascriptStructuralLines(lines);
+  const escaped = escapeRegularExpression(local);
+  const declaration = new RegExp(
+    `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(?:await\\s+)?${escaped}\\s*\\(\\s*\\)`,
+    "u",
+  );
+  for (let index = bindingLine; index < structuralLines.length; index += 1) {
+    const match = declaration.exec(structuralLines[index] ?? "");
+    if (match?.[1] === undefined) continue;
+    const sourceLine = index + 1;
+    if (
+      javascriptIdentifierReassignedBetween(
+        lines,
+        local,
+        bindingLine,
+        sourceLine + 1,
+      )
+    ) {
+      continue;
+    }
+    const result = match[1];
+    const end = Math.min(structuralLines.length, index + 17);
+    const bare = new RegExp(
+      `\\b${escapeRegularExpression(result)}\\b(?!\\s*(?:\\?\\.|\\.)\\s*[A-Za-z_$])`,
+      "u",
+    );
+    const condition = new RegExp(
+      `\\bif\\s*\\(\\s*!{0,2}\\s*${bare.source}(?:\\s*[!=]==?\\s*(?:null|undefined))?\\s*\\)`,
+      "u",
+    );
+    const ternary = new RegExp(`${bare.source}\\s*\\?`, "u");
+    const responseAction =
+      /\b(?:NextResponse|Response)\s*\.\s*(?:next|redirect|rewrite)\s*\(|\bnew\s+Response\s*\(|\b(?:redirect|rewrite|notFound|unauthorized)\s*\(/u;
+    for (let candidate = index + 1; candidate < end; candidate += 1) {
+      const line = structuralLines[candidate] ?? "";
+      const conditionMatch = condition.exec(line);
+      if (
+        (conditionMatch !== null &&
+          nodeAuthJsConditionHasConsequence(
+            structuralLines,
+            candidate,
+            conditionMatch.index + conditionMatch[0].length,
+          )) ||
+        (ternary.test(line) &&
+          responseAction.test(
+            structuralLines
+              .slice(candidate, Math.min(end, candidate + 7))
+              .join("\n"),
+          ))
+      ) {
+        decisions.push({ sinkLine: candidate + 1, sourceLine });
+        break;
+      }
+    }
+  }
+  return decisions;
+}
+
+function nodeAuthJsWrapperFailOpenDecisions(
+  use: NodeAuthJsWrapperUse,
+): NodeAuthJsFailOpenDecision[] {
+  const decisions: NodeAuthJsFailOpenDecision[] = [];
+  const structuralLines = javascriptStructuralLines(use.file.lines);
+  const escaped = escapeRegularExpression(use.local);
+  const call = new RegExp(`(?<![.$\\w])${escaped}\\s*\\(`, "u");
+  const bindingLine = use.importLine ?? use.binding.line;
+  for (let index = bindingLine; index < structuralLines.length; index += 1) {
+    if (!call.test(structuralLines[index] ?? "")) continue;
+    const sourceLine = index + 1;
+    if (
+      javascriptIdentifierReassignedBetween(
+        use.file.lines,
+        use.local,
+        bindingLine,
+        sourceLine + 1,
+      )
+    ) {
+      continue;
+    }
+    const callback = nodeAuthJsFirstCallArgument(
+      use.file.lines,
+      sourceLine,
+      call,
+    );
+    if (callback === undefined) continue;
+    const sinkLine = nodeAuthJsCallbackFailOpenDecision(callback);
+    if (sinkLine !== undefined) decisions.push({ sinkLine, sourceLine });
+  }
+  decisions.push(
+    ...nodeAuthJsNoArgumentFailOpenDecision(
+      use.file.lines,
+      use.local,
+      bindingLine,
+    ),
+  );
+  return decisions.filter(
+    (decision, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.sourceLine === decision.sourceLine &&
+          candidate.sinkLine === decision.sinkLine,
+      ) === index,
+  );
+}
+
+function nodeAuthJsConfigurationErrorFailOpenRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const wrappers = nodeAuthJsGeneratedWrapperBindings(files);
+  const records: ResidualRiskRecord[] = [];
+  for (const use of nodeAuthJsWrapperUses(files, wrappers)) {
+    const decisions = nodeAuthJsWrapperFailOpenDecisions(use);
+    if (
+      use.exposureLine !== undefined &&
+      (use.importLine === use.exposureLine ||
+        !javascriptIdentifierReassignedBetween(
+          use.file.lines,
+          use.local,
+          use.importLine ?? use.binding.line,
+          use.exposureLine + 1,
+        ))
+    ) {
+      const sinkLine = nodeAuthJsAuthorizedCallbackFailOpenDecision(
+        use.binding,
+      );
+      if (sinkLine !== undefined) {
+        decisions.push({
+          sinkFile: use.binding.file,
+          sinkLine,
+          sourceLine: use.exposureLine,
+        });
+      }
+    }
+    for (const decision of decisions) {
+      const sinkFile = decision.sinkFile ?? use.file;
+      const sinkStart = Math.max(1, decision.sinkLine - CONTEXT_LINES_BEFORE);
+      const sinkEnd = Math.min(
+        sinkFile.lines.length,
+        decision.sinkLine + CONTEXT_LINES_AFTER,
+      );
+      const sourceStart = Math.max(1, decision.sourceLine - 2);
+      const sourceEnd = Math.min(
+        use.file.lines.length,
+        decision.sourceLine + 2,
+      );
+      const prefix =
+        use.binding.dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+      const sinkKind = `${prefix}vulnerable-next-auth-truthy-error-object-authorization-decision`;
+      const propagators = [
+        ...(use.importLine === undefined
+          ? []
+          : [
+              {
+                kind:
+                  use.file.path === use.binding.file.path
+                    ? "same-file-authjs-wrapper-binding"
+                    : "authjs-module-import",
+                path: use.file.path,
+                line: use.importLine,
+                symbol: `${use.importedSymbol ?? use.binding.symbol} as ${use.local}`,
+              },
+            ]),
+        {
+          kind: "official-next-auth-factory",
+          path: use.binding.file.path,
+          line: use.binding.factoryLine,
+          symbol: use.binding.symbol,
+        },
+        {
+          kind: "next-auth-runtime-dependency",
+          path: use.binding.dependency.manifestPath,
+          line: use.binding.dependency.line,
+          symbol: `next-auth@${use.binding.dependency.version}:${use.binding.dependency.proof}:truthy-configuration-error-auth-object`,
+        },
+      ];
+      records.push({
+        path: sinkFile.path,
+        line: decision.sinkLine,
+        categories: [
+          "framework-dataflow:node-authjs-configuration-error-fail-open",
+          use.file.path === sinkFile.path
+            ? "framework-same-file-authjs-wrapper"
+            : "framework-cross-file-authjs-wrapper",
+          "modeled-source:unauthenticated-authjs-request-during-configuration-error",
+          `modeled-sink:${sinkKind}`,
+        ],
+        priority: 120,
+        startLine: sinkStart,
+        endLine: sinkEnd,
+        excerpt: sourceExcerpt(sinkFile.lines, sinkStart, sinkEnd),
+        sourceExcerpt: sourceExcerpt(use.file.lines, sourceStart, sourceEnd),
+        frameworkModel: {
+          schemaVersion: "1.2",
+          id: "node-authjs-configuration-error-fail-open",
+          language: "javascript-typescript",
+          scope: use.file.path === sinkFile.path ? "same-file" : "cross-file",
+          source: {
+            kind: "unauthenticated-authjs-request-during-configuration-error",
+            path: use.file.path,
+            line: decision.sourceLine,
+          },
+          sink: {
+            kind: sinkKind,
+            path: sinkFile.path,
+            line: decision.sinkLine,
+            cweIds: ["CWE-636", "CWE-285"],
+          },
+          propagators,
+          candidateControls: [],
+        },
+      });
+    }
+  }
+  return records;
+}
+
 function frameworkCrossFileDataflowRecords(
   files: readonly SourceFileSnapshot[],
 ): ResidualRiskRecord[] {
@@ -16586,7 +17551,8 @@ function javascriptFrameworkWrapperSummaries(
         model.id === "node-http-fastify-static-route-guard-bypass" ||
         model.id === "node-socketio-server-transitive-parser-dos" ||
         model.id === "node-opcua-server-nonce-cache-dos" ||
-        model.id === "node-opcua-server-username-token-nonce-bypass"
+        model.id === "node-opcua-server-username-token-nonce-bypass" ||
+        model.id === "node-authjs-configuration-error-fail-open"
       ) {
         continue;
       }

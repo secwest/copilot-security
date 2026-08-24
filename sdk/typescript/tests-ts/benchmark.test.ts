@@ -237,6 +237,10 @@ describe("effectiveness benchmark", () => {
         "node-opcua-server-nonce-bound-username-token",
       ],
       [
+        "node-authjs-configuration-error-fail-open",
+        "node-authjs-configuration-error-fail-closed",
+      ],
+      [
         "node-multi-hop-postcss-source-map-traversal",
         "node-multi-hop-patched-postcss",
       ],

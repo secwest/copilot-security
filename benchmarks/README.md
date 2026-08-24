@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains eighty-eight vulnerable/control pairs:
+The versioned corpus currently contains ninety vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -188,7 +188,7 @@ Decoder API. The latest pair reaches the same state through the public
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case now produce 534 scans across 89 exploit/control pairs in the complete
+per case now produce 540 scans across 90 exploit/control pairs in the complete
 corpus. The added industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size
@@ -196,6 +196,11 @@ eviction. A second node-opcua pair exercises encrypted username-token
 authentication with an explicit application user manager: 2.165.2 accepts a
 token replay across distinct session nonces, while 2.166.0 verifies the token's
 trailing nonce before calling the manager.
+The newest application-authentication pair keeps Auth.js source identical and
+changes only `next-auth` 5.0.0-beta.31 to 5.0.0-beta.32. Under a real provider
+configuration error, beta.31 exposes the JSON error body as a truthy
+`request.auth` value and a bare existence gate permits the request; beta.32
+maps the non-successful session response to `null` and the same gate denies it.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -505,6 +510,25 @@ nonce B; it also turns a four-byte forged blob into an empty password. Version
 before the manager. The empty-password branch establishes an authentication
 bypass only when the deployed manager accepts that credential; the general
 replay condition does not depend on such behavior.
+
+`node-authjs-configuration-error-manifest.json` measures the Auth.js v5
+server-configuration fail-open reviewed in GHSA-8fpg-xm3f-6cx3. The positive
+uses an official stable `next-auth` default factory, its generated `auth`
+wrapper across a relative import, and a concrete private-route decision based
+only on `!!request.auth` under exact 5.0.0-beta.31 proof. The source-identical
+control changes only the dependency to 5.0.0-beta.32. Deterministic regressions
+cover default aliases, namespace-default, TypeScript import-equals, CommonJS
+default/member forms, generated-wrapper aliases, relative and unambiguous root
+aliases, deployed `callbacks.authorized` proxy/middleware exports, inline
+destructuring, derived booleans, and direct `auth()` results.
+They accept exact prereleases and fresh declaration-consistent npm v2/v3
+locks, while rejecting repaired or v4 releases, wrong or development-only
+packages, unresolved ranges, ambiguous aliases, reassignment, local
+lookalikes, test/example code, log-only use, and concrete session-property
+checks. The published-package witness induces an OIDC endpoint-configuration
+error without a listener or outbound request: beta.31 supplies a truthy
+`{message}` object and permits the request, while beta.32 supplies `null` and
+denies it.
 
 `node-postcss-source-map-traversal-manifest.json` measures PostCSS's implicit
 previous-source-map file load. The positive sends an Express CSS body through

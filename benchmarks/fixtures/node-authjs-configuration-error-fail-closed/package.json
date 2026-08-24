@@ -1,0 +1,9 @@
+{
+  "name": "node-authjs-configuration-error-fail-closed",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "next-auth": "5.0.0-beta.32"
+  }
+}
