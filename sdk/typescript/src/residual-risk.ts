@@ -930,6 +930,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-tar-member-selection-recursion",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]tar['"]/u],
+    sources: [
+      {
+        kind: "http-uploaded-tar-path",
+        expression:
+          /\b(?:req|request)\.(?:body|file|files|params|query)\b|\bctx\.(?:params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "http-request-archive-stream",
+        expression: /\b(?:req|request)\s*\.\s*pipe\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-node-tar-member-selection-recursion",
+        expression:
+          /\b[A-Za-z_$][\w$]*(?:\s*\.\s*(?:t|list|x|extract))?\s*\(|\brequire\s*\(\s*['"]tar['"]\s*\)\s*\.\s*(?:t|list|x|extract)\s*\(/u,
+        cweIds: ["CWE-674"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-fastify-static-route-guard-bypass",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2871,6 +2897,11 @@ interface NodeExtractZipSink {
 }
 
 interface NodeTarLinkSink {
+  sourceExpressions: string[];
+  kind: string;
+}
+
+interface NodeTarMemberSelectionSink {
   sourceExpressions: string[];
   kind: string;
 }
@@ -5997,6 +6028,19 @@ function nodeTarVersionIsLinkpathTraversalVulnerable(version: string): boolean {
   );
 }
 
+function nodeTarVersionIsMemberSelectionRecursionVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    major < 7 || (major === 7 && (minor < 5 || (minor === 5 && patch <= 20)))
+  );
+}
+
 function nodeTarFilterRejectsLinks(
   lines: readonly string[],
   line: number,
@@ -6190,6 +6234,203 @@ function nodeTarLinkSink(
       lines,
       line,
       /\brequire\s*\(\s*['"]tar['"]\s*\)\s*\.\s*(?:x|extract)\s*\(/u,
+    ),
+  );
+}
+
+function nodeTarMemberSelectionPresent(
+  lines: readonly string[],
+  line: number,
+  expression: string | undefined,
+): boolean {
+  if (expression === undefined || expression.trim() === "") return false;
+  const original = expression.trim();
+  const resolved =
+    resolveJavascriptExpression(lines, original, line)?.value.trim() ??
+    original;
+  if (
+    /^(?:undefined|null|false|['"`]\s*['"`]|\[\s*\]|new\s+Array\s*\(\s*\))$/u.test(
+      resolved,
+    )
+  ) {
+    return false;
+  }
+  if (resolved.startsWith("[") && resolved.endsWith("]")) {
+    return resolved.slice(1, -1).trim() !== "";
+  }
+  return !/^(?:true|[+-]?\d+(?:\.\d+)?)$/u.test(resolved);
+}
+
+function nodeTarRecursionOptions(
+  lines: readonly string[],
+  line: number,
+  expression: string | undefined,
+): { sourceExpressions: string[]; synchronous: boolean } {
+  if (expression === undefined || expression.trim() === "") {
+    return { sourceExpressions: [], synchronous: false };
+  }
+  const original = expression.trim();
+  const resolved =
+    resolveJavascriptExpression(lines, original, line)?.value.trim() ??
+    original;
+  if (!resolved.startsWith("{") || !resolved.endsWith("}")) {
+    return { sourceExpressions: [], synchronous: false };
+  }
+  const file = javascriptObjectPropertyValue(resolved, "file")?.trim();
+  const sync = javascriptObjectPropertyValue(resolved, "sync")?.trim();
+  return {
+    sourceExpressions: file === undefined || file === "" ? [] : [file],
+    synchronous: sync === "true",
+  };
+}
+
+function nodeTarMemberSelectionSinkKind(
+  dependency: NodeRuntimeDependency,
+): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  return `${lockPrefix}vulnerable-node-tar-member-selection-recursion`;
+}
+
+function nodeTarMemberSelectionSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeTarMemberSelectionSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "tar");
+  if (
+    dependency === undefined ||
+    !nodeTarVersionIsMemberSelectionRecursionVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const bindings: NodeTarBinding[] = [];
+  const addBinding = (binding: NodeTarBinding): void => {
+    if (!bindings.some((candidate) => candidate.local === binding.local)) {
+      bindings.push(binding);
+    }
+  };
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]tar['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]tar['"]/u.exec(code) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]tar['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]tar['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      addBinding({ local: receiver[1], line: index + 1, receiver: true });
+    }
+    const namedImport = /^\s*import\s*\{([^}]+)\}\s*from\s*['"]tar['"]/u.exec(
+      code,
+    )?.[1];
+    if (namedImport !== undefined) {
+      for (const entry of namedImport.split(",")) {
+        const match =
+          /^\s*(?:t|list|x|extract)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*$/u.exec(
+            entry,
+          );
+        if (match !== null) {
+          addBinding({
+            local: match[1] ?? entry.trim(),
+            line: index + 1,
+            receiver: false,
+          });
+        }
+      }
+    }
+    const destructured =
+      /^\s*(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require\s*\(\s*['"]tar['"]\s*\)/u.exec(
+        code,
+      )?.[1];
+    if (destructured !== undefined) {
+      for (const entry of destructured.split(",")) {
+        const match =
+          /^\s*(?:t|list|x|extract)(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*$/u.exec(
+            entry,
+          );
+        if (match !== null) {
+          addBinding({
+            local: match[1] ?? entry.trim(),
+            line: index + 1,
+            receiver: false,
+          });
+        }
+      }
+    }
+  }
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const tryArguments = (
+    arguments_: string[] | undefined,
+  ): NodeTarMemberSelectionSink | undefined => {
+    if (arguments_ === undefined) return undefined;
+    const first = arguments_[0]?.trim();
+    const resolvedFirst =
+      first === undefined
+        ? undefined
+        : resolveJavascriptExpression(lines, first, line)?.value.trim() ??
+          first;
+    const firstIsSelection =
+      resolvedFirst?.startsWith("[") === true && resolvedFirst.endsWith("]");
+    const selection = firstIsSelection ? first : arguments_[1];
+    if (!nodeTarMemberSelectionPresent(lines, line, selection))
+      return undefined;
+    const options = nodeTarRecursionOptions(
+      lines,
+      line,
+      firstIsSelection ? undefined : first,
+    );
+    if (options.synchronous) return undefined;
+    const stream = nodeTarStreamSource(lines, line);
+    const sourceExpressions = [
+      ...options.sourceExpressions,
+      ...(stream === undefined ? [] : [stream]),
+    ].filter(
+      (value, index, all) => value !== "" && all.indexOf(value) === index,
+    );
+    return sourceExpressions.length === 0
+      ? undefined
+      : {
+          sourceExpressions,
+          kind: nodeTarMemberSelectionSinkKind(dependency),
+        };
+  };
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escaped = escapeRegularExpression(binding.local);
+    const callee = binding.receiver
+      ? new RegExp(`\\b${escaped}\\s*\\.\\s*(?:t|list|x|extract)\\s*\\(`, "u")
+      : new RegExp(`\\b${escaped}\\s*\\(`, "u");
+    const result = tryArguments(
+      javascriptCallArgumentsAtLine(lines, line, callee),
+    );
+    if (result !== undefined) return result;
+  }
+  return tryArguments(
+    javascriptCompositeCallArgumentsAtLine(
+      lines,
+      line,
+      /\brequire\s*\(\s*['"]tar['"]\s*\)\s*\.\s*(?:t|list|x|extract)\s*\(/u,
     ),
   );
 }
@@ -6602,6 +6843,7 @@ function frameworkDataflowRecords(
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
                 model.id === "node-http-tar-linkpath-traversal" ||
+                model.id === "node-http-tar-member-selection-recursion" ||
                 model.id === "node-http-fastify-static-route-guard-bypass"
                 ? 64
                 : 8,
@@ -6699,6 +6941,10 @@ function frameworkDataflowRecords(
       const nodeTarLink =
         model.id === "node-http-tar-linkpath-traversal"
           ? nodeTarLinkSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeTarMemberSelection =
+        model.id === "node-http-tar-member-selection-recursion"
+          ? nodeTarMemberSelectionSink(files, path, lines, sink.line)
           : undefined;
       const nodeFastifyStatic =
         model.id === "node-http-fastify-static-route-guard-bypass"
@@ -6845,6 +7091,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-tar-linkpath-traversal" &&
         nodeTarLink === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-tar-member-selection-recursion" &&
+        nodeTarMemberSelection === undefined
       ) {
         continue;
       }
@@ -7019,7 +7271,8 @@ function frameworkDataflowRecords(
         nodeTmpPath?.sourceExpressions.join("\n") ??
         nodePostcssSourceMap?.sourceExpressions.join("\n") ??
         nodeExtractZip?.sourceExpression ??
-        nodeTarLink?.sourceExpressions.join("\n");
+        nodeTarLink?.sourceExpressions.join("\n") ??
+        nodeTarMemberSelection?.sourceExpressions.join("\n");
       const nonDsetSource =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -7336,6 +7589,7 @@ function frameworkDataflowRecords(
         nodePostcssSourceMap?.kind ??
         nodeExtractZip?.kind ??
         nodeTarLink?.kind ??
+        nodeTarMemberSelection?.kind ??
         nodeFastifyStatic?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
@@ -11723,7 +11977,8 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-tmp-path-traversal" ||
                 model.id === "node-http-postcss-source-map-traversal" ||
                 model.id === "node-http-extract-zip-symlink-traversal" ||
-                model.id === "node-http-tar-linkpath-traversal"
+                model.id === "node-http-tar-linkpath-traversal" ||
+                model.id === "node-http-tar-member-selection-recursion"
                 ? 64
                 : 32,
             );
@@ -11822,6 +12077,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeTarLink =
             model.id === "node-http-tar-linkpath-traversal"
               ? nodeTarLinkSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeTarMemberSelection =
+            model.id === "node-http-tar-member-selection-recursion"
+              ? nodeTarMemberSelectionSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -11942,6 +12206,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-tar-member-selection-recursion" &&
+            nodeTarMemberSelection === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -11989,6 +12259,7 @@ function javascriptFrameworkWrapperSummaries(
             nodePostcssSourceMap?.sourceExpressions.join("\n") ??
             nodeExtractZip?.sourceExpression ??
             nodeTarLink?.sourceExpressions.join("\n") ??
+            nodeTarMemberSelection?.sourceExpressions.join("\n") ??
             (nodeDset === undefined
               ? undefined
               : nodeDset.positions
@@ -12200,6 +12471,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeTarLink === undefined
                   ? {}
                   : { kind: nodeTarLink.kind }),
+                ...(nodeTarMemberSelection === undefined
+                  ? {}
+                  : { kind: nodeTarMemberSelection.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}
