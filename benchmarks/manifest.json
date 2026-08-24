@@ -3630,6 +3630,45 @@
         "node-authjs-configuration-error-fail-closed/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-jsonata-expression-rce",
+      "description": "An Express query-string expression crosses three relative-import boundaries into the official JSONata compiler and evaluate method under an exact vulnerable 2.2.0 runtime pin. A crafted expression can recover Function and execute in the host process.",
+      "fixture": "fixtures/node-multi-hop-jsonata-expression-rce",
+      "findingsPaths": [
+        "node-multi-hop-jsonata-expression-rce/run-1/findings.json",
+        "node-multi-hop-jsonata-expression-rce/run-2/findings.json",
+        "node-multi-hop-jsonata-expression-rce/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-jsonata-expression-sandbox-escape",
+          "cwe": ["CWE-94"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 6,
+              "endLine": 6,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-jsonata-expression",
+      "description": "The source-identical control changes only jsonata to 2.2.1, the first v2 release that closes all three reviewed expression-sandbox escape chains.",
+      "fixture": "fixtures/node-multi-hop-patched-jsonata-expression",
+      "findingsPaths": [
+        "node-multi-hop-patched-jsonata-expression/run-1/findings.json",
+        "node-multi-hop-patched-jsonata-expression/run-2/findings.json",
+        "node-multi-hop-patched-jsonata-expression/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

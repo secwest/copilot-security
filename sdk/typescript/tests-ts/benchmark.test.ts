@@ -241,6 +241,10 @@ describe("effectiveness benchmark", () => {
         "node-authjs-configuration-error-fail-closed",
       ],
       [
+        "node-multi-hop-jsonata-expression-rce",
+        "node-multi-hop-patched-jsonata-expression",
+      ],
+      [
         "node-multi-hop-postcss-source-map-traversal",
         "node-multi-hop-patched-postcss",
       ],

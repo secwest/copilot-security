@@ -660,6 +660,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-jsonata-expression-rce",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/["']jsonata["']/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-jsonata-expression-sandbox-escape",
+        expression:
+          /(?:\b[A-Za-z_$][\w$]*(?:\s*\.\s*default)?|\brequire\s*\(\s*["']jsonata["']\s*\))\s*\(/u,
+        cweIds: ["CWE-94"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-flat-unflatten-prototype-pollution",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3077,6 +3104,15 @@ interface NodeJsonPathPlusSink {
     | "jsonpath-plus-native-eval";
 }
 
+interface NodeJsonataExpressionSink {
+  sourceExpression: string;
+  sinkLine: number;
+  kind:
+    | "vulnerable-jsonata-expression-sandbox-escape"
+    | "lock-resolved-vulnerable-jsonata-expression-sandbox-escape";
+  dependency: NodeRuntimeDependency;
+}
+
 interface NodeFlatUnflattenSink {
   sourceExpression: string;
   kind: "vulnerable-flat-unflatten" | "lock-resolved-vulnerable-flat-unflatten";
@@ -4489,6 +4525,306 @@ function nodeJsonPathPlusSink(
         dependency.proof === "npm-lockfile"
           ? "lock-resolved-vulnerable-jsonpath-plus-safe-eval"
           : "vulnerable-jsonpath-plus-safe-eval",
+    };
+  }
+  return undefined;
+}
+
+interface NodeJsonataFactoryBinding {
+  kind: "direct" | "namespace-default";
+  local: string;
+  line: number;
+  originLocal?: string;
+  originLine?: number;
+}
+
+function nodeJsonataVersionIsExpressionRceVulnerable(version: string): boolean {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  if (major < 1) return true;
+  if (major === 1) return minor < 8 || (minor === 8 && patch < 8);
+  return major === 2 && (minor < 2 || (minor === 2 && patch < 1));
+}
+
+function nodeJsonataFactoryBindings(
+  lines: readonly string[],
+): NodeJsonataFactoryBinding[] {
+  const structuralLines = javascriptStructuralLines(lines);
+  const bindings: NodeJsonataFactoryBinding[] = [];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const code = structuralLines[index] ?? "";
+    const original = javascriptCodeBeforeComment(lines[index] ?? "");
+    const defaultImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']jsonata["']/u.exec(
+        original,
+      );
+    const importEquals =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']jsonata["']\s*\)/u.exec(
+        original,
+      );
+    const commonjs =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']jsonata["']\s*\)\s*;?\s*$/u.exec(
+        original,
+      );
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']jsonata["']/u.exec(
+        original,
+      );
+    const direct = defaultImport?.[1] ?? importEquals?.[1] ?? commonjs?.[1];
+    if (direct !== undefined) {
+      bindings.push({ kind: "direct", local: direct, line: index + 1 });
+    }
+    if (namespace?.[1] !== undefined) {
+      bindings.push({
+        kind: "namespace-default",
+        local: namespace[1],
+        line: index + 1,
+      });
+    }
+    if (code.trim() === "") continue;
+  }
+
+  const originals = [...bindings];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const code = structuralLines[index] ?? "";
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const escapedOrigin = escapeRegularExpression(origin.local);
+      const right =
+        origin.kind === "namespace-default"
+          ? `${escapedOrigin}\\s*\\.\\s*default`
+          : escapedOrigin;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${right}\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      if (alias?.[1] === undefined) continue;
+      bindings.push({
+        kind: "direct",
+        local: alias[1],
+        line: index + 1,
+        originLocal: origin.local,
+        originLine: origin.line,
+      });
+    }
+  }
+  return bindings;
+}
+
+function nodeJsonataBindingUsable(
+  lines: readonly string[],
+  binding: NodeJsonataFactoryBinding,
+  callLine: number,
+): boolean {
+  if (binding.line >= callLine) return false;
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      callLine >= candidate.startLine && callLine <= candidate.endLine,
+  );
+  if (
+    wrapper?.parameters.includes(binding.local) === true ||
+    (binding.originLocal !== undefined &&
+      wrapper?.parameters.includes(binding.originLocal) === true) ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      callLine + 1,
+    ) ||
+    (binding.originLocal !== undefined &&
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.originLocal,
+        binding.originLine ?? binding.line,
+        callLine + 1,
+      ))
+  ) {
+    return false;
+  }
+  const originLocal = binding.originLocal ?? binding.local;
+  const originLine = binding.originLine ?? binding.line;
+  const escapedOrigin = escapeRegularExpression(originLocal);
+  const member = binding.kind === "namespace-default" ? "default" : undefined;
+  return !javascriptStructuralLines(lines)
+    .slice(originLine, Math.max(originLine, callLine))
+    .some((candidate) =>
+      member === undefined
+        ? false
+        : new RegExp(
+            `\\b${escapedOrigin}\\s*\\.\\s*${member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+    );
+}
+
+function nodeJsonataEvaluationLine(
+  lines: readonly string[],
+  compilerLine: number,
+  callee: RegExp,
+  rawCall = false,
+): number | undefined {
+  const callLines = lines.slice(
+    compilerLine - 1,
+    Math.min(lines.length, compilerLine + 12),
+  );
+  const structural = (
+    rawCall
+      ? javascriptCodeLinesWithoutComments(callLines)
+      : javascriptStructuralLines(callLines)
+  ).join("\n");
+  const firstLine = structural.split("\n", 1)[0] ?? "";
+  const match = callee.exec(firstLine);
+  if (match === null) return undefined;
+  const open = rawCall
+    ? match.index + match[0].lastIndexOf("(")
+    : structural.indexOf("(", match.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  const compilerCloseLine =
+    compilerLine + (structural.slice(0, close + 1).match(/\n/gu)?.length ?? 0);
+  const suffix = structural.slice(close + 1);
+  const immediate = /^\s*\.\s*evaluate\s*\(/u.exec(suffix);
+  if (immediate !== null) {
+    return (
+      compilerCloseLine +
+      (suffix.slice(0, immediate.index + immediate[0].length).match(/\n/gu)
+        ?.length ?? 0)
+    );
+  }
+
+  const declarationPrefix = structural.slice(0, match.index);
+  const declaration =
+    /(?:^|\n|[;{])\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;]+)?\s*=\s*$/u.exec(
+      declarationPrefix,
+    );
+  if (declaration?.[1] === undefined) return undefined;
+  const compiled = declaration[1];
+  const firstSuffixLine = suffix.split("\n", 1)[0] ?? "";
+  const sameLineEvaluation = new RegExp(
+    `^\\s*;\\s*(?:return\\s+)?(?:await\\s+)?${escapeRegularExpression(compiled)}\\s*\\.\\s*evaluate\\s*\\(`,
+    "u",
+  ).test(firstSuffixLine);
+  if (sameLineEvaluation) return compilerCloseLine;
+  if (!/^\s*;?\s*$/u.test(firstSuffixLine)) return undefined;
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      compilerLine >= candidate.startLine && compilerLine <= candidate.endLine,
+  );
+  const lastLine = Math.min(
+    lines.length,
+    wrapper?.endLine ?? compilerLine + 64,
+  );
+  const escapedCompiled = escapeRegularExpression(compiled);
+  const evaluate = new RegExp(
+    `\\b${escapedCompiled}\\s*\\.\\s*evaluate\\s*\\(`,
+    "u",
+  );
+  const replaceEvaluate = new RegExp(
+    `\\b${escapedCompiled}\\s*\\.\\s*evaluate\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+    "u",
+  );
+  const defineEvaluate = new RegExp(
+    `\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${escapedCompiled}\\s*,\\s*["']evaluate["']`,
+    "u",
+  );
+  const structuralLines = javascriptStructuralLines(lines);
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (let line = compilerCloseLine + 1; line <= lastLine; line += 1) {
+    if (
+      javascriptIdentifierReassignedBetween(
+        lines,
+        compiled,
+        compilerLine,
+        line + 1,
+      ) ||
+      structuralLines
+        .slice(compilerLine, line)
+        .some(
+          (value, index) =>
+            replaceEvaluate.test(value) ||
+            defineEvaluate.test(codeLines[compilerLine + index] ?? ""),
+        )
+    ) {
+      return undefined;
+    }
+    const candidate = structuralLines
+      .slice(line - 1, Math.min(lastLine, line + 1))
+      .join("\n");
+    const evaluation = evaluate.exec(candidate);
+    if (evaluation !== null) {
+      const memberOffset = evaluation[0].lastIndexOf("evaluate");
+      return (
+        line +
+        (candidate
+          .slice(0, evaluation.index + Math.max(0, memberOffset))
+          .match(/\n/gu)?.length ?? 0)
+      );
+    }
+  }
+  return undefined;
+}
+
+function nodeJsonataExpressionSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeJsonataExpressionSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "jsonata");
+  if (
+    dependency === undefined ||
+    !nodeJsonataVersionIsExpressionRceVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const bindings = nodeJsonataFactoryBindings(lines);
+  const candidates: Array<{
+    callee: RegExp;
+    rawCall: boolean;
+    usable: boolean;
+  }> = bindings.map((binding) => {
+    const escapedLocal = escapeRegularExpression(binding.local);
+    return {
+      callee:
+        binding.kind === "namespace-default"
+          ? new RegExp(`\\b${escapedLocal}\\s*\\.\\s*default\\s*\\(`, "u")
+          : new RegExp(`\\b${escapedLocal}\\s*\\(`, "u"),
+      rawCall: false,
+      usable: nodeJsonataBindingUsable(lines, binding, line),
+    };
+  });
+  candidates.push({
+    callee: /\brequire\s*\(\s*["']jsonata["']\s*\)\s*\(/u,
+    rawCall: true,
+    usable: true,
+  });
+  for (const candidate of candidates) {
+    if (!candidate.usable) continue;
+    const arguments_ = candidate.rawCall
+      ? javascriptRawCallArgumentsAtLine(lines, line, candidate.callee)
+      : javascriptCallArgumentsAtLine(lines, line, candidate.callee);
+    const sourceExpression = arguments_?.[0]?.trim() ?? "";
+    if (sourceExpression === "") continue;
+    const sinkLine = nodeJsonataEvaluationLine(
+      lines,
+      line,
+      candidate.callee,
+      candidate.rawCall,
+    );
+    if (sinkLine === undefined) continue;
+    return {
+      sourceExpression,
+      sinkLine,
+      kind:
+        dependency.proof === "npm-lockfile"
+          ? "lock-resolved-vulnerable-jsonata-expression-sandbox-escape"
+          : "vulnerable-jsonata-expression-sandbox-escape",
+      dependency,
     };
   }
   return undefined;
@@ -9734,6 +10070,12 @@ function frameworkDataflowRecords(
     ) {
       continue;
     }
+    if (
+      model.id === "node-http-jsonata-expression-rce" &&
+      javascriptTestOrExamplePath(path)
+    ) {
+      continue;
+    }
     if (model.id === "node-authjs-configuration-error-fail-open") continue;
     if (
       (model.id === "node-http-mongoose-nosql" ||
@@ -9783,6 +10125,7 @@ function frameworkDataflowRecords(
                 model.id === "node-copilot-system-prompt-injection" ||
                 model.id === "node-http-js-toml-prototype-pollution" ||
                 model.id === "node-http-jsonpath-plus-code-injection" ||
+                model.id === "node-http-jsonata-expression-rce" ||
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
                 model.id === "node-http-dset-prototype-pollution" ||
                 model.id === "node-http-object-path-prototype-pollution" ||
@@ -9861,6 +10204,10 @@ function frameworkDataflowRecords(
       const nodeJsonPathPlus =
         model.id === "node-http-jsonpath-plus-code-injection"
           ? nodeJsonPathPlusSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeJsonataExpression =
+        model.id === "node-http-jsonata-expression-rce"
+          ? nodeJsonataExpressionSink(files, path, lines, sink.line)
           : undefined;
       const nodeFlatUnflatten =
         model.id === "node-http-flat-unflatten-prototype-pollution"
@@ -10025,6 +10372,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-jsonpath-plus-code-injection" &&
         nodeJsonPathPlus === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-jsonata-expression-rce" &&
+        nodeJsonataExpression === undefined
       ) {
         continue;
       }
@@ -10300,6 +10653,7 @@ function frameworkDataflowRecords(
         nodePrototypeMerge?.sourceExpressions.join("\n") ??
         nodeJsToml?.sourceExpression ??
         nodeJsonPathPlus?.sourceExpression ??
+        nodeJsonataExpression?.sourceExpression ??
         nodeFlatUnflatten?.sourceExpression ??
         nodeObjectPath?.sourceExpression ??
         nodeLodashDelete?.sourceExpressions.join("\n") ??
@@ -10631,6 +10985,7 @@ function frameworkDataflowRecords(
       const effectiveSinkLine =
         nodeCopilotResolution?.input.line ??
         nodeMongooseAggregateResolution?.position.line ??
+        nodeJsonataExpression?.sinkLine ??
         nodeNanoidSizeDos?.sinkLine ??
         nodeSocketIoServerDos?.sinkLine ??
         nodeOpcuaServerDos?.sinkLine ??
@@ -10658,6 +11013,7 @@ function frameworkDataflowRecords(
         nodeTarLink?.kind ??
         nodeTarMemberSelection?.kind ??
         nodeFastifyStatic?.kind ??
+        nodeJsonataExpression?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
@@ -10703,6 +11059,16 @@ function frameworkDataflowRecords(
               sinkPattern.cweIds,
           },
           propagators: [
+            ...(nodeJsonataExpression === undefined
+              ? []
+              : [
+                  {
+                    kind: "jsonata-runtime-dependency",
+                    path: nodeJsonataExpression.dependency.manifestPath,
+                    line: nodeJsonataExpression.dependency.line,
+                    symbol: `jsonata@${nodeJsonataExpression.dependency.version}:${nodeJsonataExpression.dependency.proof}:expression-sandbox-escape`,
+                  },
+                ]),
             ...(nodeNodemailerRaw === undefined
               ? []
               : [
@@ -17539,6 +17905,12 @@ function javascriptFrameworkWrapperSummaries(
         continue;
       }
       if (
+        model.id === "node-http-jsonata-expression-rce" &&
+        javascriptTestOrExamplePath(file.path)
+      ) {
+        continue;
+      }
+      if (
         (model.id === "node-http-mongoose-nosql" ||
           model.id === "node-http-mongoose-update" ||
           model.id === "node-http-mongoose-bulk-write" ||
@@ -17564,6 +17936,7 @@ function javascriptFrameworkWrapperSummaries(
               model.sinks,
               model.id === "node-http-js-toml-prototype-pollution" ||
                 model.id === "node-http-jsonpath-plus-code-injection" ||
+                model.id === "node-http-jsonata-expression-rce" ||
                 model.id === "node-http-flat-unflatten-prototype-pollution" ||
                 model.id === "node-http-dset-prototype-pollution" ||
                 model.id === "node-http-object-path-prototype-pollution" ||
@@ -17631,6 +18004,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeJsonPathPlus =
             model.id === "node-http-jsonpath-plus-code-injection"
               ? nodeJsonPathPlusSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeJsonataExpression =
+            model.id === "node-http-jsonata-expression-rce"
+              ? nodeJsonataExpressionSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
               : undefined;
           const nodeFlatUnflatten =
             model.id === "node-http-flat-unflatten-prototype-pollution"
@@ -17783,6 +18165,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-jsonata-expression-rce" &&
+            nodeJsonataExpression === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-flat-unflatten-prototype-pollution" &&
             nodeFlatUnflatten === undefined
           ) {
@@ -17911,6 +18299,7 @@ function javascriptFrameworkWrapperSummaries(
               : nodePrototypeMerge.sourceExpressions.join("\n")) ??
             nodeJsToml?.sourceExpression ??
             nodeJsonPathPlus?.sourceExpression ??
+            nodeJsonataExpression?.sourceExpression ??
             nodeFlatUnflatten?.sourceExpression ??
             nodeObjectPath?.sourceExpression ??
             nodeLodashDelete?.sourceExpressions.join("\n") ??
@@ -18117,6 +18506,12 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeJsonPathPlus === undefined
                   ? {}
                   : { kind: nodeJsonPathPlus.kind }),
+                ...(nodeJsonataExpression === undefined
+                  ? {}
+                  : {
+                      kind: nodeJsonataExpression.kind,
+                      line: nodeJsonataExpression.sinkLine,
+                    }),
                 ...(nodeFlatUnflatten === undefined
                   ? {}
                   : { kind: nodeFlatUnflatten.kind }),
@@ -18183,13 +18578,25 @@ function javascriptFrameworkWrapperSummaries(
                   sinkPattern.cweIds,
               },
               controls: wrapperControls.slice(0, 8),
-              ...(nodeNodemailerRaw === undefined &&
+              ...(nodeJsonataExpression === undefined &&
+              nodeNodemailerRaw === undefined &&
               nodeBraceExpansionDos === undefined &&
               nodeNanoidSizeDos === undefined &&
               nodeSocketIoParserDos === undefined
                 ? {}
                 : {
                     propagators: [
+                      ...(nodeJsonataExpression === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "jsonata-runtime-dependency",
+                              path: nodeJsonataExpression.dependency
+                                .manifestPath,
+                              line: nodeJsonataExpression.dependency.line,
+                              symbol: `jsonata@${nodeJsonataExpression.dependency.version}:${nodeJsonataExpression.dependency.proof}:expression-sandbox-escape`,
+                            },
+                          ]),
                       ...(nodeNodemailerRaw === undefined
                         ? []
                         : [

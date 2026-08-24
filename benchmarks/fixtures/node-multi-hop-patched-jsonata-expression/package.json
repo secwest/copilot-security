@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-patched-jsonata-expression",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "jsonata": "2.2.1"
+  }
+}

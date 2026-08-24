@@ -188,7 +188,7 @@ Decoder API. The latest pair reaches the same state through the public
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case now produce 540 scans across 90 exploit/control pairs in the complete
+per case now produce 546 scans across 91 exploit/control pairs in the complete
 corpus. The added industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size
@@ -529,6 +529,25 @@ checks. The published-package witness induces an OIDC endpoint-configuration
 error without a listener or outbound request: beta.31 supplies a truthy
 `{message}` object and permits the request, while beta.32 supplies `null` and
 denies it.
+
+`node-jsonata-expression-rce-manifest.json` measures the application-level
+reachability missing from dependency-only JSONata alerts for
+GHSA-66mm-25pp-rfff, GHSA-2943-5xfg-gq5f, and GHSA-8gq3-vp5j-2grp. The
+positive sends an Express query expression through three relative-import
+wrappers into the official JSONata compiler and requires the returned compiled
+expression to reach `evaluate()` under exact 2.2.0 production proof. The
+source-identical control changes only JSONata to 2.2.1, the first v2 release
+that closes all three reviewed sandbox-escape chains. Regressions cover stable
+default aliases, namespace-default, TypeScript import-equals, CommonJS and
+direct-require callables, one-hop compiler aliases, immediate and retained
+compiled expressions, multiline calls, both repaired release lines, and fresh
+declaration-consistent npm v2/v3 locks. Package-only, compile-only, trusted
+static expressions, request data used only as evaluation input, named and
+CommonJS-default guesses, replaced compiler or evaluation capabilities,
+development-only packages, unresolved ranges, stale/v1 locks, test/example
+code, and repaired or prerelease versions remain negative. The bounded witness
+returns only `process.version`: 2.2.0 recovers the host `Function` constructor,
+whereas 2.2.1 rejects the same expression with `T1006`.
 
 `node-postcss-source-map-traversal-manifest.json` measures PostCSS's implicit
 previous-source-map file load. The positive sends an Express CSS body through
