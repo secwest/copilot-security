@@ -1864,8 +1864,12 @@ negative-size decrement loop terminates after the repair. The newest
 industrial-protocol pair starts an official `OPCUAServer` with exact
 `node-opcua` 2.165.0 or 2.168.0 dependency proof. A bounded real-package
 witness shows that the affected build retains the first of 50,001 unique
-nonces, while the repaired build evicts it at its 50,000-entry ceiling. Each of
-the 176 cases in 88 exploit/control pairs is scanned three times, producing 528
+nonces, while the repaired build evicts it at its 50,000-entry ceiling. A
+second node-opcua pair configures a real application `userManager`: 2.165.2
+accepts one encrypted username token under two different session nonces and
+passes a forged empty password to the manager, while source-identical 2.166.0
+rejects both nonce violations before the manager is called. Each of the 178
+cases in 89 exploit/control pairs is scanned three times, producing 534
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

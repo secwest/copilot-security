@@ -1,0 +1,9 @@
+{
+  "name": "node-opcua-server-nonce-bound-username-token",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "node-opcua": "2.166.0"
+  }
+}

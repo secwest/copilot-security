@@ -1003,6 +1003,26 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-opcua-server-username-token-nonce-bypass",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]node-opcua['"]/u],
+    sources: [
+      {
+        kind: "untrusted-opcua-username-identity-token",
+        expression: /\.\s*start\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-node-opcua-username-token-missing-nonce-binding",
+        expression: /\bnew\s+[A-Za-z_$][\w$]*(?:\s*\.\s*OPCUAServer)?\s*\(/u,
+        cweIds: ["CWE-347"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-postcss-source-map-traversal",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2909,6 +2929,7 @@ export async function buildResidualRiskInventory(
   records.push(...goPgxSqlInjectionRecords(sourceFiles));
   records.push(...goPgconnSqlInjectionRecords(sourceFiles));
   records.push(...nodeOpcuaCrossFileServerDosRecords(sourceFiles));
+  records.push(...nodeOpcuaCrossFileServerAuthRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
   records.push(...nodeAxiosPrototypeGadgetChainRecords(sourceFiles, records));
   records.push(
@@ -3111,6 +3132,13 @@ interface NodeSocketIoServerDosSink {
 
 interface NodeOpcuaServerDosSink {
   source: { kind: "untrusted-opcua-session-nonce"; line: number };
+  sinkLine: number;
+  kind: string;
+  dependency: NodeRuntimeDependency;
+}
+
+interface NodeOpcuaServerAuthSink {
+  source: { kind: "untrusted-opcua-username-identity-token"; line: number };
   sinkLine: number;
   kind: string;
   dependency: NodeRuntimeDependency;
@@ -8160,6 +8188,304 @@ function nodeOpcuaServerDosSink(
   return undefined;
 }
 
+function nodeOpcuaVersionHasUsernameTokenNonceBypass(version: string): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    major < 2 || (major === 2 && (minor < 165 || (minor === 165 && patch <= 2)))
+  );
+}
+
+function nodeOpcuaPolicyOptionsAllowEncryptedUsernameToken(
+  lines: readonly string[],
+  line: number,
+  options: JavascriptResolvedExpression,
+): boolean {
+  const securityPolicies = javascriptObjectPropertyValue(
+    options.value,
+    "securityPolicies",
+  );
+  if (securityPolicies === undefined) return true;
+  const resolved = resolveJavascriptExpression(
+    lines,
+    securityPolicies,
+    line,
+  )?.value.trim();
+  const array =
+    resolved === undefined
+      ? undefined
+      : javascriptCompositePrefix(resolved, "[", "]");
+  if (array === undefined) return false;
+  return splitJavascriptArguments(array.slice(1, -1)).some((entry) =>
+    /(?:^|\.)SecurityPolicy\s*\.\s*(?!None\b)[A-Za-z_$][\w$]*\s*$/u.test(
+      entry.trim(),
+    ),
+  );
+}
+
+function nodeOpcuaOptionsAllowEncryptedUsernameToken(
+  lines: readonly string[],
+  line: number,
+  options: JavascriptResolvedExpression,
+): boolean {
+  const endpointList =
+    javascriptObjectPropertyValue(options.value, "alternateEndpoints") ??
+    javascriptObjectPropertyValue(options.value, "endpoints");
+  if (endpointList === undefined) {
+    return nodeOpcuaPolicyOptionsAllowEncryptedUsernameToken(
+      lines,
+      line,
+      options,
+    );
+  }
+  const resolvedList = resolveJavascriptExpression(
+    lines,
+    endpointList,
+    line,
+  )?.value.trim();
+  const array =
+    resolvedList === undefined
+      ? undefined
+      : javascriptCompositePrefix(resolvedList, "[", "]");
+  if (array === undefined) return false;
+  return splitJavascriptArguments(array.slice(1, -1)).some((entry) => {
+    const endpoint = resolveJavascriptExpression(lines, entry, line);
+    return (
+      endpoint !== undefined &&
+      nodeOpcuaPolicyOptionsAllowEncryptedUsernameToken(lines, line, endpoint)
+    );
+  });
+}
+
+function nodeOpcuaOptionsHaveUserManager(
+  lines: readonly string[],
+  line: number,
+  options: JavascriptResolvedExpression,
+): boolean {
+  const userManager = javascriptObjectPropertyValue(
+    options.value,
+    "userManager",
+  );
+  if (userManager === undefined) return false;
+  const resolved = resolveJavascriptExpression(lines, userManager, line);
+  if (resolved === undefined) return false;
+  const value = resolved.value.trim();
+  if (/^(?:undefined|null|false|true|0|["']["'])$/u.test(value)) return false;
+  const object = javascriptCompositePrefix(value, "{", "}");
+  if (object !== undefined) {
+    return /(?:^|[,;{])\s*(?:["']?isValidUser["']?)\s*(?::|\()/u.test(object);
+  }
+  return (
+    /^[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*$/u.test(value) ||
+    /^(?:new\s+)?[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*\(/u.test(
+      value,
+    )
+  );
+}
+
+function nodeOpcuaConstructorHasUsernameAuthentication(
+  lines: readonly string[],
+  line: number,
+  constructor: string,
+): boolean {
+  const arguments_ = javascriptCompositeCallArgumentsAtLine(
+    lines,
+    line,
+    new RegExp(
+      `^\\s*(?:export\\s+)?(?:const|let|var)\\s+[A-Za-z_$][\\w$]*\\s*=\\s*new\\s+${constructor}\\s*\\(`,
+      "u",
+    ),
+  );
+  const optionsExpression = arguments_?.[0];
+  if (optionsExpression === undefined) return false;
+  const options = resolveJavascriptExpression(lines, optionsExpression, line);
+  if (options === undefined) return false;
+  return (
+    nodeOpcuaOptionsHaveUserManager(lines, line, options) &&
+    nodeOpcuaOptionsAllowEncryptedUsernameToken(lines, line, options)
+  );
+}
+
+function nodeOpcuaServerAuthSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeOpcuaServerAuthSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const dependency = nodeRuntimeDependency(files, path, "node-opcua");
+  if (
+    dependency === undefined ||
+    !nodeOpcuaVersionHasUsernameTokenNonceBypass(dependency.version)
+  ) {
+    return undefined;
+  }
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: NodeOpcuaServerBinding[] = [];
+  const addBinding = (binding: NodeOpcuaServerBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.member === binding.member &&
+          candidate.line === binding.line,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      imported.moduleSpecifier === "node-opcua" &&
+      imported.imported === "OPCUAServer"
+    ) {
+      addBinding({ local: imported.local, line: imported.line });
+    }
+  }
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]node-opcua['"]/u.exec(
+        code,
+      );
+    if (namespace?.[1] !== undefined) {
+      addBinding({
+        local: namespace[1],
+        line: index + 1,
+        member: "OPCUAServer",
+      });
+    }
+    const importEquals =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]node-opcua['"]\s*\)/u.exec(
+        code,
+      );
+    if (importEquals?.[1] !== undefined) {
+      addBinding({
+        local: importEquals[1],
+        line: index + 1,
+        member: "OPCUAServer",
+      });
+    }
+    const commonjs =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]node-opcua['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (commonjs?.[1] !== undefined) {
+      addBinding({
+        local: commonjs[1],
+        line: index + 1,
+        member: "OPCUAServer",
+      });
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]node-opcua['"]\s*\)\s*\.\s*OPCUAServer\s*;?\s*$/u.exec(
+        code,
+      );
+    if (direct?.[1] !== undefined) {
+      addBinding({ local: direct[1], line: index + 1 });
+    }
+    const destructured =
+      /^\s*(?:const|let|var)\s*\{\s*OPCUAServer(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*\}\s*=\s*require\s*\(\s*['"]node-opcua['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (destructured !== null) {
+      addBinding({
+        local: destructured[1] ?? "OPCUAServer",
+        line: index + 1,
+      });
+    }
+  }
+
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    if (
+      binding.member !== undefined &&
+      structuralLines
+        .slice(binding.line, Math.max(binding.line, line - 1))
+        .some((candidate) =>
+          new RegExp(
+            `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*OPCUAServer\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+        )
+    ) {
+      continue;
+    }
+    const constructor =
+      binding.member === undefined
+        ? escapeRegularExpression(binding.local)
+        : `${escapeRegularExpression(binding.local)}\\s*\\.\\s*OPCUAServer`;
+    const declaration = new RegExp(
+      `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*new\\s+${constructor}\\s*\\(`,
+      "u",
+    );
+    const match = declaration.exec(codeLines[line - 1] ?? "");
+    if (
+      match?.[1] === undefined ||
+      !nodeOpcuaConstructorHasUsernameAuthentication(lines, line, constructor)
+    ) {
+      continue;
+    }
+    const instance = match[1];
+    const startCall = new RegExp(
+      `\\b${escapeRegularExpression(instance)}\\s*\\.\\s*start\\s*\\(`,
+      "u",
+    );
+    for (let index = line; index < structuralLines.length; index += 1) {
+      if (!startCall.test(structuralLines[index] ?? "")) continue;
+      const startLine = index + 1;
+      if (
+        javascriptIdentifierReassignedBetween(
+          lines,
+          instance,
+          line,
+          startLine + 1,
+        ) ||
+        structuralLines
+          .slice(line, Math.max(line, startLine - 1))
+          .some((candidate) =>
+            new RegExp(
+              `\\b${escapeRegularExpression(instance)}\\s*\\.\\s*start\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+              "u",
+            ).test(candidate),
+          )
+      ) {
+        return undefined;
+      }
+      const prefix =
+        dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+      return {
+        source: {
+          kind: "untrusted-opcua-username-identity-token",
+          line: startLine,
+        },
+        sinkLine: line,
+        kind: `${prefix}vulnerable-node-opcua-username-token-missing-nonce-binding`,
+        dependency,
+      };
+    }
+  }
+  return undefined;
+}
+
 type NodePostcssOperation = "parse" | "process";
 
 interface NodePostcssBinding {
@@ -9548,6 +9874,10 @@ function frameworkDataflowRecords(
         model.id === "node-opcua-server-nonce-cache-dos"
           ? nodeOpcuaServerDosSink(files, path, lines, sink.line)
           : undefined;
+      const nodeOpcuaServerAuth =
+        model.id === "node-opcua-server-username-token-nonce-bypass"
+          ? nodeOpcuaServerAuthSink(files, path, lines, sink.line)
+          : undefined;
       const nodePostcssSourceMap =
         model.id === "node-http-postcss-source-map-traversal"
           ? nodePostcssSourceMapSink(files, path, lines, sink.line)
@@ -9733,6 +10063,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-opcua-server-nonce-cache-dos" &&
         nodeOpcuaServerDos === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-opcua-server-username-token-nonce-bypass" &&
+        nodeOpcuaServerAuth === undefined
       ) {
         continue;
       }
@@ -10124,9 +10460,11 @@ function frameworkDataflowRecords(
             ? nodeSocketIoServerDos?.source
             : model.id === "node-opcua-server-nonce-cache-dos"
               ? nodeOpcuaServerDos?.source
-              : model.id === "node-http-dset-prototype-pollution"
-                ? nodeDsetResolution?.source
-                : nonDsetSource;
+              : model.id === "node-opcua-server-username-token-nonce-bypass"
+                ? nodeOpcuaServerAuth?.source
+                : model.id === "node-http-dset-prototype-pollution"
+                  ? nodeDsetResolution?.source
+                  : nonDsetSource;
       if (source === undefined) continue;
       const sinkExpressionControls = PYTHON_EXTENSIONS.has(extension)
         ? model.controls
@@ -10256,6 +10594,7 @@ function frameworkDataflowRecords(
         nodeNanoidSizeDos?.sinkLine ??
         nodeSocketIoServerDos?.sinkLine ??
         nodeOpcuaServerDos?.sinkLine ??
+        nodeOpcuaServerAuth?.sinkLine ??
         sink.line;
       const effectiveSinkKind =
         nodeCopilotResolution?.input.kind ??
@@ -10273,6 +10612,7 @@ function frameworkDataflowRecords(
         nodeSocketIoParserDos?.kind ??
         nodeSocketIoServerDos?.kind ??
         nodeOpcuaServerDos?.kind ??
+        nodeOpcuaServerAuth?.kind ??
         nodePostcssSourceMap?.kind ??
         nodeExtractZip?.kind ??
         nodeTarLink?.kind ??
@@ -10387,6 +10727,16 @@ function frameworkDataflowRecords(
                     path: nodeOpcuaServerDos.dependency.manifestPath,
                     line: nodeOpcuaServerDos.dependency.line,
                     symbol: `node-opcua@${nodeOpcuaServerDos.dependency.version}:${nodeOpcuaServerDos.dependency.proof}:unbounded-session-nonce-cache`,
+                  },
+                ]),
+            ...(nodeOpcuaServerAuth === undefined
+              ? []
+              : [
+                  {
+                    kind: "node-opcua-runtime-dependency",
+                    path: nodeOpcuaServerAuth.dependency.manifestPath,
+                    line: nodeOpcuaServerAuth.dependency.line,
+                    symbol: `node-opcua@${nodeOpcuaServerAuth.dependency.version}:${nodeOpcuaServerAuth.dependency.proof}:username-token-missing-nonce-binding`,
                   },
                 ]),
           ],
@@ -13957,6 +14307,189 @@ function nodeOpcuaCrossFileServerDosRecords(
   return records;
 }
 
+function nodeOpcuaCrossFileServerAuthRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const knownPaths = new Map(
+    files.map((file) => [modelPathComparisonKey(file.path), file.path]),
+  );
+  const exportedServers: NodeOpcuaExportedServer[] = [];
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !/['"]node-opcua['"]/u.test(file.text)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "node-opcua");
+    if (
+      dependency === undefined ||
+      !nodeOpcuaVersionHasUsernameTokenNonceBypass(dependency.version)
+    ) {
+      continue;
+    }
+    const structuralLines = javascriptStructuralLines(file.lines);
+    const importedServers = importedJavascriptSymbols(file.lines).filter(
+      (imported) =>
+        imported.moduleSpecifier === "node-opcua" &&
+        imported.imported === "OPCUAServer",
+    );
+    for (const imported of importedServers) {
+      for (
+        let index = imported.line;
+        index < structuralLines.length;
+        index += 1
+      ) {
+        const declaration = new RegExp(
+          `^\\s*export\\s+(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*new\\s+${escapeRegularExpression(imported.local)}\\s*\\(`,
+          "u",
+        ).exec(structuralLines[index] ?? "");
+        if (declaration?.[1] === undefined) continue;
+        const line = index + 1;
+        if (
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            imported.local,
+            imported.line,
+            line + 1,
+          ) ||
+          !nodeOpcuaConstructorHasUsernameAuthentication(
+            file.lines,
+            line,
+            escapeRegularExpression(imported.local),
+          )
+        ) {
+          continue;
+        }
+        exportedServers.push({
+          dependency,
+          file,
+          line,
+          symbol: declaration[1],
+        });
+      }
+    }
+  }
+
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const caller of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(caller.extension) ||
+      javascriptTestOrExamplePath(caller.path)
+    ) {
+      continue;
+    }
+    const structuralLines = javascriptStructuralLines(caller.lines);
+    for (const imported of importedJavascriptSymbols(caller.lines)) {
+      const importedPath = resolveRelativeModelImport(
+        caller.path,
+        imported.moduleSpecifier,
+        knownPaths,
+      );
+      if (importedPath === undefined) continue;
+      const server = exportedServers.find(
+        (candidate) =>
+          candidate.file.path === importedPath &&
+          candidate.symbol === imported.imported,
+      );
+      if (server === undefined) continue;
+      const startCall = new RegExp(
+        `\\b${escapeRegularExpression(imported.local)}\\s*\\.\\s*start\\s*\\(`,
+        "u",
+      );
+      for (
+        let index = imported.line;
+        index < structuralLines.length;
+        index += 1
+      ) {
+        if (!startCall.test(structuralLines[index] ?? "")) continue;
+        const startLine = index + 1;
+        if (
+          javascriptIdentifierReassignedBetween(
+            caller.lines,
+            imported.local,
+            imported.line,
+            startLine + 1,
+          ) ||
+          structuralLines
+            .slice(imported.line, Math.max(imported.line, startLine - 1))
+            .some((candidate) =>
+              new RegExp(
+                `\\b${escapeRegularExpression(imported.local)}\\s*\\.\\s*start\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+                "u",
+              ).test(candidate),
+            )
+        ) {
+          continue;
+        }
+        const key = `${caller.path}\0${startLine}\0${server.file.path}\0${server.line}`;
+        if (emitted.has(key)) continue;
+        emitted.add(key);
+        const sinkStart = Math.max(1, server.line - CONTEXT_LINES_BEFORE);
+        const sinkEnd = Math.min(
+          server.file.lines.length,
+          server.line + CONTEXT_LINES_AFTER,
+        );
+        const sourceStart = Math.max(1, startLine - 2);
+        const sourceEnd = Math.min(caller.lines.length, startLine + 2);
+        const prefix =
+          server.dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+        const sinkKind = `${prefix}vulnerable-node-opcua-username-token-missing-nonce-binding`;
+        records.push({
+          path: server.file.path,
+          line: server.line,
+          categories: [
+            "framework-dataflow:node-opcua-server-username-token-nonce-bypass",
+            "framework-cross-file-server-instance",
+            "modeled-source:untrusted-opcua-username-identity-token",
+            `modeled-sink:${sinkKind}`,
+          ],
+          priority: 120,
+          startLine: sinkStart,
+          endLine: sinkEnd,
+          excerpt: sourceExcerpt(server.file.lines, sinkStart, sinkEnd),
+          sourceExcerpt: sourceExcerpt(caller.lines, sourceStart, sourceEnd),
+          frameworkModel: {
+            schemaVersion: "1.2",
+            id: "node-opcua-server-username-token-nonce-bypass",
+            language: "javascript-typescript",
+            scope: "cross-file",
+            source: {
+              kind: "untrusted-opcua-username-identity-token",
+              path: caller.path,
+              line: startLine,
+            },
+            sink: {
+              kind: sinkKind,
+              path: server.file.path,
+              line: server.line,
+              cweIds: ["CWE-347"],
+            },
+            propagators: [
+              {
+                kind: "relative-module-import",
+                path: caller.path,
+                line: imported.line,
+                symbol: `${imported.imported} as ${imported.local}`,
+              },
+              {
+                kind: "node-opcua-runtime-dependency",
+                path: server.dependency.manifestPath,
+                line: server.dependency.line,
+                symbol: `node-opcua@${server.dependency.version}:${server.dependency.proof}:username-token-missing-nonce-binding`,
+              },
+            ],
+            candidateControls: [],
+          },
+        });
+      }
+    }
+  }
+  return records;
+}
+
 function frameworkDirectCrossFileDataflowRecords(
   files: readonly SourceFileSnapshot[],
 ): ResidualRiskRecord[] {
@@ -16052,7 +16585,8 @@ function javascriptFrameworkWrapperSummaries(
       if (
         model.id === "node-http-fastify-static-route-guard-bypass" ||
         model.id === "node-socketio-server-transitive-parser-dos" ||
-        model.id === "node-opcua-server-nonce-cache-dos"
+        model.id === "node-opcua-server-nonce-cache-dos" ||
+        model.id === "node-opcua-server-username-token-nonce-bypass"
       ) {
         continue;
       }

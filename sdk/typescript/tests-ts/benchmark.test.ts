@@ -233,6 +233,10 @@ describe("effectiveness benchmark", () => {
         "node-opcua-server-bounded-nonce-cache",
       ],
       [
+        "node-opcua-server-replayable-username-token",
+        "node-opcua-server-nonce-bound-username-token",
+      ],
+      [
         "node-multi-hop-postcss-source-map-traversal",
         "node-multi-hop-patched-postcss",
       ],

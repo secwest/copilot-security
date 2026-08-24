@@ -188,11 +188,14 @@ Decoder API. The latest pair reaches the same state through the public
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case now produce 528 scans across 88 exploit/control pairs in the complete
+per case now produce 534 scans across 89 exploit/control pairs in the complete
 corpus. The added industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size
-eviction.
+eviction. A second node-opcua pair exercises encrypted username-token
+authentication with an explicit application user manager: 2.165.2 accepts a
+token replay across distinct session nonces, while 2.166.0 verifies the token's
+trailing nonce before calling the manager.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -481,6 +484,27 @@ negative. The bounded real-package witness inserts 50,001 unique 32-byte
 nonempty nonces and replays the first: 2.165.0 still recognizes it, whereas
 2.168.0 has evicted it at the 50,000-entry ceiling. This proves the storage
 repair without deliberately exhausting memory or starting a network listener.
+
+`node-opcua-username-token-nonce-bypass-manifest.json` measures the missing
+cryptographic binding reviewed in GHSA-mq36-523m-x7vv. The positive constructs
+and starts an official `OPCUAServer` with a usable application `userManager`
+under exact `node-opcua` 2.165.2 proof; the source-identical control changes
+only the dependency to 2.166.0. Deterministic regressions cover named and
+aliased ESM, namespace, TypeScript import-equals, CommonJS receiver,
+destructure, and direct-member bindings; literal, referenced, and factory-built
+user managers; same-file and exported-instance startup; exact declarations;
+and fresh npm v2/v3 resolution. Default deny-all, null, empty, or
+certificate-only managers, literal `SecurityPolicy.None`-only endpoints,
+dynamic unproved policy arrays, client-only or unstarted code, repaired or
+development-only packages, unresolved ranges, inconsistent/v1 locks,
+reassignment, member replacement, wrapper shadowing, and tests/examples remain
+negative. The bounded witness encrypts a password plus nonce A once. Version
+2.165.2 calls the manager and accepts that ciphertext under both nonce A and
+nonce B; it also turns a four-byte forged blob into an empty password. Version
+2.166.0 accepts only the correctly bound token and rejects both invalid forms
+before the manager. The empty-password branch establishes an authentication
+bypass only when the deployed manager accepts that credential; the general
+replay condition does not depend on such behavior.
 
 `node-postcss-source-map-traversal-manifest.json` measures PostCSS's implicit
 previous-source-map file load. The positive sends an Express CSS body through
