@@ -297,11 +297,19 @@ describe("node-tar decompression DoS framework model", () => {
       "fixtures",
       "node-multi-hop-patched-tar-decompression",
     );
+    const linkpathControl = join(
+      benchmarkRoot,
+      "fixtures",
+      "node-multi-hop-patched-tar-linkpath",
+    );
     const vulnerableRecords = records(
       await buildResidualRiskInventory(vulnerable),
     );
     expect(vulnerableRecords).toHaveLength(1);
     expect(records(await buildResidualRiskInventory(patched))).toEqual([]);
+    expect(records(await buildResidualRiskInventory(linkpathControl))).toEqual(
+      [],
+    );
     expect(vulnerableRecords[0]?.frameworkModel?.source.line).toBe(7);
     expect(vulnerableRecords[0]?.frameworkModel?.sink.line).toBe(4);
     expect(

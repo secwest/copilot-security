@@ -3115,7 +3115,7 @@
     },
     {
       "id": "node-multi-hop-patched-tar-linkpath",
-      "description": "The source-identical control upgrades only tar to 7.5.11, which rejects rewritten parent segments before creating Link or SymbolicLink entries.",
+      "description": "The source-identical control upgrades tar to 7.5.21, retaining the 7.5.11 linkpath repair while also closing later decompression and member-selection defects.",
       "fixture": "fixtures/node-multi-hop-patched-tar-linkpath",
       "findingsPaths": [
         "node-multi-hop-patched-tar-linkpath/run-1/findings.json",
