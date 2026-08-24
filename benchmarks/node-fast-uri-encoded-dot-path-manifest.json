@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-fast-uri-encoded-dot-path",
+      "description": "A remote asset URL crosses three wrappers into a fast-uri 3.1.0 normalize/parse path policy that collapses an encoded parent segment before a rooted filesystem write.",
+      "fixture": "fixtures/node-multi-hop-fast-uri-encoded-dot-path",
+      "findingsPaths": [
+        "node-multi-hop-fast-uri-encoded-dot-path/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "fast-uri-encoded-dot-segment-path-policy-bypass",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 10,
+              "endLine": 10,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-fast-uri-encoded-dot-path",
+      "description": "The source-identical control upgrades only fast-uri to 3.1.1, preserving encoded dot segments as path data within the intended public subtree.",
+      "fixture": "fixtures/node-multi-hop-patched-fast-uri-encoded-dot-path",
+      "findingsPaths": [
+        "node-multi-hop-patched-fast-uri-encoded-dot-path/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

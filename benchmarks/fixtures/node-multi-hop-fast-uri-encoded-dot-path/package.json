@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-fast-uri-encoded-dot-path",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fast-uri": "3.1.0"
+  }
+}

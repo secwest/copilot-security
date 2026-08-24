@@ -2764,6 +2764,7 @@ export async function buildResidualRiskInventory(
   );
   records.push(...nodeIpAddressLeadingZeroSsrfRecords(sourceFiles, records));
   records.push(...nodeFastUriHostPolicyConfusionRecords(sourceFiles, records));
+  records.push(...nodeFastUriEncodedDotPathRecords(sourceFiles, records));
   records.push(...javaFileGetNamePathBoundaryRecords(sourceFiles, records));
   records.push(...javaPathGetFileNamePathBoundaryRecords(sourceFiles, records));
 
@@ -8712,7 +8713,7 @@ type NodeFastUriHostPolicyCause = "authority-introducer" | "literal-backslash";
 interface NodeFastUriBinding {
   kind: "direct" | "receiver";
   local: string;
-  member: "parse" | "resolve";
+  member: "normalize" | "parse" | "resolve";
   line: number;
 }
 
@@ -8752,7 +8753,9 @@ function nodeFastUriBindings(lines: readonly string[]): NodeFastUriBinding[] {
   for (const imported of importedJavascriptSymbols(lines)) {
     if (
       imported.moduleSpecifier === "fast-uri" &&
-      (imported.imported === "parse" || imported.imported === "resolve")
+      (imported.imported === "normalize" ||
+        imported.imported === "parse" ||
+        imported.imported === "resolve")
     ) {
       bindings.push({
         kind: "direct",
@@ -8777,7 +8780,7 @@ function nodeFastUriBindings(lines: readonly string[]): NodeFastUriBinding[] {
         code,
       );
     if (receiver?.[1] === undefined) continue;
-    for (const member of ["parse", "resolve"] as const) {
+    for (const member of ["normalize", "parse", "resolve"] as const) {
       bindings.push({
         kind: "receiver",
         local: receiver[1],
@@ -8814,7 +8817,7 @@ function nodeJavascriptExpressionKey(expression: string): string {
     .replace(/\s+/gu, "");
 }
 
-function nodeStaticUrlHostname(
+function nodeStaticStringValue(
   lines: readonly string[],
   expression: string,
   beforeLine: number,
@@ -8833,7 +8836,16 @@ function nodeStaticUrlHostname(
   const literal =
     /^(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)')$/u.exec(value);
   const raw = literal?.[1] ?? literal?.[2];
-  if (raw === undefined || /\\/u.test(raw)) return undefined;
+  return raw === undefined || /\\/u.test(raw) ? undefined : raw;
+}
+
+function nodeStaticUrlHostname(
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+): string | undefined {
+  const raw = nodeStaticStringValue(lines, expression, beforeLine);
+  if (raw === undefined) return undefined;
   try {
     const parsed = new URL(raw);
     return parsed.protocol === "http:" || parsed.protocol === "https:"
@@ -9130,6 +9142,421 @@ function nodeFastUriHostPolicyConfusionRecords(
           ),
           {
             kind: `vulnerable-fast-uri-${guard.cause}-host-guard`,
+            path: sinkFile.path,
+            line: guard.line,
+          },
+        ],
+      },
+    });
+  }
+  return specialized;
+}
+
+interface NodePathConstructionBinding {
+  kind: "direct" | "receiver";
+  local: string;
+  member: "join" | "resolve";
+  line: number;
+}
+
+interface NodeFastUriEncodedDotPathGuard {
+  line: number;
+  prefix: string;
+}
+
+function nodeFastUriEncodedDotVersionIsVulnerable(version: string): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    major < 2 ||
+    (major === 2 && (minor < 4 || (minor === 4 && patch === 0))) ||
+    (major === 3 && (minor < 1 || (minor === 1 && patch === 0)))
+  );
+}
+
+function nodeFastUriExactCallArguments(
+  expression: string,
+  binding: NodeFastUriBinding,
+): string[] | undefined {
+  const structural = javascriptStructuralLines(expression.split(/\r?\n/u)).join(
+    "\n",
+  );
+  const escaped = escapeRegularExpression(binding.local);
+  const callExpression =
+    binding.kind === "direct"
+      ? new RegExp(`\\b${escaped}\\s*\\(`, "u")
+      : new RegExp(`\\b${escaped}\\s*\\.\\s*${binding.member}\\s*\\(`, "u");
+  const call = callExpression.exec(structural);
+  if (
+    call?.index === undefined ||
+    structural.slice(0, call.index).trim() !== ""
+  ) {
+    return undefined;
+  }
+  const open = structural.indexOf("(", call.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0 || structural.slice(close + 1).trim() !== "") {
+    return undefined;
+  }
+  return splitJavascriptArguments(structural.slice(open + 1, close)).map(
+    (argument) => argument.trim(),
+  );
+}
+
+function nodePathConstructionBindings(
+  lines: readonly string[],
+): NodePathConstructionBinding[] {
+  const bindings: NodePathConstructionBinding[] = [];
+  for (const imported of importedJavascriptSymbols(lines)) {
+    if (
+      /^(?:node:)?path$/u.test(imported.moduleSpecifier) &&
+      (imported.imported === "join" || imported.imported === "resolve")
+    ) {
+      bindings.push({
+        kind: "direct",
+        local: imported.local,
+        member: imported.imported,
+        line: imported.line,
+      });
+    }
+  }
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"](?:node:)?path['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"](?:node:)?path['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"](?:node:)?path['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"](?:node:)?path['"]\s*\)/u.exec(
+        code,
+      );
+    if (receiver?.[1] === undefined) continue;
+    for (const member of ["join", "resolve"] as const) {
+      bindings.push({
+        kind: "receiver",
+        local: receiver[1],
+        member,
+        line: index + 1,
+      });
+    }
+  }
+  return bindings;
+}
+
+function nodePathExactCallArguments(
+  expression: string,
+  binding: NodePathConstructionBinding,
+): string[] | undefined {
+  const structural = javascriptStructuralLines(expression.split(/\r?\n/u)).join(
+    "\n",
+  );
+  const escaped = escapeRegularExpression(binding.local);
+  const callExpression =
+    binding.kind === "direct"
+      ? new RegExp(`\\b${escaped}\\s*\\(`, "u")
+      : new RegExp(`\\b${escaped}\\s*\\.\\s*${binding.member}\\s*\\(`, "u");
+  const call = callExpression.exec(structural);
+  if (
+    call?.index === undefined ||
+    structural.slice(0, call.index).trim() !== ""
+  ) {
+    return undefined;
+  }
+  const open = structural.indexOf("(", call.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0 || structural.slice(close + 1).trim() !== "") {
+    return undefined;
+  }
+  return splitJavascriptArguments(structural.slice(open + 1, close)).map(
+    (argument) => argument.trim(),
+  );
+}
+
+function nodeFastUriParsePathUsesNormalizedRemote(
+  expression: string,
+  remote: string,
+  bindings: readonly NodeFastUriBinding[],
+): boolean {
+  const structural = javascriptStructuralLines(expression.split(/\r?\n/u)).join(
+    "\n",
+  );
+  for (const parseBinding of bindings.filter(
+    (binding) => binding.member === "parse",
+  )) {
+    const escaped = escapeRegularExpression(parseBinding.local);
+    const callExpression =
+      parseBinding.kind === "direct"
+        ? new RegExp(`\\b${escaped}\\s*\\(`, "u")
+        : new RegExp(`\\b${escaped}\\s*\\.\\s*parse\\s*\\(`, "u");
+    const call = callExpression.exec(structural);
+    if (call?.index === undefined) continue;
+    const open = structural.indexOf("(", call.index);
+    const close = matchingCallParenthesis(structural, open);
+    if (
+      open < 0 ||
+      close < 0 ||
+      !/^\s*\.\s*path\b/u.test(structural.slice(close + 1))
+    ) {
+      continue;
+    }
+    const parseArguments = splitJavascriptArguments(
+      structural.slice(open + 1, close),
+    ).map((argument) => argument.trim());
+    if (parseArguments.length !== 1) continue;
+    for (const normalizeBinding of bindings.filter(
+      (binding) => binding.member === "normalize",
+    )) {
+      const normalizeArguments = nodeFastUriExactCallArguments(
+        parseArguments[0]!,
+        normalizeBinding,
+      );
+      if (
+        normalizeArguments?.length === 1 &&
+        nodeJavascriptExpressionKey(normalizeArguments[0]!) === remote
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function nodeFastUriPublicPrefixGuard(
+  lines: readonly string[],
+  wrapper: ExportedJavascriptFunction,
+  remote: string,
+  sinkLine: number,
+): NodeFastUriEncodedDotPathGuard | undefined {
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const escapedRemote = escapeRegularExpression(remote);
+  const guardStart = new RegExp(
+    `\\bif\\s*\\(\\s*!\\s*${escapedRemote}\\s*\\.\\s*startsWith\\s*\\(`,
+    "u",
+  );
+  for (
+    let index = wrapper.startLine - 1;
+    index < Math.min(sinkLine - 1, codeLines.length);
+    index += 1
+  ) {
+    const window = codeLines
+      .slice(index, Math.min(index + 6, sinkLine))
+      .join("\n");
+    const guard = guardStart.exec(window);
+    if (guard?.index === undefined) continue;
+    const guardLine =
+      index + (window.slice(0, guard.index).match(/\n/gu)?.length ?? 0) + 1;
+    const open = window.indexOf("(", window.indexOf("startsWith", guard.index));
+    const close = matchingCallParenthesis(window, open);
+    if (open < 0 || close < 0) continue;
+    const prefixArguments = splitJavascriptArguments(
+      window.slice(open + 1, close),
+    ).map((argument) => argument.trim());
+    if (
+      prefixArguments.length !== 1 ||
+      !nodeFastUriGuardBranchFailsClosed(window.slice(close + 1))
+    ) {
+      continue;
+    }
+    const prefix = nodeStaticStringValue(lines, prefixArguments[0]!, guardLine);
+    if (prefix === undefined) continue;
+    try {
+      const parsed = new URL(prefix);
+      if (
+        !["http:", "https:"].includes(parsed.protocol) ||
+        parsed.username !== "" ||
+        parsed.password !== "" ||
+        parsed.search !== "" ||
+        parsed.hash !== "" ||
+        parsed.pathname === "/" ||
+        !parsed.pathname.endsWith("/") ||
+        parsed.href !== prefix
+      ) {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+    if (
+      javascriptIdentifierReassignedBetween(lines, remote, guardLine, sinkLine)
+    ) {
+      return undefined;
+    }
+    return { line: guardLine, prefix };
+  }
+  return undefined;
+}
+
+function nodeFastUriGuardBranchFailsClosed(tail: string): boolean {
+  let branch = tail.trimStart();
+  if (!branch.startsWith(")")) return false;
+  branch = branch.slice(1).trimStart();
+  if (/^(?:throw|return)\b/u.test(branch)) return true;
+  if (!branch.startsWith("{")) return false;
+  let depth = 0;
+  let close = -1;
+  for (let index = 0; index < branch.length; index += 1) {
+    if (branch[index] === "{") depth += 1;
+    else if (branch[index] === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        close = index;
+        break;
+      }
+    }
+  }
+  if (close < 0) return false;
+  const body = branch.slice(1, close).trim();
+  return /(?:^|[;\n])\s*(?:throw|return)\b[^{}]*;?\s*$/u.test(body);
+}
+
+function nodeFastUriEncodedDotPathGuard(
+  lines: readonly string[],
+  wrapper: ExportedJavascriptFunction,
+  sinkLine: number,
+  sinkExpressions: readonly string[],
+): NodeFastUriEncodedDotPathGuard | undefined {
+  const fastUriBindings = nodeFastUriBindings(lines).filter(
+    (binding) =>
+      binding.line < sinkLine &&
+      !wrapper.parameters.includes(binding.local) &&
+      !javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        sinkLine,
+      ),
+  );
+  if (
+    !fastUriBindings.some((binding) => binding.member === "normalize") ||
+    !fastUriBindings.some((binding) => binding.member === "parse")
+  ) {
+    return undefined;
+  }
+  const pathBindings = nodePathConstructionBindings(lines).filter(
+    (binding) =>
+      binding.line < sinkLine &&
+      !wrapper.parameters.includes(binding.local) &&
+      !javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        sinkLine,
+      ),
+  );
+  for (const remote of wrapper.parameters) {
+    const guard = nodeFastUriPublicPrefixGuard(
+      lines,
+      wrapper,
+      remote,
+      sinkLine,
+    );
+    if (guard === undefined) continue;
+    for (const sinkExpression of sinkExpressions) {
+      for (const pathBinding of pathBindings) {
+        const arguments_ = nodePathExactCallArguments(
+          sinkExpression,
+          pathBinding,
+        );
+        if (arguments_ === undefined || arguments_.length < 2) continue;
+        const root = nodeStaticStringValue(lines, arguments_[0]!, sinkLine);
+        if (root === undefined || root.trim() === "") continue;
+        if (
+          arguments_
+            .slice(1)
+            .some((argument) =>
+              nodeFastUriParsePathUsesNormalizedRemote(
+                argument,
+                remote,
+                fastUriBindings,
+              ),
+            )
+        ) {
+          return guard;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+function nodeFastUriEncodedDotPathRecords(
+  files: readonly SourceFileSnapshot[],
+  records: readonly ResidualRiskRecord[],
+): ResidualRiskRecord[] {
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const emitted = new Set<string>();
+  const specialized: ResidualRiskRecord[] = [];
+  for (const record of records) {
+    const framework = record.frameworkModel;
+    if (framework?.id !== "node-http-path") continue;
+    const sinkFile = filesByPath.get(framework.sink.path);
+    if (
+      sinkFile === undefined ||
+      !JAVASCRIPT_EXTENSIONS.has(sinkFile.extension) ||
+      javascriptTestOrExamplePath(sinkFile.path)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, sinkFile.path, "fast-uri");
+    if (
+      dependency === undefined ||
+      !nodeFastUriEncodedDotVersionIsVulnerable(dependency.version)
+    ) {
+      continue;
+    }
+    const sink = nodeFilesystemPathSink(sinkFile.lines, framework.sink.line);
+    if (sink === undefined) continue;
+    const wrapper = exportedJavascriptFunctions(sinkFile.lines).find(
+      (candidate) =>
+        framework.sink.line >= candidate.startLine &&
+        framework.sink.line <= candidate.endLine,
+    );
+    if (wrapper === undefined) continue;
+    const guard = nodeFastUriEncodedDotPathGuard(
+      sinkFile.lines,
+      wrapper,
+      framework.sink.line,
+      sink.expressions,
+    );
+    if (guard === undefined) continue;
+    const key = `${framework.source.path}\0${framework.source.line}\0${framework.sink.path}\0${framework.sink.line}`;
+    if (emitted.has(key)) continue;
+    emitted.add(key);
+    specialized.push({
+      ...record,
+      categories: [
+        "framework-dataflow:node-path-fast-uri-encoded-dot-segment-policy-bypass",
+        `modeled-source:${framework.source.kind}`,
+        `modeled-sink:${framework.sink.kind}`,
+        "broken-control:fast-uri-encoded-dot-segment-normalization",
+      ],
+      priority: Math.max(record.priority, 122),
+      frameworkModel: {
+        ...framework,
+        id: "node-path-fast-uri-encoded-dot-segment-policy-bypass",
+        sink: { ...framework.sink, cweIds: ["CWE-22"] },
+        propagators: [
+          ...framework.propagators,
+          {
+            kind: "fast-uri-runtime-dependency",
+            path: dependency.manifestPath,
+            line: dependency.line,
+            symbol: `fast-uri@${dependency.version}:${dependency.proof}:encoded-dot-segment-normalization`,
+          },
+        ],
+        candidateControls: [
+          ...framework.candidateControls,
+          {
+            kind: "vulnerable-fast-uri-encoded-dot-segment-path-policy",
             path: sinkFile.path,
             line: guard.line,
           },

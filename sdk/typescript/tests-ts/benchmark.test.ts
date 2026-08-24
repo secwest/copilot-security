@@ -247,6 +247,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-fast-uri-authority-ssrf",
         "node-multi-hop-patched-fast-uri-authority",
       ],
+      [
+        "node-multi-hop-fast-uri-encoded-dot-path",
+        "node-multi-hop-patched-fast-uri-encoded-dot-path",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],
