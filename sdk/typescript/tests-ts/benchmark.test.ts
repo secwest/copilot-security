@@ -229,6 +229,10 @@ describe("effectiveness benchmark", () => {
       ],
       ["node-multi-hop-nanoid-size-dos", "node-multi-hop-patched-nanoid-size"],
       [
+        "node-opcua-server-unbounded-nonce-cache",
+        "node-opcua-server-bounded-nonce-cache",
+      ],
+      [
         "node-multi-hop-postcss-source-map-traversal",
         "node-multi-hop-patched-postcss",
       ],

@@ -64,7 +64,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains eighty-seven vulnerable/control pairs:
+The versioned corpus currently contains eighty-eight vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -188,8 +188,11 @@ Decoder API. The latest pair reaches the same state through the public
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case produce 522 scans across 87 exploit/control pairs in the complete
-corpus.
+per case now produce 528 scans across 88 exploit/control pairs in the complete
+corpus. The added industrial-protocol pair starts the same official
+`OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
+client nonce in a process-global object, while 2.168.0 enforces TTL and size
+eviction.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all
@@ -462,6 +465,22 @@ patched or development-only packages, unresolved ranges, replacement,
 shadowing, and test/example paths remain negative. The zero-default control
 requires both integer validation and a positive bound because `NaN` also
 collapses the factory's random step to zero.
+
+`node-opcua-nonce-cache-dos-manifest.json` measures the unauthenticated
+process-global nonce retention reviewed in GHSA-6wvw-vrw4-363w. The positive
+constructs and starts the official `OPCUAServer` under exact production
+`node-opcua` 2.165.0 proof; the source-identical control changes only that
+dependency to 2.168.0. Deterministic regressions cover named and aliased ESM,
+namespace, TypeScript import-equals, CommonJS receiver, destructure, and direct
+member bindings, same-file startup, an exported server instance started across
+a relative import, exact declarations, and fresh npm v2/v3 resolution. Client
+use, unstarted construction, post-review releases, wrong or development-only
+packages, unresolved ranges, inconsistent or v1 locks, reassignment, member
+replacement, wrapper shadowing, local lookalikes, and test/example paths remain
+negative. The bounded real-package witness inserts 50,001 unique 32-byte
+nonempty nonces and replays the first: 2.165.0 still recognizes it, whereas
+2.168.0 has evicted it at the 50,000-entry ceiling. This proves the storage
+repair without deliberately exhausting memory or starting a network listener.
 
 `node-postcss-source-map-traversal-manifest.json` measures PostCSS's implicit
 previous-source-map file load. The positive sends an Express CSS body through

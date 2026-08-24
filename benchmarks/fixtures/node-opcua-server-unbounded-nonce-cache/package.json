@@ -1,0 +1,9 @@
+{
+  "name": "node-opcua-server-unbounded-nonce-cache",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "node-opcua": "2.165.0"
+  }
+}

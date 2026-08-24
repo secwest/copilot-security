@@ -1860,9 +1860,13 @@ pair exercises the ordinary public `socket.io` Server surface with identical
 parser changes from vulnerable 4.2.6 to repaired 4.2.7. The newest pair carries
 a request-controlled numeric ID size through three wrappers into
 `nanoid/non-secure` 5.1.15; its source-identical 5.1.16 twin proves that the
-negative-size decrement loop terminates after the repair. Each of the 174 cases
-in 87 exploit/control pairs is scanned three times, producing 522 scans that
-measure both accuracy and model variance.
+negative-size decrement loop terminates after the repair. The newest
+industrial-protocol pair starts an official `OPCUAServer` with exact
+`node-opcua` 2.165.0 or 2.168.0 dependency proof. A bounded real-package
+witness shows that the affected build retains the first of 50,001 unique
+nonces, while the repaired build evicts it at its 50,000-entry ceiling. Each of
+the 176 cases in 88 exploit/control pairs is scanned three times, producing 528
+scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild
 the selected manifest and report from the sealed campaign receipts.
