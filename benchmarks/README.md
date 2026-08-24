@@ -188,7 +188,7 @@ Decoder API. The latest pair reaches the same state through the public
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case now produce 576 scans across 96 exploit/control pairs in the complete
+per case now produce 582 scans across 97 exploit/control pairs in the complete
 corpus. The added industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size
@@ -569,6 +569,28 @@ prereleases remain negative. The shared witness never invokes a shell,
 listener, filesystem API, or network API: 10.25.7 returns only
 `process.version` through inherited `valueOf` filter resolution, while 10.26.0
 returns `false` for the identical template.
+
+`node-shescape-cmd-injection-manifest.json` measures application reachability
+for [GHSA-w4hw-qcx7-56pr / CVE-2026-73414](https://github.com/advisories/GHSA-w4hw-qcx7-56pr),
+not merely an affected Shescape dependency or incomplete local escaping code.
+The positive sends an Express query value through three relative-import
+wrappers into official Shescape 3.0.0 configured for `cmd.exe`; the exact
+escaped result reaches an official Node child-process command-string dispatch.
+The source-identical control changes only `shescape` to 3.0.1, which
+caret-escapes both CMD parentheses. Regressions cover named and aliased
+constructors; namespace and TypeScript import-equals receivers; CommonJS
+destructures, receivers, and direct members; official stateless `escape` and
+`escapeAll`; stable constructor, instance, process, command, and argument
+aliases; direct nested and multiline dispatch; `exec`, `execSync`, `spawn`,
+`spawnSync`, and shell-enabled `execFile` forms; both affected release branches;
+and fresh declaration-consistent npm v2/v3 locks. Non-CMD shells, fixed or
+unused input, safe shell-free argv dispatch, missing final shell options,
+patched/prerelease versions, wrong or development-only packages, unresolved or
+stale metadata, mutated options or values, lookalikes, replaced capabilities,
+and test/example paths remain negative. The shared witness executes only the
+advisory's benign `echo y` sentinel on Windows. Linux imports the installed
+package's published Windows CMD escape function and checks the exact string
+boundary without invoking a shell.
 
 `node-velocity-template-rce-manifest.json` measures application reachability
 for [GHSA-7gfh-x38p-prh3 / CVE-2026-73649](https://github.com/advisories/GHSA-7gfh-x38p-prh3),

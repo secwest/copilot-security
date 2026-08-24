@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-repaired-shescape-cmd",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "shescape": "3.0.1"
+  }
+}

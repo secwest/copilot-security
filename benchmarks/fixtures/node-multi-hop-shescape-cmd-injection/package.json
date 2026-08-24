@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-shescape-cmd-injection",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "shescape": "3.0.0"
+  }
+}

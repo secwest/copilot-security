@@ -713,6 +713,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-shescape-cmd-injection",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/["']shescape(?:\/stateless)?["']/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-shescape-cmd-parenthesis-injection",
+        expression:
+          /\.\s*(?:escape|escapeAll)\s*\(|\b(?:escape|escapeAll)\s*\(/u,
+        cweIds: ["CWE-78", "CWE-116"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-velocity-template-rce",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3286,6 +3313,15 @@ interface NodeLiquidJsTemplateSink {
   kind:
     | "vulnerable-liquidjs-inherited-filter-rce"
     | "lock-resolved-vulnerable-liquidjs-inherited-filter-rce";
+  dependency: NodeRuntimeDependency;
+}
+
+interface NodeShescapeCommandSink {
+  sourceExpression: string;
+  sinkLine: number;
+  kind:
+    | "vulnerable-shescape-cmd-parenthesis-injection"
+    | "lock-resolved-vulnerable-shescape-cmd-parenthesis-injection";
   dependency: NodeRuntimeDependency;
 }
 
@@ -5887,6 +5923,736 @@ function nodeLiquidJsTemplateSink(
     const sourceExpression = arguments_?.[0]?.trim() ?? "";
     if (sourceExpression !== "") {
       return { sourceExpression, sinkLine: line, kind, dependency };
+    }
+  }
+  return undefined;
+}
+
+type NodeShescapeMethod = "escape" | "escapeAll";
+type NodeChildProcessShellMethod =
+  | "exec"
+  | "execSync"
+  | "execFile"
+  | "execFileSync"
+  | "spawn"
+  | "spawnSync";
+
+interface NodeShescapeBindingProtection {
+  local: string;
+  line: number;
+  member?: string;
+}
+
+interface NodeShescapeConstructorBinding {
+  local: string;
+  receiverMember?: "Shescape";
+  line: number;
+  protections: NodeShescapeBindingProtection[];
+}
+
+interface NodeShescapeInstanceBinding {
+  local: string;
+  line: number;
+  optionsExpression: string;
+  protections: NodeShescapeBindingProtection[];
+}
+
+interface NodeShescapeFunctionBinding {
+  method: NodeShescapeMethod;
+  local: string;
+  receiverMember?: NodeShescapeMethod;
+  line: number;
+  protections: NodeShescapeBindingProtection[];
+}
+
+interface NodeChildProcessShellBinding {
+  method: NodeChildProcessShellMethod;
+  local: string;
+  receiverMember?: NodeChildProcessShellMethod;
+  line: number;
+  protections: NodeShescapeBindingProtection[];
+}
+
+function nodeShescapeVersionIsCmdInjectionVulnerable(version: string): boolean {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return (
+    major < 2 ||
+    (major === 2 && (minor < 1 || (minor === 1 && patch <= 13))) ||
+    (major === 3 && minor === 0 && patch === 0)
+  );
+}
+
+function nodePackageBindingPattern(binding: {
+  local: string;
+  receiverMember?: string;
+}): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.receiverMember === undefined
+    ? local
+    : `${local}\\s*\\.\\s*${binding.receiverMember}`;
+}
+
+function nodePackageBindingUsable(
+  lines: readonly string[],
+  protections: readonly NodeShescapeBindingProtection[],
+  useLine: number,
+): boolean {
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      useLine >= candidate.startLine && useLine <= candidate.endLine,
+  );
+  const structural = javascriptStructuralLines(lines);
+  const code = javascriptCodeLinesWithoutComments(lines);
+  for (const protection of protections) {
+    if (
+      protection.line >= useLine ||
+      wrapper?.parameters.includes(protection.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        protection.local,
+        protection.line,
+        useLine + 1,
+      )
+    ) {
+      return false;
+    }
+    if (protection.member === undefined) continue;
+    const local = escapeRegularExpression(protection.local);
+    const member = escapeRegularExpression(protection.member);
+    const replacement = new RegExp(
+      `\\b${local}\\s*\\.\\s*${member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+      "u",
+    );
+    const define = new RegExp(
+      `\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${local}\\s*,\\s*["']${member}["']`,
+      "u",
+    );
+    if (
+      structural
+        .slice(protection.line, Math.max(protection.line, useLine))
+        .some(
+          (candidate, offset) =>
+            replacement.test(candidate) ||
+            define.test(code[protection.line + offset] ?? ""),
+        )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function nodeShescapeConstructorBindings(
+  lines: readonly string[],
+): NodeShescapeConstructorBinding[] {
+  const bindings: NodeShescapeConstructorBinding[] = importedJavascriptSymbols(
+    lines,
+  )
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "shescape" &&
+        binding.imported === "Shescape",
+    )
+    .map((binding) => ({
+      local: binding.local,
+      line: binding.line,
+      protections: [{ local: binding.local, line: binding.line }],
+    }));
+  const structural = javascriptStructuralLines(lines);
+  for (let index = 0; index < structural.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']shescape["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']shescape["']\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']shescape["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      bindings.push({
+        local: receiver[1],
+        receiverMember: "Shescape",
+        line: index + 1,
+        protections: [
+          { local: receiver[1], line: index + 1, member: "Shescape" },
+        ],
+      });
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']shescape["']\s*\)\s*\.\s*Shescape\s*;?\s*$/u.exec(
+        code,
+      );
+    if (direct?.[1] !== undefined) {
+      bindings.push({
+        local: direct[1],
+        line: index + 1,
+        protections: [{ local: direct[1], line: index + 1 }],
+      });
+    }
+  }
+  const originals = [...bindings];
+  for (let index = 0; index < structural.length; index += 1) {
+    const code = structural[index] ?? "";
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${nodePackageBindingPattern(origin)}\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      if (alias?.[1] === undefined) continue;
+      bindings.push({
+        local: alias[1],
+        line: index + 1,
+        protections: [
+          ...origin.protections,
+          { local: alias[1], line: index + 1 },
+        ],
+      });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.receiverMember === binding.receiverMember &&
+          candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeShescapeInstanceBindings(
+  lines: readonly string[],
+  constructors: readonly NodeShescapeConstructorBinding[],
+): NodeShescapeInstanceBinding[] {
+  const structural = javascriptStructuralLines(lines);
+  const instances: NodeShescapeInstanceBinding[] = [];
+  for (let index = 0; index < structural.length; index += 1) {
+    for (const constructor of constructors) {
+      if (
+        !nodePackageBindingUsable(lines, constructor.protections, index + 1)
+      ) {
+        continue;
+      }
+      const callee = new RegExp(
+        `\\bnew\\s+${nodePackageBindingPattern(constructor)}\\s*\\(`,
+        "u",
+      );
+      const declaration = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*new\\s+${nodePackageBindingPattern(constructor)}\\s*\\(`,
+        "u",
+      ).exec(structural[index] ?? "");
+      if (declaration?.[1] === undefined) continue;
+      const optionsExpression =
+        javascriptCallArgumentsAtLine(lines, index + 1, callee)?.[0]?.trim() ??
+        "";
+      if (optionsExpression === "") continue;
+      instances.push({
+        local: declaration[1],
+        line: index + 1,
+        optionsExpression,
+        protections: [{ local: declaration[1], line: index + 1 }],
+      });
+    }
+  }
+  const originals = [...instances];
+  for (let index = 0; index < structural.length; index += 1) {
+    const code = structural[index] ?? "";
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapeRegularExpression(origin.local)}\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      if (alias?.[1] === undefined) continue;
+      instances.push({
+        local: alias[1],
+        line: index + 1,
+        optionsExpression: origin.optionsExpression,
+        protections: [
+          ...origin.protections,
+          { local: alias[1], line: index + 1 },
+        ],
+      });
+    }
+  }
+  return instances.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.local === binding.local && candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeShescapeStatelessBindings(
+  lines: readonly string[],
+): NodeShescapeFunctionBinding[] {
+  const methods = new Set<NodeShescapeMethod>(["escape", "escapeAll"]);
+  const bindings: NodeShescapeFunctionBinding[] = importedJavascriptSymbols(
+    lines,
+  )
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "shescape/stateless" &&
+        methods.has(binding.imported as NodeShescapeMethod),
+    )
+    .map((binding) => ({
+      method: binding.imported as NodeShescapeMethod,
+      local: binding.local,
+      line: binding.line,
+      protections: [{ local: binding.local, line: binding.line }],
+    }));
+  const structural = javascriptStructuralLines(lines);
+  for (let index = 0; index < structural.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']shescape\/stateless["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']shescape\/stateless["']\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']shescape\/stateless["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      for (const method of methods) {
+        bindings.push({
+          method,
+          local: receiver[1],
+          receiverMember: method,
+          line: index + 1,
+          protections: [
+            { local: receiver[1], line: index + 1, member: method },
+          ],
+        });
+      }
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']shescape\/stateless["']\s*\)\s*\.\s*(escape|escapeAll)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (direct?.[1] !== undefined && direct[2] !== undefined) {
+      bindings.push({
+        method: direct[2] as NodeShescapeMethod,
+        local: direct[1],
+        line: index + 1,
+        protections: [{ local: direct[1], line: index + 1 }],
+      });
+    }
+  }
+  const originals = [...bindings];
+  for (let index = 0; index < structural.length; index += 1) {
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${nodePackageBindingPattern(origin)}\\s*;?\\s*$`,
+        "u",
+      ).exec(structural[index] ?? "");
+      if (alias?.[1] === undefined) continue;
+      bindings.push({
+        method: origin.method,
+        local: alias[1],
+        line: index + 1,
+        protections: [
+          ...origin.protections,
+          { local: alias[1], line: index + 1 },
+        ],
+      });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.method === binding.method &&
+          candidate.local === binding.local &&
+          candidate.receiverMember === binding.receiverMember &&
+          candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeChildProcessShellBindings(
+  lines: readonly string[],
+): NodeChildProcessShellBinding[] {
+  const methods = new Set<NodeChildProcessShellMethod>([
+    "exec",
+    "execSync",
+    "execFile",
+    "execFileSync",
+    "spawn",
+    "spawnSync",
+  ]);
+  const bindings: NodeChildProcessShellBinding[] = importedJavascriptSymbols(
+    lines,
+  )
+    .filter(
+      (binding) =>
+        (binding.moduleSpecifier === "node:child_process" ||
+          binding.moduleSpecifier === "child_process") &&
+        methods.has(binding.imported as NodeChildProcessShellMethod),
+    )
+    .map((binding) => ({
+      method: binding.imported as NodeChildProcessShellMethod,
+      local: binding.local,
+      line: binding.line,
+      protections: [{ local: binding.local, line: binding.line }],
+    }));
+  const structural = javascriptStructuralLines(lines);
+  for (let index = 0; index < structural.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["'](?:node:)?child_process["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["'](?:node:)?child_process["']\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["'](?:node:)?child_process["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      for (const method of methods) {
+        bindings.push({
+          method,
+          local: receiver[1],
+          receiverMember: method,
+          line: index + 1,
+          protections: [
+            { local: receiver[1], line: index + 1, member: method },
+          ],
+        });
+      }
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["'](?:node:)?child_process["']\s*\)\s*\.\s*(exec|execSync|execFile|execFileSync|spawn|spawnSync)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (direct?.[1] !== undefined && direct[2] !== undefined) {
+      bindings.push({
+        method: direct[2] as NodeChildProcessShellMethod,
+        local: direct[1],
+        line: index + 1,
+        protections: [{ local: direct[1], line: index + 1 }],
+      });
+    }
+  }
+  const originals = [...bindings];
+  for (let index = 0; index < structural.length; index += 1) {
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${nodePackageBindingPattern(origin)}\\s*;?\\s*$`,
+        "u",
+      ).exec(structural[index] ?? "");
+      if (alias?.[1] === undefined) continue;
+      bindings.push({
+        method: origin.method,
+        local: alias[1],
+        line: index + 1,
+        protections: [
+          ...origin.protections,
+          { local: alias[1], line: index + 1 },
+        ],
+      });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.method === binding.method &&
+          candidate.local === binding.local &&
+          candidate.receiverMember === binding.receiverMember &&
+          candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeShescapeUsesCmdShell(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): boolean {
+  const identifier = expression.trim();
+  if (/^[A-Za-z_$][\w$]*$/u.test(identifier)) {
+    const initializer = javascriptVariableInitializer(lines, identifier, line);
+    if (initializer === undefined) return false;
+    const local = escapeRegularExpression(identifier);
+    const memberWrite = new RegExp(
+      `\\b${local}\\s*\\.\\s*shell\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+      "u",
+    );
+    const define = new RegExp(
+      `\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${local}\\s*,\\s*["']shell["']`,
+      "u",
+    );
+    const structural = javascriptStructuralLines(lines);
+    const code = javascriptCodeLinesWithoutComments(lines);
+    if (
+      structural
+        .slice(initializer.line, Math.max(initializer.line, line))
+        .some(
+          (candidate, offset) =>
+            memberWrite.test(candidate) ||
+            define.test(code[initializer.line + offset] ?? ""),
+        )
+    ) {
+      return false;
+    }
+  }
+  const options = resolveJavascriptExpression(lines, expression, line);
+  if (options === undefined) return false;
+  const shellExpression = javascriptObjectPropertyValue(options.value, "shell");
+  if (shellExpression === undefined) return false;
+  const shell =
+    resolveJavascriptExpression(
+      lines,
+      shellExpression,
+      options.line,
+    )?.value.trim() ?? shellExpression.trim();
+  if (shell === "true") return true;
+  const quoted = /^["'`]([^"'`]+)["'`]$/u.exec(shell)?.[1];
+  if (quoted === undefined) return false;
+  return /(?:^|[\\/])cmd(?:\.exe)?$/iu.test(quoted);
+}
+
+function nodeShescapeDispatchArguments(
+  lines: readonly string[],
+  line: number,
+  binding: NodeChildProcessShellBinding,
+): { values: string[]; optionsExpression: string } | undefined {
+  if (!nodePackageBindingUsable(lines, binding.protections, line)) {
+    return undefined;
+  }
+  const callee = new RegExp(
+    `\\b${nodePackageBindingPattern(binding)}\\s*\\(`,
+    "u",
+  );
+  const arguments_ =
+    javascriptCallArgumentsAtLine(lines, line, callee) ??
+    javascriptRawCallArgumentsAtLine(lines, line, callee);
+  if (arguments_ === undefined) return undefined;
+  if (binding.method === "exec" || binding.method === "execSync") {
+    if (arguments_.length < 2) return undefined;
+    return {
+      values: [arguments_[0] ?? ""],
+      optionsExpression: arguments_[1] ?? "",
+    };
+  }
+  if (binding.method === "spawn" || binding.method === "spawnSync") {
+    if (arguments_.length < 3) return undefined;
+    return {
+      values: [arguments_[0] ?? "", arguments_[1] ?? ""],
+      optionsExpression: arguments_[2] ?? "",
+    };
+  }
+  if (arguments_.length < 2) return undefined;
+  const optionsIndex = arguments_.length >= 3 ? 2 : 1;
+  return {
+    values: arguments_.slice(0, optionsIndex),
+    optionsExpression: arguments_[optionsIndex] ?? "",
+  };
+}
+
+function nodeExpressionTransitivelyReferences(
+  lines: readonly string[],
+  expression: string,
+  target: string,
+  line: number,
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+): boolean {
+  if (lineReferencesIdentifier(expression, target)) return true;
+  if (depth >= 4) return false;
+  for (const identifier of javascriptExpressionIdentifiers(expression)) {
+    if (seen.has(identifier) || identifier === target) continue;
+    const initializer = javascriptVariableInitializer(lines, identifier, line);
+    if (initializer === undefined) continue;
+    if (
+      nodeExpressionTransitivelyReferences(
+        lines,
+        initializer.value,
+        target,
+        initializer.line,
+        depth + 1,
+        new Set([...seen, identifier]),
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function nodeShescapeDispatchLine(
+  lines: readonly string[],
+  escapeLine: number,
+  escapeCallee: RegExp,
+): number | undefined {
+  const bindings = nodeChildProcessShellBindings(lines);
+  for (const binding of bindings) {
+    const dispatch = nodeShescapeDispatchArguments(lines, escapeLine, binding);
+    if (
+      dispatch !== undefined &&
+      nodeShescapeUsesCmdShell(lines, dispatch.optionsExpression, escapeLine) &&
+      (dispatch.values.some((value) => escapeCallee.test(value)) ||
+        escapeCallee.test(
+          javascriptCodeBeforeComment(lines[escapeLine - 1] ?? ""),
+        ))
+    ) {
+      return escapeLine;
+    }
+  }
+  const span = nodeVelocityCallSpan(lines, escapeLine, escapeCallee);
+  if (span === undefined) return undefined;
+  const declaration =
+    /(?:^|\n|[;{])\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;]+)?\s*=\s*$/u.exec(
+      span.prefix,
+    );
+  if (declaration?.[1] === undefined) return undefined;
+  const escaped = declaration[1];
+  if (
+    !/^\s*(?:\.\s*join\s*\([^)]*\))?\s*;?\s*$/u.test(
+      span.suffix.split("\n", 1)[0] ?? "",
+    )
+  ) {
+    return undefined;
+  }
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      escapeLine >= candidate.startLine && escapeLine <= candidate.endLine,
+  );
+  const lastLine = Math.min(lines.length, wrapper?.endLine ?? escapeLine + 64);
+  for (
+    let candidateLine = span.closeLine + 1;
+    candidateLine <= lastLine;
+    candidateLine += 1
+  ) {
+    if (
+      javascriptIdentifierReassignedBetween(
+        lines,
+        escaped,
+        escapeLine,
+        candidateLine + 1,
+      )
+    ) {
+      return undefined;
+    }
+    for (const binding of bindings) {
+      const dispatch = nodeShescapeDispatchArguments(
+        lines,
+        candidateLine,
+        binding,
+      );
+      if (
+        dispatch === undefined ||
+        !nodeShescapeUsesCmdShell(
+          lines,
+          dispatch.optionsExpression,
+          candidateLine,
+        )
+      ) {
+        continue;
+      }
+      const reachesDispatch = dispatch.values.some((value) =>
+        nodeExpressionTransitivelyReferences(
+          lines,
+          value,
+          escaped,
+          candidateLine,
+        ),
+      );
+      if (reachesDispatch) return candidateLine;
+    }
+  }
+  return undefined;
+}
+
+function nodeShescapeCommandSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeShescapeCommandSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "shescape");
+  if (
+    dependency === undefined ||
+    !nodeShescapeVersionIsCmdInjectionVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const kind =
+    dependency.proof === "npm-lockfile"
+      ? "lock-resolved-vulnerable-shescape-cmd-parenthesis-injection"
+      : "vulnerable-shescape-cmd-parenthesis-injection";
+  const constructors = nodeShescapeConstructorBindings(lines);
+  const instances = nodeShescapeInstanceBindings(lines, constructors);
+  for (const instance of instances) {
+    if (
+      !nodePackageBindingUsable(lines, instance.protections, line) ||
+      !nodeShescapeUsesCmdShell(
+        lines,
+        instance.optionsExpression,
+        instance.line,
+      )
+    ) {
+      continue;
+    }
+    for (const method of ["escape", "escapeAll"] as const) {
+      const memberProtection: NodeShescapeBindingProtection = {
+        local: instance.local,
+        line: instance.line,
+        member: method,
+      };
+      if (!nodePackageBindingUsable(lines, [memberProtection], line)) continue;
+      const callee = new RegExp(
+        `\\b${escapeRegularExpression(instance.local)}\\s*\\.\\s*${method}\\s*\\(`,
+        "u",
+      );
+      const sourceExpression =
+        (javascriptCallArgumentsAtLine(lines, line, callee) ??
+          javascriptRawCallArgumentsAtLine(lines, line, callee))?.[0]?.trim() ??
+        "";
+      if (sourceExpression === "") continue;
+      const sinkLine = nodeShescapeDispatchLine(lines, line, callee);
+      if (sinkLine !== undefined) {
+        return { sourceExpression, sinkLine, kind, dependency };
+      }
+    }
+  }
+  for (const binding of nodeShescapeStatelessBindings(lines)) {
+    if (!nodePackageBindingUsable(lines, binding.protections, line)) continue;
+    const callee = new RegExp(
+      `\\b${nodePackageBindingPattern(binding)}\\s*\\(`,
+      "u",
+    );
+    const arguments_ =
+      javascriptCallArgumentsAtLine(lines, line, callee) ??
+      javascriptRawCallArgumentsAtLine(lines, line, callee);
+    const sourceExpression = arguments_?.[0]?.trim() ?? "";
+    const optionsExpression = arguments_?.[1]?.trim() ?? "";
+    if (
+      sourceExpression === "" ||
+      optionsExpression === "" ||
+      !nodeShescapeUsesCmdShell(lines, optionsExpression, line)
+    ) {
+      continue;
+    }
+    const sinkLine = nodeShescapeDispatchLine(lines, line, callee);
+    if (sinkLine !== undefined) {
+      return { sourceExpression, sinkLine, kind, dependency };
     }
   }
   return undefined;
@@ -11878,6 +12644,7 @@ function frameworkDataflowRecords(
     if (
       (model.id === "node-http-jsonata-expression-rce" ||
         model.id === "node-http-liquidjs-template-rce" ||
+        model.id === "node-http-shescape-cmd-injection" ||
         model.id === "node-http-velocity-template-rce" ||
         model.id === "node-http-vm2-host-proto-sandbox-escape" ||
         model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
@@ -11900,7 +12667,9 @@ function frameworkDataflowRecords(
       continue;
     }
     const rawMatchedSources = JAVASCRIPT_EXTENSIONS.has(extension)
-      ? matchingJavascriptModelLines(lines, model.sources, 16)
+      ? model.id === "node-http-shescape-cmd-injection"
+        ? matchingJavascriptTemplateAwareModelLines(lines, model.sources, 16)
+        : matchingJavascriptModelLines(lines, model.sources, 16)
       : PYTHON_EXTENSIONS.has(extension)
         ? matchingPythonModelLines(lines, model.sources, 16)
         : extension === ".java" || extension === ".cs"
@@ -11930,38 +12699,43 @@ function frameworkDataflowRecords(
       model.id === "node-http-path" || model.id === "python-web-path"
         ? exactFilesystemPathSinkLines(lines, model.id, 32)
         : JAVASCRIPT_EXTENSIONS.has(extension)
-          ? matchingJavascriptModelLines(
-              lines,
-              model.sinks,
-              model.id === "node-http-ssrf" ||
-                model.id === "node-http-object-authorization" ||
-                model.id === "node-copilot-system-prompt-injection" ||
-                model.id === "node-http-js-toml-prototype-pollution" ||
-                model.id === "node-http-jsonpath-plus-code-injection" ||
-                model.id === "node-http-jsonata-expression-rce" ||
-                model.id === "node-http-liquidjs-template-rce" ||
-                model.id === "node-http-velocity-template-rce" ||
-                model.id === "node-http-flat-unflatten-prototype-pollution" ||
-                model.id === "node-http-dset-prototype-pollution" ||
-                model.id === "node-http-object-path-prototype-pollution" ||
-                model.id === "node-http-lodash-prototype-deletion" ||
-                model.id === "node-http-immutable-prototype-replacement" ||
-                model.id === "node-http-tmp-path-traversal" ||
-                model.id === "node-http-js-yaml-parser-dos" ||
-                model.id === "node-http-brace-expansion-dos" ||
-                model.id === "node-http-nanoid-size-dos" ||
-                model.id === "node-http-socketio-parser-zero-attachment-dos" ||
-                model.id === "node-socketio-server-transitive-parser-dos" ||
-                model.id === "node-opcua-server-nonce-cache-dos" ||
-                model.id === "node-http-postcss-source-map-traversal" ||
-                model.id === "node-http-extract-zip-symlink-traversal" ||
-                model.id === "node-http-tar-linkpath-traversal" ||
-                model.id === "node-http-tar-member-selection-recursion" ||
-                model.id === "node-http-nodemailer-raw-access-policy-bypass" ||
-                model.id === "node-http-fastify-static-route-guard-bypass"
-                ? 64
-                : 8,
-            )
+          ? model.id === "node-http-shescape-cmd-injection"
+            ? matchingJavascriptTemplateAwareModelLines(lines, model.sinks, 64)
+            : matchingJavascriptModelLines(
+                lines,
+                model.sinks,
+                model.id === "node-http-ssrf" ||
+                  model.id === "node-http-object-authorization" ||
+                  model.id === "node-copilot-system-prompt-injection" ||
+                  model.id === "node-http-js-toml-prototype-pollution" ||
+                  model.id === "node-http-jsonpath-plus-code-injection" ||
+                  model.id === "node-http-jsonata-expression-rce" ||
+                  model.id === "node-http-liquidjs-template-rce" ||
+                  model.id === "node-http-shescape-cmd-injection" ||
+                  model.id === "node-http-velocity-template-rce" ||
+                  model.id === "node-http-flat-unflatten-prototype-pollution" ||
+                  model.id === "node-http-dset-prototype-pollution" ||
+                  model.id === "node-http-object-path-prototype-pollution" ||
+                  model.id === "node-http-lodash-prototype-deletion" ||
+                  model.id === "node-http-immutable-prototype-replacement" ||
+                  model.id === "node-http-tmp-path-traversal" ||
+                  model.id === "node-http-js-yaml-parser-dos" ||
+                  model.id === "node-http-brace-expansion-dos" ||
+                  model.id === "node-http-nanoid-size-dos" ||
+                  model.id ===
+                    "node-http-socketio-parser-zero-attachment-dos" ||
+                  model.id === "node-socketio-server-transitive-parser-dos" ||
+                  model.id === "node-opcua-server-nonce-cache-dos" ||
+                  model.id === "node-http-postcss-source-map-traversal" ||
+                  model.id === "node-http-extract-zip-symlink-traversal" ||
+                  model.id === "node-http-tar-linkpath-traversal" ||
+                  model.id === "node-http-tar-member-selection-recursion" ||
+                  model.id ===
+                    "node-http-nodemailer-raw-access-policy-bypass" ||
+                  model.id === "node-http-fastify-static-route-guard-bypass"
+                  ? 64
+                  : 8,
+              )
           : PYTHON_EXTENSIONS.has(extension)
             ? matchingPythonModelLines(lines, model.sinks, 8)
             : extension === ".java" || extension === ".cs"
@@ -12027,6 +12801,10 @@ function frameworkDataflowRecords(
       const nodeLiquidJsTemplate =
         model.id === "node-http-liquidjs-template-rce"
           ? nodeLiquidJsTemplateSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeShescapeCommand =
+        model.id === "node-http-shescape-cmd-injection"
+          ? nodeShescapeCommandSink(files, path, lines, sink.line)
           : undefined;
       const nodeVelocityTemplate =
         model.id === "node-http-velocity-template-rce"
@@ -12224,6 +13002,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-liquidjs-template-rce" &&
         nodeLiquidJsTemplate === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-shescape-cmd-injection" &&
+        nodeShescapeCommand === undefined
       ) {
         continue;
       }
@@ -12520,6 +13304,7 @@ function frameworkDataflowRecords(
         nodeJsonPathPlus?.sourceExpression ??
         nodeJsonataExpression?.sourceExpression ??
         nodeLiquidJsTemplate?.sourceExpression ??
+        nodeShescapeCommand?.sourceExpression ??
         nodeVelocityTemplate?.sourceExpression ??
         nodeVm2Sandbox?.sourceExpression ??
         nodeFlatUnflatten?.sourceExpression ??
@@ -12856,6 +13641,7 @@ function frameworkDataflowRecords(
         nodeMongooseAggregateResolution?.position.line ??
         nodeJsonataExpression?.sinkLine ??
         nodeLiquidJsTemplate?.sinkLine ??
+        nodeShescapeCommand?.sinkLine ??
         nodeVelocityTemplate?.sinkLine ??
         nodeNanoidSizeDos?.sinkLine ??
         nodeSocketIoServerDos?.sinkLine ??
@@ -12888,6 +13674,7 @@ function frameworkDataflowRecords(
         nodeVm2Sandbox?.kind ??
         nodeJsonataExpression?.kind ??
         nodeLiquidJsTemplate?.kind ??
+        nodeShescapeCommand?.kind ??
         nodeVelocityTemplate?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
@@ -12962,6 +13749,16 @@ function frameworkDataflowRecords(
                     path: nodeLiquidJsTemplate.dependency.manifestPath,
                     line: nodeLiquidJsTemplate.dependency.line,
                     symbol: `liquidjs@${nodeLiquidJsTemplate.dependency.version}:${nodeLiquidJsTemplate.dependency.proof}:inherited-filter-rce`,
+                  },
+                ]),
+            ...(nodeShescapeCommand === undefined
+              ? []
+              : [
+                  {
+                    kind: "shescape-runtime-dependency",
+                    path: nodeShescapeCommand.dependency.manifestPath,
+                    line: nodeShescapeCommand.dependency.line,
+                    symbol: `shescape@${nodeShescapeCommand.dependency.version}:${nodeShescapeCommand.dependency.proof}:cmd-parenthesis-injection`,
                   },
                 ]),
             ...(nodeJsonataExpression === undefined
@@ -20453,6 +21250,7 @@ function javascriptFrameworkWrapperSummaries(
       if (
         (model.id === "node-http-jsonata-expression-rce" ||
           model.id === "node-http-liquidjs-template-rce" ||
+          model.id === "node-http-shescape-cmd-injection" ||
           model.id === "node-http-velocity-template-rce" ||
           model.id === "node-http-vm2-host-proto-sandbox-escape" ||
           model.id === "node-http-vm2-wildcard-builtin-host-exposure") &&
@@ -20482,32 +21280,40 @@ function javascriptFrameworkWrapperSummaries(
       const sinks =
         model.id === "node-http-path"
           ? exactFilesystemPathSinkLines(file.lines, model.id, 32)
-          : matchingJavascriptModelLines(
-              file.lines,
-              model.sinks,
-              model.id === "node-http-js-toml-prototype-pollution" ||
-                model.id === "node-http-jsonpath-plus-code-injection" ||
-                model.id === "node-http-jsonata-expression-rce" ||
-                model.id === "node-http-liquidjs-template-rce" ||
-                model.id === "node-http-velocity-template-rce" ||
-                model.id === "node-http-flat-unflatten-prototype-pollution" ||
-                model.id === "node-http-dset-prototype-pollution" ||
-                model.id === "node-http-object-path-prototype-pollution" ||
-                model.id === "node-http-lodash-prototype-deletion" ||
-                model.id === "node-http-immutable-prototype-replacement" ||
-                model.id === "node-http-tmp-path-traversal" ||
-                model.id === "node-http-js-yaml-parser-dos" ||
-                model.id === "node-http-brace-expansion-dos" ||
-                model.id === "node-http-nanoid-size-dos" ||
-                model.id === "node-http-socketio-parser-zero-attachment-dos" ||
-                model.id === "node-http-postcss-source-map-traversal" ||
-                model.id === "node-http-extract-zip-symlink-traversal" ||
-                model.id === "node-http-tar-linkpath-traversal" ||
-                model.id === "node-http-tar-member-selection-recursion" ||
-                model.id === "node-http-nodemailer-raw-access-policy-bypass"
-                ? 64
-                : 32,
-            );
+          : model.id === "node-http-shescape-cmd-injection"
+            ? matchingJavascriptTemplateAwareModelLines(
+                file.lines,
+                model.sinks,
+                64,
+              )
+            : matchingJavascriptModelLines(
+                file.lines,
+                model.sinks,
+                model.id === "node-http-js-toml-prototype-pollution" ||
+                  model.id === "node-http-jsonpath-plus-code-injection" ||
+                  model.id === "node-http-jsonata-expression-rce" ||
+                  model.id === "node-http-liquidjs-template-rce" ||
+                  model.id === "node-http-shescape-cmd-injection" ||
+                  model.id === "node-http-velocity-template-rce" ||
+                  model.id === "node-http-flat-unflatten-prototype-pollution" ||
+                  model.id === "node-http-dset-prototype-pollution" ||
+                  model.id === "node-http-object-path-prototype-pollution" ||
+                  model.id === "node-http-lodash-prototype-deletion" ||
+                  model.id === "node-http-immutable-prototype-replacement" ||
+                  model.id === "node-http-tmp-path-traversal" ||
+                  model.id === "node-http-js-yaml-parser-dos" ||
+                  model.id === "node-http-brace-expansion-dos" ||
+                  model.id === "node-http-nanoid-size-dos" ||
+                  model.id ===
+                    "node-http-socketio-parser-zero-attachment-dos" ||
+                  model.id === "node-http-postcss-source-map-traversal" ||
+                  model.id === "node-http-extract-zip-symlink-traversal" ||
+                  model.id === "node-http-tar-linkpath-traversal" ||
+                  model.id === "node-http-tar-member-selection-recursion" ||
+                  model.id === "node-http-nodemailer-raw-access-policy-bypass"
+                  ? 64
+                  : 32,
+              );
       const controls =
         model.id === "node-http-object-authorization" ||
         model.id === "node-http-mongoose-nosql" ||
@@ -20575,6 +21381,10 @@ function javascriptFrameworkWrapperSummaries(
                   file.lines,
                   sink.line,
                 )
+              : undefined;
+          const nodeShescapeCommand =
+            model.id === "node-http-shescape-cmd-injection"
+              ? nodeShescapeCommandSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodeVelocityTemplate =
             model.id === "node-http-velocity-template-rce"
@@ -20770,6 +21580,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-shescape-cmd-injection" &&
+            nodeShescapeCommand === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-velocity-template-rce" &&
             nodeVelocityTemplate === undefined
           ) {
@@ -20919,6 +21735,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsonPathPlus?.sourceExpression ??
             nodeJsonataExpression?.sourceExpression ??
             nodeLiquidJsTemplate?.sourceExpression ??
+            nodeShescapeCommand?.sourceExpression ??
             nodeVelocityTemplate?.sourceExpression ??
             nodeVm2Sandbox?.sourceExpression ??
             nodeFlatUnflatten?.sourceExpression ??
@@ -21140,6 +21957,12 @@ function javascriptFrameworkWrapperSummaries(
                       kind: nodeLiquidJsTemplate.kind,
                       line: nodeLiquidJsTemplate.sinkLine,
                     }),
+                ...(nodeShescapeCommand === undefined
+                  ? {}
+                  : {
+                      kind: nodeShescapeCommand.kind,
+                      line: nodeShescapeCommand.sinkLine,
+                    }),
                 ...(nodeVelocityTemplate === undefined
                   ? {}
                   : {
@@ -21221,6 +22044,7 @@ function javascriptFrameworkWrapperSummaries(
               ...(nodeVm2Sandbox === undefined &&
               nodeJsonataExpression === undefined &&
               nodeLiquidJsTemplate === undefined &&
+              nodeShescapeCommand === undefined &&
               nodeVelocityTemplate === undefined &&
               nodeNodemailerRaw === undefined &&
               nodeBraceExpansionDos === undefined &&
@@ -21250,6 +22074,16 @@ function javascriptFrameworkWrapperSummaries(
                                 .manifestPath,
                               line: nodeLiquidJsTemplate.dependency.line,
                               symbol: `liquidjs@${nodeLiquidJsTemplate.dependency.version}:${nodeLiquidJsTemplate.dependency.proof}:inherited-filter-rce`,
+                            },
+                          ]),
+                      ...(nodeShescapeCommand === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "shescape-runtime-dependency",
+                              path: nodeShescapeCommand.dependency.manifestPath,
+                              line: nodeShescapeCommand.dependency.line,
+                              symbol: `shescape@${nodeShescapeCommand.dependency.version}:${nodeShescapeCommand.dependency.proof}:cmd-parenthesis-injection`,
                             },
                           ]),
                       ...(nodeVm2Sandbox === undefined
@@ -28957,6 +29791,29 @@ function matchingJavascriptModelLines(
   const matches: Array<{ kind: string; line: number }> = [];
   for (let index = 0; index < lines.length && matches.length < limit; index++) {
     const structuralLine = javascriptStructuralCode(lines[index] ?? "");
+    for (const pattern of patterns) {
+      if (pattern.expression.test(structuralLine)) {
+        matches.push({ kind: pattern.kind, line: index + 1 });
+        break;
+      }
+    }
+  }
+  return matches;
+}
+
+function matchingJavascriptTemplateAwareModelLines(
+  lines: readonly string[],
+  patterns: readonly FrameworkModelPattern[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const matches: Array<{ kind: string; line: number }> = [];
+  for (
+    let index = 0;
+    index < lines.length && matches.length < limit;
+    index += 1
+  ) {
+    const line = lines[index] ?? "";
+    const structuralLine = `${javascriptStructuralCode(line)}\n${javascriptTemplateExpressionCode(line)}`;
     for (const pattern of patterns) {
       if (pattern.expression.test(structuralLine)) {
         matches.push({ kind: pattern.kind, line: index + 1 });

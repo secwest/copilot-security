@@ -249,6 +249,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-repaired-liquidjs-template",
       ],
       [
+        "node-multi-hop-shescape-cmd-injection",
+        "node-multi-hop-repaired-shescape-cmd",
+      ],
+      [
         "node-multi-hop-velocity-template-rce",
         "node-multi-hop-repaired-velocity-template",
       ],
