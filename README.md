@@ -1876,8 +1876,11 @@ the repaired version maps it to `null` and denies it. The current JSONata pair
 then carries a request-controlled expression through three wrappers into a
 compiled expression's `evaluate()` call. Exact 2.2.0 recovers the host
 `Function` constructor in a bounded witness, while source-identical 2.2.1
-rejects the chain before host access. Each of the 182 cases in 91
-exploit/control pairs is scanned three times, producing 546
+rejects the chain before host access. The latest node-tar pair then carries a
+remote compressed archive through three wrappers into `tar.list`: exact 7.5.18
+processes a bounded 1017.97:1 gzip expansion, while source-identical 7.5.19
+aborts at its new default 1000:1 cumulative ratio guard. Each of the 184 cases
+in 92 exploit/control pairs is scanned three times, producing 552
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

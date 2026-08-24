@@ -265,6 +265,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-patched-tar-member-selection",
       ],
       [
+        "node-multi-hop-tar-decompression-dos",
+        "node-multi-hop-patched-tar-decompression",
+      ],
+      [
         "node-multi-hop-js-yaml-exponential-dos",
         "node-multi-hop-patched-js-yaml-flow-parser",
       ],

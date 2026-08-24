@@ -1202,6 +1202,38 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-tar-decompression-dos",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]tar['"]/u],
+    sources: [
+      {
+        kind: "http-uploaded-compressed-tar-path",
+        expression:
+          /\b(?:req|request)\.(?:body|file|files|params|query)\b|\bctx\.(?:params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "http-request-compressed-archive-stream",
+        expression: /\b(?:req|request)\s*\.\s*pipe\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-node-tar-unbounded-decompression",
+        expression:
+          /\b[A-Za-z_$][\w$]*(?:\s*\.\s*(?:t|list|x|extract|Parse|Unpack))?\s*\(|\brequire\s*\(\s*['"]tar['"]\s*\)\s*\.\s*(?:t|list|x|extract|Parse|Unpack)\s*\(/u,
+        cweIds: ["CWE-770"],
+      },
+    ],
+    controls: [
+      {
+        kind: "decompression-ratio-or-output-budget",
+        expression:
+          /\b(?:maxDecompressionRatio|maxDecompressedBytes|maxOutputBytes|maxEntries|decompressionRatio)\b/u,
+      },
+    ],
+  },
+  {
     id: "node-http-fastify-static-route-guard-bypass",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3228,6 +3260,13 @@ interface NodeTarMemberSelectionSink {
   kind: string;
 }
 
+interface NodeTarDecompressionDosSink {
+  sourceExpressions: string[];
+  kind: string;
+  dependency: NodeRuntimeDependency;
+  operation: "list" | "extract" | "parse";
+}
+
 interface NodeFastifyStaticSink {
   kind: string;
   source: { kind: "protected-static-route-guard"; line: number };
@@ -3561,9 +3600,17 @@ function nodePackageLockResolvedVersion(
   const resolvedVersion = (installedPackage as Record<string, unknown>)[
     "version"
   ];
-  return typeof resolvedVersion === "string" && nodeExactSemver(resolvedVersion)
-    ? resolvedVersion
-    : undefined;
+  if (
+    typeof resolvedVersion !== "string" ||
+    !nodeExactSemver(resolvedVersion)
+  ) {
+    return undefined;
+  }
+  const simpleDeclaration = /^(?:[~^])?\d+\.\d+\.\d+$/u.test(declaration);
+  return simpleDeclaration &&
+    !nodeSimpleSemverDeclarationIncludes(declaration, resolvedVersion)
+    ? undefined
+    : resolvedVersion;
 }
 
 function nodeRegistrySemverDeclaration(declaration: string): boolean {
@@ -9719,6 +9766,243 @@ function nodeTarMemberSelectionSink(
   );
 }
 
+type NodeTarDecompressionOperation = "list" | "extract" | "parse";
+type NodeTarDecompressionMethod =
+  | "t"
+  | "list"
+  | "x"
+  | "extract"
+  | "Parse"
+  | "Unpack";
+
+interface NodeTarDecompressionBinding extends NodeTarBinding {
+  method?: NodeTarDecompressionMethod;
+}
+
+function nodeTarVersionIsDecompressionDosVulnerable(version: string): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return (
+    major < 7 || (major === 7 && (minor < 5 || (minor === 5 && patch <= 18)))
+  );
+}
+
+function nodeTarDecompressionOperation(
+  method: string,
+): NodeTarDecompressionOperation | undefined {
+  if (method === "t" || method === "list" || method === "Parse") {
+    return method === "Parse" ? "parse" : "list";
+  }
+  if (method === "x" || method === "extract" || method === "Unpack") {
+    return "extract";
+  }
+  return undefined;
+}
+
+function nodeTarDecompressionSinkKind(
+  dependency: NodeRuntimeDependency,
+  operation: NodeTarDecompressionOperation,
+): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  return `${lockPrefix}vulnerable-node-tar-unbounded-decompression-${operation}`;
+}
+
+function nodeTarDecompressionDosSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeTarDecompressionDosSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "tar");
+  if (
+    dependency === undefined ||
+    !nodeTarVersionIsDecompressionDosVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const bindings: NodeTarDecompressionBinding[] = [];
+  const addBinding = (binding: NodeTarDecompressionBinding): void => {
+    if (!bindings.some((candidate) => candidate.local === binding.local)) {
+      bindings.push(binding);
+    }
+  };
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]tar['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]tar['"]/u.exec(code) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]tar['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]tar['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      addBinding({ local: receiver[1], line: index + 1, receiver: true });
+    }
+    const namedImport = /^\s*import\s*\{([^}]+)\}\s*from\s*['"]tar['"]/u.exec(
+      code,
+    )?.[1];
+    if (namedImport !== undefined) {
+      for (const entry of namedImport.split(",")) {
+        const match =
+          /^\s*(t|list|x|extract|Parse|Unpack)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*$/u.exec(
+            entry,
+          );
+        const operation =
+          match?.[1] === undefined
+            ? undefined
+            : nodeTarDecompressionOperation(match[1]);
+        if (match !== null && operation !== undefined) {
+          addBinding({
+            local: match[2] ?? match[1]!,
+            line: index + 1,
+            receiver: false,
+            method: match[1] as NodeTarDecompressionMethod,
+          });
+        }
+      }
+    }
+    const destructured =
+      /^\s*(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require\s*\(\s*['"]tar['"]\s*\)/u.exec(
+        code,
+      )?.[1];
+    if (destructured !== undefined) {
+      for (const entry of destructured.split(",")) {
+        const match =
+          /^\s*(t|list|x|extract|Parse|Unpack)(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*$/u.exec(
+            entry,
+          );
+        const operation =
+          match?.[1] === undefined
+            ? undefined
+            : nodeTarDecompressionOperation(match[1]);
+        if (match !== null && operation !== undefined) {
+          addBinding({
+            local: match[2] ?? match[1]!,
+            line: index + 1,
+            receiver: false,
+            method: match[1] as NodeTarDecompressionMethod,
+          });
+        }
+      }
+    }
+  }
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindingUsable = (
+    binding: NodeTarDecompressionBinding,
+    method: string,
+  ): boolean => {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      return false;
+    }
+    if (!binding.receiver) return true;
+    const escapedBinding = escapeRegularExpression(binding.local);
+    const escapedMethod = escapeRegularExpression(method);
+    return !structuralLines
+      .slice(binding.line, Math.max(binding.line, line))
+      .some((candidate) =>
+        new RegExp(
+          `\\b${escapedBinding}\\s*\\.\\s*${escapedMethod}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+          "u",
+        ).test(candidate),
+      );
+  };
+  const tryArguments = (
+    arguments_: string[] | undefined,
+    operation: NodeTarDecompressionOperation,
+  ): NodeTarDecompressionDosSink | undefined => {
+    if (arguments_ === undefined) return undefined;
+    const options = nodeTarOptions(lines, line, arguments_[0]);
+    const stream = nodeTarStreamSource(lines, line);
+    const sourceExpressions = [
+      ...(options?.sourceExpressions ?? []),
+      ...(stream === undefined ? [] : [stream]),
+    ].filter(
+      (value, index, all) => value !== "" && all.indexOf(value) === index,
+    );
+    return sourceExpressions.length === 0
+      ? undefined
+      : {
+          sourceExpressions,
+          operation,
+          kind: nodeTarDecompressionSinkKind(dependency, operation),
+          dependency,
+        };
+  };
+  const methods: readonly NodeTarDecompressionMethod[] = [
+    "t",
+    "list",
+    "x",
+    "extract",
+    "Parse",
+    "Unpack",
+  ];
+  for (const binding of bindings) {
+    const candidateMethods = binding.receiver
+      ? methods
+      : binding.method === undefined
+        ? []
+        : [binding.method];
+    for (const method of candidateMethods) {
+      const operation = nodeTarDecompressionOperation(method);
+      if (operation === undefined || !bindingUsable(binding, method)) continue;
+      const escaped = escapeRegularExpression(binding.local);
+      const constructorPrefix = method === "Parse" || method === "Unpack";
+      const callee = binding.receiver
+        ? new RegExp(
+            `${constructorPrefix ? "\\bnew\\s+" : "\\b"}${escaped}\\s*\\.\\s*${escapeRegularExpression(method)}\\s*\\(`,
+            "u",
+          )
+        : new RegExp(
+            `${constructorPrefix ? "\\bnew\\s+" : "\\b"}${escaped}\\s*\\(`,
+            "u",
+          );
+      const result = tryArguments(
+        javascriptCallArgumentsAtLine(lines, line, callee),
+        operation,
+      );
+      if (result !== undefined) return result;
+    }
+  }
+  for (const method of methods) {
+    const operation = nodeTarDecompressionOperation(method)!;
+    const constructorPrefix = method === "Parse" || method === "Unpack";
+    const result = tryArguments(
+      javascriptCompositeCallArgumentsAtLine(
+        lines,
+        line,
+        new RegExp(
+          `${constructorPrefix ? "\\bnew\\s+" : "\\b"}require\\s*\\(\\s*['"]tar['"]\\s*\\)\\s*\\.\\s*${method}\\s*\\(`,
+          "u",
+        ),
+      ),
+      operation,
+    );
+    if (result !== undefined) return result;
+  }
+  return undefined;
+}
+
 interface NodeFastifyBinding {
   local: string;
   line: number;
@@ -10281,6 +10565,10 @@ function frameworkDataflowRecords(
         model.id === "node-http-tar-member-selection-recursion"
           ? nodeTarMemberSelectionSink(files, path, lines, sink.line)
           : undefined;
+      const nodeTarDecompressionDos =
+        model.id === "node-http-tar-decompression-dos"
+          ? nodeTarDecompressionDosSink(files, path, lines, sink.line)
+          : undefined;
       const nodeFastifyStatic =
         model.id === "node-http-fastify-static-route-guard-bypass"
           ? nodeFastifyStaticSink(files, path, lines, sink.line)
@@ -10490,6 +10778,12 @@ function frameworkDataflowRecords(
         continue;
       }
       if (
+        model.id === "node-http-tar-decompression-dos" &&
+        nodeTarDecompressionDos === undefined
+      ) {
+        continue;
+      }
+      if (
         model.id === "node-http-fastify-static-route-guard-bypass" &&
         nodeFastifyStatic === undefined
       ) {
@@ -10667,7 +10961,8 @@ function frameworkDataflowRecords(
         nodePostcssSourceMap?.sourceExpressions.join("\n") ??
         nodeExtractZip?.sourceExpression ??
         nodeTarLink?.sourceExpressions.join("\n") ??
-        nodeTarMemberSelection?.sourceExpressions.join("\n");
+        nodeTarMemberSelection?.sourceExpressions.join("\n") ??
+        nodeTarDecompressionDos?.sourceExpressions.join("\n");
       const nonDsetSource =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -11012,6 +11307,7 @@ function frameworkDataflowRecords(
         nodeExtractZip?.kind ??
         nodeTarLink?.kind ??
         nodeTarMemberSelection?.kind ??
+        nodeTarDecompressionDos?.kind ??
         nodeFastifyStatic?.kind ??
         nodeJsonataExpression?.kind ??
         nodeJsonPathPlus?.kind ??
@@ -11107,6 +11403,16 @@ function frameworkDataflowRecords(
                     path: nodeSocketIoParserDos.dependency.manifestPath,
                     line: nodeSocketIoParserDos.dependency.line,
                     symbol: `socket.io-parser@${nodeSocketIoParserDos.dependency.version}:${nodeSocketIoParserDos.dependency.proof}:zero-attachment-buffer-retention`,
+                  },
+                ]),
+            ...(nodeTarDecompressionDos === undefined
+              ? []
+              : [
+                  {
+                    kind: "node-tar-runtime-dependency",
+                    path: nodeTarDecompressionDos.dependency.manifestPath,
+                    line: nodeTarDecompressionDos.dependency.line,
+                    symbol: `tar@${nodeTarDecompressionDos.dependency.version}:${nodeTarDecompressionDos.dependency.proof}:unbounded-decompression-${nodeTarDecompressionDos.operation}`,
                   },
                 ]),
             ...(nodeSocketIoServerDos === undefined
@@ -18099,6 +18405,15 @@ function javascriptFrameworkWrapperSummaries(
                   sink.line,
                 )
               : undefined;
+          const nodeTarDecompressionDos =
+            model.id === "node-http-tar-decompression-dos"
+              ? nodeTarDecompressionDosSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
+              : undefined;
           const nodePathSink =
             model.id === "node-http-path"
               ? nodeFilesystemPathSink(file.lines, sink.line)
@@ -18260,6 +18575,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-tar-decompression-dos" &&
+            nodeTarDecompressionDos === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -18314,6 +18635,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeExtractZip?.sourceExpression ??
             nodeTarLink?.sourceExpressions.join("\n") ??
             nodeTarMemberSelection?.sourceExpressions.join("\n") ??
+            nodeTarDecompressionDos?.sourceExpressions.join("\n") ??
             (nodeDset === undefined
               ? undefined
               : nodeDset.positions
@@ -18560,6 +18882,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeTarMemberSelection === undefined
                   ? {}
                   : { kind: nodeTarMemberSelection.kind }),
+                ...(nodeTarDecompressionDos === undefined
+                  ? {}
+                  : { kind: nodeTarDecompressionDos.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}
@@ -18582,7 +18907,8 @@ function javascriptFrameworkWrapperSummaries(
               nodeNodemailerRaw === undefined &&
               nodeBraceExpansionDos === undefined &&
               nodeNanoidSizeDos === undefined &&
-              nodeSocketIoParserDos === undefined
+              nodeSocketIoParserDos === undefined &&
+              nodeTarDecompressionDos === undefined
                 ? {}
                 : {
                     propagators: [
@@ -18637,6 +18963,17 @@ function javascriptFrameworkWrapperSummaries(
                                 .manifestPath,
                               line: nodeSocketIoParserDos.dependency.line,
                               symbol: `socket.io-parser@${nodeSocketIoParserDos.dependency.version}:${nodeSocketIoParserDos.dependency.proof}:zero-attachment-buffer-retention`,
+                            },
+                          ]),
+                      ...(nodeTarDecompressionDos === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "node-tar-runtime-dependency",
+                              path: nodeTarDecompressionDos.dependency
+                                .manifestPath,
+                              line: nodeTarDecompressionDos.dependency.line,
+                              symbol: `tar@${nodeTarDecompressionDos.dependency.version}:${nodeTarDecompressionDos.dependency.proof}:unbounded-decompression-${nodeTarDecompressionDos.operation}`,
                             },
                           ]),
                     ],

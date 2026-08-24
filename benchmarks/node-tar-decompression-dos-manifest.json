@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-tar-decompression-dos",
+      "description": "A remote compressed archive reaches node-tar 7.5.18 list/parse processing without a cumulative decompression-ratio bound.",
+      "fixture": "fixtures/node-multi-hop-tar-decompression-dos",
+      "findingsPaths": [
+        "node-multi-hop-tar-decompression-dos/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-tar-unbounded-decompression-availability",
+          "cwe": ["CWE-770"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-tar-decompression",
+      "description": "The source-identical control changes only tar to 7.5.19, whose default cumulative ratio guard aborts explosive decompression.",
+      "fixture": "fixtures/node-multi-hop-patched-tar-decompression",
+      "findingsPaths": [
+        "node-multi-hop-patched-tar-decompression/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

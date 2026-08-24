@@ -1415,6 +1415,27 @@ outputs and 3,996,999 characters while measuring 1,769.885 ms versus 25.389 ms.
 This adds a reachable CWE-400/CWE-407 path that dependency-only scanning cannot
 establish and that generic regular-expression complexity rules do not express.
 
+## Implemented: operation-specific node-tar decompression reachability
+
+The reviewed [node-tar decompression advisory](https://github.com/advisories/GHSA-23hp-3jrh-7fpw)
+describes unbounded cumulative output from a small gzip, brotli, or zstd input.
+The pre-repair `maxReadSize` option bounds only individual read chunks. Version
+7.5.19 instead counts compressed and decompressed bytes inside the parser and
+defaults the allowed ratio to 1000. Authenticated source searches found no
+advisory or `maxDecompressionRatio` model in CodeQL, public Semgrep rules, or
+the reference scanner.
+
+Copilot Security combines affected production resolution with actual remote
+archive reachability through the official `t`/`list`/`x`/`extract`/`Parse` and
+`Unpack` APIs. It distinguishes listing, parsing, and extraction so validation
+cannot turn parser CPU or throughput pressure into an unsupported disk-impact
+claim. Patched releases, fixed archives, non-consuming create APIs, stale or
+development dependency evidence, binding replacement, and wrapper shadows are
+negative. A source-identical 7.5.18/7.5.19 pair and bounded installed-package
+witness prove the 1017.97:1 completion-versus-abort boundary. The same work also
+tightens shared npm lock proof so simple caret and tilde declarations cannot
+resolve below their declared minimum.
+
 ## Benchmark acceptance criteria
 
 An integration is useful only when its comparative campaign demonstrates all
