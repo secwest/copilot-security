@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-extract-zip-symlink-traversal",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "extract-zip": "2.0.1"
+  }
+}

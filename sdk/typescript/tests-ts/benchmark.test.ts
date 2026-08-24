@@ -215,6 +215,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-postcss-source-map-traversal",
         "node-multi-hop-patched-postcss",
       ],
+      [
+        "node-multi-hop-extract-zip-symlink-traversal",
+        "node-multi-hop-safe-extract-zip",
+      ],
       ["python-disabled-tls-verification", "python-safe-tls"],
       ["javascript-predictable-reset-token", "javascript-secure-reset-token"],
       ["python-ssti", "python-safe-template"],

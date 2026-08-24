@@ -867,6 +867,38 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-extract-zip-symlink-traversal",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]extract-zip['"]/u],
+    sources: [
+      {
+        kind: "http-uploaded-archive-path",
+        expression:
+          /\b(?:req|request)\.(?:body|file|files|params|query)\b|\bctx\.(?:params|query|request\.body)\b/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-extract-zip-symlink-traversal",
+        expression:
+          /\b[A-Za-z_$][\w$]*\s*\(|\brequire\s*\(\s*['"]extract-zip['"]\s*\)\s*\(/u,
+        cweIds: ["CWE-22"],
+      },
+    ],
+    controls: [
+      {
+        kind: "archive-symlink-entry-rejection",
+        expression:
+          /\bexternalFileAttributes\b|\b(?:0o120000|40960)\b|\bonEntry\b/u,
+      },
+      {
+        kind: "archive-extraction-root-isolation",
+        expression: /\b(?:staging|extractRoot|destination|pluginRoot)\b/iu,
+      },
+    ],
+  },
+  {
     id: "node-http-sql",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -2770,6 +2802,11 @@ interface NodeTmpPathSink {
 
 interface NodePostcssSourceMapSink {
   sourceExpressions: string[];
+  kind: string;
+}
+
+interface NodeExtractZipSink {
+  sourceExpression: string;
   kind: string;
 }
 
@@ -5706,6 +5743,172 @@ function nodePostcssSourceMapSink(
   return undefined;
 }
 
+interface NodeExtractZipBinding {
+  local: string;
+  line: number;
+}
+
+function nodeExtractZipVersionIsSymlinkTraversalVulnerable(
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return major < 2 || (major === 2 && minor === 0 && patch <= 1);
+}
+
+function nodeExtractZipOptions(
+  lines: readonly string[],
+  line: number,
+  expression: string | undefined,
+): { valid: boolean; rejectsSymlinks: boolean } {
+  if (expression === undefined || expression.trim() === "") {
+    return { valid: false, rejectsSymlinks: false };
+  }
+  const original = expression.trim();
+  const resolved =
+    resolveJavascriptExpression(lines, original, line)?.value.trim() ??
+    original;
+  if (!resolved.startsWith("{") || !resolved.endsWith("}")) {
+    const primitive =
+      /^(?:undefined|null|true|false|[+-]?\d+(?:\.\d+)?|['"`][\s\S]*['"`])$/u.test(
+        resolved,
+      );
+    return { valid: !primitive, rejectsSymlinks: false };
+  }
+  if (javascriptObjectPropertyValue(resolved, "dir") === undefined) {
+    return { valid: false, rejectsSymlinks: false };
+  }
+  const onEntry = javascriptObjectPropertyValue(resolved, "onEntry");
+  if (onEntry === undefined) return { valid: true, rejectsSymlinks: false };
+  const callback =
+    resolveJavascriptExpression(lines, onEntry.trim(), line)?.value.trim() ??
+    onEntry.trim();
+  const rejectsSymlinks =
+    /\bexternalFileAttributes\b/u.test(callback) &&
+    /(?:>>>|>>)\s*16\b/u.test(callback) &&
+    /&\s*(?:0o170000|61440)\b/u.test(callback) &&
+    /(?:===?|!==?)\s*(?:0o120000|40960)\b/u.test(callback) &&
+    /\bthrow\b/u.test(callback);
+  return { valid: true, rejectsSymlinks };
+}
+
+function nodeExtractZipSinkKind(dependency: NodeRuntimeDependency): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  return `${lockPrefix}vulnerable-extract-zip-symlink-traversal`;
+}
+
+function nodeExtractZipSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeExtractZipSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "extract-zip");
+  if (
+    dependency === undefined ||
+    !nodeExtractZipVersionIsSymlinkTraversalVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: NodeExtractZipBinding[] = [];
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const binding =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]extract-zip['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]extract-zip['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]extract-zip['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (
+      binding?.[1] !== undefined &&
+      !bindings.some((candidate) => candidate.local === binding[1])
+    ) {
+      bindings.push({ local: binding[1], line: index + 1 });
+    }
+  }
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escaped = escapeRegularExpression(binding.local);
+    if (
+      structuralLines
+        .slice(binding.line, Math.max(binding.line, line))
+        .some((candidate) =>
+          new RegExp(
+            `\\b${escaped}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+            "u",
+          ).test(candidate),
+        )
+    ) {
+      continue;
+    }
+    const arguments_ = javascriptCallArgumentsAtLine(
+      lines,
+      line,
+      new RegExp(`\\b${escaped}\\s*\\(`, "u"),
+    );
+    const sourceExpression = arguments_?.[0]?.trim();
+    const options = nodeExtractZipOptions(lines, line, arguments_?.[1]);
+    if (
+      sourceExpression !== undefined &&
+      sourceExpression !== "" &&
+      options.valid &&
+      !options.rejectsSymlinks
+    ) {
+      return {
+        sourceExpression,
+        kind: nodeExtractZipSinkKind(dependency),
+      };
+    }
+  }
+  const directArguments = javascriptCompositeCallArgumentsAtLine(
+    lines,
+    line,
+    /\brequire\s*\(\s*['"]extract-zip['"]\s*\)\s*\(/u,
+  );
+  const directSource = directArguments?.[0]?.trim();
+  const directOptions = nodeExtractZipOptions(
+    lines,
+    line,
+    directArguments?.[1],
+  );
+  if (
+    directSource !== undefined &&
+    directSource !== "" &&
+    directOptions.valid &&
+    !directOptions.rejectsSymlinks
+  ) {
+    return {
+      sourceExpression: directSource,
+      kind: nodeExtractZipSinkKind(dependency),
+    };
+  }
+  return undefined;
+}
+
 function nodePrototypeCopySink(
   lines: readonly string[],
   line: number,
@@ -5824,7 +6027,8 @@ function frameworkDataflowRecords(
                 model.id === "node-http-lodash-prototype-deletion" ||
                 model.id === "node-http-immutable-prototype-replacement" ||
                 model.id === "node-http-tmp-path-traversal" ||
-                model.id === "node-http-postcss-source-map-traversal"
+                model.id === "node-http-postcss-source-map-traversal" ||
+                model.id === "node-http-extract-zip-symlink-traversal"
                 ? 64
                 : 8,
             )
@@ -5913,6 +6117,10 @@ function frameworkDataflowRecords(
       const nodePostcssSourceMap =
         model.id === "node-http-postcss-source-map-traversal"
           ? nodePostcssSourceMapSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeExtractZip =
+        model.id === "node-http-extract-zip-symlink-traversal"
+          ? nodeExtractZipSink(files, path, lines, sink.line)
           : undefined;
       const nodePathSink =
         model.id === "node-http-path"
@@ -6043,6 +6251,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-postcss-source-map-traversal" &&
         nodePostcssSourceMap === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-extract-zip-symlink-traversal" &&
+        nodeExtractZip === undefined
       ) {
         continue;
       }
@@ -6209,7 +6423,8 @@ function frameworkDataflowRecords(
         nodeLodashDelete?.sourceExpressions.join("\n") ??
         nodeImmutablePrototype?.sourceExpressions.join("\n") ??
         nodeTmpPath?.sourceExpressions.join("\n") ??
-        nodePostcssSourceMap?.sourceExpressions.join("\n");
+        nodePostcssSourceMap?.sourceExpressions.join("\n") ??
+        nodeExtractZip?.sourceExpression;
       const nonDsetSource =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -6518,6 +6733,7 @@ function frameworkDataflowRecords(
         nodeImmutablePrototype?.kind ??
         nodeTmpPath?.kind ??
         nodePostcssSourceMap?.kind ??
+        nodeExtractZip?.kind ??
         nodeJsonPathPlus?.kind ??
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
@@ -10899,7 +11115,8 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-lodash-prototype-deletion" ||
                 model.id === "node-http-immutable-prototype-replacement" ||
                 model.id === "node-http-tmp-path-traversal" ||
-                model.id === "node-http-postcss-source-map-traversal"
+                model.id === "node-http-postcss-source-map-traversal" ||
+                model.id === "node-http-extract-zip-symlink-traversal"
                 ? 64
                 : 32,
             );
@@ -10990,6 +11207,10 @@ function javascriptFrameworkWrapperSummaries(
                   file.lines,
                   sink.line,
                 )
+              : undefined;
+          const nodeExtractZip =
+            model.id === "node-http-extract-zip-symlink-traversal"
+              ? nodeExtractZipSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodePathSink =
             model.id === "node-http-path"
@@ -11098,6 +11319,12 @@ function javascriptFrameworkWrapperSummaries(
           ) {
             continue;
           }
+          if (
+            model.id === "node-http-extract-zip-symlink-traversal" &&
+            nodeExtractZip === undefined
+          ) {
+            continue;
+          }
           if (model.id === "node-http-path" && nodePathSink === undefined) {
             continue;
           }
@@ -11143,6 +11370,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeImmutablePrototype?.sourceExpressions.join("\n") ??
             nodeTmpPath?.sourceExpressions.join("\n") ??
             nodePostcssSourceMap?.sourceExpressions.join("\n") ??
+            nodeExtractZip?.sourceExpression ??
             (nodeDset === undefined
               ? undefined
               : nodeDset.positions
@@ -11348,6 +11576,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodePostcssSourceMap === undefined
                   ? {}
                   : { kind: nodePostcssSourceMap.kind }),
+                ...(nodeExtractZip === undefined
+                  ? {}
+                  : { kind: nodeExtractZip.kind }),
                 ...(aggregateSinkMetadata === undefined
                   ? bulkSinkMetadata === undefined
                     ? {}

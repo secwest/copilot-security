@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-hop-safe-extract-zip",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "extract-zip": "2.0.1"
+  }
+}

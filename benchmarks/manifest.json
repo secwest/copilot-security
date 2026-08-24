@@ -2967,6 +2967,45 @@
         "node-multi-hop-patched-postcss/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-extract-zip-symlink-traversal",
+      "description": "An Express upload path crosses three wrappers into extract-zip 2.0.1, whose observe-only callback permits a contained member to materialize a link to protected configuration outside the extraction root.",
+      "fixture": "fixtures/node-multi-hop-extract-zip-symlink-traversal",
+      "findingsPaths": [
+        "node-multi-hop-extract-zip-symlink-traversal/run-1/findings.json",
+        "node-multi-hop-extract-zip-symlink-traversal/run-2/findings.json",
+        "node-multi-hop-extract-zip-symlink-traversal/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-extract-zip-symlink-target-traversal",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-safe-extract-zip",
+      "description": "The matched package, request source, wrappers, destination, callback, and later read reject Unix symlink entries before extract-zip can materialize them.",
+      "fixture": "fixtures/node-multi-hop-safe-extract-zip",
+      "findingsPaths": [
+        "node-multi-hop-safe-extract-zip/run-1/findings.json",
+        "node-multi-hop-safe-extract-zip/run-2/findings.json",
+        "node-multi-hop-safe-extract-zip/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }
