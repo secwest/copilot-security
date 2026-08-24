@@ -1887,7 +1887,11 @@ while source-identical 2.1.7 blocks the property read with its shared prototype
 guard. The Shescape pair carries a remote value through the same wrapper depth,
 escapes it for `cmd.exe`, and follows the exact result into official Node
 process dispatch: 3.0.0 leaves CMD parentheses raw, while source-identical 3.0.1
-caret-escapes both. The latest node-tar pair then carries a
+caret-escapes both. The decompression pair carries an uploaded archive through
+the same wrapper depth into official `@xhmikosr/decompress`: exact 10.2.0
+allows a bounded entry writer to cross into a sibling-prefix directory, while
+source-identical 10.2.1 rejects the destination and also repairs escaping link
+targets and special mode bits. The latest node-tar pair then carries a
 remote compressed archive through three wrappers into `tar.list`: exact 7.5.18
 processes a bounded 1017.97:1 gzip expansion, while source-identical 7.5.19
 aborts at its new default 1000:1 cumulative ratio guard. The vm2 pair carries
@@ -1895,8 +1899,8 @@ remote code through the same wrapper depth into an official `VM.run`: exact
 3.11.5 recovers only the host `process.version` with a bounded non-shell
 witness, while source-identical 3.11.6 blocks the dangerous-prototype chain.
 The scanner separately recognizes `NodeVM.run` with wildcard builtins only
-when `os` or `dns` remains exposed. Each of the 194 cases in 97 exploit/control
-pairs is scanned three times, producing 582
+when `os` or `dns` remains exposed. Each of the 196 cases in 98 exploit/control
+pairs is scanned three times, producing 588
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-repaired-decompress-archive",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "@xhmikosr/decompress": "10.2.1"
+  }
+}

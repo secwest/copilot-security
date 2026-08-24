@@ -1306,6 +1306,47 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "node-http-decompress-archive-escape",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"](?:@xhmikosr\/decompress|decompress)['"]/u],
+    sources: [
+      {
+        kind: "http-uploaded-archive-bytes",
+        expression:
+          /\b(?:req|request)\.(?:body|data|file|files|params|query)\b|\bctx\.(?:params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-request-archive-bytes",
+        expression: /\b(?:req|request)\.(?:arrayBuffer|blob|formData)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-decompress-archive-escape",
+        expression:
+          /\b[A-Za-z_$][\w$]*(?:\s*\.\s*default)?\s*\(|\brequire\s*\(\s*['"](?:@xhmikosr\/decompress|decompress)['"]\s*\)(?:\s*\.\s*default)?\s*\(/u,
+        cweIds: ["CWE-22", "CWE-59", "CWE-732"],
+      },
+    ],
+    controls: [
+      {
+        kind: "archive-entry-path-and-link-policy",
+        expression:
+          /\b(?:filter|map)\b|\b(?:isAbsolute|relative|realpath|linkname|symlink|hardlink)\b/iu,
+      },
+      {
+        kind: "archive-authenticity-boundary",
+        expression:
+          /\b(?:signature|verify|checksum|digest|trustedPublisher|allowlistedArchive)\b/iu,
+      },
+      {
+        kind: "archive-extraction-privilege-boundary",
+        expression: /\b(?:dropPrivileges|setuid|setgid|sandbox|container)\b/iu,
+      },
+    ],
+  },
+  {
     id: "node-http-tar-linkpath-traversal",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3447,6 +3488,13 @@ interface NodePostcssSourceMapSink {
 interface NodeExtractZipSink {
   sourceExpression: string;
   kind: string;
+}
+
+interface NodeDecompressArchiveEscapeSink {
+  sourceExpression: string;
+  kind: string;
+  dependency: NodeRuntimeDependency;
+  packageName: "@xhmikosr/decompress" | "decompress";
 }
 
 interface NodeTarLinkSink {
@@ -11629,6 +11677,233 @@ function nodeExtractZipSink(
   return undefined;
 }
 
+interface NodeDecompressBinding {
+  local: string;
+  line: number;
+  member?: "default";
+}
+
+function nodeDecompressVersionIsArchiveEscapeVulnerable(
+  packageName: "@xhmikosr/decompress" | "decompress",
+  version: string,
+): boolean {
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  if (packageName === "decompress") {
+    return (
+      major < 4 || (major === 4 && (minor < 2 || (minor === 2 && patch <= 1)))
+    );
+  }
+  if (major < 10) return true;
+  if (major === 10) {
+    return minor < 2 || (minor === 2 && patch < 1);
+  }
+  return major === 11 && (minor < 1 || (minor === 1 && patch < 3));
+}
+
+function nodeDecompressExtractionOutput(
+  lines: readonly string[],
+  line: number,
+  expression: string | undefined,
+): boolean {
+  if (expression === undefined || expression.trim() === "") return false;
+  const original = expression.trim();
+  const resolved =
+    resolveJavascriptExpression(lines, original, line)?.value.trim() ??
+    original;
+  if (
+    /^(?:undefined|null|false|true|[+-]?\d+(?:\.\d+)?|\{[\s\S]*\}|\[[\s\S]*\])$/u.test(
+      resolved,
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function nodeDecompressSinkKind(
+  dependency: NodeRuntimeDependency,
+  packageName: "@xhmikosr/decompress" | "decompress",
+): string {
+  const lockPrefix =
+    dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+  const packagePrefix =
+    packageName === "decompress" ? "unpatched-upstream-" : "";
+  return `${lockPrefix}${packagePrefix}vulnerable-decompress-archive-escape`;
+}
+
+function nodeDecompressBindingReplaced(
+  structuralLines: readonly string[],
+  binding: NodeDecompressBinding,
+  line: number,
+): boolean {
+  const escaped = escapeRegularExpression(binding.local);
+  const expression =
+    binding.member === "default"
+      ? new RegExp(
+          `\\b${escaped}\\s*\\.\\s*default\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+          "u",
+        )
+      : new RegExp(
+          `\\b${escaped}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+          "u",
+        );
+  return structuralLines
+    .slice(binding.line, Math.max(binding.line, line - 1))
+    .some((candidate) => expression.test(candidate));
+}
+
+function nodeDecompressArchiveEscapeSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeDecompressArchiveEscapeSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const packageNames = ["@xhmikosr/decompress", "decompress"] as const;
+  const dependencies = packageNames.flatMap((packageName) => {
+    const dependency = nodeRuntimeDependency(files, path, packageName);
+    return dependency === undefined ||
+      !nodeDecompressVersionIsArchiveEscapeVulnerable(
+        packageName,
+        dependency.version,
+      )
+      ? []
+      : [{ packageName, dependency }];
+  });
+  if (dependencies.length !== 1) return undefined;
+  const { packageName, dependency } = dependencies[0]!;
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const bindings: NodeDecompressBinding[] = [];
+  const addBinding = (binding: NodeDecompressBinding): void => {
+    if (
+      !bindings.some(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.member === binding.member,
+      )
+    ) {
+      bindings.push(binding);
+    }
+  };
+  const packageExpression = escapeRegularExpression(packageName);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const callable =
+      new RegExp(
+        `^\\s*import\\s+([A-Za-z_$][\\w$]*)\\s+from\\s+['"]${packageExpression}['"]`,
+        "u",
+      ).exec(code) ??
+      new RegExp(
+        `^\\s*import\\s*\\{\\s*default\\s+as\\s+([A-Za-z_$][\\w$]*)\\s*\\}\\s*from\\s*['"]${packageExpression}['"]`,
+        "u",
+      ).exec(code) ??
+      new RegExp(
+        `^\\s*import\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*['"]${packageExpression}['"]\\s*\\)`,
+        "u",
+      ).exec(code) ??
+      new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*['"]${packageExpression}['"]\\s*\\)(?:\\s*\\.\\s*default)?\\s*;?\\s*$`,
+        "u",
+      ).exec(code) ??
+      new RegExp(
+        `^\\s*(?:const|let|var)\\s*\\{\\s*default\\s*:\\s*([A-Za-z_$][\\w$]*)\\s*\\}\\s*=\\s*require\\s*\\(\\s*['"]${packageExpression}['"]\\s*\\)`,
+        "u",
+      ).exec(code);
+    if (callable?.[1] !== undefined) {
+      addBinding({ local: callable[1], line: index + 1 });
+    }
+    const namespace = new RegExp(
+      `^\\s*import\\s*\\*\\s*as\\s*([A-Za-z_$][\\w$]*)\\s*from\\s*['"]${packageExpression}['"]`,
+      "u",
+    ).exec(code);
+    if (namespace?.[1] !== undefined) {
+      addBinding({ local: namespace[1], line: index + 1, member: "default" });
+    }
+  }
+  for (const binding of [...bindings]) {
+    const escaped = escapeRegularExpression(binding.local);
+    const member = binding.member === "default" ? "\\s*\\.\\s*default" : "";
+    for (
+      let index = binding.line;
+      index < Math.min(line - 1, codeLines.length);
+      index += 1
+    ) {
+      const alias = new RegExp(
+        `^\\s*const\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escaped}${member}\\s*;?\\s*$`,
+        "u",
+      ).exec(codeLines[index] ?? "");
+      if (alias?.[1] !== undefined) {
+        addBinding({ local: alias[1], line: index + 1 });
+      }
+    }
+  }
+  for (const binding of bindings) {
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        binding.local,
+        binding.line,
+        line + 1,
+      ) ||
+      nodeDecompressBindingReplaced(structuralLines, binding, line)
+    ) {
+      continue;
+    }
+    const escaped = escapeRegularExpression(binding.local);
+    const member = binding.member === "default" ? "\\s*\\.\\s*default" : "";
+    const arguments_ = javascriptCompositeCallArgumentsAtLine(
+      lines,
+      line,
+      new RegExp(`\\b${escaped}${member}\\s*\\(`, "u"),
+    );
+    const sourceExpression = arguments_?.[0]?.trim();
+    if (
+      sourceExpression !== undefined &&
+      sourceExpression !== "" &&
+      nodeDecompressExtractionOutput(lines, line, arguments_?.[1])
+    ) {
+      return {
+        sourceExpression,
+        kind: nodeDecompressSinkKind(dependency, packageName),
+        dependency,
+        packageName,
+      };
+    }
+  }
+  const directArguments = javascriptCompositeCallArgumentsAtLine(
+    lines,
+    line,
+    new RegExp(
+      `\\brequire\\s*\\(\\s*['"]${packageExpression}['"]\\s*\\)(?:\\s*\\.\\s*default)?\\s*\\(`,
+      "u",
+    ),
+  );
+  const directSource = directArguments?.[0]?.trim();
+  if (
+    directSource !== undefined &&
+    directSource !== "" &&
+    nodeDecompressExtractionOutput(lines, line, directArguments?.[1])
+  ) {
+    return {
+      sourceExpression: directSource,
+      kind: nodeDecompressSinkKind(dependency, packageName),
+      dependency,
+      packageName,
+    };
+  }
+  return undefined;
+}
+
 interface NodeTarBinding {
   local: string;
   line: number;
@@ -12728,6 +13003,7 @@ function frameworkDataflowRecords(
                   model.id === "node-opcua-server-nonce-cache-dos" ||
                   model.id === "node-http-postcss-source-map-traversal" ||
                   model.id === "node-http-extract-zip-symlink-traversal" ||
+                  model.id === "node-http-decompress-archive-escape" ||
                   model.id === "node-http-tar-linkpath-traversal" ||
                   model.id === "node-http-tar-member-selection-recursion" ||
                   model.id ===
@@ -12886,6 +13162,10 @@ function frameworkDataflowRecords(
       const nodeExtractZip =
         model.id === "node-http-extract-zip-symlink-traversal"
           ? nodeExtractZipSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeDecompressArchive =
+        model.id === "node-http-decompress-archive-escape"
+          ? nodeDecompressArchiveEscapeSink(files, path, lines, sink.line)
           : undefined;
       const nodeTarLink =
         model.id === "node-http-tar-linkpath-traversal"
@@ -13121,6 +13401,12 @@ function frameworkDataflowRecords(
         continue;
       }
       if (
+        model.id === "node-http-decompress-archive-escape" &&
+        nodeDecompressArchive === undefined
+      ) {
+        continue;
+      }
+      if (
         model.id === "node-http-tar-linkpath-traversal" &&
         nodeTarLink === undefined
       ) {
@@ -13319,6 +13605,7 @@ function frameworkDataflowRecords(
         nodeSocketIoParserDos?.sourceExpression ??
         nodePostcssSourceMap?.sourceExpressions.join("\n") ??
         nodeExtractZip?.sourceExpression ??
+        nodeDecompressArchive?.sourceExpression ??
         nodeTarLink?.sourceExpressions.join("\n") ??
         nodeTarMemberSelection?.sourceExpressions.join("\n") ??
         nodeTarDecompressionDos?.sourceExpressions.join("\n");
@@ -13667,6 +13954,7 @@ function frameworkDataflowRecords(
         nodeOpcuaServerAuth?.kind ??
         nodePostcssSourceMap?.kind ??
         nodeExtractZip?.kind ??
+        nodeDecompressArchive?.kind ??
         nodeTarLink?.kind ??
         nodeTarMemberSelection?.kind ??
         nodeTarDecompressionDos?.kind ??
@@ -13819,6 +14107,16 @@ function frameworkDataflowRecords(
                     path: nodeTarDecompressionDos.dependency.manifestPath,
                     line: nodeTarDecompressionDos.dependency.line,
                     symbol: `tar@${nodeTarDecompressionDos.dependency.version}:${nodeTarDecompressionDos.dependency.proof}:unbounded-decompression-${nodeTarDecompressionDos.operation}`,
+                  },
+                ]),
+            ...(nodeDecompressArchive === undefined
+              ? []
+              : [
+                  {
+                    kind: "decompress-runtime-dependency",
+                    path: nodeDecompressArchive.dependency.manifestPath,
+                    line: nodeDecompressArchive.dependency.line,
+                    symbol: `${nodeDecompressArchive.packageName}@${nodeDecompressArchive.dependency.version}:${nodeDecompressArchive.dependency.proof}:archive-path-link-mode-escape`,
                   },
                 ]),
             ...(nodeSocketIoServerDos === undefined
@@ -21308,6 +21606,7 @@ function javascriptFrameworkWrapperSummaries(
                     "node-http-socketio-parser-zero-attachment-dos" ||
                   model.id === "node-http-postcss-source-map-traversal" ||
                   model.id === "node-http-extract-zip-symlink-traversal" ||
+                  model.id === "node-http-decompress-archive-escape" ||
                   model.id === "node-http-tar-linkpath-traversal" ||
                   model.id === "node-http-tar-member-selection-recursion" ||
                   model.id === "node-http-nodemailer-raw-access-policy-bypass"
@@ -21479,6 +21778,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeExtractZip =
             model.id === "node-http-extract-zip-symlink-traversal"
               ? nodeExtractZipSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeDecompressArchive =
+            model.id === "node-http-decompress-archive-escape"
+              ? nodeDecompressArchiveEscapeSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
               : undefined;
           const nodeTarLink =
             model.id === "node-http-tar-linkpath-traversal"
@@ -21677,6 +21985,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-decompress-archive-escape" &&
+            nodeDecompressArchive === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-tar-linkpath-traversal" &&
             nodeTarLink === undefined
           ) {
@@ -21750,6 +22064,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeSocketIoParserDos?.sourceExpression ??
             nodePostcssSourceMap?.sourceExpressions.join("\n") ??
             nodeExtractZip?.sourceExpression ??
+            nodeDecompressArchive?.sourceExpression ??
             nodeTarLink?.sourceExpressions.join("\n") ??
             nodeTarMemberSelection?.sourceExpressions.join("\n") ??
             nodeTarDecompressionDos?.sourceExpressions.join("\n") ??
@@ -22014,6 +22329,9 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeExtractZip === undefined
                   ? {}
                   : { kind: nodeExtractZip.kind }),
+                ...(nodeDecompressArchive === undefined
+                  ? {}
+                  : { kind: nodeDecompressArchive.kind }),
                 ...(nodeTarLink === undefined
                   ? {}
                   : { kind: nodeTarLink.kind }),
@@ -22050,6 +22368,7 @@ function javascriptFrameworkWrapperSummaries(
               nodeBraceExpansionDos === undefined &&
               nodeNanoidSizeDos === undefined &&
               nodeSocketIoParserDos === undefined &&
+              nodeDecompressArchive === undefined &&
               nodeTarDecompressionDos === undefined
                 ? {}
                 : {
@@ -22158,6 +22477,17 @@ function javascriptFrameworkWrapperSummaries(
                                 .manifestPath,
                               line: nodeTarDecompressionDos.dependency.line,
                               symbol: `tar@${nodeTarDecompressionDos.dependency.version}:${nodeTarDecompressionDos.dependency.proof}:unbounded-decompression-${nodeTarDecompressionDos.operation}`,
+                            },
+                          ]),
+                      ...(nodeDecompressArchive === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "decompress-runtime-dependency",
+                              path: nodeDecompressArchive.dependency
+                                .manifestPath,
+                              line: nodeDecompressArchive.dependency.line,
+                              symbol: `${nodeDecompressArchive.packageName}@${nodeDecompressArchive.dependency.version}:${nodeDecompressArchive.dependency.proof}:archive-path-link-mode-escape`,
                             },
                           ]),
                     ],

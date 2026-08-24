@@ -277,6 +277,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-patched-tar-linkpath",
       ],
       [
+        "node-multi-hop-decompress-archive-escape",
+        "node-multi-hop-repaired-decompress-archive",
+      ],
+      [
         "node-multi-hop-tar-member-selection-recursion",
         "node-multi-hop-patched-tar-member-selection",
       ],

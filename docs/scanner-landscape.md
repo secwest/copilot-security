@@ -46,6 +46,29 @@ that dissimilar products can be reduced to one score.
 | [Gitleaks](https://github.com/gitleaks/gitleaks)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Git-patch history scanning, full redaction, stable fingerprints, baselines, and scoped allowlists make high-volume secret findings manageable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Scan bounded reachable Git blobs locally through a trusted executable, deduplicate revision occurrences, use expiring justified keyed baselines, and never persist or display raw secret material.                                                                                                                                                                                                                                                                                                                                                                    |
 | [GitHub SARIF support](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Stable rule IDs, relative paths, locations, severity/precision metadata, and partial fingerprints support interoperable alert tracking.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Normalize relative paths and rule metadata, but hash source documents locally and omit imported fingerprints because they may contain arbitrary or sensitive producer data.                                                                                                                                                                                                                                                                                                                                                                                           |
 
+## Implemented: reachable archive-writer advisory models
+
+Dependency scanners correctly identify known-vulnerable archive packages, but
+package presence alone cannot establish whether remote archive bytes reach an
+extracting API, whether a destination is supplied, or which filesystem
+primitive and downstream impact are reachable. Copilot Security now combines
+exact production resolution with source-to-extraction closure for
+`@xhmikosr/decompress` and unmaintained upstream `decompress`. It distinguishes
+parse-only overloads from extraction, carries the exact affected version into
+the path, and asks reviewers to validate entry traversal, sibling-prefix
+confusion, hardlinks, symlinks, link-pivot writes, and special mode bits
+separately. This applies the call-analysis idea used by OSV-Scanner while
+retaining CodeQL-style path evidence and Sonar's distinction between a proven
+vulnerability and a review-required impact hotspot.
+
+The source-identical 10.2.0/10.2.1 pair and bounded installed-package witnesses
+make both reachability and repair executable. Exact searches found no matching
+application model in the reviewed public CodeQL or Semgrep sources or in the
+comparison scanner, so this lane complements rather than duplicates generic
+path traversal and dependency alerting. Findings cannot infer overwrite of a
+valuable file, persistence, execution, or privilege escalation without an
+independently evidenced writable target and consumer.
+
 ## Implemented: bounded reachable-Git secret history
 
 Gitleaks scans Git patches, GitHub scans all branches in repository history,
