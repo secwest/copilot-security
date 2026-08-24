@@ -46,6 +46,36 @@ that dissimilar products can be reduced to one score.
 | [Gitleaks](https://github.com/gitleaks/gitleaks)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Git-patch history scanning, full redaction, stable fingerprints, baselines, and scoped allowlists make high-volume secret findings manageable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Scan bounded reachable Git blobs locally through a trusted executable, deduplicate revision occurrences, use expiring justified keyed baselines, and never persist or display raw secret material.                                                                                                                                                                                                                                                                                                                                                                    |
 | [GitHub SARIF support](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Stable rule IDs, relative paths, locations, severity/precision metadata, and partial fingerprints support interoperable alert tracking.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Normalize relative paths and rule metadata, but hash source documents locally and omit imported fingerprints because they may contain arbitrary or sensitive producer data.                                                                                                                                                                                                                                                                                                                                                                                           |
 
+## Implemented: reachable Sequelize Oracle escaping advisory model
+
+GHSA-v8fg-2rw7-q452 is a useful example of the gap between dependency
+inventory, generic SQL taint, and application exploitability. The vulnerable
+code is inside Sequelize's ordinary value escaping, so the application can use
+an ORM object predicate rather than visibly concatenating SQL. At the same
+time, package presence is too broad: the injection requires an Oracle dialect,
+an affected production resolution, attacker control of a value that actually
+enters a model query, and a deployed database path that accepts and executes
+the generated syntax.
+
+Copilot Security now closes those conditions as one auditable path. It binds an
+official Sequelize constructor to the exact Oracle-configured instance, the
+instance to a model produced by `define`, remote data to `where`, and the model
+to an executed ORM operation. Dependency and dialect evidence remain separate
+propagators. The paired 6.37.3/6.37.4 fixtures reproduce the real query
+generator without loading an Oracle driver or contacting a database: the
+affected package emits the injected predicate and the repaired package rejects
+the same value. Following Sonar's hotspot distinction, generated injectable SQL
+establishes CWE-89 candidate evidence but does not automatically inherit a
+claim of data theft, tampering, authentication bypass, or database-host
+execution; those impacts require deployed-driver, privilege, row-policy, and
+concrete-effect validation.
+
+The public CodeQL and Semgrep source searches completed before GitHub search
+throttling showed no matching advisory/CVE model, while the available local
+comparison-scanner snapshots also contain no matching term but predate the
+advisory. The implementation therefore records the comparison boundary rather
+than overstating remote-head coverage.
+
 ## Implemented: reachable archive-writer advisory models
 
 Dependency scanners correctly identify known-vulnerable archive packages, but

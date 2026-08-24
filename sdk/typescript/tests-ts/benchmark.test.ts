@@ -281,6 +281,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-repaired-decompress-archive",
       ],
       [
+        "node-multi-hop-sequelize-oracle-sql-injection",
+        "node-multi-hop-repaired-sequelize-oracle-query",
+      ],
+      [
         "node-multi-hop-tar-member-selection-recursion",
         "node-multi-hop-patched-tar-member-selection",
       ],

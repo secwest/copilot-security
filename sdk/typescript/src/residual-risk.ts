@@ -687,6 +687,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-sequelize-oracle-sql-injection",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]sequelize['"]/u, /\bdialect\s*:\s*['"]oracle['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-sequelize-oracle-string-escape",
+        expression:
+          /\.\s*(?:count|destroy|findAll|findAndCountAll|findOne|update)\s*\(/u,
+        cweIds: ["CWE-89"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-liquidjs-template-rce",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3348,6 +3375,22 @@ interface NodeJsonataExpressionSink {
   dependency: NodeRuntimeDependency;
 }
 
+interface NodeSequelizeOracleSink {
+  sourceExpression: string;
+  kind:
+    | "vulnerable-sequelize-oracle-string-escape"
+    | "lock-resolved-vulnerable-sequelize-oracle-string-escape";
+  dependency: NodeRuntimeDependency;
+  dialectLine: number;
+  operation:
+    | "count"
+    | "destroy"
+    | "findAll"
+    | "findAndCountAll"
+    | "findOne"
+    | "update";
+}
+
 interface NodeLiquidJsTemplateSink {
   sourceExpression: string;
   sinkLine: number;
@@ -5120,6 +5163,337 @@ function nodeJsonataExpressionSink(
           : "vulnerable-jsonata-expression-sandbox-escape",
       dependency,
     };
+  }
+  return undefined;
+}
+
+interface NodeSequelizeClassBinding {
+  local: string;
+  line: number;
+  member?: "Sequelize";
+}
+
+interface NodeSequelizeOracleInstance {
+  local: string;
+  line: number;
+  dialectLine: number;
+}
+
+interface NodeSequelizeModelBinding {
+  local: string;
+  line: number;
+  instance: NodeSequelizeOracleInstance;
+}
+
+const NODE_SEQUELIZE_ORACLE_OPERATIONS = [
+  "count",
+  "destroy",
+  "findAll",
+  "findAndCountAll",
+  "findOne",
+  "update",
+] as const;
+
+function nodeSequelizeVersionIsOracleSqlInjectionVulnerable(
+  version: string,
+): boolean {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return (
+    major < 6 || (major === 6 && (minor < 37 || (minor === 37 && patch < 4)))
+  );
+}
+
+function nodeSequelizeClassBindings(
+  lines: readonly string[],
+): NodeSequelizeClassBinding[] {
+  const bindings: NodeSequelizeClassBinding[] = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "sequelize" &&
+        binding.imported === "Sequelize",
+    )
+    .map((binding) => ({ local: binding.local, line: binding.line }));
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const direct =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]sequelize['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]sequelize['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]sequelize['"]\s*\)(?:\s*\.\s*Sequelize)?\s*;?\s*$/u.exec(
+        code,
+      );
+    if (direct?.[1] !== undefined) {
+      bindings.push({ local: direct[1], line: index + 1 });
+    }
+    const namespace =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]sequelize['"]/u.exec(
+        code,
+      );
+    if (namespace?.[1] !== undefined) {
+      bindings.push({
+        local: namespace[1],
+        line: index + 1,
+        member: "Sequelize",
+      });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.line === binding.line &&
+          candidate.member === binding.member,
+      ) === index,
+  );
+}
+
+function nodeSequelizeOracleConfiguration(
+  lines: readonly string[],
+  line: number,
+  arguments_: readonly string[],
+): number | undefined {
+  const first = resolveJavascriptExpression(lines, arguments_[0] ?? "", line);
+  if (
+    first !== undefined &&
+    /^(['"`])oracle:(?!.*\$\{)[\s\S]*\1$/iu.test(first.value.trim())
+  ) {
+    return first.line;
+  }
+  for (const argument of arguments_) {
+    const resolved = resolveJavascriptExpression(lines, argument, line);
+    if (resolved === undefined) continue;
+    const dialect = javascriptObjectEntries(resolved).find(
+      (candidate) => candidate.key === "dialect",
+    );
+    if (dialect === undefined) continue;
+    const value = resolveJavascriptExpression(
+      lines,
+      dialect.value,
+      dialect.line,
+    );
+    if (value !== undefined && /^['"]oracle['"]$/iu.test(value.value.trim())) {
+      return value.line;
+    }
+  }
+  return undefined;
+}
+
+function nodeSequelizeOracleInstances(
+  lines: readonly string[],
+): NodeSequelizeOracleInstance[] {
+  const structuralLines = javascriptStructuralLines(lines);
+  const wrappers = exportedJavascriptFunctions(lines);
+  const instances: NodeSequelizeOracleInstance[] = [];
+  for (const binding of nodeSequelizeClassBindings(lines)) {
+    const escaped = escapeRegularExpression(binding.local);
+    const classExpression =
+      binding.member === "Sequelize"
+        ? `${escaped}\\s*\\.\\s*Sequelize`
+        : escaped;
+    for (let index = binding.line; index < structuralLines.length; index += 1) {
+      const declaration = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*new\\s+${classExpression}\\s*\\(`,
+        "u",
+      ).exec(structuralLines[index] ?? "");
+      if (declaration?.[1] === undefined) continue;
+      const declarationLine = index + 1;
+      const wrapper = wrappers.find(
+        (candidate) =>
+          declarationLine >= candidate.startLine &&
+          declarationLine <= candidate.endLine,
+      );
+      if (
+        wrapper?.parameters.includes(binding.local) === true ||
+        javascriptIdentifierReassignedBetween(
+          lines,
+          binding.local,
+          binding.line,
+          declarationLine + 1,
+        )
+      ) {
+        continue;
+      }
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        declarationLine,
+        new RegExp(`new\\s+${classExpression}\\s*\\(`, "u"),
+      );
+      if (arguments_ === undefined) continue;
+      const dialectLine = nodeSequelizeOracleConfiguration(
+        lines,
+        declarationLine,
+        arguments_,
+      );
+      if (dialectLine === undefined) continue;
+      instances.push({
+        local: declaration[1],
+        line: declarationLine,
+        dialectLine,
+      });
+    }
+  }
+  return instances;
+}
+
+function nodeSequelizeModelBindings(
+  lines: readonly string[],
+  sinkLine: number,
+): NodeSequelizeModelBinding[] {
+  const structuralLines = javascriptStructuralLines(lines);
+  const models: NodeSequelizeModelBinding[] = [];
+  for (const instance of nodeSequelizeOracleInstances(lines)) {
+    const instanceName = escapeRegularExpression(instance.local);
+    for (
+      let index = instance.line;
+      index < Math.min(sinkLine, structuralLines.length);
+      index += 1
+    ) {
+      const declaration = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*${instanceName}\\s*\\.\\s*define\\s*\\(`,
+        "u",
+      ).exec(structuralLines[index] ?? "");
+      if (declaration?.[1] === undefined) continue;
+      const modelLine = index + 1;
+      if (
+        javascriptIdentifierReassignedBetween(
+          lines,
+          instance.local,
+          instance.line,
+          modelLine + 1,
+        ) ||
+        javascriptStructuralLines(lines)
+          .slice(instance.line, modelLine)
+          .some((candidate) =>
+            new RegExp(
+              `\\b${instanceName}\\s*\\.\\s*define\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+              "u",
+            ).test(candidate),
+          )
+      ) {
+        continue;
+      }
+      models.push({
+        local: declaration[1],
+        line: modelLine,
+        instance,
+      });
+    }
+  }
+  return models;
+}
+
+function nodeSequelizeWhereExpression(
+  lines: readonly string[],
+  line: number,
+  operation: NodeSequelizeOracleSink["operation"],
+  arguments_: readonly string[],
+): string | undefined {
+  const optionsIndex = operation === "update" ? 1 : 0;
+  const options = resolveJavascriptExpression(
+    lines,
+    arguments_[optionsIndex] ?? "",
+    line,
+  );
+  if (options === undefined) return undefined;
+  const where = javascriptObjectPropertyValue(options.value, "where");
+  if (where === undefined) return undefined;
+  const resolved = resolveJavascriptExpression(lines, where, options.line);
+  const value = resolved?.value.trim() ?? where.trim();
+  if (
+    value === "" ||
+    /^(?:undefined|null|true|false|[+-]?\d+(?:\.\d+)?|['"`][\s\S]*['"`])$/u.test(
+      value,
+    )
+  ) {
+    return undefined;
+  }
+  return value;
+}
+
+function nodeSequelizeOracleSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeSequelizeOracleSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const dependency = nodeRuntimeDependency(files, path, "sequelize");
+  if (
+    dependency === undefined ||
+    !nodeSequelizeVersionIsOracleSqlInjectionVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const structuralLines = javascriptStructuralLines(lines);
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  for (const model of nodeSequelizeModelBindings(lines, line)) {
+    if (
+      model.line >= line ||
+      wrapper?.parameters.includes(model.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        model.local,
+        model.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    const escapedModel = escapeRegularExpression(model.local);
+    for (const operation of NODE_SEQUELIZE_ORACLE_OPERATIONS) {
+      const escapedOperation = escapeRegularExpression(operation);
+      if (
+        structuralLines
+          .slice(model.line, Math.max(model.line, line))
+          .some((candidate) =>
+            new RegExp(
+              `\\b${escapedModel}\\s*\\.\\s*${escapedOperation}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+              "u",
+            ).test(candidate),
+          )
+      ) {
+        continue;
+      }
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        line,
+        new RegExp(
+          `\\b${escapedModel}\\s*\\.\\s*${escapedOperation}\\s*\\(`,
+          "u",
+        ),
+      );
+      if (arguments_ === undefined) continue;
+      const sourceExpression = nodeSequelizeWhereExpression(
+        lines,
+        line,
+        operation,
+        arguments_,
+      );
+      if (sourceExpression === undefined) continue;
+      return {
+        sourceExpression,
+        kind:
+          dependency.proof === "npm-lockfile"
+            ? "lock-resolved-vulnerable-sequelize-oracle-string-escape"
+            : "vulnerable-sequelize-oracle-string-escape",
+        dependency,
+        dialectLine: model.instance.dialectLine,
+        operation,
+      };
+    }
   }
   return undefined;
 }
@@ -12918,6 +13292,7 @@ function frameworkDataflowRecords(
     }
     if (
       (model.id === "node-http-jsonata-expression-rce" ||
+        model.id === "node-http-sequelize-oracle-sql-injection" ||
         model.id === "node-http-liquidjs-template-rce" ||
         model.id === "node-http-shescape-cmd-injection" ||
         model.id === "node-http-velocity-template-rce" ||
@@ -12985,6 +13360,7 @@ function frameworkDataflowRecords(
                   model.id === "node-http-js-toml-prototype-pollution" ||
                   model.id === "node-http-jsonpath-plus-code-injection" ||
                   model.id === "node-http-jsonata-expression-rce" ||
+                  model.id === "node-http-sequelize-oracle-sql-injection" ||
                   model.id === "node-http-liquidjs-template-rce" ||
                   model.id === "node-http-shescape-cmd-injection" ||
                   model.id === "node-http-velocity-template-rce" ||
@@ -13073,6 +13449,10 @@ function frameworkDataflowRecords(
       const nodeJsonataExpression =
         model.id === "node-http-jsonata-expression-rce"
           ? nodeJsonataExpressionSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeSequelizeOracle =
+        model.id === "node-http-sequelize-oracle-sql-injection"
+          ? nodeSequelizeOracleSink(files, path, lines, sink.line)
           : undefined;
       const nodeLiquidJsTemplate =
         model.id === "node-http-liquidjs-template-rce"
@@ -13276,6 +13656,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-jsonata-expression-rce" &&
         nodeJsonataExpression === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-sequelize-oracle-sql-injection" &&
+        nodeSequelizeOracle === undefined
       ) {
         continue;
       }
@@ -13589,6 +13975,7 @@ function frameworkDataflowRecords(
         nodeJsToml?.sourceExpression ??
         nodeJsonPathPlus?.sourceExpression ??
         nodeJsonataExpression?.sourceExpression ??
+        nodeSequelizeOracle?.sourceExpression ??
         nodeLiquidJsTemplate?.sourceExpression ??
         nodeShescapeCommand?.sourceExpression ??
         nodeVelocityTemplate?.sourceExpression ??
@@ -13961,6 +14348,7 @@ function frameworkDataflowRecords(
         nodeFastifyStatic?.kind ??
         nodeVm2Sandbox?.kind ??
         nodeJsonataExpression?.kind ??
+        nodeSequelizeOracle?.kind ??
         nodeLiquidJsTemplate?.kind ??
         nodeShescapeCommand?.kind ??
         nodeVelocityTemplate?.kind ??
@@ -14057,6 +14445,22 @@ function frameworkDataflowRecords(
                     path: nodeJsonataExpression.dependency.manifestPath,
                     line: nodeJsonataExpression.dependency.line,
                     symbol: `jsonata@${nodeJsonataExpression.dependency.version}:${nodeJsonataExpression.dependency.proof}:expression-sandbox-escape`,
+                  },
+                ]),
+            ...(nodeSequelizeOracle === undefined
+              ? []
+              : [
+                  {
+                    kind: "sequelize-runtime-dependency",
+                    path: nodeSequelizeOracle.dependency.manifestPath,
+                    line: nodeSequelizeOracle.dependency.line,
+                    symbol: `sequelize@${nodeSequelizeOracle.dependency.version}:${nodeSequelizeOracle.dependency.proof}:oracle-string-escape-sql-injection`,
+                  },
+                  {
+                    kind: "sequelize-oracle-dialect",
+                    path,
+                    line: nodeSequelizeOracle.dialectLine,
+                    symbol: "dialect:oracle",
                   },
                 ]),
             ...(nodeNodemailerRaw === undefined
@@ -21547,6 +21951,7 @@ function javascriptFrameworkWrapperSummaries(
       }
       if (
         (model.id === "node-http-jsonata-expression-rce" ||
+          model.id === "node-http-sequelize-oracle-sql-injection" ||
           model.id === "node-http-liquidjs-template-rce" ||
           model.id === "node-http-shescape-cmd-injection" ||
           model.id === "node-http-velocity-template-rce" ||
@@ -21590,6 +21995,7 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-js-toml-prototype-pollution" ||
                   model.id === "node-http-jsonpath-plus-code-injection" ||
                   model.id === "node-http-jsonata-expression-rce" ||
+                  model.id === "node-http-sequelize-oracle-sql-injection" ||
                   model.id === "node-http-liquidjs-template-rce" ||
                   model.id === "node-http-shescape-cmd-injection" ||
                   model.id === "node-http-velocity-template-rce" ||
@@ -21671,6 +22077,10 @@ function javascriptFrameworkWrapperSummaries(
                   file.lines,
                   sink.line,
                 )
+              : undefined;
+          const nodeSequelizeOracle =
+            model.id === "node-http-sequelize-oracle-sql-injection"
+              ? nodeSequelizeOracleSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodeLiquidJsTemplate =
             model.id === "node-http-liquidjs-template-rce"
@@ -21882,6 +22292,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-sequelize-oracle-sql-injection" &&
+            nodeSequelizeOracle === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-liquidjs-template-rce" &&
             nodeLiquidJsTemplate === undefined
           ) {
@@ -22048,6 +22464,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsToml?.sourceExpression ??
             nodeJsonPathPlus?.sourceExpression ??
             nodeJsonataExpression?.sourceExpression ??
+            nodeSequelizeOracle?.sourceExpression ??
             nodeLiquidJsTemplate?.sourceExpression ??
             nodeShescapeCommand?.sourceExpression ??
             nodeVelocityTemplate?.sourceExpression ??
@@ -22266,6 +22683,9 @@ function javascriptFrameworkWrapperSummaries(
                       kind: nodeJsonataExpression.kind,
                       line: nodeJsonataExpression.sinkLine,
                     }),
+                ...(nodeSequelizeOracle === undefined
+                  ? {}
+                  : { kind: nodeSequelizeOracle.kind }),
                 ...(nodeLiquidJsTemplate === undefined
                   ? {}
                   : {
@@ -22361,6 +22781,7 @@ function javascriptFrameworkWrapperSummaries(
               controls: wrapperControls.slice(0, 8),
               ...(nodeVm2Sandbox === undefined &&
               nodeJsonataExpression === undefined &&
+              nodeSequelizeOracle === undefined &&
               nodeLiquidJsTemplate === undefined &&
               nodeShescapeCommand === undefined &&
               nodeVelocityTemplate === undefined &&
@@ -22424,6 +22845,22 @@ function javascriptFrameworkWrapperSummaries(
                                 .manifestPath,
                               line: nodeJsonataExpression.dependency.line,
                               symbol: `jsonata@${nodeJsonataExpression.dependency.version}:${nodeJsonataExpression.dependency.proof}:expression-sandbox-escape`,
+                            },
+                          ]),
+                      ...(nodeSequelizeOracle === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "sequelize-runtime-dependency",
+                              path: nodeSequelizeOracle.dependency.manifestPath,
+                              line: nodeSequelizeOracle.dependency.line,
+                              symbol: `sequelize@${nodeSequelizeOracle.dependency.version}:${nodeSequelizeOracle.dependency.proof}:oracle-string-escape-sql-injection`,
+                            },
+                            {
+                              kind: "sequelize-oracle-dialect",
+                              path: file.path,
+                              line: nodeSequelizeOracle.dialectLine,
+                              symbol: "dialect:oracle",
                             },
                           ]),
                       ...(nodeNodemailerRaw === undefined

@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-sequelize-oracle-sql-injection",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "sequelize": "6.37.3"
+  }
+}

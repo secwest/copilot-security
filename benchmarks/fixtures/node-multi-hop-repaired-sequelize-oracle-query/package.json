@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-repaired-sequelize-oracle-query",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "sequelize": "6.37.4"
+  }
+}

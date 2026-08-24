@@ -1899,8 +1899,11 @@ remote code through the same wrapper depth into an official `VM.run`: exact
 3.11.5 recovers only the host `process.version` with a bounded non-shell
 witness, while source-identical 3.11.6 blocks the dangerous-prototype chain.
 The scanner separately recognizes `NodeVM.run` with wildcard builtins only
-when `os` or `dns` remains exposed. Each of the 196 cases in 98 exploit/control
-pairs is scanned three times, producing 588
+when `os` or `dns` remains exposed. The Sequelize Oracle pair carries a remote
+predicate through three wrappers into an official model query: exact 6.37.3
+emits a bounded injected predicate from the real query generator without a
+database connection, while source-identical 6.37.4 rejects the same value.
+Each of the 198 cases in 99 exploit/control pairs is scanned three times, producing 594
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

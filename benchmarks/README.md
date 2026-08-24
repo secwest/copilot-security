@@ -188,7 +188,7 @@ Decoder API. The latest pair reaches the same state through the public
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case now produce 588 scans across 98 exploit/control pairs in the complete
+per case now produce 594 scans across 99 exploit/control pairs in the complete
 corpus. The added industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size
@@ -548,6 +548,23 @@ development-only packages, unresolved ranges, stale/v1 locks, test/example
 code, and repaired or prerelease versions remain negative. The bounded witness
 returns only `process.version`: 2.2.0 recovers the host `Function` constructor,
 whereas 2.2.1 rejects the same expression with `T1006`.
+
+`node-sequelize-oracle-sql-injection-manifest.json` measures the conjunction
+that dependency and generic raw-SQL scanners cannot establish for
+[GHSA-v8fg-2rw7-q452 / CVE-2026-69240](https://github.com/advisories/GHSA-v8fg-2rw7-q452):
+an affected production Sequelize resolution, a statically proven Oracle
+dialect, an exact model created by that instance, and remote data reaching
+`where` in an executed ORM operation. The positive carries an Express query
+value through three relative-import wrappers into `Student.findOne` under
+exact 6.37.3 proof. The source-identical control changes only Sequelize and its
+lock to 6.37.4. Regressions cover official named/aliased, default, namespace,
+TypeScript import-equals, CommonJS destructured/direct constructors; static
+Oracle URIs; resolved and shorthand options; six executed model operations;
+the stable repaired boundary; exact and modern lock provenance; reassignment,
+member replacement, wrong-dialect, wrong-position, fixed-value, path, and
+metadata negatives. The shared witness loads no Oracle driver and contacts no
+database: 6.37.3 emits the bounded `OR 1=1--` predicate, while 6.37.4 rejects
+the identical value with `Invalid SQL function call.`
 
 `node-liquidjs-template-rce-manifest.json` measures application reachability
 for [GHSA-gf2q-c269-pqgc / CVE-2026-45618](https://github.com/advisories/GHSA-gf2q-c269-pqgc),
