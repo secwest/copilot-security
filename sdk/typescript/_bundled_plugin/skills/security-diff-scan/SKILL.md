@@ -48,6 +48,12 @@ evidence and PowerShell only for scan-directory draft artifacts.
   control as an untrusted candidate. Preserve its provenance context, but
   independently prove or reject it; imported severity and conclusions do not
   determine reportability.
+- Preserve every reviewed seed's exact reserved instance, CWE list, and
+  normalized locations. Do not insert out-of-scope seeds, duplicate or invent
+  `sarif-seed-NNNNN` instances, or author the host-owned
+  `artifacts/03_coverage/external_sarif_seed_coverage.json` receipt. The host
+  fails finalization if any imported identity or terminal validation and
+  attack-path closure is missing or inconsistent.
 
 ## Workflow
 

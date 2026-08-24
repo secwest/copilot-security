@@ -36,6 +36,13 @@ normalizer's `--seed-input`, preserve each seed's `instance` and provenance
 context, and give every in-scope seed independent validation and attack-path
 closure. It augments but never replaces deterministic inventory, native
 discovery, or residual-miss review.
+The host reconciles the normalized seed bytes against the enriched candidate
+ledger and generates
+`artifacts/03_coverage/external_sarif_seed_coverage.json`. Do not create,
+modify, summarize in place of, or invent that receipt. Missing, duplicated, or
+unknown reserved `sarif-seed-NNNNN` instances; changed seed identity; omitted
+validation; or missing attack-path closure for a reportable/deferred seed will
+fail finalization. Do not add an out-of-scope seed to the ledger.
 
 ## Workflow
 

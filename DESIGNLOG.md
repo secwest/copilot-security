@@ -2,6 +2,81 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-24 — Make imported-analyzer closure a sealed host fact
+
+**Gap and external semantics.** SARIF interchange increases recall only if the
+scanner can prove what happened to every imported result. The SARIF 2.1.0
+standard distinguishes a result that is absent from the current run and gives
+suppressions explicit status semantics; GitHub uses partial fingerprints for
+result identity and supports a bounded SARIF subset; Sonar imports external
+issues while keeping the external producer's conclusion distinct from its own
+analysis. These sources support treating SARIF as candidate evidence, but none
+lets this scanner inherit a producer's finding or claim imported coverage from
+prose alone. See the [OASIS SARIF 2.1.0
+specification](https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html),
+[GitHub CodeQL SARIF output
+guidance](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli/sarif-output),
+[GitHub's supported SARIF
+subset](https://docs.github.com/en/enterprise-cloud@latest/code-security/reference/code-scanning/sarif-files/sarif-support),
+and [Sonar external-issue
+imports](https://docs.sonarsource.com/sonarqube-server/analyzing-source-code/importing-external-issues).
+
+**Trusted binding and reconciliation.** Bind all four launch-recipe fields as
+one atomic contract: source paths, normalized candidate count, the SHA-256 of
+the exact candidate JSONL bytes, and ordered source IDs/digests. Registration
+rejects partial bindings, zero or excessive candidates, excessive sources,
+non-lowercase hashes, and nonsequential source IDs. Completion rereads bounded,
+no-follow scan-local files, verifies the source metadata and candidate bytes
+against that immutable binding, derives scope from the host inventory, and
+matches the reserved instance plus exact CWE/location identity against the
+enriched ledger. Missing, duplicate, invented, out-of-scope, or identity-
+mutated rows fail closed. Each in-scope row must have terminal validation;
+reportable or deferred validation also needs a consistent attack-path decision.
+
+**Receipt, completeness, and tamper evidence.** The host—not the model—writes
+`artifacts/03_coverage/external_sarif_seed_coverage.json`. It records input,
+source-metadata, and enriched-ledger digests; one input-ordered terminal
+`reportable`, `rejected`, `deferred`, or `out_of_scope` row per normalized
+seed; and exact totals. Canonical coverage references the source metadata,
+candidate JSONL, ledger, and receipt, causing all four to enter the manifest
+seal. Deferred seeds add deterministic deferred work and force partial
+coverage. Re-finalization recomputes the receipt and coverage records and
+byte-compares them with the sealed state, so post-prepare mutation fails. The
+SDK exposes the receipt path, while CLI and desktop completion warnings expose
+the counts without trusting model prose.
+
+**Effectiveness gate.** `expectedSeedCoverage` upgrades the dedicated seeded
+command-injection/safe-command pair from a findings-only check to a closure
+contract. The evaluator requires consistent totals, unique reserved instances,
+the canonical coverage reference, and the exact receipt digest in the scan
+manifest. The positive must be reportable and the noisy negative rejected;
+either deferred work, a missing seed, or an unsealed receipt makes the run
+incomplete. Adversarial regressions cover partial and malformed recipe
+bindings, missing/duplicate/invented/out-of-scope/mutated rows, inconsistent
+validation and attack-path states, candidate/source tampering, and sealed
+ledger mutation. This establishes a reusable receipt contract for future
+opt-in analyzer adapters without coupling the core scanner to their execution.
+
+**Local acceptance.** The authoritative Windows Bun 1.3.14 suite passes 1,482
+tests and 11,059 assertions across 165 files in 559.22 seconds, with 20
+intentional platform/environment skips and zero failures. Ubuntu/WSL passes all
+107 changed-contract, benchmark, SDK, and complete recovery tests with 2,155
+assertions and no skips in 115.79 seconds; this includes the POSIX symlink-only
+checks. Generated-model drift, repository formatting, TypeScript checking, the
+clean production build, and the production high-severity audit are green with
+no known vulnerabilities. The first package smoke could not write the managed
+Windows npm cache; its unchanged native retry passes. Strict Windows and Linux
+inspection accept the same 251-entry, 1,806,132-byte pnpm archive with SHA-256
+`ac2d79b5b73287a21426a48e827b90ade21fe17883067c20c88f8d32baa52746`;
+isolated consumers validate the public import, CLI, and all 79 bundled plugin
+files. Windows and Linux both pass 7 core and 3 shared desktop tests; Linux also
+passes 2 Avalonia tests. The Windows 346,796-byte executable has SHA-256
+`819b9cf12cffc29ad27c52841c6bdb5ed4041ccf1a081d41312acd6fafb2f814`
+and survives hidden startup. The Linux 72,568-byte executable has SHA-256
+`53c4e49e6f0aecdafec913a4d5b2423d70503f35db12c5228c0e25768fc6421d`
+and passes both non-graphical and real X11/Xvfb window startup. Generated
+archives and publications are removed after their evidence is recorded.
+
 ## 2026-08-24 — Bind shell-quote object-token escaping to real POSIX dispatch
 
 **Selection and comparative gap.** [GHSA-w7jw-789q-3m8p / CVE-2026-9277](https://github.com/advisories/GHSA-w7jw-789q-3m8p) affects `shell-quote` 1.1.0 through 1.8.3. Its object-token serializer escaped `op` with a dot-based replacement that does not match LF, CR, U+2028, or U+2029; a line terminator can therefore survive serialization and become a command separator in a POSIX shell. Release 1.8.4 instead accepts only the operator values the parser itself emits. Authenticated public-source search found no advisory or CVE reference in CodeQL and nine `shell-quote` references; the inspected examples parse a command and feed a shell-free `execFileSync` argv boundary rather than modeling attacker-shaped object-token serialization. Public Semgrep rules contain no advisory, CVE, or package reference. The initial current-reference search returned no advisory or CVE and one package reference before GitHub throttled subsequent queries; locally available comparison snapshots contain only unrelated prose and predate the advisory. Among reviewed candidates, this advisory offered the strongest new precision boundary: dependency version, unusual object-token shape, exact serializer identity, and a real shell dispatch must all coincide.

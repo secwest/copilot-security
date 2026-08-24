@@ -8,6 +8,7 @@ import {
   truncate,
   writeFile,
 } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -125,6 +126,7 @@ describe("external SARIF candidate seeds", () => {
     expect(prepared.sources).toEqual([await realpath(sarif)]);
     expect(prepared.ignoredResultCount).toBe(0);
     expect(prepared.candidates).toHaveLength(1);
+    expect(prepared.candidateSha256).toMatch(/^[a-f0-9]{64}$/u);
     expect(prepared.candidates[0]).toMatchObject({
       cwe_ids: ["CWE-78"],
       summary:
@@ -146,6 +148,27 @@ describe("external SARIF candidate seeds", () => {
     expect(payload).not.toContain("Leaked token");
     expect(payload).not.toContain("partialFingerprints");
     expect(payload).toContain("untrusted-candidate-input");
+    expect(payload).toContain(prepared.candidateSha256);
+    expect(
+      createHash("sha256")
+        .update(await readFile(written.candidatesPath))
+        .digest("hex"),
+    ).toBe(prepared.candidateSha256);
+  });
+
+  test("refuses to write a prepared seed set whose candidates changed", async () => {
+    const { root, repository, sarif } = await fixture();
+    await writeFile(
+      sarif,
+      JSON.stringify(
+        document([{ ruleIndex: 0, locations: [location("src/server.ts", 1)] }]),
+      ),
+    );
+    const prepared = await prepareSarifSeeds([sarif], repository);
+    prepared.candidates[0]!.summary = "mutated after preparation";
+    await expect(
+      writePreparedSarifSeeds(join(root, "mutated-scan"), prepared),
+    ).rejects.toThrow("changed before they could be written");
   });
 
   test("ignores suppressed, absent, and unlocatable results while preserving valid seeds", async () => {

@@ -49,6 +49,12 @@ PowerShell only for scan-directory draft artifacts.
 - Every in-scope external SARIF seed must be merged as an independent imported
   pass and receive the same terminal disposition. Imported severity and tool
   conclusions are not evidence.
+- Preserve each seed's exact reserved instance, CWE list, and normalized
+  locations. Do not insert out-of-scope seeds, duplicate or invent
+  `sarif-seed-NNNNN` instances, or create or modify
+  `artifacts/03_coverage/external_sarif_seed_coverage.json`. The host derives
+  and seals that receipt and fails closed on missing, mutated, duplicate,
+  unbound, or incompletely validated seed rows.
 - Candidate count is not a quality target. Proven coverage and correct
   dispositions are.
 - The scan is incomplete until the three draft contract files exist and every

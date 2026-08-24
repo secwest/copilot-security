@@ -51,6 +51,7 @@ export interface PreparedSarifSeeds {
   sources: string[];
   sourceRecords: SarifSeedSource[];
   candidates: SarifSeedCandidate[];
+  candidateSha256: string;
   ignoredResultCount: number;
 }
 
@@ -81,6 +82,7 @@ export async function prepareSarifSeeds(
       sources: [],
       sourceRecords: [],
       candidates: [],
+      candidateSha256: createHash("sha256").update("").digest("hex"),
       ignoredResultCount: 0,
     };
   }
@@ -251,6 +253,9 @@ export async function prepareSarifSeeds(
     sources: [...uniqueSources].sort(),
     sourceRecords,
     candidates,
+    candidateSha256: createHash("sha256")
+      .update(serializedSarifCandidates(candidates))
+      .digest("hex"),
     ignoredResultCount,
   };
 }
@@ -341,29 +346,44 @@ export async function writePreparedSarifSeeds(
     discoveryDirectory,
     "external_sarif_candidates.jsonl",
   );
+  const candidateRows = serializedSarifCandidates(prepared.candidates);
+  const candidateSha256 = createHash("sha256")
+    .update(candidateRows)
+    .digest("hex");
+  if (candidateSha256 !== prepared.candidateSha256) {
+    throw new Error(
+      "Prepared SARIF candidates changed before they could be written.",
+    );
+  }
   const sourceDocument = {
     schemaVersion: "1.0",
     trust: "untrusted-candidate-input",
     secretHandling:
       "Result messages, snippets, fixes, properties, fingerprints, and embedded content were intentionally omitted.",
     candidateCount: prepared.candidates.length,
+    candidateSha256,
     ignoredResultCount: prepared.ignoredResultCount,
     sources: prepared.sourceRecords,
   };
-  const candidateRows = prepared.candidates
-    .map((candidate) => JSON.stringify(candidate))
-    .join("\n");
   await writeFile(sourcesPath, `${JSON.stringify(sourceDocument)}\n`, {
     flag: "wx",
     mode: 0o600,
     signal,
   });
-  await writeFile(candidatesPath, `${candidateRows}\n`, {
+  await writeFile(candidatesPath, candidateRows, {
     flag: "wx",
     mode: 0o600,
     signal,
   });
   return { candidatesPath, sourcesPath };
+}
+
+function serializedSarifCandidates(
+  candidates: readonly SarifSeedCandidate[],
+): string {
+  return candidates.length === 0
+    ? ""
+    : `${candidates.map((candidate) => JSON.stringify(candidate)).join("\n")}\n`;
 }
 
 async function canonicalDirectory(

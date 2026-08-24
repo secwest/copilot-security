@@ -126,6 +126,7 @@ async function workbench(fixture: ScanFixture, args: readonly string[]) {
 
 async function startDraftScan(
   repositoryKind: "directory" | "clean" | "dirty" | "nested" = "directory",
+  recipeExtras: Record<string, unknown> = {},
 ): Promise<ScanFixture> {
   const root = await realpath(
     await mkdtemp(join(tmpdir(), "copilot-security-scan-recovery-")),
@@ -195,6 +196,7 @@ async function startDraftScan(
       mode: "standard",
       repository: target,
       target: { kind: "repository", paths: [] },
+      ...recipeExtras,
     }),
   ]);
   fixture.scanId = String(registration["scanId"]);
@@ -248,7 +250,366 @@ async function completeScan(fixture: ScanFixture): Promise<ScanSummary> {
   return result["scan"] as unknown as ScanSummary;
 }
 
+type SeedFixture = ScanFixture & {
+  candidatesPath: string;
+  coveragePath: string;
+  ledgerPath: string;
+  receiptPath: string;
+  sourceMetadataPath: string;
+};
+
+function externalSeed(instance: string, path = "src/extract.py") {
+  return {
+    cwe_ids: ["CWE-78"],
+    locations: [{ path, start_line: 1, end_line: 1, role: "evidence" }],
+    summary: `External candidate ${instance}.`,
+    evidence: "Independently validate this candidate.",
+    context: `seed_id=${instance}; source_id=sarif-source-001`,
+    instance,
+  };
+}
+
+function seedLedgerRow(
+  instance: string,
+  validationDisposition: string,
+  attackPathDecision?: string,
+) {
+  return {
+    ...externalSeed(instance),
+    candidate_id: `candidate-${instance}`,
+    validation: {
+      disposition: validationDisposition,
+      method: "repository evidence",
+    },
+    ...(attackPathDecision === undefined
+      ? {}
+      : {
+          attack_path: {
+            decision: attackPathDecision,
+            dataflow: "bounded test flow",
+          },
+        }),
+  };
+}
+
+async function startExternalSeedFixture(options?: {
+  candidates?: Array<ReturnType<typeof externalSeed>>;
+  ledger?: Array<Record<string, unknown>>;
+}): Promise<SeedFixture> {
+  const candidates = options?.candidates ?? [
+    externalSeed("sarif-seed-00001"),
+    externalSeed("sarif-seed-00002"),
+    externalSeed("sarif-seed-00003"),
+    externalSeed("sarif-seed-00004", "src/outside.py"),
+  ];
+  const candidateBytes = `${candidates.map((row) => JSON.stringify(row)).join("\n")}\n`;
+  const candidateSha256 = createHash("sha256")
+    .update(candidateBytes)
+    .digest("hex");
+  const sourceSha256 = createHash("sha256")
+    .update("original external SARIF bytes")
+    .digest("hex");
+  const fixture = (await startDraftScan("directory", {
+    seedSarifPaths: ["/analysis/example.sarif"],
+    seedSarifCandidateCount: candidates.length,
+    seedSarifCandidatesSha256: candidateSha256,
+    seedSarifSourceDigests: [{ id: "sarif-source-001", sha256: sourceSha256 }],
+  })) as SeedFixture;
+  await writeFile(join(fixture.repository, "src", "outside.py"), "# outside\n");
+  const contextDirectory = join(fixture.scanDir, "artifacts", "01_context");
+  const discoveryDirectory = join(fixture.scanDir, "artifacts", "02_discovery");
+  const coverageDirectory = join(fixture.scanDir, "artifacts", "03_coverage");
+  await mkdir(contextDirectory, { recursive: true });
+  await mkdir(discoveryDirectory, { recursive: true });
+  await mkdir(coverageDirectory, { recursive: true });
+  fixture.sourceMetadataPath = join(
+    contextDirectory,
+    "external_sarif_sources.json",
+  );
+  fixture.candidatesPath = join(
+    discoveryDirectory,
+    "external_sarif_candidates.jsonl",
+  );
+  fixture.ledgerPath = join(discoveryDirectory, "candidate_ledger.jsonl");
+  fixture.receiptPath = join(
+    coverageDirectory,
+    "external_sarif_seed_coverage.json",
+  );
+  fixture.coveragePath = join(fixture.scanDir, "coverage.json");
+  await writeJson(fixture.sourceMetadataPath, {
+    schemaVersion: "1.0",
+    trust: "untrusted-candidate-input",
+    candidateCount: candidates.length,
+    candidateSha256,
+    ignoredResultCount: 0,
+    sources: [
+      {
+        id: "sarif-source-001",
+        fileName: "example.sarif",
+        sha256: sourceSha256,
+        runCount: 1,
+        resultCount: candidates.length,
+        importedCount: candidates.length,
+        ignoredCount: 0,
+        tools: ["Example 1.0"],
+      },
+    ],
+  });
+  await writeFile(fixture.candidatesPath, candidateBytes);
+  const ledger = options?.ledger ?? [
+    seedLedgerRow("sarif-seed-00001", "reportable", "reportable"),
+    seedLedgerRow("sarif-seed-00002", "suppressed"),
+    seedLedgerRow("sarif-seed-00003", "reportable", "deferred"),
+  ];
+  await writeFile(
+    fixture.ledgerPath,
+    `${ledger.map((row) => JSON.stringify(row)).join("\n")}\n`,
+  );
+  const inventoryBytes = "src/extract.py\n";
+  await writeFile(
+    join(discoveryDirectory, "in_scope_files.txt"),
+    inventoryBytes,
+  );
+  fixture.inventorySha256 = createHash("sha256")
+    .update(inventoryBytes)
+    .digest("hex");
+  const coverage = await readJson<CoverageDocument>(fixture.coveragePath);
+  expect(Array.isArray(coverage.surfaces)).toBeTrue();
+  (coverage.surfaces as CoverageSurface[]).push({
+    id: "source-extract-py",
+    label: "src/extract.py",
+    disposition: "no_issue_found",
+    receiptRefs: [],
+  });
+  await writeJson(fixture.coveragePath, coverage);
+  return fixture;
+}
+
 describe("malformed scan artifact recovery", () => {
+  test("seals a deterministic terminal receipt for every external SARIF seed", async () => {
+    const fixture = await startExternalSeedFixture();
+    const completed = await completeScan(fixture);
+    expect(completed.progress.status).toBe("complete");
+    expect(completed.warnings).toContain(
+      "Bound external SARIF seed coverage: 1 reportable, 1 rejected, 1 deferred, and 1 out of scope.",
+    );
+
+    const receipt = await readJson<{
+      documentType: string;
+      ledger: { sha256: string };
+      seeds: Array<{
+        instance: string;
+        disposition: string;
+        candidateId?: string;
+      }>;
+      summary: Record<string, number>;
+    }>(fixture.receiptPath);
+    expect(receipt.documentType).toBe(
+      "copilot-security.external-sarif-seed-coverage",
+    );
+    expect(receipt.ledger.sha256).toBe(
+      createHash("sha256")
+        .update(await readFile(fixture.ledgerPath))
+        .digest("hex"),
+    );
+    expect(receipt.summary).toEqual({
+      deferred: 1,
+      inScope: 3,
+      outOfScope: 1,
+      rejected: 1,
+      reportable: 1,
+      total: 4,
+    });
+    expect(
+      receipt.seeds.map(({ instance, disposition }) => [instance, disposition]),
+    ).toEqual([
+      ["sarif-seed-00001", "reportable"],
+      ["sarif-seed-00002", "rejected"],
+      ["sarif-seed-00003", "deferred"],
+      ["sarif-seed-00004", "out_of_scope"],
+    ]);
+    expect(receipt.seeds[3]).not.toHaveProperty("candidateId");
+
+    const coverage = await readJson<CoverageDocument>(fixture.coveragePath);
+    expect(coverage.completeness).toBe("partial");
+    const surfaces = coverage.surfaces as CoverageSurface[];
+    expect(
+      surfaces.find(({ id }) => id === "external-sarif-seed-closure"),
+    ).toMatchObject({
+      disposition: "needs_follow_up",
+      receiptRefs: [
+        "artifacts/01_context/external_sarif_sources.json",
+        "artifacts/02_discovery/external_sarif_candidates.jsonl",
+        "artifacts/02_discovery/candidate_ledger.jsonl",
+        "artifacts/03_coverage/external_sarif_seed_coverage.json",
+      ],
+    });
+    expect(coverage.deferred).toContainEqual(
+      expect.objectContaining({
+        id: "external-sarif-seed-closure-deferred",
+        paths: ["src/extract.py"],
+      }),
+    );
+    const manifest = await readJson<{
+      scan: { artifacts: Array<{ path: string; sha256: string }> };
+    }>(join(fixture.scanDir, "scan-manifest.json"));
+    for (const path of [
+      "artifacts/01_context/external_sarif_sources.json",
+      "artifacts/02_discovery/external_sarif_candidates.jsonl",
+      "artifacts/02_discovery/candidate_ledger.jsonl",
+      "artifacts/03_coverage/external_sarif_seed_coverage.json",
+    ]) {
+      expect(
+        manifest.scan.artifacts.some((artifact) => artifact.path === path),
+      ).toBeTrue();
+    }
+  });
+
+  test.each([
+    ["missing", [], "is missing in the ledger"],
+    [
+      "duplicated",
+      [
+        seedLedgerRow("sarif-seed-00001", "suppressed"),
+        seedLedgerRow("sarif-seed-00001", "suppressed"),
+      ],
+      "is duplicated in the ledger",
+    ],
+    [
+      "unbound",
+      [
+        seedLedgerRow("sarif-seed-00001", "suppressed"),
+        seedLedgerRow("sarif-seed-99999", "suppressed"),
+      ],
+      "unbound reserved SARIF seed instance",
+    ],
+    [
+      "inconsistent",
+      [seedLedgerRow("sarif-seed-00001", "deferred", "reportable")],
+      "deferred validation cannot be reportable",
+    ],
+    [
+      "identity-mutated",
+      [
+        {
+          ...seedLedgerRow("sarif-seed-00001", "suppressed"),
+          cwe_ids: ["CWE-89"],
+        },
+      ],
+      "ledger identity differs from normalized input",
+    ],
+  ] as const)(
+    "rejects a %s external seed closure",
+    async (_case, ledger, error) => {
+      const fixture = await startExternalSeedFixture({
+        candidates: [externalSeed("sarif-seed-00001")],
+        ledger: [...ledger],
+      });
+      await expect(completeScan(fixture)).rejects.toThrow(error);
+    },
+  );
+
+  test("rejects an out-of-scope seed that the model inserts into its ledger", async () => {
+    const fixture = await startExternalSeedFixture({
+      candidates: [externalSeed("sarif-seed-00001", "src/outside.py")],
+      ledger: [seedLedgerRow("sarif-seed-00001", "suppressed")],
+    });
+    await expect(completeScan(fixture)).rejects.toThrow(
+      "out-of-scope external SARIF seed sarif-seed-00001 entered the ledger",
+    );
+  });
+
+  test("revalidates sealed seed evidence and rejects post-prepare ledger tampering", async () => {
+    const fixture = await startExternalSeedFixture({
+      candidates: [externalSeed("sarif-seed-00001")],
+      ledger: [seedLedgerRow("sarif-seed-00001", "suppressed")],
+    });
+    await workbench(fixture, [
+      "prepare-scan-completion",
+      "--scan-id",
+      fixture.scanId,
+      "--inventory-sha256",
+      `sha256:${fixture.inventorySha256}`,
+    ]);
+    await writeFile(fixture.ledgerPath, " \n", { flag: "a" });
+    await expect(completeScan(fixture)).rejects.toThrow(
+      "sealed external SARIF seed coverage receipt changed",
+    );
+  });
+
+  test("rejects candidate and source metadata that no longer match the trusted recipe", async () => {
+    const candidateFixture = await startExternalSeedFixture({
+      candidates: [externalSeed("sarif-seed-00001")],
+      ledger: [seedLedgerRow("sarif-seed-00001", "suppressed")],
+    });
+    await writeFile(candidateFixture.candidatesPath, " \n", { flag: "a" });
+    await expect(completeScan(candidateFixture)).rejects.toThrow(
+      "external SARIF candidates do not match the scan recipe",
+    );
+
+    const sourceFixture = await startExternalSeedFixture({
+      candidates: [externalSeed("sarif-seed-00001")],
+      ledger: [seedLedgerRow("sarif-seed-00001", "suppressed")],
+    });
+    const source = await readJson<Record<string, unknown>>(
+      sourceFixture.sourceMetadataPath,
+    );
+    source["candidateSha256"] = "0".repeat(64);
+    await writeJson(sourceFixture.sourceMetadataPath, source);
+    await expect(completeScan(sourceFixture)).rejects.toThrow(
+      "external SARIF source metadata does not match the scan recipe",
+    );
+  });
+
+  test.each([
+    [
+      "partial",
+      { seedSarifPaths: ["/analysis/example.sarif"] },
+      "incomplete SARIF seed binding",
+    ],
+    [
+      "zero candidates",
+      {
+        seedSarifPaths: ["/analysis/example.sarif"],
+        seedSarifCandidateCount: 0,
+        seedSarifCandidatesSha256: "1".repeat(64),
+        seedSarifSourceDigests: [
+          { id: "sarif-source-001", sha256: "2".repeat(64) },
+        ],
+      },
+      "candidate count is invalid",
+    ],
+    [
+      "noncanonical digest",
+      {
+        seedSarifPaths: ["/analysis/example.sarif"],
+        seedSarifCandidateCount: 1,
+        seedSarifCandidatesSha256: "A".repeat(64),
+        seedSarifSourceDigests: [
+          { id: "sarif-source-001", sha256: "2".repeat(64) },
+        ],
+      },
+      "candidate digest is invalid",
+    ],
+    [
+      "misnumbered source",
+      {
+        seedSarifPaths: ["/analysis/example.sarif"],
+        seedSarifCandidateCount: 1,
+        seedSarifCandidatesSha256: "1".repeat(64),
+        seedSarifSourceDigests: [
+          { id: "sarif-source-002", sha256: "2".repeat(64) },
+        ],
+      },
+      "source digest is invalid",
+    ],
+  ] as const)(
+    "rejects a %s SARIF recipe binding",
+    async (_case, recipe, error) => {
+      await expect(startDraftScan("directory", recipe)).rejects.toThrow(error);
+    },
+  );
+
   test("refuses to seal a scan without its immutable in-scope inventory", async () => {
     const fixture = await startDraftScan();
     await rm(

@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { afterEach, describe, expect, test } from "bun:test";
 import { evaluateBenchmark } from "../src/benchmark.js";
 import {
@@ -2962,6 +2963,115 @@ describe("effectiveness benchmark", () => {
     expect(receiptBound.cases[0]?.runs[0]?.error).toContain(
       "Missing run status for benchmark case manual-control",
     );
+  });
+
+  test("gates seeded campaigns on exact sealed seed-coverage closure", async () => {
+    const root = await fixtureRoot();
+    const output = join(root, "results", "seeded-control", "run-1");
+    const receiptPath = join(
+      output,
+      "artifacts",
+      "03_coverage",
+      "external_sarif_seed_coverage.json",
+    );
+    const expectation = {
+      total: 1,
+      inScope: 1,
+      reportable: 0,
+      rejected: 1,
+      deferred: 0,
+      outOfScope: 0,
+    };
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      cases: [
+        {
+          id: "seeded-control",
+          seedSarif: ["seed.sarif"],
+          expectedSeedCoverage: expectation,
+          findingsPath: "seeded-control/run-1/findings.json",
+          expected: [],
+        },
+      ],
+    });
+    await writeFindings(join(output, "findings.json"), []);
+    await writeJson(join(output, "coverage.json"), {
+      surfaces: [
+        {
+          id: "external-sarif-seed-closure",
+          receiptRefs: [
+            "artifacts/03_coverage/external_sarif_seed_coverage.json",
+          ],
+        },
+      ],
+    });
+    await writeJson(receiptPath, {
+      documentType: "copilot-security.external-sarif-seed-coverage",
+      schemaVersion: "1.0",
+      summary: expectation,
+      seeds: [
+        {
+          instance: "sarif-seed-00001",
+          disposition: "rejected",
+        },
+      ],
+    });
+    const receiptSha256 = createHash("sha256")
+      .update(await readFile(receiptPath))
+      .digest("hex");
+    await writeJson(join(output, "scan-manifest.json"), {
+      scan: {
+        artifacts: [
+          {
+            path: "artifacts/03_coverage/external_sarif_seed_coverage.json",
+            sha256: receiptSha256,
+          },
+        ],
+      },
+    });
+
+    const accepted = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+      requireRunStatus: false,
+    });
+    expect(accepted.passed).toBe(true);
+
+    await writeJson(receiptPath, {
+      documentType: "copilot-security.external-sarif-seed-coverage",
+      schemaVersion: "1.0",
+      summary: { ...expectation, rejected: 0, deferred: 1 },
+      seeds: [
+        {
+          instance: "sarif-seed-00001",
+          disposition: "deferred",
+        },
+      ],
+    });
+    const rejected = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+      requireRunStatus: false,
+    });
+    expect(rejected.passed).toBe(false);
+    expect(rejected.cases[0]?.runs[0]?.error).toContain(
+      "seed coverage rejected does not match",
+    );
+
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      cases: [
+        {
+          id: "inconsistent-seed-gate",
+          seedSarif: ["seed.sarif"],
+          expectedSeedCoverage: { ...expectation, inScope: 0 },
+          expected: [],
+        },
+      ],
+    });
+    await expect(
+      evaluateBenchmark({ manifestPath: join(root, "manifest.json") }),
+    ).rejects.toThrow("expectedSeedCoverage is inconsistent");
   });
 });
 

@@ -52,6 +52,10 @@ End each repository-scoped threat model with these two lines:
   - After normalization, compact validation adds exactly one `validation` object to every row with `disposition` (`reportable`, `suppressed`, `not_applicable`, or `deferred`), `method`, `confidence` (`high`, `medium`, or `low`), `confidence_rationale`, concise `rubric` and `evidence`, `counterevidence_or_proof_gap`, `remaining_uncertainty`, and optional `artifact_paths`. Add `source`, `control`, `sink`, or `preconditions` only when they clarify or differ from the discovery fields.
   - Compact attack-path analysis adds exactly one `attack_path` object to each validation row marked `reportable` or `deferred`, with `decision` (`reportable`, `ignore`, or `deferred`), `dataflow`, `reachability`, `counterevidence`, `impact` and `likelihood` (`high`, `medium`, `low`, `ignore`, or `unknown`), `severity` (`critical`, `high`, `medium`, `low`, `ignore`, or `unknown`), `severity_rationale`, `change_conditions`, and `proof_gap` when deferred. A `reportable` decision requires severity `critical`, `high`, `medium`, or `low`; `ignore` requires severity `ignore`; `deferred` uses a provisional reportable severity or `unknown`.
   - Preserve all discovery fields and row order during enrichment, rewrite atomically, and do not pass the enriched ledger back to `normalize_candidates.py`.
+  - With external SARIF input, preserve each seed's exact reserved instance,
+    CWE list, and normalized locations. Each in-scope seed appears exactly
+    once; out-of-scope seeds and invented reserved instances never enter the
+    ledger.
 - Optional compact validation evidence: `<discovery_dir>/validation_artifacts/<candidate_id>/`
   - Create this directory only for actual PoCs, crafted inputs, or logs and reference those paths from the row's `validation` object. Do not create placeholder per-candidate directories or narrative reports.
 
@@ -85,6 +89,13 @@ The legacy ranking, raw/deduped candidate, per-finding receipt, and phase-report
 - Repository-wide coverage ledger: `<coverage_dir>/repository_coverage_ledger.md`
   - This is a coverage artifact, not a findings list: it should include checked surfaces with not_applicable, suppressed, deferred, or reportable dispositions.
 - Reviewed surfaces summary: `<coverage_dir>/reviewed_surfaces.md` if applicable
+- Host-owned external SARIF closure receipt:
+  `<coverage_dir>/external_sarif_seed_coverage.json` when SARIF seeds are
+  bound. It records the immutable candidate and ledger digests plus each
+  seed's `reportable`, `rejected`, `deferred`, or `out_of_scope` terminal
+  disposition. The model must not author or modify it. The host references it
+  from canonical coverage and seals the source metadata, normalized candidate
+  JSONL, enriched ledger, and receipt together.
 
 ## Validation (Phase 3) Paths
 

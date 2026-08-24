@@ -2008,6 +2008,7 @@ function scanRecipe(
       : {
           seedSarifPaths: sarifSeeds.sources,
           seedSarifCandidateCount: sarifSeeds.candidates.length,
+          seedSarifCandidatesSha256: sarifSeeds.candidateSha256,
           seedSarifSourceDigests: sarifSeeds.sourceRecords.map(
             ({ id, sha256 }) => ({ id, sha256 }),
           ),

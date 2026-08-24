@@ -190,13 +190,22 @@ The host performs these steps before Copilot sees any imported candidate:
    counts, and tool provenance under the isolated scan artifact tree.
 8. Merge every in-scope seed into the normal candidate ledger and require the
    same independent validation and attack-path closure as native discovery.
+9. Bind the exact normalized candidate bytes and ordered source digests into
+   the immutable launch recipe. At completion, reconcile every reserved seed
+   identity against the ledger and fail on missing, duplicate, invented,
+   out-of-scope, identity-mutated, or incomplete rows.
+10. Generate a deterministic, manifest-sealed closure receipt with exact
+    `reportable`, `rejected`, `deferred`, and `out_of_scope` totals and one
+    terminal record per seed. Deferred seeds force partial completeness.
 
 `benchmarks/sarif-seed-manifest.json` is the initial ensemble lane. Its
 positive case should retain a seeded command injection; its negative case
 feeds a high-severity false-positive process-execution seed that must be
 rejected. Both source SARIF files contain hostile messages and fake credential
 text, allowing artifact inspection to prove that the host removed those fields
-before model execution.
+before model execution. The benchmark now gates the receipt itself: each case
+must have the expected closure totals, unique reserved instances, a canonical
+coverage reference, and the receipt's exact digest in the sealed manifest.
 
 The import does not execute another analyzer, trust imported severity, or
 claim that a seeded tool completed its own coverage. Native inventory,
@@ -1410,10 +1419,12 @@ patched .NET 8 dependency floors for its legacy caching and JSON transitives.
    composite-action chains,
    Docker, Kubernetes, Terraform, and cloud policy surfaces, then ask Copilot
    to evaluate deployment reachability and compensating controls.
-5. **Seed-coverage receipts.** Make imported-candidate closure a workbench
-   contract field, not only a ledger invariant, so a future host can prove the
-   exact imported count that was reportable, rejected, deferred, or out of
-   scope without relying on prose.
+5. **Seed-coverage receipts — shipped.** Imported-candidate closure is now a
+   workbench-bound, deterministic, manifest-sealed contract. The host proves
+   the exact normalized input digest and one terminal `reportable`, `rejected`,
+   `deferred`, or `out_of_scope` record per seed; the dedicated benchmark gates
+   these counts and the seal. Extend this evidence to future local analyzer
+   adapters without weakening the current fail-closed identity rules.
 6. **Ensemble benchmark lanes.** Run native-only and native-plus-seed campaigns
    over the same selected manifest. Gate the integration on improved recall or
    completion without precision, evidence, validation, attack-path, stability,

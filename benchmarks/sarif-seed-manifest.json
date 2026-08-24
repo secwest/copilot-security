@@ -20,6 +20,14 @@
       "description": "A true external command-injection seed must survive independent validation without importing hostile SARIF text.",
       "fixture": "fixtures/javascript-command-injection",
       "seedSarif": ["seeds/javascript-command-injection.sarif"],
+      "expectedSeedCoverage": {
+        "total": 1,
+        "inScope": 1,
+        "reportable": 1,
+        "rejected": 0,
+        "deferred": 0,
+        "outOfScope": 0
+      },
       "findingsPaths": [
         "sarif-seeded-javascript-command-injection/run-1/findings.json",
         "sarif-seeded-javascript-command-injection/run-2/findings.json",
@@ -49,6 +57,14 @@
       "description": "A noisy external process-execution seed must be rejected because validation and argument-array execution block injection.",
       "fixture": "fixtures/javascript-safe-command",
       "seedSarif": ["seeds/javascript-safe-command.sarif"],
+      "expectedSeedCoverage": {
+        "total": 1,
+        "inScope": 1,
+        "reportable": 0,
+        "rejected": 1,
+        "deferred": 0,
+        "outOfScope": 0
+      },
       "findingsPaths": [
         "sarif-seeded-javascript-safe-command/run-1/findings.json",
         "sarif-seeded-javascript-safe-command/run-2/findings.json",

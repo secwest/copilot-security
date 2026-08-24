@@ -322,6 +322,7 @@ const result = await scanner.run("/path/to/repository", {
 });
 
 console.log(result.reportPath);
+console.log(result.externalSarifSeedCoveragePath);
 ```
 
 `seedSarifPaths` imports SARIF 2.1.0 results only as untrusted candidate hints.
@@ -331,6 +332,15 @@ and requires Copilot to independently prove or reject each in-scope seed.
 `sarifSourceRoot` remaps absolute paths emitted from another checkout. Omit it
 when SARIF paths are repository-relative or were produced from the repository
 being scanned.
+
+The host binds the normalized candidate count and byte digest plus every source
+digest into the immutable launch recipe. Completion rejects missing,
+duplicated, invented, out-of-scope, identity-mutated, or incompletely closed
+reserved seed rows. A successful seeded scan seals
+`artifacts/03_coverage/external_sarif_seed_coverage.json`, containing one
+`reportable`, `rejected`, `deferred`, or `out_of_scope` disposition per seed;
+`externalSarifSeedCoveragePath` resolves that receipt. Deferred seeds make
+coverage partial.
 
 `secretBaselinePath` selects an optional strict schema 1.0 file containing only
 opaque local HMAC fingerprints, exact rule/path identity, a justification, and

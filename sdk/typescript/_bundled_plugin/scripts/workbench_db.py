@@ -125,6 +125,9 @@ FINDING_ARTIFACT_DIRECTORIES_LIMIT = 80
 FINDING_ARTIFACTS_LIMIT = 40
 FINDING_WRITEUP_REPORT_PATH = re.compile(r"^findings/([a-z0-9][a-z0-9._-]*)/\1\.md$")
 SCAN_RECIPE_MAX_BYTES = 256 * 1024
+SARIF_SEED_MAX_CANDIDATES = 5_000
+SARIF_SEED_MAX_SOURCES = 32
+SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 def now() -> str:
@@ -595,7 +598,7 @@ def workbench_completion_binding(scan: sqlite3.Row, completed_at: str) -> dict[s
         "excludePaths": contract["scope"]["requiredExcludePaths"],
     }
 
-    return {
+    binding = {
         "scanId": scan["id"],
         "startedAt": scan["started_at"],
         "completedAt": completed_at,
@@ -604,6 +607,73 @@ def workbench_completion_binding(scan: sqlite3.Row, completed_at: str) -> dict[s
         "allowedTargetKinds": target_contract["allowedKinds"],
         "scope": scope,
         "coverageMode": expected_coverage_mode(scan),
+    }
+    if scan["recipe_json"] is not None:
+        recipe = json.loads(scan["recipe_json"], parse_constant=reject_non_finite_json)
+        sarif_seed_binding = _sarif_seed_binding_from_recipe(recipe)
+        if sarif_seed_binding is not None:
+            binding["sarifSeeds"] = sarif_seed_binding
+    return binding
+
+
+def _sarif_seed_binding_from_recipe(recipe: dict[str, Any]) -> dict[str, Any] | None:
+    fields = {
+        "seedSarifPaths",
+        "seedSarifCandidateCount",
+        "seedSarifCandidatesSha256",
+        "seedSarifSourceDigests",
+    }
+    present = fields.intersection(recipe)
+    if not present:
+        return None
+    if present != fields:
+        raise SystemExit("Scan launch recipe contains an incomplete SARIF seed binding.")
+    paths = recipe["seedSarifPaths"]
+    candidate_count = recipe["seedSarifCandidateCount"]
+    candidate_sha256 = recipe["seedSarifCandidatesSha256"]
+    source_digests = recipe["seedSarifSourceDigests"]
+    if (
+        not isinstance(paths, list)
+        or not paths
+        or len(paths) > SARIF_SEED_MAX_SOURCES
+        or not all(isinstance(path, str) and path for path in paths)
+    ):
+        raise SystemExit("Scan launch recipe SARIF seed paths are invalid.")
+    if (
+        not isinstance(candidate_count, int)
+        or isinstance(candidate_count, bool)
+        or candidate_count < 1
+        or candidate_count > SARIF_SEED_MAX_CANDIDATES
+    ):
+        raise SystemExit("Scan launch recipe SARIF seed candidate count is invalid.")
+    if not isinstance(candidate_sha256, str) or SHA256_RE.fullmatch(candidate_sha256) is None:
+        raise SystemExit("Scan launch recipe SARIF seed candidate digest is invalid.")
+    if (
+        not isinstance(source_digests, list)
+        or len(source_digests) != len(paths)
+        or len(source_digests) > SARIF_SEED_MAX_SOURCES
+    ):
+        raise SystemExit("Scan launch recipe SARIF source digests are invalid.")
+    normalized_sources: list[dict[str, str]] = []
+    source_ids: set[str] = set()
+    for index, source in enumerate(source_digests):
+        if not isinstance(source, dict) or set(source) != {"id", "sha256"}:
+            raise SystemExit("Scan launch recipe SARIF source digest is invalid.")
+        source_id = source.get("id")
+        source_sha256 = source.get("sha256")
+        if (
+            source_id != f"sarif-source-{index + 1:03d}"
+            or source_id in source_ids
+            or not isinstance(source_sha256, str)
+            or SHA256_RE.fullmatch(source_sha256) is None
+        ):
+            raise SystemExit("Scan launch recipe SARIF source digest is invalid.")
+        source_ids.add(source_id)
+        normalized_sources.append({"id": source_id, "sha256": source_sha256})
+    return {
+        "candidateCount": candidate_count,
+        "candidatesSha256": candidate_sha256,
+        "sourceDigests": normalized_sources,
     }
 
 
@@ -1724,6 +1794,7 @@ def parse_scan_recipe(value: str, repository: Path) -> dict[str, Any]:
     if target["kind"] in {"refs", "working_tree"}:
         if not isinstance(target.get("base"), str) or not isinstance(target.get("head"), str):
             raise SystemExit("Diff scan launch recipes require resolved base and head revisions.")
+    _sarif_seed_binding_from_recipe(recipe)
     return recipe
 
 

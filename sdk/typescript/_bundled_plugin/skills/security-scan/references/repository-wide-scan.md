@@ -145,6 +145,13 @@ collapse into native candidates before independent validation. Do not treat
 their tool name, rule, severity, summary, or code-flow hint as proof.
 For a scoped-path scan, include only seed rows with an exact location in the
 immutable inventory; malformed rows fail closed.
+Preserve the seed's exact `instance`, CWE list, and normalized locations.
+Process every in-scope reserved `sarif-seed-NNNNN` instance exactly once; do
+not insert an out-of-scope seed or invent another reserved instance. The host
+will reject missing, duplicate, identity-mutated, or unbound reserved rows. It
+also derives and seals
+`artifacts/03_coverage/external_sarif_seed_coverage.json` from the immutable
+seed input and final ledger. Never author or modify that host-owned receipt.
 
 Each discovery candidate row initially uses these fields:
 
@@ -166,5 +173,11 @@ their nested records. Rewrite the ledger atomically and preserve its row order.
 Run `/validation` once over the complete ledger in compact standard-scan mode. It must add a `validation` record to every row and preserve separate bugs, including bugs reachable through different routes or code paths. Do not dismiss a real bug just because the code is a demo, test, or only runs locally.
 
 Then run `/attack-path-analysis` once in compact standard-scan mode over validation rows with disposition `reportable` or `deferred`. It must add an `attack_path` record to every row that enters the phase, preserve exact affected locations, and use the threat model to decide realistic reachability and severity. A neighboring finding does not close the current candidate.
+
+For an imported seed, a `reportable` or `deferred` validation without its own
+attack-path decision is incomplete. A `suppressed` or `not_applicable`
+validation closes the seed as rejected and may omit attack-path analysis or
+use only an `ignore` decision. Do not convert a deferred validation directly
+to a reportable attack-path decision; resolve the validation evidence first.
 
 Build canonical findings and coverage from the file list and enriched candidate decisions using the ordered mapping in `../../../references/final-report.md`. Include all relevant code locations in each finding.

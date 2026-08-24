@@ -89,6 +89,37 @@ describe("ScanResult", () => {
     expect(result.toJSON()["cost"]).toEqual(result.cost);
   });
 
+  test("exposes the sealed external SARIF seed coverage receipt", () => {
+    const result = new ScanResult({
+      manifest,
+      findings,
+      coverage: {
+        ...coverage,
+        surfaces: [
+          {
+            id: "external-sarif-seed-closure",
+            label: "External SARIF seed closure",
+            disposition: "rejected",
+            receiptRefs: [
+              "artifacts/03_coverage/external_sarif_seed_coverage.json",
+            ],
+          },
+        ],
+      },
+      scanDir: "/scan",
+      threadId: "thread",
+      turnResult: { id: "turn", status: "completed" },
+    });
+    const expected = join(
+      "/scan",
+      "artifacts",
+      "03_coverage",
+      "external_sarif_seed_coverage.json",
+    );
+    expect(result.externalSarifSeedCoveragePath).toBe(expected);
+    expect(result.toJSON()["externalSarifSeedCoveragePath"]).toBe(expected);
+  });
+
   test("discovers SARIF at its canonical scan path", async () => {
     const scanDir = await mkdtemp(join(tmpdir(), "copilot-security-result-"));
     try {

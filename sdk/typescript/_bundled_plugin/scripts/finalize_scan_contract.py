@@ -72,6 +72,17 @@ GITHUB_HASH_MAX_LINES = 100_000
 SOURCE_READ_CHUNK_SIZE = 64 * 1024
 SOURCE_READ_MAX_BYTES = 10 * 1024 * 1024
 IN_SCOPE_INVENTORY_MAX_BYTES = 8 * 1024 * 1024
+EXTERNAL_SARIF_CANDIDATES_MAX_BYTES = 128 * 1024 * 1024
+EXTERNAL_SARIF_LEDGER_MAX_BYTES = 128 * 1024 * 1024
+EXTERNAL_SARIF_SEED_MAX_ROWS = 5_000
+EXTERNAL_SARIF_LEDGER_MAX_ROWS = 50_000
+EXTERNAL_SARIF_SOURCE_PATH = "artifacts/01_context/external_sarif_sources.json"
+EXTERNAL_SARIF_CANDIDATE_PATH = "artifacts/02_discovery/external_sarif_candidates.jsonl"
+EXTERNAL_SARIF_LEDGER_PATH = "artifacts/02_discovery/candidate_ledger.jsonl"
+EXTERNAL_SARIF_RECEIPT_PATH = "artifacts/03_coverage/external_sarif_seed_coverage.json"
+EXTERNAL_SARIF_SURFACE_ID = "external-sarif-seed-closure"
+EXTERNAL_SARIF_DEFERRED_ID = "external-sarif-seed-closure-deferred"
+EXTERNAL_SARIF_INSTANCE_RE = re.compile(r"^sarif-seed-\d{5}$")
 CONTRACT_DOCUMENT_MAX_BYTES = {
     "scan-manifest.json": 16 * 1024 * 1024,
     "findings.json": 128 * 1024 * 1024,
@@ -4138,6 +4149,419 @@ def _read_in_scope_inventory(scan_dir: Path) -> list[str]:
     return paths
 
 
+def _read_bounded_scan_local_bytes(
+    scan_dir: Path, relative_path: str, context: str, maximum: int
+) -> bytes:
+    descriptor = open_scan_local_file_descriptor(scan_dir, relative_path, context)
+    try:
+        metadata = os.fstat(descriptor)
+        if metadata.st_size > maximum:
+            raise ContractError(f"{context}: exceeds the deterministic size limit")
+        with os.fdopen(descriptor, "rb") as handle:
+            descriptor = -1
+            raw = handle.read(maximum + 1)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if len(raw) > maximum:
+        raise ContractError(f"{context}: exceeds the deterministic size limit")
+    return raw
+
+
+def _read_external_sarif_jsonl(
+    scan_dir: Path,
+    relative_path: str,
+    context: str,
+    maximum_bytes: int,
+    maximum_rows: int,
+) -> tuple[list[dict[str, Any]], bytes]:
+    raw = _read_bounded_scan_local_bytes(scan_dir, relative_path, context, maximum_bytes)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ContractError(f"{context}: expected UTF-8 JSONL") from exc
+    rows: list[dict[str, Any]] = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        if len(rows) >= maximum_rows:
+            raise ContractError(f"{context}: exceeds the deterministic row limit")
+        encoded = line.encode("utf-8")
+        _require_json_nesting(encoded, f"{context} line {line_number}")
+        try:
+            row = _loads_json(line)
+        except ValueError as exc:
+            raise ContractError(f"{context} line {line_number}: invalid JSON") from exc
+        if not isinstance(row, dict):
+            raise ContractError(f"{context} line {line_number}: expected a JSON object")
+        _require_safe_json_value(row, f"{context} line {line_number}")
+        rows.append(row)
+    return rows, raw
+
+
+def _external_sarif_candidate_identity(candidate: dict[str, Any], index: int) -> tuple[str, str]:
+    context = f"external SARIF candidate {index + 1}"
+    instance = candidate.get("instance")
+    if not isinstance(instance, str) or EXTERNAL_SARIF_INSTANCE_RE.fullmatch(instance) is None:
+        raise ContractError(f"{context}: expected a reserved seed instance")
+    locations = candidate.get("locations")
+    cwe_ids = candidate.get("cwe_ids")
+    if (
+        not isinstance(locations, list)
+        or not locations
+        or not isinstance(cwe_ids, list)
+        or not all(
+            isinstance(cwe_id, str) and re.fullmatch(r"CWE-[1-9][0-9]{0,6}", cwe_id)
+            for cwe_id in cwe_ids
+        )
+    ):
+        raise ContractError(f"{context}: expected normalized locations and CWE ids")
+    normalized_locations: list[dict[str, Any]] = []
+    for location_index, location in enumerate(locations):
+        if not isinstance(location, dict):
+            raise ContractError(f"{context} location {location_index + 1}: expected an object")
+        path = location.get("path")
+        start_line = location.get("start_line")
+        end_line = location.get("end_line")
+        role = location.get("role")
+        if not isinstance(path, str):
+            raise ContractError(f"{context} location {location_index + 1}: expected a path")
+        path = _require_safe_relative_path(path, f"{context} location {location_index + 1}")
+        if (
+            not isinstance(start_line, int)
+            or isinstance(start_line, bool)
+            or start_line < 1
+            or not isinstance(end_line, int)
+            or isinstance(end_line, bool)
+            or end_line < start_line
+            or role not in {"source", "sink", "evidence"}
+        ):
+            raise ContractError(f"{context} location {location_index + 1}: invalid normalized location")
+        normalized_locations.append(
+            {"path": path, "start_line": start_line, "end_line": end_line, "role": role}
+        )
+    identity = {
+        "cwe_ids": cwe_ids,
+        "instance": instance,
+        "locations": normalized_locations,
+    }
+    encoded = json.dumps(
+        identity, allow_nan=False, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    return instance, hashlib.sha256(encoded).hexdigest()
+
+
+def _external_sarif_terminal_disposition(
+    row: dict[str, Any], instance: str
+) -> tuple[str, str, str | None]:
+    candidate_id = row.get("candidate_id")
+    if not isinstance(candidate_id, str) or not candidate_id.strip():
+        raise ContractError(f"external SARIF seed {instance}: missing candidate_id")
+    validation = row.get("validation")
+    if not isinstance(validation, dict):
+        raise ContractError(f"external SARIF seed {instance}: missing validation closure")
+    validation_disposition = validation.get("disposition")
+    if validation_disposition not in {
+        "reportable",
+        "suppressed",
+        "not_applicable",
+        "deferred",
+    }:
+        raise ContractError(f"external SARIF seed {instance}: invalid validation disposition")
+    attack_path = row.get("attack_path")
+    alternate_attack_path = row.get("attackPath")
+    if attack_path is not None and alternate_attack_path is not None:
+        raise ContractError(f"external SARIF seed {instance}: ambiguous attack-path closure")
+    if attack_path is None:
+        attack_path = alternate_attack_path
+    attack_decision: str | None = None
+    if attack_path is not None:
+        if not isinstance(attack_path, dict):
+            raise ContractError(f"external SARIF seed {instance}: invalid attack-path closure")
+        decision = attack_path.get("decision")
+        if decision not in {"reportable", "ignore", "deferred"}:
+            raise ContractError(f"external SARIF seed {instance}: invalid attack-path decision")
+        attack_decision = decision
+
+    if validation_disposition in {"suppressed", "not_applicable"}:
+        if attack_decision not in {None, "ignore"}:
+            raise ContractError(
+                f"external SARIF seed {instance}: rejected validation conflicts with attack path"
+            )
+        return "rejected", validation_disposition, attack_decision
+    if attack_decision is None:
+        raise ContractError(f"external SARIF seed {instance}: missing attack-path closure")
+    if validation_disposition == "reportable":
+        return (
+            "reportable" if attack_decision == "reportable" else
+            "rejected" if attack_decision == "ignore" else
+            "deferred",
+            validation_disposition,
+            attack_decision,
+        )
+    if attack_decision == "reportable":
+        raise ContractError(
+            f"external SARIF seed {instance}: deferred validation cannot be reportable"
+        )
+    return (
+        "rejected" if attack_decision == "ignore" else "deferred",
+        validation_disposition,
+        attack_decision,
+    )
+
+
+def _external_sarif_seed_coverage(
+    scan_dir: Path,
+    completion_binding: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+    binding = completion_binding.get("sarifSeeds")
+    if not isinstance(binding, dict):
+        raise ContractError("external SARIF seed binding: expected an object")
+    expected_count = binding.get("candidateCount")
+    expected_digest = binding.get("candidatesSha256")
+    expected_sources = binding.get("sourceDigests")
+    if (
+        not isinstance(expected_count, int)
+        or isinstance(expected_count, bool)
+        or expected_count < 1
+        or expected_count > EXTERNAL_SARIF_SEED_MAX_ROWS
+        or not isinstance(expected_digest, str)
+        or re.fullmatch(r"[a-f0-9]{64}", expected_digest) is None
+        or not isinstance(expected_sources, list)
+    ):
+        raise ContractError("external SARIF seed binding: invalid trusted metadata")
+
+    source_document = _read_scan_local_json(
+        scan_dir, EXTERNAL_SARIF_SOURCE_PATH, "external SARIF source metadata"
+    )
+    source_rows = source_document.get("sources")
+    if not isinstance(source_rows, list) or not all(
+        isinstance(source, dict) for source in source_rows
+    ):
+        raise ContractError("external SARIF source metadata has invalid source records")
+    if (
+        source_document.get("candidateCount") != expected_count
+        or source_document.get("candidateSha256") != expected_digest
+        or [
+            {"id": source.get("id"), "sha256": source.get("sha256")}
+            for source in source_rows
+        ]
+        != expected_sources
+    ):
+        raise ContractError("external SARIF source metadata does not match the scan recipe")
+
+    candidates, candidate_bytes = _read_external_sarif_jsonl(
+        scan_dir,
+        EXTERNAL_SARIF_CANDIDATE_PATH,
+        "external SARIF candidates",
+        EXTERNAL_SARIF_CANDIDATES_MAX_BYTES,
+        EXTERNAL_SARIF_SEED_MAX_ROWS,
+    )
+    if len(candidates) != expected_count or _sha256_bytes(candidate_bytes) != expected_digest:
+        raise ContractError("external SARIF candidates do not match the scan recipe")
+    inventory = set(_read_in_scope_inventory(scan_dir))
+    ledger, ledger_bytes = _read_external_sarif_jsonl(
+        scan_dir,
+        EXTERNAL_SARIF_LEDGER_PATH,
+        "candidate ledger",
+        EXTERNAL_SARIF_LEDGER_MAX_BYTES,
+        EXTERNAL_SARIF_LEDGER_MAX_ROWS,
+    )
+    ledger_by_instance: dict[str, list[dict[str, Any]]] = {}
+    for row in ledger:
+        instance = row.get("instance")
+        if isinstance(instance, str) and EXTERNAL_SARIF_INSTANCE_RE.fullmatch(instance):
+            ledger_by_instance.setdefault(instance, []).append(row)
+
+    entries: list[dict[str, Any]] = []
+    expected_instances: set[str] = set()
+    counts = {"reportable": 0, "rejected": 0, "deferred": 0, "out_of_scope": 0}
+    deferred_paths: set[str] = set()
+    for index, candidate in enumerate(candidates):
+        instance, identity_sha256 = _external_sarif_candidate_identity(candidate, index)
+        if instance in expected_instances:
+            raise ContractError(f"external SARIF candidates contain duplicate instance {instance}")
+        expected_instances.add(instance)
+        candidate_paths = {
+            location["path"]
+            for location in candidate["locations"]
+            if isinstance(location, dict) and isinstance(location.get("path"), str)
+        }
+        matching_rows = ledger_by_instance.get(instance, [])
+        if not candidate_paths.intersection(inventory):
+            if matching_rows:
+                raise ContractError(f"out-of-scope external SARIF seed {instance} entered the ledger")
+            counts["out_of_scope"] += 1
+            entries.append(
+                {
+                    "candidateIdentitySha256": identity_sha256,
+                    "disposition": "out_of_scope",
+                    "instance": instance,
+                }
+            )
+            continue
+        if len(matching_rows) != 1:
+            detail = "missing" if not matching_rows else "duplicated"
+            raise ContractError(f"in-scope external SARIF seed {instance} is {detail} in the ledger")
+        row = matching_rows[0]
+        _, ledger_identity_sha256 = _external_sarif_candidate_identity(row, index)
+        if ledger_identity_sha256 != identity_sha256:
+            raise ContractError(
+                f"external SARIF seed {instance}: ledger identity differs from normalized input"
+            )
+        disposition, validation_disposition, attack_decision = (
+            _external_sarif_terminal_disposition(row, instance)
+        )
+        counts[disposition] += 1
+        if disposition == "deferred":
+            deferred_paths.update(candidate_paths.intersection(inventory))
+        entry: dict[str, Any] = {
+            "attackPathDecision": attack_decision,
+            "candidateId": row["candidate_id"],
+            "candidateIdentitySha256": identity_sha256,
+            "disposition": disposition,
+            "instance": instance,
+            "validationDisposition": validation_disposition,
+        }
+        entries.append(entry)
+
+    unexpected = sorted(set(ledger_by_instance) - expected_instances)
+    if unexpected:
+        raise ContractError(
+            f"candidate ledger contains an unbound reserved SARIF seed instance: {unexpected[0]}"
+        )
+    receipt = {
+        "candidateInput": {
+            "count": expected_count,
+            "path": EXTERNAL_SARIF_CANDIDATE_PATH,
+            "sha256": expected_digest,
+        },
+        "documentType": "copilot-security.external-sarif-seed-coverage",
+        "ledger": {
+            "path": EXTERNAL_SARIF_LEDGER_PATH,
+            "sha256": _sha256_bytes(ledger_bytes),
+        },
+        "schemaVersion": "1.0",
+        "seeds": entries,
+        "sourceMetadata": {
+            "path": EXTERNAL_SARIF_SOURCE_PATH,
+            "sha256": _sha256_scan_local_file(
+                scan_dir, EXTERNAL_SARIF_SOURCE_PATH, "external SARIF source metadata"
+            ),
+            "sources": expected_sources,
+        },
+        "summary": {
+            "deferred": counts["deferred"],
+            "inScope": expected_count - counts["out_of_scope"],
+            "outOfScope": counts["out_of_scope"],
+            "rejected": counts["rejected"],
+            "reportable": counts["reportable"],
+            "total": expected_count,
+        },
+    }
+    surface_disposition = (
+        "needs_follow_up"
+        if counts["deferred"]
+        else "reported"
+        if counts["reportable"]
+        else "not_applicable"
+        if counts["out_of_scope"] == expected_count
+        else "rejected"
+    )
+    surface = {
+        "disposition": surface_disposition,
+        "id": EXTERNAL_SARIF_SURFACE_ID,
+        "label": "External SARIF seed closure",
+        "notes": (
+            f"Host reconciliation closed {expected_count - counts['out_of_scope']} in-scope "
+            f"seed(s) and classified {counts['out_of_scope']} as out of scope."
+        ),
+        "receiptRefs": [
+            EXTERNAL_SARIF_SOURCE_PATH,
+            EXTERNAL_SARIF_CANDIDATE_PATH,
+            EXTERNAL_SARIF_LEDGER_PATH,
+            EXTERNAL_SARIF_RECEIPT_PATH,
+        ],
+        "riskArea": "external analyzer candidate validation",
+    }
+    deferred = (
+        {
+            "id": EXTERNAL_SARIF_DEFERRED_ID,
+            "paths": sorted(deferred_paths),
+            "reason": (
+                f"{counts['deferred']} in-scope external analyzer seed(s) lack terminal proof."
+            ),
+            "surfaceIds": [EXTERNAL_SARIF_SURFACE_ID],
+        }
+        if counts["deferred"]
+        else None
+    )
+    return receipt, surface, deferred
+
+
+def _reconcile_external_sarif_seed_coverage(
+    scan_dir: Path,
+    coverage: dict[str, Any],
+    completion_binding: dict[str, Any] | None,
+    *,
+    was_sealed: bool,
+    completion_warnings: list[str] | None,
+) -> None:
+    if completion_binding is None or "sarifSeeds" not in completion_binding:
+        return
+    receipt, surface, deferred = _external_sarif_seed_coverage(scan_dir, completion_binding)
+    receipt_bytes = _json_bytes(receipt)
+    surfaces = coverage.get("surfaces")
+    deferred_rows = coverage.get("deferred")
+    if not isinstance(surfaces, list) or not isinstance(deferred_rows, list):
+        raise ContractError("external SARIF seed coverage requires canonical coverage arrays")
+    existing_surfaces = [
+        row for row in surfaces if isinstance(row, dict) and row.get("id") == EXTERNAL_SARIF_SURFACE_ID
+    ]
+    existing_deferred = [
+        row
+        for row in deferred_rows
+        if isinstance(row, dict) and row.get("id") == EXTERNAL_SARIF_DEFERRED_ID
+    ]
+    if was_sealed:
+        existing_receipt = _read_bounded_scan_local_bytes(
+            scan_dir,
+            EXTERNAL_SARIF_RECEIPT_PATH,
+            "external SARIF seed coverage receipt",
+            EXTERNAL_SARIF_CANDIDATES_MAX_BYTES,
+        )
+        if existing_receipt != receipt_bytes:
+            raise ContractError("sealed external SARIF seed coverage receipt changed")
+        if existing_surfaces != [surface] or existing_deferred != ([] if deferred is None else [deferred]):
+            raise ContractError("sealed external SARIF seed coverage metadata changed")
+        return
+
+    surfaces[:] = [
+        row
+        for row in surfaces
+        if not isinstance(row, dict) or row.get("id") != EXTERNAL_SARIF_SURFACE_ID
+    ]
+    surfaces.append(surface)
+    deferred_rows[:] = [
+        row
+        for row in deferred_rows
+        if not isinstance(row, dict) or row.get("id") != EXTERNAL_SARIF_DEFERRED_ID
+    ]
+    if deferred is not None:
+        deferred_rows.append(deferred)
+        coverage["completeness"] = "partial"
+    write_scan_local_bytes(scan_dir, EXTERNAL_SARIF_RECEIPT_PATH, receipt_bytes)
+    if completion_warnings is not None:
+        summary = receipt["summary"]
+        warning = (
+            "Bound external SARIF seed coverage: "
+            f"{summary['reportable']} reportable, {summary['rejected']} rejected, "
+            f"{summary['deferred']} deferred, and {summary['outOfScope']} out of scope."
+        )
+        if warning not in completion_warnings:
+            completion_warnings.append(warning)
+
+
 def _reconcile_coverage_with_inventory(
     coverage: dict[str, Any],
     scan_dir: Path,
@@ -4256,6 +4680,13 @@ def _prepare_scan_finalization(
         _reconcile_coverage_with_inventory(
             coverage, scan_dir, completion_warnings
         )
+        _reconcile_external_sarif_seed_coverage(
+            scan_dir,
+            coverage,
+            completion_binding,
+            was_sealed=False,
+            completion_warnings=completion_warnings,
+        )
         if (
             completion_warnings is not None
             and (simplified_manifest or simplified_findings or simplified_coverage)
@@ -4269,6 +4700,14 @@ def _prepare_scan_finalization(
             expected_coverage_mode=expected_coverage_mode,
         )
         _normalize_unsealed_open_questions(coverage)
+    else:
+        _reconcile_external_sarif_seed_coverage(
+            scan_dir,
+            coverage,
+            completion_binding,
+            was_sealed=True,
+            completion_warnings=None,
+        )
 
     if manifest.get("schemaVersion") != SCHEMA_VERSION:
         raise ContractError(f"manifest.schemaVersion: expected {SCHEMA_VERSION}")

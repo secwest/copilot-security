@@ -92,6 +92,18 @@ export class ScanResult {
     return join(this.scanDir, "artifacts");
   }
 
+  public get externalSarifSeedCoveragePath(): string | null {
+    const reference = this.coverage.surfaces
+      .find((surface) => surface.id === "external-sarif-seed-closure")
+      ?.receiptRefs.find(
+        (path) =>
+          path === "artifacts/03_coverage/external_sarif_seed_coverage.json",
+      );
+    return reference === undefined
+      ? null
+      : join(this.scanDir, ...reference.split("/"));
+  }
+
   public toJSON(): Record<string, unknown> {
     return {
       manifest: this.manifest,
@@ -101,6 +113,7 @@ export class ScanResult {
       threadId: this.threadId,
       reportPath: this.reportPath,
       artifactsDir: this.artifactsDir,
+      externalSarifSeedCoveragePath: this.externalSarifSeedCoveragePath,
       sarifPath: this.sarifPath,
       cost: this.cost,
       turn: this.turnResult,

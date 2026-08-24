@@ -444,6 +444,17 @@ seeded, and ignored counts remain visible in the provenance artifact. Seed
 files and their source root are preserved in the launch recipe so history
 reruns use the same inputs.
 
+The launch recipe also binds the exact normalized candidate count, candidate
+JSONL SHA-256, and ordered source-document digests. At completion, the trusted
+host reconciles every reserved seed identity against the enriched ledger and
+fails closed on a missing, duplicate, invented, out-of-scope, identity-mutated,
+or incompletely validated row. It then writes and manifest-seals
+`artifacts/03_coverage/external_sarif_seed_coverage.json`, with one terminal
+`reportable`, `rejected`, `deferred`, or `out_of_scope` record per normalized
+seed. Deferred seeds force partial coverage. CLI and GUI completion warnings
+show the four counts; SDK results expose the receipt through
+`externalSarifSeedCoveragePath`.
+
 See [`docs/scanner-landscape.md`](docs/scanner-landscape.md) for the design
 comparison and improvement backlog derived from other mature scanners.
 
@@ -478,7 +489,9 @@ The dedicated `benchmarks/sarif-seed-manifest.json` campaign pairs a real
 command-injection seed with a deliberately noisy safe-process-execution seed.
 It tests recall gain and false-positive rejection while its SARIF messages and
 fingerprints contain hostile text and fake secrets that must never reach scan
-artifacts or model context:
+artifacts or model context. Each case additionally requires an exact sealed
+seed-coverage receipt: the positive must close as reportable and the negative
+as rejected, with no deferred or out-of-scope seed:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `

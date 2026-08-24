@@ -29,6 +29,7 @@ import type { SeverityLevel } from "./models.js";
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
 const MAX_FINDINGS_BYTES = 64 * 1024 * 1024;
 const MAX_COVERAGE_BYTES = 32 * 1024 * 1024;
+const MAX_SEED_COVERAGE_BYTES = 16 * 1024 * 1024;
 const MAX_STATUS_BYTES = 64 * 1024;
 const MAX_CASES = 10_000;
 const MAX_RUNS_PER_CASE = 100;
@@ -74,9 +75,19 @@ export interface BenchmarkCase {
   fixture?: string;
   /** SARIF 2.1.0 files, relative to the manifest, seeded by the campaign runner. */
   seedSarif?: string[];
+  expectedSeedCoverage?: BenchmarkSeedCoverageExpectation;
   findingsPath?: string;
   findingsPaths?: string[];
   expected: BenchmarkFindingExpectation[];
+}
+
+export interface BenchmarkSeedCoverageExpectation {
+  total: number;
+  inScope: number;
+  reportable: number;
+  rejected: number;
+  deferred: number;
+  outOfScope: number;
 }
 
 export interface BenchmarkManifest {
@@ -252,6 +263,12 @@ export async function evaluateBenchmark(options: {
             findings.scanId,
           );
         }
+        if (benchmarkCase.expectedSeedCoverage !== undefined) {
+          await requireExternalSeedCoverageArtifacts(
+            dirname(findingsPath),
+            benchmarkCase.expectedSeedCoverage,
+          );
+        }
         runs.push(
           evaluateRun(benchmarkCase, runId, findingsPath, findings.findings),
         );
@@ -398,6 +415,159 @@ async function requireReceiptArtifacts(
         `Benchmark receipt artifact ${key} does not match: ${findingsPath}.`,
       );
     }
+  }
+}
+
+async function requireExternalSeedCoverageArtifacts(
+  outputDirectory: string,
+  expected: BenchmarkSeedCoverageExpectation,
+): Promise<void> {
+  const [coverageBytes, manifestBytes] = await Promise.all([
+    readBoundedBytes(
+      join(outputDirectory, "coverage.json"),
+      MAX_COVERAGE_BYTES,
+      "benchmark coverage artifact",
+    ),
+    readBoundedBytes(
+      join(outputDirectory, "scan-manifest.json"),
+      MAX_MANIFEST_BYTES,
+      "benchmark scan manifest artifact",
+    ),
+  ]);
+  await requireExternalSeedCoverage(
+    outputDirectory,
+    coverageBytes,
+    manifestBytes,
+    expected,
+  );
+}
+
+async function requireExternalSeedCoverage(
+  outputDirectory: string,
+  coverageBytes: Buffer,
+  manifestBytes: Buffer,
+  expected: BenchmarkSeedCoverageExpectation,
+): Promise<void> {
+  const receiptPath = join(
+    outputDirectory,
+    "artifacts",
+    "03_coverage",
+    "external_sarif_seed_coverage.json",
+  );
+  const receiptBytes = await readBoundedBytes(
+    receiptPath,
+    MAX_SEED_COVERAGE_BYTES,
+    "external SARIF seed coverage receipt",
+  );
+  const receipt = parseJson(receiptBytes.toString("utf8"), receiptPath);
+  requireRecord(receipt, "External SARIF seed coverage receipt");
+  if (
+    receipt["documentType"] !==
+      "copilot-security.external-sarif-seed-coverage" ||
+    receipt["schemaVersion"] !== "1.0"
+  ) {
+    throw new CopilotSecurityError(
+      "External SARIF seed coverage receipt has an unsupported contract.",
+    );
+  }
+  const summary = receipt["summary"];
+  requireRecord(summary, "External SARIF seed coverage summary");
+  for (const [key, value] of Object.entries(expected)) {
+    if (summary[key] !== value) {
+      throw new CopilotSecurityError(
+        `External SARIF seed coverage ${key} does not match the benchmark expectation.`,
+      );
+    }
+  }
+  const seeds = receipt["seeds"];
+  if (!Array.isArray(seeds) || seeds.length !== expected.total) {
+    throw new CopilotSecurityError(
+      "External SARIF seed coverage entry count does not match the benchmark expectation.",
+    );
+  }
+  const instances = new Set<string>();
+  const dispositions = {
+    reportable: 0,
+    rejected: 0,
+    deferred: 0,
+    out_of_scope: 0,
+  };
+  for (const [index, seed] of seeds.entries()) {
+    requireRecord(seed, `External SARIF seed coverage entry ${index + 1}`);
+    const instance = seed["instance"];
+    const disposition = seed["disposition"];
+    if (
+      typeof instance !== "string" ||
+      !/^sarif-seed-\d{5}$/u.test(instance) ||
+      instances.has(instance) ||
+      typeof disposition !== "string" ||
+      !(disposition in dispositions)
+    ) {
+      throw new CopilotSecurityError(
+        "External SARIF seed coverage contains an invalid or duplicate entry.",
+      );
+    }
+    instances.add(instance);
+    dispositions[disposition as keyof typeof dispositions] += 1;
+  }
+  if (
+    dispositions.reportable !== expected.reportable ||
+    dispositions.rejected !== expected.rejected ||
+    dispositions.deferred !== expected.deferred ||
+    dispositions.out_of_scope !== expected.outOfScope
+  ) {
+    throw new CopilotSecurityError(
+      "External SARIF seed coverage entries disagree with the expected summary.",
+    );
+  }
+
+  const coverage = parseJson(
+    coverageBytes.toString("utf8"),
+    join(outputDirectory, "coverage.json"),
+  );
+  requireRecord(coverage, "Benchmark coverage artifact");
+  const surfaces = coverage["surfaces"];
+  const seedSurfaces = Array.isArray(surfaces)
+    ? surfaces.filter(
+        (surface) =>
+          isRecord(surface) && surface["id"] === "external-sarif-seed-closure",
+      )
+    : [];
+  if (
+    seedSurfaces.length !== 1 ||
+    !Array.isArray(seedSurfaces[0]!["receiptRefs"]) ||
+    !seedSurfaces[0]!["receiptRefs"].includes(
+      "artifacts/03_coverage/external_sarif_seed_coverage.json",
+    )
+  ) {
+    throw new CopilotSecurityError(
+      "Benchmark coverage does not reference the external SARIF seed receipt.",
+    );
+  }
+
+  const manifest = parseJson(
+    manifestBytes.toString("utf8"),
+    join(outputDirectory, "scan-manifest.json"),
+  );
+  requireRecord(manifest, "Benchmark scan manifest artifact");
+  const scan = manifest["scan"];
+  requireRecord(scan, "Benchmark scan manifest scan");
+  const artifacts = scan["artifacts"];
+  const receiptArtifacts = Array.isArray(artifacts)
+    ? artifacts.filter(
+        (artifact) =>
+          isRecord(artifact) &&
+          artifact["path"] ===
+            "artifacts/03_coverage/external_sarif_seed_coverage.json",
+      )
+    : [];
+  if (
+    receiptArtifacts.length !== 1 ||
+    receiptArtifacts[0]!["sha256"] !== sha256(receiptBytes)
+  ) {
+    throw new CopilotSecurityError(
+      "External SARIF seed coverage receipt is not bound by the benchmark scan seal.",
+    );
   }
 }
 
@@ -760,6 +930,15 @@ function parseManifest(contents: string, path: string): BenchmarkManifest {
         `Benchmark case ${id} seedSarif must not be empty.`,
       );
     }
+    const expectedSeedCoverage =
+      entry["expectedSeedCoverage"] === undefined
+        ? undefined
+        : parseSeedCoverageExpectation(entry["expectedSeedCoverage"], id);
+    if (expectedSeedCoverage !== undefined && seedSarif === undefined) {
+      throw new CopilotSecurityError(
+        `Benchmark case ${id} expectedSeedCoverage requires seedSarif.`,
+      );
+    }
     const findingsPath = optionalString(entry["findingsPath"]);
     const findingsPaths =
       entry["findingsPaths"] === undefined
@@ -812,6 +991,7 @@ function parseManifest(contents: string, path: string): BenchmarkManifest {
         : { description: optionalString(entry["description"]) }),
       ...(fixture === undefined ? {} : { fixture }),
       ...(seedSarif === undefined ? {} : { seedSarif }),
+      ...(expectedSeedCoverage === undefined ? {} : { expectedSeedCoverage }),
       ...(safeFindingsPath === undefined
         ? {}
         : { findingsPath: safeFindingsPath }),
@@ -828,6 +1008,35 @@ function parseManifest(contents: string, path: string): BenchmarkManifest {
       : { thresholds: parseThresholds(value["thresholds"]) }),
     cases,
   };
+}
+
+function parseSeedCoverageExpectation(
+  value: unknown,
+  caseId: string,
+): BenchmarkSeedCoverageExpectation {
+  requireRecord(value, `Benchmark case ${caseId} expectedSeedCoverage`);
+  const keys = [
+    "total",
+    "inScope",
+    "reportable",
+    "rejected",
+    "deferred",
+    "outOfScope",
+  ] as const;
+  const values = Object.fromEntries(
+    keys.map((key) => [key, nonnegativeInteger(value[key])]),
+  ) as Record<(typeof keys)[number], number | null>;
+  if (
+    Object.values(values).some((entry) => entry === null) ||
+    values.total === 0 ||
+    values.inScope! + values.outOfScope! !== values.total ||
+    values.reportable! + values.rejected! + values.deferred! !== values.inScope
+  ) {
+    throw new CopilotSecurityError(
+      `Benchmark case ${caseId} expectedSeedCoverage is inconsistent.`,
+    );
+  }
+  return values as BenchmarkSeedCoverageExpectation;
 }
 
 function parseExpectation(

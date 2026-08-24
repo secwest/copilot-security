@@ -12,6 +12,16 @@ negatives instead of disappearing from the score. When a runner status receipt
 is present, a nonzero, malformed, or mismatched receipt also makes the run a
 reliability failure even if partial findings exist.
 
+Cases with `seedSarif` may declare `expectedSeedCoverage` totals for `total`,
+`inScope`, `reportable`, `rejected`, `deferred`, and `outOfScope`. The evaluator
+requires internally consistent totals, validates every reserved seed entry in
+the host-generated closure receipt, requires canonical coverage to reference
+it, and verifies its exact SHA-256 in the sealed scan manifest. A missing,
+malformed, mismatched, duplicated, or unsealed receipt makes the run incomplete
+even when its findings happen to match. `sarif-seed-manifest.json` uses this
+gate to require its vulnerable seed to close as reportable and its noisy safe
+seed to close as rejected.
+
 The evaluator accepts both the current explicit `id`/`locations` expectation
 shape and the committed specialized manifests' original
 `title`/`path`/`line` shape. Legacy expectations receive deterministic
