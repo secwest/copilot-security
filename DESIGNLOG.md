@@ -63,6 +63,12 @@ Their isolated consumers install 67 and 75 packages respectively and validate
 the public import, CLI, and all 79 bundled plugin files. The archive and
 isolated installation directories are removed after acceptance.
 
+**Hosted acceptance.** All exact-source workflow families pass on checkpoint
+`bc97e5e4bde3f9d8c6637113d38f6b63ef8c2b55`: Node `32796785950`, container
+`32796785902`, Windows GUI `32796785918`, Linux GUI `32796785931`, Java
+`32796785883`, .NET `32796785929`, and Go `32796785893`. The Node matrix passes
+Windows Node 22, macOS Node 22, and Linux Node 22, 24, 24.0.0, 26, and 26.0.0.
+
 ## 2026-08-24 — Make imported-analyzer closure a sealed host fact
 
 **Gap and external semantics.** SARIF interchange increases recall only if the

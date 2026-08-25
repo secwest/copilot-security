@@ -38,6 +38,12 @@ All notable scanner, application, benchmark, and operational changes are recorde
   isolated consumers install 67 and 75 packages respectively and validate the
   public import, CLI, and all 79 bundled plugin files. The archive and isolated
   installs are removed after acceptance.
+- Exact-commit hosted acceptance is green for
+  `bc97e5e4bde3f9d8c6637113d38f6b63ef8c2b55`: Node `32796785950`, container
+  `32796785902`, Windows GUI `32796785918`, Linux GUI `32796785931`, Java
+  `32796785883`, .NET `32796785929`, and Go `32796785893` all succeed. The Node
+  workflow covers Windows Node 22, macOS Node 22, and Linux Node 22, 24, 24.0.0,
+  26, and 26.0.0.
 - Added deterministic external-SARIF seed-coverage receipts. Seeded scans now
   bind the exact normalized candidate count and JSONL SHA-256 plus ordered
   source digests into the trusted workbench recipe; reject partial, malformed,
