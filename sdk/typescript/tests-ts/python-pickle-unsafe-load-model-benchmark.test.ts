@@ -146,6 +146,110 @@ describe("Python pickle unsafe deserialization model", () => {
     }
   });
 
+  test("keeps a strict Unpickler construction-to-load benchmark and JSON control", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(benchmarkRoot, "python-pickle-unpickler-manifest.json"),
+        "utf8",
+      ),
+    ) as BenchmarkManifest;
+
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(
+      Object.values(manifest.thresholds).every(
+        (value) => value === 0 || value === 1,
+      ),
+    ).toBeTrue();
+    expect(manifest.cases.map(({ id }) => id)).toEqual([
+      "python-pickle-unpickler-unsafe-load",
+      "python-pickle-unpickler-json-control",
+    ]);
+    expect(manifest.cases[0]?.findingsPaths).toHaveLength(1);
+    expect(manifest.cases[0]?.expected[0]?.cwe).toEqual(["CWE-502"]);
+    expect(
+      manifest.cases[0]?.expected[0]?.requiredValidationTextAnyOf,
+    ).toHaveLength(5);
+    expect(
+      manifest.cases[0]?.expected[0]?.requiredAttackPathTextAnyOf,
+    ).toHaveLength(5);
+    expect(manifest.cases[0]?.expected[0]?.forbiddenText).toHaveLength(3);
+    expect(manifest.cases[1]?.expected).toEqual([]);
+    for (const relativePath of [
+      join("examples", "witness.py"),
+      join("src", "effects.py"),
+      join("src", "server.py"),
+      "requirements.txt",
+    ]) {
+      expect(
+        await readFile(
+          join(
+            benchmarkRoot,
+            "fixtures",
+            "python-pickle-unpickler-unsafe-load",
+            relativePath,
+          ),
+          "utf8",
+        ),
+      ).toBe(
+        await readFile(
+          join(
+            benchmarkRoot,
+            "fixtures",
+            "python-pickle-unpickler-json-control",
+            relativePath,
+          ),
+          "utf8",
+        ),
+      );
+    }
+  });
+
+  test("emits the exact request-stream-to-Unpickler construction and load path", async () => {
+    const unsafeRoot = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-pickle-unpickler-unsafe-load",
+    );
+    const safeRoot = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-pickle-unpickler-json-control",
+    );
+    const unsafe = pickleRecords(await buildResidualRiskInventory(unsafeRoot));
+    const safe = pickleRecords(await buildResidualRiskInventory(safeRoot));
+
+    expect(safe).toEqual([]);
+    expect(unsafe).toHaveLength(1);
+    expect(unsafe[0]?.path.replaceAll("\\", "/")).toBe("src/parser.py");
+    expect(unsafe[0]?.line).toBe(6);
+    expect(unsafe[0]?.frameworkModel?.scope).toBe("cross-file-wrapper");
+    expect(unsafe[0]?.frameworkModel?.source).toMatchObject({
+      kind: "framework-request-body",
+      path: "src/server.py",
+      line: 10,
+    });
+    expect(unsafe[0]?.frameworkModel?.sink).toMatchObject({
+      kind: "pickle-unpickler-load-untrusted-file",
+      path: "src/parser.py",
+      line: 6,
+      cweIds: ["CWE-502"],
+    });
+    expect(unsafe[0]?.frameworkModel?.propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "pickle-unpickler-constructor-file",
+          path: "src/parser.py",
+          line: 5,
+        }),
+        expect.objectContaining({
+          kind: "pickle-unpickler-load-dispatch",
+          path: "src/parser.py",
+          line: 6,
+        }),
+      ]),
+    );
+  });
+
   test("emits the exact request-to-pickle.loads wrapper path", async () => {
     const unsafeRoot = join(
       benchmarkRoot,
@@ -226,6 +330,145 @@ describe("Python pickle unsafe deserialization model", () => {
     expect(records[2]?.[0]?.frameworkModel?.sink.kind).toBe(
       "pickle-load-untrusted-file",
     );
+  });
+
+  test("tracks Unpickler construction through direct, assigned, and aliased load dispatch", async () => {
+    const repositories = await Promise.all([
+      writeRepository({
+        "app.py": [
+          "import pickle as serializer",
+          "def route(request):",
+          "    return serializer.Unpickler(request.stream).load()",
+        ].join("\n"),
+      }),
+      writeRepository({
+        "app.py": [
+          "from pickle import Unpickler as Decoder",
+          "def route(request):",
+          "    decoder = Decoder(request.stream)",
+          "    return decoder.load()",
+        ].join("\n"),
+      }),
+      writeRepository({
+        "app.py": [
+          "from pickle import (",
+          "    Unpickler as Decoder,",
+          ")",
+          "def route(request):",
+          "    decoder = Decoder(request.stream)",
+          "    selected = decoder",
+          "    return selected.load()",
+        ].join("\n"),
+      }),
+      writeRepository({
+        "app.py": [
+          "import pickle",
+          "def route(request):",
+          "    decoder = pickle.Unpickler(",
+          "        request.stream,",
+          "    )",
+          "    return decoder.load()",
+        ].join("\n"),
+      }),
+    ]);
+    const records = await Promise.all(
+      repositories.map(async (repository) =>
+        pickleRecords(await buildResidualRiskInventory(repository)),
+      ),
+    );
+
+    expect(records.map((rows) => rows.length)).toEqual([1, 1, 1, 1]);
+    for (const rows of records) {
+      expect(rows[0]?.frameworkModel?.sink.kind).toBe(
+        "pickle-unpickler-load-untrusted-file",
+      );
+      expect(
+        rows[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+      ).toEqual(
+        expect.arrayContaining([
+          "python-stdlib-pickle-unpickler-binding",
+          "pickle-unpickler-constructor-file",
+          "pickle-unpickler-load-dispatch",
+          "intrinsic-pickle-reduce-execution",
+        ]),
+      );
+    }
+    expect(
+      records[2]?.[0]?.frameworkModel?.propagators.map(({ kind }) => kind),
+    ).toContain("pickle-unpickler-instance-alias");
+  });
+
+  test("rejects inert or invalidated Unpickler flows and restrictive subclasses", async () => {
+    const repositories = await Promise.all([
+      writeRepository({
+        "app.py": [
+          "import pickle",
+          "def route(request):",
+          "    pickle.Unpickler(request.stream)",
+          "    return None",
+        ].join("\n"),
+      }),
+      writeRepository({
+        "app.py": [
+          "import pickle",
+          "def route(request):",
+          "    decoder = pickle.Unpickler(request.stream)",
+          "    decoder = request.safe_decoder",
+          "    return decoder.load()",
+        ].join("\n"),
+      }),
+      writeRepository({
+        "app.py": [
+          "import pickle",
+          "def safe(): return {}",
+          "def route(request):",
+          "    decoder = pickle.Unpickler(request.stream)",
+          "    decoder.load = safe",
+          "    return decoder.load()",
+        ].join("\n"),
+      }),
+      writeRepository({
+        "app.py": [
+          "import pickle",
+          "def route(request):",
+          "    pickle.Unpickler = request.safe_decoder",
+          "    return pickle.Unpickler(request.stream).load()",
+        ].join("\n"),
+      }),
+      writeRepository({
+        "app.py": [
+          "import pickle",
+          "class RestrictedUnpickler(pickle.Unpickler):",
+          "    def find_class(self, module, name):",
+          "        raise pickle.UnpicklingError('global forbidden')",
+          "def route(request):",
+          "    return RestrictedUnpickler(request.stream).load()",
+        ].join("\n"),
+      }),
+      writeRepository({
+        "app.py": [
+          "import pickle",
+          "def route(request):",
+          "    return pickle.Unpickler(b'fixed', buffers=request.stream).load()",
+        ].join("\n"),
+      }),
+      writeRepository({
+        "app.py": [
+          "import pickle",
+          "def prepare(request):",
+          "    decoder = pickle.Unpickler(request.stream)",
+          "def route(request):",
+          "    return decoder.load()",
+        ].join("\n"),
+      }),
+    ]);
+    const records = await Promise.all(
+      repositories.map(async (repository) =>
+        pickleRecords(await buildResidualRiskInventory(repository)),
+      ),
+    );
+
+    expect(records.map((rows) => rows.length)).toEqual([0, 0, 0, 0, 0, 0, 0]);
   });
 
   test("preserves a two-relay path and terminal pickle binding", async () => {
@@ -344,6 +587,10 @@ describe("Python pickle unsafe deserialization model", () => {
     const prompt = scanQualityGatePrompt("inventory-row");
 
     expect(prompt).toContain("For python-web-pickle-unsafe-load rows");
+    expect(prompt).toContain("a two-stage flow");
+    expect(prompt).toContain("same non-reassigned instance");
+    expect(prompt).toContain("constructor file argument");
+    expect(prompt).toContain("do not collapse construction without load");
     expect(prompt).toContain("GLOBAL/STACK_GLOBAL and REDUCE machinery");
     expect(prompt).toContain("separately installed gadget is not required");
     expect(prompt).toContain("bounded non-destructive callable witness");

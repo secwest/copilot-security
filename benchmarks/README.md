@@ -74,7 +74,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains 105 vulnerable/control pairs:
+The versioned corpus currently contains 106 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -90,8 +90,9 @@ HTTP response splitting through a CR/LF-injected download filename with
 pre-serialization control-byte rejection and RFC 5987 encoding as the control,
 object-level authorization, SQL injection, document-query operator injection,
 server-side request forgery, unsafe deserialization including a
-standard-library `pickle.loads`/JSON relative-wrapper pair with a bounded
-fixture-local `__reduce__` callable witness and a PyYAML
+standard-library `pickle.loads`/JSON relative-wrapper pair and a separate
+`pickle.Unpickler(file).load()`/JSON request-stream pair with a bounded
+fixture-local `__reduce__` callable witness, plus a PyYAML
 `UnsafeLoader`/`safe_load` relative-wrapper pair, reflected XSS, XML
 external entities, JWT signature-verification bypass, JWT `alg`/key-type
 confusion that reinterprets an RSA public key as an HMAC secret,

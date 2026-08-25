@@ -2046,11 +2046,13 @@ when `os` or `dns` remains exposed. The Sequelize Oracle pair carries a remote
 predicate through three wrappers into an official model query: exact 6.37.3
 emits a bounded injected predicate from the real query generator without a
 database connection, while source-identical 6.37.4 rejects the same value.
-The shell-quote pair carries a remote operator through three wrappers into an
+The pickle corpus separately covers direct `pickle.loads` and the two-stage
+`pickle.Unpickler(file).load()` object flow, with JSON controls and a bounded
+fixture-local callable witness for both call shapes. The shell-quote pair carries a remote operator through three wrappers into an
 explicit object token, official `quote()`, and a real POSIX shell dispatch:
 exact 1.8.3 preserves a line terminator and executes only the harmless `pwd`
 second line in `/tmp`, while source-identical 1.8.4 rejects the token before
-serialization. Each of the 210 cases in 105 exploit/control pairs is scanned three times, producing 630
+serialization. Each of the 212 cases in 106 exploit/control pairs is scanned three times, producing 636
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

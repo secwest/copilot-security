@@ -6,6 +6,31 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended `python-web-pickle-unsafe-load` across the standard-library
+  `pickle.Unpickler(file).load()` boundary. The host now links request control
+  at constructor argument zero to a later zero-argument `load()` on the same
+  non-reassigned instance, including named/receiver imports and bounded local
+  aliases. It records separate binding, constructor-file, instance-alias,
+  dispatch, and intrinsic-execution evidence. Inert construction, fixed input,
+  wrong argument roles, import/constructor/instance/member replacement, local
+  module shadows, and unproved or restrictive subclasses remain negative.
+- Added a Flask request-stream `Unpickler`/JSON pair, a bounded in-memory
+  callable witness, a strict specialized manifest, and adversarial direct,
+  assigned, aliased, invalidated, inert, and restrictive-subclass regressions.
+  The correction gate now requires the model to preserve constructor file,
+  retained instance or aliases, and later load dispatch instead of collapsing
+  construction into execution. The canonical corpus advances to 106
+  exploit/control pairs, 212 cases, and 636 repeated scans.
+- The final focused Windows and WSL lanes each pass 30 tests and 1,817
+  assertions. On both Python 3.14.5 and Python 3.12.3 the positive invokes only
+  the fixture-local in-memory marker and returns its dictionary, while JSON
+  rejects the same protocol-4 bytes and leaves the marker unset. The
+  authoritative native Windows suite passes 1,537 tests and 11,442 assertions
+  across 170 files with 20 intentional platform/environment skips, zero
+  failures, and a 560.78-second runtime. An initial managed-sandbox diagnostic
+  denied Git, Windows ACL, PDF-worker, and immutable-inventory operations; the
+  unchanged authorized run closes all 78 environmental failures. Formatting,
+  generated-model drift, TypeScript, and the clean production build pass.
 - Added `python-web-pickle-unsafe-load`, a typed Python web-to-standard-library
   pickle model for CWE-502. It requires an exact live `import pickle` receiver
   or named `from pickle import load/loads` binding, traces only argument zero,

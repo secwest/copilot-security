@@ -25275,6 +25275,7 @@ function pythonPyyamlUnsafeSink(
 interface PythonPickleBindingContext {
   receivers: PythonModuleImportBinding[];
   functions: PythonModuleImportBinding[];
+  unpicklers: PythonModuleImportBinding[];
 }
 
 function pythonPickleBindings(
@@ -25282,6 +25283,7 @@ function pythonPickleBindings(
 ): PythonPickleBindingContext {
   const receivers: PythonModuleImportBinding[] = [];
   const functions: PythonModuleImportBinding[] = [];
+  const unpicklers: PythonModuleImportBinding[] = [];
   const structuralLines = pythonStructuralLines(lines);
   for (let index = 0; index < structuralLines.length; index += 1) {
     const structural = structuralLines[index] ?? "";
@@ -25319,20 +25321,318 @@ function pythonPickleBindings(
       const binding = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
         rawBinding.trim(),
       );
-      if (
-        binding?.[1] === undefined ||
-        (binding[1] !== "load" && binding[1] !== "loads")
-      ) {
+      if (binding?.[1] === undefined) {
         continue;
       }
-      functions.push({
+      const entry = {
         imported: binding[1],
         local: binding[2] ?? binding[1],
         line: index + 1,
-      });
+      };
+      if (entry.imported === "load" || entry.imported === "loads") {
+        functions.push(entry);
+      } else if (entry.imported === "Unpickler") {
+        unpicklers.push(entry);
+      }
     }
   }
-  return { receivers, functions };
+  return { receivers, functions, unpicklers };
+}
+
+interface PythonPickleUnpicklerConstruction {
+  sourceExpression: string;
+  line: number;
+  binding: PythonModuleImportBinding;
+  receiverCall: boolean;
+}
+
+function pythonPickleUnpicklerConstructionAtLine(
+  lines: readonly string[],
+  context: PythonPickleBindingContext,
+  line: number,
+): PythonPickleUnpicklerConstruction | undefined {
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const candidates = [
+    ...context.receivers.map((binding) => ({ binding, receiverCall: true })),
+    ...context.unpicklers.map((binding) => ({
+      binding,
+      receiverCall: false,
+    })),
+  ];
+  for (const candidate of candidates) {
+    if (
+      candidate.binding.line >= line ||
+      wrapper?.parameters.includes(candidate.binding.local) === true ||
+      pythonImportedBindingReassigned(
+        lines,
+        candidate.binding,
+        candidate.receiverCall ? "Unpickler" : undefined,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const callee = candidate.receiverCall
+      ? new RegExp(
+          `\\b${escapeRegularExpression(candidate.binding.local)}\\s*\\.\\s*Unpickler\\s*\\(`,
+          "u",
+        )
+      : new RegExp(
+          `\\b${escapeRegularExpression(candidate.binding.local)}\\s*\\(`,
+          "u",
+        );
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(lines, line, callee);
+    if (arguments_ === undefined) continue;
+    const sourceExpression = pythonPositionalArguments(arguments_)[0];
+    if (
+      sourceExpression === undefined ||
+      sourceExpression.trim() === "" ||
+      sourceExpression.trim().startsWith("*")
+    ) {
+      continue;
+    }
+    return {
+      sourceExpression,
+      line,
+      binding: candidate.binding,
+      receiverCall: candidate.receiverCall,
+    };
+  }
+  return undefined;
+}
+
+function pythonObjectMemberReassignedBetween(
+  lines: readonly string[],
+  identifier: string,
+  member: string,
+  afterLine: number,
+  beforeLine: number,
+): boolean {
+  const replacement = new RegExp(
+    `^\\s*${escapeRegularExpression(identifier)}\\s*\\.\\s*${escapeRegularExpression(member)}\\s*(?:[+\\-*/%&|^]?=|:=)`,
+    "u",
+  );
+  return pythonStructuralLines(lines)
+    .slice(afterLine, Math.max(afterLine, beforeLine - 1))
+    .some((candidate) => replacement.test(candidate));
+}
+
+interface PythonPickleUnpicklerInstanceOrigin {
+  construction: PythonPickleUnpicklerConstruction;
+  aliases: ReadonlyArray<{ identifier: string; line: number }>;
+}
+
+function pythonPickleUnpicklerInstanceOrigin(
+  lines: readonly string[],
+  context: PythonPickleBindingContext,
+  identifier: string,
+  beforeLine: number,
+  minimumLine: number,
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+): PythonPickleUnpicklerInstanceOrigin | undefined {
+  if (depth > 8 || seen.has(identifier)) return undefined;
+  const structuralLines = pythonStructuralLines(lines);
+  const assignment = new RegExp(
+    `^\\s*${escapeRegularExpression(identifier)}\\s*(?::[^=]+)?=\\s*(.+)$`,
+    "u",
+  );
+  const earliest = Math.max(minimumLine, beforeLine - 64);
+  for (let line = beforeLine - 1; line >= earliest; line -= 1) {
+    const match = assignment.exec(structuralLines[line - 1] ?? "");
+    if (match === null) continue;
+    if (
+      pythonIdentifierReassignedBetween(lines, identifier, line, beforeLine)
+    ) {
+      return undefined;
+    }
+    const original = pythonCodeBeforeComment(lines[line - 1] ?? "");
+    const equals = original.indexOf("=");
+    if (equals < 0) return undefined;
+    const construction = pythonPickleUnpicklerConstructionAtLine(
+      lines,
+      context,
+      line,
+    );
+    if (construction !== undefined) {
+      return {
+        construction,
+        aliases: [{ identifier, line }],
+      };
+    }
+    const right = original.slice(equals + 1).trim();
+    if (!/^[A-Za-z_]\w*$/u.test(right)) return undefined;
+    const origin = pythonPickleUnpicklerInstanceOrigin(
+      lines,
+      context,
+      right,
+      line,
+      minimumLine,
+      depth + 1,
+      new Set([...seen, identifier]),
+    );
+    if (origin === undefined) return undefined;
+    return {
+      construction: origin.construction,
+      aliases: [...origin.aliases, { identifier, line }],
+    };
+  }
+  return undefined;
+}
+
+function pythonPickleUnpicklerUnsafeSink(
+  lines: readonly string[],
+  sourcePath: string,
+  context: PythonPickleBindingContext,
+  line: number,
+): PythonUnsafeDeserializationSink | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const original = callLines.join("\n");
+  const structural = pythonStructuralLines(callLines).join("\n");
+  const firstLineEnd = structural.indexOf("\n");
+  const candidates = [
+    ...context.receivers.map((binding) => ({ binding, receiverCall: true })),
+    ...context.unpicklers.map((binding) => ({
+      binding,
+      receiverCall: false,
+    })),
+  ];
+  for (const candidate of candidates) {
+    const callee = candidate.receiverCall
+      ? new RegExp(
+          `\\b${escapeRegularExpression(candidate.binding.local)}\\s*\\.\\s*Unpickler\\s*\\(`,
+          "u",
+        )
+      : new RegExp(
+          `\\b${escapeRegularExpression(candidate.binding.local)}\\s*\\(`,
+          "u",
+        );
+    const match = callee.exec(structural);
+    if (
+      match === null ||
+      (firstLineEnd >= 0 && match.index >= firstLineEnd) ||
+      candidate.binding.line >= line ||
+      pythonImportedBindingReassigned(
+        lines,
+        candidate.binding,
+        candidate.receiverCall ? "Unpickler" : undefined,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const open = structural.indexOf("(", match.index);
+    const close = matchingCallParenthesis(original, open);
+    if (open < 0 || close < 0) continue;
+    if (!/^\s*\.\s*load\s*\(\s*\)/u.test(structural.slice(close + 1))) {
+      continue;
+    }
+    const construction = pythonPickleUnpicklerConstructionAtLine(
+      lines,
+      context,
+      line,
+    );
+    if (construction !== undefined) {
+      return {
+        sourceExpression: construction.sourceExpression,
+        kind: "pickle-unpickler-load-untrusted-file",
+        propagators: [
+          {
+            kind: "python-stdlib-pickle-unpickler-binding",
+            path: sourcePath,
+            line: construction.binding.line,
+            symbol: `${construction.binding.imported} as ${construction.binding.local}`,
+          },
+          {
+            kind: "pickle-unpickler-constructor-file",
+            path: sourcePath,
+            line,
+            symbol: construction.sourceExpression,
+          },
+          {
+            kind: "pickle-unpickler-load-dispatch",
+            path: sourcePath,
+            line,
+            symbol: "load",
+          },
+          {
+            kind: "intrinsic-pickle-reduce-execution",
+            path: sourcePath,
+            line,
+            symbol: "load",
+          },
+        ],
+      };
+    }
+  }
+
+  const loadCall = /\b([A-Za-z_]\w*)\s*\.\s*load\s*\(\s*\)/u.exec(
+    structural.split("\n", 1)[0] ?? "",
+  );
+  const instance = loadCall?.[1];
+  if (instance === undefined) return undefined;
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const origin = pythonPickleUnpicklerInstanceOrigin(
+    lines,
+    context,
+    instance,
+    line,
+    wrapper?.startLine ?? Math.max(1, line - 64),
+  );
+  if (origin === undefined) return undefined;
+  if (
+    origin.aliases.some(({ identifier, line: aliasLine }) =>
+      pythonObjectMemberReassignedBetween(
+        lines,
+        identifier,
+        "load",
+        aliasLine,
+        line,
+      ),
+    )
+  ) {
+    return undefined;
+  }
+  return {
+    sourceExpression: origin.construction.sourceExpression,
+    kind: "pickle-unpickler-load-untrusted-file",
+    propagators: [
+      {
+        kind: "python-stdlib-pickle-unpickler-binding",
+        path: sourcePath,
+        line: origin.construction.binding.line,
+        symbol: `${origin.construction.binding.imported} as ${origin.construction.binding.local}`,
+      },
+      {
+        kind: "pickle-unpickler-constructor-file",
+        path: sourcePath,
+        line: origin.construction.line,
+        symbol: origin.construction.sourceExpression,
+      },
+      ...origin.aliases.slice(1).map(({ identifier, line: aliasLine }) => ({
+        kind: "pickle-unpickler-instance-alias",
+        path: sourcePath,
+        line: aliasLine,
+        symbol: identifier,
+      })),
+      {
+        kind: "pickle-unpickler-load-dispatch",
+        path: sourcePath,
+        line,
+        symbol: `${instance}.load`,
+      },
+      {
+        kind: "intrinsic-pickle-reduce-execution",
+        path: sourcePath,
+        line,
+        symbol: "load",
+      },
+    ],
+  };
 }
 
 function pythonPickleUnsafeSink(
@@ -25345,6 +25645,13 @@ function pythonPickleUnsafeSink(
     return undefined;
   }
   const context = pythonPickleBindings(lines);
+  const unpickler = pythonPickleUnpicklerUnsafeSink(
+    lines,
+    sourcePath,
+    context,
+    line,
+  );
+  if (unpickler !== undefined) return unpickler;
   const wrapper = exportedPythonFunctions(lines).find(
     (candidate) => line >= candidate.startLine && line <= candidate.endLine,
   );

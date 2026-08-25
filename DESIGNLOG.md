@@ -2,6 +2,64 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Link standard-library Unpickler construction to load dispatch
+
+**Gap and authoritative semantics.** Direct `pickle.load` and `pickle.loads`
+coverage still missed the object-oriented standard-library API. Python's
+official [`pickle` documentation](https://docs.python.org/3/library/pickle.html)
+defines `Unpickler(file)` as retaining a binary file-like object and `load()` as
+reading and reconstructing the next object from that retained stream. The same
+documentation warns that unpickling untrusted data can execute arbitrary code,
+describes `find_class()` as the callable-resolution boundary, and demonstrates
+a restrictive subclass as the way to forbid or tightly allow globals. GitHub's
+high-precision
+[`py/unsafe-deserialization`](https://codeql.github.com/codeql-query-help/python/py-unsafe-deserialization/)
+likewise treats remote flow into Python object deserialization as CWE-502 and
+notes that code may execute before the call returns.
+
+**Chosen flow and precision boundary.** Extend the existing standard-library
+pickle model, but represent the object lifetime explicitly. Accept only live
+`import pickle` receivers or named `from pickle import Unpickler` bindings;
+take only ordinary positional constructor argument zero; find a later exact
+zero-argument `load()` on the constructed instance; and follow bounded local
+aliases without treating unrelated `.load()` methods as pickle. Reassignment
+of the module, `Unpickler` member, named constructor, instance, or `load`
+member invalidates the proof. A discarded constructor, constructor without
+load, fixed constructor file, request input in `buffers=`, star expansion,
+local module shadow, and text lookalikes remain negative. Calls through custom
+subclasses are intentionally not guessed: the official restrictive pattern is
+a real safety boundary, while proving an unsafe subclass requires separate
+inheritance and `find_class` analysis.
+
+**Evidence contract.** The inventory records distinct standard-library
+binding, constructor-file, optional alias, load-dispatch, and intrinsic
+`GLOBAL`/`STACK_GLOBAL` plus `REDUCE` execution steps. The correction prompt
+must reopen each step, name the retained file-like stream and same instance,
+and must not claim execution from construction alone. Post-load checks remain
+too late; a secret-keyed integrity decision that fails closed before
+construction/load remains counterevidence. The new matched Flask pair carries
+`request.stream` through a relative wrapper. Its positive constructs an exact
+standard-library `Unpickler` and dispatches `load`; its JSON control preserves
+the request, wrapper, witness, and effect module. The harmless protocol-4
+fixture witness can set only an in-memory marker.
+
+**Regression evidence.** The focused pickle and canonical-manifest
+lanes pass 30 tests and 1,817 assertions. They cover receiver, named,
+parenthesized, direct-chain, retained-instance, and instance-alias positives;
+and inert construction, fixed data, wrong argument position, reassigned
+constructor/instance/member, restrictive subclass, module shadow, and textual
+negatives. Windows and WSL produce the same result, and their Python 3.14.5 and
+3.12.3 witnesses invoke only the positive fixture's in-memory marker while the
+JSON control rejects the same bytes without an effect. The authoritative native
+Windows suite passes 1,537 tests and 11,442 assertions across 170 files with 20
+intentional skips and zero failures in 560.78 seconds. A managed-sandbox
+diagnostic denied the suite's Git, Windows ACL, PDF-worker, and immutable-
+inventory operations; no source changed before the authorized host-boundary
+run closed all 78 resulting failures. Formatting, generated-model drift,
+TypeScript, and the clean production build pass. Package, self-scan,
+live-campaign, and hosted acceptance evidence follows after the implementation
+checkpoint.
+
 ## 2026-08-24 — Close standard-library pickle callable execution exactly
 
 **Coverage gap and comparative evidence.** The prior Python inventory had a
@@ -28,10 +86,11 @@ pickle binding as propagator evidence. Reject serialization APIs, fixed bytes,
 wrong argument roles, receiver or callable reassignment, replacement of
 `pickle.load(s)`, wrapper-parameter shadowing, strings, comments, and a local
 `pickle.py` or `pickle/__init__.py` on an ancestor import path. An unrelated
-nested module does not suppress a valid standard-library binding. This model
-does not silently widen to `_pickle`, `dill`, `cloudpickle`, `joblib`, or
-`pickle.Unpickler(...).load()`; those need separate identity and call-shape
-work.
+nested module does not suppress a valid standard-library binding. At this
+checkpoint the model did not silently widen to `_pickle`, `dill`,
+`cloudpickle`, `joblib`, or `pickle.Unpickler(...).load()`; the standard-library
+object API is closed separately in the 2026-08-25 decision above, while the
+third-party formats still need separate identity and call-shape work.
 
 **Execution and control boundary.** Unlike dependency-gadget-only formats,
 the pickle virtual machine can resolve a callable with `GLOBAL` or
