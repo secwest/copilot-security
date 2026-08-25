@@ -57,6 +57,51 @@ validation and attack-path states, candidate/source tampering, and sealed
 ledger mutation. This establishes a reusable receipt contract for future
 opt-in analyzer adapters without coupling the core scanner to their execution.
 
+**Cross-mode closure compatibility.** The first live deep runs correctly found
+the vulnerable seed and rejected the safe seed, but exposed a host/model
+contract mismatch: deep scans keep validation and attack-path rows in separate
+ledgers and may preserve imported identities in bounded merged forms rather
+than the compact standard row. The host now recognizes exact top-level and
+single-level imported-seed records, canonical snake/camel location fields, and
+the observed reserved-instance aliases. It never searches arbitrary recursive
+text or accepts a same-family neighbor. Exactly one representation must match
+the immutable instance, CWE list, and normalized locations; duplicate,
+conflicting, incomplete, or identity-mutated aliases fail closed. Separate
+validation and attack-path ledgers are read only when needed, bound by
+candidate identity, included in the closure receipt, referenced by canonical
+coverage, and sealed in the manifest. A reportable or deferred row needs both
+terminal agreement and substantive attack-path evidence; a rejected row needs
+independent validation but no invented attack path. Deep and diff prompts now
+prefer one canonical imported-seed row, keeping compatibility in the host as a
+recovery boundary rather than an output-format target.
+
+**Live positive and negative evidence.** A fresh Copilot deep scan of the
+vulnerable seeded command fixture sealed one reportable seed, emitted the one
+expected high finding, and passed completion, precision, recall, F1, stable
+detection, validation, attack-path, code-evidence, severity, and case gates
+with no false positives or negatives. A separate fresh deep scan of the noisy
+source-identical safe fixture sealed one rejected seed, emitted zero findings,
+and passed every gate including negative-case rate with zero false positives.
+The safe run completed on its first attempt after compatibility hardening. This
+pair demonstrates that the receipt measures both recovered recall and explicit
+false-positive rejection rather than merely accepting a model-authored finding.
+
+**Compatibility hardening acceptance.** Final review also rejects mixed valid
+and invalid reserved-instance aliases instead of silently selecting the valid
+one, rejects conflicting CWE and location aliases, and counts only named
+attack-path evidence fields—not terminal metadata or arbitrary keys—as
+substantive closure. The exact final Windows suite passes 1,490 tests and
+11,086 assertions across 165 files in 582.78 seconds, with 20 intentional
+platform/environment skips and no failures. Windows and Ubuntu/WSL each pass
+the complete 100-test recovery and benchmark lane with 2,144 assertions and no
+skips. Formatting, generated-model drift, TypeScript checking, the clean
+production build, and the production audit are green with no known
+vulnerabilities. Windows and Linux strict package inspection accepts the same
+251-entry, 1,808,822-byte npm archive with SHA-256
+`0840d319146ee7cd89c6d917a6e7e1dce20e7f103969739c832f950ddb0f7b5e`;
+isolated consumers validate the public import, CLI, and all 79 bundled plugin
+files. The archive is removed after recording this evidence.
+
 **Local acceptance.** The authoritative Windows Bun 1.3.14 suite passes 1,482
 tests and 11,059 assertions across 165 files in 559.22 seconds, with 20
 intentional platform/environment skips and zero failures. Ubuntu/WSL passes all

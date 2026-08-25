@@ -20,6 +20,35 @@ All notable scanner, application, benchmark, and operational changes are recorde
   SARIF ensemble benchmark now gates exact closure totals, unique instances,
   the coverage reference, and the receipt's sealed digest, so a matching
   finding alone cannot hide lost imported candidates or a false-positive seed.
+- Hardened those receipts for real deep and diff scan artifacts. Finalization
+  now reconciles the canonical compact row and a bounded set of exact merged
+  representations emitted by multi-pass scans, including camel-case identity
+  fields, nested imported-seed records, and separate validation and attack-path
+  ledgers. It still requires an exact reserved instance/CWE/location identity,
+  rejects conflicting aliases and ambiguous representations, requires
+  substantive attack-path evidence for reportable or deferred seeds, and adds
+  every supporting closure ledger to canonical coverage and the manifest seal.
+  The bundled deep/diff instructions now specify one canonical imported-seed
+  row and exact closure-ledger filenames to reduce output variance.
+- Live Copilot deep scans now pass both dedicated external-SARIF controls on
+  their first attempt with the hardened finalizer. The vulnerable command case
+  seals one reportable seed and one true positive with no false positives or
+  negatives. The source-identical safe `execFile` case seals one rejected seed,
+  emits no finding, and passes every completion, negative-case, precision,
+  recall, validation, attack-path, evidence, severity, stability, and
+  false-positive gate at 1.0 (zero false positives).
+- Final exact-state acceptance for deep-ledger compatibility is green. The
+  authoritative Windows suite passes 1,490 tests and 11,086 assertions across
+  165 files in 582.78 seconds, with 20 intentional platform/environment skips
+  and zero failures. Windows and Ubuntu/WSL each pass all 100 recovery and
+  benchmark tests with 2,144 assertions and no skips. Formatting,
+  generated-model drift, TypeScript checking, the clean production build, and
+  the production audit are green with no known vulnerabilities. Strict Windows
+  and Linux inspection accepts the same 251-entry, 1,808,822-byte npm archive
+  with SHA-256
+  `0840d319146ee7cd89c6d917a6e7e1dce20e7f103969739c832f950ddb0f7b5e`;
+  isolated consumers validate the public import, CLI, and all 79 bundled plugin
+  files.
 - Local acceptance for the seed-coverage contract is green. The authoritative
   Windows suite passes 1,482 tests and 11,059 assertions across 165 files in
   559.22 seconds, with 20 intentional platform/environment skips and zero

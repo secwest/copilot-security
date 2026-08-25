@@ -129,6 +129,15 @@ PowerShell only for scan-directory draft artifacts.
    boundary. Preserve discovering pass IDs, supporting evidence,
    counterevidence, duplicate relationships, and unresolved ambiguity in
    `artifacts/02_discovery/candidate_ledger.jsonl`.
+   Give every imported SARIF seed its own canonical ledger row with
+   `candidateId`, the exact `instance`, `cweIds`, normalized `locations`, and
+   `terminalDisposition`; record duplicate relationships instead of removing
+   or replacing the imported row. Use the same `candidateId` and `instance` in
+   its `artifacts/03_validation/validation_ledger.jsonl` row. For reportable or
+   deferred seeds, use them again in
+   `artifacts/04_attack_paths/attack_path_ledger.jsonl` with substantive
+   reachability and impact evidence. Rejected seeds need validation closure but
+   no attack-path row.
 6. Run an independent miss-oriented residual sweep. Revisit high-risk inventory
    rows and security families with no candidate. Require a candidate or an exact
    reviewed-safe receipt for:
@@ -687,8 +696,8 @@ PowerShell only for scan-directory draft artifacts.
 8. For reportable and deferred candidates, perform attack-path analysis.
    Calibrate attacker capability, reachability, preconditions, control breaks,
    impact, likelihood, severity, blast radius, and compensating controls.
-   Preserve exact code locations and evidence. Save the ledger beneath
-   `artifacts/04_attack_paths/`.
+   Preserve exact code locations and evidence. Save the ledger as
+   `artifacts/04_attack_paths/attack_path_ledger.jsonl`.
 9. Write complete draft `scan-manifest.json`, `findings.json`, and
    `coverage.json` directly in `COPILOT_SECURITY_SCAN_DIR`, following
    `../../references/draft-contract.md`, `../../references/final-report.md`,

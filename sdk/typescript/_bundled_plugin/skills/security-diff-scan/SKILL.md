@@ -260,6 +260,14 @@ evidence and PowerShell only for scan-directory draft artifacts.
 
    Record candidate and reviewed-safe receipts in
    `artifacts/02_discovery/candidate_ledger.jsonl`.
+   Give every reviewed SARIF seed its own canonical row with `candidateId`,
+   exact `instance`, `cweIds`, normalized `locations`, and
+   `terminalDisposition`; preserve duplicate relationships rather than
+   replacing the seed with a native candidate. Use the same `candidateId` and
+   `instance` in `artifacts/03_validation/validation_ledger.jsonl` and, for a
+   reportable or deferred seed, in
+   `artifacts/04_attack_paths/attack_path_ledger.jsonl` with substantive path
+   evidence. Rejected seeds need validation closure but no attack-path row.
 
 5. Run a second, miss-oriented residual pass over every changed file and every
    high-risk changed source/control/sink family with no candidate. Require an

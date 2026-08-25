@@ -79,6 +79,8 @@ EXTERNAL_SARIF_LEDGER_MAX_ROWS = 50_000
 EXTERNAL_SARIF_SOURCE_PATH = "artifacts/01_context/external_sarif_sources.json"
 EXTERNAL_SARIF_CANDIDATE_PATH = "artifacts/02_discovery/external_sarif_candidates.jsonl"
 EXTERNAL_SARIF_LEDGER_PATH = "artifacts/02_discovery/candidate_ledger.jsonl"
+EXTERNAL_SARIF_VALIDATION_PATH = "artifacts/03_validation/validation_ledger.jsonl"
+EXTERNAL_SARIF_ATTACK_PATH = "artifacts/04_attack_paths/attack_path_ledger.jsonl"
 EXTERNAL_SARIF_RECEIPT_PATH = "artifacts/03_coverage/external_sarif_seed_coverage.json"
 EXTERNAL_SARIF_SURFACE_ID = "external-sarif-seed-closure"
 EXTERNAL_SARIF_DEFERRED_ID = "external-sarif-seed-closure-deferred"
@@ -4199,13 +4201,19 @@ def _read_external_sarif_jsonl(
     return rows, raw
 
 
-def _external_sarif_candidate_identity(candidate: dict[str, Any], index: int) -> tuple[str, str]:
-    context = f"external SARIF candidate {index + 1}"
-    instance = candidate.get("instance")
-    if not isinstance(instance, str) or EXTERNAL_SARIF_INSTANCE_RE.fullmatch(instance) is None:
+def _external_sarif_identity(
+    instance: Any,
+    cwe_ids: Any,
+    locations: Any,
+    context: str,
+) -> str:
+    if isinstance(cwe_ids, dict):
+        cwe_ids = cwe_ids.get("cwe")
+    if (
+        not isinstance(instance, str)
+        or EXTERNAL_SARIF_INSTANCE_RE.fullmatch(instance) is None
+    ):
         raise ContractError(f"{context}: expected a reserved seed instance")
-    locations = candidate.get("locations")
-    cwe_ids = candidate.get("cwe_ids")
     if (
         not isinstance(locations, list)
         or not locations
@@ -4221,8 +4229,8 @@ def _external_sarif_candidate_identity(candidate: dict[str, Any], index: int) ->
         if not isinstance(location, dict):
             raise ContractError(f"{context} location {location_index + 1}: expected an object")
         path = location.get("path")
-        start_line = location.get("start_line")
-        end_line = location.get("end_line")
+        start_line = location.get("start_line", location.get("startLine"))
+        end_line = location.get("end_line", location.get("endLine"))
         role = location.get("role")
         if not isinstance(path, str):
             raise ContractError(f"{context} location {location_index + 1}: expected a path")
@@ -4248,42 +4256,196 @@ def _external_sarif_candidate_identity(candidate: dict[str, Any], index: int) ->
     encoded = json.dumps(
         identity, allow_nan=False, ensure_ascii=False, separators=(",", ":"), sort_keys=True
     ).encode("utf-8")
-    return instance, hashlib.sha256(encoded).hexdigest()
+    return hashlib.sha256(encoded).hexdigest()
 
 
-def _external_sarif_terminal_disposition(
-    row: dict[str, Any], instance: str
-) -> tuple[str, str, str | None]:
-    candidate_id = row.get("candidate_id")
+def _external_sarif_candidate_identity(candidate: dict[str, Any], index: int) -> tuple[str, str]:
+    context = f"external SARIF candidate {index + 1}"
+    instance = candidate.get("instance")
+    return instance, _external_sarif_identity(
+        instance,
+        candidate.get("cwe_ids"),
+        candidate.get("locations"),
+        context,
+    )
+
+
+def _external_sarif_record_instance(record: dict[str, Any]) -> str | None:
+    supplied = [
+        value
+        for value in (
+            record.get("instance"),
+            record.get("instanceId"),
+            record.get("seedInstance"),
+        )
+        if value is not None
+    ]
+    values = [
+        value
+        for value in supplied
+        if isinstance(value, str) and EXTERNAL_SARIF_INSTANCE_RE.fullmatch(value)
+    ]
+    if values and len(values) != len(supplied):
+        raise ContractError("candidate ledger contains conflicting imported seed identities")
+    if values and any(value != values[0] for value in values[1:]):
+        raise ContractError("candidate ledger contains conflicting imported seed identities")
+    return values[0] if values else None
+
+
+def _external_sarif_record_locations(record: dict[str, Any]) -> Any:
+    values = [
+        value
+        for value in (record.get("locations"), record.get("normalizedLocations"))
+        if value is not None
+    ]
+    if values and any(value != values[0] for value in values[1:]):
+        raise ContractError("candidate ledger contains conflicting imported seed locations")
+    return values[0] if values else None
+
+
+def _external_sarif_record_cwe_ids(record: dict[str, Any]) -> Any:
+    values = []
+    for value in (
+        record.get("cwe_ids"),
+        record.get("cweIds"),
+        record.get("cwe"),
+        record.get("taxonomy"),
+    ):
+        if isinstance(value, dict):
+            value = value.get("cwe")
+        if value is not None:
+            values.append(value)
+    if values and any(value != values[0] for value in values[1:]):
+        raise ContractError("candidate ledger contains conflicting imported seed CWE ids")
+    return values[0] if values else None
+
+
+def _external_sarif_nested_seed_records(row: dict[str, Any]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for value in row.values():
+        if isinstance(value, dict):
+            items = [value]
+        elif isinstance(value, list):
+            items = [item for item in value if isinstance(item, dict)]
+        else:
+            continue
+        for item in items:
+            if _external_sarif_record_instance(item) is not None:
+                records.append(item)
+    return records
+
+
+def _external_sarif_ledger_instances(row: dict[str, Any]) -> list[str]:
+    instances: list[str] = []
+    instance = _external_sarif_record_instance(row)
+    if instance is not None:
+        instances.append(instance)
+    plural = row.get("instances")
+    if plural is not None:
+        if not isinstance(plural, list) or not all(
+            isinstance(item, str) or isinstance(item, dict) for item in plural
+        ):
+            raise ContractError("candidate ledger contains invalid imported seed instances")
+        instances.extend(
+            item
+            for item in plural
+            if isinstance(item, str) and EXTERNAL_SARIF_INSTANCE_RE.fullmatch(item)
+        )
+    instances.extend(
+        instance
+        for item in _external_sarif_nested_seed_records(row)
+        if (instance := _external_sarif_record_instance(item)) is not None
+    )
+    return instances
+
+
+def _external_sarif_ledger_identity(
+    row: dict[str, Any], instance: str, index: int
+) -> str:
+    representations: list[tuple[Any, Any, str]] = []
+    if _external_sarif_record_instance(row) == instance:
+        representations.append(
+            (
+                _external_sarif_record_cwe_ids(row),
+                _external_sarif_record_locations(row),
+                "flat ledger row",
+            )
+        )
+    plural = row.get("instances")
+    if isinstance(plural, list) and instance in plural:
+        provenance = row.get("provenance")
+        if not isinstance(provenance, dict):
+            raise ContractError(
+                f"external SARIF seed {instance}: instances entry lacks provenance"
+            )
+        representations.append(
+            (
+                _external_sarif_record_cwe_ids(provenance),
+                _external_sarif_record_locations(provenance),
+                "deep-scan provenance",
+            )
+        )
+    for item in _external_sarif_nested_seed_records(row):
+        if _external_sarif_record_instance(item) != instance:
+            continue
+        provenance = item.get("provenance")
+        if not isinstance(provenance, dict):
+            provenance = item
+        cwe_ids = _external_sarif_record_cwe_ids(provenance)
+        if cwe_ids is None:
+            cwe_ids = _external_sarif_record_cwe_ids(item)
+        locations = _external_sarif_record_locations(provenance)
+        if locations is None:
+            locations = _external_sarif_record_locations(item)
+        representations.append(
+            (
+                cwe_ids,
+                locations,
+                "deep-scan imported seed",
+            )
+        )
+    if len(representations) != 1:
+        raise ContractError(
+            f"external SARIF seed {instance}: expected one unambiguous ledger identity"
+        )
+    cwe_ids, locations, label = representations[0]
+    return _external_sarif_identity(
+        instance,
+        cwe_ids,
+        locations,
+        f"external SARIF seed {instance} {label} at candidate {index + 1}",
+    )
+
+
+def _external_sarif_candidate_id(row: dict[str, Any], instance: str) -> str:
+    snake = row.get("candidate_id")
+    camel = row.get("candidateId")
+    ledger = row.get("ledgerId")
+    supplied = [value for value in (snake, camel, ledger) if value is not None]
+    if supplied and any(value != supplied[0] for value in supplied[1:]):
+        raise ContractError(f"external SARIF seed {instance}: ambiguous candidate id")
+    candidate_id = supplied[0] if supplied else None
     if not isinstance(candidate_id, str) or not candidate_id.strip():
-        raise ContractError(f"external SARIF seed {instance}: missing candidate_id")
-    validation = row.get("validation")
-    if not isinstance(validation, dict):
-        raise ContractError(f"external SARIF seed {instance}: missing validation closure")
-    validation_disposition = validation.get("disposition")
+        raise ContractError(f"external SARIF seed {instance}: missing candidate id")
+    return candidate_id
+
+
+def _external_sarif_classify_terminal(
+    validation_disposition: Any,
+    attack_decision: Any,
+    instance: str,
+) -> tuple[str, str, str | None]:
     if validation_disposition not in {
         "reportable",
+        "rejected",
         "suppressed",
         "not_applicable",
         "deferred",
     }:
         raise ContractError(f"external SARIF seed {instance}: invalid validation disposition")
-    attack_path = row.get("attack_path")
-    alternate_attack_path = row.get("attackPath")
-    if attack_path is not None and alternate_attack_path is not None:
-        raise ContractError(f"external SARIF seed {instance}: ambiguous attack-path closure")
-    if attack_path is None:
-        attack_path = alternate_attack_path
-    attack_decision: str | None = None
-    if attack_path is not None:
-        if not isinstance(attack_path, dict):
-            raise ContractError(f"external SARIF seed {instance}: invalid attack-path closure")
-        decision = attack_path.get("decision")
-        if decision not in {"reportable", "ignore", "deferred"}:
-            raise ContractError(f"external SARIF seed {instance}: invalid attack-path decision")
-        attack_decision = decision
-
-    if validation_disposition in {"suppressed", "not_applicable"}:
+    if attack_decision not in {None, "reportable", "ignore", "deferred"}:
+        raise ContractError(f"external SARIF seed {instance}: invalid attack-path decision")
+    if validation_disposition in {"rejected", "suppressed", "not_applicable"}:
         if attack_decision not in {None, "ignore"}:
             raise ContractError(
                 f"external SARIF seed {instance}: rejected validation conflicts with attack path"
@@ -4308,6 +4470,174 @@ def _external_sarif_terminal_disposition(
         validation_disposition,
         attack_decision,
     )
+
+
+def _external_sarif_terminal_claim(row: dict[str, Any], instance: str) -> str | None:
+    values = [
+        value
+        for value in (row.get("terminalDisposition"), row.get("disposition"))
+        if value in {"reportable", "rejected", "deferred"}
+    ]
+    if len(set(values)) > 1:
+        raise ContractError(f"external SARIF seed {instance}: conflicting terminal claims")
+    return values[0] if values else None
+
+
+def _external_sarif_rows_for_candidate(
+    rows: list[dict[str, Any]],
+    candidate_id: str,
+    instance: str,
+    context: str,
+) -> dict[str, Any]:
+    matching: list[dict[str, Any]] = []
+    for row in rows:
+        row_candidate_id = row.get("candidate_id", row.get("candidateId"))
+        if row_candidate_id != candidate_id:
+            continue
+        row_instance = _external_sarif_record_instance(row)
+        has_instance = any(
+            key in row for key in ("instance", "instanceId", "seedInstance")
+        )
+        if has_instance and row_instance != instance:
+            continue
+        matching.append(row)
+    if len(matching) != 1:
+        detail = "missing" if not matching else "ambiguous"
+        raise ContractError(f"external SARIF seed {instance}: {detail} {context}")
+    return matching[0]
+
+
+def _external_sarif_attack_has_evidence(attack: dict[str, Any]) -> bool:
+    evidence_keys = {
+        "attackPath",
+        "blastRadius",
+        "blast_radius",
+        "changeConditions",
+        "change_conditions",
+        "compensatingControls",
+        "compensating_controls",
+        "controlBreaks",
+        "control_breaks",
+        "dataflow",
+        "evidence",
+        "impact",
+        "likelihood",
+        "path",
+        "preconditions",
+        "proofGap",
+        "proof_gap",
+        "reachability",
+        "severity",
+        "severityRationale",
+        "severity_rationale",
+        "steps",
+    }
+    return any(
+        key in evidence_keys
+        and value is not None
+        and value != ""
+        and value != []
+        and value != {}
+        for key, value in attack.items()
+    )
+
+
+def _external_sarif_terminal_disposition(
+    row: dict[str, Any], instance: str
+) -> tuple[str, str, str | None, str]:
+    candidate_id = _external_sarif_candidate_id(row, instance)
+    validation = row.get("validation")
+    if not isinstance(validation, dict):
+        raise ContractError(f"external SARIF seed {instance}: missing validation closure")
+    validation_disposition = validation.get(
+        "disposition", validation.get("terminalDisposition")
+    )
+    attack_path = row.get("attack_path")
+    alternate_attack_path = row.get("attackPath")
+    if attack_path is not None and alternate_attack_path is not None:
+        raise ContractError(f"external SARIF seed {instance}: ambiguous attack-path closure")
+    if attack_path is None:
+        attack_path = alternate_attack_path
+    candidate_claim = _external_sarif_terminal_claim(row, instance)
+    attack_decision: str | None = None
+    attack_claim: str | None = None
+    if attack_path is not None:
+        if not isinstance(attack_path, dict):
+            raise ContractError(f"external SARIF seed {instance}: invalid attack-path closure")
+        attack_decision = attack_path.get("decision", attack_path.get("disposition"))
+        if attack_decision == "rejected":
+            attack_decision = "ignore"
+        if attack_decision is None and candidate_claim in {"reportable", "deferred"}:
+            attack_decision = candidate_claim
+        attack_claim = _external_sarif_terminal_claim(attack_path, instance)
+        if (
+            validation_disposition in {"reportable", "deferred"}
+            and not _external_sarif_attack_has_evidence(attack_path)
+        ):
+            raise ContractError(
+                f"external SARIF seed {instance}: attack-path closure lacks evidence"
+            )
+    disposition, validation_disposition, attack_decision = (
+        _external_sarif_classify_terminal(
+            validation_disposition, attack_decision, instance
+        )
+    )
+    for claim in (candidate_claim, attack_claim):
+        if claim is not None and claim != disposition:
+            raise ContractError(
+                f"external SARIF seed {instance}: candidate terminal claim is inconsistent"
+            )
+    return disposition, validation_disposition, attack_decision, candidate_id
+
+
+def _external_sarif_separate_terminal_disposition(
+    row: dict[str, Any],
+    instance: str,
+    validation_rows: list[dict[str, Any]],
+    attack_rows: list[dict[str, Any]] | None,
+) -> tuple[str, str, str | None, str]:
+    candidate_id = _external_sarif_candidate_id(row, instance)
+    validation = _external_sarif_rows_for_candidate(
+        validation_rows, candidate_id, instance, "validation closure"
+    )
+    validation_disposition = validation.get(
+        "disposition", validation.get("terminalDisposition")
+    )
+    validation_claim = _external_sarif_terminal_claim(validation, instance)
+    candidate_claim = _external_sarif_terminal_claim(row, instance)
+    attack_decision: str | None = None
+    attack_claim: str | None = None
+    if validation_disposition in {"reportable", "deferred"}:
+        if attack_rows is None:
+            raise ContractError(f"external SARIF seed {instance}: missing attack-path ledger")
+        attack = _external_sarif_rows_for_candidate(
+            attack_rows, candidate_id, instance, "attack-path closure"
+        )
+        if not _external_sarif_attack_has_evidence(attack):
+            raise ContractError(
+                f"external SARIF seed {instance}: attack-path closure lacks evidence"
+            )
+        attack_decision = attack.get("decision", attack.get("disposition"))
+        if attack_decision == "rejected":
+            attack_decision = "ignore"
+        if attack_decision is None and candidate_claim in {"reportable", "deferred"}:
+            attack_decision = candidate_claim
+        attack_claim = _external_sarif_terminal_claim(attack, instance)
+    disposition, validation_disposition, attack_decision = (
+        _external_sarif_classify_terminal(
+            validation_disposition, attack_decision, instance
+        )
+    )
+    for claim in (
+        candidate_claim,
+        validation_claim,
+        attack_claim,
+    ):
+        if claim is not None and claim != disposition:
+            raise ContractError(
+                f"external SARIF seed {instance}: terminal claim is inconsistent"
+            )
+    return disposition, validation_disposition, attack_decision, candidate_id
 
 
 def _external_sarif_seed_coverage(
@@ -4369,14 +4699,17 @@ def _external_sarif_seed_coverage(
     )
     ledger_by_instance: dict[str, list[dict[str, Any]]] = {}
     for row in ledger:
-        instance = row.get("instance")
-        if isinstance(instance, str) and EXTERNAL_SARIF_INSTANCE_RE.fullmatch(instance):
+        for instance in _external_sarif_ledger_instances(row):
             ledger_by_instance.setdefault(instance, []).append(row)
 
     entries: list[dict[str, Any]] = []
     expected_instances: set[str] = set()
     counts = {"reportable": 0, "rejected": 0, "deferred": 0, "out_of_scope": 0}
     deferred_paths: set[str] = set()
+    validation_rows: list[dict[str, Any]] | None = None
+    validation_bytes: bytes | None = None
+    attack_rows: list[dict[str, Any]] | None = None
+    attack_bytes: bytes | None = None
     for index, candidate in enumerate(candidates):
         instance, identity_sha256 = _external_sarif_candidate_identity(candidate, index)
         if instance in expected_instances:
@@ -4404,20 +4737,57 @@ def _external_sarif_seed_coverage(
             detail = "missing" if not matching_rows else "duplicated"
             raise ContractError(f"in-scope external SARIF seed {instance} is {detail} in the ledger")
         row = matching_rows[0]
-        _, ledger_identity_sha256 = _external_sarif_candidate_identity(row, index)
+        ledger_identity_sha256 = _external_sarif_ledger_identity(row, instance, index)
         if ledger_identity_sha256 != identity_sha256:
             raise ContractError(
                 f"external SARIF seed {instance}: ledger identity differs from normalized input"
             )
-        disposition, validation_disposition, attack_decision = (
-            _external_sarif_terminal_disposition(row, instance)
-        )
+        if isinstance(row.get("validation"), dict):
+            disposition, validation_disposition, attack_decision, candidate_id = (
+                _external_sarif_terminal_disposition(row, instance)
+            )
+        else:
+            if validation_rows is None:
+                validation_rows, validation_bytes = _read_external_sarif_jsonl(
+                    scan_dir,
+                    EXTERNAL_SARIF_VALIDATION_PATH,
+                    "external SARIF validation ledger",
+                    EXTERNAL_SARIF_LEDGER_MAX_BYTES,
+                    EXTERNAL_SARIF_LEDGER_MAX_ROWS,
+                )
+            candidate_id = _external_sarif_candidate_id(row, instance)
+            validation_row = _external_sarif_rows_for_candidate(
+                validation_rows,
+                candidate_id,
+                instance,
+                "validation closure",
+            )
+            validation_disposition = validation_row.get(
+                "disposition", validation_row.get("terminalDisposition")
+            )
+            if validation_disposition in {"reportable", "deferred"}:
+                if attack_rows is None:
+                    attack_rows, attack_bytes = _read_external_sarif_jsonl(
+                        scan_dir,
+                        EXTERNAL_SARIF_ATTACK_PATH,
+                        "external SARIF attack-path ledger",
+                        EXTERNAL_SARIF_LEDGER_MAX_BYTES,
+                        EXTERNAL_SARIF_LEDGER_MAX_ROWS,
+                    )
+            disposition, validation_disposition, attack_decision, candidate_id = (
+                _external_sarif_separate_terminal_disposition(
+                    row,
+                    instance,
+                    validation_rows,
+                    attack_rows,
+                )
+            )
         counts[disposition] += 1
         if disposition == "deferred":
             deferred_paths.update(candidate_paths.intersection(inventory))
         entry: dict[str, Any] = {
             "attackPathDecision": attack_decision,
-            "candidateId": row["candidate_id"],
+            "candidateId": candidate_id,
             "candidateIdentitySha256": identity_sha256,
             "disposition": disposition,
             "instance": instance,
@@ -4430,6 +4800,26 @@ def _external_sarif_seed_coverage(
         raise ContractError(
             f"candidate ledger contains an unbound reserved SARIF seed instance: {unexpected[0]}"
         )
+    closure_inputs = [
+        {
+            "path": EXTERNAL_SARIF_LEDGER_PATH,
+            "sha256": _sha256_bytes(ledger_bytes),
+        }
+    ]
+    if validation_bytes is not None:
+        closure_inputs.append(
+            {
+                "path": EXTERNAL_SARIF_VALIDATION_PATH,
+                "sha256": _sha256_bytes(validation_bytes),
+            }
+        )
+    if attack_bytes is not None:
+        closure_inputs.append(
+            {
+                "path": EXTERNAL_SARIF_ATTACK_PATH,
+                "sha256": _sha256_bytes(attack_bytes),
+            }
+        )
     receipt = {
         "candidateInput": {
             "count": expected_count,
@@ -4437,6 +4827,7 @@ def _external_sarif_seed_coverage(
             "sha256": expected_digest,
         },
         "documentType": "copilot-security.external-sarif-seed-coverage",
+        "closureInputs": closure_inputs,
         "ledger": {
             "path": EXTERNAL_SARIF_LEDGER_PATH,
             "sha256": _sha256_bytes(ledger_bytes),
@@ -4468,6 +4859,12 @@ def _external_sarif_seed_coverage(
         if counts["out_of_scope"] == expected_count
         else "rejected"
     )
+    surface_receipts = [
+        EXTERNAL_SARIF_SOURCE_PATH,
+        EXTERNAL_SARIF_CANDIDATE_PATH,
+        *[entry["path"] for entry in closure_inputs],
+        EXTERNAL_SARIF_RECEIPT_PATH,
+    ]
     surface = {
         "disposition": surface_disposition,
         "id": EXTERNAL_SARIF_SURFACE_ID,
@@ -4476,12 +4873,7 @@ def _external_sarif_seed_coverage(
             f"Host reconciliation closed {expected_count - counts['out_of_scope']} in-scope "
             f"seed(s) and classified {counts['out_of_scope']} as out of scope."
         ),
-        "receiptRefs": [
-            EXTERNAL_SARIF_SOURCE_PATH,
-            EXTERNAL_SARIF_CANDIDATE_PATH,
-            EXTERNAL_SARIF_LEDGER_PATH,
-            EXTERNAL_SARIF_RECEIPT_PATH,
-        ],
+        "receiptRefs": surface_receipts,
         "riskArea": "external analyzer candidate validation",
     }
     deferred = (

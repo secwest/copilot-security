@@ -293,8 +293,10 @@ function seedLedgerRow(
 }
 
 async function startExternalSeedFixture(options?: {
+  attackPathLedger?: Array<Record<string, unknown>>;
   candidates?: Array<ReturnType<typeof externalSeed>>;
   ledger?: Array<Record<string, unknown>>;
+  validationLedger?: Array<Record<string, unknown>>;
 }): Promise<SeedFixture> {
   const candidates = options?.candidates ?? [
     externalSeed("sarif-seed-00001"),
@@ -365,6 +367,30 @@ async function startExternalSeedFixture(options?: {
     fixture.ledgerPath,
     `${ledger.map((row) => JSON.stringify(row)).join("\n")}\n`,
   );
+  if (options?.validationLedger !== undefined) {
+    const validationDirectory = join(
+      fixture.scanDir,
+      "artifacts",
+      "03_validation",
+    );
+    await mkdir(validationDirectory, { recursive: true });
+    await writeFile(
+      join(validationDirectory, "validation_ledger.jsonl"),
+      `${options.validationLedger.map((row) => JSON.stringify(row)).join("\n")}\n`,
+    );
+  }
+  if (options?.attackPathLedger !== undefined) {
+    const attackDirectory = join(
+      fixture.scanDir,
+      "artifacts",
+      "04_attack_paths",
+    );
+    await mkdir(attackDirectory, { recursive: true });
+    await writeFile(
+      join(attackDirectory, "attack_path_ledger.jsonl"),
+      `${options.attackPathLedger.map((row) => JSON.stringify(row)).join("\n")}\n`,
+    );
+  }
   const inventoryBytes = "src/extract.py\n";
   await writeFile(
     join(discoveryDirectory, "in_scope_files.txt"),
@@ -465,6 +491,280 @@ describe("malformed scan artifact recovery", () => {
     }
   });
 
+  test("seals deep-scan imported seed identities and separate closure ledgers", async () => {
+    const first = externalSeed("sarif-seed-00001");
+    const second = externalSeed("sarif-seed-00002");
+    const third = externalSeed("sarif-seed-00003");
+    const fixture = await startExternalSeedFixture({
+      candidates: [first, second, third],
+      ledger: [
+        {
+          candidateId: "candidate-deep-reportable",
+          importedSeeds: [
+            {
+              instance: first.instance,
+              cweIds: first.cwe_ids,
+              locations: first.locations,
+            },
+          ],
+          terminalDisposition: "reportable",
+        },
+        {
+          candidateId: "candidate-deep-rejected",
+          instances: [
+            {
+              instance: second.instance,
+              provenance: {
+                cwe: second.cwe_ids,
+                locations: second.locations,
+              },
+            },
+          ],
+          disposition: "rejected",
+        },
+        {
+          candidateId: "candidate-deep-string-instance",
+          instances: [third.instance],
+          provenance: {
+            cwe: third.cwe_ids,
+            locations: third.locations.map((location) => ({
+              path: location.path,
+              startLine: location.start_line,
+              endLine: location.end_line,
+              role: location.role,
+            })),
+          },
+          disposition: "rejected",
+        },
+      ],
+      validationLedger: [
+        {
+          candidateId: "candidate-deep-reportable",
+          disposition: "reportable",
+        },
+        {
+          candidateId: "candidate-deep-rejected",
+          terminalDisposition: "rejected",
+        },
+        {
+          candidateId: "candidate-deep-string-instance",
+          instance: third.instance,
+          disposition: "rejected",
+        },
+      ],
+      attackPathLedger: [
+        {
+          candidateId: "candidate-deep-reportable",
+          decision: "reportable",
+          impact: "Bounded test impact.",
+        },
+      ],
+    });
+
+    await completeScan(fixture);
+    const receipt = await readJson<{
+      closureInputs: Array<{ path: string }>;
+      summary: Record<string, number>;
+    }>(fixture.receiptPath);
+    expect(receipt.summary).toMatchObject({
+      reportable: 1,
+      rejected: 2,
+      deferred: 0,
+      outOfScope: 0,
+    });
+    expect(receipt.closureInputs.map(({ path }) => path)).toEqual([
+      "artifacts/02_discovery/candidate_ledger.jsonl",
+      "artifacts/03_validation/validation_ledger.jsonl",
+      "artifacts/04_attack_paths/attack_path_ledger.jsonl",
+    ]);
+    const coverage = await readJson<CoverageDocument>(fixture.coveragePath);
+    expect(
+      (coverage.surfaces as CoverageSurface[]).find(
+        ({ id }) => id === "external-sarif-seed-closure",
+      )?.receiptRefs,
+    ).toEqual([
+      "artifacts/01_context/external_sarif_sources.json",
+      "artifacts/02_discovery/external_sarif_candidates.jsonl",
+      "artifacts/02_discovery/candidate_ledger.jsonl",
+      "artifacts/03_validation/validation_ledger.jsonl",
+      "artifacts/04_attack_paths/attack_path_ledger.jsonl",
+      "artifacts/03_coverage/external_sarif_seed_coverage.json",
+    ]);
+  });
+
+  test("seals a flat deep-scan seed with camel-case locations and CWE provenance", async () => {
+    const seed = externalSeed("sarif-seed-00001");
+    const fixture = await startExternalSeedFixture({
+      candidates: [seed],
+      ledger: [
+        {
+          candidateId: seed.instance,
+          instanceId: seed.instance,
+          cwe: seed.cwe_ids,
+          normalizedLocations: seed.locations.map((location) => ({
+            path: location.path,
+            startLine: location.start_line,
+            endLine: location.end_line,
+            role: location.role,
+          })),
+          disposition: "reportable",
+        },
+      ],
+      validationLedger: [
+        {
+          candidateId: seed.instance,
+          disposition: "reportable",
+        },
+      ],
+      attackPathLedger: [
+        {
+          candidateId: seed.instance,
+          disposition: "reportable",
+          impact: "Bounded test impact.",
+        },
+      ],
+    });
+
+    await completeScan(fixture);
+    const receipt = await readJson<{
+      seeds: Array<{ candidateId: string; disposition: string }>;
+    }>(fixture.receiptPath);
+    expect(receipt.seeds).toEqual([
+      expect.objectContaining({
+        candidateId: seed.instance,
+        disposition: "reportable",
+      }),
+    ]);
+  });
+
+  test("seals a top-level deep-scan seed container with an implicit terminal attack decision", async () => {
+    const seed = externalSeed("sarif-seed-00001");
+    const fixture = await startExternalSeedFixture({
+      candidates: [seed],
+      ledger: [
+        {
+          ledgerId: "candidate-singular-import",
+          instances: [
+            {
+              instanceId: seed.instance,
+              provenance: { sourceId: "sarif-source-001" },
+              cweIds: seed.cwe_ids,
+              locations: seed.locations.map((location) => ({
+                path: location.path,
+                startLine: location.start_line,
+                endLine: location.end_line,
+                role: location.role,
+              })),
+            },
+          ],
+          disposition: "reportable",
+        },
+      ],
+      validationLedger: [
+        {
+          candidateId: "candidate-singular-import",
+          disposition: "reportable",
+        },
+      ],
+      attackPathLedger: [
+        {
+          candidateId: "candidate-singular-import",
+          impact:
+            "Substantive attack path whose terminal decision is on the candidate.",
+        },
+      ],
+    });
+
+    await completeScan(fixture);
+    const receipt = await readJson<{
+      seeds: Array<{
+        attackPathDecision: string;
+        disposition: string;
+      }>;
+    }>(fixture.receiptPath);
+    expect(receipt.seeds).toEqual([
+      expect.objectContaining({
+        attackPathDecision: "reportable",
+        disposition: "reportable",
+      }),
+    ]);
+  });
+
+  test("seals a deep-scan imported seed with string provenance and embedded closure", async () => {
+    const seed = externalSeed("sarif-seed-00001");
+    const fixture = await startExternalSeedFixture({
+      candidates: [seed],
+      ledger: [
+        {
+          candidateId: "candidate-embedded-import",
+          importedSeeds: [
+            {
+              instance: seed.instance,
+              cwe: seed.cwe_ids,
+              locations: seed.locations.map((location) => ({
+                path: location.path,
+                startLine: location.start_line,
+                endLine: location.end_line,
+                role: location.role,
+              })),
+              provenance: "external_sarif_candidates.jsonl",
+            },
+          ],
+          validation: { disposition: "reportable" },
+          attackPath: {
+            decision: "reportable",
+            impact: "Bounded test impact.",
+          },
+          terminalDisposition: "reportable",
+        },
+      ],
+    });
+
+    await completeScan(fixture);
+    const receipt = await readJson<{
+      closureInputs: Array<{ path: string }>;
+      seeds: Array<{ disposition: string }>;
+    }>(fixture.receiptPath);
+    expect(receipt.seeds[0]?.disposition).toBe("reportable");
+    expect(receipt.closureInputs.map(({ path }) => path)).toEqual([
+      "artifacts/02_discovery/candidate_ledger.jsonl",
+    ]);
+  });
+
+  test("rejects terminal metadata presented as substantive attack-path evidence", async () => {
+    const seed = externalSeed("sarif-seed-00001");
+    const fixture = await startExternalSeedFixture({
+      candidates: [seed],
+      ledger: [
+        {
+          candidateId: seed.instance,
+          instance: seed.instance,
+          cweIds: seed.cwe_ids,
+          locations: seed.locations,
+          terminalDisposition: "reportable",
+        },
+      ],
+      validationLedger: [
+        {
+          candidateId: seed.instance,
+          instance: seed.instance,
+          terminalDisposition: "reportable",
+        },
+      ],
+      attackPathLedger: [
+        {
+          candidateId: seed.instance,
+          instance: seed.instance,
+          terminalDisposition: "reportable",
+        },
+      ],
+    });
+
+    await expect(completeScan(fixture)).rejects.toThrow(
+      "attack-path closure lacks evidence",
+    );
+  });
+
   test.each([
     ["missing", [], "is missing in the ledger"],
     [
@@ -497,6 +797,43 @@ describe("malformed scan artifact recovery", () => {
         },
       ],
       "ledger identity differs from normalized input",
+    ],
+    [
+      "conflicting-location-alias",
+      [
+        {
+          ...seedLedgerRow("sarif-seed-00001", "suppressed"),
+          normalizedLocations: [
+            {
+              path: "src/extract.py",
+              startLine: 2,
+              endLine: 2,
+              role: "sink",
+            },
+          ],
+        },
+      ],
+      "conflicting imported seed locations",
+    ],
+    [
+      "conflicting-cwe-alias",
+      [
+        {
+          ...seedLedgerRow("sarif-seed-00001", "suppressed"),
+          cweIds: ["CWE-89"],
+        },
+      ],
+      "conflicting imported seed CWE ids",
+    ],
+    [
+      "conflicting-instance-alias",
+      [
+        {
+          ...seedLedgerRow("sarif-seed-00001", "suppressed"),
+          instanceId: "not-a-reserved-seed",
+        },
+      ],
+      "conflicting imported seed identities",
     ],
   ] as const)(
     "rejects a %s external seed closure",

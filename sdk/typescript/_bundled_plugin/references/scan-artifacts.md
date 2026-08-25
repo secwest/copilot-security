@@ -84,6 +84,15 @@ The legacy ranking, raw/deduped candidate, per-finding receipt, and phase-report
 - Scoped dedupe report: `<reconciliation_dir>/dedupe_report.md` if applicable
 - Scoped deduped candidates: `<reconciliation_dir>/deduped_candidates.jsonl` if applicable
 
+Deep and diff workflows should represent each imported SARIF seed as one
+top-level candidate row with `candidateId`, exact `instance`, `cweIds`,
+normalized `locations`, and `terminalDisposition`. Its separate validation row
+uses the same `candidateId` and `instance`; reportable or deferred seeds also
+have a matching attack-path row with substantive path evidence. The trusted
+host accepts a bounded set of older merged deep-ledger spellings, but still
+requires one unambiguous exact instance/CWE/location identity and rejects
+conflicting aliases.
+
 ### Coverage
 
 - Repository-wide coverage ledger: `<coverage_dir>/repository_coverage_ledger.md`
@@ -95,13 +104,15 @@ The legacy ranking, raw/deduped candidate, per-finding receipt, and phase-report
   seed's `reportable`, `rejected`, `deferred`, or `out_of_scope` terminal
   disposition. The model must not author or modify it. The host references it
   from canonical coverage and seals the source metadata, normalized candidate
-  JSONL, enriched ledger, and receipt together.
+  JSONL, candidate ledger, every separate validation or attack-path ledger used
+  for seed closure, and the receipt together.
 
 ## Validation (Phase 3) Paths
 
 Compact standard scans use the nested `validation` record and optional compact evidence path above. Other scan modes use these paths:
 
 - Scan-level validation summary: `<findings_dir>/validation_summary.md` if applicable
+- Deep/diff validation ledger: `<artifacts_dir>/03_validation/validation_ledger.jsonl`
 - Per-finding validation report: `<findings_dir>/<candidate_id>/validation_report.md`
 - Per-finding validation artifacts: `<findings_dir>/<candidate_id>/validation_artifacts/`
 
@@ -110,6 +121,7 @@ Compact standard scans use the nested `validation` record and optional compact e
 Compact standard scans use the nested `attack_path` record above. Other scan modes use these paths:
 
 - Scan-level attack-path analysis report: `<findings_dir>/attack_path_analysis_report.md` if applicable
+- Deep/diff attack-path ledger: `<artifacts_dir>/04_attack_paths/attack_path_ledger.jsonl`
 - Per-finding attack-path analysis report: `<findings_dir>/<candidate_id>/attack_path_analysis_report.md`
 
 ## Final Report Paths
