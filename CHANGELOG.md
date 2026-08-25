@@ -89,6 +89,14 @@ All notable scanner, application, benchmark, and operational changes are recorde
   run is 10m58s, while all Linux and macOS matrix jobs completed successfully;
   the wider bound preserves the same commands and assertions instead of
   splitting or weakening the suite.
+- All seven hosted workflow families pass on correction revision
+  `0681f170a20552898bb8472833741fe265ad3c6d`: Node `32880004422`, manually
+  dispatched exact-head container `32881145835`, Windows GUI `32880004311`,
+  Linux GUI `32880004337`, Go `32880004335`, Java `32880004317`, and .NET
+  `32880004338`. The corrected Windows Node test completes in 8m39s and its
+  complete job in 11m33s, including build, package inspection, and installed-
+  runtime smoke. The earlier 10-minute cancellation remains visible as the
+  trigger for the bounded operational fix.
 - Added `python-web-tarfile-unsafe-extraction`, a Python-standard-library
   CWE-22 model for remote tar archive extraction outside the intended
   destination. It resolves live `tarfile.open` and `TarFile` bindings across

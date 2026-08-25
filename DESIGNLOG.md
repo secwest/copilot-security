@@ -146,6 +146,29 @@ Exactly one row identifies
 1.3.4 control and production scanner source emit no Hydra row. The temporary
 worktree is removed after capture.
 
+**Final hosted closure.** All seven workflow families pass on correction
+revision `0681f170a20552898bb8472833741fe265ad3c6d`: Node
+[`32880004422`](https://github.com/secwest/copilot-security/actions/runs/32880004422),
+manually dispatched exact-head container
+[`32881145835`](https://github.com/secwest/copilot-security/actions/runs/32881145835),
+Windows GUI
+[`32880004311`](https://github.com/secwest/copilot-security/actions/runs/32880004311),
+Linux GUI
+[`32880004337`](https://github.com/secwest/copilot-security/actions/runs/32880004337),
+Go
+[`32880004335`](https://github.com/secwest/copilot-security/actions/runs/32880004335),
+Java
+[`32880004317`](https://github.com/secwest/copilot-security/actions/runs/32880004317),
+and .NET
+[`32880004338`](https://github.com/secwest/copilot-security/actions/runs/32880004338).
+Path filtering correctly omitted container CI from the docs-and-Node-workflow
+push, so an explicit `workflow_dispatch` proves the exact final head rather
+than relying only on the already-green implementation revision. The corrected
+Windows Node test runs from 17:49:28 to 17:58:07 UTC, 8m39s, and the full job
+completes in 11m33s with build, package inspection, and runtime smoke. The
+15-minute step and 20-minute job bounds therefore preserve finite failure
+deadlines with current measured headroom.
+
 ## 2026-08-25 — Bind Python tar extraction to runtime and effective filter semantics
 
 **Gap and authoritative semantics.** Python's
