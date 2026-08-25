@@ -46,6 +46,34 @@ All notable scanner, application, benchmark, and operational changes are recorde
   benchmark pair, import and executor aliases, file and returned-source
   lifecycles, built-in `compile`, same-file and two-relay flow, dense decoys,
   field-local evidence closure, prompt guidance, and a strict negative matrix.
+- Final acceptance is green at immutable implementation revision
+  `1d3303b6d21950da9f4cc4afd084a610736d284b`. After a clean production
+  build, the authoritative native Windows Bun 1.3.14 suite passes 1,649 tests
+  and 12,084 assertions across 180 files with 25 intentional platform or
+  environment skips, zero failures, and a 582.04-second runtime. The focused
+  native Ubuntu/WSL model, canonical corpus, Python cross-file and multi-hop,
+  adjacent typed-model, framework-dataflow, and residual-risk lane passes all
+  149 tests and 3,233 assertions. Generated-model drift, repository
+  formatting, TypeScript compilation, the clean production build, and the
+  production high-severity audit are green with no known vulnerabilities.
+- Strict package inspection accepts the fresh 259-entry, 1,927,885-byte npm
+  archive with SHA-256
+  `c96a78e6d89706f7913fff6c94fbc47e3ca0ab3a550c07fe6322b29b7680f742`.
+  Two isolated consumers each install 67 production packages and validate the
+  public import, executable CLI, and all 79 bundled plugin files. Two
+  inventories of a disposable exact-commit archive take 20,354.484 and
+  15,859.490 milliseconds and produce 256 byte-identical rows totaling
+  524,932 bytes with SHA-256
+  `67eb897f367f435a929d24b3a6b624158da0cc8dbff1c44cabd81f57a661d8ba`;
+  all 185 structured rows survive and exactly one is the new affected model.
+  The real CPython 3.12.3 package differential records the bounded affected
+  `42` output and repaired pre-write `Error` control.
+- All seven exact-revision workflows pass: Node `32901920374`, container
+  `32901920413`, Windows GUI `32901920388`, Linux GUI `32901920403`, Go
+  `32901920467`, Java `32901920324`, and .NET `32901920370`. GitHub reports
+  the repository public on default branch `main`. The disposable Windows and
+  WSL witness environments, exact-commit archive, package archive, and
+  isolated consumers were removed after acceptance.
 - Added `python-web-statemachine-unsafe-scxml-eval`, a version- and
   lifecycle-aware CWE-95 model for request-controlled SCXML reaching the
   official `statemachine.io.scxml.processor.SCXMLProcessor`. Under the

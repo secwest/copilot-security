@@ -70,9 +70,37 @@ arguments, returned source, built-in `compile`, builtins receivers, twenty
 strict negative repositories, two relay wrappers, eighty dense `exec` decoys,
 field-local quality closure, and correction guidance. The pair advances the
 canonical corpus to 116 exploit/control pairs, 232 cases, and 696 repeated
-scans. Full scanner, Linux, package, GUI, self-scan, and hosted acceptance will
-be recorded after the immutable implementation checkpoint completes those
-gates.
+scans.
+
+**Full scanner and Linux acceptance.** Immutable implementation revision
+`1d3303b6d21950da9f4cc4afd084a610736d284b` passes the authoritative native
+Windows Bun 1.3.14 suite after a clean production build: 1,649 tests, 12,084
+assertions, 25 intentional environment or platform skips, zero failures, 180
+files, and 582.04 seconds. The focused native Ubuntu/WSL model, canonical
+corpus, Python cross-file and multi-hop, adjacent typed-model,
+framework-dataflow, and residual-risk lane passes all 149 tests and 3,233
+assertions, including its POSIX symlink controls. Generated-model drift,
+repository formatting, TypeScript compilation, the clean build, and the
+production high-severity dependency audit are green; the audit reports no
+known vulnerabilities.
+
+**Distribution, self-review, GUI, and hosted acceptance.** Strict inspection
+validates a fresh 259-entry, 1,927,885-byte npm archive with SHA-256
+`c96a78e6d89706f7913fff6c94fbc47e3ca0ab3a550c07fe6322b29b7680f742`.
+Two isolated consumers each install 67 packages and validate public import,
+the executable CLI, and all 79 bundled plugin files. Two compiled inventories
+of a disposable exact-commit archive take 20,354.484 and 15,859.490
+milliseconds and produce 256 byte-identical rows, 524,932 bytes, and SHA-256
+`67eb897f367f435a929d24b3a6b624158da0cc8dbff1c44cabd81f57a661d8ba`.
+All 185 structured records survive; exactly one new row retains source
+`src/server.py:12`, sink `src/loader.py:12`, CWE-94/CWE-95, six ordered
+model-specific propagators, and exact 0.63.0 provenance, while the
+source-identical 0.64.0 twin is absent. All seven exact-revision workflows
+pass: Node `32901920374`, container `32901920413`, Windows GUI `32901920388`,
+Linux GUI `32901920403`, Go `32901920467`, Java `32901920324`, and .NET
+`32901920370`. The repository remains public on default branch `main`.
+Disposable witness environments, exact-commit archives, package archives, and
+isolated consumers are removed after acceptance.
 
 ## 2026-08-25 — Bind python-statemachine SCXML evaluation to parse/start lifecycle and evaluator mode
 
