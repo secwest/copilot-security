@@ -2092,8 +2092,13 @@ wrapper, official `hydra.utils.instantiate` call, Python 3.12.3 runtime, and
 fixed arithmetic witness identical while changing only `hydra-core==1.3.3` to
 1.3.4. The affected package resolves and invokes attacker-selected `_target_`
 callables; the advisory control rejects the blocklisted `builtins.eval` target
-before it can evaluate `6 * 7`. Each of the 226 cases in 113 exploit/control
-pairs is scanned three times, producing 678 scans
+before it can evaluate `6 * 7`. The SymPy pair distinguishes its builtin-
+capable default namespace from an empty-builtin mathematical allowlist. The
+python-statemachine pair then holds the remote SCXML parse/start lifecycle
+constant while changing only 3.1.2 to 3.2.0: the affected datamodel reaches
+Python evaluation, while the repaired default rejects calls and builtins with
+`InvalidDefinition` and preserves ordinary arithmetic. Each of the 230 cases
+in 115 exploit/control pairs is scanned three times, producing 690 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

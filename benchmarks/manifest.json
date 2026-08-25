@@ -4847,6 +4847,45 @@
         "python-sympy-restricted-namespace-control/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "python-statemachine-unsafe-scxml-eval",
+      "description": "A remote Flask SCXML document crosses an exact relative wrapper into python-statemachine 3.1.2, where starting the processor evaluates datamodel expressions with Python eval.",
+      "fixture": "fixtures/python-statemachine-unsafe-scxml-eval",
+      "findingsPaths": [
+        "python-statemachine-unsafe-scxml-eval/run-1/findings.json",
+        "python-statemachine-unsafe-scxml-eval/run-2/findings.json",
+        "python-statemachine-unsafe-scxml-eval/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-statemachine-untrusted-scxml-evaluation",
+          "cwe": ["CWE-95"],
+          "locations": [
+            {
+              "path": "src/loader.py",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-statemachine-restricted-evaluator-control",
+      "description": "The topology-identical control changes only python-statemachine to 3.2.0, whose default restricted evaluator rejects the builtin capability probe while preserving ordinary arithmetic.",
+      "fixture": "fixtures/python-statemachine-restricted-evaluator-control",
+      "findingsPaths": [
+        "python-statemachine-restricted-evaluator-control/run-1/findings.json",
+        "python-statemachine-restricted-evaluator-control/run-2/findings.json",
+        "python-statemachine-restricted-evaluator-control/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

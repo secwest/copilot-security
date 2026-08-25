@@ -139,6 +139,10 @@ describe("effectiveness benchmark", () => {
       ],
       ["python-hydra-unsafe-instantiate", "python-hydra-blocklist-control"],
       [
+        "python-statemachine-unsafe-scxml-eval",
+        "python-statemachine-restricted-evaluator-control",
+      ],
+      [
         "python-sympy-unsafe-parse-expr",
         "python-sympy-restricted-namespace-control",
       ],

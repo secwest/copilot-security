@@ -6,6 +6,50 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-statemachine-unsafe-scxml-eval`, a version- and
+  lifecycle-aware CWE-95 model for request-controlled SCXML reaching the
+  official `statemachine.io.scxml.processor.SCXMLProcessor`. Under the
+  GHSA-v4jc-pm6r-3vj8 / CVE-2026-47103 affected range
+  `python-statemachine>=3.0.0,<3.2.0`, a finding requires one exact production
+  pin, construction of an official processor, `parse_scxml` receiving the
+  remote document, and a later `start()` on the same live receiver. The row is
+  anchored at `start()`, where initial-state entry actually invokes the
+  datamodel callback, rather than at parsing alone.
+- Preserved the repaired and deliberate opt-in boundaries. Version 3.2.0 or
+  later with the default or explicit `trusted=False` is negative because its
+  restricted AST evaluator rejects calls, builtins, dunder/private access,
+  comprehensions, and script execution. An explicit literal
+  `SCXMLProcessor(trusted=True)` or positional `True` remains reportable for a
+  remote document because the package intentionally restores full Python
+  `eval`/`exec` in that mode. Stable versions below 3.0, ranges, prereleases,
+  missing or duplicate pins, unofficial package re-exports, local
+  `statemachine.py` or `statemachine/` shadows, replaced bindings or
+  parse/start members, receiver reassignment, cross-function receiver
+  confusion, parse-only and wrong-receiver lifecycles, star expansion, fixed
+  documents, and text lookalikes fail closed.
+- Added topology-identical Flask fixtures pinned to CPython 3.12.3 and
+  `python-statemachine` 3.1.2/3.2.0, a perfect-gate specialized manifest, and
+  a bounded arithmetic witness. The affected package lets an SCXML `<data
+expr>` resolve `__import__` and ask `builtins.eval` to evaluate only `6 * 7`,
+  producing 42. The repaired default raises `InvalidDefinition` for that
+  capability probe while ordinary `6 * 7` still produces 42. No command,
+  file, network, credential, persistence, or destructive operation is used.
+  Eleven evidence groups are independently mandatory in validation and attack
+  path, and the canonical corpus advances to 115 exploit/control pairs, 230
+  cases, and 690 repeated scans.
+- Authenticated searches of current `github/codeql` and
+  `semgrep/semgrep-rules` source found no match for the advisory, CVE, package,
+  `SCXMLProcessor`, or `parse_scxml_file`. Official 3.1.2 and 3.2.0 package
+  execution confirms the affected callback chain and the repaired evaluator
+  boundary. Nine focused groups currently pass 44 assertions with one
+  intentional Windows symlink skip across exact imports, parenthesized and
+  one-hop aliases, affected defaults, repaired trusted opt-in, same-file and
+  multi-hop flow, dense unrelated `start()` calls, field-local evidence
+  closure, regular-file dependency provenance, and the strict negative matrix.
+  The full Python model lane passes 127 tests and 683 assertions with four
+  intentional Windows symlink skips. Wider suite, package, self-review, live
+  paired scan, and hosted workflow evidence remain separate acceptance
+  checkpoints.
 - Added `python-web-sympy-unsafe-parse-expr`, a primitive-wide CWE-94/CWE-95
   model for request-controlled strings reaching the official
   `sympy.parsing.sympy_parser.parse_expr` evaluator without a provably

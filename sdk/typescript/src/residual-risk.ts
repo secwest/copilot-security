@@ -2208,6 +2208,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-web-statemachine-unsafe-scxml-eval",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+statemachine\.io\.scxml\.processor\b|\bfrom\s+statemachine\.io\.scxml(?:\.processor)?\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-document",
+        expression:
+          /\brequest\.(?:body|data|files|form|json|POST)\b|\brequest\.(?:get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\bBody\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "statemachine-untrusted-scxml-datamodel-evaluation",
+        expression: /\b[A-Za-z_]\w*\s*\.\s*start\s*\(/u,
+        cweIds: ["CWE-95"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-sympy-unsafe-parse-expr",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3299,6 +3326,7 @@ function isPythonTypedSinkModel(modelId: string): boolean {
     modelId === "python-web-lxml-etcompat-xxe" ||
     modelId === "python-web-tarfile-unsafe-extraction" ||
     modelId === "python-web-hydra-unsafe-instantiate" ||
+    modelId === "python-web-statemachine-unsafe-scxml-eval" ||
     modelId === "python-web-sympy-unsafe-parse-expr"
   );
 }
@@ -3567,6 +3595,20 @@ const HYDRA_FIELD_EVIDENCE_REQUIREMENTS = [
   ["hydra-core 1.3.4", "InstantiationException", "target blocklist"],
 ] as const;
 
+const STATEMACHINE_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["SCXML upload", "request.get_data", "request body"],
+  ["run_statechart", "wrapper"],
+  ["SCXMLProcessor", "official python-statemachine binding"],
+  ["parse_scxml", "scxml_content", "document argument"],
+  ["python-statemachine 3.1.2", "python-statemachine==3.1.2"],
+  ["datamodel expression", "<data expr", "SCXML datamodel"],
+  ["start execution", "processor.start", "start()"],
+  ["_create_dataitem_callable", "_eval", "Python eval"],
+  ["__import__", "6 * 7", "arithmetic sentinel", "42"],
+  ["Python 3.12.3"],
+  ["python-statemachine 3.2.0", "restricted evaluator", "InvalidDefinition"],
+] as const;
+
 const SYMPY_FIELD_EVIDENCE_REQUIREMENTS = [
   ["expression upload", "request.get_json", "request JSON"],
   ["parse_expression", "wrapper"],
@@ -3628,6 +3670,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: HYDRA_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: HYDRA_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-web-statemachine-unsafe-scxml-eval",
+    {
+      validation: STATEMACHINE_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: STATEMACHINE_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -14459,13 +14508,15 @@ function frameworkDataflowRecords(
                   ? pythonTarfileCandidateLines(lines, 64)
                   : model.id === "python-web-hydra-unsafe-instantiate"
                     ? pythonHydraCandidateLines(lines, 64)
-                    : model.id === "python-web-sympy-unsafe-parse-expr"
-                      ? pythonSympyCandidateLines(lines, 64)
-                      : matchingPythonModelLines(
-                          lines,
-                          model.sinks,
-                          isPythonTypedSinkModel(model.id) ? 64 : 8,
-                        )
+                    : model.id === "python-web-statemachine-unsafe-scxml-eval"
+                      ? pythonStatemachineCandidateLines(lines, 64)
+                      : model.id === "python-web-sympy-unsafe-parse-expr"
+                        ? pythonSympyCandidateLines(lines, 64)
+                        : matchingPythonModelLines(
+                            lines,
+                            model.sinks,
+                            isPythonTypedSinkModel(model.id) ? 64 : 8,
+                          )
             : extension === ".java" || extension === ".cs"
               ? matchingJavaModelLines(lines, model.sinks, 8)
               : matchingModelLines(lines, model.sinks, 8);
@@ -14696,14 +14747,22 @@ function frameworkDataflowRecords(
                               lines,
                               sink.line,
                             )
-                          : model.id === "python-web-sympy-unsafe-parse-expr"
-                            ? pythonSympyUnsafeParseExprSink(
+                          : model.id ===
+                              "python-web-statemachine-unsafe-scxml-eval"
+                            ? pythonStatemachineUnsafeScxmlSink(
                                 files,
                                 path,
                                 lines,
                                 sink.line,
                               )
-                            : undefined;
+                            : model.id === "python-web-sympy-unsafe-parse-expr"
+                              ? pythonSympyUnsafeParseExprSink(
+                                  files,
+                                  path,
+                                  lines,
+                                  sink.line,
+                                )
+                              : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -24166,9 +24225,11 @@ function pythonFrameworkWrapperSummaries(
                 ? pythonTarfileCandidateLines(file.lines, 64)
                 : model.id === "python-web-hydra-unsafe-instantiate"
                   ? pythonHydraCandidateLines(file.lines, 64)
-                  : model.id === "python-web-sympy-unsafe-parse-expr"
-                    ? pythonSympyCandidateLines(file.lines, 64)
-                    : matchingPythonModelLines(file.lines, model.sinks, 32);
+                  : model.id === "python-web-statemachine-unsafe-scxml-eval"
+                    ? pythonStatemachineCandidateLines(file.lines, 64)
+                    : model.id === "python-web-sympy-unsafe-parse-expr"
+                      ? pythonSympyCandidateLines(file.lines, 64)
+                      : matchingPythonModelLines(file.lines, model.sinks, 32);
       const controls = matchingPythonModelLines(file.lines, model.controls, 64);
       for (const wrapper of exportedFunctions) {
         for (const sink of sinks) {
@@ -24244,14 +24305,22 @@ function pythonFrameworkWrapperSummaries(
                                   sink.line,
                                 )
                               : model.id ===
-                                  "python-web-sympy-unsafe-parse-expr"
-                                ? pythonSympyUnsafeParseExprSink(
+                                  "python-web-statemachine-unsafe-scxml-eval"
+                                ? pythonStatemachineUnsafeScxmlSink(
                                     files,
                                     file.path,
                                     file.lines,
                                     sink.line,
                                   )
-                                : undefined;
+                                : model.id ===
+                                    "python-web-sympy-unsafe-parse-expr"
+                                  ? pythonSympyUnsafeParseExprSink(
+                                      files,
+                                      file.path,
+                                      file.lines,
+                                      sink.line,
+                                    )
+                                  : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
@@ -27767,6 +27836,486 @@ function pythonHydraUnsafeInstantiateSink(
     };
   }
   return undefined;
+}
+
+interface PythonStatemachineBinding extends PythonMemberBinding {
+  operation: "SCXMLProcessor";
+  originLine?: number;
+}
+
+interface PythonStatemachineLifecycle {
+  binding: PythonStatemachineBinding;
+  receiver: string;
+  constructionLine: number;
+  constructorArguments: string[];
+  parseLine: number;
+  sourceExpression: string;
+  sourceArgument: "argument one" | "scxml_content=";
+}
+
+function pythonStatemachineBindings(
+  lines: readonly string[],
+): PythonStatemachineBinding[] {
+  const bindings: PythonStatemachineBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  const addBinding = (
+    local: string,
+    memberPath: string,
+    line: number,
+  ): void => {
+    bindings.push({
+      imported: "statemachine.io.scxml.processor.SCXMLProcessor",
+      local,
+      memberPath,
+      operation: "SCXMLProcessor",
+      line,
+    });
+  };
+  const collectedImport = (startIndex: number, initial: string): string => {
+    let importedText = initial.trim();
+    if (importedText.startsWith("(") && !importedText.endsWith(")")) {
+      for (
+        let offset = startIndex + 1;
+        offset < Math.min(structuralLines.length, startIndex + 8);
+        offset += 1
+      ) {
+        importedText += `\n${structuralLines[offset] ?? ""}`;
+        if ((structuralLines[offset] ?? "").includes(")")) break;
+      }
+    }
+    return importedText.startsWith("(") === importedText.endsWith(")")
+      ? importedText.replace(/^\(([\s\S]*)\)$/u, "$1")
+      : "";
+  };
+
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const moduleImport =
+      /^\s*import\s+statemachine\.io\.scxml\.processor(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+        structural,
+      );
+    if (moduleImport !== null) {
+      if (moduleImport[1] === undefined) {
+        addBinding(
+          "statemachine",
+          "io.scxml.processor.SCXMLProcessor",
+          index + 1,
+        );
+      } else {
+        addBinding(moduleImport[1], "SCXMLProcessor", index + 1);
+      }
+      continue;
+    }
+
+    const fromScxml =
+      /^\s*from\s+statemachine\.io\.scxml\s+import\s+(.+?)\s*$/u.exec(
+        structural,
+      );
+    if (fromScxml?.[1] !== undefined) {
+      const importedText = collectedImport(index, fromScxml[1]);
+      for (const rawBinding of splitPythonArguments(importedText)) {
+        const parsed = /^processor(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+          rawBinding.trim(),
+        );
+        if (parsed !== null) {
+          addBinding(parsed[1] ?? "processor", "SCXMLProcessor", index + 1);
+        }
+      }
+      continue;
+    }
+
+    const fromProcessor =
+      /^\s*from\s+statemachine\.io\.scxml\.processor\s+import\s+(.+?)\s*$/u.exec(
+        structural,
+      );
+    if (fromProcessor?.[1] === undefined) continue;
+    const importedText = collectedImport(index, fromProcessor[1]);
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const parsed = /^SCXMLProcessor(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      if (parsed !== null) {
+        addBinding(parsed[1] ?? "SCXMLProcessor", "", index + 1);
+      }
+    }
+  }
+
+  const importedBindings = [...bindings];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    for (const binding of importedBindings) {
+      if (
+        binding.line >= index + 1 ||
+        !pythonStatemachineBindingReachableAtLine(lines, binding, index + 1) ||
+        pythonStatemachineBindingReassigned(lines, binding, index + 1)
+      ) {
+        continue;
+      }
+      const source = pythonStatemachineBindingExpression(binding)
+        .split(".")
+        .map(escapeRegularExpression)
+        .join("\\s*\\.\\s*");
+      const alias = new RegExp(
+        `^\\s*([A-Za-z_]\\w*)\\s*(?::[^=]+)?=\\s*${source}\\s*$`,
+        "u",
+      ).exec(structural)?.[1];
+      if (alias === undefined || alias === binding.local) continue;
+      bindings.push({
+        imported: binding.imported,
+        local: alias,
+        memberPath: "",
+        operation: "SCXMLProcessor",
+        line: index + 1,
+        originLine: binding.originLine ?? binding.line,
+      });
+    }
+  }
+  return bindings;
+}
+
+function pythonStatemachineBindingExpression(
+  binding: PythonStatemachineBinding,
+): string {
+  return binding.memberPath === ""
+    ? binding.local
+    : `${binding.local}.${binding.memberPath}`;
+}
+
+function pythonStatemachineBindingCallee(
+  binding: PythonStatemachineBinding,
+): RegExp {
+  const segments = pythonStatemachineBindingExpression(binding).split(".");
+  return new RegExp(
+    `\\b${segments.map(escapeRegularExpression).join("\\s*\\.\\s*")}\\s*\\(`,
+    "u",
+  );
+}
+
+function pythonStatemachineBindingReassigned(
+  lines: readonly string[],
+  binding: PythonStatemachineBinding,
+  callLine: number,
+): boolean {
+  if (
+    pythonIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      callLine,
+    )
+  ) {
+    return true;
+  }
+  const segments = binding.memberPath.split(".").filter(Boolean);
+  if (segments.length === 0) return false;
+  const structuralLines = pythonStructuralLines(lines).slice(
+    binding.line,
+    Math.max(binding.line, callLine - 1),
+  );
+  for (let length = 1; length <= segments.length; length += 1) {
+    const member = [binding.local, ...segments.slice(0, length)]
+      .map(escapeRegularExpression)
+      .join("\\s*\\.\\s*");
+    const replacement = new RegExp(
+      `^\\s*${member}\\s*(?:[+\\-*/%&|^]?=|:=)`,
+      "u",
+    );
+    if (structuralLines.some((candidate) => replacement.test(candidate))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pythonStatemachineBindingReachableAtLine(
+  lines: readonly string[],
+  binding: PythonStatemachineBinding,
+  line: number,
+): boolean {
+  const scope = pythonTopLevelFunctionRangeAtLine(lines, binding.line);
+  return (
+    scope === undefined || (line >= scope.startLine && line <= scope.endLine)
+  );
+}
+
+function pythonStatemachineSameScope(
+  lines: readonly string[],
+  leftLine: number,
+  rightLine: number,
+): boolean {
+  const left = pythonTopLevelFunctionRangeAtLine(lines, leftLine);
+  const right = pythonTopLevelFunctionRangeAtLine(lines, rightLine);
+  if (left === undefined || right === undefined) return left === right;
+  return left.startLine === right.startLine && left.endLine === right.endLine;
+}
+
+function pythonStatemachineReceiverMemberReassigned(
+  lines: readonly string[],
+  receiver: string,
+  afterLine: number,
+  beforeLine: number,
+): boolean {
+  const replacement = new RegExp(
+    `^\\s*${escapeRegularExpression(receiver)}\\s*\\.\\s*(?:parse_scxml|start)\\s*(?:[+\\-*/%&|^]?=|:=)`,
+    "u",
+  );
+  return pythonStructuralLines(lines)
+    .slice(afterLine, Math.max(afterLine, beforeLine - 1))
+    .some((candidate) => replacement.test(candidate));
+}
+
+function pythonStatemachineLifecycleAtStart(
+  lines: readonly string[],
+  startLine: number,
+): PythonStatemachineLifecycle | undefined {
+  const structuralLines = pythonStructuralLines(lines);
+  const startStructural = structuralLines[startLine - 1] ?? "";
+  for (const binding of pythonStatemachineBindings(lines)) {
+    if (
+      binding.line >= startLine ||
+      !pythonStatemachineBindingReachableAtLine(lines, binding, startLine) ||
+      pythonStatemachineBindingReassigned(lines, binding, startLine)
+    ) {
+      continue;
+    }
+    for (
+      let constructionLine = startLine - 1;
+      constructionLine > binding.line;
+      constructionLine -= 1
+    ) {
+      if (!pythonStatemachineSameScope(lines, constructionLine, startLine)) {
+        continue;
+      }
+      const structural = structuralLines[constructionLine - 1] ?? "";
+      const constructorExpression = pythonStatemachineBindingExpression(binding)
+        .split(".")
+        .map(escapeRegularExpression)
+        .join("\\s*\\.\\s*");
+      const receiver = new RegExp(
+        `^\\s*([A-Za-z_]\\w*)\\s*(?::[^=]+)?=\\s*${constructorExpression}\\s*\\(`,
+        "u",
+      ).exec(structural)?.[1];
+      if (receiver === undefined) continue;
+      const constructorArguments = pythonCallArgumentsForCalleeAtLine(
+        lines,
+        constructionLine,
+        pythonStatemachineBindingCallee(binding),
+      );
+      if (
+        constructorArguments === undefined ||
+        constructorArguments.some((argument) =>
+          argument.trim().startsWith("*"),
+        ) ||
+        pythonIdentifierReassignedBetween(
+          lines,
+          receiver,
+          constructionLine,
+          startLine,
+        ) ||
+        pythonStatemachineReceiverMemberReassigned(
+          lines,
+          receiver,
+          constructionLine,
+          startLine,
+        )
+      ) {
+        continue;
+      }
+      const startCallee = new RegExp(
+        `\\b${escapeRegularExpression(receiver)}\\s*\\.\\s*start\\s*\\(`,
+        "u",
+      );
+      if (!startCallee.test(startStructural)) continue;
+      const startArguments = pythonCallArgumentsForCalleeAtLine(
+        lines,
+        startLine,
+        startCallee,
+      );
+      if (
+        startArguments === undefined ||
+        startArguments.some((argument) => argument.trim().startsWith("*"))
+      ) {
+        continue;
+      }
+      const parseCallee = new RegExp(
+        `\\b${escapeRegularExpression(receiver)}\\s*\\.\\s*parse_scxml\\s*\\(`,
+        "u",
+      );
+      for (
+        let parseLine = startLine - 1;
+        parseLine > constructionLine;
+        parseLine -= 1
+      ) {
+        if (!parseCallee.test(structuralLines[parseLine - 1] ?? "")) continue;
+        const parseArguments = pythonCallArgumentsForCalleeAtLine(
+          lines,
+          parseLine,
+          parseCallee,
+        );
+        if (
+          parseArguments === undefined ||
+          parseArguments.some((argument) => argument.trim().startsWith("*"))
+        ) {
+          continue;
+        }
+        const positional = pythonPositionalArguments(parseArguments);
+        const keywordDocument = pythonKeywordArgument(
+          parseArguments,
+          "scxml_content",
+        );
+        const sourceExpression = keywordDocument ?? positional[1];
+        if (sourceExpression === undefined || sourceExpression.trim() === "") {
+          continue;
+        }
+        return {
+          binding,
+          receiver,
+          constructionLine,
+          constructorArguments,
+          parseLine,
+          sourceExpression,
+          sourceArgument:
+            keywordDocument === undefined ? "argument one" : "scxml_content=",
+        };
+      }
+    }
+  }
+  return undefined;
+}
+
+function pythonStatemachineCandidateLines(
+  lines: readonly string[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const structuralLines = pythonStructuralLines(lines);
+  const matches: Array<{ kind: string; line: number }> = [];
+  for (
+    let index = 0;
+    index < structuralLines.length && matches.length < limit;
+    index += 1
+  ) {
+    if (
+      /\b[A-Za-z_]\w*\s*\.\s*start\s*\(/u.test(structuralLines[index] ?? "") &&
+      pythonStatemachineLifecycleAtStart(lines, index + 1) !== undefined
+    ) {
+      matches.push({
+        kind: "statemachine-untrusted-scxml-datamodel-evaluation",
+        line: index + 1,
+      });
+    }
+  }
+  return matches;
+}
+
+function pythonStatemachineUnsafeScxmlSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "statemachine")) {
+    return undefined;
+  }
+  const lifecycle = pythonStatemachineLifecycleAtStart(lines, line);
+  if (lifecycle === undefined) return undefined;
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  if (
+    wrapper?.parameters.includes(lifecycle.binding.local) === true ||
+    wrapper?.parameters.includes(lifecycle.receiver) === true
+  ) {
+    return undefined;
+  }
+  const pinned = pythonPinnedRequirement(
+    files,
+    sourcePath,
+    "python-statemachine",
+  );
+  if (
+    pinned === undefined ||
+    !/^\d+\.\d+\.\d+$/u.test(pinned.version) ||
+    !pythonPackageVersionAtLeast(pinned.version, [3, 0, 0])
+  ) {
+    return undefined;
+  }
+  const constructorArguments = lifecycle.constructorArguments.filter(
+    (argument) => argument.trim() !== "",
+  );
+  const positional = pythonPositionalArguments(constructorArguments);
+  const trustedKeyword = pythonKeywordArgument(constructorArguments, "trusted");
+  const affectedDefault =
+    !pythonPackageVersionAtLeast(pinned.version, [3, 2, 0]) &&
+    constructorArguments.length === 0;
+  const explicitTrusted =
+    pythonPackageVersionAtLeast(pinned.version, [3, 2, 0]) &&
+    constructorArguments.length === 1 &&
+    (trustedKeyword?.trim() === "True" || positional[0]?.trim() === "True");
+  if (!affectedDefault && !explicitTrusted) return undefined;
+
+  return {
+    sourceExpression:
+      resolvePythonExpression(
+        lines,
+        lifecycle.sourceExpression,
+        lifecycle.parseLine,
+      ) ?? lifecycle.sourceExpression,
+    kind: explicitTrusted
+      ? "statemachine-explicit-trusted-untrusted-scxml-evaluation"
+      : "statemachine-affected-default-untrusted-scxml-evaluation",
+    propagators: [
+      {
+        kind: "statemachine-scxml-processor-binding",
+        path: sourcePath,
+        line: lifecycle.binding.originLine ?? lifecycle.binding.line,
+        symbol: `${lifecycle.binding.imported} as ${pythonStatemachineBindingExpression(lifecycle.binding)}`,
+      },
+      ...(lifecycle.binding.originLine === undefined
+        ? []
+        : [
+            {
+              kind: "statemachine-scxml-processor-alias",
+              path: sourcePath,
+              line: lifecycle.binding.line,
+              symbol: lifecycle.binding.local,
+            },
+          ]),
+      {
+        kind: "python-statemachine-runtime-dependency",
+        path: pinned.path,
+        line: pinned.line,
+        symbol: `python-statemachine@${pinned.version}:requirements-exact`,
+      },
+      {
+        kind: "statemachine-scxml-processor-construction",
+        path: sourcePath,
+        line: lifecycle.constructionLine,
+        symbol: explicitTrusted
+          ? `${lifecycle.receiver}:trusted=True`
+          : `${lifecycle.receiver}:affected-default-evaluator`,
+      },
+      {
+        kind: "statemachine-untrusted-scxml-edge",
+        path: sourcePath,
+        line: lifecycle.parseLine,
+        symbol: `parse_scxml:${lifecycle.sourceArgument}`,
+      },
+      {
+        kind: "statemachine-start-execution",
+        path: sourcePath,
+        line,
+        symbol: `${lifecycle.receiver}.start`,
+      },
+      {
+        kind: "intrinsic-statemachine-datamodel-eval",
+        path: sourcePath,
+        line,
+        symbol: explicitTrusted
+          ? "trusted evaluator -> eval/exec"
+          : "create_datamodel_action_callable -> _create_dataitem_callable -> _eval -> eval",
+      },
+    ],
+  };
 }
 
 interface PythonTarfileBinding extends PythonMemberBinding {

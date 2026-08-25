@@ -74,7 +74,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains 109 vulnerable/control pairs:
+The versioned corpus currently contains 115 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -102,7 +102,11 @@ an affected-default `ETCompatXMLParser` to `fromstring`, plus a PyYAML
 that contrasts the pre-3.14 fully trusted default with `filter="data"` plus
 bounded member/type/name/expanded-byte preflight, plus a Hydra
 1.3.3/1.3.4 untrusted-configuration pair that distinguishes attacker-selected
-`_target_` invocation from fixed application-owned target configuration,
+`_target_` invocation from fixed application-owned target configuration, a
+SymPy default-namespace/restricted-namespace pair, and a
+`python-statemachine` 3.1.2/3.2.0 pair that requires the same processor to
+parse remote SCXML and then start while distinguishing the repaired restricted
+default from explicit `trusted=True`,
 relative-wrapper pair, reflected XSS, XML
 external entities, JWT signature-verification bypass, JWT `alg`/key-type
 confusion that reinterprets an RSA public key as an HMAC secret,
@@ -220,7 +224,7 @@ actually reach the parse call; ordinary `XMLParser` and construction alone
 remain negative. The tarfile pair adds exact uploaded-`fileobj` flow, retained
 `TarFile` receiver identity, runtime-default semantics, and a matched control
 that closes both traversal and decompression-exhaustion paths. Three runs per
-case now produce 678 scans across 113 exploit/control pairs in the complete
+case now produce 690 scans across 115 exploit/control pairs in the complete
 corpus. The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty

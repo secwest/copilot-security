@@ -2,6 +2,90 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Bind python-statemachine SCXML evaluation to parse/start lifecycle and evaluator mode
+
+**Gap and authoritative semantics.** The reviewed
+[`GHSA-v4jc-pm6r-3vj8`](https://github.com/fgmacedo/python-statemachine/security/advisories/GHSA-v4jc-pm6r-3vj8),
+assigned CVE-2026-47103 and CWE-95, covers `python-statemachine>=3.0.0,<3.2.0`.
+Official 3.1.2 source shows that `SCXMLProcessor.parse_scxml` parses the
+document and `process_definition` creates a datamodel callback; actual
+expression execution occurs only when `start()` constructs the root machine
+and enters its initial state. The callback chain is
+`create_datamodel_action_callable -> _create_dataitem_callable -> _eval ->
+eval`. Version 3.2.0 changes the default to a restricted AST evaluator that
+allows ordinary arithmetic, literals, indexing, comparisons, and boolean
+operations but rejects arbitrary calls, builtins, private/dunder access, and
+scripts with `InvalidDefinition`. Its constructor also exposes
+`trusted=True`, which deliberately restores full Python `eval`/`exec` for
+application-owned documents. Current authenticated CodeQL and Semgrep source
+searches returned no match for the advisory, CVE, package, class, or SCXML file
+parser API.
+
+**Decision and dataflow boundary.** Add
+`python-web-statemachine-unsafe-scxml-eval` as an exact Python typed sink.
+Recognize only the official module import, the official `processor` submodule
+import, or the direct class import, including aliases, bounded parenthesized
+imports, and one direct class alias. Do not accept
+`from statemachine.io.scxml import SCXMLProcessor`: the package does not export
+the class there. Derive candidates from a constructed official receiver and
+anchor the sink at that receiver's `start()`. Require an earlier
+`parse_scxml(sm_name, remote_document)` or exact `scxml_content=` edge after
+the same construction and within the same top-level scope. Preserve same-file,
+one relative wrapper, and two relative relay paths. This receiver-derived
+discovery prevents unrelated `.start()` calls from consuming the 64-candidate
+budget.
+
+**Version, mode, and false-positive boundary.** Require exactly one nearest
+regular `requirements.txt` line with a stable exact `python-statemachine`
+version. Versions from 3.0.0 through 3.1.x emit only for the zero-argument
+constructor supported by that API. Version 3.2.0 or later is suppressed for
+the default and `trusted=False`, but an explicit literal keyword or positional
+`True` remains visible because it restores the same dangerous primitive.
+Reject ranges, prereleases, missing or duplicate pins, pre-3.0 versions,
+unofficial re-exports, repository-local module/package shadows, replaced
+imports or nested members, wrapper and receiver parameter shadows, receiver
+or parse/start member reassignment, different receiver identities, parse
+without start, start without parse, cross-function receiver confusion, star
+arguments, fixed documents, comments, strings, and lookalikes. Do not model
+`parse_scxml_file` from a request-controlled path alone: path control does not
+prove the file contents are attacker-controlled, and the scanner should not
+convert a path bug into expression injection without that separate evidence.
+
+**Executable pair and report discipline.** Both fixtures retain Flask, Python
+3.12.3, the bounded request body, relative `run_statechart` wrapper, official
+class import, parse/start lifecycle, ordinary arithmetic, and witness bytes.
+Only `python-statemachine==3.1.2` changes to 3.2.0. Their SCXML `<data expr>`
+asks `__import__` only to reach `builtins.eval` for fixed arithmetic `6 * 7`.
+The affected package returns 42; the repaired package raises
+`InvalidDefinition` for the capability expression and still returns 42 for
+ordinary arithmetic. The witness executes no command, opens no file or
+socket, reads no credential, mutates no persistent state, and performs no
+destructive action. Validation and attack path must each name eleven groups:
+SCXML upload, wrapper, official binding, parse document argument, exact 3.1.2
+pin, datamodel expression, start execution, internal eval chain, bounded
+capability sentinel, Python runtime, and 3.2.0 restricted-evaluator control.
+Impact remains a tested capability until endpoint reachability, accepted
+grammar, authentication, installed version and trusted mode, process privilege
+and containment, error handling, and a concrete command, file, network,
+secret, or availability effect are proved.
+
+**Regression result and consequence.** The real package differential on
+CPython 3.12.3 produces the expected `42` versus `InvalidDefinition` boundary
+and preserves ordinary arithmetic on both sides. Nine focused groups pass 44
+assertions with one intentional Windows symlink skip, covering the manifest
+and fixtures, exact cross-file path, nine supported import/mode forms, twenty
+strict negative repositories, regular-file dependency provenance, two relays,
+eighty dense `.start()` decoys, field-local quality closure, and correction
+guidance. The full Python model lane passes 127 tests and 683 assertions with
+four intentional Windows symlink skips. The canonical corpus advances to 115
+pairs, 230 cases, and 690
+three-run scans. Full-suite, cross-platform, packaging, deterministic
+self-review, sealed live campaign, and hosted workflow evidence remain future
+acceptance checkpoints rather than being inferred from focused success. Future
+changes must preserve the same-receiver lifecycle, exact dependency evidence,
+repaired default, explicit trusted opt-in, and the distinction between
+capability proof and deployed compromise.
+
 ## 2026-08-25 — Treat SymPy `parse_expr` as Python evaluation, not mathematical parsing
 
 **Gap and authoritative semantics.** The reviewed
