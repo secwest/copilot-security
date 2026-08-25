@@ -1,0 +1,136 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-datamodel-codegen-import-injection",
+      "description": "A remote Flask JSON Schema crosses an exact relative wrapper into datamodel-code-generator 0.63.0; a malicious import extension reaches generated Python source that the application executes with runpy.run_path.",
+      "fixture": "fixtures/python-datamodel-codegen-import-injection",
+      "findingsPaths": [
+        "python-datamodel-codegen-import-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-datamodel-codegen-generated-import-injection",
+          "cwe": ["CWE-94", "CWE-95"],
+          "locations": [
+            {
+              "path": "src/loader.py",
+              "startLine": 12,
+              "endLine": 12,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["schema upload", "request.get_json", "request JSON Schema"],
+            ["compile_and_load", "wrapper"],
+            [
+              "datamodel_code_generator.generate",
+              "datamodel-code-generator generate",
+              "official generator binding"
+            ],
+            [
+              "input_ schema argument",
+              "schema argument",
+              "argument zero",
+              "argument 0"
+            ],
+            [
+              "datamodel-code-generator 0.63.0",
+              "datamodel-code-generator==0.63.0"
+            ],
+            ["x-python-import", "customTypePath", "schema extension"],
+            [
+              "Import.from_full_path",
+              "Imports.create_line",
+              "unvalidated import path"
+            ],
+            [
+              "generated model source",
+              "generated output path",
+              "returned source"
+            ],
+            ["runpy.run_path", "built-in exec", "module-scope execution"],
+            ["6 * 7", "arithmetic sentinel", "42"],
+            ["Python 3.12.3"],
+            [
+              "datamodel-code-generator 0.64.0",
+              "validation Error",
+              "repaired release"
+            ]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["schema upload", "request.get_json", "request JSON Schema"],
+            ["compile_and_load", "wrapper"],
+            [
+              "datamodel_code_generator.generate",
+              "datamodel-code-generator generate",
+              "official generator binding"
+            ],
+            [
+              "input_ schema argument",
+              "schema argument",
+              "argument zero",
+              "argument 0"
+            ],
+            [
+              "datamodel-code-generator 0.63.0",
+              "datamodel-code-generator==0.63.0"
+            ],
+            ["x-python-import", "customTypePath", "schema extension"],
+            [
+              "Import.from_full_path",
+              "Imports.create_line",
+              "unvalidated import path"
+            ],
+            [
+              "generated model source",
+              "generated output path",
+              "returned source"
+            ],
+            ["runpy.run_path", "built-in exec", "module-scope execution"],
+            ["6 * 7", "arithmetic sentinel", "42"],
+            ["Python 3.12.3"],
+            [
+              "datamodel-code-generator 0.64.0",
+              "validation Error",
+              "repaired release"
+            ]
+          ],
+          "forbiddenText": [
+            "package presence alone proves exploitation",
+            "generation alone executes the generated module",
+            "every JSON Schema exploits datamodel-code-generator",
+            "the arithmetic witness proves the deployed service is compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-datamodel-codegen-validated-import-control",
+      "description": "The topology-identical control changes only datamodel-code-generator to 0.64.0, which rejects the malicious dotted import path during generation before any generated module can execute.",
+      "fixture": "fixtures/python-datamodel-codegen-validated-import-control",
+      "findingsPaths": [
+        "python-datamodel-codegen-validated-import-control/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

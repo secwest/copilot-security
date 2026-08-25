@@ -2,6 +2,78 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Require datamodel-code-generator output execution, not generation alone
+
+**Gap and authoritative semantics.** The reviewed
+[`GHSA-5578-w22f-pfx9`](https://github.com/koxudaxi/datamodel-code-generator/security/advisories/GHSA-5578-w22f-pfx9),
+assigned CVE-2026-55415 and CWE-94/CWE-95, covers
+`datamodel-code-generator>=0.11.6,<=0.63.0`. A schema-controlled
+`x-python-import` or `customTypePath` reaches `Import.from_full_path`, which
+splits a dotted path but does not reject a newline, and then
+`Imports.create_line`, which renders the resulting import into generated
+Python. Version 0.64.0 adds schema Python-import-path validation. The generator
+does not execute its output, so package presence or `generate()` alone does
+not close an application attack path. Authenticated current-source searches
+of `github/codeql` and `semgrep/semgrep-rules` found no package, module, or
+extension match.
+
+**Decision and execution boundary.** Add
+`python-web-datamodel-codegen-import-injection` as an exact Python typed sink.
+Recognize the official module or direct `generate` import, aliases, bounded
+parenthesized imports, and one direct callable alias. Accept two concrete
+lifecycles. In file mode, an official `generate(remote_schema, output=path)`
+must precede a live official `runpy.run_path` call on the same resolved path in
+the same top-level scope. In returned-source mode, the exact source returned
+by official `generate(remote_schema)` must reach live built-in `exec`, either
+directly, through one stable assignment, or through live built-in `compile`.
+Anchor the row at `run_path` or `exec`, where generated source becomes active,
+and retain generation as an ordered propagator. This distinction prevents a
+code-generation service that only returns or stores source from being
+reported as server-side execution.
+
+**Version, identity, and false-positive boundary.** Require exactly one
+nearest regular `requirements.txt` line with a stable exact version from
+0.11.6 through 0.63.0. Treat absent or dynamic `input_file_type` as
+reviewable, accept exact Auto, JsonSchema, and OpenAPI forms, and reject a
+literal known non-schema type. Fail closed on repaired or earlier releases,
+ranges, prereleases, missing or duplicate pins, local module/package shadows,
+replaced imports or nested members, wrapper parameters that shadow bindings or
+builtins, out-of-scope imports, star arguments, mismatched or reassigned output
+paths, file-output mode whose `None` return is passed to `exec`, fixed schemas,
+comments, strings, and lookalikes. Derive candidates from a valid
+generator-to-executor lifecycle rather than raw `exec` text, so eighty
+unrelated executor calls do not consume the bounded candidate set.
+
+**Executable pair and report discipline.** Both Flask fixtures retain Python
+3.12.3, request JSON, the relative `compile_and_load` wrapper, official
+generator and `runpy` bindings, JsonSchema mode, one output path, and the
+execution call. Only `datamodel-code-generator==0.63.0` changes to 0.64.0.
+The bounded schema extension adds only `print(6 * 7)` after a harmless import.
+The affected package writes the statement and `runpy.run_path` captures 42
+before a later unrelated `PydanticSchemaGenerationError`; the repaired package
+raises `Error` before writing a module. The witness uses an automatically
+deleted temporary directory and in-memory output, and performs no shell
+command, network access, credential read, persistence, or destructive action.
+Validation and attack path must each name twelve groups: request schema,
+wrapper, official binding, schema argument, exact 0.63.0 pin, dangerous schema
+extension, internal render chain, generated source/path, actual execution,
+arithmetic sentinel, Python runtime, and 0.64.0 control. Impact remains a
+tested capability until deployment reachability, accepted dialect and
+extensions, exact installed version, generated-source execution, process
+privilege and containment, error handling, and a concrete security effect are
+proved.
+
+**Focused regression result.** Nine groups pass 46 assertions, covering the
+strict manifest and topology-identical pair, exact cross-file row, module and
+direct imports, parenthesized and one-hop aliases, `run_path` aliases, keyword
+arguments, returned source, built-in `compile`, builtins receivers, twenty
+strict negative repositories, two relay wrappers, eighty dense `exec` decoys,
+field-local quality closure, and correction guidance. The pair advances the
+canonical corpus to 116 exploit/control pairs, 232 cases, and 696 repeated
+scans. Full scanner, Linux, package, GUI, self-scan, and hosted acceptance will
+be recorded after the immutable implementation checkpoint completes those
+gates.
+
 ## 2026-08-25 — Bind python-statemachine SCXML evaluation to parse/start lifecycle and evaluator mode
 
 **Gap and authoritative semantics.** The reviewed

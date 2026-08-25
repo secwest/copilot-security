@@ -2097,8 +2097,14 @@ capable default namespace from an empty-builtin mathematical allowlist. The
 python-statemachine pair then holds the remote SCXML parse/start lifecycle
 constant while changing only 3.1.2 to 3.2.0: the affected datamodel reaches
 Python evaluation, while the repaired default rejects calls and builtins with
-`InvalidDefinition` and preserves ordinary arithmetic. Each of the 230 cases
-in 115 exploit/control pairs is scanned three times, producing 690 scans
+`InvalidDefinition` and preserves ordinary arithmetic. The
+datamodel-code-generator pair holds a remote JSON Schema, relative
+`compile_and_load` wrapper, official generator call, generated output path,
+and `runpy.run_path` execution constant while changing only 0.63.0 to 0.64.0:
+the affected release renders a newline-bearing `x-python-import` value into a
+module-scope statement, while the repaired release rejects it before writing
+the module. Each of the 232 cases in 116 exploit/control pairs is scanned
+three times, producing 696 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

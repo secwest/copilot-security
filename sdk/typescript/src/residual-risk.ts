@@ -2235,6 +2235,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-web-datamodel-codegen-import-injection",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+datamodel_code_generator(?:\s+as\s+[A-Za-z_]\w*)?\b|\bfrom\s+datamodel_code_generator\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-schema",
+        expression:
+          /\brequest\.(?:body|data|files|form|json|POST)\b|\brequest\.(?:get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\bBody\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "datamodel-codegen-generated-module-execution",
+        expression: /\b(?:exec|run_path)\s*\(/u,
+        cweIds: ["CWE-94", "CWE-95"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-sympy-unsafe-parse-expr",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3327,6 +3354,7 @@ function isPythonTypedSinkModel(modelId: string): boolean {
     modelId === "python-web-tarfile-unsafe-extraction" ||
     modelId === "python-web-hydra-unsafe-instantiate" ||
     modelId === "python-web-statemachine-unsafe-scxml-eval" ||
+    modelId === "python-web-datamodel-codegen-import-injection" ||
     modelId === "python-web-sympy-unsafe-parse-expr"
   );
 }
@@ -3609,6 +3637,25 @@ const STATEMACHINE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["python-statemachine 3.2.0", "restricted evaluator", "InvalidDefinition"],
 ] as const;
 
+const DATAMODEL_CODEGEN_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["schema upload", "request.get_json", "request JSON Schema"],
+  ["compile_and_load", "wrapper"],
+  [
+    "datamodel_code_generator.generate",
+    "datamodel-code-generator generate",
+    "official generator binding",
+  ],
+  ["input_ schema argument", "schema argument", "argument zero", "argument 0"],
+  ["datamodel-code-generator 0.63.0", "datamodel-code-generator==0.63.0"],
+  ["x-python-import", "customTypePath", "schema extension"],
+  ["Import.from_full_path", "Imports.create_line", "unvalidated import path"],
+  ["generated model source", "generated output path", "returned source"],
+  ["runpy.run_path", "built-in exec", "module-scope execution"],
+  ["6 * 7", "arithmetic sentinel", "42"],
+  ["Python 3.12.3"],
+  ["datamodel-code-generator 0.64.0", "validation Error", "repaired release"],
+] as const;
+
 const SYMPY_FIELD_EVIDENCE_REQUIREMENTS = [
   ["expression upload", "request.get_json", "request JSON"],
   ["parse_expression", "wrapper"],
@@ -3677,6 +3724,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: STATEMACHINE_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: STATEMACHINE_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-web-datamodel-codegen-import-injection",
+    {
+      validation: DATAMODEL_CODEGEN_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: DATAMODEL_CODEGEN_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -14510,13 +14564,16 @@ function frameworkDataflowRecords(
                     ? pythonHydraCandidateLines(lines, 64)
                     : model.id === "python-web-statemachine-unsafe-scxml-eval"
                       ? pythonStatemachineCandidateLines(lines, 64)
-                      : model.id === "python-web-sympy-unsafe-parse-expr"
-                        ? pythonSympyCandidateLines(lines, 64)
-                        : matchingPythonModelLines(
-                            lines,
-                            model.sinks,
-                            isPythonTypedSinkModel(model.id) ? 64 : 8,
-                          )
+                      : model.id ===
+                          "python-web-datamodel-codegen-import-injection"
+                        ? pythonDatamodelCodegenCandidateLines(lines, 64)
+                        : model.id === "python-web-sympy-unsafe-parse-expr"
+                          ? pythonSympyCandidateLines(lines, 64)
+                          : matchingPythonModelLines(
+                              lines,
+                              model.sinks,
+                              isPythonTypedSinkModel(model.id) ? 64 : 8,
+                            )
             : extension === ".java" || extension === ".cs"
               ? matchingJavaModelLines(lines, model.sinks, 8)
               : matchingModelLines(lines, model.sinks, 8);
@@ -14755,14 +14812,23 @@ function frameworkDataflowRecords(
                                 lines,
                                 sink.line,
                               )
-                            : model.id === "python-web-sympy-unsafe-parse-expr"
-                              ? pythonSympyUnsafeParseExprSink(
+                            : model.id ===
+                                "python-web-datamodel-codegen-import-injection"
+                              ? pythonDatamodelCodegenImportInjectionSink(
                                   files,
                                   path,
                                   lines,
                                   sink.line,
                                 )
-                              : undefined;
+                              : model.id ===
+                                  "python-web-sympy-unsafe-parse-expr"
+                                ? pythonSympyUnsafeParseExprSink(
+                                    files,
+                                    path,
+                                    lines,
+                                    sink.line,
+                                  )
+                                : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -24227,9 +24293,12 @@ function pythonFrameworkWrapperSummaries(
                   ? pythonHydraCandidateLines(file.lines, 64)
                   : model.id === "python-web-statemachine-unsafe-scxml-eval"
                     ? pythonStatemachineCandidateLines(file.lines, 64)
-                    : model.id === "python-web-sympy-unsafe-parse-expr"
-                      ? pythonSympyCandidateLines(file.lines, 64)
-                      : matchingPythonModelLines(file.lines, model.sinks, 32);
+                    : model.id ===
+                        "python-web-datamodel-codegen-import-injection"
+                      ? pythonDatamodelCodegenCandidateLines(file.lines, 64)
+                      : model.id === "python-web-sympy-unsafe-parse-expr"
+                        ? pythonSympyCandidateLines(file.lines, 64)
+                        : matchingPythonModelLines(file.lines, model.sinks, 32);
       const controls = matchingPythonModelLines(file.lines, model.controls, 64);
       for (const wrapper of exportedFunctions) {
         for (const sink of sinks) {
@@ -24313,14 +24382,22 @@ function pythonFrameworkWrapperSummaries(
                                     sink.line,
                                   )
                                 : model.id ===
-                                    "python-web-sympy-unsafe-parse-expr"
-                                  ? pythonSympyUnsafeParseExprSink(
+                                    "python-web-datamodel-codegen-import-injection"
+                                  ? pythonDatamodelCodegenImportInjectionSink(
                                       files,
                                       file.path,
                                       file.lines,
                                       sink.line,
                                     )
-                                  : undefined;
+                                  : model.id ===
+                                      "python-web-sympy-unsafe-parse-expr"
+                                    ? pythonSympyUnsafeParseExprSink(
+                                        files,
+                                        file.path,
+                                        file.lines,
+                                        sink.line,
+                                      )
+                                    : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
@@ -28313,6 +28390,639 @@ function pythonStatemachineUnsafeScxmlSink(
         symbol: explicitTrusted
           ? "trusted evaluator -> eval/exec"
           : "create_datamodel_action_callable -> _create_dataitem_callable -> _eval -> eval",
+      },
+    ],
+  };
+}
+
+interface PythonDatamodelCodegenBinding extends PythonMemberBinding {
+  originLine?: number;
+}
+
+interface PythonDatamodelCodegenLifecycle {
+  generator: PythonDatamodelCodegenBinding;
+  generationLine: number;
+  sourceExpression: string;
+  sourceArgument: string;
+  generatedExpression: string;
+  execution: "builtins.exec" | "runpy.run_path";
+  executionBinding?: PythonDatamodelCodegenBinding;
+}
+
+function pythonCollectedImport(
+  structuralLines: readonly string[],
+  startIndex: number,
+  initial: string,
+): string | undefined {
+  let importedText = initial.trim();
+  if (importedText.startsWith("(") && !importedText.endsWith(")")) {
+    for (
+      let offset = startIndex + 1;
+      offset < Math.min(structuralLines.length, startIndex + 8);
+      offset += 1
+    ) {
+      importedText += `\n${structuralLines[offset] ?? ""}`;
+      if ((structuralLines[offset] ?? "").includes(")")) break;
+    }
+  }
+  if (importedText.startsWith("(") !== importedText.endsWith(")")) {
+    return undefined;
+  }
+  return importedText.replace(/^\(([\s\S]*)\)$/u, "$1");
+}
+
+function pythonDatamodelCodegenGeneratorBindings(
+  lines: readonly string[],
+): PythonDatamodelCodegenBinding[] {
+  const bindings: PythonDatamodelCodegenBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const moduleImport =
+      /^\s*import\s+datamodel_code_generator(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+        structural,
+      );
+    if (moduleImport !== null) {
+      bindings.push({
+        imported: "datamodel_code_generator.generate",
+        local: moduleImport[1] ?? "datamodel_code_generator",
+        memberPath: "generate",
+        operation: "generate",
+        line: index + 1,
+      });
+      continue;
+    }
+    const fromImport =
+      /^\s*from\s+datamodel_code_generator\s+import\s+(.+?)\s*$/u.exec(
+        structural,
+      );
+    if (fromImport?.[1] === undefined) continue;
+    const importedText = pythonCollectedImport(
+      structuralLines,
+      index,
+      fromImport[1],
+    );
+    if (importedText === undefined) continue;
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const parsed = /^generate(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      if (parsed !== null) {
+        bindings.push({
+          imported: "datamodel_code_generator.generate",
+          local: parsed[1] ?? "generate",
+          memberPath: "",
+          operation: "generate",
+          line: index + 1,
+        });
+      }
+    }
+  }
+
+  const importedBindings = [...bindings];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const line = index + 1;
+    const wrapper = exportedPythonFunctions(lines).find(
+      (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+    );
+    for (const binding of importedBindings) {
+      if (
+        !pythonDatamodelBindingReachableAtLine(lines, binding, line) ||
+        !pythonMemberBindingIsLive(lines, binding, line, wrapper)
+      ) {
+        continue;
+      }
+      const expression = pythonMemberBindingExpression(binding)
+        .split(".")
+        .map(escapeRegularExpression)
+        .join("\\s*\\.\\s*");
+      const alias = new RegExp(
+        `^\\s*([A-Za-z_]\\w*)\\s*(?::[^=]+)?=\\s*${expression}\\s*$`,
+        "u",
+      ).exec(structural)?.[1];
+      if (alias === undefined || alias === binding.local) continue;
+      bindings.push({
+        imported: binding.imported,
+        local: alias,
+        memberPath: "",
+        operation: "generate",
+        line,
+        originLine: binding.originLine ?? binding.line,
+      });
+    }
+  }
+  return bindings;
+}
+
+function pythonDatamodelCodegenExecutionBindings(
+  lines: readonly string[],
+): PythonDatamodelCodegenBinding[] {
+  const bindings: PythonDatamodelCodegenBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const runpyImport =
+      /^\s*import\s+runpy(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(structural);
+    if (runpyImport !== null) {
+      bindings.push({
+        imported: "runpy.run_path",
+        local: runpyImport[1] ?? "runpy",
+        memberPath: "run_path",
+        operation: "run_path",
+        line: index + 1,
+      });
+      continue;
+    }
+    const builtinsImport =
+      /^\s*import\s+builtins(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(structural);
+    if (builtinsImport !== null) {
+      bindings.push({
+        imported: "builtins.exec",
+        local: builtinsImport[1] ?? "builtins",
+        memberPath: "exec",
+        operation: "exec",
+        line: index + 1,
+      });
+      continue;
+    }
+    const fromImport = /^\s*from\s+(runpy|builtins)\s+import\s+(.+?)\s*$/u.exec(
+      structural,
+    );
+    if (fromImport?.[1] === undefined || fromImport[2] === undefined) continue;
+    const importedText = pythonCollectedImport(
+      structuralLines,
+      index,
+      fromImport[2],
+    );
+    if (importedText === undefined) continue;
+    const expected = fromImport[1] === "runpy" ? "run_path" : "exec";
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const parsed = new RegExp(
+        `^${expected}(?:\\s+as\\s+([A-Za-z_]\\w*))?$`,
+        "u",
+      ).exec(rawBinding.trim());
+      if (parsed !== null) {
+        bindings.push({
+          imported: `${fromImport[1]}.${expected}`,
+          local: parsed[1] ?? expected,
+          memberPath: "",
+          operation: expected,
+          line: index + 1,
+        });
+      }
+    }
+  }
+  return bindings;
+}
+
+function pythonDatamodelBindingReachableAtLine(
+  lines: readonly string[],
+  binding: PythonDatamodelCodegenBinding,
+  line: number,
+): boolean {
+  const bindingScope = pythonTopLevelFunctionRangeAtLine(lines, binding.line);
+  const callScope = pythonTopLevelFunctionRangeAtLine(lines, line);
+  if (bindingScope === undefined) return true;
+  return (
+    callScope !== undefined &&
+    bindingScope.startLine === callScope.startLine &&
+    bindingScope.endLine === callScope.endLine
+  );
+}
+
+function pythonBuiltinCallableIsLive(
+  lines: readonly string[],
+  name: "compile" | "exec",
+  callLine: number,
+  wrapper: ExportedPythonFunction | undefined,
+): boolean {
+  if (
+    wrapper?.parameters.includes(name) === true ||
+    pythonIdentifierReassignedBetween(lines, name, 0, callLine)
+  ) {
+    return false;
+  }
+  const shadow = new RegExp(
+    `^\\s*(?:def\\s+${name}\\s*\\(|(?:from\\s+[^\\s]+\\s+import\\s+[^#]*\\b${name}\\b)|(?:import\\s+[^#]*\\s+as\\s+${name}\\b))`,
+    "u",
+  );
+  return !pythonStructuralLines(lines)
+    .slice(0, Math.max(0, callLine - 1))
+    .some((candidate) => shadow.test(candidate));
+}
+
+function pythonDatamodelCodegenInputTypeEligible(
+  expression: string | undefined,
+): boolean {
+  if (expression === undefined) return true;
+  const structural = expression
+    .split(/\r?\n/u)
+    .map((line) => pythonCodeBeforeComment(line))
+    .join("\n")
+    .trim();
+  const literal = /^(?:[rubf]{0,2})(["'])([^"']*)\1$/iu.exec(structural);
+  if (literal?.[2] !== undefined) {
+    return new Set(["auto", "jsonschema", "openapi"]).has(
+      literal[2].toLowerCase(),
+    );
+  }
+  if (/^(?:[A-Za-z_]\w*\.)*InputFileType\.[A-Za-z_]\w*$/u.test(structural)) {
+    return /\.(?:Auto|JsonSchema|OpenAPI)$/u.test(structural);
+  }
+  return true;
+}
+
+function pythonDatamodelNormalizedPathExpression(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): string | undefined {
+  const origin = resolvePythonExpressionOrigin(lines, expression, line);
+  if (origin === undefined) return undefined;
+  let value = origin.expression.trim();
+  for (let depth = 0; depth < 3; depth += 1) {
+    const wrapper = /^(?:str|Path)\s*\(/u;
+    const arguments_ = pythonCallArgumentsForExpression(value, wrapper);
+    if (arguments_ === undefined || arguments_.length !== 1) break;
+    value = arguments_[0]!.trim();
+  }
+  return value.replace(/\s+/gu, "");
+}
+
+function pythonDatamodelGenerationAtLine(
+  lines: readonly string[],
+  generationLine: number,
+  generators: readonly PythonDatamodelCodegenBinding[],
+):
+  | {
+      generator: PythonDatamodelCodegenBinding;
+      arguments: string[];
+      sourceExpression: string;
+      sourceArgument: string;
+    }
+  | undefined {
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) =>
+      generationLine >= candidate.startLine &&
+      generationLine <= candidate.endLine,
+  );
+  for (const generator of generators) {
+    if (
+      !pythonDatamodelBindingReachableAtLine(
+        lines,
+        generator,
+        generationLine,
+      ) ||
+      !pythonMemberBindingIsLive(lines, generator, generationLine, wrapper)
+    ) {
+      continue;
+    }
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(
+      lines,
+      generationLine,
+      pythonMemberBindingCallee(generator),
+    );
+    if (
+      arguments_ === undefined ||
+      arguments_.some((argument) => argument.trim().startsWith("*"))
+    ) {
+      continue;
+    }
+    const positional = pythonPositionalArguments(arguments_);
+    const keywordInput = pythonKeywordArgument(arguments_, "input_");
+    const sourceExpression = keywordInput ?? positional[0];
+    if (sourceExpression === undefined || sourceExpression.trim() === "") {
+      continue;
+    }
+    const inputType = pythonKeywordArgument(arguments_, "input_file_type");
+    if (!pythonDatamodelCodegenInputTypeEligible(inputType)) continue;
+    return {
+      generator,
+      arguments: arguments_,
+      sourceExpression,
+      sourceArgument: keywordInput === undefined ? "argument zero" : "input_=",
+    };
+  }
+  return undefined;
+}
+
+function pythonDatamodelCodegenFileLifecycle(
+  lines: readonly string[],
+  executionLine: number,
+  executionBinding: PythonDatamodelCodegenBinding,
+  executionArguments: readonly string[],
+  generators: readonly PythonDatamodelCodegenBinding[],
+): PythonDatamodelCodegenLifecycle | undefined {
+  const positional = pythonPositionalArguments(executionArguments);
+  const keywordPath = pythonKeywordArgument(executionArguments, "path_name");
+  const executedPath = keywordPath ?? positional[0];
+  if (executedPath === undefined || executedPath.trim() === "")
+    return undefined;
+  const earliest = Math.max(
+    executionBinding.line + 1,
+    executionLine - 128,
+    pythonTopLevelFunctionRangeAtLine(lines, executionLine)?.startLine ?? 1,
+  );
+  for (
+    let generationLine = executionLine - 1;
+    generationLine >= earliest;
+    generationLine -= 1
+  ) {
+    const generation = pythonDatamodelGenerationAtLine(
+      lines,
+      generationLine,
+      generators,
+    );
+    if (generation === undefined) continue;
+    const output = pythonKeywordArgument(generation.arguments, "output");
+    if (output === undefined || output.trim() === "None") continue;
+    const generatedPath = pythonDatamodelNormalizedPathExpression(
+      lines,
+      output,
+      generationLine,
+    );
+    const executionPath = pythonDatamodelNormalizedPathExpression(
+      lines,
+      executedPath,
+      executionLine,
+    );
+    if (
+      generatedPath === undefined ||
+      executionPath === undefined ||
+      generatedPath !== executionPath
+    ) {
+      continue;
+    }
+    return {
+      generator: generation.generator,
+      generationLine,
+      sourceExpression: generation.sourceExpression,
+      sourceArgument: generation.sourceArgument,
+      generatedExpression: output,
+      execution: "runpy.run_path",
+      executionBinding,
+    };
+  }
+  return undefined;
+}
+
+function pythonDatamodelCodegenReturnedLifecycle(
+  lines: readonly string[],
+  executionLine: number,
+  executionArguments: readonly string[],
+  generators: readonly PythonDatamodelCodegenBinding[],
+  wrapper: ExportedPythonFunction | undefined,
+): PythonDatamodelCodegenLifecycle | undefined {
+  const positional = pythonPositionalArguments(executionArguments);
+  const keywordObject = pythonKeywordArgument(executionArguments, "object");
+  let generatedExpression = keywordObject ?? positional[0];
+  if (generatedExpression === undefined || generatedExpression.trim() === "") {
+    return undefined;
+  }
+  const compileArguments = pythonCallArgumentsForExpression(
+    generatedExpression,
+    /^compile\s*\(/u,
+  );
+  if (compileArguments !== undefined) {
+    if (
+      !pythonBuiltinCallableIsLive(lines, "compile", executionLine, wrapper) ||
+      compileArguments.some((argument) => argument.trim().startsWith("*"))
+    ) {
+      return undefined;
+    }
+    const compilePositional = pythonPositionalArguments(compileArguments);
+    const keywordSource = pythonKeywordArgument(compileArguments, "source");
+    generatedExpression = keywordSource ?? compilePositional[0];
+    if (generatedExpression === undefined) return undefined;
+  }
+
+  const origin = resolvePythonExpressionOrigin(
+    lines,
+    generatedExpression,
+    executionLine,
+  );
+  if (origin === undefined) return undefined;
+  const generationLine = origin.line;
+  const generation = pythonDatamodelGenerationAtLine(
+    lines,
+    generationLine,
+    generators,
+  );
+  if (generation === undefined) return undefined;
+  const callArguments = pythonCallArgumentsForExpression(
+    origin.expression,
+    pythonMemberBindingCallee(generation.generator),
+  );
+  if (callArguments === undefined) return undefined;
+  const output = pythonKeywordArgument(generation.arguments, "output");
+  if (output !== undefined && output.trim() !== "None") return undefined;
+  return {
+    generator: generation.generator,
+    generationLine,
+    sourceExpression: generation.sourceExpression,
+    sourceArgument: generation.sourceArgument,
+    generatedExpression,
+    execution: "builtins.exec",
+  };
+}
+
+function pythonDatamodelCodegenLifecycleAtExecution(
+  lines: readonly string[],
+  executionLine: number,
+): PythonDatamodelCodegenLifecycle | undefined {
+  const generators = pythonDatamodelCodegenGeneratorBindings(lines);
+  if (generators.length === 0) return undefined;
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) =>
+      executionLine >= candidate.startLine &&
+      executionLine <= candidate.endLine,
+  );
+  const executionBindings = pythonDatamodelCodegenExecutionBindings(lines);
+  for (const binding of executionBindings) {
+    if (
+      !pythonDatamodelBindingReachableAtLine(lines, binding, executionLine) ||
+      !pythonMemberBindingIsLive(lines, binding, executionLine, wrapper)
+    ) {
+      continue;
+    }
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(
+      lines,
+      executionLine,
+      pythonMemberBindingCallee(binding),
+    );
+    if (
+      arguments_ === undefined ||
+      arguments_.some((argument) => argument.trim().startsWith("*"))
+    ) {
+      continue;
+    }
+    if (binding.imported === "runpy.run_path") {
+      const lifecycle = pythonDatamodelCodegenFileLifecycle(
+        lines,
+        executionLine,
+        binding,
+        arguments_,
+        generators,
+      );
+      if (lifecycle !== undefined) return lifecycle;
+    } else {
+      const lifecycle = pythonDatamodelCodegenReturnedLifecycle(
+        lines,
+        executionLine,
+        arguments_,
+        generators,
+        wrapper,
+      );
+      if (lifecycle !== undefined) return lifecycle;
+    }
+  }
+
+  if (!pythonBuiltinCallableIsLive(lines, "exec", executionLine, wrapper)) {
+    return undefined;
+  }
+  const arguments_ = pythonCallArgumentsForCalleeAtLine(
+    lines,
+    executionLine,
+    /\bexec\s*\(/u,
+  );
+  if (
+    arguments_ === undefined ||
+    arguments_.some((argument) => argument.trim().startsWith("*"))
+  ) {
+    return undefined;
+  }
+  return pythonDatamodelCodegenReturnedLifecycle(
+    lines,
+    executionLine,
+    arguments_,
+    generators,
+    wrapper,
+  );
+}
+
+function pythonDatamodelCodegenCandidateLines(
+  lines: readonly string[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const structuralLines = pythonStructuralLines(lines);
+  const executionCallees = pythonDatamodelCodegenExecutionBindings(lines).map(
+    (binding) => pythonMemberBindingCallee(binding),
+  );
+  const matches: Array<{ kind: string; line: number }> = [];
+  for (
+    let index = 0;
+    index < structuralLines.length && matches.length < limit;
+    index += 1
+  ) {
+    const structural = structuralLines[index] ?? "";
+    if (
+      (/\bexec\s*\(/u.test(structural) ||
+        executionCallees.some((callee) => callee.test(structural))) &&
+      pythonDatamodelCodegenLifecycleAtExecution(lines, index + 1) !== undefined
+    ) {
+      matches.push({
+        kind: "datamodel-codegen-generated-module-execution",
+        line: index + 1,
+      });
+    }
+  }
+  return matches;
+}
+
+function pythonDatamodelCodegenImportInjectionSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  if (
+    pythonLocalModuleCouldShadow(files, sourcePath, "datamodel_code_generator")
+  ) {
+    return undefined;
+  }
+  const lifecycle = pythonDatamodelCodegenLifecycleAtExecution(lines, line);
+  if (lifecycle === undefined) return undefined;
+  if (
+    lifecycle.execution === "runpy.run_path" &&
+    pythonLocalModuleCouldShadow(files, sourcePath, "runpy")
+  ) {
+    return undefined;
+  }
+  const pinned = pythonPinnedRequirement(
+    files,
+    sourcePath,
+    "datamodel-code-generator",
+  );
+  if (
+    pinned === undefined ||
+    !/^\d+\.\d+\.\d+$/u.test(pinned.version) ||
+    !pythonPackageVersionAtLeast(pinned.version, [0, 11, 6]) ||
+    pythonPackageVersionAtLeast(pinned.version, [0, 64, 0])
+  ) {
+    return undefined;
+  }
+  const generatorExpression = pythonMemberBindingExpression(
+    lifecycle.generator,
+  );
+  return {
+    sourceExpression:
+      resolvePythonExpression(
+        lines,
+        lifecycle.sourceExpression,
+        lifecycle.generationLine,
+      ) ?? lifecycle.sourceExpression,
+    kind: "datamodel-codegen-affected-generated-module-execution",
+    propagators: [
+      {
+        kind: "datamodel-codegen-generate-binding",
+        path: sourcePath,
+        line: lifecycle.generator.originLine ?? lifecycle.generator.line,
+        symbol: `${lifecycle.generator.imported} as ${generatorExpression}`,
+      },
+      ...(lifecycle.generator.originLine === undefined
+        ? []
+        : [
+            {
+              kind: "datamodel-codegen-generate-alias",
+              path: sourcePath,
+              line: lifecycle.generator.line,
+              symbol: lifecycle.generator.local,
+            },
+          ]),
+      {
+        kind: "datamodel-codegen-runtime-dependency",
+        path: pinned.path,
+        line: pinned.line,
+        symbol: `datamodel-code-generator@${pinned.version}:requirements-exact`,
+      },
+      {
+        kind: "datamodel-codegen-untrusted-schema-edge",
+        path: sourcePath,
+        line: lifecycle.generationLine,
+        symbol: `generate:${lifecycle.sourceArgument}`,
+      },
+      {
+        kind: "datamodel-codegen-generated-source-edge",
+        path: sourcePath,
+        line: lifecycle.generationLine,
+        symbol:
+          lifecycle.execution === "runpy.run_path"
+            ? `output=${lifecycle.generatedExpression}`
+            : `return=${lifecycle.generatedExpression}`,
+      },
+      {
+        kind: "datamodel-codegen-generated-module-execution",
+        path: sourcePath,
+        line,
+        symbol: lifecycle.execution,
+      },
+      {
+        kind: "intrinsic-datamodel-codegen-import-rendering",
+        path: sourcePath,
+        line,
+        symbol:
+          "x-python-import/customTypePath -> Import.from_full_path -> Imports.create_line -> module scope",
       },
     ],
   };

@@ -143,6 +143,10 @@ describe("effectiveness benchmark", () => {
         "python-statemachine-restricted-evaluator-control",
       ],
       [
+        "python-datamodel-codegen-import-injection",
+        "python-datamodel-codegen-validated-import-control",
+      ],
+      [
         "python-sympy-unsafe-parse-expr",
         "python-sympy-restricted-namespace-control",
       ],
@@ -414,6 +418,11 @@ describe("effectiveness benchmark", () => {
         .get("c-format-string-secret-disclosure")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-134"]]);
+    expect(
+      cases
+        .get("python-datamodel-codegen-import-injection")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-94", "CWE-95"]]);
     expect(
       cases
         .get("javascript-archive-link-pivot")

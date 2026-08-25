@@ -6,6 +6,46 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-datamodel-codegen-import-injection`, a version- and
+  lifecycle-aware CWE-94/CWE-95 model for request-controlled OpenAPI or JSON
+  Schema data reaching the official `datamodel_code_generator.generate` API
+  under [GHSA-5578-w22f-pfx9 / CVE-2026-55415](https://github.com/advisories/GHSA-5578-w22f-pfx9).
+  A finding requires one exact production pin in the affected
+  `>=0.11.6,<=0.63.0` range, a live official generator binding, an exact
+  schema argument, and actual execution of the generated Python: either the
+  same `output=` path reaches official `runpy.run_path`, or the exact returned
+  source reaches live built-in `exec`, optionally through live built-in
+  `compile`. The sink is anchored at generated-module execution rather than
+  generation alone.
+- Preserved the fixed and lifecycle controls. Version 0.64.0 and later,
+  versions below 0.11.6, ranges, prereleases, missing or duplicate pins,
+  literal non-schema input types, local `datamodel_code_generator` or `runpy`
+  shadows, replaced bindings or members, wrapper-parameter shadows, unrelated
+  scopes, star expansion, fixed schemas, output-path mismatch or reassignment,
+  output mode followed by `exec` of the generator's `None` return, generation
+  without execution, execution without official generation, comments,
+  strings, and lookalikes fail closed. Candidate discovery is derived from a
+  complete generator-to-executor lifecycle, so dense unrelated `exec` calls
+  cannot consume the 64-candidate budget.
+- Added topology-identical Flask fixtures pinned to CPython 3.12.3 and
+  `datamodel-code-generator` 0.63.0/0.64.0, a perfect-gate specialized
+  manifest, main-corpus registration, and a bounded real-package witness. The
+  affected release renders a newline-bearing `x-python-import` value through
+  `Import.from_full_path` and `Imports.create_line`; `runpy.run_path` captures
+  the harmless fixed `print(6 * 7)` output as 42. The repaired release raises
+  `Error` during import-path validation before writing a module. The witness
+  uses only an automatically removed temporary directory and in-memory
+  standard-output capture—no command, network, credential, persistence, or
+  destructive operation. Twelve evidence groups are independently mandatory
+  in validation and attack path. The canonical corpus advances to 116
+  exploit/control pairs, 232 cases, and 696 repeated scans.
+- Authenticated searches of current `github/codeql` and
+  `semgrep/semgrep-rules` source found no match for
+  `datamodel-code-generator`, `datamodel_code_generator`, or
+  `x-python-import`. Nine focused groups pass 46 assertions across the exact
+  benchmark pair, import and executor aliases, file and returned-source
+  lifecycles, built-in `compile`, same-file and two-relay flow, dense decoys,
+  field-local evidence closure, prompt guidance, and a strict negative matrix.
 - Added `python-web-statemachine-unsafe-scxml-eval`, a version- and
   lifecycle-aware CWE-95 model for request-controlled SCXML reaching the
   official `statemachine.io.scxml.processor.SCXMLProcessor`. Under the

@@ -1,0 +1,2 @@
+datamodel-code-generator==0.64.0
+Flask==3.1.2
