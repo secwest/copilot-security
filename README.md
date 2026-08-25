@@ -62,8 +62,11 @@ PyYAML `unsafe_load` or `load` with an explicit `Loader`, `UnsafeLoader`,
 import and stream argument, follows relative wrappers, and rejects `safe_load`,
 safe or full loaders, absent or dynamic loaders, fixed YAML, reassignment,
 local `yaml` module shadows, and comment/string lookalikes. The correction pass
-must still verify that the deployed module is PyYAML, reproduce a bounded
-constructor or gadget, and establish concrete impact before reporting CWE-502.
+treats this exact non-shadowed API and remote stream as reportable CWE-502
+object/state integrity evidence even when deployment metadata is unavailable.
+It records runtime-module and constructor uncertainty as validation limitations
+and requires a bounded constructor or gadget witness before escalating to code
+execution, filesystem, network, credential, or availability impact.
 For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
 bodies, and preserves annotated Spring or servlet-assigned request values

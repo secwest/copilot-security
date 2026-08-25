@@ -40,13 +40,17 @@ negative.
 wrapper graph, but preserve the exact unsafe-loader import as additional
 propagator evidence on direct and multi-hop rows. Application validation after
 loading and discarding the return value are not constructor barriers, because
-object construction occurs during parsing. Conversely, unsafe API selection is
-not proof that a usable gadget exists or that code execution follows. Reviewer
-guidance requires the deployed module identity, retained attacker-controlled
-YAML tags and bytes, a bounded non-destructive payload against the exact
-environment, available constructors or gadgets, process privilege and
-containment, error behavior, and the least concrete execution, filesystem,
-network, credential, integrity, or availability effect.
+object construction occurs during parsing. The exact non-shadowed
+PyYAML-specific API plus remote stream is source-backed evidence of unsafe
+deserialization and supports a CWE-502 object/state integrity finding even when
+deployment metadata is unavailable in the sealed scope. Missing runtime-module
+or constructor observation is recorded as a validation limitation rather than
+used to erase the proven source boundary. Unsafe API selection is still not
+proof that a usable gadget or code execution follows. Escalation beyond
+object/state integrity requires retained attacker-controlled YAML tags and
+bytes, a bounded non-destructive payload against the exact environment,
+available constructors or gadgets, process privilege and containment, error
+behavior, and the least concrete stronger effect.
 
 **Benchmark evidence.** A topology-identical Flask pair carries the request
 body through one relative wrapper. The positive calls
@@ -81,6 +85,25 @@ SHA-256 `2d10f411533bf65858a96b4d5632a8227b1c6c26ba9a45bc41d365808b8b7e56`;
 fresh installs validate the public import, executable CLI, and all 79 bundled
 plugin files. Temporary package artifacts are removed. Hosted evidence follows
 the implementation checkpoint.
+
+**Live false-negative and correction.** Exact-source campaign
+`945b070b3559c64279828bf4ec90e3e17d6a598a79fb615eb3f723f84bf0602b`
+on checkpoint `8ab9f694cd5047f76e4a625e732af5b489e9cc76` completed both
+cases without authentication, quota, credit, or classifier errors. The safe
+control correctly produced no finding. The unsafe scan also produced no
+finding, leaving recall and F1 at zero despite complete coverage and the exact
+host path. Its sealed validation and report identify the cause: only the three
+Python source files were in the immutable worklist, and the quality gate
+converted absent deployed-module and concrete-effect proof into candidate
+rejection. That is an unsound reportability boundary for this narrowly proven
+API. The correction treats the exact non-shadowed PyYAML-specific API plus
+remote stream as sufficient source evidence for CWE-502 arbitrary Python-object
+construction and process-state integrity, while preserving runtime identity and
+constructor availability as limitations. A bounded environment-specific
+witness remains mandatory before escalation to execution, filesystem, network,
+credential, or availability effects. The failed campaign cost $1.626461125 and
+is retained outside the repository as regression evidence rather than erased or
+relabelled as a pass.
 
 **Consequence.** The scanner gains a deterministic Python CWE-502 path while
 remaining narrower than version-insensitive `yaml.load` lexical rules. Future

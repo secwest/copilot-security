@@ -16,9 +16,13 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `full_load`, `FullLoader`, missing or dynamic loaders, fixed YAML, request data
   in another argument, reassignment, member replacement, local import shadows,
   comments, strings, and unrelated nested `yaml` modules remain negative. The
-  correction pass verifies that the deployed module is PyYAML and requires a
-  bounded non-destructive constructor/gadget witness plus concrete impact; the
-  host row alone never becomes an automatic remote-code-execution claim.
+  correction pass treats the exact non-shadowed PyYAML-specific API and remote
+  stream as source-backed CWE-502 object/state integrity evidence even when
+  deployment metadata is outside the sealed scope. Runtime-module and
+  constructor uncertainty remain explicit validation limitations, and stronger
+  execution, filesystem, network, credential, or availability impact requires
+  a bounded non-destructive constructor/gadget witness; the host row alone
+  never becomes an automatic remote-code-execution claim.
 - Added a topology-identical Flask `UnsafeLoader`/`safe_load` fixture pair, a
   strict semantic specialized manifest, and adversarial regression coverage for
   module/named aliases, positional and keyword stream and loader roles,
@@ -49,6 +53,18 @@ All notable scanner, application, benchmark, and operational changes are recorde
   isolated installs validate the public import, executable CLI, and all 79
   bundled plugin files. Temporary archives and isolated installs are removed
   after acceptance.
+- Exact-source live campaign
+  `945b070b3559c64279828bf4ec90e3e17d6a598a79fb615eb3f723f84bf0602b`
+  against checkpoint `8ab9f694cd5047f76e4a625e732af5b489e9cc76`
+  supplied an actionable false-negative: the safe control stayed clean, but the
+  unsafe case was rejected solely because deployed-module and concrete-gadget
+  proof were absent from the three-file sealed scope. The two completed scans
+  had zero false positives and no authentication, quota, credit, or classifier
+  failure, but recall and F1 were zero at a total cost of $1.626461125. The
+  quality gate now treats the exact host-proven non-shadowed PyYAML unsafe API
+  and remote stream as sufficient for a CWE-502 object/state integrity finding,
+  records unavailable runtime proof as a limitation, and retains the bounded
+  witness requirement before any stronger impact claim.
 - Added `cloudformation-public-admin-role`, the first native CloudFormation IAM
   authority model. It joins one exact `AWS::IAM::Role`, an unrestricted
   wildcard AWS-principal `Allow` for `sts:AssumeRole`, and either the exact

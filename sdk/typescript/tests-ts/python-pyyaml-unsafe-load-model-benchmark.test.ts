@@ -403,14 +403,17 @@ describe("Python PyYAML unsafe deserialization model", () => {
     ).toHaveLength(1);
   });
 
-  test("requires runtime module identity, bounded validation, and demonstrated impact", () => {
+  test("reports source-backed object construction while bounding stronger impact", () => {
     const prompt = scanQualityGatePrompt("inventory-row");
 
     expect(prompt).toContain("For python-web-pyyaml-unsafe-load rows");
-    expect(prompt).toContain("Verify that the deployed yaml module is PyYAML");
+    expect(prompt).toContain("is sufficient to report CWE-502");
+    expect(prompt).toContain("do not reject that finding merely because");
+    expect(prompt).toContain("deployed-module observation");
     expect(prompt).toContain("discarding the returned value does not undo");
     expect(prompt).toContain("bounded non-destructive payload");
-    expect(prompt).toContain("Report CWE-502 and only the demonstrated impact");
+    expect(prompt).toContain("Before escalating beyond object/state integrity");
+    expect(prompt).toContain("Report only the demonstrated impact");
     expect(prompt).not.toContain(
       "python-web-pyyaml-unsafe-load rows are always remote code execution",
     );
