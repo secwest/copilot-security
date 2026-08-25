@@ -42,6 +42,23 @@ All notable scanner, application, benchmark, and operational changes are recorde
   package check validates 259 entries, public import, CLI startup, and all 79
   bundled plugin files; the pre-commit tarball is 1,917,201 bytes with SHA-256
   `80f4f27922440dc6ff1b456cf3274e7ebca75e8c6b9d10f3bc21c471400aa241`.
+- Final acceptance for the Kysely MySQL DDL model is green at exact
+  implementation checkpoint `650cc29d61d5d2b94279613420dc01b48feb40c2`.
+  Two compiled inventories of a disposable repository-root archive take
+  17,223.331 and 16,026.728 milliseconds and produce 256 byte-identical rows,
+  529,269 bytes, and SHA-256
+  `d941e79efd02be37a1a1a15b73fcee6c03158a52ba63731c870b3ed4512d9d6b`.
+  All 187 structured rows survive ahead of 69 lexical leads; 233 rows are in
+  benchmark fixtures and 23 are not. Exactly one Kysely row retains the HTTP
+  source at `src/server.js:4`, compilation sink at `src/storage.js:17`,
+  CWE-89, nine ordered relative-wrapper transitions, exact
+  `kysely@0.28.13` provenance, and the official MySQL dialect edge; the
+  source-identical 0.28.14 control is absent. The exact-commit npm archive is
+  byte-identical to the pre-commit package and passes the same strict install
+  checks. All seven exact-source workflow families pass: Node `32911252669`,
+  container `32911252735`, Windows GUI `32911252716`, Linux GUI `32911252767`,
+  Java `32911252692`, .NET `32911252770`, and Go `32911252751`. The repository
+  remains public on default branch `main`.
 - Added `node-http-prompty-nunjucks-template-rce`, an exact provenance- and
   lifecycle-aware CWE-94/CWE-1336 model for request-controlled template grammar
   reaching Microsoft Prompty's official TypeScript Nunjucks renderer under

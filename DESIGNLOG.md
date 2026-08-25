@@ -54,9 +54,25 @@ real-package witnesses, and the production dependency audit pass. Strict
 package inspection validates public import, CLI startup, 79 bundled plugin
 files, and all 259 package entries. The 1,917,201-byte pre-commit package has
 SHA-256 `80f4f27922440dc6ff1b456cf3274e7ebca75e8c6b9d10f3bc21c471400aa241`.
-The corpus advances to 118 pairs, 236 cases, and 708 repeated scans. An
-immutable exact-commit self-inventory and hosted acceptance follow the pushed
-implementation checkpoint.
+The corpus advances to 118 pairs, 236 cases, and 708 repeated scans.
+
+**Exact-checkpoint closure.** Commit
+`650cc29d61d5d2b94279613420dc01b48feb40c2` is authored and committed by
+`Dragos Ruiu <dr@secwest.net>`. Two compiled scans of its immutable
+repository-root archive take 17,223.331 and 16,026.728 milliseconds and emit
+256 byte-identical JSONL rows totaling 529,269 bytes with SHA-256
+`d941e79efd02be37a1a1a15b73fcee6c03158a52ba63731c870b3ed4512d9d6b`.
+Structured-first retention preserves all 187 framework records ahead of 69
+lexical leads, with 233 fixture and 23 non-fixture rows. Exactly one Kysely row
+survives: HTTP source `src/server.js:4`, terminal compilation
+`src/storage.js:17`, CWE-89, nine relative import/call/parameter transitions,
+the Kysely dependency edge, and the official MySQL dialect edge. Its
+source-identical 0.28.14 control is absent. The exact-commit package is
+byte-identical to the pre-commit archive and passes the 259-entry strict check.
+All seven exact-source workflow families pass: Node `32911252669`, container
+`32911252735`, Windows GUI `32911252716`, Linux GUI `32911252767`, Java
+`32911252692`, .NET `32911252770`, and Go `32911252751`. The repository remains
+public on default branch `main`.
 
 ## 2026-08-25 — Bind Prompty SSTI to template position and actual Nunjucks execution
 
