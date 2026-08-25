@@ -3288,6 +3288,8 @@ type FindingQualityGapReason =
   | "incomplete_attack_path_reachability"
   | "missing_broken_controls"
   | "missing_attack_path_evidence_refs"
+  | "missing_model_specific_validation_evidence"
+  | "missing_model_specific_attack_path_evidence"
   | "unknown_code_evidence_refs"
   | "non_reportable_validation_disposition"
   | "non_reportable_attack_path_decision";
@@ -3296,7 +3298,41 @@ interface FindingQualityGapRecord {
   findingIndex: number;
   findingId: string;
   reasons: FindingQualityGapReason[];
+  frameworkModelId?: string;
+  missingValidationTextAnyOf?: string[][];
+  missingAttackPathTextAnyOf?: string[][];
 }
+
+interface ModelSpecificFindingRequirements {
+  validation: readonly (readonly string[])[];
+  attackPath: readonly (readonly string[])[];
+}
+
+const JOBLIB_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["model upload", "request.files", "uploaded stream"],
+  ["parse_model", "wrapper"],
+  ["joblib.load", "Joblib load"],
+  ["filename", "file object", "argument zero", "argument 0"],
+  ["pickle-backed", "pickle protocol", "Python pickle"],
+  ["__reduce__", "REDUCE", "callable"],
+  ["effects.mark", "in-process effect", "process integrity"],
+  ["Python 3.12.3"],
+  ["Python 3.14.5", "3.12.3 and 3.14.5", "3.12.3 or 3.14.5"],
+  ["joblib 1.5.3", "joblib==1.5.3"],
+] as const;
+
+const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
+  string,
+  ModelSpecificFindingRequirements
+> = new Map([
+  [
+    "python-web-joblib-unsafe-load",
+    {
+      validation: JOBLIB_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: JOBLIB_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+]);
 
 export async function buildResidualRiskInventory(
   repository: string,
@@ -32676,6 +32712,7 @@ export async function buildCoverageGapInventory(
 export async function buildFindingQualityGapInventory(
   scanDirectory: string | undefined,
   repository?: string,
+  residualRiskInventory = "",
 ): Promise<string> {
   if (scanDirectory === undefined) return "";
   const canonicalScanDirectory = await realpath(scanDirectory).catch(
@@ -32709,6 +32746,9 @@ export async function buildFindingQualityGapInventory(
   }
 
   const findings = document["findings"];
+  const modeledSinkLocations = modelSpecificSinkLocations(
+    residualRiskInventory,
+  );
   const gaps: FindingQualityGapRecord[] = [];
   for (let index = 0; index < findings.length; index += 1) {
     const finding = findings[index];
@@ -32779,11 +32819,37 @@ export async function buildFindingQualityGapInventory(
     if (hasNonreportableAttackPathDecision(finding["attackPath"])) {
       reasons.push("non_reportable_attack_path_decision");
     }
+    const modelSpecificGaps = modelSpecificFindingClosureGaps(
+      finding,
+      locations,
+      modeledSinkLocations,
+    );
+    if (modelSpecificGaps.missingValidationTextAnyOf.length > 0) {
+      reasons.push("missing_model_specific_validation_evidence");
+    }
+    if (modelSpecificGaps.missingAttackPathTextAnyOf.length > 0) {
+      reasons.push("missing_model_specific_attack_path_evidence");
+    }
     if (reasons.length > 0) {
       gaps.push({
         findingIndex: index,
         findingId: findingIdentifier(finding, index),
         reasons,
+        ...(modelSpecificGaps.frameworkModelId === undefined
+          ? {}
+          : { frameworkModelId: modelSpecificGaps.frameworkModelId }),
+        ...(modelSpecificGaps.missingValidationTextAnyOf.length === 0
+          ? {}
+          : {
+              missingValidationTextAnyOf:
+                modelSpecificGaps.missingValidationTextAnyOf,
+            }),
+        ...(modelSpecificGaps.missingAttackPathTextAnyOf.length === 0
+          ? {}
+          : {
+              missingAttackPathTextAnyOf:
+                modelSpecificGaps.missingAttackPathTextAnyOf,
+            }),
       });
     }
   }
@@ -32801,6 +32867,106 @@ export async function buildFindingQualityGapInventory(
     }),
     ...selected.map((gap) => JSON.stringify(gap)),
   ].join("\n");
+}
+
+interface ModelSpecificSinkLocation {
+  frameworkModelId: string;
+  location: EvidenceLocation;
+}
+
+interface ModelSpecificFindingClosureGaps {
+  frameworkModelId?: string;
+  missingValidationTextAnyOf: string[][];
+  missingAttackPathTextAnyOf: string[][];
+}
+
+function modelSpecificSinkLocations(
+  residualRiskInventory: string,
+): ModelSpecificSinkLocation[] {
+  const locations: ModelSpecificSinkLocation[] = [];
+  for (const line of residualRiskInventory.split("\n").slice(0, MAX_SIGNALS)) {
+    if (line.trim() === "") continue;
+    let record: unknown;
+    try {
+      record = JSON.parse(line) as unknown;
+    } catch {
+      continue;
+    }
+    if (!isRecord(record) || !isRecord(record["frameworkModel"])) continue;
+    const frameworkModel = record["frameworkModel"];
+    const frameworkModelId = frameworkModel["id"];
+    const sink = frameworkModel["sink"];
+    if (
+      typeof frameworkModelId !== "string" ||
+      !MODEL_SPECIFIC_FINDING_REQUIREMENTS.has(frameworkModelId) ||
+      !isRecord(sink) ||
+      typeof sink["path"] !== "string" ||
+      !Number.isSafeInteger(sink["line"]) ||
+      Number(sink["line"]) < 1
+    ) {
+      continue;
+    }
+    locations.push({
+      frameworkModelId,
+      location: {
+        path: sink["path"],
+        startLine: Number(sink["line"]),
+      },
+    });
+  }
+  return locations;
+}
+
+function modelSpecificFindingClosureGaps(
+  finding: Record<string, unknown>,
+  findingLocations: readonly EvidenceLocation[],
+  modeledSinkLocations: readonly ModelSpecificSinkLocation[],
+): ModelSpecificFindingClosureGaps {
+  const modeledSink = modeledSinkLocations.find((candidate) =>
+    findingLocations.some((location) =>
+      evidenceLocationsOverlap(location, candidate.location),
+    ),
+  );
+  if (modeledSink === undefined) {
+    return {
+      missingValidationTextAnyOf: [],
+      missingAttackPathTextAnyOf: [],
+    };
+  }
+  const requirements = MODEL_SPECIFIC_FINDING_REQUIREMENTS.get(
+    modeledSink.frameworkModelId,
+  );
+  if (requirements === undefined) {
+    return {
+      missingValidationTextAnyOf: [],
+      missingAttackPathTextAnyOf: [],
+    };
+  }
+  return {
+    frameworkModelId: modeledSink.frameworkModelId,
+    missingValidationTextAnyOf: missingRequiredTextGroups(
+      finding["validation"],
+      requirements.validation,
+    ),
+    missingAttackPathTextAnyOf: missingRequiredTextGroups(
+      finding["attackPath"],
+      requirements.attackPath,
+    ),
+  };
+}
+
+function missingRequiredTextGroups(
+  value: unknown,
+  groups: readonly (readonly string[])[],
+): string[][] {
+  const text = JSON.stringify(value ?? null).toLocaleLowerCase("en-US");
+  return groups.flatMap((group) =>
+    group.some((alternative) =>
+      text.includes(alternative.toLocaleLowerCase("en-US")),
+    )
+      ? []
+      : [[...group]],
+  );
 }
 
 function validationClosureGaps(

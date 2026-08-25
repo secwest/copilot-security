@@ -2066,8 +2066,11 @@ second line in `/tmp`, while source-identical 1.8.4 rejects the token before
 serialization. The NumPy pair holds the upload, relative wrapper, package,
 object-dtype payload, request and decoded-byte budgets, header and format
 checks, rank and element limits, and witness constant while changing only
-`allow_pickle=True` to `False`. Each of the 214 cases in 107 exploit/control
-pairs is scanned three times, producing 642
+`allow_pickle=True` to `False`. The Joblib pair likewise preserves its model
+upload, relative `parse_model` wrapper, byte budget, exact dependency/runtime
+record, serialized artifact, and harmless in-process witness while replacing
+only pickle-backed `joblib.load` with `json.load` at the unsafe boundary. Each
+of the 216 cases in 108 exploit/control pairs is scanned three times, producing 648
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

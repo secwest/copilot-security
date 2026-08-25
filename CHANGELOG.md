@@ -38,6 +38,32 @@ All notable scanner, application, benchmark, and operational changes are recorde
   invalidation, local-shadow rejection, field-scoped correction requirements,
   and an executable false-positive control rather than claiming a library-level
   detection gap.
+- Diagnostic campaign
+  `cd3b48aa3cb7e22e00bbbcd5df46872375dbbb45dec69160abe4ea7f9773052a`
+  on immutable checkpoint `9a2da9d307802f6d19a553562cf33cdaa6073321`
+  authenticated from stored Copilot credentials with no account, allowance,
+  quota, rate-limit, classifier, authentication, or transport failure. The
+  JSON control completed on attempt one with zero findings. The positive's
+  first draft failed closed on one finding-quality and five coverage gaps; its
+  automatic retry produced one high CWE-502 finding with complete structural
+  coverage. Precision, recall, F1, stability, validation, attack-path,
+  code-evidence, severity, and negative-control rates were all 1.0 with zero
+  false positives or false negatives.
+- Kept that campaign diagnostic at a 0.5 case-pass rate because both validation
+  and attack path omitted seven required Joblib fact groups despite retaining
+  the correct source, sink, wrapper path, and finding. The missing facts were
+  the `parse_model` wrapper, argument-zero/file-object role, pickle-backed
+  protocol, observed `effects.mark` process effect, both tested Python
+  versions, and Joblib 1.5.3. The report also incorrectly described the review
+  as static-only even though the fixture contains bounded executable evidence.
+- Added deterministic host-side, model-specific report closure. The finding
+  quality re-audit now correlates a draft finding with the exact modeled Joblib
+  sink from the host residual-risk inventory and independently requires all ten
+  semantic evidence groups in validation and attack path. Its JSONL diagnostic
+  returns the exact missing alternative groups to bounded correction; facts in
+  another field cannot substitute, and fixture runtime evidence cannot be
+  promoted to a deployment claim. Re-auditing the sealed failed finding
+  reproduces its exact seven omitted groups in each field.
 - Added `python-web-numpy-allow-pickle-load`, a typed Python web-to-NumPy
   object-array deserialization model for CWE-502. It requires an exact live
   `import numpy` receiver or named `from numpy import load` binding, request

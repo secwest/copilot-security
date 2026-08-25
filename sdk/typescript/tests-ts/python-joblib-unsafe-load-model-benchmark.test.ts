@@ -3,7 +3,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { scanQualityGatePrompt } from "../src/copilot-client.js";
-import { buildResidualRiskInventory } from "../src/residual-risk.js";
+import {
+  buildFindingQualityGapInventory,
+  buildResidualRiskInventory,
+} from "../src/residual-risk.js";
 
 interface FrameworkRecord {
   path: string;
@@ -349,8 +352,133 @@ describe("Python Joblib unsafe deserialization model", () => {
     expect(records[0]?.frameworkModel?.sink.path).toBe("parser.py");
   });
 
+  test("host re-audit requires Joblib evidence in both report fields", async () => {
+    const repository = await writeRepository({
+      "src/server.py": [
+        "from .parser import parse_model",
+        "def route(request):",
+        "    return parse_model(request.stream)",
+      ].join("\n"),
+      "src/parser.py": [
+        "import joblib",
+        "def parse_model(document):",
+        "    return joblib.load(document)",
+      ].join("\n"),
+    });
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-joblib-quality-"),
+    );
+    temporaryPaths.push(scanDirectory);
+    const finding = {
+      occurrenceId: "occ_joblib_quality",
+      taxonomy: { cwe: ["CWE-502"] },
+      locations: [
+        { path: "src/server.py", startLine: 3, role: "source" },
+        { path: "src/parser.py", startLine: 3, role: "sink" },
+      ],
+      codeEvidence: [
+        {
+          id: "upload-source",
+          path: "src/server.py",
+          startLine: 3,
+          code: "    return parse_model(request.stream)",
+          explanation: "The request stream enters the parser wrapper.",
+          role: "source",
+        },
+        {
+          id: "joblib-sink",
+          path: "src/parser.py",
+          startLine: 3,
+          code: "    return joblib.load(document)",
+          explanation: "The same stream reaches unsafe object loading.",
+          role: "sink",
+        },
+      ],
+      validation: {
+        summary: "Static review confirms a reachable unsafe deserializer.",
+        method: "static source trace",
+        exploitWitness:
+          "A compact serialized object reaches callable reconstruction.",
+        negativeControl:
+          "A schema-bound parser rejects the serialized object before loading.",
+        evidence: ["upload-source", "joblib-sink"],
+        counterEvidence:
+          "A size check does not constrain object reconstruction.",
+        remainingUncertainty:
+          "Deployment privileges determine the final process impact.",
+      },
+      attackPath: {
+        summary: "A remote caller reaches unsafe object reconstruction.",
+        dataflow: {
+          source: "upload-source",
+          sink: "joblib-sink",
+          outcome: "attacker-selected callable reconstruction",
+        },
+        reachability: {
+          attacker: "Unauthenticated remote caller",
+          entrypoint: "Model import HTTP endpoint",
+          outcome: "Service-process integrity is compromised",
+        },
+        brokenControls: ["No safe data-only decoder"],
+        evidenceRefs: ["upload-source", "joblib-sink"],
+      },
+    };
+    await writeFile(
+      join(scanDirectory, "findings.json"),
+      JSON.stringify({ findings: [finding] }),
+    );
+    const residualRiskInventory = await buildResidualRiskInventory(repository);
+
+    const incomplete = await buildFindingQualityGapInventory(
+      scanDirectory,
+      repository,
+      residualRiskInventory,
+    );
+    const rows = incomplete.split("\n").map((line) => JSON.parse(line));
+    expect(rows[1]).toMatchObject({
+      findingId: "occ_joblib_quality",
+      frameworkModelId: "python-web-joblib-unsafe-load",
+      reasons: [
+        "missing_model_specific_validation_evidence",
+        "missing_model_specific_attack_path_evidence",
+      ],
+    });
+    expect(rows[1]?.missingValidationTextAnyOf).toContainEqual([
+      "parse_model",
+      "wrapper",
+    ]);
+    expect(rows[1]?.missingAttackPathTextAnyOf).toContainEqual([
+      "Python 3.12.3",
+    ]);
+
+    const semanticContract = [
+      "A model upload from request.files reaches the uploaded stream.",
+      "The parse_model wrapper passes it to joblib.load.",
+      "The file object is filename argument zero.",
+      "Joblib uses the Python pickle protocol and is pickle-backed.",
+      "The fixture __reduce__ callable invokes effects.mark.",
+      "That in-process effect proves process integrity impact.",
+      "The fixture was tested on Python 3.12.3 and Python 3.14.5",
+      "with joblib 1.5.3; this does not prove deployment versions.",
+    ].join(" ");
+    finding.validation.summary = semanticContract;
+    finding.attackPath.summary = semanticContract;
+    await writeFile(
+      join(scanDirectory, "findings.json"),
+      JSON.stringify({ findings: [finding] }),
+    );
+
+    expect(
+      await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        residualRiskInventory,
+      ),
+    ).toBe("");
+  });
+
   test("requires versioned callable validation and false-positive controls", () => {
-    const prompt = scanQualityGatePrompt("inventory-row");
+    const prompt = scanQualityGatePrompt("inventory-row", "", "gap-row");
 
     expect(prompt).toContain("For python-web-joblib-unsafe-load rows");
     expect(prompt).toContain("argument zero or the filename keyword");
@@ -361,6 +489,7 @@ describe("Python Joblib unsafe deserialization model", () => {
     expect(prompt).toContain("parse_model wrapper");
     expect(prompt).toContain("fixture-local effects.mark state change");
     expect(prompt).toContain("mmap_mode and ensure_native_byte_order");
+    expect(prompt).toContain("missingValidationTextAnyOf");
     expect(prompt).toContain("Report CWE-502");
   });
 });

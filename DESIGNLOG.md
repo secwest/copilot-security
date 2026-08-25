@@ -54,6 +54,40 @@ the false cases above. Future pickle-backed libraries must keep their own
 identity, safe-mode semantics, artifact formats, and matched controls rather
 than being folded into a generic `.load()` signature.
 
+**Live diagnostic and deterministic closure.** Campaign
+`cd3b48aa3cb7e22e00bbbcd5df46872375dbbb45dec69160abe4ea7f9773052a`
+ran from immutable checkpoint `9a2da9d307802f6d19a553562cf33cdaa6073321`
+with `gpt-5.6-terra`, high reasoning, deep mode, two workers, and bounded
+automatic retry. Stored Copilot credentials worked normally: no account,
+allowance, quota, rate-limit, classifier, authentication, or transport failure
+occurred. The JSON control completed on attempt one with zero findings. The
+positive failed closed after its first draft exposed one finding-quality and
+five coverage gaps, then completed on attempt two with one high CWE-502 finding
+and complete structural coverage. Precision, recall, F1, negative-control,
+stability, validation, attack-path, code-evidence, and severity metrics were
+all 1.0 with no false positive or false negative.
+
+Acceptance still failed intentionally at a 0.5 case-pass rate. The final
+validation and attack-path fields each omitted seven parts of the explicit
+Joblib evidence contract: the `parse_model` wrapper, filename/file-object
+argument role, pickle-backed protocol, observed `effects.mark` process effect,
+the Python 3.12.3 and 3.14.5 witness environments, and Joblib 1.5.3. The report
+also characterized validation as static-only despite the checked-in bounded
+witness and runtime records. Detection and reachability were correct; report
+closure was not.
+
+Prompt instructions alone are insufficient for a field-local invariant. The
+host now carries model-specific semantic groups alongside finding-quality
+checks, derives exact Joblib sink locations from its own residual-risk JSONL,
+and correlates findings by canonical overlapping location. It audits validation
+and attack path independently and emits the unsatisfied alternative groups in
+the bounded correction inventory. A title, summary, code excerpt, or opposite
+field cannot satisfy an omission, and tested fixture versions must remain
+distinguished from deployment proof. Directly re-auditing the sealed campaign
+finding produces precisely the same seven missing groups in both fields. This
+pattern can extend to later high-value models without weakening the generic
+finding schema or trusting model-authored classifications.
+
 ## 2026-08-25 — Model NumPy object arrays only across explicit pickle opt-in
 
 **Gap and authoritative semantics.** The Python unsafe-deserialization pass
