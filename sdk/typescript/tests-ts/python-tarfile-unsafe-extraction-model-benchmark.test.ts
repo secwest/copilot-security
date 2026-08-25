@@ -210,6 +210,34 @@ describe("Python standard-library tarfile unsafe extraction model", () => {
         "utf8",
       ),
     ).toContain('filter="data"');
+    const controlExtractor = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        "python-tarfile-data-filter-control",
+        "src",
+        "extractor.py",
+      ),
+      "utf8",
+    );
+    expect(controlExtractor).toContain("MAX_ARCHIVE_MEMBERS = 32");
+    expect(controlExtractor).toContain("MAX_EXPANDED_BYTES = 2_097_152");
+    expect(controlExtractor).toContain("MAX_MEMBER_BYTES = 1_048_576");
+    expect(controlExtractor).toContain("member.isfile() or member.isdir()");
+    expect(controlExtractor).toContain("duplicate archive member");
+    expect(controlExtractor).toContain("members=validated_members(archive)");
+    expect(
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "python-tarfile-data-filter-control",
+          "examples",
+          "resource_witness.py",
+        ),
+        "utf8",
+      ),
+    ).toContain("expanded_total_rejected");
   });
 
   test("emits the exact upload-wrapper-open-extraction path and suppresses the control", async () => {
@@ -787,6 +815,8 @@ describe("Python standard-library tarfile unsafe extraction model", () => {
     expect(prompt).toContain("Python 3.14 changes the default to data");
     expect(prompt).toContain("fully_trusted_filter");
     expect(prompt).toContain("OutsideDestinationError");
+    expect(prompt).toContain("streams at most 32 members");
+    expect(prompt).toContain("total expanded data to 2 MiB");
     expect(prompt).toContain("Python 3.12.3");
     expect(prompt).toContain("Report CWE-22");
   });

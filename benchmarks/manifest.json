@@ -1953,7 +1953,7 @@
     },
     {
       "id": "python-tarfile-data-filter-control",
-      "description": "The source-identical Python 3.12 control supplies the standard-library data extraction filter, which rejects an outside-destination member before the write.",
+      "description": "The topology-matched Python 3.12 control supplies the data filter and bounded member, type, duplicate-name, and expanded-byte preflight, rejecting traversal and decompression exhaustion before writes.",
       "fixture": "fixtures/python-tarfile-data-filter-control",
       "findingsPaths": [
         "python-tarfile-data-filter-control/run-1/findings.json",

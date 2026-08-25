@@ -98,7 +98,9 @@ model-upload pair, and a version-sensitive PyTorch full-unpickler/patched
 weights-only checkpoint pair, a source-identical lxml 6.0.2/6.1.1
 `iterparse` external-entity pair, a second source-identical pair that supplies
 an affected-default `ETCompatXMLParser` to `fromstring`, plus a PyYAML
-`UnsafeLoader`/`safe_load`
+`UnsafeLoader`/`safe_load`, and a Python 3.12 standard-library tarfile pair
+that contrasts the pre-3.14 fully trusted default with `filter="data"` plus
+bounded member/type/name/expanded-byte preflight,
 relative-wrapper pair, reflected XSS, XML
 external entities, JWT signature-verification bypass, JWT `alg`/key-type
 confusion that reinterprets an RSA public key as an HMAC secret,
@@ -213,8 +215,11 @@ retains local external-entity access while source-identical 6.1.1 rejects the
 same fixture-local `SYSTEM` entity. Its ET-compatible companion proves the
 separate constructor default and requires that the exact constructed parser
 actually reach the parse call; ordinary `XMLParser` and construction alone
-remain negative. Three runs per case now produce 666 scans across 111
-exploit/control pairs in the complete corpus. The added
+remain negative. The tarfile pair adds exact uploaded-`fileobj` flow, retained
+`TarFile` receiver identity, runtime-default semantics, and a matched control
+that closes both traversal and decompression-exhaustion paths. Three runs per
+case now produce 672 scans across 112 exploit/control pairs in the complete
+corpus. The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size

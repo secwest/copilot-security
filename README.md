@@ -2083,9 +2083,12 @@ through the affected external-entity default and the latter rejects it. One
 pair requires eager `iterparse` consumption. The other requires a constructed
 `ETCompatXMLParser` (or its `XMLTreeBuilder` alias) to reach the actual `XML`,
 `fromstring`, `fromstringlist`, or `parse` parser argument without conflating
-ordinary `XMLParser`. Each of the 222 cases in 111 exploit/control pairs is
-scanned three times, producing 666 scans that measure both accuracy and model
-variance.
+ordinary `XMLParser`. The Python tarfile pair then contrasts a Python 3.12
+uploaded `fileobj` extracted under the pre-3.14 fully trusted default with a
+control that combines `filter="data"` and bounded streaming member, type,
+duplicate-name, per-file, and total-expanded-byte validation. Each of the 224
+cases in 112 exploit/control pairs is scanned three times, producing 672 scans
+that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses
 keyword-mode findings that could not reach the modeled loader branch.

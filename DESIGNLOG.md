@@ -69,8 +69,11 @@ data-filter negative control. Four forbidden claims protect the safe-filter,
 
 **Matched executable evidence.** The Flask pair preserves `.python-version`,
 route, one MiB request budget, uploaded stream, relative wrapper, fixed
-destination, marker bytes, and witness. Its only application-code difference
-is `filter="data"` on the control extraction call. The witness builds one
+destination, marker bytes, and witness. The hardened control retains the same
+tarfile operation but adds `filter="data"` plus a streaming preflight capped at
+32 members, 1 MiB per regular file, and 2 MiB total expanded bytes; it rejects
+links, special files, duplicates, and case-colliding names before extraction.
+The witness builds one
 in-memory regular-file member named `../escaped-marker.txt`, reads only the
 fixture marker, and extracts inside a new disposable temporary directory; it
 does not access a network or launch a shell. On Ubuntu/WSL Python 3.12.3, the
@@ -98,6 +101,23 @@ package inspection validates 259 entries and a fresh 67-package isolated
 install, including public import, CLI behavior, and all 79 bundled plugin
 files. The removed 1,897,492-byte archive has SHA-256
 `a391de3c4965d81543648e6c2742a33c9bf0e64903a27fd20e6d251ed1cacc7f`.
+
+**Live control correction.** Sealed campaign
+`d2832de97e5649e10f6d27a06abd3864776b9c976fb919afb196b126d28909a7`
+proved the CWE-22 model on its first attempt, with one high expected finding,
+complete coverage, and every semantic gate satisfied. It also rejected the
+initial negative control for a sound reason: a separate high CWE-409/CWE-400
+finding showed that the one MiB `Content-Length` check bounded compressed input
+but not automatic `r:*` expansion, member count, individual size, disk output,
+or synchronous extraction work. The control run completed with 586,968 input,
+529,518 cached, and 11,834 output tokens at $0.489402; the positive completed
+with 1,957,436 input, 1,735,061 cached, and 47,427 output tokens at $1.840019.
+Neither receipt or log contains an authentication, quota, allowance, credit-
+limit, classifier-refusal, reconnect, transport, or timeout failure. The
+campaign's 0.5 precision is therefore retained as evidence of a real control
+design defect, not relabeled model noise. The bounded member/type/size/name
+preflight above is the resulting fix; the perfect threshold remains unchanged
+and requires a fresh sealed campaign.
 
 ## 2026-08-25 — Complete lxml ET-compatible parser XXE with exact parser-use proof
 

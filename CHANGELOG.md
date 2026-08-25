@@ -25,13 +25,15 @@ All notable scanner, application, benchmark, and operational changes are recorde
   closed, as do write modes, filename-only input, fixed streams, destination-
   only request flow, star expansion, binding replacement, receiver
   reassignment, unrelated scopes, local package shadows, and text lookalikes.
-- Added source-identical Flask unsafe/default and `filter="data"` fixtures with
-  a perfect-gate specialized benchmark. Their bounded witness creates one
+- Added topology-matched Flask unsafe/default and hardened `filter="data"`
+  fixtures with a perfect-gate specialized benchmark. Their bounded witness creates one
   in-memory tar member named `../escaped-marker.txt`, operates only in a new
   temporary directory, and uses neither network nor shell. Under Python
   3.12.3 in Ubuntu/WSL, the unsafe default writes the fixture marker outside
   the selected destination; the data-filter control raises
-  `OutsideDestinationError` and writes nothing. The canonical corpus now
+  `OutsideDestinationError` and writes nothing. The control also enforces 32
+  members, 1 MiB per member, 2 MiB total expanded data, regular file/directory
+  types, and unique case-folded names before extraction. The canonical corpus now
   contains 112 exploit/control pairs, 224 cases, and 672 repeated scans.
 - Added fourteen tarfile regression groups covering all accepted binding and
   receiver forms, `extract` and `extractall`, multiline and positional
@@ -61,6 +63,14 @@ All notable scanner, application, benchmark, and operational changes are recorde
   an isolated install adds 67 packages and validates public import, CLI
   behavior, and all 79 bundled plugin files. The unique package staging
   directory is removed after evidence capture.
+- The first sealed live campaign correctly reported the expected traversal in
+  the unsafe fixture, but also found a distinct high CWE-409/CWE-400
+  decompression/resource-exhaustion flaw in the initial data-filter control.
+  That control limited only compressed request bytes while `r:*` and
+  `extractall` left expanded bytes, member count, individual size, and
+  extraction work unbounded. The result is retained as valid scanner evidence;
+  the benchmark was hardened rather than suppressing the finding or weakening
+  its zero-false-positive gate.
 - Added `python-web-lxml-etcompat-xxe`, a version-aware CWE-611 model that
   completes the second parser surface in CVE-2026-41066/GHSA-vfmq-68hx-4jfw.
   It resolves live official `ETCompatXMLParser` and `XMLTreeBuilder`
