@@ -128,6 +128,30 @@ passes every threshold, which isolates the change to comparison semantics.
 Because the manifest hash changed, that compatibility result is diagnostic;
 the next acceptance campaign must bind fresh receipts to the new manifest.
 
+**Receipt-bound acceptance.** Campaign
+`108ea03d172a173cc913229c4fcb18bcf44b7bc655cb75e7f22b4adaea38c04e`
+on immutable checkpoint `13e1f85ab710ac405107b7416d13748b266e6fec`
+passes every configured threshold. Both `gpt-5.6-terra` high-reasoning deep
+scans authenticated from stored Copilot credentials and completed on attempt
+one. There was no account, credit, allowance, quota, rate-limit, classifier,
+authentication, or transport error. The unsafe case emitted one high CWE-502
+finding with complete coverage in 6m06s; deterministic finalization
+re-anchored two code excerpts and aligned one endpoint role from repository
+bytes before sealing. The `allow_pickle=False` control emitted no finding with
+complete coverage in 4m41s.
+
+All twelve gates pass: completion, precision, recall, F1, case pass,
+negative-case pass, stable detection, validation, attack path, code evidence,
+and severity are 1.0, while false positives per run are zero. The campaign
+consumed an estimated $3.581733125. Its fresh receipts bind manifest SHA-256
+`9b8db9ffff98e3482b75c669ee5a67d916158b1a0f308190b4cb71156ab347de`,
+scanner package SHA-256
+`00acf9b550328464be22f9f56e87fe06e2f9ba156b9eb8173e2d3e994a52f4fb`,
+the exact repository revision, and both fixture digests. The NumPy increment
+therefore has live positive detection, an isolated negative, independently
+auditable field evidence, cross-platform executable witnesses, and immutable
+campaign provenance.
+
 ## 2026-08-25 — Keep Unpickler construction explicit in the attack path
 
 **Live evidence.** Campaign

@@ -88,6 +88,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   enforcement intentionally disabled passes every threshold, proving the
   change repairs evaluator spelling rather than scanner output. A new
   receipt-bound campaign remains required for final live acceptance.
+- Receipt-bound campaign
+  `108ea03d172a173cc913229c4fcb18bcf44b7bc655cb75e7f22b4adaea38c04e`
+  on checkpoint `13e1f85ab710ac405107b7416d13748b266e6fec` passes every
+  threshold. Both deep scans completed on attempt one with stored Copilot
+  credentials and no account, credit, allowance, quota, rate-limit,
+  classifier, authentication, or transport failure. The unsafe case produced
+  one high CWE-502 finding with complete coverage in 6m06s; the bounded
+  `allow_pickle=False` control produced zero findings with complete coverage
+  in 4m41s. Precision, recall, F1, case pass, negative-case pass, stability,
+  validation, attack path, code evidence, severity, and completion are all
+  1.0, false positives per run are zero, and total estimated cost is
+  $3.581733125. Fresh receipts bind the exact revision, manifest hash, scanner
+  package, and both fixture digests.
 - Live campaign
   `c6fb9c92bed2214f45681dde76518cbc72c2c65850dc1e673b33e16247e494f3`
   on checkpoint `4cb88e175bb0d06a8ebc400579b54b623f8ba2e4` completed both
