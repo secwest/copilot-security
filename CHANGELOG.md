@@ -38,6 +38,32 @@ All notable scanner, application, benchmark, and operational changes are recorde
   lane passes 25 tests and 1,732 assertions on native Windows and Ubuntu/WSL.
   The canonical corpus now contains 103 exploit/control pairs, 206 cases, and
   618 repeated scans.
+- Final local and hosted acceptance for the CloudFormation model is green at
+  exact implementation checkpoint `77546af1ad18746790e4fb3c5d3f90c2f1f285fb`.
+  The authoritative Windows Bun 1.3.14 suite passes 1,516 tests and 11,252
+  assertions across 168 files in 581.48 seconds, with 20 intentional platform/
+  environment skips and zero failures. The first full run correctly exposed
+  that indiscriminately ingesting JSON displaced three prior framework rows and
+  weakened an oversized npm-boundary control; the format-specific discovery
+  correction restores both regressions, and the exact failing suites pass on
+  Windows and Ubuntu/WSL. Generated-model drift, formatting, TypeScript, the
+  clean production build, and the production high-severity audit are green with
+  no known vulnerabilities. Two inventories of an immutable exact-commit
+  archive produce 256 byte-identical rows totaling 582,834 bytes with SHA-256
+  `48516b803c7ba2299c4afa62354bca85fbf79cc43b1f21c47012c8040ec037a8`.
+  Exactly one CloudFormation row retains the wildcard trust at line 13, the
+  same role and assume action, and AdministratorAccess sink at line 17; its
+  specific-principal control is absent. Both prior Kubernetes rows remain and
+  their controls are absent. Windows and Ubuntu/WSL strictly inspect the same
+  POSIX-built 259-entry, 1,817,596-byte npm archive with SHA-256
+  `1a8adc2cfa77bea33edf7b38cfea311bcd3c7718369626313f85a8f5792fd5a6`;
+  isolated consumers install 67 and 75 packages respectively and validate the
+  public import, executable CLI, new `cloudformation-risk` distribution module,
+  and all 79 bundled plugin files. All exact-source workflows succeed: Node
+  `32806856391`, container `32806856370`, Windows GUI `32806856344`, Linux GUI
+  `32806856384`, Java `32806856341`, .NET `32806856380`, and Go `32806856368`.
+  The package archive, immutable source snapshot, inventories, and isolated
+  installs are removed after acceptance.
 - Added `kubernetes-cluster-admin-broad-subject`, the second native Kubernetes
   infrastructure-as-code model. It requires an exact
   `rbac.authorization.k8s.io/v1` `ClusterRoleBinding`, an immutable exact

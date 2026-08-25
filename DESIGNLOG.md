@@ -90,6 +90,40 @@ reviewer guidance. The focused and canonical lanes pass 25 tests and 1,732
 assertions on native Windows and Ubuntu/WSL. The canonical benchmark advances
 to 103 exploit/control pairs, 206 cases, and 618 repeated scans.
 
+**Final acceptance.** At exact implementation checkpoint
+`77546af1ad18746790e4fb3c5d3f90c2f1f285fb`, the authoritative Windows Bun
+1.3.14 suite passes 1,516 tests and 11,252 assertions across 168 files in 581.48
+seconds, with 20 intentional environment/platform skips and no failures. The
+first full run's two failures were valuable acceptance evidence: general JSON
+ingestion reduced the decompression model's retained repository rows from the
+required 169 to 166 and let a child source cross an oversized npm package
+boundary. After the format-specific prefilter, both exact suites pass on
+Windows and Ubuntu/WSL while an arbitrarily named nested CloudFormation JSON
+template remains detected. Generated-model drift, formatting, TypeScript, a
+clean production build, and the high-severity production audit are green.
+
+Two compiled inventories of an immutable archive of the implementation commit
+take 35,333.328 and 16,450.443 ms and produce 256 byte-identical rows totaling
+582,834 bytes with SHA-256
+`48516b803c7ba2299c4afa62354bca85fbf79cc43b1f21c47012c8040ec037a8`.
+The CloudFormation row preserves source `template.yaml:13`, assume-role action
+line 14, role type line 5, AdministratorAccess sink line 17, condition and
+boundary absence, CWE-269/CWE-284, and exact logical/deployed role identity.
+The specific-principal control is absent. The earlier RBAC and hostPath rows
+remain present and their paired controls remain absent, so the new IaC family
+survives the 256-row global cap without displacing either Kubernetes model.
+
+Windows and Ubuntu/WSL strictly inspect the same POSIX-built 259-entry,
+1,817,596-byte npm archive with SHA-256
+`1a8adc2cfa77bea33edf7b38cfea311bcd3c7718369626313f85a8f5792fd5a6`.
+Their isolated consumers install 67 and 75 packages respectively and validate
+the public import, installed CLI and mode, the `cloudformation-risk` module,
+and all 79 bundled plugin files. Every exact-source workflow succeeds: Node
+`32806856391`, container `32806856370`, Windows GUI `32806856344`, Linux GUI
+`32806856384`, Java `32806856341`, .NET `32806856380`, and Go `32806856368`.
+Remove the exact-commit archive and snapshot, inventories, npm package, and
+isolated installs after acceptance.
+
 **Consequence.** Review now receives a joined public-trust-to-administrator path
 instead of two disconnected IAM keywords, with exact counterevidence boundaries
 for the common condition and permissions-boundary false-positive classes.
