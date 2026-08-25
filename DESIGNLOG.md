@@ -61,6 +61,32 @@ lane passes 31 tests and 1,768 assertions on native Windows and Ubuntu/WSL. The
 canonical benchmark advances to 102 exploit/control pairs, 204 cases, and 612
 repeated scans.
 
+**Final acceptance.** At exact implementation checkpoint
+`140ead32297a8deaf4fe99fb4d490db6ce1e83b2`, the authoritative Windows Bun
+1.3.14 suite passes 1,508 tests and 11,210 assertions across 167 files in 594.96
+seconds, with 20 intentional platform/environment skips and no failures.
+Generated-model drift, formatting, TypeScript checking, the clean production
+build, and the production dependency audit are green. Two compiled inventories
+of an immutable exact-commit archive produce 256 byte-identical rows totaling
+581,530 bytes with SHA-256
+`ac1d024e3486aa3f80fa49c066b12acae2690c5ed831f36bb69d7d7aa8ae6281`.
+Exactly one RBAC row preserves `Group:system:serviceaccounts`, the built-in
+cluster-admin role reference, binding identity, cluster scope, and exact lines;
+the named-group control is absent. Exactly one prior hostPath row remains and
+its matched control is absent, showing that both Kubernetes models survive the
+global cap without displacing one another.
+
+Windows and Ubuntu/WSL strictly inspect the same POSIX-built 255-entry,
+1,804,936-byte npm archive with SHA-256
+`51ef028caad7dca0b75315a0ca15d694fabd45af6aa34bf3ce2e52fc6e4e4caa`.
+Their isolated consumers install 67 and 75 packages respectively and validate
+the public import, installed CLI, executable mode, and all 79 bundled plugin
+files. All exact-source hosted workflow families succeed: Node `32803416155`,
+container `32803416113`, Windows GUI `32803416227`, Linux GUI `32803416168`,
+Java `32803416140`, .NET `32803416156`, and Go `32803416115`. Remove the exact-
+commit archive and snapshot, release-check archive, and isolated installs after
+acceptance.
+
 ## 2026-08-24 — Join Kubernetes privilege and host filesystem authority
 
 **Coverage gap and comparative evidence.** Application dataflow, package
