@@ -136,6 +136,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
   without refusal, retry, rate-limit, authentication, transport, or allowance
   error. The accepted artifacts remain isolated under
   `C:\security-benchmarks\cloudformation-public-admin-role-semantic-final-17b27d8`.
+- Final regression and release-shape acceptance is green. The authoritative
+  elevated Windows Bun 1.3.14 suite passes 1,517 tests and 11,268 assertions
+  across 168 files in 557.07 seconds, with 20 intentional platform/environment
+  skips and zero failures. An initial managed-sandbox run was stopped after it
+  consistently denied its temporary Git, Windows ACL, PDF worker, and Python
+  workbench fixtures; every affected test passes with its required access.
+  Generated-model drift, formatting, TypeScript, clean build, and the production
+  high-severity audit are clean with no known vulnerabilities. Windows and
+  WSL-built archives each contain 259 entries totaling 9,255,964 unpacked bytes
+  and pass strict inspection plus two isolated installs, public import, CLI,
+  and all 79 bundled plugin files. The Windows archive is 1,823,031 bytes,
+  SHA-1 `56522b551fa630ea8b4d262ff137c04dab1ca199`, integrity
+  `sha512-YAezvRTXGglhuXOd5AJlUVrPL4gpOv4KxuZE2ikjqeRpuHY65ZO3Vufxkceg1tkVcVqApY9xtNpUhtJD+xVYhg==`,
+  and SHA-256 `142e9eeeb799c3b71fd517a67fb770decf65d2f1f05512820b6134efbc2561f1`.
+  The POSIX archive is 1,823,011 bytes, SHA-1
+  `f051226487bf0e2d5817e913a9e679e86e494e58`, integrity
+  `sha512-eSNuEDewm9h6yleS29bLg3MwcvGuTILd9y0AEpwd2lrBkMtAiZCOJWk21JLzhoEJqhMKA+kP45RmVMmWe3Ubsw==`,
+  and SHA-256 `69581e3e0095cad31426cdb583a262c8ab70b61be0a134b1ab928f2a3ff3727f`.
+  Exact implementation commit `17b27d8` passes Node `32810193083`, container
+  `32810193122`, Windows GUI `32810193063`, Linux GUI `32810193071`, Java
+  `32810193089`, .NET `32810193080`, and Go `32810193073`. Documentation-only
+  acceptance commit `212382d` also passes its six applicable path-filtered
+  workflows. Local archives and isolated installs are removed after acceptance.
 - Added `kubernetes-cluster-admin-broad-subject`, the second native Kubernetes
   infrastructure-as-code model. It requires an exact
   `rbac.authorization.k8s.io/v1` `ClusterRoleBinding`, an immutable exact

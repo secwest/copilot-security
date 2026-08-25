@@ -242,6 +242,36 @@ rate-limit, authentication, transport, or allowance failure. Preserve its
 directory at `C:\security-benchmarks\cloudformation-public-admin-role-semantic-final-17b27d8`
 alongside both earlier diagnostic campaigns.
 
+**Full regression and release acceptance.** The exact implementation survives
+the complete elevated Windows Bun 1.3.14 suite: 1,517 pass, 20 intentional
+platform/environment skips, zero failures, and 11,268 assertions across 168
+files in 557.07 seconds. The non-authoritative managed-sandbox attempt was
+stopped only after a single access cause repeated across temporary Git,
+credential-home ACL, PDF worker, and Python finalizer fixtures; the elevated run
+passes all of them. Generated-model drift, full formatting, TypeScript checking,
+a clean build, and production audit pass with no known vulnerabilities.
+
+Build release archives on both hosts because Windows tar creation does not
+preserve the POSIX CLI execute bit. Both archives contain 259 entries and
+9,255,964 unpacked bytes and survive strict entry inspection, two isolated
+installs per host, public API import, executable CLI, and all 79 bundled plugin
+files. Windows installs 67 packages; its 1,823,031-byte archive has SHA-1
+`56522b551fa630ea8b4d262ff137c04dab1ca199`, integrity
+`sha512-YAezvRTXGglhuXOd5AJlUVrPL4gpOv4KxuZE2ikjqeRpuHY65ZO3Vufxkceg1tkVcVqApY9xtNpUhtJD+xVYhg==`,
+and SHA-256 `142e9eeeb799c3b71fd517a67fb770decf65d2f1f05512820b6134efbc2561f1`.
+WSL installs 75 packages; its 1,823,011-byte POSIX archive has SHA-1
+`f051226487bf0e2d5817e913a9e679e86e494e58`, integrity
+`sha512-eSNuEDewm9h6yleS29bLg3MwcvGuTILd9y0AEpwd2lrBkMtAiZCOJWk21JLzhoEJqhMKA+kP45RmVMmWe3Ubsw==`,
+and SHA-256 `69581e3e0095cad31426cdb583a262c8ab70b61be0a134b1ab928f2a3ff3727f`.
+
+Hosted exact-source evidence is also green. Implementation commit `17b27d8`
+passes Node `32810193083`, container `32810193122`, Windows GUI `32810193063`,
+Linux GUI `32810193071`, Java `32810193089`, .NET `32810193080`, and Go
+`32810193073`. Evidence-only commit `212382d` passes its six applicable
+path-filtered workflows; container correctly does not run for the documentation
+change. Remove both local archives and every smoke-test temporary installation
+after recording their immutable hashes.
+
 **Consequence.** Review now receives a joined public-trust-to-administrator path
 instead of two disconnected IAM keywords, with exact counterevidence boundaries
 for the common condition and permissions-boundary false-positive classes.
