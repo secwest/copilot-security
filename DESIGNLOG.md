@@ -88,6 +88,49 @@ finding produces precisely the same seven missing groups in both fields. This
 pattern can extend to later high-value models without weakening the generic
 finding schema or trusting model-authored classifications.
 
+**Build-bound acceptance.** A first post-checkpoint campaign,
+`89c2822204217f3696237b32d9995e0aa5a4d2a5fc767f9248c2d640ff9d8de3`,
+exposed an operational provenance error rather than a scanner-logic defect.
+The source revision was `9ff3f627dae5f45e9637dcfb4e108af192ce3233`, but
+the receipt retained package hash
+`d9d55f901ce580e7aaba2e9bee2880e9c0e4c49fbecc4ad92ac8a353f54fbab0`
+from the preceding build because ignored `dist` output had not been rebuilt.
+The positive and control classified correctly, while the stale executable
+allowed five missing semantic groups. The current source, and then freshly
+compiled output, both rejected that sealed finding with exactly those five
+validation and attack-path omissions. Revision identity alone is therefore not
+sufficient benchmark provenance; the scanner package digest is the decisive
+executable binding.
+
+After a clean TypeScript build, campaign
+`b039e5ea8188ef83e17d38a9c12014106643b78fe93afcf31411f25af0778d95`
+carried new package hash
+`d184bad8d187cb873f21bf6bc5e949515e06d856e146111f47347a17c85c70da`.
+Both `gpt-5.6-terra` high-effort deep scans authenticated from stored Copilot
+credentials and completed on attempt one without account, allowance, quota,
+rate-limit, classifier, authentication, or transport failure. The positive
+finished in 4m02s with one high CWE-502 finding; the JSON control finished in
+3m57s with none. Every required semantic group appeared independently in both
+fields. Completion, precision, recall, F1, case pass, negative pass, stable
+detection, validation, attack path, code evidence, and severity accuracy were
+all 1.0, with zero false positives and zero false negatives. Total estimated
+cost was $1.540957375. Future live acceptance runs must build first and compare
+the package digest to the intended implementation checkpoint before their
+metrics are accepted. The runner now enforces this operationally before it
+creates or locks a campaign: a bounded, symlink-rejecting source walk requires
+every non-declaration TypeScript file to have a compiled JavaScript counterpart
+whose modification time is not older. Missing or stale output fails with the
+exact build command, while the existing package digest continues to bind the
+actual executable bytes.
+
+The widened acceptance lane passes 135 Windows tests and 1,396 assertions with
+one intentional symlink skip. The WSL Joblib, closure, campaign-provenance,
+residual-risk, and Copilot lanes also pass, and the freshness check itself takes
+0.58 seconds on the Windows-mounted source tree. A separate extended diagnostic
+completed all five nested runner-recovery cases; process startup across
+`/mnt/c` can exceed that Windows-calibrated harness's 25-second child timeout.
+No production scan, model-turn, retry, or campaign deadline was relaxed.
+
 ## 2026-08-25 — Model NumPy object arrays only across explicit pickle opt-in
 
 **Gap and authoritative semantics.** The Python unsafe-deserialization pass

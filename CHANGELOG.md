@@ -64,6 +64,43 @@ All notable scanner, application, benchmark, and operational changes are recorde
   another field cannot substitute, and fixture runtime evidence cannot be
   promoted to a deployment claim. Re-auditing the sealed failed finding
   reproduces its exact seven omitted groups in each field.
+- Campaign
+  `89c2822204217f3696237b32d9995e0aa5a4d2a5fc767f9248c2d640ff9d8de3`
+  deliberately remains diagnostic: source revision
+  `9ff3f627dae5f45e9637dcfb4e108af192ce3233` was checked out, but the live CLI
+  receipt retained the prior package hash
+  `d9d55f901ce580e7aaba2e9bee2880e9c0e4c49fbecc4ad92ac8a353f54fbab0`
+  because `dist` had not been rebuilt after the source-only checkpoint. Its
+  positive and control still detected correctly, but the stale executable
+  omitted five Joblib evidence groups and failed acceptance. Running the
+  current source directly against that sealed finding reproduced the exact
+  five validation and attack-path gaps, identifying build provenance rather
+  than correlation logic as the integration fault.
+- Rebuilt campaign
+  `b039e5ea8188ef83e17d38a9c12014106643b78fe93afcf31411f25af0778d95`
+  is bound to the same revision and new package hash
+  `d184bad8d187cb873f21bf6bc5e949515e06d856e146111f47347a17c85c70da`.
+  Both deep scans authenticated from stored Copilot credentials and completed
+  on attempt one with no account, allowance, quota, rate-limit, classifier,
+  authentication, or transport failure. The positive emitted one high CWE-502
+  finding with every required fact in both fields; the JSON control emitted no
+  findings. All completion, precision, recall, F1, case-pass, negative-pass,
+  stability, validation, attack-path, code-evidence, and severity metrics are
+  1.0 with zero false positives and zero false negatives. Total estimated cost
+  was $1.540957375.
+- The benchmark runner now fails before campaign creation when local TypeScript
+  source is newer than, or lacks, its compiled JavaScript counterpart. This
+  bounds the source walk, rejects symbolic links, and gives an exact build
+  command, preventing a source revision from being paired with stale ignored
+  `dist` bytes in future live evidence.
+- The widened Windows provenance, recovery, Joblib, residual-risk, and Copilot
+  orchestration lane passes 135 tests and 1,396 assertions with one intentional
+  symlink skip. The WSL Joblib, closure, campaign-provenance, residual-risk, and
+  Copilot lanes also pass; the freshness check takes 0.58 seconds on the
+  Windows-mounted source tree. A separate extended diagnostic completed all
+  five nested runner-recovery cases under WSL, where process startup across
+  `/mnt/c` exceeds that Windows-calibrated test's 25-second child timeout.
+  Production scanner and campaign deadlines are unchanged.
 - Added `python-web-numpy-allow-pickle-load`, a typed Python web-to-NumPy
   object-array deserialization model for CWE-502. It requires an exact live
   `import numpy` receiver or named `from numpy import load` binding, request

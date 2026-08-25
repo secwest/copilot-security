@@ -7,6 +7,7 @@ import {
   readFile,
   readdir,
   rm,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -25,6 +26,7 @@ import {
   readBenchmarkCampaign,
   readBenchmarkReceiptAttempt,
   readSuccessfulBenchmarkReceipt,
+  requireFreshTypeScriptBuild,
   sha256Directory,
   sha256ScannerPackage,
   writeBenchmarkReceipt,
@@ -295,6 +297,34 @@ describe("benchmark campaign integrity", () => {
       "changed policy\n",
     );
     expect(await sha256ScannerPackage(scanner)).not.toBe(before);
+  });
+
+  test("rejects stale or missing local benchmark build output", async () => {
+    const root = await temporaryDirectory("campaign-build-freshness-");
+    const source = join(root, "src");
+    const dist = join(root, "dist");
+    await mkdir(join(source, "nested"), { recursive: true });
+    await mkdir(join(dist, "nested"), { recursive: true });
+    const sourcePath = join(source, "nested", "scanner.ts");
+    const compiledPath = join(dist, "nested", "scanner.js");
+    await writeFile(sourcePath, "export const value = 1;\n");
+    await writeFile(compiledPath, "export const value = 1;\n");
+    await utimes(sourcePath, new Date(2_000), new Date(2_000));
+    await utimes(compiledPath, new Date(3_000), new Date(3_000));
+
+    await expect(requireFreshTypeScriptBuild(source, dist)).resolves.toBe(
+      undefined,
+    );
+
+    await utimes(sourcePath, new Date(4_000), new Date(4_000));
+    await expect(requireFreshTypeScriptBuild(source, dist)).rejects.toThrow(
+      "build is stale for nested/scanner.ts",
+    );
+
+    await writeFile(join(source, "missing.ts"), "export {};\n");
+    await expect(requireFreshTypeScriptBuild(source, dist)).rejects.toThrow(
+      "build is stale for missing.ts",
+    );
   });
 
   test("binds benchmark evaluation to the campaign recorded in each run receipt", async () => {

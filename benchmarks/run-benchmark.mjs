@@ -25,6 +25,7 @@ import {
   promoteBenchmarkAttemptOutput,
   readBenchmarkReceiptAttempt,
   readSuccessfulBenchmarkReceipt,
+  requireFreshTypeScriptBuild,
   sha256Directory,
   sha256File,
   sha256ScannerPackage,
@@ -90,6 +91,10 @@ const scannerCli = resolve(options.scannerCli ?? defaultCli);
 const scannerPackageRoot = resolve(dirname(scannerCli), "..");
 requireOutsideRepository(resultsDirectory);
 await requireRegularFile(scannerCli, "Scanner CLI");
+await requireFreshTypeScriptBuild(
+  join(repositoryRoot, "sdk", "typescript", "src"),
+  join(repositoryRoot, "sdk", "typescript", "dist"),
+);
 const benchmarkRunnerLock = await acquireBenchmarkRunnerLock(resultsDirectory);
 process.once("exit", () => benchmarkRunnerLock.releaseSync());
 

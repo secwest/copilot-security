@@ -18,6 +18,7 @@ const MAX_RECEIPT_BYTES = 256 * 1024;
 const MAX_RUNNER_LOCK_BYTES = 16 * 1024;
 const MAX_FIXTURE_FILES = 10_000;
 const MAX_FIXTURE_BYTES = 256 * 1024 * 1024;
+const MAX_BUILD_SOURCE_FILES = 10_000;
 const RUNNER_LOCK_RECOVERY_DELAY_MS = 25;
 const MAX_RUNNER_LOCK_TRANSITIONS = 32;
 
@@ -25,6 +26,83 @@ export const BENCHMARK_CAMPAIGN_FILENAME = "benchmark-campaign.json";
 export const BENCHMARK_RUNNER_LOCK_FILENAME = ".benchmark-runner.lock";
 export const BENCHMARK_RUNNER_LOCK_ARCHIVE_DIRECTORY =
   ".benchmark-runner-locks";
+
+/**
+ * Refuse benchmark provenance that names current source while executing stale
+ * ignored build output. The package digest binds the executable bytes after
+ * this check; callers must still build before creating the campaign.
+ */
+export async function requireFreshTypeScriptBuild(
+  sourceRoot: string,
+  distRoot: string,
+): Promise<void> {
+  const sourceMetadata = await lstat(sourceRoot).catch(() => null);
+  const distMetadata = await lstat(distRoot).catch(() => null);
+  if (
+    sourceMetadata === null ||
+    !sourceMetadata.isDirectory() ||
+    sourceMetadata.isSymbolicLink() ||
+    distMetadata === null ||
+    !distMetadata.isDirectory() ||
+    distMetadata.isSymbolicLink()
+  ) {
+    throw new CopilotSecurityError(
+      "The local benchmark build is missing. Run pnpm --dir sdk/typescript run build before benchmarking.",
+    );
+  }
+
+  const pending = [sourceRoot];
+  let sourceFileCount = 0;
+  while (pending.length > 0) {
+    const directory = pending.pop()!;
+    const entries = await readdir(directory, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name, "en"));
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) {
+        throw new CopilotSecurityError(
+          "The local benchmark source tree contains a symbolic link.",
+        );
+      }
+      const sourcePath = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(sourcePath);
+        continue;
+      }
+      if (
+        !entry.isFile() ||
+        !entry.name.endsWith(".ts") ||
+        entry.name.endsWith(".d.ts")
+      ) {
+        continue;
+      }
+      sourceFileCount += 1;
+      if (sourceFileCount > MAX_BUILD_SOURCE_FILES) {
+        throw new CopilotSecurityError(
+          "The local benchmark source tree exceeds the build freshness limit.",
+        );
+      }
+      const source = await lstat(sourcePath);
+      const relativeSource = relative(sourceRoot, sourcePath);
+      const compiledPath = join(distRoot, `${relativeSource.slice(0, -3)}.js`);
+      const compiled = await lstat(compiledPath).catch(() => null);
+      if (
+        compiled === null ||
+        !compiled.isFile() ||
+        compiled.isSymbolicLink() ||
+        compiled.mtimeMs < source.mtimeMs
+      ) {
+        throw new CopilotSecurityError(
+          `The local benchmark build is stale for ${relativeSource.replaceAll(sep, "/")}. Run pnpm --dir sdk/typescript run build before benchmarking.`,
+        );
+      }
+    }
+  }
+  if (sourceFileCount === 0) {
+    throw new CopilotSecurityError(
+      "The local benchmark source tree contains no TypeScript files.",
+    );
+  }
+}
 
 interface BenchmarkRunnerLockDocument {
   documentType: "copilot-security.benchmark-runner-lock";
