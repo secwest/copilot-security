@@ -69,6 +69,26 @@ isolated installation directories are removed after acceptance.
 `32796785883`, .NET `32796785929`, and Go `32796785893`. The Node matrix passes
 Windows Node 22, macOS Node 22, and Linux Node 22, 24, 24.0.0, 26, and 26.0.0.
 
+**Hosted deadlock guards are not scanner deadlines.** A subsequent
+documentation-head Windows run completed 1,492 tests without an assertion
+failure but the hosted Python interpreter exceeded the test's 30-second
+subprocess guard and private credential-home setup exceeded its 60-second outer
+guard. Preserve the distinction between a scanner model-turn deadline and a
+test-process deadlock bound. The two slow environment integrations now allow
+120 seconds for Python, 150 seconds for its enclosing test, and 180 seconds for
+credential-home preparation. No production timeout, retry budget, assertion,
+or scanner failure policy changes. Both native Windows files pass 119 tests and
+1,317 assertions with one intentional skip after the adjustment.
+
+The corresponding WSL audit exposed an independent mounted-filesystem timing
+assumption in the split TypeScript npm-bin integration: a clean build plus two
+launcher checks can legitimately exceed its former 30-second outer guard. Give
+the build a 90-second deadlock guard and the enclosing test 180 seconds, retain
+the failed-launcher's 30-second child guard, and assert every child-process
+error explicitly. The complete WSL CLI file then passes 81 tests and 1,148
+assertions; the split-package case completes in 60.97 seconds. These are test
+infrastructure bounds only, not product runtime limits.
+
 ## 2026-08-24 — Make imported-analyzer closure a sealed host fact
 
 **Gap and external semantics.** SARIF interchange increases recall only if the

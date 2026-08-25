@@ -331,7 +331,10 @@ describe("CLI", () => {
             COPILOT_HOME: join(root, "copilot-home"),
             PYTHONDONTWRITEBYTECODE: "1",
           },
-          timeout: 30_000,
+          // Hosted Windows Python startup can be delayed substantially while
+          // the full Bun suite exercises process-heavy fixtures in parallel.
+          // This is a deadlock guard, not a performance assertion.
+          timeout: 120_000,
         },
       );
 
@@ -357,7 +360,7 @@ describe("CLI", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  }, 60_000);
+  }, 150_000);
 
   test("marks findings as false positives without starting Copilot", async () => {
     const reason = "  Not reachable from untrusted input.  ";
@@ -1383,8 +1386,15 @@ describe("CLI", () => {
             "--pretty",
             "false",
           ],
-          { encoding: "utf8", cwd: source },
+          {
+            encoding: "utf8",
+            cwd: source,
+            // Building through a mounted WSL workspace is much slower than a
+            // native filesystem on a cold host. This remains a deadlock guard.
+            timeout: 90_000,
+          },
         );
+        expect(build.error).toBeUndefined();
         expect(build.status).toBe(0);
         expect(build.stderr).toBe("");
         expect(await readFile(join(dist, "cli.js"), "utf8")).toContain(
@@ -1414,7 +1424,9 @@ describe("CLI", () => {
               "--preserve-symlinks-main --no-experimental-detect-module",
             NODE_USE_ENV_PROXY: undefined,
           },
+          timeout: 30_000,
         });
+        expect(child.error).toBeUndefined();
         expect(child.status).toBe(0);
         expect(child.stderr).toBe("");
         expect(child.stdout).toBe(`${VERSION}\n`);
@@ -1448,6 +1460,7 @@ describe("CLI", () => {
             timeout: 30_000,
           },
         );
+        expect(failed.error).toBeUndefined();
         expect([failed.status, failed.stdout, failed.stderr]).toEqual([
           2,
           "",
@@ -1457,7 +1470,7 @@ describe("CLI", () => {
         await rm(root, { recursive: true, force: true });
       }
     },
-    30_000,
+    180_000,
   );
 
   test("uses Incur version and command help", async () => {

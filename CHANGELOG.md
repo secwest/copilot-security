@@ -44,6 +44,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `32796785883`, .NET `32796785929`, and Go `32796785893` all succeed. The Node
   workflow covers Windows Node 22, macOS Node 22, and Linux Node 22, 24, 24.0.0,
   26, and 26.0.0.
+- Hardened two environment-heavy Windows test deadlock guards after a later
+  documentation-head run completed 1,492 assertions-clean tests but timed out
+  waiting for hosted Python startup and private credential-home setup. The
+  Python subprocess guard is now 120 seconds with a 150-second enclosing test;
+  the credential-home integration test allows 180 seconds. Scanner production
+  deadlines, retry limits, assertions, and failure handling are unchanged. The
+  affected native Windows files pass 119 tests and 1,317 assertions with one
+  intentional platform skip and zero failures. The same audit exposed a
+  separate WSL mounted-filesystem integration whose clean TypeScript build can
+  exceed its old 30-second outer guard; it now has a 90-second build guard and
+  180-second test guard plus explicit child-process error assertions. The full
+  WSL CLI file passes all 81 tests and 1,148 assertions, including the 60.97s
+  split-package case.
 - Added deterministic external-SARIF seed-coverage receipts. Seeded scans now
   bind the exact normalized candidate count and JSONL SHA-256 plus ordered
   source digests into the trusted workbench recipe; reject partial, malformed,

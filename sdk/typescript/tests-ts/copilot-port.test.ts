@@ -1441,5 +1441,5 @@ describe("Copilot port", () => {
     );
     expect(runtime.environment["COPILOT_HOME"]).toBe(runtime.copilotHome);
     expect(runtime.copilotHome).not.toContain(ambientHome);
-  }, 60_000);
+  }, 180_000);
 });
