@@ -133,6 +133,10 @@ describe("effectiveness benchmark", () => {
       ["python-xxe", "python-safe-xml"],
       ["python-lxml-iterparse-xxe", "python-lxml-iterparse-patched-control"],
       ["python-lxml-etcompat-xxe", "python-lxml-etcompat-patched-control"],
+      [
+        "python-tarfile-unsafe-extraction",
+        "python-tarfile-data-filter-control",
+      ],
       ["javascript-prototype-pollution", "javascript-safe-preferences"],
       [
         "node-multi-hop-prototype-pollution",

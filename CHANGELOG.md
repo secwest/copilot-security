@@ -6,6 +6,61 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-tarfile-unsafe-extraction`, a Python-standard-library
+  CWE-22 model for remote tar archive extraction outside the intended
+  destination. It resolves live `tarfile.open` and `TarFile` bindings across
+  module, aliased, direct, and bounded parenthesized imports; binds only the
+  `fileobj` input of a readable archive to the exact retained `TarFile`
+  receiver; and requires a later `extract` or `extractall` operation. Same-file,
+  one-wrapper, and two-relay request flows retain explicit binding, open,
+  runtime, filter, extraction, and intrinsic member-path-write provenance.
+- Made omitted-filter semantics runtime exact. One nearest regular
+  `.python-version` or `runtime.txt` must contain one stable `X.Y.Z` pin.
+  Omitted or `None` filters are unsafe below Python 3.14 and suppressed at
+  3.14 or later; literal or official `fully_trusted` filters remain findings
+  on supported Python 3.12+ releases. Literal `data` or `tar`, official
+  `data_filter` or `tar_filter`, and exact safe instance or class
+  `extraction_filter` assignments are negative controls. Missing, ranged,
+  malformed, duplicate, shadowed, symlinked, or ambiguous evidence fails
+  closed, as do write modes, filename-only input, fixed streams, destination-
+  only request flow, star expansion, binding replacement, receiver
+  reassignment, unrelated scopes, local package shadows, and text lookalikes.
+- Added source-identical Flask unsafe/default and `filter="data"` fixtures with
+  a perfect-gate specialized benchmark. Their bounded witness creates one
+  in-memory tar member named `../escaped-marker.txt`, operates only in a new
+  temporary directory, and uses neither network nor shell. Under Python
+  3.12.3 in Ubuntu/WSL, the unsafe default writes the fixture marker outside
+  the selected destination; the data-filter control raises
+  `OutsideDestinationError` and writes nothing. The canonical corpus now
+  contains 112 exploit/control pairs, 224 cases, and 672 repeated scans.
+- Added fourteen tarfile regression groups covering all accepted binding and
+  receiver forms, `extract` and `extractall`, multiline and positional
+  `fileobj` calls, one-hop aliases, two relative relays, the Python 3.14
+  default transition, nearest runtime boundaries, literal and official
+  filters, instance and class overrides, dense candidate decoys, shadows,
+  reassignment, wrong argument roles, and ten independent evidence groups in
+  both validation and attack path. The focused Windows lane passes 31 tests
+  and 1,857 assertions with one intentional POSIX-only skip; Ubuntu/WSL
+  passes all 32 tests and 1,858 assertions. A test-discovered exact-value
+  parser defect is fixed: quoted `mode=` and `filter=` values are now compared
+  before structural string erasure.
+- Compared the model against Python's 3.12 and current `tarfile` documentation
+  and CodeQL's medium-precision `py/tarslip` query guidance. The scanner adds
+  exact remote `fileobj` flow, official receiver identity, runtime/default and
+  override semantics, cross-file propagation, executable matched evidence,
+  and field-local report closure instead of treating archive extraction or a
+  path spelling alone as a verdict.
+- Final local acceptance is green. The authoritative native Windows suite
+  passes 1,608 tests and 11,843 assertions across 176 files with 24 intentional
+  environment/platform skips, zero failures, and a 622.25-second runtime.
+  Formatting, generated-model drift, TypeScript compilation, the clean build,
+  and the high-severity production audit pass with no known vulnerabilities.
+  Strict inspection validates a fresh 259-entry, 1,897,492-byte package with
+  SHA-256
+  `a391de3c4965d81543648e6c2742a33c9bf0e64903a27fd20e6d251ed1cacc7f`;
+  an isolated install adds 67 packages and validates public import, CLI
+  behavior, and all 79 bundled plugin files. The unique package staging
+  directory is removed after evidence capture.
 - Added `python-web-lxml-etcompat-xxe`, a version-aware CWE-611 model that
   completes the second parser surface in CVE-2026-41066/GHSA-vfmq-68hx-4jfw.
   It resolves live official `ETCompatXMLParser` and `XMLTreeBuilder`

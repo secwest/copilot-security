@@ -1894,6 +1894,75 @@
       "expected": []
     },
     {
+      "id": "python-tarfile-unsafe-extraction",
+      "description": "A remote Flask tar upload crosses an exact relative wrapper into a standard-library tarfile opened from fileobj and extracted under Python 3.12's fully trusted default.",
+      "fixture": "fixtures/python-tarfile-unsafe-extraction",
+      "findingsPaths": [
+        "python-tarfile-unsafe-extraction/run-1/findings.json",
+        "python-tarfile-unsafe-extraction/run-2/findings.json",
+        "python-tarfile-unsafe-extraction/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-tarfile-outside-destination-write",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/extractor.py",
+              "startLine": 8,
+              "endLine": 8,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["archive upload", "request.files", "uploaded tar"],
+            ["extract_archive", "wrapper"],
+            ["tarfile.open", "TarFile", "tarfile binding"],
+            ["fileobj", "archive stream", "uploaded stream"],
+            ["extractall", "extract operation", "extraction operation"],
+            ["fully_trusted", "pre-3.14 default", "filter=None"],
+            ["../", "traversal member", "member path"],
+            ["outside destination", "escaped marker", "arbitrary file write"],
+            ["Python 3.12.3"],
+            ["filter=\"data\"", "data filter", "OutsideDestinationError"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["archive upload", "request.files", "uploaded tar"],
+            ["extract_archive", "wrapper"],
+            ["tarfile.open", "TarFile", "tarfile binding"],
+            ["fileobj", "archive stream", "uploaded stream"],
+            ["extractall", "extract operation", "extraction operation"],
+            ["fully_trusted", "pre-3.14 default", "filter=None"],
+            ["../", "traversal member", "member path"],
+            ["outside destination", "escaped marker", "arbitrary file write"],
+            ["Python 3.12.3"],
+            ["filter=\"data\"", "data filter", "OutsideDestinationError"]
+          ],
+          "forbiddenText": [
+            "filter=\"data\" is unsafe for this traversal",
+            "Python 3.14 retains the fully trusted default",
+            "opening a tar archive alone writes files",
+            "the request controls only the destination"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-tarfile-data-filter-control",
+      "description": "The source-identical Python 3.12 control supplies the standard-library data extraction filter, which rejects an outside-destination member before the write.",
+      "fixture": "fixtures/python-tarfile-data-filter-control",
+      "findingsPaths": [
+        "python-tarfile-data-filter-control/run-1/findings.json",
+        "python-tarfile-data-filter-control/run-2/findings.json",
+        "python-tarfile-data-filter-control/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-prototype-pollution",
       "description": "A dotted attacker-controlled path performs recursive computed writes through an ordinary object and permits __proto__ traversal.",
       "fixture": "fixtures/javascript-prototype-pollution",

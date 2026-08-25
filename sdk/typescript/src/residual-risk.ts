@@ -53,6 +53,8 @@ const MAX_NODE_PACKAGE_LOCKFILE_BYTES = 16 * 1024 * 1024;
 const MAX_NODE_PACKAGE_LOCKFILE_BYTES_PER_FILE = 4 * 1024 * 1024;
 const MAX_PYTHON_REQUIREMENT_FILES = 512;
 const MAX_PYTHON_REQUIREMENT_BYTES = 2 * 1024 * 1024;
+const MAX_PYTHON_RUNTIME_FILES = 512;
+const MAX_PYTHON_RUNTIME_BYTES = 512 * 1024;
 const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
 const MAX_EXCERPT_LINES = 16;
@@ -2152,6 +2154,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-web-tarfile-unsafe-extraction",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+tarfile(?:\s+as\s+[A-Za-z_]\w*)?\b|\bfrom\s+tarfile\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-body",
+        expression:
+          /\brequest\.(?:body|data|files|form|json|POST|stream)\b|\brequest\.(?:get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\bBody\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "tarfile-untrusted-archive-extraction",
+        expression: /\b[A-Za-z_]\w*\s*\.\s*(?:extract|extractall)\s*\(/u,
+        cweIds: ["CWE-22"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-pyyaml-unsafe-load",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3194,7 +3223,7 @@ interface FrameworkFilesystemPathSink {
   operation: string;
 }
 
-interface PythonUnsafeDeserializationSink {
+interface PythonTypedSink {
   sourceExpression: string;
   kind: string;
   propagators: Array<{
@@ -3205,7 +3234,7 @@ interface PythonUnsafeDeserializationSink {
   }>;
 }
 
-function isPythonUnsafeDeserializationModel(modelId: string): boolean {
+function isPythonTypedSinkModel(modelId: string): boolean {
   return (
     modelId === "python-web-pickle-unsafe-load" ||
     modelId === "python-web-pyyaml-unsafe-load" ||
@@ -3213,7 +3242,8 @@ function isPythonUnsafeDeserializationModel(modelId: string): boolean {
     modelId === "python-web-joblib-unsafe-load" ||
     modelId === "python-web-torch-unsafe-load" ||
     modelId === "python-web-lxml-iterparse-xxe" ||
-    modelId === "python-web-lxml-etcompat-xxe"
+    modelId === "python-web-lxml-etcompat-xxe" ||
+    modelId === "python-web-tarfile-unsafe-extraction"
   );
 }
 
@@ -3455,6 +3485,19 @@ const LXML_ETCOMPAT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["lxml 6.0.2", "lxml==6.0.2"],
 ] as const;
 
+const TARFILE_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["archive upload", "request.files", "uploaded tar stream"],
+  ["extract_archive", "wrapper"],
+  ["tarfile.open", "TarFile", "official tarfile binding"],
+  ["fileobj", "archive source", "open argument"],
+  ["extractall", "extract member", "TarFile.extract"],
+  ["fully_trusted", "pre-3.14 default", "unsafe extraction filter"],
+  ["../", "dot-dot", "traversal member"],
+  ["outside destination", "arbitrary file write", "escaped marker"],
+  ["Python 3.12.3"],
+  ["filter='data'", 'filter="data"', "OutsideDestinationError"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3485,6 +3528,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: LXML_ETCOMPAT_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: LXML_ETCOMPAT_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-web-tarfile-unsafe-extraction",
+    {
+      validation: TARFILE_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: TARFILE_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -3569,6 +3619,9 @@ export async function buildResidualRiskInventory(
       canonicalRepository,
       sourceFiles,
     )),
+  );
+  sourceFiles.push(
+    ...(await nearestPythonRuntimeSnapshots(canonicalRepository, sourceFiles)),
   );
 
   for (const file of sourceFiles) {
@@ -14302,11 +14355,13 @@ function frameworkDataflowRecords(
               ? pythonLxmlIterparseCandidateLines(lines, 64)
               : model.id === "python-web-lxml-etcompat-xxe"
                 ? pythonLxmlEtCompatCandidateLines(lines, 64)
-                : matchingPythonModelLines(
-                    lines,
-                    model.sinks,
-                    isPythonUnsafeDeserializationModel(model.id) ? 64 : 8,
-                  )
+                : model.id === "python-web-tarfile-unsafe-extraction"
+                  ? pythonTarfileCandidateLines(lines, 64)
+                  : matchingPythonModelLines(
+                      lines,
+                      model.sinks,
+                      isPythonTypedSinkModel(model.id) ? 64 : 8,
+                    )
             : extension === ".java" || extension === ".cs"
               ? matchingJavaModelLines(lines, model.sinks, 8)
               : matchingModelLines(lines, model.sinks, 8);
@@ -14508,7 +14563,7 @@ function frameworkDataflowRecords(
         model.id === "python-web-path"
           ? pythonFilesystemPathSink(lines, sink.line)
           : undefined;
-      const pythonUnsafeDeserializationSink =
+      const pythonTypedSink =
         model.id === "python-web-pyyaml-unsafe-load"
           ? pythonPyyamlUnsafeSink(files, path, lines, sink.line)
           : model.id === "python-web-pickle-unsafe-load"
@@ -14523,7 +14578,14 @@ function frameworkDataflowRecords(
                     ? pythonLxmlIterparseXxeSink(files, path, lines, sink.line)
                     : model.id === "python-web-lxml-etcompat-xxe"
                       ? pythonLxmlEtCompatXxeSink(files, path, lines, sink.line)
-                      : undefined;
+                      : model.id === "python-web-tarfile-unsafe-extraction"
+                        ? pythonTarfileUnsafeExtractionSink(
+                            files,
+                            path,
+                            lines,
+                            sink.line,
+                          )
+                        : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -14789,10 +14851,7 @@ function frameworkDataflowRecords(
       if (model.id === "python-web-path" && pythonPathSink === undefined) {
         continue;
       }
-      if (
-        isPythonUnsafeDeserializationModel(model.id) &&
-        pythonUnsafeDeserializationSink === undefined
-      ) {
+      if (isPythonTypedSinkModel(model.id) && pythonTypedSink === undefined) {
         continue;
       }
       if (
@@ -15021,13 +15080,13 @@ function frameworkDataflowRecords(
                                 ),
                               )
                               .find((candidate) => candidate !== undefined)
-                          : isPythonUnsafeDeserializationModel(model.id) &&
-                              pythonUnsafeDeserializationSink !== undefined
+                          : isPythonTypedSinkModel(model.id) &&
+                              pythonTypedSink !== undefined
                             ? modeledPythonObjectSource(
                                 lines,
                                 sources,
                                 sink.line,
-                                pythonUnsafeDeserializationSink.sourceExpression,
+                                pythonTypedSink.sourceExpression,
                                 model.sources,
                               )
                             : model.id === "node-http-object-authorization" &&
@@ -15318,7 +15377,7 @@ function frameworkDataflowRecords(
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
         nodePrototypeMerge?.kind ??
-        pythonUnsafeDeserializationSink?.kind ??
+        pythonTypedSink?.kind ??
         sink.kind;
       const startLine = Math.max(1, effectiveSinkLine - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(
@@ -15512,7 +15571,7 @@ function frameworkDataflowRecords(
                     symbol: `socket.io-parser@${nodeSocketIoServerDos.dependency.child.version}:${nodeSocketIoServerDos.dependency.child.proof}:${nodeSocketIoServerDos.dependency.childDeclaration}:zero-attachment-buffer-retention`,
                   },
                 ]),
-            ...(pythonUnsafeDeserializationSink?.propagators ?? []),
+            ...(pythonTypedSink?.propagators ?? []),
             ...(nodeOpcuaServerDos === undefined
               ? []
               : [
@@ -23977,7 +24036,9 @@ function pythonFrameworkWrapperSummaries(
             ? pythonLxmlIterparseCandidateLines(file.lines, 64)
             : model.id === "python-web-lxml-etcompat-xxe"
               ? pythonLxmlEtCompatCandidateLines(file.lines, 64)
-              : matchingPythonModelLines(file.lines, model.sinks, 32);
+              : model.id === "python-web-tarfile-unsafe-extraction"
+                ? pythonTarfileCandidateLines(file.lines, 64)
+                : matchingPythonModelLines(file.lines, model.sinks, 32);
       const controls = matchingPythonModelLines(file.lines, model.controls, 64);
       for (const wrapper of exportedFunctions) {
         for (const sink of sinks) {
@@ -23993,7 +24054,7 @@ function pythonFrameworkWrapperSummaries(
             model.id === "python-web-path"
               ? pythonFilesystemPathSink(file.lines, sink.line)
               : undefined;
-          const pythonUnsafeDeserializationSink =
+          const pythonTypedSink =
             model.id === "python-web-pyyaml-unsafe-load"
               ? pythonPyyamlUnsafeSink(files, file.path, file.lines, sink.line)
               : model.id === "python-web-pickle-unsafe-load"
@@ -24038,18 +24099,25 @@ function pythonFrameworkWrapperSummaries(
                               file.lines,
                               sink.line,
                             )
-                          : undefined;
+                          : model.id === "python-web-tarfile-unsafe-extraction"
+                            ? pythonTarfileUnsafeExtractionSink(
+                                files,
+                                file.path,
+                                file.lines,
+                                sink.line,
+                              )
+                            : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
           if (
-            isPythonUnsafeDeserializationModel(model.id) &&
-            pythonUnsafeDeserializationSink === undefined
+            isPythonTypedSinkModel(model.id) &&
+            pythonTypedSink === undefined
           ) {
             continue;
           }
           const tracedSinkExpression =
-            pythonUnsafeDeserializationSink?.sourceExpression ??
+            pythonTypedSink?.sourceExpression ??
             pythonPathSink?.expressions
               .map(
                 (expression) =>
@@ -24101,14 +24169,14 @@ function pythonFrameworkWrapperSummaries(
               declarationLine: wrapper.startLine,
               sink: {
                 ...sink,
-                kind: pythonUnsafeDeserializationSink?.kind ?? sink.kind,
+                kind: pythonTypedSink?.kind ?? sink.kind,
                 cweIds: sinkPattern.cweIds,
               },
               controls: wrapperControls.slice(0, 8),
-              ...(pythonUnsafeDeserializationSink === undefined
+              ...(pythonTypedSink === undefined
                 ? {}
                 : {
-                    propagators: pythonUnsafeDeserializationSink.propagators,
+                    propagators: pythonTypedSink.propagators,
                   }),
             });
           }
@@ -25576,10 +25644,12 @@ function pythonLxmlIterparseCandidateLines(
   return matches;
 }
 
-interface PythonLxmlEtCompatBinding extends PythonModuleImportBinding {
+interface PythonMemberBinding extends PythonModuleImportBinding {
   memberPath: string;
   operation: string;
 }
+
+interface PythonLxmlEtCompatBinding extends PythonMemberBinding {}
 
 interface PythonLxmlEtCompatBindingContext {
   constructors: PythonLxmlEtCompatBinding[];
@@ -25704,7 +25774,7 @@ function pythonLxmlEtCompatBindings(
   return { constructors, parsers };
 }
 
-function pythonLxmlBindingCallee(binding: PythonLxmlEtCompatBinding): RegExp {
+function pythonMemberBindingCallee(binding: PythonMemberBinding): RegExp {
   const memberPattern = binding.memberPath
     .split(".")
     .filter(Boolean)
@@ -25718,9 +25788,9 @@ function pythonLxmlBindingCallee(binding: PythonLxmlEtCompatBinding): RegExp {
       );
 }
 
-function pythonLxmlBindingIsLive(
+function pythonMemberBindingIsLive(
   lines: readonly string[],
-  binding: PythonLxmlEtCompatBinding,
+  binding: PythonMemberBinding,
   callLine: number,
   wrapper: ExportedPythonFunction | undefined,
 ): boolean {
@@ -25752,7 +25822,7 @@ function pythonLxmlEtCompatCandidateLines(
 ): Array<{ kind: string; line: number }> {
   const bindings = pythonLxmlEtCompatBindings(lines).parsers.map((binding) => ({
     binding,
-    callee: pythonLxmlBindingCallee(binding),
+    callee: pythonMemberBindingCallee(binding),
   }));
   const structuralLines = pythonStructuralLines(lines);
   const matches: Array<{ kind: string; line: number }> = [];
@@ -25876,6 +25946,53 @@ interface PythonPinnedRequirement {
   version: string;
   path: string;
   line: number;
+}
+
+interface PythonPinnedRuntime {
+  version: string;
+  path: string;
+  line: number;
+}
+
+function pythonPinnedRuntime(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+): PythonPinnedRuntime | undefined {
+  let directory = posix.dirname(sourcePath.replaceAll("\\", "/"));
+  while (true) {
+    const prefix = directory === "." ? "" : `${directory}/`;
+    const runtimeFiles = files.filter((file) => {
+      const normalized = file.path.replaceAll("\\", "/").toLowerCase();
+      return (
+        normalized === `${prefix}.python-version`.toLowerCase() ||
+        normalized === `${prefix}runtime.txt`.toLowerCase()
+      );
+    });
+    if (runtimeFiles.length > 0) {
+      if (runtimeFiles.length !== 1) return undefined;
+      const runtime = runtimeFiles[0]!;
+      const nonempty = runtime.lines
+        .map((line, index) => ({ line: line.trim(), index }))
+        .filter(({ line }) => line !== "" && !line.startsWith("#"));
+      if (nonempty.length !== 1) return undefined;
+      const expected = runtime.path.toLowerCase().endsWith("runtime.txt")
+        ? /^python-(\d+\.\d+\.\d+)$/u
+        : /^(\d+\.\d+\.\d+)$/u;
+      const parsed = expected.exec(nonempty[0]!.line);
+      return parsed?.[1] === undefined
+        ? undefined
+        : {
+            version: parsed[1],
+            path: runtime.path,
+            line: nonempty[0]!.index + 1,
+          };
+    }
+    if (directory === ".") break;
+    const parent = posix.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  return undefined;
 }
 
 function pythonPinnedRequirement(
@@ -26115,7 +26232,7 @@ function pythonNumpyAllowPickleUnsafeSink(
   sourcePath: string,
   lines: readonly string[],
   line: number,
-): PythonUnsafeDeserializationSink | undefined {
+): PythonTypedSink | undefined {
   if (pythonLocalModuleCouldShadow(files, sourcePath, "numpy")) {
     return undefined;
   }
@@ -26201,7 +26318,7 @@ function pythonJoblibUnsafeSink(
   sourcePath: string,
   lines: readonly string[],
   line: number,
-): PythonUnsafeDeserializationSink | undefined {
+): PythonTypedSink | undefined {
   if (pythonLocalModuleCouldShadow(files, sourcePath, "joblib")) {
     return undefined;
   }
@@ -26277,7 +26394,7 @@ function pythonTorchUnsafeSink(
   sourcePath: string,
   lines: readonly string[],
   line: number,
-): PythonUnsafeDeserializationSink | undefined {
+): PythonTypedSink | undefined {
   if (pythonLocalModuleCouldShadow(files, sourcePath, "torch")) {
     return undefined;
   }
@@ -26446,7 +26563,7 @@ function pythonLxmlIterparseXxeSink(
   sourcePath: string,
   lines: readonly string[],
   line: number,
-): PythonUnsafeDeserializationSink | undefined {
+): PythonTypedSink | undefined {
   if (pythonLocalModuleCouldShadow(files, sourcePath, "lxml")) {
     return undefined;
   }
@@ -26575,7 +26692,7 @@ function pythonLxmlEtCompatXxeSink(
   sourcePath: string,
   lines: readonly string[],
   line: number,
-): PythonUnsafeDeserializationSink | undefined {
+): PythonTypedSink | undefined {
   if (pythonLocalModuleCouldShadow(files, sourcePath, "lxml")) {
     return undefined;
   }
@@ -26585,8 +26702,9 @@ function pythonLxmlEtCompatXxeSink(
     (candidate) => line >= candidate.startLine && line <= candidate.endLine,
   );
   for (const parserBinding of context.parsers) {
-    if (!pythonLxmlBindingIsLive(lines, parserBinding, line, wrapper)) continue;
-    const parserCallee = pythonLxmlBindingCallee(parserBinding);
+    if (!pythonMemberBindingIsLive(lines, parserBinding, line, wrapper))
+      continue;
+    const parserCallee = pythonMemberBindingCallee(parserBinding);
     const arguments_ = pythonCallArgumentsForCalleeAtLine(
       lines,
       line,
@@ -26644,7 +26762,7 @@ function pythonLxmlEtCompatXxeSink(
           ? wrapper
           : undefined;
       if (
-        !pythonLxmlBindingIsLive(
+        !pythonMemberBindingIsLive(
           lines,
           constructorBinding,
           resolvedParser.line,
@@ -26653,7 +26771,7 @@ function pythonLxmlEtCompatXxeSink(
       ) {
         continue;
       }
-      const constructorCallee = pythonLxmlBindingCallee(constructorBinding);
+      const constructorCallee = pythonMemberBindingCallee(constructorBinding);
       const constructorArguments = pythonCallArgumentsForExpression(
         resolvedParser.expression,
         constructorCallee,
@@ -26747,6 +26865,517 @@ function pythonLxmlEtCompatXxeSink(
   return undefined;
 }
 
+interface PythonTarfileBinding extends PythonMemberBinding {
+  operation:
+    | "TarFile"
+    | "data_filter"
+    | "fully_trusted_filter"
+    | "open"
+    | "tar_filter";
+}
+
+interface PythonTarfileBindingContext {
+  creators: PythonTarfileBinding[];
+  filters: PythonTarfileBinding[];
+}
+
+function pythonTarfileBindings(
+  lines: readonly string[],
+): PythonTarfileBindingContext {
+  const creators: PythonTarfileBinding[] = [];
+  const filters: PythonTarfileBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  const addReceiverBindings = (local: string, line: number): void => {
+    for (const operation of ["open", "TarFile"] as const) {
+      creators.push({
+        imported: `tarfile.${operation}`,
+        local,
+        memberPath: operation,
+        operation,
+        line,
+      });
+    }
+    for (const operation of [
+      "data_filter",
+      "tar_filter",
+      "fully_trusted_filter",
+    ] as const) {
+      filters.push({
+        imported: `tarfile.${operation}`,
+        local,
+        memberPath: operation,
+        operation,
+        line,
+      });
+    }
+  };
+
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const moduleImport =
+      /^\s*import\s+tarfile(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(structural);
+    if (moduleImport !== null) {
+      addReceiverBindings(moduleImport[1] ?? "tarfile", index + 1);
+      continue;
+    }
+    const fromImport = /^\s*from\s+tarfile\s+import\s+(.+?)\s*$/u.exec(
+      structural,
+    );
+    if (fromImport?.[1] === undefined) continue;
+    let importedText = fromImport[1].trim();
+    if (importedText.startsWith("(") && !importedText.endsWith(")")) {
+      for (
+        let offset = index + 1;
+        offset < Math.min(structuralLines.length, index + 8);
+        offset += 1
+      ) {
+        importedText += `\n${structuralLines[offset] ?? ""}`;
+        if ((structuralLines[offset] ?? "").includes(")")) break;
+      }
+    }
+    if (importedText.startsWith("(") !== importedText.endsWith(")")) {
+      continue;
+    }
+    importedText = importedText.replace(/^\(([\s\S]*)\)$/u, "$1");
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const binding = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      const operation = binding?.[1];
+      if (
+        operation !== "open" &&
+        operation !== "TarFile" &&
+        operation !== "data_filter" &&
+        operation !== "tar_filter" &&
+        operation !== "fully_trusted_filter"
+      ) {
+        continue;
+      }
+      const entry: PythonTarfileBinding = {
+        imported: `tarfile.${operation}`,
+        local: binding?.[2] ?? operation,
+        memberPath: "",
+        operation,
+        line: index + 1,
+      };
+      if (operation === "open" || operation === "TarFile") {
+        creators.push(entry);
+      } else {
+        filters.push(entry);
+      }
+    }
+  }
+  return { creators, filters };
+}
+
+function pythonMemberBindingExpression(binding: PythonMemberBinding): string {
+  return binding.memberPath === ""
+    ? binding.local
+    : `${binding.local}.${binding.memberPath}`;
+}
+
+interface PythonTarfileCreationCall {
+  receiver: string;
+  arguments: string[];
+}
+
+function pythonTarfileCreationCallAtLine(
+  lines: readonly string[],
+  line: number,
+  binding: PythonTarfileBinding,
+): PythonTarfileCreationCall | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const original = callLines.join("\n");
+  const structural = pythonStructuralLines(callLines).join("\n");
+  const callee = pythonMemberBindingCallee(binding);
+  const match = callee.exec(structural);
+  if (match === null) return undefined;
+  const firstLineEnd = structural.indexOf("\n");
+  if (firstLineEnd >= 0 && match.index >= firstLineEnd) return undefined;
+  const open = structural.indexOf("(", match.index);
+  if (open < 0) return undefined;
+  const close = matchingCallParenthesis(original, open);
+  if (close < 0) return undefined;
+  const firstLine = structural.split("\n", 1)[0] ?? "";
+  const assignment = /^\s*([A-Za-z_]\w*)(?:\s*:[^=]+)?\s*=\s*/u.exec(
+    firstLine,
+  )?.[1];
+  const withReceiver = /^\s+as\s+([A-Za-z_]\w*)\s*:/u.exec(
+    pythonStructuralCode(original.slice(close + 1)),
+  )?.[1];
+  const receiver = assignment ?? withReceiver;
+  return receiver === undefined
+    ? undefined
+    : {
+        receiver,
+        arguments: splitPythonArguments(original.slice(open + 1, close)),
+      };
+}
+
+function pythonTarfileArchiveReceiverNames(
+  lines: readonly string[],
+): Set<string> {
+  const names = new Set<string>();
+  const context = pythonTarfileBindings(lines);
+  for (let line = 1; line <= lines.length; line += 1) {
+    for (const creator of context.creators) {
+      if (creator.line >= line) continue;
+      const creation = pythonTarfileCreationCallAtLine(lines, line, creator);
+      if (creation !== undefined) names.add(creation.receiver);
+    }
+  }
+  const structuralLines = pythonStructuralLines(lines);
+  for (let pass = 0; pass < 8; pass += 1) {
+    let changed = false;
+    for (const structural of structuralLines) {
+      const alias = /^\s*([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*$/u.exec(
+        structural,
+      );
+      if (
+        alias?.[1] !== undefined &&
+        alias[2] !== undefined &&
+        names.has(alias[2]) &&
+        !names.has(alias[1])
+      ) {
+        names.add(alias[1]);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return names;
+}
+
+function pythonTarfileCandidateLines(
+  lines: readonly string[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const receivers = pythonTarfileArchiveReceiverNames(lines);
+  if (receivers.size === 0) return [];
+  const receiverPattern = [...receivers].map(escapeRegularExpression).join("|");
+  const extraction = new RegExp(
+    `\\b(?:${receiverPattern})\\s*\\.\\s*(?:extract|extractall)\\s*\\(`,
+    "u",
+  );
+  const matches: Array<{ kind: string; line: number }> = [];
+  for (const [index, structural] of pythonStructuralLines(lines).entries()) {
+    if (matches.length >= limit) break;
+    if (extraction.test(structural)) {
+      matches.push({
+        kind: "tarfile-untrusted-archive-extraction",
+        line: index + 1,
+      });
+    }
+  }
+  return matches;
+}
+
+interface PythonTarfileOrigin {
+  receiver: string;
+  sourceExpression: string;
+  line: number;
+  binding: PythonTarfileBinding;
+}
+
+function pythonTarfileReadMode(arguments_: readonly string[]): boolean {
+  const positional = pythonPositionalArguments(arguments_);
+  const modeExpression =
+    pythonKeywordArgument(arguments_, "mode") ?? positional[1];
+  if (modeExpression === undefined) return true;
+  const parsed = /^(["'])(r(?:(?::|\|)(?:\*|gz|bz2|xz|zst))?)\1$/u.exec(
+    modeExpression.trim(),
+  );
+  return parsed !== null;
+}
+
+function pythonTarfileOriginsBeforeLine(
+  lines: readonly string[],
+  line: number,
+  context: PythonTarfileBindingContext,
+): PythonTarfileOrigin[] {
+  const origins: PythonTarfileOrigin[] = [];
+  for (let creationLine = 1; creationLine < line; creationLine += 1) {
+    for (const binding of context.creators) {
+      const owner = pythonTopLevelFunctionRangeAtLine(lines, creationLine);
+      const wrapper = exportedPythonFunctions(lines).find(
+        (candidate) =>
+          creationLine >= candidate.startLine &&
+          creationLine <= candidate.endLine,
+      );
+      if (!pythonMemberBindingIsLive(lines, binding, creationLine, wrapper)) {
+        continue;
+      }
+      const creation = pythonTarfileCreationCallAtLine(
+        lines,
+        creationLine,
+        binding,
+      );
+      if (
+        creation === undefined ||
+        creation.arguments.some((argument) =>
+          argument.trim().startsWith("*"),
+        ) ||
+        !pythonTarfileReadMode(creation.arguments)
+      ) {
+        continue;
+      }
+      const positional = pythonPositionalArguments(creation.arguments);
+      const sourceExpression =
+        pythonKeywordArgument(creation.arguments, "fileobj") ?? positional[2];
+      if (sourceExpression === undefined || sourceExpression.trim() === "") {
+        continue;
+      }
+      const sinkOwner = pythonTopLevelFunctionRangeAtLine(lines, line);
+      if (
+        owner !== undefined &&
+        (sinkOwner === undefined || owner.startLine !== sinkOwner.startLine)
+      ) {
+        continue;
+      }
+      origins.push({
+        receiver: creation.receiver,
+        sourceExpression,
+        line: creationLine,
+        binding,
+      });
+    }
+  }
+  return origins;
+}
+
+function pythonTarfileOriginForReceiver(
+  lines: readonly string[],
+  origins: readonly PythonTarfileOrigin[],
+  receiver: string,
+  beforeLine: number,
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+): PythonTarfileOrigin | undefined {
+  if (depth > 8 || seen.has(receiver)) return undefined;
+  const direct = origins
+    .filter(
+      (origin) =>
+        origin.receiver === receiver &&
+        origin.line < beforeLine &&
+        !pythonIdentifierReassignedBetween(
+          lines,
+          receiver,
+          origin.line,
+          beforeLine,
+        ),
+    )
+    .sort((left, right) => right.line - left.line)[0];
+  if (direct !== undefined) return direct;
+  const structuralLines = pythonStructuralLines(lines);
+  const alias = new RegExp(
+    `^\\s*${escapeRegularExpression(receiver)}\\s*=\\s*([A-Za-z_]\\w*)\\s*$`,
+    "u",
+  );
+  for (let aliasLine = beforeLine - 1; aliasLine >= 1; aliasLine -= 1) {
+    const base = alias.exec(structuralLines[aliasLine - 1] ?? "")?.[1];
+    if (base === undefined) continue;
+    if (
+      pythonIdentifierReassignedBetween(lines, receiver, aliasLine, beforeLine)
+    ) {
+      return undefined;
+    }
+    return pythonTarfileOriginForReceiver(
+      lines,
+      origins,
+      base,
+      aliasLine,
+      depth + 1,
+      new Set([...seen, receiver]),
+    );
+  }
+  return undefined;
+}
+
+type PythonTarfileFilterDisposition = "default" | "safe" | "unknown" | "unsafe";
+
+function pythonTarfileFilterDisposition(
+  lines: readonly string[],
+  context: PythonTarfileBindingContext,
+  expression: string,
+  line: number,
+): PythonTarfileFilterDisposition {
+  let value = expression.trim();
+  const staticMethod = /^staticmethod\s*\(([\s\S]+)\)$/u.exec(value);
+  if (staticMethod?.[1] !== undefined) value = staticMethod[1].trim();
+  if (value === "None") return "default";
+  if (/^(["'])(?:data|tar)\1$/u.test(value)) return "safe";
+  if (/^(["'])fully_trusted\1$/u.test(value)) return "unsafe";
+  for (const binding of context.filters) {
+    if (
+      binding.line < line &&
+      value === pythonMemberBindingExpression(binding) &&
+      pythonMemberBindingIsLive(lines, binding, line, undefined)
+    ) {
+      return binding.operation === "fully_trusted_filter" ? "unsafe" : "safe";
+    }
+  }
+  return "unknown";
+}
+
+function pythonTarfileExtractionFilterOverride(
+  lines: readonly string[],
+  context: PythonTarfileBindingContext,
+  receivers: ReadonlySet<string>,
+  beforeLine: number,
+): PythonTarfileFilterDisposition | undefined {
+  const owners = new Set<string>(receivers);
+  for (const creator of context.creators) {
+    if (creator.operation === "TarFile") {
+      owners.add(pythonMemberBindingExpression(creator));
+    }
+  }
+  const structuralLines = pythonStructuralLines(lines);
+  let selected:
+    | { disposition: PythonTarfileFilterDisposition; line: number }
+    | undefined;
+  for (
+    let assignmentLine = 1;
+    assignmentLine < beforeLine;
+    assignmentLine += 1
+  ) {
+    const assignment =
+      /^\s*([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*\.\s*extraction_filter\s*=\s*([\s\S]+)$/u.exec(
+        structuralLines[assignmentLine - 1] ?? "",
+      );
+    if (assignment?.[1] === undefined || assignment[2] === undefined) continue;
+    const owner = assignment[1].replace(/\s+/gu, "");
+    if (!owners.has(owner)) continue;
+    selected = {
+      disposition: pythonTarfileFilterDisposition(
+        lines,
+        context,
+        assignment[2],
+        assignmentLine,
+      ),
+      line: assignmentLine,
+    };
+  }
+  return selected?.disposition;
+}
+
+function pythonTarfileUnsafeExtractionSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "tarfile")) {
+    return undefined;
+  }
+  const runtime = pythonPinnedRuntime(files, sourcePath);
+  if (runtime === undefined) return undefined;
+  const context = pythonTarfileBindings(lines);
+  const structural = pythonStructuralLines(lines)[line - 1] ?? "";
+  const extraction = /\b([A-Za-z_]\w*)\s*\.\s*(extractall|extract)\s*\(/u.exec(
+    structural,
+  );
+  if (extraction?.[1] === undefined || extraction[2] === undefined) {
+    return undefined;
+  }
+  const receiver = extraction[1];
+  const operation = extraction[2];
+  const callee = new RegExp(
+    `\\b${escapeRegularExpression(receiver)}\\s*\\.\\s*${operation}\\s*\\(`,
+    "u",
+  );
+  const arguments_ = pythonCallArgumentsForCalleeAtLine(lines, line, callee);
+  if (
+    arguments_ === undefined ||
+    arguments_.some((argument) => argument.trim().startsWith("*"))
+  ) {
+    return undefined;
+  }
+  const origins = pythonTarfileOriginsBeforeLine(lines, line, context);
+  const origin = pythonTarfileOriginForReceiver(lines, origins, receiver, line);
+  if (origin === undefined) return undefined;
+  const explicitFilter = pythonKeywordArgument(arguments_, "filter");
+  let disposition =
+    explicitFilter === undefined
+      ? "default"
+      : pythonTarfileFilterDisposition(lines, context, explicitFilter, line);
+  if (disposition === "safe" || disposition === "unknown") return undefined;
+  if (disposition === "default") {
+    const override = pythonTarfileExtractionFilterOverride(
+      lines,
+      context,
+      new Set([receiver, origin.receiver]),
+      line,
+    );
+    if (override === "safe" || override === "unknown") return undefined;
+    if (override === "unsafe") disposition = "unsafe";
+  }
+  const runtimeAtLeast312 = pythonPackageVersionAtLeast(
+    runtime.version,
+    [3, 12, 0],
+  );
+  const runtimeAtLeast314 = pythonPackageVersionAtLeast(
+    runtime.version,
+    [3, 14, 0],
+  );
+  const unsafeMode =
+    disposition === "unsafe"
+      ? runtimeAtLeast312
+        ? "explicit-fully-trusted-filter"
+        : undefined
+      : runtimeAtLeast314
+        ? undefined
+        : "pre-3.14-default";
+  if (unsafeMode === undefined) return undefined;
+  return {
+    sourceExpression: origin.sourceExpression,
+    kind: "tarfile-untrusted-archive-extraction",
+    propagators: [
+      {
+        kind: "tarfile-creator-binding",
+        path: sourcePath,
+        line: origin.binding.line,
+        symbol: `${origin.binding.imported} as ${origin.binding.local}`,
+      },
+      {
+        kind: "tarfile-untrusted-archive-open",
+        path: sourcePath,
+        line: origin.line,
+        symbol: `${origin.binding.operation}:fileobj`,
+      },
+      {
+        kind: "python-runtime-version",
+        path: runtime.path,
+        line: runtime.line,
+        symbol: `python@${runtime.version}`,
+      },
+      {
+        kind:
+          unsafeMode === "explicit-fully-trusted-filter"
+            ? "explicit-fully-trusted-tar-filter"
+            : "pre-3.14-fully-trusted-tar-default",
+        path: sourcePath,
+        line,
+        symbol:
+          unsafeMode === "explicit-fully-trusted-filter"
+            ? "fully_trusted"
+            : "filter=None",
+      },
+      {
+        kind: "tarfile-extraction-operation",
+        path: sourcePath,
+        line,
+        symbol: operation,
+      },
+      {
+        kind: "intrinsic-tar-member-path-write",
+        path: sourcePath,
+        line,
+        symbol: "archive member path outside destination",
+      },
+    ],
+  };
+}
+
 function pythonPyyamlLoaderBinding(
   context: PythonPyyamlBindingContext,
   lines: readonly string[],
@@ -26785,7 +27414,7 @@ function pythonPyyamlUnsafeSink(
   sourcePath: string,
   lines: readonly string[],
   line: number,
-): PythonUnsafeDeserializationSink | undefined {
+): PythonTypedSink | undefined {
   if (pythonLocalModuleCouldShadow(files, sourcePath, "yaml")) return undefined;
   const context = pythonPyyamlBindings(lines);
   const wrapper = exportedPythonFunctions(lines).find(
@@ -27091,7 +27720,7 @@ function pythonPickleUnpicklerUnsafeSink(
   sourcePath: string,
   context: PythonPickleBindingContext,
   line: number,
-): PythonUnsafeDeserializationSink | undefined {
+): PythonTypedSink | undefined {
   const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
   const original = callLines.join("\n");
   const structural = pythonStructuralLines(callLines).join("\n");
@@ -27244,7 +27873,7 @@ function pythonPickleUnsafeSink(
   sourcePath: string,
   lines: readonly string[],
   line: number,
-): PythonUnsafeDeserializationSink | undefined {
+): PythonTypedSink | undefined {
   if (pythonLocalModuleCouldShadow(files, sourcePath, "pickle")) {
     return undefined;
   }
@@ -35148,6 +35777,74 @@ async function nearestPythonRequirementSnapshots(
         break;
       }
       if (existingBoundaries.has(requirementPath)) break;
+      if (directory === ".") break;
+      const parent = posix.dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+  }
+  return [...selected.values()].sort((left, right) =>
+    left.path.localeCompare(right.path),
+  );
+}
+
+async function nearestPythonRuntimeSnapshots(
+  repository: string,
+  files: readonly SourceFileSnapshot[],
+): Promise<SourceFileSnapshot[]> {
+  const examined = new Map<string, SourceFileSnapshot | null>();
+  const selected = new Map<string, SourceFileSnapshot>();
+  let totalBytes = 0;
+  sourceFiles: for (const file of files) {
+    if (
+      !PYTHON_EXTENSIONS.has(file.extension) ||
+      selected.size >= MAX_PYTHON_RUNTIME_FILES
+    ) {
+      continue;
+    }
+    let directory = posix.dirname(file.path);
+    while (true) {
+      const prefix = directory === "." ? "" : `${directory}/`;
+      const candidates = [`${prefix}.python-version`, `${prefix}runtime.txt`];
+      const existing: string[] = [];
+      for (const candidate of candidates) {
+        const metadata = await lstat(resolve(repository, candidate)).catch(
+          () => null,
+        );
+        if (metadata !== null) existing.push(candidate);
+      }
+      if (existing.length > 0) {
+        for (const runtimePath of existing) {
+          let runtime = examined.get(runtimePath);
+          if (runtime === undefined) {
+            const source = await readBoundedRepositoryFile(
+              repository,
+              runtimePath,
+              4 * 1024,
+            );
+            if (source === null || source.includes(0)) {
+              runtime = null;
+            } else if (
+              totalBytes + source.byteLength >
+              MAX_PYTHON_RUNTIME_BYTES
+            ) {
+              break sourceFiles;
+            } else {
+              totalBytes += source.byteLength;
+              const text = source.toString("utf8");
+              runtime = {
+                path: runtimePath,
+                extension: extname(runtimePath).toLowerCase(),
+                lines: text.split(/\r?\n/u),
+                text,
+              };
+            }
+            examined.set(runtimePath, runtime);
+          }
+          if (runtime !== null) selected.set(runtime.path, runtime);
+        }
+        break;
+      }
       if (directory === ".") break;
       const parent = posix.dirname(directory);
       if (parent === directory) break;

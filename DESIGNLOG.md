@@ -2,6 +2,103 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Bind Python tar extraction to runtime and effective filter semantics
+
+**Gap and authoritative semantics.** Python's
+[`tarfile` documentation](https://docs.python.org/3/library/tarfile.html)
+records two security boundaries that a generic call-name rule loses. Extraction
+filters were added in Python 3.12, and Python 3.14 changed the omitted-filter
+default from fully trusted behavior to `data`; `TarFile.extraction_filter` can
+also override that default at the instance or class level. Both `data` and
+`tar` reject members that resolve outside the destination, while
+`fully_trusted` preserves historical behavior. The
+[`Python 3.12 documentation`](https://docs.python.org/3.12/library/tarfile.html)
+captures the affected default directly. CodeQL's public
+[`py/tarslip`](https://codeql.github.com/codeql-query-help/python/py-tarslip/)
+guidance supplies the CWE-22 category and a useful medium-precision archive
+extraction baseline, but its public contract does not distinguish a remotely
+supplied `fileobj`, exact `TarFile` identity, the 3.14 default transition, and
+effective instance/class filter overrides together. Semgrep's public community
+rules reviewed for this increment did not provide a released Python tarfile
+rule with those combined semantics.
+
+**Decision.** Add `python-web-tarfile-unsafe-extraction` as an exact typed
+model. Resolve standard-library `tarfile.open` and `TarFile` through ordinary
+module imports, module aliases, direct aliases, and bounded parenthesized
+imports. A creator is relevant only when an exact positional slot two or
+`fileobj=` carries the archive bytes and its `mode` is omitted or an exact read
+mode. Track the resulting receiver through bounded local aliases and require an
+actual `extract` or `extractall` dispatch on that same non-reassigned receiver.
+Derive candidates from proven receiver identities so arbitrary unrelated
+`.extractall()` calls cannot exhaust the fixed candidate budget. Package
+presence, opening without extraction, filename-only request control, a request-
+controlled destination with a fixed archive, write mode, star expansion, or an
+unrelated receiver is not a finding.
+
+**Runtime and filter proof.** Standard-library defaults cannot be inferred from
+a dependency lock, so inventory preparation reads only the nearest
+`.python-version` or `runtime.txt` boundary. Exactly one regular non-symlink
+file with one stable `X.Y.Z` or `python-X.Y.Z` record is accepted; missing,
+ranged, malformed, duplicate, conflicting, oversized, and symlinked metadata
+fails closed. Omitted or `None` extraction filters emit only below 3.14 unless
+an effective override changes the result. Explicit `fully_trusted` and the
+official `fully_trusted_filter` emit only where filter support exists, Python
+3.12 or later. Literal `data` or `tar`, official `data_filter` or `tar_filter`,
+and exact safe instance/class `extraction_filter` assignments suppress the
+row. Custom, dynamic, or ambiguous filters and overrides also suppress it
+rather than guessing. A focused regression exposed that applying Python
+structural normalization before exact-value comparison erased the contents of
+quoted `mode=` and `filter=` arguments. Comparing the already bounded parsed
+argument text directly fixed that false negative without making comments or
+unrelated strings executable evidence.
+
+**Identity and flow boundary.** Reject a repository-local `tarfile.py` or
+`tarfile/` package, replaced module/function/filter bindings, wrapper-parameter
+shadows, receiver reassignment, another top-level function scope, and string or
+comment lookalikes. The terminal resolver returns the exact `fileobj` expression
+so the existing Python data-flow engine can preserve same-file, one relative
+wrapper, or two relative relay boundaries. Each row separately records the
+creator binding, untrusted archive open, Python runtime pin, explicit or
+pre-3.14 fully trusted mode, extraction operation, and intrinsic outside-
+destination member-path write. Host re-audit requires ten semantic groups in
+both validation and attack path: archive upload, `extract_archive` wrapper,
+official tarfile binding, `fileobj` edge, extraction operation, effective
+fully trusted mode, traversal member, escaped write, Python 3.12.3, and the
+data-filter negative control. Four forbidden claims protect the safe-filter,
+3.14-default, open-only, and destination-only boundaries.
+
+**Matched executable evidence.** The Flask pair preserves `.python-version`,
+route, one MiB request budget, uploaded stream, relative wrapper, fixed
+destination, marker bytes, and witness. Its only application-code difference
+is `filter="data"` on the control extraction call. The witness builds one
+in-memory regular-file member named `../escaped-marker.txt`, reads only the
+fixture marker, and extracts inside a new disposable temporary directory; it
+does not access a network or launch a shell. On Ubuntu/WSL Python 3.12.3, the
+omitted-filter fixture returns `disclosed: true` with no error. The control
+returns `disclosed: false` with `OutsideDestinationError`. This pair advances
+the canonical corpus to 112 exploit/control pairs, 224 cases, and 672
+three-run scans.
+
+**Regression and acceptance evidence.** Fourteen focused test groups cover the
+strict manifest, exact benchmark path, module/direct/aliased/parenthesized
+bindings, both extraction operations, assignment and context-manager
+receivers, multiline calls, positional `fileobj`, local aliases, the Python
+3.14 transition, nearest runtime boundaries, all supported filter forms,
+instance/class overrides, write and wrong-role negatives, shadows and
+reassignment, dense decoys, two relays, POSIX symlink rejection, field-local
+quality closure, and correction-prompt boundaries. Windows passes 31 tests and
+1,857 assertions with the POSIX-only case skipped; WSL passes all 32 tests and
+1,858 assertions. The first full-suite attempt is deliberately rejected as
+non-authoritative because stale compiled output correctly stopped four
+benchmark-runner integration tests; after a clean production build, the native
+Windows run passes 1,608 tests and 11,843 assertions across 176 files with 24
+intentional skips, no failures, and a 622.25-second runtime. Formatting,
+generated models, types, build, and the production advisory audit pass. Strict
+package inspection validates 259 entries and a fresh 67-package isolated
+install, including public import, CLI behavior, and all 79 bundled plugin
+files. The removed 1,897,492-byte archive has SHA-256
+`a391de3c4965d81543648e6c2742a33c9bf0e64903a27fd20e6d251ed1cacc7f`.
+
 ## 2026-08-25 — Complete lxml ET-compatible parser XXE with exact parser-use proof
 
 **Gap and authoritative semantics.** The official
