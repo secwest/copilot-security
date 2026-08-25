@@ -54,6 +54,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   container `32803416113`, Windows GUI `32803416227`, Linux GUI `32803416168`,
   Java `32803416140`, .NET `32803416156`, and Go `32803416115`. Disposable
   archives, snapshots, and isolated installs are removed after acceptance.
+- A live first-attempt Copilot deep benchmark of the RBAC pair passes every
+  perfect gate with campaign ID
+  `f01cac642bc942aa0f073eaa9f7787234a6a290dc4e468fa8b4d1dd2a9c23fae`.
+  The vulnerable binding produces exactly one high-severity true positive with
+  substantive validation, attack-path and code evidence; the named-group
+  control produces zero findings. Completion, precision, recall, F1, case and
+  negative-case pass rates, stable detection, validation, attack-path,
+  code-evidence, and severity accuracy are all 1.0 with zero false positives.
+  The parallel campaign completes in 3m52s without retry or refusal, consuming
+  1,959,466 input tokens (1,693,549 cached), 37,064 output tokens, and an
+  estimated $1.80694350. The isolated receipts remain under
+  `C:\security-benchmarks\kubernetes-cluster-admin-binding-140ead3` for
+  comparison runs.
 - Added the first native Kubernetes infrastructure-as-code model,
   `kubernetes-privileged-sensitive-hostpath`. It joins one exact deployable
   workload shape, one exact privileged Linux container or init/ephemeral

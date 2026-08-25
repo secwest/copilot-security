@@ -87,6 +87,22 @@ Java `32803416140`, .NET `32803416156`, and Go `32803416115`. Remove the exact-
 commit archive and snapshot, release-check archive, and isolated installs after
 acceptance.
 
+**Live Copilot gate.** A one-run, two-worker, high-effort deep campaign on
+`gpt-5.6-terra` passes on the first attempt for both cases with campaign ID
+`f01cac642bc942aa0f073eaa9f7787234a6a290dc4e468fa8b4d1dd2a9c23fae`.
+The vulnerable case closes in 3m42s with one high-severity true positive and
+complete substantive validation, attack-path, code-evidence, and severity
+coverage. The source-identical named-group control closes in 2m22s with zero
+findings and complete coverage. Campaign completion, precision, recall, F1,
+case pass, negative-case pass, stable detection, validation, attack-path,
+code-evidence, and severity accuracy are all 1.0, with zero false positives or
+false negatives. Parallel wall time is 3m52s; aggregate usage is 1,959,466 input
+tokens (1,693,549 cached), 37,064 output tokens, and estimated cost
+$1.80694350. No classifier retry, fresh attempt, rate-limit event, or transport
+recovery occurs. Preserve the isolated receipts at
+`C:\security-benchmarks\kubernetes-cluster-admin-binding-140ead3` as the
+baseline for later model and prompt comparisons.
+
 ## 2026-08-24 — Join Kubernetes privilege and host filesystem authority
 
 **Coverage gap and comparative evidence.** Application dataflow, package
