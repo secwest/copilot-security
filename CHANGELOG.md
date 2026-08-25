@@ -118,7 +118,24 @@ All notable scanner, application, benchmark, and operational changes are recorde
   code backticks and admit the precise phrase "role is deployed unchanged."
   Semantic normalization now removes Markdown code delimiters as presentation,
   and the manifest includes the exact caller-authorization and deployment
-  variants. A fresh manifest-bound live campaign remains the final gate.
+  variants. The fresh manifest-bound acceptance is recorded below.
+- Exact manifest-bound campaign
+  `e8d629966465d373da2516e3ab72f1dfe50f2d3ebc5ec11bf979d2a4f975b37d`
+  at source `17b27d8e5f53ddae5c96d6651f4aa4015b248218` passes the final
+  gate. The vulnerable case reports one conditional critical CWE-269/CWE-284
+  finding at the wildcard trust, `sts:AssumeRole`, and AdministratorAccess
+  lines; the specific-principal control reports none. Both completed on attempt
+  one with complete coverage. All structural rates are 1.0, false positives and
+  misses are zero, and the semantic match has empty whole-finding, validation,
+  attack-path, and forbidden-text failure lists. Direct ledger review confirms
+  unchanged deployment and effective external caller-side authorization in
+  validation and attack-path preconditions, conditional session wording, and
+  no anonymous, active-deployment, successful-session, target-account, or
+  organization-wide claim. The two scans used 3,847,786 input tokens (3,462,660
+  cached), 54,043 output tokens, and estimated cost $2.879669375 over 4m29s,
+  without refusal, retry, rate-limit, authentication, transport, or allowance
+  error. The accepted artifacts remain isolated under
+  `C:\security-benchmarks\cloudformation-public-admin-role-semantic-final-17b27d8`.
 - Added `kubernetes-cluster-admin-broad-subject`, the second native Kubernetes
   infrastructure-as-code model. It requires an exact
   `rbac.authorization.k8s.io/v1` `ClusterRoleBinding`, an immutable exact

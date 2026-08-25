@@ -213,6 +213,35 @@ forbidden lists. Because the campaign manifest hash predates those matching
 variants, require one new exact-manifest campaign before recording final live
 acceptance rather than rewriting or overclaiming the preserved receipt.
 
+**Exact semantic acceptance.** Campaign
+`e8d629966465d373da2516e3ab72f1dfe50f2d3ebc5ec11bf979d2a4f975b37d`
+binds source `17b27d8e5f53ddae5c96d6651f4aa4015b248218`, manifest SHA-256
+`45cc0d9d6139f108e504af373f6b0b6c11e72a0900d62328a4099de745981116`,
+the rebuilt evaluator, scanner hash, and both fixture hashes. The vulnerable
+case reports one conditional critical finding in 4m18s; the fixed-principal
+control reports none in 3m48s. Both finish on attempt one with complete
+coverage. Precision, recall, F1, completion, case, negative-control, stability,
+validation, attack-path, code-evidence, and severity metrics are all 1.0, with
+no false positive or false negative. The semantic match independently records
+empty whole-finding, validation-scoped, attack-path-scoped, and forbidden-text
+failure arrays.
+
+Directly reopen the final finding and both ledgers. They preserve CWE-269/CWE-
+284 and the wildcard trust at line 13, trust action at line 15, and
+AdministratorAccess sink at line 17. Validation says the snapshot cannot prove
+unchanged deployment or an external caller's effective caller-side
+`sts:AssumeRole` authorization. The attack path repeats both as preconditions
+and makes credential issuance and administrator effect conditional on them and
+the absence of an external deny. The control is rejected because its fixed
+account principal is not the modeled wildcard and missing external account
+context cannot manufacture an exploit. No row claims anonymous access, current
+deployment, a successful session, a known target account, or organization-wide
+compromise. The campaign used 3,847,786 input tokens (3,462,660 cached), 54,043
+output tokens, $2.879669375, and about 4m29s wall time, without refusal, retry,
+rate-limit, authentication, transport, or allowance failure. Preserve its
+directory at `C:\security-benchmarks\cloudformation-public-admin-role-semantic-final-17b27d8`
+alongside both earlier diagnostic campaigns.
+
 **Consequence.** Review now receives a joined public-trust-to-administrator path
 instead of two disconnected IAM keywords, with exact counterevidence boundaries
 for the common condition and permissions-boundary false-positive classes.
