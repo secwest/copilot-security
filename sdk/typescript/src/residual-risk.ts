@@ -2181,6 +2181,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-web-hydra-unsafe-instantiate",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+hydra(?:\.utils)?\b|\bfrom\s+hydra(?:\.utils)?\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-config",
+        expression:
+          /\brequest\.(?:body|data|files|form|json|POST)\b|\brequest\.(?:get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\bBody\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "hydra-untrusted-target-instantiation",
+        expression: /\b(?:[A-Za-z_]\w*\s*\.\s*)*(?:instantiate|call)\s*\(/u,
+        cweIds: ["CWE-94", "CWE-470"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-pyyaml-unsafe-load",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3243,7 +3270,8 @@ function isPythonTypedSinkModel(modelId: string): boolean {
     modelId === "python-web-torch-unsafe-load" ||
     modelId === "python-web-lxml-iterparse-xxe" ||
     modelId === "python-web-lxml-etcompat-xxe" ||
-    modelId === "python-web-tarfile-unsafe-extraction"
+    modelId === "python-web-tarfile-unsafe-extraction" ||
+    modelId === "python-web-hydra-unsafe-instantiate"
   );
 }
 
@@ -3498,6 +3526,19 @@ const TARFILE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["filter='data'", 'filter="data"', "OutsideDestinationError"],
 ] as const;
 
+const HYDRA_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["configuration upload", "request.get_json", "request JSON config"],
+  ["build_component", "wrapper"],
+  ["hydra.utils.instantiate", "Hydra instantiate", "official Hydra binding"],
+  ["config argument", "argument zero", "argument 0", "config="],
+  ["hydra-core 1.3.3", "hydra-core==1.3.3"],
+  ["_target_", "target selection", "callable selection"],
+  ["target arguments", "configured arguments", "call arguments"],
+  ["builtins.eval", "6 * 7", "arithmetic sentinel"],
+  ["Python 3.12.3"],
+  ["hydra-core 1.3.4", "InstantiationException", "target blocklist"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3535,6 +3576,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: TARFILE_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: TARFILE_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-web-hydra-unsafe-instantiate",
+    {
+      validation: HYDRA_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: HYDRA_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -14357,11 +14405,13 @@ function frameworkDataflowRecords(
                 ? pythonLxmlEtCompatCandidateLines(lines, 64)
                 : model.id === "python-web-tarfile-unsafe-extraction"
                   ? pythonTarfileCandidateLines(lines, 64)
-                  : matchingPythonModelLines(
-                      lines,
-                      model.sinks,
-                      isPythonTypedSinkModel(model.id) ? 64 : 8,
-                    )
+                  : model.id === "python-web-hydra-unsafe-instantiate"
+                    ? pythonHydraCandidateLines(lines, 64)
+                    : matchingPythonModelLines(
+                        lines,
+                        model.sinks,
+                        isPythonTypedSinkModel(model.id) ? 64 : 8,
+                      )
             : extension === ".java" || extension === ".cs"
               ? matchingJavaModelLines(lines, model.sinks, 8)
               : matchingModelLines(lines, model.sinks, 8);
@@ -14585,7 +14635,14 @@ function frameworkDataflowRecords(
                             lines,
                             sink.line,
                           )
-                        : undefined;
+                        : model.id === "python-web-hydra-unsafe-instantiate"
+                          ? pythonHydraUnsafeInstantiateSink(
+                              files,
+                              path,
+                              lines,
+                              sink.line,
+                            )
+                          : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -24038,7 +24095,9 @@ function pythonFrameworkWrapperSummaries(
               ? pythonLxmlEtCompatCandidateLines(file.lines, 64)
               : model.id === "python-web-tarfile-unsafe-extraction"
                 ? pythonTarfileCandidateLines(file.lines, 64)
-                : matchingPythonModelLines(file.lines, model.sinks, 32);
+                : model.id === "python-web-hydra-unsafe-instantiate"
+                  ? pythonHydraCandidateLines(file.lines, 64)
+                  : matchingPythonModelLines(file.lines, model.sinks, 32);
       const controls = matchingPythonModelLines(file.lines, model.controls, 64);
       for (const wrapper of exportedFunctions) {
         for (const sink of sinks) {
@@ -24106,7 +24165,14 @@ function pythonFrameworkWrapperSummaries(
                                 file.lines,
                                 sink.line,
                               )
-                            : undefined;
+                            : model.id === "python-web-hydra-unsafe-instantiate"
+                              ? pythonHydraUnsafeInstantiateSink(
+                                  files,
+                                  file.path,
+                                  file.lines,
+                                  sink.line,
+                                )
+                              : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
@@ -25884,9 +25950,25 @@ function pythonAssignmentValueAtLine(
   if (equals < 0) return undefined;
   const value = original.slice(equals + 1).trim();
   const firstLine = value.split("\n", 1)[0] ?? "";
-  const open = pythonStructuralCode(firstLine).indexOf("(");
+  const structural = pythonStructuralLines(value.split("\n")).join("\n");
+  const first = structural.search(/\S/u);
+  let open = first >= 0 && "([{".includes(structural[first] ?? "") ? first : -1;
+  if (open < 0) open = pythonStructuralCode(firstLine).indexOf("(");
   if (open < 0) return firstLine.trim();
-  const close = matchingCallParenthesis(value, open);
+  const opening = structural[open];
+  const closing = opening === "(" ? ")" : opening === "[" ? "]" : "}";
+  let depth = 0;
+  let close = -1;
+  for (let index = open; index < structural.length; index += 1) {
+    if (structural[index] === opening) depth += 1;
+    else if (structural[index] === closing) {
+      depth -= 1;
+      if (depth === 0) {
+        close = index;
+        break;
+      }
+    }
+  }
   return (close < 0 ? value : value.slice(0, close + 1)).trim();
 }
 
@@ -26861,6 +26943,351 @@ function pythonLxmlEtCompatXxeSink(
         ],
       };
     }
+  }
+  return undefined;
+}
+
+interface PythonHydraBinding extends PythonMemberBinding {
+  operation: "call" | "instantiate";
+  originLine?: number;
+}
+
+function pythonHydraBindings(lines: readonly string[]): PythonHydraBinding[] {
+  const bindings: PythonHydraBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  const addReceiverBindings = (
+    local: string,
+    memberPrefix: string,
+    line: number,
+  ): void => {
+    for (const operation of ["instantiate", "call"] as const) {
+      bindings.push({
+        imported: `hydra.utils.${operation}`,
+        local,
+        memberPath: `${memberPrefix}${operation}`,
+        operation,
+        line,
+      });
+    }
+  };
+  const collectedImport = (startIndex: number, initial: string): string => {
+    let importedText = initial.trim();
+    if (importedText.startsWith("(") && !importedText.endsWith(")")) {
+      for (
+        let offset = startIndex + 1;
+        offset < Math.min(structuralLines.length, startIndex + 8);
+        offset += 1
+      ) {
+        importedText += `\n${structuralLines[offset] ?? ""}`;
+        if ((structuralLines[offset] ?? "").includes(")")) break;
+      }
+    }
+    return importedText.startsWith("(") === importedText.endsWith(")")
+      ? importedText.replace(/^\(([\s\S]*)\)$/u, "$1")
+      : "";
+  };
+
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const moduleImport =
+      /^\s*import\s+(hydra(?:\.utils)?)(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+        structural,
+      );
+    if (moduleImport !== null) {
+      const importedModule = moduleImport[1]!;
+      const alias = moduleImport[2];
+      if (importedModule === "hydra.utils" && alias !== undefined) {
+        addReceiverBindings(alias, "", index + 1);
+      } else {
+        addReceiverBindings(alias ?? "hydra", "utils.", index + 1);
+      }
+      continue;
+    }
+
+    const fromHydra = /^\s*from\s+hydra\s+import\s+(.+?)\s*$/u.exec(structural);
+    if (fromHydra?.[1] !== undefined) {
+      const importedText = collectedImport(index, fromHydra[1]);
+      for (const rawBinding of splitPythonArguments(importedText)) {
+        const binding = /^utils(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+          rawBinding.trim(),
+        );
+        if (binding !== null) {
+          addReceiverBindings(binding[1] ?? "utils", "", index + 1);
+        }
+      }
+      continue;
+    }
+
+    const fromUtils = /^\s*from\s+hydra\.utils\s+import\s+(.+?)\s*$/u.exec(
+      structural,
+    );
+    if (fromUtils?.[1] === undefined) continue;
+    const importedText = collectedImport(index, fromUtils[1]);
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const binding = /^(instantiate|call)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      if (binding === null) continue;
+      const operation = binding[1] as PythonHydraBinding["operation"];
+      bindings.push({
+        imported: `hydra.utils.${operation}`,
+        local: binding[2] ?? operation,
+        memberPath: "",
+        operation,
+        line: index + 1,
+      });
+    }
+  }
+  const importedBindings = [...bindings];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    for (const binding of importedBindings) {
+      if (
+        binding.line >= index + 1 ||
+        !pythonHydraBindingReachableAtLine(lines, binding, index + 1) ||
+        pythonHydraBindingReassigned(lines, binding, index + 1)
+      ) {
+        continue;
+      }
+      const source = pythonHydraBindingExpression(binding)
+        .split(".")
+        .map(escapeRegularExpression)
+        .join("\\s*\\.\\s*");
+      const alias = new RegExp(
+        `^\\s*([A-Za-z_]\\w*)\\s*(?::[^=]+)?=\\s*${source}\\s*$`,
+        "u",
+      ).exec(structural)?.[1];
+      if (alias === undefined || alias === binding.local) continue;
+      bindings.push({
+        imported: binding.imported,
+        local: alias,
+        memberPath: "",
+        operation: binding.operation,
+        line: index + 1,
+        originLine: binding.originLine ?? binding.line,
+      });
+    }
+  }
+  return bindings;
+}
+
+function pythonHydraBindingExpression(binding: PythonHydraBinding): string {
+  return binding.memberPath === ""
+    ? binding.local
+    : `${binding.local}.${binding.memberPath}`;
+}
+
+function pythonHydraBindingCallee(binding: PythonHydraBinding): RegExp {
+  const segments = pythonHydraBindingExpression(binding).split(".");
+  return new RegExp(
+    `\\b${segments.map(escapeRegularExpression).join("\\s*\\.\\s*")}\\s*\\(`,
+    "u",
+  );
+}
+
+function pythonHydraBindingReassigned(
+  lines: readonly string[],
+  binding: PythonHydraBinding,
+  callLine: number,
+): boolean {
+  if (
+    pythonIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      callLine,
+    )
+  ) {
+    return true;
+  }
+  const segments = binding.memberPath.split(".").filter(Boolean);
+  if (segments.length === 0) return false;
+  const structuralLines = pythonStructuralLines(lines).slice(
+    binding.line,
+    Math.max(binding.line, callLine - 1),
+  );
+  for (let length = 1; length <= segments.length; length += 1) {
+    const member = [binding.local, ...segments.slice(0, length)]
+      .map(escapeRegularExpression)
+      .join("\\s*\\.\\s*");
+    const replacement = new RegExp(
+      `^\\s*${member}\\s*(?:[+\\-*/%&|^]?=|:=)`,
+      "u",
+    );
+    if (structuralLines.some((candidate) => replacement.test(candidate))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pythonHydraBindingReachableAtLine(
+  lines: readonly string[],
+  binding: PythonHydraBinding,
+  line: number,
+): boolean {
+  const scope = pythonTopLevelFunctionRangeAtLine(lines, binding.line);
+  return (
+    scope === undefined || (line >= scope.startLine && line <= scope.endLine)
+  );
+}
+
+function pythonHydraCandidateLines(
+  lines: readonly string[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const bindings = pythonHydraBindings(lines).map((binding) => ({
+    binding,
+    callee: pythonHydraBindingCallee(binding),
+  }));
+  const structuralLines = pythonStructuralLines(lines);
+  const matches: Array<{ kind: string; line: number }> = [];
+  for (
+    let index = 0;
+    index < structuralLines.length && matches.length < limit;
+    index += 1
+  ) {
+    const line = index + 1;
+    const structural = structuralLines[index] ?? "";
+    if (
+      bindings.some(
+        ({ binding, callee }) =>
+          binding.line < line &&
+          pythonHydraBindingReachableAtLine(lines, binding, line) &&
+          callee.test(structural),
+      )
+    ) {
+      matches.push({ kind: "hydra-untrusted-target-instantiation", line });
+    }
+  }
+  return matches;
+}
+
+function pythonHydraHasOnlyLiteralTargets(
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+): boolean {
+  const resolved = resolvePythonExpression(lines, expression, beforeLine);
+  if (resolved === undefined) return false;
+  const targets = [
+    ...resolved.matchAll(
+      /(?:["']_target_["']|\b_target_)\s*(?::|=)\s*([^,}\r\n]+)/giu,
+    ),
+  ].map((match) => (match[1] ?? "").trim());
+  return (
+    targets.length > 0 &&
+    targets.every((target) =>
+      /^(?:[rubf]{0,2})?["'][A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*["']$/iu.test(
+        target,
+      ),
+    )
+  );
+}
+
+function pythonHydraUnsafeInstantiateSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "hydra")) {
+    return undefined;
+  }
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  for (const binding of pythonHydraBindings(lines)) {
+    if (
+      binding.line >= line ||
+      !pythonHydraBindingReachableAtLine(lines, binding, line) ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      pythonHydraBindingReassigned(lines, binding, line)
+    ) {
+      continue;
+    }
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(
+      lines,
+      line,
+      pythonHydraBindingCallee(binding),
+    );
+    if (
+      arguments_ === undefined ||
+      arguments_.some((argument) => argument.trim().startsWith("*"))
+    ) {
+      continue;
+    }
+    const positional = pythonPositionalArguments(arguments_);
+    const targetOverride = pythonKeywordArgument(arguments_, "_target_");
+    const configExpression =
+      pythonKeywordArgument(arguments_, "config") ?? positional[0];
+    const sourceExpression = targetOverride ?? configExpression;
+    if (
+      sourceExpression === undefined ||
+      sourceExpression.trim() === "" ||
+      (targetOverride === undefined &&
+        pythonHydraHasOnlyLiteralTargets(lines, sourceExpression, line))
+    ) {
+      continue;
+    }
+    const pinned = pythonPinnedRequirement(files, sourcePath, "hydra-core");
+    if (
+      pinned === undefined ||
+      !/^\d+\.\d+\.\d+$/u.test(pinned.version) ||
+      !pythonPackageVersionAtMost(pinned.version, [1, 3, 3])
+    ) {
+      continue;
+    }
+    return {
+      sourceExpression:
+        targetOverride === undefined
+          ? resolvePythonExpression(lines, sourceExpression, line) ??
+            sourceExpression
+          : sourceExpression,
+      kind: "hydra-affected-untrusted-target-instantiation",
+      propagators: [
+        {
+          kind: "hydra-instantiate-binding",
+          path: sourcePath,
+          line: binding.originLine ?? binding.line,
+          symbol: `${binding.imported} as ${pythonHydraBindingExpression(binding)}`,
+        },
+        ...(binding.originLine === undefined
+          ? []
+          : [
+              {
+                kind: "hydra-callable-alias",
+                path: sourcePath,
+                line: binding.line,
+                symbol: binding.local,
+              },
+            ]),
+        {
+          kind: "hydra-core-runtime-dependency",
+          path: pinned.path,
+          line: pinned.line,
+          symbol: `hydra-core@${pinned.version}:requirements-exact`,
+        },
+        {
+          kind: "hydra-untrusted-config-or-target-edge",
+          path: sourcePath,
+          line,
+          symbol: targetOverride === undefined ? "config" : "_target_ override",
+        },
+        {
+          kind: "intrinsic-hydra-dynamic-target-resolution",
+          path: sourcePath,
+          line,
+          symbol: "_target_ dotpath import and lookup",
+        },
+        {
+          kind: "intrinsic-hydra-configured-callable-invocation",
+          path: sourcePath,
+          line,
+          symbol: `${binding.operation}:configured arguments`,
+        },
+      ],
+    };
   }
   return undefined;
 }
@@ -30002,12 +30429,11 @@ function resolvePythonExpression(
     if (pythonIdentifierReassignedBetween(lines, value, line, beforeLine)) {
       return undefined;
     }
-    const original = pythonCodeBeforeComment(lines[line - 1] ?? "");
-    const equals = original.indexOf("=");
-    if (equals < 0) return undefined;
+    const assigned = pythonAssignmentValueAtLine(lines, line);
+    if (assigned === undefined) return undefined;
     return resolvePythonExpression(
       lines,
-      original.slice(equals + 1),
+      assigned,
       line,
       depth + 1,
       new Set([...seen, value]),

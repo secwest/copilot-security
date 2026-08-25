@@ -6,6 +6,59 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-hydra-unsafe-instantiate`, a version-aware CWE-94/CWE-470
+  model for remote Hydra object-instantiation configuration under
+  GHSA-2cp2-2r3c-7p7r / CVE-2026-68508. It resolves the official
+  `hydra.utils.instantiate` and `call` APIs through module, utility, direct,
+  aliased, parenthesized, and one-hop callable-alias bindings; preserves
+  same-file, one-wrapper, and two-relay request flows; and requires one nearest
+  exact production `hydra-core<=1.3.3` pin. Each row records the official
+  binding, exact config or `_target_` edge, dependency proof, dynamic dotpath
+  resolution, and configured callable invocation.
+- Kept the model fail closed at its identity and version boundaries. Stable
+  1.3.4 or later, ranges, development versions, duplicate or missing pins,
+  symlinked requirements, local `hydra.py` or `hydra/` shadows, import/member
+  replacement, wrapper-parameter shadowing, cross-function callable aliases,
+  fixed application-owned targets, wrong keyword roles, star expansion, and
+  string/comment lookalikes do not emit. Candidate discovery begins with the
+  proven Hydra binding, so dense unrelated `.instantiate()` calls cannot
+  consume the bounded sink budget. The shared Python expression resolver now
+  retains bounded multiline dictionary, list, tuple, and call assignments;
+  a regression-discovered scalar-alias overread is prevented by limiting a
+  non-container opening parenthesis to the assignment's first line.
+- Added topology-identical Flask fixtures pinned to Python 3.12.3 and
+  `hydra-core` 1.3.3/1.3.4, plus a perfect-gate specialized manifest. Their
+  bounded, non-shell witness supplies `builtins.eval` only the fixed arithmetic
+  expression `6 * 7`: 1.3.3 returns 42, while 1.3.4 raises
+  `InstantiationException` before invocation. The witness performs no network,
+  filesystem write, process mutation, persistence, or credential access. Ten
+  independent evidence groups are mandatory in both validation and attack
+  path, and four forbidden claims prevent package-presence, ordinary-data,
+  complete-boundary, and deployment-proof overstatement. The canonical corpus
+  now contains 113 exploit/control pairs, 226 cases, and 678 repeated scans.
+- Compared the increment with the reviewed GitHub advisory, Hydra's official
+  instantiate documentation, the 1.3.4 release and target blocklist, and the
+  1.4 trusted call-site `_target_whitelist` upgrade guidance. The 1.3.4
+  blocklist is retained as the exact advisory control but not represented as a
+  complete security boundary. Authenticated searches found no corresponding
+  `hydra.utils.instantiate` model in the current public CodeQL or Semgrep rule
+  repositories, so this scanner adds exact call identity, affected dependency
+  proof, cross-file source flow, executable paired evidence, and field-local
+  report closure rather than a package or call-name heuristic.
+- Twelve focused Hydra groups and the corpus lane pass 30 tests and 1,865
+  assertions on both Windows and Ubuntu/WSL; Linux executes the real symlink
+  provenance rejection. The complete Python model lane passes 107 tests and
+  591 assertions with four intentional Windows-only skips. The authoritative
+  native Windows suite passes 1,620 tests and 11,912 assertions across 177
+  files with 24 intentional environment/platform skips, zero failures, and a
+  658.21-second runtime. Formatting, generated-model drift, TypeScript
+  compilation, the clean production build, and the high-severity production
+  audit pass with no known vulnerabilities. Strict package inspection accepts
+  a fresh 259-entry, 1,903,475-byte archive with SHA-256
+  `a13dc2cb004a1d92831544b9dff133129aaa5397b0a0679949be3527ed995a66`;
+  two isolated installs each add 67 packages and validate public import, CLI
+  behavior, and all 79 bundled plugin files. The unique package staging
+  directory was removed after evidence capture.
 - Added `python-web-tarfile-unsafe-extraction`, a Python-standard-library
   CWE-22 model for remote tar archive extraction outside the intended
   destination. It resolves live `tarfile.open` and `TarFile` bindings across

@@ -100,7 +100,9 @@ weights-only checkpoint pair, a source-identical lxml 6.0.2/6.1.1
 an affected-default `ETCompatXMLParser` to `fromstring`, plus a PyYAML
 `UnsafeLoader`/`safe_load`, and a Python 3.12 standard-library tarfile pair
 that contrasts the pre-3.14 fully trusted default with `filter="data"` plus
-bounded member/type/name/expanded-byte preflight,
+bounded member/type/name/expanded-byte preflight, plus a Hydra
+1.3.3/1.3.4 untrusted-configuration pair that distinguishes attacker-selected
+`_target_` invocation from fixed application-owned target configuration,
 relative-wrapper pair, reflected XSS, XML
 external entities, JWT signature-verification bypass, JWT `alg`/key-type
 confusion that reinterprets an RSA public key as an HMAC secret,
@@ -218,7 +220,7 @@ actually reach the parse call; ordinary `XMLParser` and construction alone
 remain negative. The tarfile pair adds exact uploaded-`fileobj` flow, retained
 `TarFile` receiver identity, runtime-default semantics, and a matched control
 that closes both traversal and decompression-exhaustion paths. Three runs per
-case now produce 672 scans across 112 exploit/control pairs in the complete
+case now produce 678 scans across 113 exploit/control pairs in the complete
 corpus. The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty

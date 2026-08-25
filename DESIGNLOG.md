@@ -2,6 +2,103 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Bind Hydra instantiation to untrusted target selection and affected runtime proof
+
+**Gap and authoritative semantics.** The reviewed
+[`GHSA-2cp2-2r3c-7p7r`](https://github.com/advisories/GHSA-2cp2-2r3c-7p7r)
+advisory, assigned CVE-2026-68508, records that `hydra.utils.instantiate()` can
+import and invoke an attacker-selected `_target_` when an application accepts
+untrusted configuration. `hydra-core` through 1.3.3 is affected; 1.3.4 adds a
+sensitive-target blocklist, which the advisory explicitly treats as defense in
+depth rather than a complete trust boundary. Hydra's official
+[`instantiate` documentation](https://hydra.cc/docs/advanced/instantiate_objects/overview/)
+defines recursive object construction and configured arguments. Its
+[`1.3 to 1.4 upgrade guidance`](https://hydra.cc/docs/upgrades/1.3_to_1.4/instantiate_target_whitelist/)
+moves toward an explicit trusted call-site `_target_whitelist`. Authenticated
+searches of the current official `github/codeql` and `semgrep/semgrep-rules`
+repositories returned no `hydra.utils.instantiate` model. Package presence or
+an arbitrary method named `instantiate` therefore cannot safely recover the
+missing binding, target, version, and reachability semantics.
+
+**Decision.** Add `python-web-hydra-unsafe-instantiate` as an exact Python
+typed sink. Resolve `import hydra`, `import hydra.utils`, `from hydra import
+utils`, and `from hydra.utils import instantiate` or `call`, including aliases,
+bounded parenthesized imports, and one direct callable alias. Candidate lines
+are derived from those live bindings so forty unrelated `.instantiate()`
+decoys cannot exhaust the 64-candidate budget. A sink requires remote flow
+into positional configuration argument zero, `config=`, or an explicit
+`_target_=` override, plus one nearest regular `requirements.txt` containing
+exactly one stable `hydra-core==X.Y.Z` pin no later than 1.3.3. Same-file, one
+relative wrapper, and two relative relays reuse the existing Python data-flow
+engine. Findings retain six explicit stages: official Hydra binding, optional
+callable alias, exact dependency proof, untrusted config/target edge, dynamic
+dotpath import and lookup, and configured callable invocation.
+
+**Identity, scope, and false-positive boundary.** Reject 1.3.4 or later,
+ranges, development versions, duplicate or missing pins, and symlinked
+requirements. Reject local `hydra.py` and `hydra/` shadows, replaced imports or
+members, wrapper-parameter shadows, callable aliases created in another
+top-level function, unrelated scopes, wrong keyword roles, star expansion,
+fixed application-owned target configuration, and text lookalikes. The alias
+review added an explicit lexical-visibility check at both alias creation and
+use so a syntactically similar local name from another function cannot become
+runtime evidence. Multiline config assignments exposed a shared expression
+resolver limitation: it previously returned only the first line of dictionary,
+list, and tuple values. The resolver now retains one bounded balanced container
+or call. Its first regression run caught an overread where a scalar alias could
+absorb a later call; a non-container opening parenthesis is now recognized only
+on the assignment's first line, preserving existing lxml and other Python
+model boundaries.
+
+**Matched executable evidence and report contract.** The Flask pair keeps
+`.python-version` 3.12.3, `request.get_json()`, the relative
+`build_component` wrapper, `hydra.utils.instantiate(config)`, and witness bytes
+identical. Only `hydra-core==1.3.3` changes to 1.3.4. The witness requests
+`builtins.eval` with the fixed expression `6 * 7`; affected Hydra returns the
+integer 42, while the advisory control raises `InstantiationException` before
+evaluation. It launches no shell, opens no network connection, writes no file,
+changes no process state, persists nothing, and reads no credential. This is a
+bounded callable-selection capability test, not proof of a deployed service's
+authentication, input shape, privileges, containment, or concrete command,
+file, network, secret, or availability effect. Both validation and attack path
+must independently name ten groups: configuration upload,
+`build_component`, official binding, config argument, 1.3.3 pin, `_target_`
+selection, configured arguments, arithmetic witness, Python 3.12.3, and the
+1.3.4 blocklist negative control. Four forbidden claims prevent package-only,
+ordinary-constructor-data, complete-blocklist, and deployment-proof
+overstatement. The canonical corpus advances to 113 pairs, 226 cases, and 678
+three-run scans.
+
+**Regression and implementation acceptance.** Twelve focused groups cover the
+strict manifest, exact fixture path, every supported binding, multiline calls,
+direct aliases, explicit and nested target control, stable version boundaries,
+fixed and wrong-role negatives, local file/package shadows, replacement,
+parameter and cross-function scope, text, star expansion, two relays, dense
+decoys, POSIX symlink provenance, field-local closure, and correction-prompt
+guidance. Hydra plus canonical corpus integrity passes 30 tests and 1,865
+assertions on both Windows and WSL; the latter executes the real symlink case.
+All Python typed-model suites pass 107 tests and 591 assertions with four
+intentional Windows platform skips. After a clean build, the authoritative
+Windows suite passes 1,620 tests and 11,912 assertions across 177 files with 24
+intentional skips, no failures, and a 658.21-second runtime. Formatting,
+generated models, TypeScript checking, build, and the high-severity production
+audit pass with no known vulnerabilities. Strict package inspection accepts
+259 entries in the fresh 1,903,475-byte archive with SHA-256
+`a13dc2cb004a1d92831544b9dff133129aaa5397b0a0679949be3527ed995a66`.
+Two fresh 67-package consumers validate the public import, CLI, and all 79
+bundled plugin files; the uniquely named staging directory is removed after
+capture. Sealed live paired scanning, deterministic exact-commit self-review,
+and hosted workflow evidence remain the next checkpoint rather than being
+inferred from local tests.
+
+**Consequence.** Hydra findings now require joined source, callable identity,
+runtime, target-selection, and invocation proof, while the paired control
+measures the advisory's exact 1.3.4 change without claiming that a blocklist
+turns untrusted configuration into a general security boundary. Future work
+must preserve the strict negative identities and report-impact discipline, and
+must rerun the perfect-gate sealed campaign after any material model or fixture
+change.
+
 ## 2026-08-25 — Bind Python tar extraction to runtime and effective filter semantics
 
 **Gap and authoritative semantics.** Python's

@@ -2086,8 +2086,14 @@ pair requires eager `iterparse` consumption. The other requires a constructed
 ordinary `XMLParser`. The Python tarfile pair then contrasts a Python 3.12
 uploaded `fileobj` extracted under the pre-3.14 fully trusted default with a
 control that combines `filter="data"` and bounded streaming member, type,
-duplicate-name, per-file, and total-expanded-byte validation. Each of the 224
-cases in 112 exploit/control pairs is scanned three times, producing 672 scans
+duplicate-name, per-file, and total-expanded-byte validation. The Hydra pair
+then keeps a remotely supplied configuration, relative `build_component`
+wrapper, official `hydra.utils.instantiate` call, Python 3.12.3 runtime, and
+fixed arithmetic witness identical while changing only `hydra-core==1.3.3` to
+1.3.4. The affected package resolves and invokes attacker-selected `_target_`
+callables; the advisory control rejects the blocklisted `builtins.eval` target
+before it can evaluate `6 * 7`. Each of the 226 cases in 113 exploit/control
+pairs is scanned three times, producing 678 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

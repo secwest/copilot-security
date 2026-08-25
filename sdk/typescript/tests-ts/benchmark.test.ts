@@ -137,6 +137,7 @@ describe("effectiveness benchmark", () => {
         "python-tarfile-unsafe-extraction",
         "python-tarfile-data-filter-control",
       ],
+      ["python-hydra-unsafe-instantiate", "python-hydra-blocklist-control"],
       ["javascript-prototype-pollution", "javascript-safe-preferences"],
       [
         "node-multi-hop-prototype-pollution",

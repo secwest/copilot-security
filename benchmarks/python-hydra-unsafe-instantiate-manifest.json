@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-hydra-unsafe-instantiate",
+      "description": "A remote Flask JSON configuration crosses an exact relative wrapper into hydra.utils.instantiate under hydra-core 1.3.3, allowing attacker-selected callable lookup and invocation.",
+      "fixture": "fixtures/python-hydra-unsafe-instantiate",
+      "findingsPaths": ["python-hydra-unsafe-instantiate/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "python-hydra-untrusted-target-code-execution",
+          "cwe": ["CWE-94", "CWE-470"],
+          "locations": [
+            {
+              "path": "src/factory.py",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["configuration upload", "request.get_json", "request JSON"],
+            ["build_component", "wrapper"],
+            ["hydra.utils.instantiate", "Hydra instantiate", "Hydra binding"],
+            ["config argument", "argument zero", "config="],
+            ["hydra-core 1.3.3", "hydra-core==1.3.3"],
+            ["_target_", "callable selection", "target selection"],
+            ["target arguments", "configured arguments", "call arguments"],
+            ["builtins.eval", "6 * 7", "arithmetic sentinel"],
+            ["Python 3.12.3"],
+            ["hydra-core 1.3.4", "InstantiationException", "target blocklist"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["configuration upload", "request.get_json", "request JSON"],
+            ["build_component", "wrapper"],
+            ["hydra.utils.instantiate", "Hydra instantiate", "Hydra binding"],
+            ["config argument", "argument zero", "config="],
+            ["hydra-core 1.3.3", "hydra-core==1.3.3"],
+            ["_target_", "callable selection", "target selection"],
+            ["target arguments", "configured arguments", "call arguments"],
+            ["builtins.eval", "6 * 7", "arithmetic sentinel"],
+            ["Python 3.12.3"],
+            ["hydra-core 1.3.4", "InstantiationException", "target blocklist"]
+          ],
+          "forbiddenText": [
+            "package presence alone proves code execution",
+            "ordinary constructor data controls the target",
+            "hydra-core 1.3.4 is a complete arbitrary-target security boundary",
+            "the fixture proves the deployed service is exploitable"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-hydra-blocklist-control",
+      "description": "The topology-identical advisory control changes only hydra-core to 1.3.4, whose sensitive-target blocklist rejects the bounded builtins.eval arithmetic witness before invocation.",
+      "fixture": "fixtures/python-hydra-blocklist-control",
+      "findingsPaths": ["python-hydra-blocklist-control/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}
