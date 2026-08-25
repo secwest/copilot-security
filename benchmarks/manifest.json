@@ -635,12 +635,22 @@
           "requiredValidationTextAnyOf": [
             ["PyYAML", "yaml module"],
             ["UnsafeLoader", "unsafe loader"],
-            ["request body", "attacker-controlled YAML"]
+            [
+              "request body",
+              "POST body",
+              "attacker-controlled YAML",
+              "request-controlled document"
+            ]
           ],
           "requiredAttackPathTextAnyOf": [
             ["request body", "attacker-controlled YAML"],
             ["UnsafeLoader", "unsafe loader"],
-            ["object construction", "Python object"]
+            [
+              "object construction",
+              "Python object",
+              "Python-specific constructor",
+              "Python-specific YAML construction"
+            ]
           ],
           "forbiddenText": [
             "import alone proves code execution",

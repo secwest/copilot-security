@@ -65,6 +65,18 @@ All notable scanner, application, benchmark, and operational changes are recorde
   and remote stream as sufficient for a CWE-502 object/state integrity finding,
   records unavailable runtime proof as a limitation, and retains the bounded
   witness requirement before any stronger impact claim.
+- A second exact-source campaign on corrected checkpoint
+  `3f9b0d859ac1993596e6ac089befc93084e2838a` recovered one high
+  unsafe-case finding on attempt one and kept the source-identical `safe_load`
+  control clean, yielding perfect structural precision, recall, F1, stability,
+  evidence, validation, attack-path, severity, and false-positive metrics. Its
+  stricter field-scoped semantic gate exposed two wording variants: validation
+  used `POST body`, while the attack path used `Python-specific constructor`
+  rather than the narrower benchmark literals. The benchmark now recognizes
+  these exact equivalent phrases, and correction guidance explicitly requires
+  the request/YAML boundary in validation and Python construction outcome in
+  the attack path. It does not relax CWE, location, severity, substantive-field,
+  safe-control, or impact-overclaim gates.
 - Added `cloudformation-public-admin-role`, the first native CloudFormation IAM
   authority model. It joins one exact `AWS::IAM::Role`, an unrestricted
   wildcard AWS-principal `Allow` for `sts:AssumeRole`, and either the exact

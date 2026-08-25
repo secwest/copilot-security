@@ -106,6 +106,22 @@ describe("Python PyYAML unsafe deserialization model", () => {
     expect(
       manifest.cases[0]?.expected[0]?.requiredAttackPathTextAnyOf,
     ).toHaveLength(3);
+    expect(
+      manifest.cases[0]?.expected[0]?.requiredValidationTextAnyOf?.[2],
+    ).toEqual([
+      "request body",
+      "POST body",
+      "attacker-controlled YAML",
+      "request-controlled document",
+    ]);
+    expect(
+      manifest.cases[0]?.expected[0]?.requiredAttackPathTextAnyOf?.[2],
+    ).toEqual([
+      "object construction",
+      "Python object",
+      "Python-specific constructor",
+      "Python-specific YAML construction",
+    ]);
     expect(manifest.cases[0]?.expected[0]?.forbiddenText).toHaveLength(2);
     expect(manifest.cases[1]?.expected).toEqual([]);
     expect(
@@ -410,6 +426,8 @@ describe("Python PyYAML unsafe deserialization model", () => {
     expect(prompt).toContain("is sufficient to report CWE-502");
     expect(prompt).toContain("do not reject that finding merely because");
     expect(prompt).toContain("deployed-module observation");
+    expect(prompt).toContain("In the validation section explicitly state");
+    expect(prompt).toContain("in the attack path explicitly name");
     expect(prompt).toContain("discarding the returned value does not undo");
     expect(prompt).toContain("bounded non-destructive payload");
     expect(prompt).toContain("Before escalating beyond object/state integrity");

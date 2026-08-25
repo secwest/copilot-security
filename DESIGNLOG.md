@@ -105,6 +105,21 @@ credential, or availability effects. The failed campaign cost $1.626461125 and
 is retained outside the repository as regression evidence rather than erased or
 relabelled as a pass.
 
+The first corrected campaign on checkpoint
+`3f9b0d859ac1993596e6ac089befc93084e2838a` recovered one high
+unsafe-case finding on attempt one and kept the source-identical safe control at
+zero findings. Structural precision, recall, F1, stability, evidence,
+validation, attack-path, severity, and false-positive metrics were all perfect.
+The remaining case failure was field-scoped wording, not missing semantics:
+validation said `POST body` and the attack path said `Python-specific
+constructor processing`, while the initial manifest allowed only `request body`
+or `attacker-controlled YAML` and `object construction` or `Python object` in
+those exact sections. Add only the observed equivalent phrases and explicitly
+direct the correction pass to put the request/YAML boundary in validation and
+the Python construction outcome in attack-path data. CWE-502, exact location,
+high/critical severity, substantive evidence, safe-control, and impact-overclaim
+gates remain unchanged.
+
 **Consequence.** The scanner gains a deterministic Python CWE-502 path while
 remaining narrower than version-insensitive `yaml.load` lexical rules. Future
 pickle, marshal, `load_all` consumption, ruamel.yaml, or gadget-specific
