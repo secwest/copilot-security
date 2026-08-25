@@ -98,8 +98,14 @@ expr>` resolve `__import__` and ask `builtins.eval` to evaluate only `6 * 7`,
   finding; no model, process, or campaign retry occurs. Bounded campaign output
   contains no allowance, quota, credit-limit, rate-limit, classifier-refusal,
   reconnect, timeout, transport, authentication, or authorization failure.
-  Hosted workflow evidence remains a separate exact-head acceptance
-  checkpoint.
+- All seven hosted workflow families pass on acceptance head
+  `41ee1c37c95e4fc7065e453e7aa1736ab0d54552`: Node `32897953405`,
+  container `32898015237`, Windows GUI `32897953447`, Linux GUI
+  `32897953455`, Go `32897953391`, Java `32897953314`, and .NET
+  `32897953426`. The container workflow was dispatched explicitly because its
+  push path filter correctly excludes a documentation-only acceptance commit;
+  its recorded head is the same exact revision. GitHub reports the repository
+  public on default branch `main`.
 - Added `python-web-sympy-unsafe-parse-expr`, a primitive-wide CWE-94/CWE-95
   model for request-controlled strings reaching the official
   `sympy.parsing.sympy_parser.parse_expr` evaluator without a provably
