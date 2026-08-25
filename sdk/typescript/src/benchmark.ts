@@ -1728,7 +1728,7 @@ function normalizeCwe(value: string): string {
 }
 
 function normalizeSemanticText(value: string): string {
-  return value.toLowerCase().replace(/\s+/gu, " ").trim();
+  return value.toLowerCase().replace(/`+/gu, "").replace(/\s+/gu, " ").trim();
 }
 
 function collectStringValues(value: unknown): string[] {

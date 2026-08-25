@@ -522,7 +522,7 @@ cross-provider findings without claiming that their scanner process completed.
 An expectation may also define bounded `requiredTextAnyOf`,
 `requiredValidationTextAnyOf`, and `requiredAttackPathTextAnyOf` groups plus
 `forbiddenText` literals. Every alternative group must match at least one
-case-insensitive, whitespace-normalized string in its specified scope and no
-forbidden literal may match anywhere in the finding. These semantic contracts
+case-insensitive, whitespace- and Markdown-code-normalized string in its
+specified scope and no forbidden literal may match anywhere in the finding. These semantic contracts
 fail the case and report the exact scoped missing groups or present overclaims;
 manifests never supply executable regular expressions.

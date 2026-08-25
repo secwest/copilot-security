@@ -2455,11 +2455,11 @@ describe("effectiveness benchmark", () => {
         line: 17,
         validation: {
           remainingUncertainty:
-            "If deployed unchanged, an external caller still needs caller-side sts:AssumeRole permission.",
+            "If the role is deployed unchanged, an external caller still needs caller-side `sts:AssumeRole` permission.",
         },
         attackPath: {
           outcome:
-            "If deployed unchanged, the external caller obtains a role session only with caller-side sts:AssumeRole permission.",
+            "If the role is deployed unchanged, the external caller obtains a role session only with caller-side `sts:AssumeRole` permission.",
         },
       }),
     ]);

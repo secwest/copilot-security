@@ -177,8 +177,8 @@ impact without the required cross-account identity permission. The final
 finding was less severe but retained the same unconditional reachability in
 multiple fields. Add generic, bounded whole-finding, validation-scoped, and
 attack-path-scoped alternative groups plus forbidden literals to benchmark
-expectations. Matching is literal, case-insensitive, whitespace-normalized, and
-limited in group, alternative, and string size; no manifest regex is compiled
+expectations. Matching is literal, case-insensitive, whitespace- and Markdown-
+code-normalized, and limited in group, alternative, and string size; no manifest regex is compiled
 or executed. Semantic failure is a case failure and the report identifies the
 exact scoped missing groups and present forbidden claims. Re-evaluation of the
 immutable campaign now fails with caller permission missing from validation,
@@ -189,6 +189,29 @@ deployment and effective caller-side `sts:AssumeRole` authorization appear as
 explicit remaining uncertainties and every outcome is conditional. This turns
 manual reviewer judgment into a repeatable effectiveness gate before spending
 another live campaign.
+
+Campaign `ff9bc508799c3db3d4b9ae0c3d9100f6c2c9eca6b794671db084d9646da1790e`
+provides the next scanner witness at source `19cfe40e4bafbf42e597e60f82f7605598b27762`.
+The control closed with no findings in 2m12s; the vulnerable case retained one
+conditional critical finding in 3m58s, and deterministic completion re-anchored
+three code excerpts to repository bytes. Both validation and attack-path JSON
+state unchanged deployment and external caller-side STS authorization as
+preconditions, and neither the final finding nor the two ledgers contains the
+prior unconditional claims. Together the scans used 2,521,686 input tokens
+(2,258,391 cached), 40,156 output tokens, and $1.989648375 over about 4m10s.
+
+The first generated report for that campaign is not the final semantic
+acceptance receipt: the runner loaded the prior clean `dist` build, so it did
+not project the newly added scoped fields into its match record. Exact-source
+re-evaluation caught two presentation mismatches despite the substantively
+correct artifact: Markdown backticks split the caller-side authorization
+literal, and the deployment wording was "the role is deployed unchanged."
+Treat Markdown code delimiters as presentation during semantic normalization
+and add the exact authorization and deployment variants. The sealed scanner
+artifact then passes with empty missing-validation, missing-attack-path, and
+forbidden lists. Because the campaign manifest hash predates those matching
+variants, require one new exact-manifest campaign before recording final live
+acceptance rather than rewriting or overclaiming the preserved receipt.
 
 **Consequence.** Review now receives a joined public-trust-to-administrator path
 instead of two disconnected IAM keywords, with exact counterevidence boundaries

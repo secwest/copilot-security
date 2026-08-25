@@ -103,6 +103,22 @@ All notable scanner, application, benchmark, and operational changes are recorde
   require unchanged deployment plus effective caller-side `sts:AssumeRole` in
   both validation uncertainty and attack-path serialization. The combined generic
   benchmark and CloudFormation lanes pass 26 tests and 1,748 assertions.
+- Campaign `ff9bc508799c3db3d4b9ae0c3d9100f6c2c9eca6b794671db084d9646da1790e`
+  then produced the intended semantics: one conditional critical finding and
+  zero control findings on attempt one, with explicit unchanged-deployment and
+  caller-side authorization preconditions in both validation and attack-path
+  objects and none of the forbidden overclaims. Deterministic completion also
+  re-anchored three model-written excerpts to exact repository bytes. The two
+  scans used 2,521,686 input tokens (2,258,391 cached), 40,156 output tokens,
+  and estimated cost $1.989648375 over about 4m10s, with no refusal, retry,
+  limit, authentication, or transport event. This campaign exposed an
+  acceptance-process issue: its runner loaded the preceding compiled evaluator
+  while the source had just gained field-scoped gates. Exact-source evaluation
+  verified the finding but showed that literal matching should ignore Markdown
+  code backticks and admit the precise phrase "role is deployed unchanged."
+  Semantic normalization now removes Markdown code delimiters as presentation,
+  and the manifest includes the exact caller-authorization and deployment
+  variants. A fresh manifest-bound live campaign remains the final gate.
 - Added `kubernetes-cluster-admin-broad-subject`, the second native Kubernetes
   infrastructure-as-code model. It requires an exact
   `rbac.authorization.k8s.io/v1` `ClusterRoleBinding`, an immutable exact

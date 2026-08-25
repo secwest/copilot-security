@@ -32,7 +32,9 @@
           "requiredValidationTextAnyOf": [
             [
               "caller-side sts:AssumeRole permission",
+              "caller-side sts:AssumeRole authorization",
               "identity-based permission to call sts:AssumeRole",
+              "identity policy allowing sts:AssumeRole",
               "caller identity policy",
               "caller-side authorization",
               "separate effective sts:AssumeRole authorization"
@@ -40,6 +42,8 @@
             [
               "if deployed",
               "deployed as written",
+              "role is deployed unchanged",
+              "template is deployed unchanged",
               "deployment of this resource",
               "template is deployed"
             ]
@@ -47,7 +51,9 @@
           "requiredAttackPathTextAnyOf": [
             [
               "caller-side sts:AssumeRole permission",
+              "caller-side sts:AssumeRole authorization",
               "identity-based permission to call sts:AssumeRole",
+              "identity policy allowing sts:AssumeRole",
               "caller identity policy",
               "caller-side authorization",
               "separate effective sts:AssumeRole authorization"
@@ -55,6 +61,8 @@
             [
               "if deployed",
               "deployed as written",
+              "role is deployed unchanged",
+              "template is deployed unchanged",
               "deployment of this resource",
               "template is deployed"
             ]
