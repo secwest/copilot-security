@@ -164,6 +164,7 @@ const distFiles = new Set(
     "go-template-risk",
     "index",
     "knowledge-base",
+    "kubernetes-risk",
     "model-draft-recovery",
     "models",
     "multiscan",

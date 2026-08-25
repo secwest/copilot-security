@@ -72,6 +72,22 @@ exactly one Kubernetes row survives for the vulnerable fixture and none for the
 control. The canonical benchmark now contains 101 exploit/control pairs, 202
 cases, and 606 repeated scans.
 
+**Final local acceptance and portable packaging.** The authoritative Windows
+Bun 1.3.14 suite passes 1,501 tests and 11,163 assertions across 166 files in
+705.07 seconds, with 20 intentional platform/environment skips and no failures.
+Generated-model drift, formatting, TypeScript checking, and the clean
+production build pass; `pnpm audit --prod --audit-level high` reports no known
+vulnerabilities. Windows and Ubuntu/WSL strictly inspect the same 255-entry,
+1,800,859-byte npm archive with SHA-256
+`63f03c3a436d5fbf1baf752af50ab670e219fff1a8b2c9f18cb1b68cd75798b5`.
+Their isolated consumers install 67 and 75 packages respectively and validate
+the public import, installed CLI, and all 79 bundled plugin files. Add the new
+`kubernetes-risk` build output to the strict distribution allowlist. Produce
+the accepted archive under POSIX: inspection deliberately rejects the same
+Windows-produced payload because npm on that host flattens the executable CLI
+mode to 0644, while the WSL-produced archive preserves 0755. This is a release
+artifact property, not a source-tree exception.
+
 ## 2026-08-24 — Resume host-audited correction after complete-draft transport loss
 
 **Measured gap.** The immutable self-scan established that a late Copilot

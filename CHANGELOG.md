@@ -38,6 +38,22 @@ All notable scanner, application, benchmark, and operational changes are recorde
   the new structured row survives the global cap and only the vulnerable
   fixture is retained. The canonical corpus now contains 101 exploit/control
   pairs, 202 cases, and 606 repeated scans.
+- Final local acceptance for the Kubernetes authority-path model is green. The
+  authoritative Windows suite passes 1,501 tests and 11,163 assertions across
+  166 files in 705.07 seconds, with 20 intentional platform/environment skips
+  and zero failures. Generated-model drift, repository formatting, TypeScript
+  checking, and the clean production build pass; the production dependency
+  audit reports no known vulnerabilities. Windows and Ubuntu/WSL strictly
+  inspect the same POSIX-built 255-entry, 1,800,859-byte npm archive with
+  SHA-256
+  `63f03c3a436d5fbf1baf752af50ab670e219fff1a8b2c9f18cb1b68cd75798b5`;
+  isolated consumers install 67 and 75 packages respectively and validate the
+  public import, installed CLI, and all 79 bundled plugin files. The strict
+  package checker now explicitly accounts for the new `kubernetes-risk`
+  distribution module. It rejected the otherwise valid Windows-produced
+  archive because that producer flattened the CLI mode to 0644; the accepted
+  WSL-produced archive preserves 0755, preventing a Linux packaging regression
+  from being hidden by Windows-only validation.
 - Complete-draft transport recovery now resumes the mandatory host-audited
   quality gate in a fresh isolated Copilot session before deterministic
   finalization. A timeout or sanitized transport interruption whose session
