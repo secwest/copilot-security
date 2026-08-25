@@ -2208,6 +2208,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-web-sympy-unsafe-parse-expr",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+sympy(?:\.parsing(?:\.sympy_parser)?)?\b|\bfrom\s+sympy(?:\.parsing(?:\.sympy_parser)?)?\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-expression",
+        expression:
+          /\brequest\.(?:body|data|files|form|json|POST)\b|\brequest\.(?:get|get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\bBody\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "sympy-unsandboxed-expression-evaluation",
+        expression: /\b(?:[A-Za-z_]\w*\s*\.\s*)*parse_expr\s*\(/u,
+        cweIds: ["CWE-94", "CWE-95"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-pyyaml-unsafe-load",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3271,7 +3298,8 @@ function isPythonTypedSinkModel(modelId: string): boolean {
     modelId === "python-web-lxml-iterparse-xxe" ||
     modelId === "python-web-lxml-etcompat-xxe" ||
     modelId === "python-web-tarfile-unsafe-extraction" ||
-    modelId === "python-web-hydra-unsafe-instantiate"
+    modelId === "python-web-hydra-unsafe-instantiate" ||
+    modelId === "python-web-sympy-unsafe-parse-expr"
   );
 }
 
@@ -3539,6 +3567,23 @@ const HYDRA_FIELD_EVIDENCE_REQUIREMENTS = [
   ["hydra-core 1.3.4", "InstantiationException", "target blocklist"],
 ] as const;
 
+const SYMPY_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["expression upload", "request.get_json", "request JSON"],
+  ["parse_expression", "wrapper"],
+  [
+    "sympy.parsing.sympy_parser.parse_expr",
+    "SymPy parse_expr",
+    "official SymPy binding",
+  ],
+  ["expression argument", "argument zero", "argument 0", "s="],
+  ["default global_dict", "default namespace", "builtin namespace"],
+  ["stringify_expr", "eval_expr", "Python eval"],
+  ["__import__", "builtin capability"],
+  ["6 * 7", "arithmetic sentinel", "42"],
+  ["Python 3.12.3"],
+  ["restricted namespace", "empty __builtins__", "SAFE_GLOBALS"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3583,6 +3628,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: HYDRA_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: HYDRA_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-web-sympy-unsafe-parse-expr",
+    {
+      validation: SYMPY_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: SYMPY_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -14407,11 +14459,13 @@ function frameworkDataflowRecords(
                   ? pythonTarfileCandidateLines(lines, 64)
                   : model.id === "python-web-hydra-unsafe-instantiate"
                     ? pythonHydraCandidateLines(lines, 64)
-                    : matchingPythonModelLines(
-                        lines,
-                        model.sinks,
-                        isPythonTypedSinkModel(model.id) ? 64 : 8,
-                      )
+                    : model.id === "python-web-sympy-unsafe-parse-expr"
+                      ? pythonSympyCandidateLines(lines, 64)
+                      : matchingPythonModelLines(
+                          lines,
+                          model.sinks,
+                          isPythonTypedSinkModel(model.id) ? 64 : 8,
+                        )
             : extension === ".java" || extension === ".cs"
               ? matchingJavaModelLines(lines, model.sinks, 8)
               : matchingModelLines(lines, model.sinks, 8);
@@ -14642,7 +14696,14 @@ function frameworkDataflowRecords(
                               lines,
                               sink.line,
                             )
-                          : undefined;
+                          : model.id === "python-web-sympy-unsafe-parse-expr"
+                            ? pythonSympyUnsafeParseExprSink(
+                                files,
+                                path,
+                                lines,
+                                sink.line,
+                              )
+                            : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -15139,13 +15200,21 @@ function frameworkDataflowRecords(
                               .find((candidate) => candidate !== undefined)
                           : isPythonTypedSinkModel(model.id) &&
                               pythonTypedSink !== undefined
-                            ? modeledPythonObjectSource(
-                                lines,
-                                sources,
-                                sink.line,
-                                pythonTypedSink.sourceExpression,
-                                model.sources,
-                              )
+                            ? model.id === "python-web-sympy-unsafe-parse-expr"
+                              ? modeledPythonSympyObjectSource(
+                                  lines,
+                                  sources,
+                                  sink.line,
+                                  pythonTypedSink.sourceExpression,
+                                  model.sources,
+                                )
+                              : modeledPythonObjectSource(
+                                  lines,
+                                  sources,
+                                  sink.line,
+                                  pythonTypedSink.sourceExpression,
+                                  model.sources,
+                                )
                             : model.id === "node-http-object-authorization" &&
                                 nodeObjectSink !== undefined
                               ? modeledObjectLookupSource(
@@ -24097,7 +24166,9 @@ function pythonFrameworkWrapperSummaries(
                 ? pythonTarfileCandidateLines(file.lines, 64)
                 : model.id === "python-web-hydra-unsafe-instantiate"
                   ? pythonHydraCandidateLines(file.lines, 64)
-                  : matchingPythonModelLines(file.lines, model.sinks, 32);
+                  : model.id === "python-web-sympy-unsafe-parse-expr"
+                    ? pythonSympyCandidateLines(file.lines, 64)
+                    : matchingPythonModelLines(file.lines, model.sinks, 32);
       const controls = matchingPythonModelLines(file.lines, model.controls, 64);
       for (const wrapper of exportedFunctions) {
         for (const sink of sinks) {
@@ -24172,7 +24243,15 @@ function pythonFrameworkWrapperSummaries(
                                   file.lines,
                                   sink.line,
                                 )
-                              : undefined;
+                              : model.id ===
+                                  "python-web-sympy-unsafe-parse-expr"
+                                ? pythonSympyUnsafeParseExprSink(
+                                    files,
+                                    file.path,
+                                    file.lines,
+                                    sink.line,
+                                  )
+                                : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
@@ -26943,6 +27022,404 @@ function pythonLxmlEtCompatXxeSink(
         ],
       };
     }
+  }
+  return undefined;
+}
+
+interface PythonSympyBinding extends PythonMemberBinding {
+  operation: "parse_expr";
+  originLine?: number;
+}
+
+function pythonSympyBindings(lines: readonly string[]): PythonSympyBinding[] {
+  const bindings: PythonSympyBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  const addBinding = (
+    local: string,
+    memberPath: string,
+    line: number,
+  ): void => {
+    bindings.push({
+      imported: "sympy.parsing.sympy_parser.parse_expr",
+      local,
+      memberPath,
+      operation: "parse_expr",
+      line,
+    });
+  };
+  const collectedImport = (startIndex: number, initial: string): string => {
+    let importedText = initial.trim();
+    if (importedText.startsWith("(") && !importedText.endsWith(")")) {
+      for (
+        let offset = startIndex + 1;
+        offset < Math.min(structuralLines.length, startIndex + 8);
+        offset += 1
+      ) {
+        importedText += `\n${structuralLines[offset] ?? ""}`;
+        if ((structuralLines[offset] ?? "").includes(")")) break;
+      }
+    }
+    return importedText.startsWith("(") === importedText.endsWith(")")
+      ? importedText.replace(/^\(([\s\S]*)\)$/u, "$1")
+      : "";
+  };
+
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const moduleImport =
+      /^\s*import\s+(sympy(?:\.parsing(?:\.sympy_parser)?)?)(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+        structural,
+      );
+    if (moduleImport !== null) {
+      const importedModule = moduleImport[1]!;
+      const alias = moduleImport[2];
+      if (importedModule === "sympy" || alias === undefined) {
+        addBinding(
+          alias ?? "sympy",
+          "parsing.sympy_parser.parse_expr",
+          index + 1,
+        );
+      } else if (importedModule === "sympy.parsing") {
+        addBinding(alias, "sympy_parser.parse_expr", index + 1);
+      } else {
+        addBinding(alias!, "parse_expr", index + 1);
+      }
+      continue;
+    }
+
+    for (const [moduleName, importedName, memberPath] of [
+      ["sympy", "parsing", "sympy_parser.parse_expr"],
+      ["sympy.parsing", "sympy_parser", "parse_expr"],
+      ["sympy.parsing.sympy_parser", "parse_expr", ""],
+    ] as const) {
+      const fromImport = new RegExp(
+        `^\\s*from\\s+${escapeRegularExpression(moduleName)}\\s+import\\s+(.+?)\\s*$`,
+        "u",
+      ).exec(structural);
+      if (fromImport?.[1] === undefined) continue;
+      const importedText = collectedImport(index, fromImport[1]);
+      for (const rawBinding of splitPythonArguments(importedText)) {
+        const parsed = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+          rawBinding.trim(),
+        );
+        if (parsed?.[1] !== importedName) continue;
+        addBinding(parsed[2] ?? importedName, memberPath, index + 1);
+      }
+    }
+  }
+
+  const importedBindings = [...bindings];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    for (const binding of importedBindings) {
+      if (
+        binding.line >= index + 1 ||
+        !pythonSympyBindingReachableAtLine(lines, binding, index + 1) ||
+        pythonSympyBindingReassigned(lines, binding, index + 1)
+      ) {
+        continue;
+      }
+      const source = pythonSympyBindingExpression(binding)
+        .split(".")
+        .map(escapeRegularExpression)
+        .join("\\s*\\.\\s*");
+      const alias = new RegExp(
+        `^\\s*([A-Za-z_]\\w*)\\s*(?::[^=]+)?=\\s*${source}\\s*$`,
+        "u",
+      ).exec(structural)?.[1];
+      if (alias === undefined || alias === binding.local) continue;
+      bindings.push({
+        imported: binding.imported,
+        local: alias,
+        memberPath: "",
+        operation: "parse_expr",
+        line: index + 1,
+        originLine: binding.originLine ?? binding.line,
+      });
+    }
+  }
+  return bindings;
+}
+
+function pythonSympyBindingExpression(binding: PythonSympyBinding): string {
+  return binding.memberPath === ""
+    ? binding.local
+    : `${binding.local}.${binding.memberPath}`;
+}
+
+function pythonSympyBindingCallee(binding: PythonSympyBinding): RegExp {
+  const segments = pythonSympyBindingExpression(binding).split(".");
+  return new RegExp(
+    `\\b${segments.map(escapeRegularExpression).join("\\s*\\.\\s*")}\\s*\\(`,
+    "u",
+  );
+}
+
+function pythonSympyBindingReassigned(
+  lines: readonly string[],
+  binding: PythonSympyBinding,
+  callLine: number,
+): boolean {
+  if (
+    pythonIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      callLine,
+    )
+  ) {
+    return true;
+  }
+  const segments = binding.memberPath.split(".").filter(Boolean);
+  if (segments.length === 0) return false;
+  const structuralLines = pythonStructuralLines(lines).slice(
+    binding.line,
+    Math.max(binding.line, callLine - 1),
+  );
+  for (let length = 1; length <= segments.length; length += 1) {
+    const member = [binding.local, ...segments.slice(0, length)]
+      .map(escapeRegularExpression)
+      .join("\\s*\\.\\s*");
+    const replacement = new RegExp(
+      `^\\s*${member}\\s*(?:[+\\-*/%&|^]?=|:=)`,
+      "u",
+    );
+    if (structuralLines.some((candidate) => replacement.test(candidate))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pythonSympyBindingReachableAtLine(
+  lines: readonly string[],
+  binding: PythonSympyBinding,
+  line: number,
+): boolean {
+  const scope = pythonTopLevelFunctionRangeAtLine(lines, binding.line);
+  return (
+    scope === undefined || (line >= scope.startLine && line <= scope.endLine)
+  );
+}
+
+function pythonSympyCandidateLines(
+  lines: readonly string[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const bindings = pythonSympyBindings(lines).map((binding) => ({
+    binding,
+    callee: pythonSympyBindingCallee(binding),
+  }));
+  const structuralLines = pythonStructuralLines(lines);
+  const matches: Array<{ kind: string; line: number }> = [];
+  for (
+    let index = 0;
+    index < structuralLines.length && matches.length < limit;
+    index += 1
+  ) {
+    const line = index + 1;
+    const structural = structuralLines[index] ?? "";
+    if (
+      bindings.some(
+        ({ binding, callee }) =>
+          binding.line < line &&
+          pythonSympyBindingReachableAtLine(lines, binding, line) &&
+          callee.test(structural),
+      )
+    ) {
+      matches.push({ kind: "sympy-unsandboxed-expression-evaluation", line });
+    }
+  }
+  return matches;
+}
+
+function pythonSympyResolvedNamespace(
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+): string | undefined {
+  let resolved = resolvePythonExpression(lines, expression, beforeLine);
+  for (let depth = 0; depth < 4 && resolved !== undefined; depth += 1) {
+    const wrapper =
+      /^(?:dict\s*\(\s*([A-Za-z_]\w*)\s*\)|([A-Za-z_]\w*)\s*\.\s*copy\s*\(\s*\))$/u.exec(
+        resolved.trim(),
+      );
+    const inner = wrapper?.[1] ?? wrapper?.[2];
+    if (inner === undefined) return resolved;
+    const next = resolvePythonExpression(lines, inner, beforeLine);
+    if (next === undefined || next === inner) return undefined;
+    resolved = next;
+  }
+  return resolved;
+}
+
+function pythonSympyHasStrippedBuiltins(
+  lines: readonly string[],
+  expression: string | undefined,
+  beforeLine: number,
+): boolean {
+  if (expression === undefined) return false;
+  const resolved = pythonSympyResolvedNamespace(lines, expression, beforeLine);
+  if (resolved === undefined) return false;
+  const compact = resolved.replace(/\s+/gu, "");
+  return /^\{(?:["']__builtins__["']:\{\},?)\}$/u.test(compact);
+}
+
+const SYMPY_SAFE_LOCAL_IDENTIFIERS = new Set([
+  "Abs",
+  "E",
+  "Float",
+  "I",
+  "Integer",
+  "Rational",
+  "Symbol",
+  "acos",
+  "acosh",
+  "asin",
+  "asinh",
+  "atan",
+  "atan2",
+  "atanh",
+  "binomial",
+  "cbrt",
+  "cos",
+  "cosh",
+  "cot",
+  "csc",
+  "exp",
+  "factorial",
+  "log",
+  "oo",
+  "pi",
+  "sec",
+  "sin",
+  "sinh",
+  "sqrt",
+  "sympy",
+  "tan",
+  "tanh",
+]);
+
+function pythonSympyHasSafeLocalAllowlist(
+  lines: readonly string[],
+  expression: string | undefined,
+  beforeLine: number,
+): boolean {
+  if (expression === undefined || expression.trim() === "None") return true;
+  const resolved = pythonSympyResolvedNamespace(lines, expression, beforeLine);
+  if (resolved === undefined) return false;
+  const trimmed = resolved.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return false;
+  const withoutStrings = trimmed.replace(
+    /(?:[rubf]{0,2})(["'])(?:\\.|(?!\1)[^\\])*\1/giu,
+    "",
+  );
+  if (withoutStrings.includes("__")) return false;
+  const identifiers = withoutStrings.match(/\b[A-Za-z_]\w*\b/gu) ?? [];
+  return identifiers.every((identifier) =>
+    SYMPY_SAFE_LOCAL_IDENTIFIERS.has(identifier),
+  );
+}
+
+function pythonSympyUnsafeParseExprSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "sympy")) {
+    return undefined;
+  }
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  for (const binding of pythonSympyBindings(lines)) {
+    if (
+      binding.line >= line ||
+      !pythonSympyBindingReachableAtLine(lines, binding, line) ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      pythonSympyBindingReassigned(lines, binding, line)
+    ) {
+      continue;
+    }
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(
+      lines,
+      line,
+      pythonSympyBindingCallee(binding),
+    );
+    if (
+      arguments_ === undefined ||
+      arguments_.some((argument) => argument.trim().startsWith("*"))
+    ) {
+      continue;
+    }
+    const positional = pythonPositionalArguments(arguments_);
+    const sourceExpression =
+      pythonKeywordArgument(arguments_, "s") ?? positional[0];
+    if (sourceExpression === undefined || sourceExpression.trim() === "")
+      continue;
+    const localDictionary =
+      pythonKeywordArgument(arguments_, "local_dict") ?? positional[1];
+    const globalDictionary =
+      pythonKeywordArgument(arguments_, "global_dict") ?? positional[3];
+    const safeGlobal = pythonSympyHasStrippedBuiltins(
+      lines,
+      globalDictionary,
+      line,
+    );
+    const safeLocal = pythonSympyHasSafeLocalAllowlist(
+      lines,
+      localDictionary,
+      line,
+    );
+    if (safeGlobal && safeLocal) continue;
+    return {
+      sourceExpression:
+        resolvePythonExpression(lines, sourceExpression, line) ??
+        sourceExpression,
+      kind: "sympy-untrusted-parse-expr-evaluation",
+      propagators: [
+        {
+          kind: "sympy-parse-expr-binding",
+          path: sourcePath,
+          line: binding.originLine ?? binding.line,
+          symbol: `${binding.imported} as ${pythonSympyBindingExpression(binding)}`,
+        },
+        ...(binding.originLine === undefined
+          ? []
+          : [
+              {
+                kind: "sympy-parse-expr-callable-alias",
+                path: sourcePath,
+                line: binding.line,
+                symbol: binding.local,
+              },
+            ]),
+        {
+          kind: "sympy-untrusted-expression-edge",
+          path: sourcePath,
+          line,
+          symbol:
+            pythonKeywordArgument(arguments_, "s") === undefined
+              ? "argument zero"
+              : "s=",
+        },
+        {
+          kind: "sympy-evaluation-namespace",
+          path: sourcePath,
+          line,
+          symbol: safeGlobal
+            ? "builtins stripped; local allowlist unproved"
+            : "default or unproved global_dict exposes evaluation capabilities",
+        },
+        {
+          kind: "intrinsic-sympy-eval-execution",
+          path: sourcePath,
+          line,
+          symbol: "stringify_expr -> compile -> eval_expr -> eval",
+        },
+      ],
+    };
   }
   return undefined;
 }
@@ -30386,6 +30863,43 @@ function modeledPythonObjectSource(
   if (direct !== undefined) return { kind: direct.kind, line: callLine };
   const structuralLines = pythonStructuralLines(lines);
   const earliest = Math.max(1, callLine - MAX_WRAPPER_CALL_DISTANCE);
+  for (let line = callLine - 1; line >= earliest; line -= 1) {
+    const source = sources.find((candidate) => candidate.line === line);
+    if (source === undefined) continue;
+    const assignment = /^\s*([A-Za-z_]\w*)\s*(?::[^=]+)?=/u.exec(
+      structuralLines[line - 1] ?? "",
+    );
+    const identifier = assignment?.[1];
+    if (
+      identifier === undefined ||
+      !pythonLineReferencesIdentifier(argument, identifier) ||
+      pythonIdentifierReassignedBetween(lines, identifier, line, callLine)
+    ) {
+      continue;
+    }
+    return source;
+  }
+  return undefined;
+}
+
+function modeledPythonSympyObjectSource(
+  lines: readonly string[],
+  sources: readonly { kind: string; line: number }[],
+  callLine: number,
+  argument: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const direct = sourcePatterns.find((pattern) =>
+    pattern.expression.test(argument),
+  );
+  if (direct !== undefined) return { kind: direct.kind, line: callLine };
+  const structuralLines = pythonStructuralLines(lines);
+  const containingFunction = pythonTopLevelFunctionRangeAtLine(lines, callLine);
+  const earliest = Math.max(
+    1,
+    callLine - 64,
+    containingFunction?.startLine ?? 1,
+  );
   for (let line = callLine - 1; line >= earliest; line -= 1) {
     const source = sources.find((candidate) => candidate.line === line);
     if (source === undefined) continue;

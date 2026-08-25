@@ -2,6 +2,101 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Treat SymPy `parse_expr` as Python evaluation, not mathematical parsing
+
+**Gap and authoritative semantics.** The reviewed
+[`GHSA-q27q-98j4-9pfv`](https://github.com/advisories/GHSA-q27q-98j4-9pfv),
+assigned CVE-2026-55585, records authenticated remote code execution in Qwed
+below 5.1.2 when a tenant-controlled expression reaches SymPy `parse_expr()`.
+The official
+[`parse_expr` implementation](https://github.com/sympy/sympy/blob/master/sympy/parsing/sympy_parser.py)
+warns that it uses `eval` and must not receive unsanitized input. When
+`global_dict` is omitted it executes `from sympy import *`, adds Python builtin
+functions, transforms the string, compiles it, and calls `eval_expr`, which
+directly invokes Python `eval`. `evaluate=False` changes SymPy expression
+evaluation and simplification; it does not remove the Python compile/eval
+stage. Authenticated source searches found no `parse_expr` rule in current
+`github/codeql` or `semgrep/semgrep-rules` repositories. A package-presence or
+method-name heuristic would therefore miss the real flow while confusing
+unrelated parsers and restricted uses.
+
+**Decision and source-flow boundary.** Add
+`python-web-sympy-unsafe-parse-expr` as a typed Python sink independent of Qwed
+version. Resolve `import sympy`, `import sympy.parsing`,
+`import sympy.parsing.sympy_parser`, `from sympy import parsing`,
+`from sympy.parsing import sympy_parser`, and direct `parse_expr` imports,
+including aliases, bounded parenthesized imports, function-local imports, and
+one direct callable alias. Candidate discovery begins with those live bindings
+so forty unrelated `.parse_expr()` calls cannot exhaust the 64-candidate
+budget. The expression must be request-derived in argument zero or `s=`.
+Same-file, one relative wrapper, and two relative relays remain supported. The
+Qwed route places 41 lines of validation and normalization between
+`request.get("expression")` and the terminal sink, exceeding the shared
+12-line local lookup. Extend only this model's source reconciliation to 64
+lines and bound it to the containing top-level function when that range is
+available; do not weaken every framework model's locality rule.
+
+**Namespace and false-positive boundary.** A missing or `None` global
+dictionary is unsafe. An empty dictionary without an explicit `__builtins__`
+key is also not a sandbox because Python `eval` inserts builtins. Regex
+normalization, AST syntax checks, length limits, authentication, try/except,
+and `evaluate=False` are counterevidence about other risks but do not dominate
+name resolution and evaluation. Suppress only when the scanner proves an
+application-owned global mapping whose sole capability is
+`{"__builtins__": {}}` and a literal local mapping composed entirely from the
+reviewed mathematical SymPy constructor, constant, and function allowlist.
+Keep dynamic locals, request-controlled globals, explicit `eval` or other
+capabilities, star arguments, and unproved namespace builders visible. Reject
+local SymPy shadows, reassigned imports or nested members, parameter shadows,
+out-of-scope aliases, fixed input, strings, comments, and text lookalikes.
+
+**Executable pair and impact discipline.** Both fixtures keep Flask, Python
+3.12.3, SymPy 1.14.0, the JSON route, `parse_expression` wrapper, ordinary
+arithmetic, and witness bytes aligned. The affected parser omits namespace
+arguments. The control passes `SAFE_GLOBALS={"__builtins__": {}}` and a
+literal `SAFE_LOCALS` containing only `Float`, `Integer`, `Rational`, and
+`Symbol`. The bounded witness asks `__import__` only to reach `builtins.eval`
+for the fixed arithmetic string `6 * 7`: the affected case returns 42, the
+control raises `NameError`, and both evaluate ordinary arithmetic to 42. It
+does not execute a command, open a file or socket, access credentials, mutate
+process state, persist, or perform a destructive operation. Both validation
+and attack path must independently name ten groups: expression upload,
+wrapper, official binding, expression argument, default namespace,
+stringify/compile/eval chain, builtin capability, arithmetic sentinel, Python
+runtime, and restricted-namespace control. Concrete remote code execution
+still requires endpoint reachability, authentication, installed behavior,
+process privilege and containment, error handling, and a demonstrated command,
+file, network, secret, or availability effect.
+
+**Upstream differential and regression result.** A disposable clone of
+official Qwed `v5.1.1` at
+`edb0c90b16df9afefd8795e2707c126ab92858d9` initially exposed a recall miss:
+the mapping-style `request.get()` source was absent and the real 41-line flow
+exceeded the shared locality window. After the narrow corrections, the exact
+tag emits one row from `main.py:463` to `main.py:504` with the official binding
+and intrinsic eval chain. Current repaired Qwed 7.1.0 at
+`4f0f4f05f2998889aed386e34f6a14e469d1ef2d` emits zero rows. Twelve direct
+groups cover manifest semantics, exact cross-file flow, every supported
+binding, both real Qwed shapes, restricted namespaces, unsafe namespace
+variants, shadows and replacements, star and fixed inputs, two relays, dense
+decoys, field-local report closure, and correction guidance. They and corpus
+integrity pass 30 tests and 1,874 assertions; the wider Python and residual
+lane passes 184 tests with five intentional platform skips. The canonical
+corpus advances to 114 pairs, 228 cases, and 684 scans. A separate elevated
+native transport lane passes 39 tests and 179 assertions, including the private
+`copilot-security-home` ACL integration. The disposable clone and WSL
+environment were removed. Full-suite, package, deterministic self-scan, sealed
+campaign, and hosted workflow evidence remain separate checkpoints and must
+not be inferred from focused success.
+
+**Consequence.** The scanner can now distinguish an apparently mathematical
+API from its actual Python evaluation semantics and can prove both the live
+capability and a functional negative control without harmful exploitation.
+Future changes must preserve exact binding identity, the explicit empty
+builtin mapping, local allowlist discipline, realistic Qwed-length flow, and
+the rule that arithmetic capability evidence is not itself deployment-level
+compromise proof.
+
 ## 2026-08-25 — Bind Hydra instantiation to untrusted target selection and affected runtime proof
 
 **Gap and authoritative semantics.** The reviewed

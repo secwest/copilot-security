@@ -4808,6 +4808,45 @@
         "python-hydra-blocklist-control/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "python-sympy-unsafe-parse-expr",
+      "description": "A remote Flask JSON expression crosses an exact relative wrapper into the official SymPy parse_expr binding with its default builtin-capable evaluation namespace.",
+      "fixture": "fixtures/python-sympy-unsafe-parse-expr",
+      "findingsPaths": [
+        "python-sympy-unsafe-parse-expr/run-1/findings.json",
+        "python-sympy-unsafe-parse-expr/run-2/findings.json",
+        "python-sympy-unsafe-parse-expr/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-sympy-untrusted-expression-code-execution",
+          "cwe": ["CWE-94", "CWE-95"],
+          "locations": [
+            {
+              "path": "src/parser.py",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-sympy-restricted-namespace-control",
+      "description": "The topology-matched control retains SymPy 1.14.0 but strips builtins and supplies a literal mathematical local allowlist, rejecting the capability probe while preserving arithmetic.",
+      "fixture": "fixtures/python-sympy-restricted-namespace-control",
+      "findingsPaths": [
+        "python-sympy-restricted-namespace-control/run-1/findings.json",
+        "python-sympy-restricted-namespace-control/run-2/findings.json",
+        "python-sympy-restricted-namespace-control/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

@@ -138,6 +138,10 @@ describe("effectiveness benchmark", () => {
         "python-tarfile-data-filter-control",
       ],
       ["python-hydra-unsafe-instantiate", "python-hydra-blocklist-control"],
+      [
+        "python-sympy-unsafe-parse-expr",
+        "python-sympy-restricted-namespace-control",
+      ],
       ["javascript-prototype-pollution", "javascript-safe-preferences"],
       [
         "node-multi-hop-prototype-pollution",

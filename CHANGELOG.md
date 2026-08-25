@@ -6,6 +6,57 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-sympy-unsafe-parse-expr`, a primitive-wide CWE-94/CWE-95
+  model for request-controlled strings reaching the official
+  `sympy.parsing.sympy_parser.parse_expr` evaluator without a provably
+  restricted namespace. It resolves module, parser-module, direct, aliased,
+  parenthesized, function-local, and one-hop callable-alias bindings; preserves
+  same-file, one-wrapper, and two-relay flows; records the exact expression
+  argument and intrinsic `stringify_expr -> compile -> eval_expr -> eval`
+  chain; and extends the same-file trace to 64 lines within the containing
+  function so realistic validation and normalization do not hide the source.
+- Kept the model fail closed at identity, namespace, and flow boundaries.
+  Repository-local `sympy.py` or `sympy/` shadows, import/member replacement,
+  wrapper-parameter and cross-function shadows, star expansion, fixed strings,
+  comments, and lookalikes do not emit. `evaluate=False`, regex or AST checks,
+  length limits, exception handling, authentication, `global_dict=None`, and
+  an empty global dictionary without an explicit empty `__builtins__` mapping
+  are not misclassified as sandboxes. The negative boundary requires an
+  application-owned `{"__builtins__": {}}` global dictionary plus a literal
+  local allowlist made only from reviewed mathematical SymPy identifiers;
+  dynamic, request-controlled, or capability-bearing namespaces remain
+  reviewable findings.
+- Added topology-matched Flask fixtures pinned to Python 3.12.3 and SymPy
+  1.14.0, a perfect-gate specialized manifest, and a bounded arithmetic
+  witness. The affected default namespace resolves `__import__` and evaluates
+  only the fixed expression `6 * 7` to 42. The control raises `NameError` for
+  the same capability probe while ordinary `6 * 7` still returns 42. The
+  witness launches no shell, touches no file or credential, opens no network
+  connection, persists nothing, and performs no destructive action. Ten
+  independent evidence groups are mandatory in both validation and attack
+  path, and four forbidden claims prevent simplification-mode, universal-call,
+  shell-witness, and deployment-proof overstatement. The canonical corpus now
+  contains 114 exploit/control pairs, 228 cases, and 684 repeated scans.
+- Tested the generalized primitive against the exact upstream application that
+  motivated it. Official Qwed tag `v5.1.1` at
+  `edb0c90b16df9afefd8795e2707c126ab92858d9` emits one exact same-file row from
+  `request.get("expression")` at `src/qwed_new/api/main.py:463` through its
+  cosmetic normalization to `parse_expr` at line 504. Current repaired Qwed
+  7.1.0 at `4f0f4f05f2998889aed386e34f6a14e469d1ef2d` emits zero SymPy rows. This
+  upstream differential exposed and closed the old 12-line same-file tracing
+  limit without widening other typed-sink models. Authenticated searches of
+  current public CodeQL and Semgrep rule source found no `parse_expr` model.
+  The disposable upstream clone and WSL witness environment were removed after
+  verification.
+- Twelve focused SymPy groups plus the canonical corpus lane pass 30 tests and
+  1,874 assertions on Windows. The wider Python typed-model, cross-file,
+  multi-hop, and residual-inventory lane passes 184 tests with five intentional
+  Windows-only skips. The separate elevated native transport lane passes all
+  39 tests and 179 assertions, including creation and verification of the
+  private `copilot-security-home` ACL. Generated-model drift and TypeScript
+  compilation are clean. Full native and WSL regression, package, audit,
+  deterministic self-scan, sealed live paired campaign, and hosted workflow
+  evidence remain the acceptance checkpoint.
 - Added `python-web-hydra-unsafe-instantiate`, a version-aware CWE-94/CWE-470
   model for remote Hydra object-instantiation configuration under
   GHSA-2cp2-2r3c-7p7r / CVE-2026-68508. It resolves the official
