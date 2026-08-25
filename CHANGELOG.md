@@ -42,8 +42,8 @@ All notable scanner, application, benchmark, and operational changes are recorde
   filters, instance and class overrides, dense candidate decoys, shadows,
   reassignment, wrong argument roles, and ten independent evidence groups in
   both validation and attack path. The focused Windows lane passes 31 tests
-  and 1,857 assertions with one intentional POSIX-only skip; Ubuntu/WSL
-  passes all 32 tests and 1,858 assertions. A test-discovered exact-value
+  and 1,866 assertions with one intentional POSIX-only skip; Ubuntu/WSL
+  passes all 32 tests and 1,867 assertions. A test-discovered exact-value
   parser defect is fixed: quoted `mode=` and `filter=` values are now compared
   before structural string erasure.
 - Compared the model against Python's 3.12 and current `tarfile` documentation
@@ -53,13 +53,13 @@ All notable scanner, application, benchmark, and operational changes are recorde
   and field-local report closure instead of treating archive extraction or a
   path spelling alone as a verdict.
 - Final local acceptance is green. The authoritative native Windows suite
-  passes 1,608 tests and 11,843 assertions across 176 files with 24 intentional
-  environment/platform skips, zero failures, and a 622.25-second runtime.
+  passes 1,608 tests and 11,852 assertions across 176 files with 24 intentional
+  environment/platform skips, zero failures, and a 687.10-second runtime.
   Formatting, generated-model drift, TypeScript compilation, the clean build,
   and the high-severity production audit pass with no known vulnerabilities.
-  Strict inspection validates a fresh 259-entry, 1,897,492-byte package with
+  Strict inspection validates a fresh 259-entry, 1,897,637-byte package with
   SHA-256
-  `a391de3c4965d81543648e6c2742a33c9bf0e64903a27fd20e6d251ed1cacc7f`;
+  `86e91e9e606beca7f844c8dd973c3be0eb690b7a7218e76c2035447f76a809f3`;
   an isolated install adds 67 packages and validates public import, CLI
   behavior, and all 79 bundled plugin files. The unique package staging
   directory is removed after evidence capture.
@@ -71,6 +71,30 @@ All notable scanner, application, benchmark, and operational changes are recorde
   extraction work unbounded. The result is retained as valid scanner evidence;
   the benchmark was hardened rather than suppressing the finding or weakening
   its zero-false-positive gate.
+- Fresh sealed campaign
+  `730a523dd61c335277874beb75a7de4ce1d28ccfa068f8574cd858ef4645aea3`
+  binds hardened source revision
+  `c80e03d993bcddf5f6f4d61ef0a33fa767420af7`, the exact manifest, fixtures,
+  comparison policy, scanner CLI, and packaged scanner to `gpt-5.6-terra`,
+  high effort, deep mode, and stored GitHub authentication. Both scans
+  completed on attempt one with complete coverage. The positive emitted the
+  one expected high CWE-22 finding in 4m31s; the hardened control emitted zero
+  findings in 4m05s. Completion, precision, recall, F1, case and negative-case
+  pass, stability, validation, attack path, code evidence, and severity are
+  all 1.0, with zero false positives per run. The two scans used 1,565,351
+  input, 1,315,410 cached, and 44,868 output tokens at an estimated
+  $1.782881875. A finalize-only replay reproduced the same campaign and
+  receipts without a model call. No retry, authentication, allowance, quota,
+  credit, rate-limit, classifier-refusal, reconnect, timeout, or transport
+  event occurred.
+- Deterministic self-review of the hardened revision is byte-for-byte stable:
+  two runs each emit 256 rows and 520,096 bytes with SHA-256
+  `2a888db147a5bfd36064081b7c510dba5e8d3f9cc120262fa526d9fa5ec05c91`.
+  Exactly one tarfile row identifies the positive benchmark; the hardened
+  control and production scanner code emit none. All seven hosted workflows
+  pass for the same source revision: Node `32870741290`, container
+  `32870741422`, Windows GUI `32870741382`, Linux GUI `32870741347`, Go
+  `32870741387`, Java `32870741376`, and .NET `32870741453`.
 - Added `python-web-lxml-etcompat-xxe`, a version-aware CWE-611 model that
   completes the second parser surface in CVE-2026-41066/GHSA-vfmq-68hx-4jfw.
   It resolves live official `ETCompatXMLParser` and `XMLTreeBuilder`

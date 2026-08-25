@@ -90,17 +90,17 @@ receivers, multiline calls, positional `fileobj`, local aliases, the Python
 instance/class overrides, write and wrong-role negatives, shadows and
 reassignment, dense decoys, two relays, POSIX symlink rejection, field-local
 quality closure, and correction-prompt boundaries. Windows passes 31 tests and
-1,857 assertions with the POSIX-only case skipped; WSL passes all 32 tests and
-1,858 assertions. The first full-suite attempt is deliberately rejected as
+1,866 assertions with the POSIX-only case skipped; WSL passes all 32 tests and
+1,867 assertions. The first full-suite attempt is deliberately rejected as
 non-authoritative because stale compiled output correctly stopped four
 benchmark-runner integration tests; after a clean production build, the native
-Windows run passes 1,608 tests and 11,843 assertions across 176 files with 24
-intentional skips, no failures, and a 622.25-second runtime. Formatting,
+Windows run passes 1,608 tests and 11,852 assertions across 176 files with 24
+intentional skips, no failures, and a 687.10-second runtime. Formatting,
 generated models, types, build, and the production advisory audit pass. Strict
 package inspection validates 259 entries and a fresh 67-package isolated
 install, including public import, CLI behavior, and all 79 bundled plugin
-files. The removed 1,897,492-byte archive has SHA-256
-`a391de3c4965d81543648e6c2742a33c9bf0e64903a27fd20e6d251ed1cacc7f`.
+files. The removed 1,897,637-byte archive has SHA-256
+`86e91e9e606beca7f844c8dd973c3be0eb690b7a7218e76c2035447f76a809f3`.
 
 **Live control correction.** Sealed campaign
 `d2832de97e5649e10f6d27a06abd3864776b9c976fb919afb196b126d28909a7`
@@ -118,6 +118,50 @@ campaign's 0.5 precision is therefore retained as evidence of a real control
 design defect, not relabeled model noise. The bounded member/type/size/name
 preflight above is the resulting fix; the perfect threshold remains unchanged
 and requires a fresh sealed campaign.
+
+**Final sealed campaign and self-review.** Fresh campaign
+`730a523dd61c335277874beb75a7de4ce1d28ccfa068f8574cd858ef4645aea3`
+binds hardened source revision
+`c80e03d993bcddf5f6f4d61ef0a33fa767420af7`, manifest
+`64f25d8d2442836fbc8d9addf06614f8fa104794e4e9916952039c4d37f3d2ae`,
+corpus `a946d516eb2f0188a97f30a1e9c9559cb07287ec670884f0a1a7a54d856df3b5`,
+comparison policy
+`e4db2ca57992f1ed2cf881dc6a0a0ee28c84064611ed5537d3814a1d3cd11cab`,
+scanner CLI
+`287b9cc996b6ea55518de7cc42205dc430972625fdbe7a6cced6358771d61883`,
+and campaign package
+`b2a141669208d7a52dc245b13f667ca62e280fa06059eac6c5f0e2bb934fab19`.
+Both stored-GitHub-authentication scans used `gpt-5.6-terra`, high effort, deep
+mode, two workers, and no credit ceiling. The control completed on attempt one
+with zero findings and complete coverage in 4m05s, using 719,992 input, 589,595
+cached, and 24,308 output tokens at $0.9194775. The positive completed on
+attempt one with one expected high CWE-22 finding and complete coverage in
+4m31s, using 845,359 input, 725,815 cached, and 20,560 output tokens at
+$0.863404375. All twelve acceptance gates pass: completion, precision, recall,
+F1, case pass, negative-case pass, stability, validation, attack path, code
+evidence, and severity are 1.0, while false positives per run are zero. A
+finalize-only replay verifies the same sealed receipts without invoking the
+model. No log or receipt contains a retry, authentication, allowance, quota,
+credit, rate-limit, classifier-refusal, reconnect, timeout, or transport
+failure; the account completed both campaigns rather than exhibiting an
+allowance ceiling.
+
+Two hardened-revision self-reviews are byte-identical at 256 rows and 520,096
+bytes, SHA-256
+`2a888db147a5bfd36064081b7c510dba5e8d3f9cc120262fa526d9fa5ec05c91`.
+The sole tarfile result is the intentional positive benchmark; neither the
+hardened control nor production code emits a tarfile row. Hosted verification
+also closes on the exact revision: Node `32870741290`, container `32870741422`,
+Windows GUI `32870741382`, Linux GUI `32870741347`, Go `32870741387`, Java
+`32870741376`, and .NET `32870741453` all pass.
+
+**Consequence.** Python tar extraction is now evaluated as a joined runtime,
+binding, data-flow, receiver, and effective-filter problem, while the benchmark
+control is independently safe against traversal and bounded against archive
+resource abuse. The diagnostic first campaign remains part of the evidence:
+future model improvements must fix newly discovered control defects instead of
+discounting them, and acceptance still requires a fresh perfect-gate campaign
+after every material fixture or model change.
 
 ## 2026-08-25 — Complete lxml ET-compatible parser XXE with exact parser-use proof
 
