@@ -746,6 +746,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-prompty-nunjucks-template-rce",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]@prompty\/core['"]/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-prompty-nunjucks-template-rce",
+        expression:
+          /\.\s*render\s*\(|\b[A-Za-z_$][\w$]*(?:\s*\.\s*(?:render|prepare|invoke))?\s*\(/u,
+        cweIds: ["CWE-94", "CWE-1336"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-shescape-cmd-injection",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -4012,6 +4039,16 @@ interface NodeLiquidJsTemplateSink {
   dependency: NodeRuntimeDependency;
 }
 
+interface NodePromptyTemplateSink {
+  sourceExpression: string;
+  sinkLine: number;
+  kind:
+    | "vulnerable-prompty-nunjucks-template-rce"
+    | "lock-resolved-vulnerable-prompty-nunjucks-template-rce";
+  dependency: NodeRuntimeDependency;
+  route: "explicit-nunjucks-renderer" | "prompty-pipeline";
+}
+
 interface NodeShescapeCommandSink {
   sourceExpression: string;
   sinkLine: number;
@@ -6967,6 +7004,416 @@ function nodeLiquidJsTemplateSink(
     const sourceExpression = arguments_?.[0]?.trim() ?? "";
     if (sourceExpression !== "") {
       return { sourceExpression, sinkLine: line, kind, dependency };
+    }
+  }
+  return undefined;
+}
+
+interface NodePromptyBinding {
+  imported:
+    | "NunjucksRenderer"
+    | "Prompty"
+    | "render"
+    | "prepare"
+    | "invoke"
+    | "module";
+  local: string;
+  member?: "NunjucksRenderer" | "Prompty" | "render" | "prepare" | "invoke";
+  line: number;
+}
+
+interface NodePromptyInstanceBinding {
+  local: string;
+  line: number;
+}
+
+function nodePromptyVersionIsTemplateRceVulnerable(version: string): boolean {
+  const legacy = /^0\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(version);
+  if (legacy !== null) {
+    const minor = Number(legacy[1]);
+    const patch = Number(legacy[2]);
+    return minor < 1 || (minor === 1 && patch <= 4);
+  }
+  const preview = /^2\.0\.0-(alpha|beta)\.(0|[1-9]\d*)$/u.exec(version);
+  if (preview === null) return false;
+  return preview[1] === "alpha" || Number(preview[2]) <= 4;
+}
+
+function nodePromptyBindingPattern(binding: NodePromptyBinding): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.member === undefined
+    ? local
+    : `${local}\\s*\\.\\s*${binding.member}`;
+}
+
+function nodePromptyBindings(lines: readonly string[]): NodePromptyBinding[] {
+  const bindings: NodePromptyBinding[] = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "@prompty/core" &&
+        ["NunjucksRenderer", "Prompty", "render", "prepare", "invoke"].includes(
+          binding.imported,
+        ),
+    )
+    .map((binding) => ({
+      imported: binding.imported as Exclude<
+        NodePromptyBinding["imported"],
+        "module"
+      >,
+      local: binding.local,
+      line: binding.line,
+    }));
+  const structural = javascriptStructuralLines(lines);
+  for (let index = 0; index < structural.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]@prompty\/core['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]@prompty\/core['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]@prompty\/core['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      bindings.push({
+        imported: "module",
+        local: receiver[1],
+        line: index + 1,
+      });
+    }
+  }
+  const originals = [...bindings];
+  for (let index = 0; index < structural.length; index += 1) {
+    const code = structural[index] ?? "";
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      if (origin.imported === "module") {
+        const receiverAlias = new RegExp(
+          `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapeRegularExpression(origin.local)}\\s*;?\\s*$`,
+          "u",
+        ).exec(code);
+        if (receiverAlias?.[1] !== undefined) {
+          bindings.push({
+            imported: "module",
+            local: receiverAlias[1],
+            line: index + 1,
+          });
+        }
+        for (const member of [
+          "NunjucksRenderer",
+          "Prompty",
+          "render",
+          "prepare",
+          "invoke",
+        ] as const) {
+          const memberAlias = new RegExp(
+            `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapeRegularExpression(origin.local)}\\s*\\.\\s*${member}\\s*;?\\s*$`,
+            "u",
+          ).exec(code);
+          if (memberAlias?.[1] !== undefined) {
+            bindings.push({
+              imported: member,
+              local: memberAlias[1],
+              line: index + 1,
+            });
+          }
+        }
+        continue;
+      }
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${nodePromptyBindingPattern(origin)}\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      if (alias?.[1] !== undefined) {
+        bindings.push({
+          imported: origin.imported,
+          local: alias[1],
+          line: index + 1,
+        });
+      }
+    }
+  }
+  for (const receiver of bindings.filter(
+    ({ imported }) => imported === "module",
+  )) {
+    for (const member of [
+      "NunjucksRenderer",
+      "Prompty",
+      "render",
+      "prepare",
+      "invoke",
+    ] as const) {
+      bindings.push({
+        imported: member,
+        local: receiver.local,
+        member,
+        line: receiver.line,
+      });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.imported === binding.imported &&
+          candidate.local === binding.local &&
+          candidate.member === binding.member &&
+          candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodePromptyBindingUsable(
+  lines: readonly string[],
+  binding: NodePromptyBinding,
+  useLine: number,
+): boolean {
+  if (
+    binding.line >= useLine ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      useLine + 1,
+    )
+  ) {
+    return false;
+  }
+  if (binding.member === undefined) return true;
+  const structural = javascriptStructuralLines(lines)
+    .slice(binding.line, Math.max(binding.line, useLine))
+    .join("\n");
+  const local = escapeRegularExpression(binding.local);
+  const member = escapeRegularExpression(binding.member);
+  return !new RegExp(
+    `\\b${local}\\s*\\.\\s*${member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)|\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${local}\\s*,\\s*['"]${member}['"]`,
+    "u",
+  ).test(structural);
+}
+
+function nodePromptyRendererInstances(
+  lines: readonly string[],
+  bindings: readonly NodePromptyBinding[],
+): NodePromptyInstanceBinding[] {
+  const structural = javascriptStructuralLines(lines);
+  const instances: NodePromptyInstanceBinding[] = [];
+  for (let index = 0; index < structural.length; index += 1) {
+    const code = structural[index] ?? "";
+    for (const binding of bindings.filter(
+      ({ imported }) => imported === "NunjucksRenderer",
+    )) {
+      if (!nodePromptyBindingUsable(lines, binding, index + 1)) continue;
+      const match = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*new\\s+${nodePromptyBindingPattern(binding)}\\s*\\(`,
+        "u",
+      ).exec(code);
+      if (match?.[1] !== undefined) {
+        instances.push({ local: match[1], line: index + 1 });
+      }
+    }
+  }
+  const originals = [...instances];
+  for (let index = 0; index < structural.length; index += 1) {
+    const code = structural[index] ?? "";
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapeRegularExpression(origin.local)}\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+      if (alias?.[1] !== undefined) {
+        instances.push({ local: alias[1], line: index + 1 });
+      }
+    }
+  }
+  return instances;
+}
+
+function nodePromptyInstanceUsable(
+  lines: readonly string[],
+  instance: NodePromptyInstanceBinding,
+  useLine: number,
+): boolean {
+  if (
+    instance.line >= useLine ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      instance.local,
+      instance.line,
+      useLine + 1,
+    )
+  ) {
+    return false;
+  }
+  const local = escapeRegularExpression(instance.local);
+  return !javascriptStructuralLines(lines)
+    .slice(instance.line, Math.max(instance.line, useLine))
+    .some((candidate) =>
+      new RegExp(
+        `\\b${local}\\s*\\.\\s*render\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)|\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${local}\\s*,\\s*['"]render['"]`,
+        "u",
+      ).test(candidate),
+    );
+}
+
+function nodePromptyObjectInstructions(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): string | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  const value = resolved?.value.trim() ?? expression.trim();
+  if (!value.startsWith("{") || !value.endsWith("}")) return undefined;
+  return javascriptObjectPropertyValue(value, "instructions")?.trim();
+}
+
+function nodePromptyAgentInstructionSource(
+  lines: readonly string[],
+  agentExpression: string,
+  sinkLine: number,
+  constructors: readonly NodePromptyBinding[],
+): string | undefined {
+  const inline = (expression: string): string | undefined => {
+    for (const constructor of constructors) {
+      if (!nodePromptyBindingUsable(lines, constructor, sinkLine)) continue;
+      const pattern = nodePromptyBindingPattern(constructor);
+      for (const callee of [
+        new RegExp(`\\bnew\\s+${pattern}\\s*\\(`, "u"),
+        new RegExp(`\\b${pattern}\\s*\\.\\s*load\\s*\\(`, "u"),
+      ]) {
+        const args = javascriptRawCallArgumentsAtLine([expression], 1, callee);
+        const object = args?.[0];
+        if (object !== undefined) {
+          const source = nodePromptyObjectInstructions(lines, object, sinkLine);
+          if (source !== undefined && source !== "") return source;
+        }
+      }
+    }
+    return undefined;
+  };
+  const direct = inline(agentExpression);
+  if (direct !== undefined) return direct;
+  const agent = /^([A-Za-z_$][\w$]*)$/u.exec(agentExpression.trim())?.[1];
+  if (agent === undefined) return undefined;
+  let constructed = false;
+  let constructionLine = 0;
+  let source: string | undefined;
+  for (let candidateLine = 1; candidateLine <= sinkLine; candidateLine += 1) {
+    const code = javascriptStructuralLines(lines)[candidateLine - 1] ?? "";
+    for (const constructor of constructors) {
+      if (!nodePromptyBindingUsable(lines, constructor, candidateLine))
+        continue;
+      const pattern = nodePromptyBindingPattern(constructor);
+      for (const callee of [
+        new RegExp(`\\bnew\\s+${pattern}\\s*\\(`, "u"),
+        new RegExp(`\\b${pattern}\\s*\\.\\s*load\\s*\\(`, "u"),
+      ]) {
+        const declaration = new RegExp(
+          `(?:^|[;{])\\s*(?:const|let|var)\\s+${escapeRegularExpression(agent)}(?:\\s*:[^=;]+)?\\s*=`,
+          "u",
+        );
+        if (!declaration.test(code) || !callee.test(code)) continue;
+        const args = javascriptCallArgumentsAtLine(
+          lines,
+          candidateLine,
+          callee,
+        );
+        const object = args?.[0];
+        if (object === undefined) continue;
+        constructed = true;
+        constructionLine = candidateLine;
+        source = nodePromptyObjectInstructions(lines, object, candidateLine);
+      }
+    }
+    if (!constructed) continue;
+    const assignment = new RegExp(
+      `\\b${escapeRegularExpression(agent)}\\s*\\.\\s*instructions\\s*=\\s*([^;]+)`,
+      "u",
+    ).exec(code);
+    if (assignment?.[1] !== undefined) source = assignment[1].trim();
+  }
+  if (
+    !constructed ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      agent,
+      constructionLine,
+      sinkLine + 1,
+    )
+  ) {
+    return undefined;
+  }
+  return source;
+}
+
+function nodePromptyTemplateSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodePromptyTemplateSink | undefined {
+  const dependency = nodeRuntimeDependency(files, path, "@prompty/core");
+  if (
+    dependency === undefined ||
+    !nodePromptyVersionIsTemplateRceVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const kind =
+    dependency.proof === "npm-lockfile"
+      ? "lock-resolved-vulnerable-prompty-nunjucks-template-rce"
+      : "vulnerable-prompty-nunjucks-template-rce";
+  const bindings = nodePromptyBindings(lines);
+  for (const instance of nodePromptyRendererInstances(lines, bindings)) {
+    if (!nodePromptyInstanceUsable(lines, instance, line)) continue;
+    const callee = new RegExp(
+      `\\b${escapeRegularExpression(instance.local)}\\s*\\.\\s*render\\s*\\(`,
+      "u",
+    );
+    const args = javascriptCallArgumentsAtLine(lines, line, callee);
+    const sourceExpression = args?.[1]?.trim() ?? "";
+    if (sourceExpression !== "") {
+      return {
+        sourceExpression,
+        sinkLine: line,
+        kind,
+        dependency,
+        route: "explicit-nunjucks-renderer",
+      };
+    }
+  }
+  const constructors = bindings.filter(
+    ({ imported }) => imported === "Prompty",
+  );
+  for (const operation of ["render", "prepare", "invoke"] as const) {
+    for (const binding of bindings.filter(
+      ({ imported }) => imported === operation,
+    )) {
+      if (!nodePromptyBindingUsable(lines, binding, line)) continue;
+      const callee = new RegExp(
+        `\\b${nodePromptyBindingPattern(binding)}\\s*\\(`,
+        "u",
+      );
+      const args = javascriptCallArgumentsAtLine(lines, line, callee);
+      const agentExpression = args?.[0]?.trim();
+      if (agentExpression === undefined || agentExpression === "") continue;
+      const sourceExpression = nodePromptyAgentInstructionSource(
+        lines,
+        agentExpression,
+        line,
+        constructors,
+      );
+      if (sourceExpression !== undefined && sourceExpression !== "") {
+        return {
+          sourceExpression,
+          sinkLine: line,
+          kind,
+          dependency,
+          route: "prompty-pipeline",
+        };
+      }
     }
   }
   return undefined;
@@ -14454,6 +14901,7 @@ function frameworkDataflowRecords(
       (model.id === "node-http-jsonata-expression-rce" ||
         model.id === "node-http-sequelize-oracle-sql-injection" ||
         model.id === "node-http-liquidjs-template-rce" ||
+        model.id === "node-http-prompty-nunjucks-template-rce" ||
         model.id === "node-http-shescape-cmd-injection" ||
         model.id === "node-http-shell-quote-object-token-command-injection" ||
         model.id === "node-http-velocity-template-rce" ||
@@ -14525,6 +14973,7 @@ function frameworkDataflowRecords(
                   model.id === "node-http-jsonata-expression-rce" ||
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
                   model.id === "node-http-liquidjs-template-rce" ||
+                  model.id === "node-http-prompty-nunjucks-template-rce" ||
                   model.id === "node-http-shescape-cmd-injection" ||
                   model.id ===
                     "node-http-shell-quote-object-token-command-injection" ||
@@ -14641,6 +15090,10 @@ function frameworkDataflowRecords(
       const nodeLiquidJsTemplate =
         model.id === "node-http-liquidjs-template-rce"
           ? nodeLiquidJsTemplateSink(files, path, lines, sink.line)
+          : undefined;
+      const nodePromptyTemplate =
+        model.id === "node-http-prompty-nunjucks-template-rce"
+          ? nodePromptyTemplateSink(files, path, lines, sink.line)
           : undefined;
       const nodeShescapeCommand =
         model.id === "node-http-shescape-cmd-injection"
@@ -14910,6 +15363,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-liquidjs-template-rce" &&
         nodeLiquidJsTemplate === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-prompty-nunjucks-template-rce" &&
+        nodePromptyTemplate === undefined
       ) {
         continue;
       }
@@ -15228,6 +15687,7 @@ function frameworkDataflowRecords(
         nodeJsonataExpression?.sourceExpression ??
         nodeSequelizeOracle?.sourceExpression ??
         nodeLiquidJsTemplate?.sourceExpression ??
+        nodePromptyTemplate?.sourceExpression ??
         nodeShescapeCommand?.sourceExpression ??
         nodeShellQuoteCommand?.sourceExpression ??
         nodeVelocityTemplate?.sourceExpression ??
@@ -15585,6 +16045,7 @@ function frameworkDataflowRecords(
         nodeMongooseAggregateResolution?.position.line ??
         nodeJsonataExpression?.sinkLine ??
         nodeLiquidJsTemplate?.sinkLine ??
+        nodePromptyTemplate?.sinkLine ??
         nodeShescapeCommand?.sinkLine ??
         nodeShellQuoteCommand?.sinkLine ??
         nodeVelocityTemplate?.sinkLine ??
@@ -15621,6 +16082,7 @@ function frameworkDataflowRecords(
         nodeJsonataExpression?.kind ??
         nodeSequelizeOracle?.kind ??
         nodeLiquidJsTemplate?.kind ??
+        nodePromptyTemplate?.kind ??
         nodeShescapeCommand?.kind ??
         nodeShellQuoteCommand?.kind ??
         nodeVelocityTemplate?.kind ??
@@ -15698,6 +16160,16 @@ function frameworkDataflowRecords(
                     path: nodeLiquidJsTemplate.dependency.manifestPath,
                     line: nodeLiquidJsTemplate.dependency.line,
                     symbol: `liquidjs@${nodeLiquidJsTemplate.dependency.version}:${nodeLiquidJsTemplate.dependency.proof}:inherited-filter-rce`,
+                  },
+                ]),
+            ...(nodePromptyTemplate === undefined
+              ? []
+              : [
+                  {
+                    kind: "prompty-core-runtime-dependency",
+                    path: nodePromptyTemplate.dependency.manifestPath,
+                    line: nodePromptyTemplate.dependency.line,
+                    symbol: `@prompty/core@${nodePromptyTemplate.dependency.version}:${nodePromptyTemplate.dependency.proof}:${nodePromptyTemplate.route}:nunjucks-member-traversal-rce`,
                   },
                 ]),
             ...(nodeShescapeCommand === undefined
@@ -23239,6 +23711,7 @@ function javascriptFrameworkWrapperSummaries(
         (model.id === "node-http-jsonata-expression-rce" ||
           model.id === "node-http-sequelize-oracle-sql-injection" ||
           model.id === "node-http-liquidjs-template-rce" ||
+          model.id === "node-http-prompty-nunjucks-template-rce" ||
           model.id === "node-http-shescape-cmd-injection" ||
           model.id === "node-http-shell-quote-object-token-command-injection" ||
           model.id === "node-http-velocity-template-rce" ||
@@ -23286,6 +23759,7 @@ function javascriptFrameworkWrapperSummaries(
                   model.id === "node-http-jsonata-expression-rce" ||
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
                   model.id === "node-http-liquidjs-template-rce" ||
+                  model.id === "node-http-prompty-nunjucks-template-rce" ||
                   model.id === "node-http-shescape-cmd-injection" ||
                   model.id ===
                     "node-http-shell-quote-object-token-command-injection" ||
@@ -23381,6 +23855,10 @@ function javascriptFrameworkWrapperSummaries(
                   file.lines,
                   sink.line,
                 )
+              : undefined;
+          const nodePromptyTemplate =
+            model.id === "node-http-prompty-nunjucks-template-rce"
+              ? nodePromptyTemplateSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodeShescapeCommand =
             model.id === "node-http-shescape-cmd-injection"
@@ -23604,6 +24082,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-prompty-nunjucks-template-rce" &&
+            nodePromptyTemplate === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-shescape-cmd-injection" &&
             nodeShescapeCommand === undefined
           ) {
@@ -23773,6 +24257,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsonataExpression?.sourceExpression ??
             nodeSequelizeOracle?.sourceExpression ??
             nodeLiquidJsTemplate?.sourceExpression ??
+            nodePromptyTemplate?.sourceExpression ??
             nodeShescapeCommand?.sourceExpression ??
             nodeShellQuoteCommand?.sourceExpression ??
             nodeVelocityTemplate?.sourceExpression ??
@@ -24000,6 +24485,12 @@ function javascriptFrameworkWrapperSummaries(
                       kind: nodeLiquidJsTemplate.kind,
                       line: nodeLiquidJsTemplate.sinkLine,
                     }),
+                ...(nodePromptyTemplate === undefined
+                  ? {}
+                  : {
+                      kind: nodePromptyTemplate.kind,
+                      line: nodePromptyTemplate.sinkLine,
+                    }),
                 ...(nodeShescapeCommand === undefined
                   ? {}
                   : {
@@ -24097,6 +24588,7 @@ function javascriptFrameworkWrapperSummaries(
               nodeJsonataExpression === undefined &&
               nodeSequelizeOracle === undefined &&
               nodeLiquidJsTemplate === undefined &&
+              nodePromptyTemplate === undefined &&
               nodeShescapeCommand === undefined &&
               nodeShellQuoteCommand === undefined &&
               nodeVelocityTemplate === undefined &&
@@ -24129,6 +24621,16 @@ function javascriptFrameworkWrapperSummaries(
                                 .manifestPath,
                               line: nodeLiquidJsTemplate.dependency.line,
                               symbol: `liquidjs@${nodeLiquidJsTemplate.dependency.version}:${nodeLiquidJsTemplate.dependency.proof}:inherited-filter-rce`,
+                            },
+                          ]),
+                      ...(nodePromptyTemplate === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "prompty-core-runtime-dependency",
+                              path: nodePromptyTemplate.dependency.manifestPath,
+                              line: nodePromptyTemplate.dependency.line,
+                              symbol: `@prompty/core@${nodePromptyTemplate.dependency.version}:${nodePromptyTemplate.dependency.proof}:${nodePromptyTemplate.route}:nunjucks-member-traversal-rce`,
                             },
                           ]),
                       ...(nodeShescapeCommand === undefined

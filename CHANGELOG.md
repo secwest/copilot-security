@@ -6,6 +6,48 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-http-prompty-nunjucks-template-rce`, an exact provenance- and
+  lifecycle-aware CWE-94/CWE-1336 model for request-controlled template grammar
+  reaching Microsoft Prompty's official TypeScript Nunjucks renderer under
+  [GHSA-w28w-gp39-m4p6 / CVE-2026-73299](https://github.com/microsoft/prompty/security/advisories/GHSA-w28w-gp39-m4p6).
+  The model covers both the legacy line through 0.1.4 and the 2.0 preview line
+  through 2.0.0-beta.4. It binds named, aliased, namespace, TypeScript
+  import-equals, and CommonJS `@prompty/core` capabilities; follows stable
+  constructor, module-member, and renderer-instance aliases; and recognizes
+  both explicit `NunjucksRenderer.render(agent, template, inputs)` and the
+  public `render`/`prepare`/`invoke` pipeline when the exact
+  `Prompty.instructions` value is remote-controlled.
+- Preserved the execution and repair boundaries. Dependency presence,
+  construction without execution, trusted template literals with request data
+  used only as render inputs, Mustache rendering, path-only `invoke` calls,
+  local lookalikes, reassigned or replaced constructors/renderers/functions,
+  development-only declarations, lockfile-free ranges, inconsistent or v1
+  locks, malformed previews, tests, and examples fail closed. Exact 0.1.5 and
+  2.0.0-beta.5-or-later releases are negative because the repaired Nunjucks
+  path sanitizes inputs, performs own-data-only member lookup, rejects
+  `__proto__`, `constructor`, and `prototype`, and prohibits template calls.
+- Added topology-identical four-file Express fixtures pinned to
+  `@prompty/core` 2.0.0-beta.4 and 2.0.0-beta.5, a perfect-gate specialized
+  manifest, main-corpus registration, and a real-package non-shell witness.
+  The affected package evaluates the bounded template
+  `{{ range.constructor("return process.version")() }}` and returns only the
+  local Node version; the repaired package rejects `constructor` access before
+  invocation. The canonical corpus advances to 117 exploit/control pairs, 234
+  cases, and 702 repeated scans.
+- Current authenticated source searches found no `@prompty/core`,
+  `NunjucksRenderer`, or GHSA-specific match in `github/codeql` or
+  `semgrep/semgrep-rules`. Focused native Windows acceptance passes 42 tests
+  and 1,952 assertions across the new model, adjacent LiquidJS lifecycle
+  model, same-file and multi-hop framework lanes, and canonical corpus; exact
+  TypeScript/generated-model checks are also green.
+- Full pre-commit acceptance is green. After a clean production build, the
+  authoritative native Windows Bun suite passes 1,658 tests and 12,119
+  assertions across 181 files, with 25 intentional skips and zero failures in
+  615.00 seconds. The compact authoritative WSL lane passes 33 tests and 1,920
+  assertions across four files in 6.00 seconds. Production dependency audit
+  reports no known vulnerabilities. The 1,909,482-byte npm archive passes the
+  strict isolated-install check: 259 entries, the public import and CLI, and
+  all 79 bundled plugin files validate successfully.
 - Added `python-web-datamodel-codegen-import-injection`, a version- and
   lifecycle-aware CWE-94/CWE-95 model for request-controlled OpenAPI or JSON
   Schema data reaching the official `datamodel_code_generator.generate` API

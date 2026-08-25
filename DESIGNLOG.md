@@ -2,6 +2,81 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Bind Prompty SSTI to template position and actual Nunjucks execution
+
+**Gap and authoritative semantics.** Microsoft
+[`GHSA-w28w-gp39-m4p6`](https://github.com/microsoft/prompty/security/advisories/GHSA-w28w-gp39-m4p6),
+assigned CVE-2026-73299 and CWE-94/CWE-1336, covers `@prompty/core` through
+0.1.4 and the 2.0 TypeScript preview through 2.0.0-beta.4. The affected
+`NunjucksRenderer` passes the template body directly to `env.renderString`.
+Unrestricted member lookup and function calls let template grammar traverse a
+built-in function's `constructor` and create a host JavaScript function.
+Microsoft's 0.1.5/2.0.0-beta.5 repair replaces that boundary with sanitized
+own-data-only inputs, rejects `__proto__`, `constructor`, and `prototype`, and
+disallows template function calls. Current authenticated searches of
+`github/codeql` and `semgrep/semgrep-rules` found no `@prompty/core`,
+`NunjucksRenderer`, or advisory-specific match.
+
+**Decision and lifecycle boundary.** Add
+`node-http-prompty-nunjucks-template-rce` as an exact Node typed sink. One route
+requires an official `NunjucksRenderer`, a live non-reassigned instance, and
+remote data in render argument one—the template position, not the inputs
+object. A second route binds official `Prompty` plus `render`, `prepare`, or
+`invoke`, derives the exact instructions value from construction,
+`Prompty.load`, or a later stable `agent.instructions` assignment, and requires
+that agent to reach the pipeline call. Both routes retain the existing
+same-file and three-relative-wrapper dataflow machinery. The row is anchored
+at the call that enters Nunjucks execution, rather than at dependency
+declaration, renderer construction, or template storage.
+
+**Identity, version, and false-positive boundary.** Accept official named and
+aliased ESM imports, namespaces, TypeScript import-equals, CommonJS destructure
+and module receivers, stable module-member aliases, and one renderer-instance
+alias. Require an exact production version or a declaration-consistent npm v2
+or v3 lock. Recognize the stable legacy repair boundary and ordered alpha/beta
+preview boundary while rejecting malformed prereleases. Fail closed on
+Mustache, trusted literal templates with request data used only as render
+inputs, construction without execution, path-only `invoke`, package presence,
+local lookalikes, development-only declarations, lockfile-free ranges,
+inconsistent or v1 locks, reassigned bindings or instances, replaced members,
+tests, and examples. The sink-candidate expression is deliberately broad
+enough to see aliased public functions, but official ownership and argument
+role are resolved before any row is emitted.
+
+**Executable pair and report discipline.** Both four-file Express fixtures
+retain the endpoint, three wrapper boundaries, official renderer, exact
+template argument, package graph, and witness bytes. Only `@prompty/core`
+2.0.0-beta.4 changes to 2.0.0-beta.5. The bounded non-shell template
+`{{ range.constructor("return process.version")() }}` returns only the local
+Node version on the affected package. The repaired package throws
+`Unsafe template member access: constructor`. The witness opens no application
+file, socket, or credential; invokes no command; creates no persistence; and
+mutates no external state. Validation must preserve the distinction between
+this tested host-code capability and deployment impact: endpoint reachability,
+accepted template origin, installed version, renderer choice, error handling,
+process privilege and containment, and a concrete security effect remain
+separate proof obligations.
+
+**Focused regression result.** Nine model groups plus adjacent framework and
+corpus lanes pass 42 tests and 1,952 assertions on native Windows. Coverage
+includes both exact repair lines, modern lock resolution, official import and
+alias forms, direct rendering, public render/prepare/invoke pipelines,
+three-wrapper propagation, field-local review guidance, and strict negative
+matrices for renderer, template/data role, lifecycle, identity, mutation,
+provenance, and repository-path controls. The pair advances the canonical
+corpus to 117 exploit/control pairs, 234 cases, and 702 repeated scans.
+
+**Pre-commit acceptance.** A clean production build precedes the authoritative
+native Windows Bun run: 1,658 pass, 25 intentional skips, zero fail, 12,119
+assertions, and 181 files in 615.00 seconds. The compact authoritative WSL lane
+passes 33 tests and 1,920 assertions across four files in 6.00 seconds. Exact
+types and generated-model checks, formatting, production build, diff hygiene,
+and production dependency audit are green; the audit reports no known
+vulnerabilities. The 1,909,482-byte package has 259 entries and passes the
+strict isolated-consumer check for its public import, CLI, and 79 bundled
+plugin files. Immutable-revision self-inventory, hosted workflows, and package
+hash are intentionally recorded only after the implementation commit exists.
+
 ## 2026-08-25 — Require datamodel-code-generator output execution, not generation alone
 
 **Gap and authoritative semantics.** The reviewed

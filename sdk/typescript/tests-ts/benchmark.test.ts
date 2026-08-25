@@ -278,6 +278,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-repaired-liquidjs-template",
       ],
       [
+        "node-multi-hop-prompty-nunjucks-template-rce",
+        "node-multi-hop-patched-prompty-nunjucks-template",
+      ],
+      [
         "node-multi-hop-shescape-cmd-injection",
         "node-multi-hop-repaired-shescape-cmd",
       ],
@@ -423,6 +427,11 @@ describe("effectiveness benchmark", () => {
         .get("python-datamodel-codegen-import-injection")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-94", "CWE-95"]]);
+    expect(
+      cases
+        .get("node-multi-hop-prompty-nunjucks-template-rce")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-94", "CWE-1336"]]);
     expect(
       cases
         .get("javascript-archive-link-pivot")

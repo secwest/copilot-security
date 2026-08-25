@@ -2103,8 +2103,14 @@ datamodel-code-generator pair holds a remote JSON Schema, relative
 and `runpy.run_path` execution constant while changing only 0.63.0 to 0.64.0:
 the affected release renders a newline-bearing `x-python-import` value into a
 module-scope statement, while the repaired release rejects it before writing
-the module. Each of the 232 cases in 116 exploit/control pairs is scanned
-three times, producing 696 scans
+the module. The Prompty pair carries a remote template through three relative
+wrappers into the official TypeScript `NunjucksRenderer`: exact
+`@prompty/core` 2.0.0-beta.4 permits `range.constructor` traversal and returns
+only the witness process's Node version, while source-identical 2.0.0-beta.5
+rejects unsafe member access. The host model also covers official
+`render`/`prepare`/`invoke` pipelines only when the exact Prompty instructions,
+not ordinary render inputs, contain remote template grammar. Each of the 234
+cases in 117 exploit/control pairs is scanned three times, producing 702 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

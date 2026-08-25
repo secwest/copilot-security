@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-prompty-nunjucks-template-rce",
+      "description": "An Express query-string template crosses three relative-import boundaries into the official @prompty/core NunjucksRenderer under exact affected 2.0.0-beta.4 provenance. Unrestricted member traversal reaches the host Function constructor.",
+      "fixture": "fixtures/node-multi-hop-prompty-nunjucks-template-rce",
+      "findingsPaths": [
+        "node-multi-hop-prompty-nunjucks-template-rce/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-prompty-nunjucks-template-rce",
+          "cwe": ["CWE-94", "CWE-1336"],
+          "locations": [
+            {
+              "path": "src/renderer.js",
+              "startLine": 6,
+              "endLine": 6,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-prompty-nunjucks-template",
+      "description": "The source-identical control changes only @prompty/core to 2.0.0-beta.5, whose own-data-only member lookup rejects constructor and prototype traversal and disallows template function calls.",
+      "fixture": "fixtures/node-multi-hop-patched-prompty-nunjucks-template",
+      "findingsPaths": [
+        "node-multi-hop-patched-prompty-nunjucks-template/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}
