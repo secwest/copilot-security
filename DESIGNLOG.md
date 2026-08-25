@@ -152,6 +152,66 @@ therefore has live positive detection, an isolated negative, independently
 auditable field evidence, cross-platform executable witnesses, and immutable
 campaign provenance.
 
+**Regression, self-review, distribution, and hosted closure.** The complete
+native Windows suite on documentation head
+`b094cacab7d4053e2acfcf9fdbd575f5de364d1d` passes 1,546 tests and
+11,512 assertions across 171 files in 570.55 seconds, with 20 intentional
+platform/environment skips and zero failures. An initial managed-sandbox run
+was stopped after its filesystem policy denied the private Windows
+credential-home ACL and then made immutable workbench inventories unreadable.
+The unchanged unrestricted run passes the exact ACL, finalization, recovery,
+and full-suite paths. Generated-model drift, formatting, TypeScript checking,
+the clean production build, and the production high-severity advisory query
+are green with no known vulnerabilities.
+
+Two independent inventories of a disposable whole-repository Git archive are
+byte-identical at 256 rows and 587,921 bytes, SHA-256
+`03c42368bd3e38d5d5ec3aecb2e8775207b62541e8826882abd82cd176c14b63`.
+The global cap retains exactly one
+`python-web-numpy-allow-pickle-load` row, from
+`benchmarks/fixtures/python-numpy-allow-pickle/src/server.py:11` to
+`src/parser.py:31`, with CWE-502 and the six expected relative-import,
+wrapper-argument, wrapper-parameter, NumPy-binding, explicit-opt-in, and
+intrinsic-object-array-unpickling propagators. The `allow_pickle=False`
+control produces no NumPy row. Because the input is a Git archive, the two
+protected untracked working-tree paths are outside the test by construction.
+
+The Windows and WSL package builds each contain 259 entries and pass strict tar
+inspection, two isolated installs, public import, CLI execution, and all 79
+bundled plugin files. Windows installs 67 packages; its 1,861,671-byte archive
+has SHA-256
+`a508b62fd01810239ef4db2190014d58bd634b665990513a9ffbd8781b94d1df`.
+WSL installs 75 packages; its 1,837,653-byte POSIX archive has SHA-256
+`a5643a3519f7546f2514cf4786eb4449f898ee5408b77e066aac7c479fb83f06`.
+
+All seven implementation-checkpoint workflows pass: [Node
+`32835367417`](https://github.com/secwest/copilot-security/actions/runs/32835367417),
+[container
+`32835367422`](https://github.com/secwest/copilot-security/actions/runs/32835367422),
+[Windows GUI
+`32835367470`](https://github.com/secwest/copilot-security/actions/runs/32835367470),
+[Linux GUI
+`32835367468`](https://github.com/secwest/copilot-security/actions/runs/32835367468),
+[Java
+`32835367432`](https://github.com/secwest/copilot-security/actions/runs/32835367432),
+[.NET
+`32835367421`](https://github.com/secwest/copilot-security/actions/runs/32835367421),
+and [Go
+`32835367413`](https://github.com/secwest/copilot-security/actions/runs/32835367413).
+The six path-selected workflows for documentation head `b094cac` also pass:
+[Node
+`32836047715`](https://github.com/secwest/copilot-security/actions/runs/32836047715),
+[Windows GUI
+`32836047667`](https://github.com/secwest/copilot-security/actions/runs/32836047667),
+[Linux GUI
+`32836047689`](https://github.com/secwest/copilot-security/actions/runs/32836047689),
+[Java
+`32836047713`](https://github.com/secwest/copilot-security/actions/runs/32836047713),
+[.NET
+`32836047683`](https://github.com/secwest/copilot-security/actions/runs/32836047683),
+and [Go
+`32836047704`](https://github.com/secwest/copilot-security/actions/runs/32836047704).
+
 ## 2026-08-25 — Keep Unpickler construction explicit in the attack path
 
 **Live evidence.** Campaign

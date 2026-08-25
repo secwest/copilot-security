@@ -101,6 +101,35 @@ All notable scanner, application, benchmark, and operational changes are recorde
   1.0, false positives per run are zero, and total estimated cost is
   $3.581733125. Fresh receipts bind the exact revision, manifest hash, scanner
   package, and both fixture digests.
+- Final NumPy acceptance is green. The authoritative native Windows suite on
+  documentation head `b094cacab7d4053e2acfcf9fdbd575f5de364d1d` passes
+  1,546 tests and 11,512 assertions across 171 files in 570.55 seconds, with 20
+  intentional platform/environment skips and zero failures. A managed-sandbox
+  diagnostic was stopped after it denied Windows ACL hardening and immutable
+  workbench inventory access; the unchanged unrestricted rerun passes those
+  exact lanes and the complete suite. Generated models, formatting,
+  TypeScript, production build, and the high-severity production audit are
+  clean with no known vulnerabilities.
+- Two inventories of an immutable whole-repository Git archive are
+  byte-identical at 256 rows and 587,921 bytes, SHA-256
+  `03c42368bd3e38d5d5ec3aecb2e8775207b62541e8826882abd82cd176c14b63`.
+  Exactly one NumPy row survives the global cap: request source
+  `benchmarks/fixtures/python-numpy-allow-pickle/src/server.py:11`, sink
+  `src/parser.py:31`, CWE-502, and the six relative-wrapper, binding, explicit
+  opt-in, and intrinsic-unpickling propagators. The false control emits no row.
+- Windows and WSL packages each contain 259 entries and pass strict tar
+  inspection, two isolated installations, public import, CLI, and all 79
+  bundled plugin files. The Windows archive installs 67 packages and is
+  1,861,671 bytes with SHA-256
+  `a508b62fd01810239ef4db2190014d58bd634b665990513a9ffbd8781b94d1df`;
+  the WSL archive installs 75 packages and is 1,837,653 bytes with SHA-256
+  `a5643a3519f7546f2514cf4786eb4449f898ee5408b77e066aac7c479fb83f06`.
+- All seven implementation-checkpoint workflows pass: Node `32835367417`,
+  container `32835367422`, Windows GUI `32835367470`, Linux GUI `32835367468`,
+  Java `32835367432`, .NET `32835367421`, and Go `32835367413`. The six
+  workflows selected for documentation head `b094cac` also pass: Node
+  `32836047715`, Windows GUI `32836047667`, Linux GUI `32836047689`, Java
+  `32836047713`, .NET `32836047683`, and Go `32836047704`.
 - Live campaign
   `c6fb9c92bed2214f45681dde76518cbc72c2c65850dc1e673b33e16247e494f3`
   on checkpoint `4cb88e175bb0d06a8ebc400579b54b623f8ba2e4` completed both
