@@ -633,12 +633,16 @@
           "requireAttackPath": true,
           "requireCodeEvidence": true,
           "requiredValidationTextAnyOf": [
-            ["NumPy", "numpy.load"],
+            ["upload", "request.files", "uploaded stream"],
+            ["parse_array", "wrapper"],
+            ["numpy.load", "NumPy load"],
             ["allow_pickle=True", "allow pickle true"],
             ["object-dtype", "object array", ".npy"],
             ["__reduce__", "REDUCE", "callable"],
-            ["Python 3", "Python version", "interpreter"],
-            ["NumPy 2", "NumPy version", "numpy=="]
+            ["process", "code execution", "process integrity"],
+            ["Python 3.12.3"],
+            ["Python 3.14.5"],
+            ["NumPy 2.5.2", "numpy==2.5.2"]
           ],
           "requiredAttackPathTextAnyOf": [
             ["upload", "request.files", "uploaded stream"],
@@ -647,7 +651,10 @@
             ["allow_pickle=True", "allow pickle true"],
             ["object-dtype", "object array", ".npy"],
             ["__reduce__", "callable", "function invocation"],
-            ["process", "code execution", "process integrity"]
+            ["process", "code execution", "process integrity"],
+            ["Python 3.12.3"],
+            ["Python 3.14.5"],
+            ["NumPy 2.5.2", "numpy==2.5.2"]
           ],
           "forbiddenText": [
             "NumPy import alone proves code execution",

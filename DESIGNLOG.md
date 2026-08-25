@@ -68,6 +68,36 @@ and source identity is asserted after replacing only the literal Boolean flag.
 This turns the unexpected finding into a better fixture and preserves the
 scanner's broader availability coverage.
 
+**Bounded-pair live result and field-local correction.** Campaign
+`277c69851f7961baeea043f1aa5f8280571a46b9ecf2ba5cc617bf55a5dccc86`
+ran from immutable checkpoint `86ac235fb4e6965c74f0225fedf8e9b7f8a545a5`
+with `gpt-5.6-terra`, high reasoning, deep mode, and two workers. Both cases
+authenticated from stored Copilot credentials and completed on attempt one;
+there was no allowance, quota, rate-limit, classifier, authentication, or
+transport failure. The positive emitted one critical CWE-502 finding and the
+resource-bounded negative emitted none, both with complete coverage. All
+structural and classification metrics were 1.0 with zero false positives and
+zero false negatives.
+
+The campaign remains diagnostic rather than accepted. Validation described
+the object-array payload, explicit flag, and callable effect but recorded exact
+Python and NumPy versions only as unavailable uncertainty. Attack-path data
+held the precise request source and `np.load(..., allow_pickle=True)` sink, but
+its prose compressed the intermediate `parse_array` wrapper and callable
+dispatch into generic parser and pickle language. The field-scoped semantic
+gate correctly rejected those omissions; a fact in a summary or another field
+does not make an individual validation record independently reproducible.
+
+Add one identical `RUNTIME.md` to each fixture with the actual acceptance
+matrix: Python 3.12.3/NumPy 2.5.2 on Linux and Python 3.14.5/NumPy 2.5.2 on
+Windows. Treat this as bounded fixture-witness evidence, not proof of an
+unrelated deployment. Require both validation and attack path to independently
+name that exact matrix, request-controlled upload, `parse_array`, exact
+`numpy.load`, literal `allow_pickle=True`, object-dtype `.npy`, `__reduce__` or
+equivalent callable dispatch, and the demonstrated process effect. This makes
+the output auditable without relaxing a gate or encouraging invented runtime
+facts.
+
 ## 2026-08-25 — Keep Unpickler construction explicit in the attack path
 
 **Live evidence.** Campaign

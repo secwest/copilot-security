@@ -11,3 +11,5 @@ the pair focused on the explicit pickle boundary rather than generic upload or
 array-allocation exhaustion.
 
 Run `python examples/witness.py` after installing `requirements.txt`.
+See `RUNTIME.md` for the exact cross-platform witness matrix and the boundary
+between fixture validation evidence and a deployed service's runtime.

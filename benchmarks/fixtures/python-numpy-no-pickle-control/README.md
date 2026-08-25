@@ -9,3 +9,5 @@ and element-count budgets so the negative case differs only at the pickle
 execution boundary.
 
 Run `python examples/witness.py` after installing `requirements.txt`.
+See `RUNTIME.md` for the exact cross-platform witness matrix and the boundary
+between fixture validation evidence and a deployed service's runtime.

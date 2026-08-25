@@ -44,8 +44,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
   plus independent stream-byte, header-size, format-version, rank, element
   count, and dtype checks before `numpy.load`. The only parser difference
   remains literal `allow_pickle=True` versus `False`; the bounded object-array
-  witness still executes only in the positive. The paired campaign must be
-  rerun from an immutable checkpoint before live acceptance is claimed.
+  witness still executes only in the positive.
+- Diagnostic campaign
+  `277c69851f7961baeea043f1aa5f8280571a46b9ecf2ba5cc617bf55a5dccc86`
+  on immutable checkpoint `86ac235fb4e6965c74f0225fedf8e9b7f8a545a5`
+  confirmed the corrected topology. Both deep scans completed on attempt one
+  with stored Copilot credentials and no provider failure. The positive
+  produced one critical CWE-502 finding with complete coverage; the bounded
+  `allow_pickle=False` control produced zero findings with complete coverage.
+  Precision, recall, F1, stability, validation, attack-path, code-evidence,
+  severity, and negative-control rates were all 1.0, with no false positive or
+  false negative. Acceptance remained intentionally failed at a 0.5 case-pass
+  rate because validation omitted the exact tested Python and NumPy versions,
+  while attack-path prose omitted `parse_array`, explicit `numpy.load`, and
+  `__reduce__`/callable dispatch even though the underlying finding retained
+  the correct source, sink, and effect.
+- Added a source-identical `RUNTIME.md` contract for both NumPy cases recording
+  the executable witness matrix: Python 3.12.3 on Linux and Python 3.14.5 on
+  Windows, both with NumPy 2.5.2. Correction guidance distinguishes that
+  fixture evidence from deployment proof. Validation and attack path must now
+  each independently preserve the exact runtime matrix and full upload →
+  `parse_array` → `numpy.load(..., allow_pickle=True)` → object-dtype `.npy` →
+  `__reduce__` callable → process-effect chain. Evidence elsewhere in a report
+  cannot satisfy an omitted field-local step.
 - Live campaign
   `c6fb9c92bed2214f45681dde76518cbc72c2c65850dc1e673b33e16247e494f3`
   on checkpoint `4cb88e175bb0d06a8ebc400579b54b623f8ba2e4` completed both

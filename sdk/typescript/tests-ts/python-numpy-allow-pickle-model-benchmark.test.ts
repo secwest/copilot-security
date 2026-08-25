@@ -91,16 +91,17 @@ describe("Python NumPy allow_pickle unsafe deserialization model", () => {
     ]);
     expect(
       manifest.cases[0]?.expected[0]?.requiredValidationTextAnyOf,
-    ).toHaveLength(6);
+    ).toHaveLength(10);
     expect(
       manifest.cases[0]?.expected[0]?.requiredAttackPathTextAnyOf,
-    ).toHaveLength(7);
+    ).toHaveLength(10);
     expect(manifest.cases[0]?.expected[0]?.forbiddenText).toHaveLength(3);
     expect(manifest.cases[1]?.expected).toEqual([]);
     for (const relativePath of [
       join("examples", "witness.py"),
       join("src", "effects.py"),
       join("src", "server.py"),
+      "RUNTIME.md",
       "requirements.txt",
     ]) {
       expect(
@@ -151,6 +152,18 @@ describe("Python NumPy allow_pickle unsafe deserialization model", () => {
     expect(unsafeParser).toContain("MAX_ARRAY_BYTES");
     expect(unsafeParser).toContain("MAX_ARRAY_ELEMENTS");
     expect(unsafeParser).toContain("max_header_size=1024");
+    const runtimeContract = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        "python-numpy-allow-pickle",
+        "RUNTIME.md",
+      ),
+      "utf8",
+    );
+    expect(runtimeContract).toContain("Python 3.12.3");
+    expect(runtimeContract).toContain("Python 3.14.5");
+    expect(runtimeContract).toContain("NumPy 2.5.2");
   });
 
   test("emits the exact cross-file stream-to-object-array unpickling path", async () => {
@@ -359,7 +372,10 @@ describe("Python NumPy allow_pickle unsafe deserialization model", () => {
     expect(prompt).toContain("For python-web-numpy-allow-pickle-load rows");
     expect(prompt).toContain("allow_pickle=False as the default");
     expect(prompt).toContain("object-dtype .npy witness");
-    expect(prompt).toContain("exact Python and NumPy versions");
+    expect(prompt).toContain("exact tested Python and NumPy versions");
+    expect(prompt).toContain("Validation and attack path must each separately");
+    expect(prompt).toContain("parse_array wrapper");
+    expect(prompt).toContain("Python 3.12.3 and 3.14.5 with NumPy 2.5.2");
     expect(prompt).toContain("__reduce__ callable");
     expect(prompt).toContain("inert .npz archive that is never indexed");
     expect(prompt).toContain("Report CWE-502");
