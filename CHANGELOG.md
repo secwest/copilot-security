@@ -36,6 +36,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
   120 tests and 3,009 assertions. The authoritative Windows suite passes 1,533
   tests and 11,394 assertions across 170 files, with 20 intentional
   environment/platform skips and zero failures in 557.46 seconds.
+- Final acceptance for the pickle model is green. Formatting,
+  generated-model drift, TypeScript, the clean production build, and
+  `pnpm audit --prod --audit-level high` pass with no known vulnerabilities.
+  Two compiled self-inventories take 15,935.037 and 16,578.093 ms and produce
+  256 byte-identical rows totaling 584,985 bytes with SHA-256
+  `7dfae52dc7383b76711fef3fc73ca1003a0124e81538e95095224d9322786684`.
+  They retain the new cross-file pickle row with five exact propagators and the
+  older same-file pickle fixture, while both JSON controls and production
+  source remain clean. Strict Windows and WSL inspection validates the same
+  259-entry, 1,854,553-byte npm archive with SHA-256
+  `a9a6d81172126a26d9efaf9ab484b4927a16759b4180dbe8e78c03d33e4f5fbf`;
+  two isolated installs on each host validate the public import, executable
+  CLI, and all 79 bundled plugin files. The temporary archive is removed.
+- Live campaign
+  `e4f0eec1b0a9a517324f4f6235835e8fea903dfcf32171a99fdef4e8d2794fba`
+  against implementation checkpoint
+  `61854de9f33175f71c649223baf296202bb7ae57` completed both deep scans on
+  attempt one with no authentication, allowance, quota, rate-limit,
+  classifier, or transport failure. The unsafe case produced one source-backed
+  high CWE-502 finding with complete coverage in 5m19s; the source-identical
+  JSON control produced zero findings with complete coverage in 2m41s. Total
+  estimated cost was $2.115233875. Precision, recall, F1, completion,
+  case/negative pass, stable detection, validation, attack-path, code-evidence,
+  and severity gates are all 1.0, with zero false positives or false negatives.
+  Initial evaluation exposed a benchmark spelling defect: the sealed
+  validation repeatedly said `standard-library`, while its alternatives
+  accepted only the equivalent unhyphenated phrase. Both specialized and
+  canonical gates now accept either exact spelling, and a regression preserves
+  that semantic equivalence; re-evaluation of the immutable receipts passes
+  every gate without another model call.
 - Added `python-web-pyyaml-unsafe-load`, a typed Python web-to-PyYAML
   deserialization model for CWE-502. It requires an exact `import yaml`
   receiver or named `from yaml import` binding, accepts ordinary and

@@ -37,7 +37,12 @@
           "requireAttackPath": true,
           "requireCodeEvidence": true,
           "requiredValidationTextAnyOf": [
-            ["standard library", "stdlib", "pickle module"],
+            [
+              "standard library",
+              "standard-library",
+              "stdlib",
+              "pickle module"
+            ],
             [
               "request body",
               "POST body",

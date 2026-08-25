@@ -109,6 +109,9 @@ describe("Python pickle unsafe deserialization model", () => {
       manifest.cases[0]?.expected[0]?.requiredValidationTextAnyOf,
     ).toHaveLength(3);
     expect(
+      manifest.cases[0]?.expected[0]?.requiredValidationTextAnyOf?.[0],
+    ).toEqual(expect.arrayContaining(["standard library", "standard-library"]));
+    expect(
       manifest.cases[0]?.expected[0]?.requiredAttackPathTextAnyOf,
     ).toHaveLength(4);
     expect(manifest.cases[0]?.expected[0]?.forbiddenText).toHaveLength(3);

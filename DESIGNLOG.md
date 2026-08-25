@@ -67,8 +67,38 @@ passes all 120 tests and 3,009 assertions. The authoritative Windows suite
 passes 1,533 tests and 11,394 assertions across 170 files, with 20 intentional
 environment/platform skips and zero failures in 557.46 seconds. The
 canonical corpus advances to 105 exploit/control pairs, 210 cases, and 630
-three-run scans. Full host, package, self-scan, and live-campaign evidence is
-recorded after the implementation checkpoint is sealed.
+three-run scans.
+
+**Acceptance evidence.** Formatting, generated-model drift, TypeScript, the
+clean production build, and the production advisory audit are green. Two
+compiled self-reviews take 15,935.037 and 16,578.093 ms and produce 256
+byte-identical rows totaling 584,985 bytes with SHA-256
+`7dfae52dc7383b76711fef3fc73ca1003a0124e81538e95095224d9322786684`.
+The new cross-file fixture is retained at `src/parser.py:5` with five exact
+propagators; the older same-file pickle fixture is also retained, while both
+JSON controls and production source emit no pickle row. Strict Windows and WSL
+inspection validates the same 259-entry, 1,854,553-byte archive with SHA-256
+`a9a6d81172126a26d9efaf9ab484b4927a16759b4180dbe8e78c03d33e4f5fbf`.
+Two isolated installs on each host validate the public import, CLI, and all 79
+bundled plugin files; the temporary archive is removed.
+
+Live campaign
+`e4f0eec1b0a9a517324f4f6235835e8fea903dfcf32171a99fdef4e8d2794fba`
+binds its source to implementation checkpoint
+`61854de9f33175f71c649223baf296202bb7ae57`. Both deep scans complete on
+attempt one with no authentication, allowance, quota, rate-limit, classifier,
+or transport failure. The unsafe case emits one high CWE-502 finding with
+complete coverage in 5m19s; the JSON twin emits none with complete coverage in
+2m41s. Total estimated cost is $2.115233875. Every accuracy, completion,
+stability, evidence-quality, and severity metric is 1.0, with zero false
+positives and false negatives. The first evaluation rejected only the spelling
+`standard-library` in validation even though the semantic gate listed
+`standard library`; the sealed finding used the hyphenated form repeatedly in
+validation, confidence, code evidence, summary, and attack path. Accept both
+exact grammatical forms in the specialized and canonical manifests and pin
+that equivalence in regression. Re-evaluating the immutable receipts then
+passes all twelve gates without another model call or any relaxation of the
+required standard-library identity.
 
 ## 2026-08-24 — Bind Python request bodies to explicit unsafe PyYAML loaders
 
