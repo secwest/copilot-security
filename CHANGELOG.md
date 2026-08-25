@@ -22,6 +22,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   “request stream,” while correction guidance requires validation and attack
   path to each retain request/file source, constructor argument, instance, and
   later dispatch. The constructor requirement remains strict.
+- Corrected campaign
+  `4516f838395104dcd4452b6ed47875a9a77b53d6c447304b661d51575038ca62`
+  on checkpoint `49e3126299409e85fefee3ea7a6f0b2b4013afb7` passes every
+  threshold. Both deep scans again completed on attempt one with no account,
+  allowance, quota, rate-limit, classifier, authentication, or transport
+  failure. The unsafe case produced one critical CWE-502 finding with complete
+  coverage in 5m15s; its attack path now explicitly preserves
+  `request.stream` → `pickle.Unpickler(document)` → retained decoder →
+  zero-argument `decoder.load()` → `GLOBAL`/`REDUCE` callable execution. The
+  JSON control produced zero findings with complete coverage in 3m53s. Every
+  metric is 1.0, with zero false positives or false negatives and a total
+  estimated cost of $2.988318375. Deterministic finalization safely re-anchored
+  one code-evidence excerpt from repository bytes before sealing the positive.
 - Preserved exact framework sink-kind diversity at the 256-record
   whole-repository ceiling. Selection now reserves one ranked record for every
   distinct framework-model ID and sink kind before repeated rows can consume

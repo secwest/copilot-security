@@ -41,6 +41,24 @@ complete constructor-to-dispatch path in the attack-path field itself. Semantic
 equivalence is accepted for syntax; loss of a security-relevant execution step
 is not.
 
+**Corrected campaign.** Campaign
+`4516f838395104dcd4452b6ed47875a9a77b53d6c447304b661d51575038ca62`
+on checkpoint `49e3126299409e85fefee3ea7a6f0b2b4013afb7` passes every
+threshold. Both deep scans again completed on attempt one using stored Copilot
+credentials, with no account, allowance, quota, rate-limit, classifier,
+authentication, or transport failure. The unsafe case emitted one critical
+CWE-502 finding with complete coverage in 5m15s. Its attack path explicitly
+records the attacker-controlled file-like `request.stream`, exact
+`pickle.Unpickler(document)` construction, retained decoder, zero-argument
+`decoder.load()`, and callable resolution/invocation through `GLOBAL` or
+`STACK_GLOBAL` plus `REDUCE`. The JSON control emitted no finding with complete
+coverage in 3m53s. Precision, recall, F1, case pass, negative case, stable
+detection, validation, attack-path, code-evidence, and severity accuracy are
+all 1.0, with zero false positives and false negatives. Total estimated cost
+was $2.988318375. The host deterministically re-anchored one code-evidence
+excerpt from repository bytes before sealing; that recovery changed no source,
+sink, taxonomy, or impact conclusion.
+
 ## 2026-08-25 — Seed framework sink diversity before filling the inventory cap
 
 **Failure mode.** Framework rows have deliberately high priority because they
