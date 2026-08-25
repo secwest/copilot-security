@@ -87,7 +87,6 @@ const SOURCE_EXTENSIONS = new Set([
   ".hrl",
   ".java",
   ".js",
-  ".json",
   ".jsx",
   ".kt",
   ".kts",
@@ -110,7 +109,6 @@ const SOURCE_EXTENSIONS = new Set([
   ".sql",
   ".svelte",
   ".swift",
-  ".template",
   ".tf",
   ".ts",
   ".tsx",
@@ -3241,14 +3239,11 @@ export async function buildResidualRiskInventory(
     );
   }
 
-  const knownSourcePaths = new Set(sourceFiles.map((file) => file.path));
   sourceFiles.push(
-    ...(
-      await nearestNodePackageMetadataSnapshots(
-        canonicalRepository,
-        sourceFiles,
-      )
-    ).filter((file) => !knownSourcePaths.has(file.path)),
+    ...(await nearestNodePackageMetadataSnapshots(
+      canonicalRepository,
+      sourceFiles,
+    )),
   );
 
   for (const file of sourceFiles) {
@@ -32335,13 +32330,42 @@ async function discoverSourcePaths(repository: string): Promise<string[]> {
       } else if (
         entry.isFile() &&
         !entry.isSymbolicLink() &&
-        isSourcePath(entry.name)
+        (isSourcePath(entry.name) ||
+          (await isCloudFormationDiscoveryCandidate(absolutePath, entry.name)))
       ) {
         paths.push(relative(repository, absolutePath));
       }
     }
   }
   return paths.sort((left, right) => left.localeCompare(right));
+}
+
+async function isCloudFormationDiscoveryCandidate(
+  absolutePath: string,
+  name: string,
+): Promise<boolean> {
+  if (!/\.(?:json|template)$/iu.test(name)) return false;
+  const metadata = await lstat(absolutePath).catch(() => null);
+  if (
+    metadata === null ||
+    !metadata.isFile() ||
+    metadata.isSymbolicLink() ||
+    metadata.size > MAX_FILE_BYTES
+  ) {
+    return false;
+  }
+  const source = await readFile(absolutePath).catch(() => null);
+  if (
+    source === null ||
+    source.byteLength > MAX_FILE_BYTES ||
+    source.includes(0)
+  ) {
+    return false;
+  }
+  const text = source.toString("utf8");
+  return (
+    /["']?Resources["']?\s*:/u.test(text) && text.includes("AWS::IAM::Role")
+  );
 }
 
 async function nearestNodePackageMetadataSnapshots(

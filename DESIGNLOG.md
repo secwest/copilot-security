@@ -56,7 +56,14 @@ narrower actions or resources, and every other static or dynamic permissions
 boundary. This deliberately misses parameter-resolved public roles and
 semantically permissive custom managed policies until exact resolution can be
 added without guessing. Empty condition maps remain unrestricted rather than
-being credited as a control.
+being credited as a control. When no immutable model inventory is available,
+fallback traversal admits `.json` and `.template` files only after a bounded
+content prefilter observes both a Resources mapping and `AWS::IAM::Role`.
+Adding every JSON file to the shared source set displaced existing framework
+rows under the 8 MiB/2,000-file budgets and bypassed an oversized npm-boundary
+control in the first full regression run; the format-specific prefilter retains
+arbitrarily named CloudFormation JSON without spending the application and
+package-analysis budget on unrelated metadata.
 
 **Deployment and attack-path discipline.** Static template evidence proves a
 declared authority path, not a deployed role or reachable caller. Correction

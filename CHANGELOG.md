@@ -23,7 +23,10 @@ All notable scanner, application, benchmark, and operational changes are recorde
   transforms and generated templates, drift, caller reachability, same- versus
   cross-account semantics, effective SCP/session/explicit denies, and the least
   concrete administrator effect without inventing anonymous access or valid
-  credentials.
+  credentials. Fallback repository discovery content-prefilters bounded JSON
+  and `.template` candidates for both `Resources` and `AWS::IAM::Role` instead
+  of adding every JSON metadata or lock file to the general source budget; this
+  preserves existing package-boundary and candidate-cap coverage.
 - Added the paired perfect-gate
   `cloudformation-public-admin-role-manifest.json` benchmark. The positive uses
   a wildcard trust and exact AdministratorAccess attachment; the source-

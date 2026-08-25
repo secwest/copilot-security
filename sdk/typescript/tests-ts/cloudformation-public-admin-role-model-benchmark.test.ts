@@ -225,7 +225,9 @@ describe("CloudFormation public administrator role model benchmark", () => {
         },
       },
     });
-    expect(await repositoryInventory({ "stack.json": json })).toHaveLength(1);
+    expect(
+      await repositoryInventory({ "infra/identity-boundary.json": json }),
+    ).toHaveLength(1);
   });
 
   test("recognizes exact unbounded inline administrator permissions", async () => {
