@@ -54,6 +54,24 @@ All notable scanner, application, benchmark, and operational changes are recorde
   binding invalidation, version-gated modes, executable control evidence, and
   field-local report closure rather than claiming that the primitive is
   unknown elsewhere.
+- Ran the sealed PyTorch exploit/control campaign against the pushed
+  `f321ba4d8cc18cad99bbb5407ba48973cdad9043` revision with authenticated
+  Copilot CLI, `gpt-5.6-terra`, high effort, deep mode, two workers, and up to
+  three fresh attempts. Both cases completed on attempt one: the vulnerable
+  fixture produced one accepted high-severity finding, the patched
+  weights-only control produced none, and all strict completion, precision,
+  recall, F1, case, stability, validation, attack-path, code-evidence, and
+  severity metrics equal 1 with zero false positives or negatives. Campaign
+  `8282e25aefbd054e06d1e3a9b598b7329a824396ab8c1bd6b146cb2465709bfd`
+  also exercised successful repository-byte excerpt re-anchoring and observed
+  no allowance-exhaustion or classifier-refusal event.
+- Closed hosted verification for the same source checkpoint. `node-ci` run
+  `32849767656` passes Ubuntu Node 22, 24, 24.0.0, 26, and 26.0.0, Windows
+  Node 22, and macOS Node 22, including full tests, formatting, build, package
+  inspection, and installed-runtime smoke checks. Container run `32849767711`,
+  Go fixture run `32849767649`, Java fixture run `32849767685`, .NET fixture
+  run `32849767754`, Windows GUI run `32849767653`, and Linux GUI run
+  `32849767689` also pass.
 - Added `python-web-joblib-unsafe-load`, a typed Python request-to-Joblib
   deserialization model for CWE-502. It accepts only a live non-shadowed
   `import joblib` receiver or named `from joblib import load` binding and

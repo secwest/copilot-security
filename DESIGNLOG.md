@@ -91,6 +91,32 @@ Two isolated 67-package consumers independently validate public import, CLI
 behavior, and all 79 bundled plugin files. The unique package directory and
 archive were removed after acceptance.
 
+**Live scanner evidence.** A sealed, selection-only campaign ran the paired
+fixture through authenticated Copilot CLI at pushed revision
+`f321ba4d8cc18cad99bbb5407ba48973cdad9043`, using `gpt-5.6-terra`, high effort,
+deep mode, two workers, and a three-attempt recovery ceiling. Campaign
+`8282e25aefbd054e06d1e3a9b598b7329a824396ab8c1bd6b146cb2465709bfd`
+completed both cases on their first attempt. The vulnerable fixture produced
+one high-severity true positive; the patched weights-only control produced no
+finding. Completion, precision, recall, F1, case pass, negative-case pass,
+stable detection, validation, attack path, code evidence, and severity
+accuracy are all 1.0, with no false positive or false negative. The positive
+scan also re-anchored one code excerpt from repository bytes and still closed
+the strict report contract. The concurrent scans consumed 2,027,720 input
+tokens, including 1,781,345 cached, and 44,139 output tokens; reported cost was
+$1.8772625. Stored Copilot authentication succeeded without an observed
+allowance-exhaustion or classifier-refusal event. This is evidence for this
+campaign, not proof that every account or future model invocation is
+unlimited.
+
+The exact source checkpoint also closes its hosted matrix. `node-ci` run
+`32849767656` is green on Ubuntu Node 22, 24, 24.0.0, 26, and 26.0.0, Windows
+Node 22, and macOS Node 22; every leg passes its applicable full tests,
+formatting, build, package inspection, and installed-runtime smoke. Container
+run `32849767711`, Go fixture run `32849767649`, Java fixture run
+`32849767685`, .NET fixture run `32849767754`, Windows GUI run `32849767653`,
+and Linux GUI run `32849767689` are green as well.
+
 **Prior-checkpoint operational closure.** Checkpoint
 `2c5f2ce1e5b18c47a0e0030196922742d2d856fb` passes its production advisory
 audit and all six hosted workflow families. Node run `32845476828` is green on
