@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-joblib-unsafe-load",
+      "description": "A Flask model upload crosses a relative wrapper into pickle-backed joblib.load.",
+      "fixture": "fixtures/python-joblib-unsafe-load",
+      "findingsPaths": ["python-joblib-unsafe-load/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "python-joblib-pickle-unsafe-deserialization",
+          "cwe": ["CWE-502"],
+          "locations": [
+            {
+              "path": "src/parser.py",
+              "startLine": 13,
+              "endLine": 13,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["model upload", "request.files", "uploaded stream"],
+            ["parse_model", "wrapper"],
+            ["joblib.load", "Joblib load"],
+            ["filename", "file object", "argument zero", "argument 0"],
+            ["pickle-backed", "pickle protocol", "Python pickle"],
+            ["__reduce__", "REDUCE", "callable"],
+            ["effects.mark", "in-process effect", "process integrity"],
+            ["Python 3.12.3"],
+            ["Python 3.14.5", "3.12.3 and 3.14.5", "3.12.3 or 3.14.5"],
+            ["joblib 1.5.3", "joblib==1.5.3"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["model upload", "request.files", "uploaded stream"],
+            ["parse_model", "wrapper"],
+            ["joblib.load", "Joblib load"],
+            ["filename", "file object", "argument zero", "argument 0"],
+            ["pickle-backed", "pickle protocol", "Python pickle"],
+            ["__reduce__", "REDUCE", "callable"],
+            ["effects.mark", "in-process effect", "process integrity"],
+            ["Python 3.12.3"],
+            ["Python 3.14.5", "3.12.3 and 3.14.5", "3.12.3 or 3.14.5"],
+            ["joblib 1.5.3", "joblib==1.5.3"]
+          ],
+          "forbiddenText": [
+            "joblib import alone proves code execution",
+            "joblib.dump executes the payload",
+            "size checks prevent pickle execution",
+            "authentication after loading prevents execution"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-joblib-json-control",
+      "description": "The identical upload, wrapper, and malicious Joblib witness fail closed at json.load.",
+      "fixture": "fixtures/python-joblib-json-control",
+      "findingsPaths": ["python-joblib-json-control/run-1/findings.json"],
+      "expected": []
+    }
+  ]
+}

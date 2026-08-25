@@ -2041,6 +2041,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-web-joblib-unsafe-load",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+joblib(?:\s+as\s+[A-Za-z_]\w*)?\b|\bfrom\s+joblib\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-body",
+        expression:
+          /\brequest\.(?:body|data|files|form|json|POST|stream)\b|\brequest\.(?:get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\bBody\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "joblib-pickle-object-construction",
+        expression: /\b(?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*\s*\(/u,
+        cweIds: ["CWE-502"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-pyyaml-unsafe-load",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3098,7 +3125,8 @@ function isPythonUnsafeDeserializationModel(modelId: string): boolean {
   return (
     modelId === "python-web-pickle-unsafe-load" ||
     modelId === "python-web-pyyaml-unsafe-load" ||
-    modelId === "python-web-numpy-allow-pickle-load"
+    modelId === "python-web-numpy-allow-pickle-load" ||
+    modelId === "python-web-joblib-unsafe-load"
   );
 }
 
@@ -14286,7 +14314,9 @@ function frameworkDataflowRecords(
             ? pythonPickleUnsafeSink(files, path, lines, sink.line)
             : model.id === "python-web-numpy-allow-pickle-load"
               ? pythonNumpyAllowPickleUnsafeSink(files, path, lines, sink.line)
-              : undefined;
+              : model.id === "python-web-joblib-unsafe-load"
+                ? pythonJoblibUnsafeSink(files, path, lines, sink.line)
+                : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -23769,7 +23799,14 @@ function pythonFrameworkWrapperSummaries(
                       file.lines,
                       sink.line,
                     )
-                  : undefined;
+                  : model.id === "python-web-joblib-unsafe-load"
+                    ? pythonJoblibUnsafeSink(
+                        files,
+                        file.path,
+                        file.lines,
+                        sink.line,
+                      )
+                    : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
@@ -25024,6 +25061,8 @@ interface PythonNumpyBindingContext {
   functions: PythonModuleImportBinding[];
 }
 
+type PythonJoblibBindingContext = PythonNumpyBindingContext;
+
 function pythonNumpyBindings(
   lines: readonly string[],
 ): PythonNumpyBindingContext {
@@ -25044,6 +25083,59 @@ function pythonNumpyBindings(
       continue;
     }
     const fromImport = /^\s*from\s+numpy\s+import\s+(.+?)\s*$/u.exec(
+      structural,
+    );
+    if (fromImport?.[1] === undefined) continue;
+    let importedText = fromImport[1].trim();
+    if (importedText.startsWith("(") && !importedText.endsWith(")")) {
+      for (
+        let offset = index + 1;
+        offset < Math.min(structuralLines.length, index + 8);
+        offset += 1
+      ) {
+        importedText += `\n${structuralLines[offset] ?? ""}`;
+        if ((structuralLines[offset] ?? "").includes(")")) break;
+      }
+    }
+    if (importedText.startsWith("(") !== importedText.endsWith(")")) {
+      continue;
+    }
+    importedText = importedText.replace(/^\(([\s\S]*)\)$/u, "$1");
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const binding = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      if (binding?.[1] !== "load") continue;
+      functions.push({
+        imported: "load",
+        local: binding[2] ?? "load",
+        line: index + 1,
+      });
+    }
+  }
+  return { receivers, functions };
+}
+
+function pythonJoblibBindings(
+  lines: readonly string[],
+): PythonJoblibBindingContext {
+  const receivers: PythonModuleImportBinding[] = [];
+  const functions: PythonModuleImportBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const receiver = /^\s*import\s+joblib(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+      structural,
+    );
+    if (receiver !== null) {
+      receivers.push({
+        imported: "joblib",
+        local: receiver[1] ?? "joblib",
+        line: index + 1,
+      });
+      continue;
+    }
+    const fromImport = /^\s*from\s+joblib\s+import\s+(.+?)\s*$/u.exec(
       structural,
     );
     if (fromImport?.[1] === undefined) continue;
@@ -25318,6 +25410,82 @@ function pythonNumpyAllowPickleUnsafeSink(
           path: sourcePath,
           line,
           symbol: "numpy.load",
+        },
+      ],
+    };
+  }
+  return undefined;
+}
+
+function pythonJoblibUnsafeSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonUnsafeDeserializationSink | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "joblib")) {
+    return undefined;
+  }
+  const context = pythonJoblibBindings(lines);
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const calls = [
+    ...context.receivers.map((binding) => ({ binding, receiverCall: true })),
+    ...context.functions.map((binding) => ({ binding, receiverCall: false })),
+  ];
+  for (const call of calls) {
+    if (
+      call.binding.line >= line ||
+      wrapper?.parameters.includes(call.binding.local) === true ||
+      pythonImportedBindingReassigned(
+        lines,
+        call.binding,
+        call.receiverCall ? "load" : undefined,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const callee = call.receiverCall
+      ? new RegExp(
+          `\\b${escapeRegularExpression(call.binding.local)}\\s*\\.\\s*load\\s*\\(`,
+          "u",
+        )
+      : new RegExp(
+          `\\b${escapeRegularExpression(call.binding.local)}\\s*\\(`,
+          "u",
+        );
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(lines, line, callee);
+    if (arguments_ === undefined) continue;
+    if (arguments_.some((argument) => argument.trim().startsWith("*"))) {
+      continue;
+    }
+    const sourceExpression =
+      pythonKeywordArgument(arguments_, "filename") ??
+      pythonPositionalArguments(arguments_)[0];
+    if (
+      sourceExpression === undefined ||
+      sourceExpression.trim() === "" ||
+      sourceExpression.trim().startsWith("*")
+    ) {
+      continue;
+    }
+    return {
+      sourceExpression,
+      kind: "joblib-load-untrusted-file",
+      propagators: [
+        {
+          kind: "joblib-load-binding",
+          path: sourcePath,
+          line: call.binding.line,
+          symbol: `${call.binding.imported} as ${call.binding.local}`,
+        },
+        {
+          kind: "intrinsic-joblib-pickle-reduce-execution",
+          path: sourcePath,
+          line,
+          symbol: "joblib.load",
         },
       ],
     };

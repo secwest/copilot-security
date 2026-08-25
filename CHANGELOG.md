@@ -6,6 +6,38 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-joblib-unsafe-load`, a typed Python request-to-Joblib
+  deserialization model for CWE-502. It accepts only a live non-shadowed
+  `import joblib` receiver or named `from joblib import load` binding and
+  request control of argument zero or `filename=` across bounded relative
+  wrappers. Fixed and wrong-role values, star expansion, `joblib.dump`, local
+  module/package shadows, reassigned imports or members, and text lookalikes
+  remain negative.
+- Added a bounded Flask model-upload/JSON control pair, fixture-local
+  `__reduce__` marker witness, and strict specialized benchmark. Both fixtures
+  preserve the route, upload stream, `parse_model` wrapper, byte budget,
+  dependency pin, runtime contract, witness, and malicious Joblib artifact;
+  only `joblib.load` versus `json.load` differs at the trust boundary. The
+  canonical corpus now contains 108 exploit/control pairs, 216 cases, and 648
+  repeated scans.
+- Executed the pinned witness on Python 3.14.5/Windows and Python 3.12.3/Linux,
+  both with Joblib 1.5.3. Each positive invokes the harmless in-process marker;
+  each JSON control rejects the same serialized bytes with the marker unset.
+  Windows and WSL focused regression lanes each pass 46 tests and 1,939
+  assertions with no failures.
+- Two independent inventories of the positive fixture are byte-identical and
+  emit one CWE-502 row from `src/server.py:11` to `src/parser.py:13`, with the
+  relative import/call/parameter chain, exact Joblib binding, and intrinsic
+  pickle-callable boundary retained as five propagators. The JSON control emits
+  no Joblib row.
+- Compared the model against current primary scanner sources. CodeQL now has a
+  first-party `JoblibLoadCall` decoder model for argument zero or `filename`.
+  Trail of Bits' public Semgrep rule excludes only literal-string calls, while
+  Semgrep's broader ML-loader rule is still an open proposal. This scanner adds
+  request-to-sink reachability, relative-wrapper evidence, exact import
+  invalidation, local-shadow rejection, field-scoped correction requirements,
+  and an executable false-positive control rather than claiming a library-level
+  detection gap.
 - Added `python-web-numpy-allow-pickle-load`, a typed Python web-to-NumPy
   object-array deserialization model for CWE-502. It requires an exact live
   `import numpy` receiver or named `from numpy import load` binding, request

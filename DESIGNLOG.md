@@ -2,6 +2,58 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Trace untrusted Joblib artifacts through exact live bindings
+
+**Authoritative behavior and comparative coverage.** Joblib's official
+[`joblib.load`](https://joblib.readthedocs.io/en/stable/generated/joblib.load.html)
+contract states that the function relies on pickle, can execute arbitrary
+Python code, and must never load untrusted sources. Its `filename` parameter may
+be a path or file object; `mmap_mode` and native-byte-order handling do not form
+a safe-deserialization mode. Current CodeQL source contains a first-party
+[`JoblibLoadCall`](https://github.com/github/codeql/blob/main/python/ql/lib/semmle/python/frameworks/Joblib.qll)
+decoder whose inputs are argument zero and `filename`. Trail of Bits' public
+[`scikit-joblib-load`](https://github.com/semgrep/tob-semgrep-rules/blob/main/python/scikit-joblib-load.yaml)
+Semgrep rule matches `joblib.load(...)` except a literal-string call, while
+Semgrep's community repository tracks broader ML-loader coverage as an open
+request. The effectiveness opportunity is therefore precision and complete
+application attack-path evidence, not a claim that all competing scanners miss
+the library.
+
+**Decision.** Add a distinct `python-web-joblib-unsafe-load` model. Resolve only
+a live `import joblib` receiver or `from joblib import load` binding, including
+aliases and bounded parenthesized imports. Require attacker-controlled request
+data in argument zero or `filename=` and preserve up to the existing bounded
+relative Python wrapper depth. Record both the exact Joblib binding and its
+intrinsic pickle/callable boundary. Reject a repository-local `joblib.py` or
+`joblib/__init__.py`, fixed paths, request data only in `mmap_mode` or
+`ensure_native_byte_order`, star expansion, `dump`, binding/member replacement,
+parameter shadowing, and comments or strings. A server-owned immutable artifact
+or a secret-keyed integrity decision that dominates loading remains strong
+counterevidence; filename extensions, size limits, post-load type checks, and
+authentication after loading do not prevent pre-return callable execution.
+
+**Matched control and evidence contract.** Joblib exposes no safe flag
+equivalent to NumPy's `allow_pickle=False`, so a topology-identical Joblib call
+cannot be a true negative when its complete artifact is attacker-controlled.
+The control instead preserves the Flask route, upload stream, `parse_model`
+wrapper, byte budget, requirements, runtime record, fixture-local marker, and
+malicious artifact, but substitutes `json.load` at the single unsafe boundary.
+The bounded witness serializes a `__reduce__` reference only to
+`src.effects.mark`; the positive mutates that in-process marker during
+`joblib.load`, while JSON rejects the same bytes before dispatch. Both
+validation and attack path must independently state the tested Python 3.12.3
+and 3.14.5 environments, Joblib 1.5.3, upload provenance, wrapper, exact
+argument role, pickle-backed callable dispatch, and observed marker effect.
+These fixture versions are reproducibility evidence, not proof of a scanned
+deployment's runtime.
+
+**Consequence.** The canonical benchmark grows to 108 exploit/control pairs,
+216 cases, and 648 repeated scans. Dedicated regressions cover direct and named
+aliases, `filename=`, parenthesized imports, same-file and two-relay paths, and
+the false cases above. Future pickle-backed libraries must keep their own
+identity, safe-mode semantics, artifact formats, and matched controls rather
+than being folded into a generic `.load()` signature.
+
 ## 2026-08-25 — Model NumPy object arrays only across explicit pickle opt-in
 
 **Gap and authoritative semantics.** The Python unsafe-deserialization pass
