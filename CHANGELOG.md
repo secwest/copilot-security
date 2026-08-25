@@ -6,6 +6,42 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-http-kysely-mysql-ddl-sql-injection`, an exact provenance-,
+  dialect-, argument-, and lifecycle-aware CWE-89 model for
+  [GHSA-8cpq-38p9-67gx / CVE-2026-33468](https://github.com/kysely-org/kysely/security/advisories/GHSA-8cpq-38p9-67gx).
+  It requires request data in argument two of an official three-argument
+  `Kysely` `schema.createIndex(...).where(lhs, operator, value)` chain, a live
+  official `MysqlDialect`, actual `compile()` or `execute()`, and exact
+  affected production provenance through 0.28.13. Named and aliased ESM,
+  namespace, TypeScript import-equals, CommonJS, and stable schema aliases are
+  covered across same-file and three-relative-wrapper flows.
+- Preserved the advisory-specific false-positive boundary. Kysely 0.28.14 and
+  later, prereleases, non-MySQL or unresolved dialects, ordinary parameterized
+  DML, fixed values, request data only in the left operand or operator, builder
+  construction without compilation/execution, local lookalikes, reassigned
+  instances or schema aliases, wrong or development-only packages,
+  lockfile-free ranges, inconsistent or v1 locks, tests, and examples fail
+  closed. Raw `sql.lit` and `sql.raw` are excluded because their documented
+  unchecked-input contract is distinct from this versioned DDL compiler flaw.
+- Added topology-identical four-file fixtures pinned to Kysely 0.28.13 and
+  0.28.14, a perfect-gate specialized manifest, main-corpus registration, and
+  a database-free real-package witness. The affected package compiles the
+  bounded `\\' OR 1=1 --` value with one MySQL backslash before the quote; the
+  repaired package emits two. The witness opens no connection or socket and
+  changes no external state. The canonical corpus advances to 118
+  exploit/control pairs, 236 cases, and 708 repeated scans.
+- Current authenticated source searches found no `kysely`, advisory ID, or
+  Kysely DDL literal match in `github/codeql` or `semgrep/semgrep-rules`.
+  Focused native acceptance passes 24 tests and 1,893 assertions across the
+  exact model and full corpus contract; the broader focused matrix passes 50
+  tests and 2,003 assertions, and WSL passes 42 tests and 1,976 assertions.
+  Full Windows regression passes 1,664 tests with 25 platform/integration
+  skips, zero failures, and 12,151 assertions across 182 files. Both
+  real-package witnesses, generated-model checks, TypeScript, formatting, the
+  clean build, and the production dependency audit are green. The strict npm
+  package check validates 259 entries, public import, CLI startup, and all 79
+  bundled plugin files; the pre-commit tarball is 1,917,201 bytes with SHA-256
+  `80f4f27922440dc6ff1b456cf3274e7ebca75e8c6b9d10f3bc21c471400aa241`.
 - Added `node-http-prompty-nunjucks-template-rce`, an exact provenance- and
   lifecycle-aware CWE-94/CWE-1336 model for request-controlled template grammar
   reaching Microsoft Prompty's official TypeScript Nunjucks renderer under

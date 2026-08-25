@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-kysely-mysql-ddl-sql-injection",
+      "description": "An HTTP query value crosses three relative wrappers into the value position of an official Kysely CreateIndexBuilder.where chain under MysqlDialect and exact affected 0.28.13 provenance, then reaches compile().",
+      "fixture": "fixtures/node-multi-hop-kysely-mysql-ddl-sql-injection",
+      "findingsPaths": [
+        "node-multi-hop-kysely-mysql-ddl-sql-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-kysely-mysql-ddl-literal-escape",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 17,
+              "endLine": 17,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-kysely-mysql-ddl-literal",
+      "description": "The source-identical control changes only Kysely to 0.28.14, whose MySQL compiler escapes backslashes before quotes.",
+      "fixture": "fixtures/node-multi-hop-patched-kysely-mysql-ddl-literal",
+      "findingsPaths": [
+        "node-multi-hop-patched-kysely-mysql-ddl-literal/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

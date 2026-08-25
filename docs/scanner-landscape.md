@@ -5,6 +5,17 @@ the constraints for integrating them without turning Copilot Security into an
 unverifiable alert aggregator. It is a living engineering backlog, not a claim
 that dissimilar products can be reduced to one score.
 
+The latest comparator gap is Kysely
+[GHSA-8cpq-38p9-67gx](https://github.com/kysely-org/kysely/security/advisories/GHSA-8cpq-38p9-67gx).
+The advisory distinguishes a versioned MySQL DDL compiler defect from Kysely's
+documented raw-literal APIs: remote data must reach an immediate
+`CreateIndexBuilder.where` value and actual compilation under `MysqlDialect`.
+Current authenticated CodeQL and Semgrep rule-source searches have no Kysely
+or advisory match. Copilot Security therefore binds exact package provenance,
+dialect, overload position, fluent-chain execution, and source flow, with
+0.28.14, other dialects, parameterized DML, compile-free builders, and raw API
+usage retained as explicit counterexamples.
+
 ## Design principles extracted from other scanners
 
 | Scanner or ecosystem                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Useful design                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Copilot Security application                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |

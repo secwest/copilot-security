@@ -2,6 +2,62 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Bind Kysely MySQL DDL findings to immediate values and compilation
+
+**Gap and authoritative semantics.** Kysely
+[`GHSA-8cpq-38p9-67gx`](https://github.com/kysely-org/kysely/security/advisories/GHSA-8cpq-38p9-67gx),
+assigned CVE-2026-33468 and CWE-89, covers releases through 0.28.13.
+`CreateIndexBuilder.where()` applies `ImmediateValueTransformer` because DDL
+predicates are emitted as literals. The inherited MySQL compiler doubles
+quotes but does not first escape backslashes; with MySQL's ordinary
+`NO_BACKSLASH_ESCAPES=OFF` mode, an attacker backslash can consume the quote
+that was intended to escape the following quote. Version 0.28.14 adds the
+MySQL-specific backslash escape. Current authenticated searches of
+`github/codeql` and `semgrep/semgrep-rules` found no Kysely or advisory match.
+
+**Decision and lifecycle boundary.** Add
+`node-http-kysely-mysql-ddl-sql-injection` as a typed Node sink. Require an
+official `Kysely` instance configured with an official `MysqlDialect`, a
+`schema.createIndex` chain, remote data in argument two of the exact
+three-argument `where(lhs, operator, value)` overload, and a subsequent
+`compile()` or `execute()` in the same fluent chain. Anchor the row at that
+terminal call, where the immediate value actually enters compilation. Preserve
+same-file and three-relative-wrapper source flow. This intentionally excludes
+ordinary parameterized DML, builder construction alone, remote operands or
+operators with a fixed value, and `sql.raw`/`sql.lit`, whose documented
+unchecked-input contract is not this versioned compiler defect.
+
+**Identity, provenance, and repair boundary.** Accept named and aliased ESM,
+namespace receivers, TypeScript import-equals, CommonJS destructuring and
+receivers, plus stable `db.schema` aliases. Require exact production provenance
+or a declaration-consistent npm v2/v3 lock resolving to a stable release at or
+below 0.28.13. Reject 0.28.14 and later, prereleases, PostgreSQL/SQLite or
+unresolved dialects, wrong/development packages, ranges without a safe modern
+lock, inconsistent and v1 locks, local lookalikes, reassigned constructors,
+instances, dialect members or schema aliases, fixed values, non-executed
+builders, tests, and examples.
+
+**Executable pair and acceptance evidence.** Both four-file fixtures retain
+the HTTP source, three wrapper boundaries, official constructors, MySQL
+dialect, create-index shape, value position, terminal compilation, and witness
+bytes. Only Kysely 0.28.13 changes to 0.28.14. The bounded compile-only witness
+shows one backslash before the quote in affected output and two in repaired
+output; it creates no database connection, network traffic, persistence, or
+external mutation. The strict pair, official binding matrix, modern-lock
+boundary, lifecycle/argument/dialect/identity/provenance negative matrix, and
+review guidance pass 24 tests and 1,893 assertions with zero failures. A
+broader native matrix passes 50 tests and 2,003 assertions; WSL passes 42 tests
+and 1,976 assertions. The authoritative Windows suite passes 1,664 tests with
+25 platform/integration skips, zero failures, and 12,151 assertions across 182
+files. Generated-model checks, TypeScript, formatting, a clean build, both
+real-package witnesses, and the production dependency audit pass. Strict
+package inspection validates public import, CLI startup, 79 bundled plugin
+files, and all 259 package entries. The 1,917,201-byte pre-commit package has
+SHA-256 `80f4f27922440dc6ff1b456cf3274e7ebca75e8c6b9d10f3bc21c471400aa241`.
+The corpus advances to 118 pairs, 236 cases, and 708 repeated scans. An
+immutable exact-commit self-inventory and hosted acceptance follow the pushed
+implementation checkpoint.
+
 ## 2026-08-25 — Bind Prompty SSTI to template position and actual Nunjucks execution
 
 **Gap and authoritative semantics.** Microsoft

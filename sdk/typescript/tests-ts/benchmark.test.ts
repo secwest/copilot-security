@@ -282,6 +282,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-patched-prompty-nunjucks-template",
       ],
       [
+        "node-multi-hop-kysely-mysql-ddl-sql-injection",
+        "node-multi-hop-patched-kysely-mysql-ddl-literal",
+      ],
+      [
         "node-multi-hop-shescape-cmd-injection",
         "node-multi-hop-repaired-shescape-cmd",
       ],
@@ -432,6 +436,11 @@ describe("effectiveness benchmark", () => {
         .get("node-multi-hop-prompty-nunjucks-template-rce")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-94", "CWE-1336"]]);
+    expect(
+      cases
+        .get("node-multi-hop-kysely-mysql-ddl-sql-injection")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-89"]]);
     expect(
       cases
         .get("javascript-archive-link-pivot")

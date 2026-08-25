@@ -2109,8 +2109,13 @@ wrappers into the official TypeScript `NunjucksRenderer`: exact
 only the witness process's Node version, while source-identical 2.0.0-beta.5
 rejects unsafe member access. The host model also covers official
 `render`/`prepare`/`invoke` pipelines only when the exact Prompty instructions,
-not ordinary render inputs, contain remote template grammar. Each of the 234
-cases in 117 exploit/control pairs is scanned three times, producing 702 scans
+not ordinary render inputs, contain remote template grammar. The Kysely pair
+then holds the HTTP source, three wrappers, `MysqlDialect`, create-index DDL,
+remote `where` value, and compilation constant while changing only 0.28.13 to
+0.28.14. The affected compiler doubles quotes without first escaping the
+MySQL backslash; the repaired compiler escapes the backslash first. Its
+compile-only witness never opens a database. Each of the 236 cases in 118
+exploit/control pairs is scanned three times, producing 708 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

@@ -720,6 +720,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-kysely-mysql-ddl-sql-injection",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/['"]kysely['"]/u, /\bMysqlDialect\b/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-kysely-mysql-ddl-literal-escape",
+        expression: /\.\s*(?:compile|execute)\s*\(/u,
+        cweIds: ["CWE-89"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-liquidjs-template-rce",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3700,6 +3726,19 @@ const SYMPY_FIELD_EVIDENCE_REQUIREMENTS = [
   ["restricted namespace", "empty __builtins__", "SAFE_GLOBALS"],
 ] as const;
 
+const KYSELY_MYSQL_DDL_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["request status", "request.query", "HTTP request field"],
+  ["compileStatusIndex", "wrapper", "relative-module flow"],
+  ["Kysely", "official Kysely binding"],
+  ["MysqlDialect", "MySQL dialect"],
+  ["createIndex", "CreateIndexBuilder"],
+  ["where value", "argument two", "argument 2", "three-argument where"],
+  ["compile()", "execute()", "actual compilation", "actual execution"],
+  ["kysely 0.28.13", "kysely@0.28.13"],
+  ["NO_BACKSLASH_ESCAPES", "backslash escaping", "generated SQL"],
+  ["kysely 0.28.14", "repaired MySQL compiler", "patched control"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3765,6 +3804,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: SYMPY_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: SYMPY_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-http-kysely-mysql-ddl-sql-injection",
+    {
+      validation: KYSELY_MYSQL_DDL_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: KYSELY_MYSQL_DDL_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -4028,6 +4074,17 @@ interface NodeSequelizeOracleSink {
     | "findAndCountAll"
     | "findOne"
     | "update";
+}
+
+interface NodeKyselyMysqlDdlSink {
+  sourceExpression: string;
+  sinkLine: number;
+  kind:
+    | "vulnerable-kysely-mysql-ddl-literal-escape"
+    | "lock-resolved-vulnerable-kysely-mysql-ddl-literal-escape";
+  dependency: NodeRuntimeDependency;
+  dialectLine: number;
+  execution: "compile" | "execute";
 }
 
 interface NodeLiquidJsTemplateSink {
@@ -6151,6 +6208,309 @@ function nodeSequelizeOracleSink(
         dependency,
         dialectLine: model.instance.dialectLine,
         operation,
+      };
+    }
+  }
+  return undefined;
+}
+
+interface NodeKyselyClassExpression {
+  expression: string;
+  local: string;
+  line: number;
+  member?: "Kysely" | "MysqlDialect";
+}
+
+interface NodeKyselyMysqlInstance {
+  local: string;
+  line: number;
+  dialectLine: number;
+}
+
+function nodeKyselyVersionIsMysqlDdlVulnerable(version: string): boolean {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return major === 0 && (minor < 28 || (minor === 28 && patch <= 13));
+}
+
+function nodeKyselyClassExpressions(
+  lines: readonly string[],
+  imported: "Kysely" | "MysqlDialect",
+): NodeKyselyClassExpression[] {
+  const expressions: NodeKyselyClassExpression[] = importedJavascriptSymbols(
+    lines,
+  )
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "kysely" && binding.imported === imported,
+    )
+    .map((binding) => ({
+      expression: escapeRegularExpression(binding.local),
+      local: binding.local,
+      line: binding.line,
+    }));
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]kysely['"]/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]kysely['"]\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['"]kysely['"]\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      expressions.push({
+        expression: `${escapeRegularExpression(receiver[1])}\\s*\\.\\s*${imported}`,
+        local: receiver[1],
+        line: index + 1,
+        member: imported,
+      });
+    }
+  }
+  return expressions.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.expression === binding.expression &&
+          candidate.local === binding.local &&
+          candidate.line === binding.line,
+      ) === index,
+  );
+}
+
+function nodeKyselyBindingUsable(
+  lines: readonly string[],
+  binding: NodeKyselyClassExpression,
+  useLine: number,
+): boolean {
+  if (
+    binding.line >= useLine ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      useLine + 1,
+    )
+  ) {
+    return false;
+  }
+  if (binding.member === undefined) return true;
+  const receiver = escapeRegularExpression(binding.local);
+  return !javascriptStructuralLines(lines)
+    .slice(binding.line, useLine)
+    .some((candidate) =>
+      new RegExp(
+        `\\b${receiver}\\s*\\.\\s*${binding.member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+        "u",
+      ).test(candidate),
+    );
+}
+
+function nodeKyselyMysqlDialectLine(
+  lines: readonly string[],
+  configExpression: string,
+  configLine: number,
+  useLine: number,
+): number | undefined {
+  const config = resolveJavascriptExpression(
+    lines,
+    configExpression,
+    configLine,
+  );
+  if (config === undefined) return undefined;
+  const dialectValue = javascriptObjectPropertyValue(config.value, "dialect");
+  if (dialectValue === undefined) return undefined;
+  const dialect = resolveJavascriptExpression(lines, dialectValue, config.line);
+  if (dialect === undefined) return undefined;
+  for (const binding of nodeKyselyClassExpressions(lines, "MysqlDialect")) {
+    if (!nodeKyselyBindingUsable(lines, binding, useLine)) continue;
+    if (
+      new RegExp(
+        `^\\s*new\\s+${binding.expression}(?:\\s*<[^;(){}]+>)?\\s*\\(`,
+        "u",
+      ).test(dialect.value.trim())
+    ) {
+      return dialect.line;
+    }
+  }
+  return undefined;
+}
+
+function nodeKyselyMysqlInstances(
+  lines: readonly string[],
+): NodeKyselyMysqlInstance[] {
+  const structuralLines = javascriptStructuralLines(lines);
+  const instances: NodeKyselyMysqlInstance[] = [];
+  for (const binding of nodeKyselyClassExpressions(lines, "Kysely")) {
+    for (let index = binding.line; index < structuralLines.length; index += 1) {
+      const declaration = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*new\\s+${binding.expression}(?:\\s*<[^;(){}]+>)?\\s*\\(`,
+        "u",
+      ).exec(structuralLines[index] ?? "");
+      if (declaration?.[1] === undefined) continue;
+      const declarationLine = index + 1;
+      if (!nodeKyselyBindingUsable(lines, binding, declarationLine)) continue;
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        declarationLine,
+        new RegExp(
+          `new\\s+${binding.expression}(?:\\s*<[^;(){}]+>)?\\s*\\(`,
+          "u",
+        ),
+      );
+      const configExpression = arguments_?.[0]?.trim() ?? "";
+      if (configExpression === "") continue;
+      const dialectLine = nodeKyselyMysqlDialectLine(
+        lines,
+        configExpression,
+        declarationLine,
+        declarationLine,
+      );
+      if (dialectLine === undefined) continue;
+      instances.push({
+        local: declaration[1],
+        line: declarationLine,
+        dialectLine,
+      });
+    }
+  }
+  return instances;
+}
+
+function nodeKyselySchemaReceivers(
+  lines: readonly string[],
+  instance: NodeKyselyMysqlInstance,
+  sinkLine: number,
+): Array<{ expression: string; line: number }> {
+  const escaped = escapeRegularExpression(instance.local);
+  const receivers = [
+    { expression: `${escaped}\\s*\\.\\s*schema`, line: instance.line },
+  ];
+  const structuralLines = javascriptStructuralLines(lines);
+  for (let index = instance.line; index < sinkLine; index += 1) {
+    const alias = new RegExp(
+      `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*${escaped}\\s*\\.\\s*schema\\s*;?\\s*$`,
+      "u",
+    ).exec(structuralLines[index] ?? "");
+    if (alias?.[1] !== undefined) {
+      receivers.push({
+        expression: escapeRegularExpression(alias[1]),
+        line: index + 1,
+      });
+    }
+  }
+  return receivers;
+}
+
+function nodeKyselyMysqlDdlSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeKyselyMysqlDdlSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const dependency = nodeRuntimeDependency(files, path, "kysely");
+  if (
+    dependency === undefined ||
+    !nodeKyselyVersionIsMysqlDdlVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const executionMatch = /\.\s*(compile|execute)\s*\(/u.exec(
+    javascriptStructuralLines(lines)[line - 1] ?? "",
+  );
+  const execution = executionMatch?.[1] as "compile" | "execute" | undefined;
+  if (execution === undefined) return undefined;
+  const windowStart = Math.max(0, line - 17);
+  const windowLines = lines.slice(
+    windowStart,
+    Math.min(lines.length, line + 12),
+  );
+  const original = javascriptCodeLinesWithoutComments(windowLines).join("\n");
+  const structural = javascriptStructuralLines(windowLines).join("\n");
+  const sinkOffset = javascriptStructuralLines(windowLines)
+    .slice(0, line - 1 - windowStart)
+    .reduce((total, candidate) => total + candidate.length + 1, 0);
+  const sinkMatch = new RegExp(`\\.\\s*${execution}\\s*\\(`, "u").exec(
+    structural.slice(sinkOffset),
+  );
+  if (sinkMatch === null) return undefined;
+  const sinkIndex = sinkOffset + sinkMatch.index;
+  for (const instance of nodeKyselyMysqlInstances(lines)) {
+    if (
+      instance.line >= line ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        instance.local,
+        instance.line,
+        line + 1,
+      )
+    ) {
+      continue;
+    }
+    for (const receiver of nodeKyselySchemaReceivers(lines, instance, line)) {
+      const receiverIdentifier = receiver.expression.includes("\\s*")
+        ? undefined
+        : receiver.expression;
+      if (
+        receiverIdentifier !== undefined &&
+        javascriptIdentifierReassignedBetween(
+          lines,
+          receiverIdentifier,
+          receiver.line,
+          line + 1,
+        )
+      ) {
+        continue;
+      }
+      const prefix = new RegExp(
+        `\\b${receiver.expression}\\s*\\.\\s*createIndex\\s*\\(`,
+        "gu",
+      );
+      let chainStart = -1;
+      for (const match of structural.slice(0, sinkIndex).matchAll(prefix)) {
+        if (match.index !== undefined) chainStart = match.index;
+      }
+      if (chainStart < 0) continue;
+      const between = structural.slice(chainStart, sinkIndex);
+      if (/;\s*[^;]*$/u.test(between)) continue;
+      const whereMatches = [...between.matchAll(/\.\s*where\s*\(/gu)];
+      const where = whereMatches.at(-1);
+      if (where?.index === undefined) continue;
+      const open = chainStart + where.index + where[0].lastIndexOf("(");
+      const close = matchingCallParenthesis(structural, open);
+      if (close < 0 || close >= sinkIndex) continue;
+      const arguments_ = splitJavascriptArguments(
+        original.slice(open + 1, close),
+      );
+      const sourceExpression = arguments_[2]?.trim() ?? "";
+      if (
+        sourceExpression === "" ||
+        /^(?:undefined|null|true|false|[+-]?\d+(?:\.\d+)?|['"`][\s\S]*['"`])$/u.test(
+          sourceExpression,
+        )
+      ) {
+        continue;
+      }
+      return {
+        sourceExpression,
+        sinkLine: line,
+        kind:
+          dependency.proof === "npm-lockfile"
+            ? "lock-resolved-vulnerable-kysely-mysql-ddl-literal-escape"
+            : "vulnerable-kysely-mysql-ddl-literal-escape",
+        dependency,
+        dialectLine: instance.dialectLine,
+        execution,
       };
     }
   }
@@ -14972,6 +15332,7 @@ function frameworkDataflowRecords(
                   model.id === "node-http-jsonpath-plus-code-injection" ||
                   model.id === "node-http-jsonata-expression-rce" ||
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
+                  model.id === "node-http-kysely-mysql-ddl-sql-injection" ||
                   model.id === "node-http-liquidjs-template-rce" ||
                   model.id === "node-http-prompty-nunjucks-template-rce" ||
                   model.id === "node-http-shescape-cmd-injection" ||
@@ -15086,6 +15447,10 @@ function frameworkDataflowRecords(
       const nodeSequelizeOracle =
         model.id === "node-http-sequelize-oracle-sql-injection"
           ? nodeSequelizeOracleSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeKyselyMysqlDdl =
+        model.id === "node-http-kysely-mysql-ddl-sql-injection"
+          ? nodeKyselyMysqlDdlSink(files, path, lines, sink.line)
           : undefined;
       const nodeLiquidJsTemplate =
         model.id === "node-http-liquidjs-template-rce"
@@ -15357,6 +15722,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-sequelize-oracle-sql-injection" &&
         nodeSequelizeOracle === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-kysely-mysql-ddl-sql-injection" &&
+        nodeKyselyMysqlDdl === undefined
       ) {
         continue;
       }
@@ -15686,6 +16057,7 @@ function frameworkDataflowRecords(
         nodeJsonPathPlus?.sourceExpression ??
         nodeJsonataExpression?.sourceExpression ??
         nodeSequelizeOracle?.sourceExpression ??
+        nodeKyselyMysqlDdl?.sourceExpression ??
         nodeLiquidJsTemplate?.sourceExpression ??
         nodePromptyTemplate?.sourceExpression ??
         nodeShescapeCommand?.sourceExpression ??
@@ -16044,6 +16416,7 @@ function frameworkDataflowRecords(
         nodeCopilotResolution?.input.line ??
         nodeMongooseAggregateResolution?.position.line ??
         nodeJsonataExpression?.sinkLine ??
+        nodeKyselyMysqlDdl?.sinkLine ??
         nodeLiquidJsTemplate?.sinkLine ??
         nodePromptyTemplate?.sinkLine ??
         nodeShescapeCommand?.sinkLine ??
@@ -16081,6 +16454,7 @@ function frameworkDataflowRecords(
         nodeVm2Sandbox?.kind ??
         nodeJsonataExpression?.kind ??
         nodeSequelizeOracle?.kind ??
+        nodeKyselyMysqlDdl?.kind ??
         nodeLiquidJsTemplate?.kind ??
         nodePromptyTemplate?.kind ??
         nodeShescapeCommand?.kind ??
@@ -16216,6 +16590,22 @@ function frameworkDataflowRecords(
                     path,
                     line: nodeSequelizeOracle.dialectLine,
                     symbol: "dialect:oracle",
+                  },
+                ]),
+            ...(nodeKyselyMysqlDdl === undefined
+              ? []
+              : [
+                  {
+                    kind: "kysely-runtime-dependency",
+                    path: nodeKyselyMysqlDdl.dependency.manifestPath,
+                    line: nodeKyselyMysqlDdl.dependency.line,
+                    symbol: `kysely@${nodeKyselyMysqlDdl.dependency.version}:${nodeKyselyMysqlDdl.dependency.proof}:mysql-ddl-literal-escape:${nodeKyselyMysqlDdl.execution}`,
+                  },
+                  {
+                    kind: "kysely-mysql-dialect",
+                    path,
+                    line: nodeKyselyMysqlDdl.dialectLine,
+                    symbol: "MysqlDialect",
                   },
                 ]),
             ...(nodeNodemailerRaw === undefined
@@ -23758,6 +24148,7 @@ function javascriptFrameworkWrapperSummaries(
                   model.id === "node-http-jsonpath-plus-code-injection" ||
                   model.id === "node-http-jsonata-expression-rce" ||
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
+                  model.id === "node-http-kysely-mysql-ddl-sql-injection" ||
                   model.id === "node-http-liquidjs-template-rce" ||
                   model.id === "node-http-prompty-nunjucks-template-rce" ||
                   model.id === "node-http-shescape-cmd-injection" ||
@@ -23846,6 +24237,10 @@ function javascriptFrameworkWrapperSummaries(
           const nodeSequelizeOracle =
             model.id === "node-http-sequelize-oracle-sql-injection"
               ? nodeSequelizeOracleSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeKyselyMysqlDdl =
+            model.id === "node-http-kysely-mysql-ddl-sql-injection"
+              ? nodeKyselyMysqlDdlSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodeLiquidJsTemplate =
             model.id === "node-http-liquidjs-template-rce"
@@ -24076,6 +24471,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-kysely-mysql-ddl-sql-injection" &&
+            nodeKyselyMysqlDdl === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-liquidjs-template-rce" &&
             nodeLiquidJsTemplate === undefined
           ) {
@@ -24256,6 +24657,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsonPathPlus?.sourceExpression ??
             nodeJsonataExpression?.sourceExpression ??
             nodeSequelizeOracle?.sourceExpression ??
+            nodeKyselyMysqlDdl?.sourceExpression ??
             nodeLiquidJsTemplate?.sourceExpression ??
             nodePromptyTemplate?.sourceExpression ??
             nodeShescapeCommand?.sourceExpression ??
@@ -24479,6 +24881,12 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeSequelizeOracle === undefined
                   ? {}
                   : { kind: nodeSequelizeOracle.kind }),
+                ...(nodeKyselyMysqlDdl === undefined
+                  ? {}
+                  : {
+                      kind: nodeKyselyMysqlDdl.kind,
+                      line: nodeKyselyMysqlDdl.sinkLine,
+                    }),
                 ...(nodeLiquidJsTemplate === undefined
                   ? {}
                   : {
@@ -24587,6 +24995,7 @@ function javascriptFrameworkWrapperSummaries(
               ...(nodeVm2Sandbox === undefined &&
               nodeJsonataExpression === undefined &&
               nodeSequelizeOracle === undefined &&
+              nodeKyselyMysqlDdl === undefined &&
               nodeLiquidJsTemplate === undefined &&
               nodePromptyTemplate === undefined &&
               nodeShescapeCommand === undefined &&
@@ -24689,6 +25098,22 @@ function javascriptFrameworkWrapperSummaries(
                               path: file.path,
                               line: nodeSequelizeOracle.dialectLine,
                               symbol: "dialect:oracle",
+                            },
+                          ]),
+                      ...(nodeKyselyMysqlDdl === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "kysely-runtime-dependency",
+                              path: nodeKyselyMysqlDdl.dependency.manifestPath,
+                              line: nodeKyselyMysqlDdl.dependency.line,
+                              symbol: `kysely@${nodeKyselyMysqlDdl.dependency.version}:${nodeKyselyMysqlDdl.dependency.proof}:mysql-ddl-literal-escape:${nodeKyselyMysqlDdl.execution}`,
+                            },
+                            {
+                              kind: "kysely-mysql-dialect",
+                              path: file.path,
+                              line: nodeKyselyMysqlDdl.dialectLine,
+                              symbol: "MysqlDialect",
                             },
                           ]),
                       ...(nodeNodemailerRaw === undefined

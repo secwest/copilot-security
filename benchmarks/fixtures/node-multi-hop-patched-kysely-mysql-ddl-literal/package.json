@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-patched-kysely-mysql-ddl-literal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "kysely": "0.28.14"
+  }
+}
