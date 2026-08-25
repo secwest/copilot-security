@@ -6,6 +6,52 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-lxml-iterparse-xxe`, a version-aware request-to-parser
+  model for CWE-611 and CVE-2026-41066/GHSA-vfmq-68hx-4jfw. It resolves live
+  official `lxml.etree.iterparse` module, receiver, direct, aliased, and
+  parenthesized imports; requires request control of argument zero or
+  `source=`; and requires actual iterator consumption through inline
+  iteration or eager `list`/`tuple` materialization. It emits for explicit
+  `resolve_entities=True` on any otherwise proven runtime, or for an omitted
+  mode under one exact nearest `lxml<6.1.0` `requirements.txt` pin. The 6.1.0
+  patched default, safe explicit modes, unpinned or ranged version guesses,
+  duplicate or out-of-boundary pins, unconsumed iterators, wrong-role or fixed
+  sources, star expansion, dynamic flags, local package shadows, reassignment,
+  and text lookalikes remain negative.
+- Added source-identical Flask `lxml==6.0.2` and `lxml==6.1.1` fixtures and a
+  strict specialized benchmark. On Python 3.12.3 under Linux/WSL, the affected
+  fixture eagerly consumes `iterparse` and discloses only its fixture-local
+  marker, while the patched control raises `XMLSyntaxError` without returning
+  the marker. No witness accesses the network, launches a shell, or reads a
+  non-fixture file. The canonical corpus now contains 110 exploit/control
+  pairs, 220 cases, and 660 repeated scans.
+- Added thirteen lxml regression groups covering every accepted binding form,
+  positional and keyword sources, explicit and version-derived modes, the
+  exact 6.1 boundary, iterator-consumption closure, two-relay flow, dependency
+  scope and symlink rejection, import invalidation, wrong-role and safe-mode
+  controls, and ten independent semantic evidence groups in both validation
+  and attack-path fields. A dense 80-call decoy regression also proves that an
+  arbitrary direct alias remains discoverable after the bounded candidate
+  budget. The focused Windows lane passes 30 tests and 1,839 assertions with
+  one intentional POSIX-only skip; Ubuntu/WSL passes all 31 tests and 1,840
+  assertions. The authoritative unrestricted Windows suite passes 1,579 tests
+  and 11,709 assertions across 174 files with 22 intentional
+  environment/platform skips, zero failures, and a 574.46-second runtime.
+- Compared the model with current primary sources. The lxml advisory records
+  the affected default and the 6.1.0 change to `resolve_entities='internal'`;
+  current lxml API documentation preserves the distinction between entity
+  resolution and `no_network`; and CodeQL's high-precision Python XXE guidance
+  establishes the CWE-611 category. The scanner adds exact application flow,
+  iterator execution, dependency-bound version semantics, executable paired
+  evidence, and field-local report closure rather than treating package
+  presence or an import as a vulnerability.
+- Formatting, generated-model drift, TypeScript compilation, the clean
+  production build, and the production dependency audit pass. A
+  fresh 259-entry, 1,877,025-byte package with SHA-256
+  `4e80e19605bfa573f4fb7ad3a81ad7a83bee40c71056ff97680693e3d74d0afd`
+  passes strict archive inspection, a fresh 67-package isolated install,
+  public import, CLI behavior, and all 79 bundled plugin-file checks. The
+  unique package probe is removed after recording this acceptance evidence.
 - Added `python-web-torch-unsafe-load`, a typed request-to-PyTorch checkpoint
   model for CWE-502. It resolves only live official `torch.load` receiver or
   named bindings, the artifact in argument zero or `f=`, and bounded relative

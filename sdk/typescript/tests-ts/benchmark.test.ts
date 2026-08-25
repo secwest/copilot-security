@@ -131,6 +131,7 @@ describe("effectiveness benchmark", () => {
         "javascript-safe-saml-assertion-binding",
       ],
       ["python-xxe", "python-safe-xml"],
+      ["python-lxml-iterparse-xxe", "python-lxml-iterparse-patched-control"],
       ["javascript-prototype-pollution", "javascript-safe-preferences"],
       [
         "node-multi-hop-prototype-pollution",

@@ -95,7 +95,8 @@ standard-library `pickle.loads`/JSON relative-wrapper pair and a separate
 fixture-local `__reduce__` callable witness, a NumPy object-array
 `allow_pickle=True`/`False` upload pair, a pickle-backed `joblib.load`/JSON
 model-upload pair, and a version-sensitive PyTorch full-unpickler/patched
-weights-only checkpoint pair, plus a PyYAML `UnsafeLoader`/`safe_load`
+weights-only checkpoint pair, a source-identical lxml 6.0.2/6.1.1
+`iterparse` external-entity pair, plus a PyYAML `UnsafeLoader`/`safe_load`
 relative-wrapper pair, reflected XSS, XML
 external entities, JWT signature-verification bypass, JWT `alg`/key-type
 confusion that reinterprets an RSA public key as an HMAC secret,
@@ -204,9 +205,12 @@ Decoder API. The latest pair reaches the same state through the public
 `socket.io` Server: application source and `socket.io@4.8.3` stay identical,
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
-`nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case now produce 654 scans across 109 exploit/control pairs in the complete
-corpus. The added industrial-protocol pair starts the same official
+`nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. The lxml
+pair then proves that eagerly consumed `iterparse` under one exact 6.0.2 pin
+retains local external-entity access while source-identical 6.1.1 rejects the
+same fixture-local `SYSTEM` entity. Three runs per case now produce 660 scans
+across 110 exploit/control pairs in the complete corpus. The added
+industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size
 eviction. A second node-opcua pair exercises encrypted username-token

@@ -2,6 +2,92 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Gate lxml iterparse XXE on consumption and exact runtime semantics
+
+**Gap and authoritative semantics.** The official
+[`GHSA-vfmq-68hx-4jfw`](https://github.com/lxml/lxml/security/advisories/GHSA-vfmq-68hx-4jfw)
+advisory records that `iterparse()` and `ETCompatXMLParser()` defaulted
+`resolve_entities` to `True`, permitting local-file external entity access,
+and that lxml 6.1.0 changed the default to `'internal'`. Current
+[`lxml.etree` API documentation](https://lxml.de/apidoc/lxml.etree.html)
+separately documents `resolve_entities` and `no_network`: disabling network
+access is not proof that a local `file:` `SYSTEM` entity cannot resolve.
+CodeQL's official
+[`py/xxe`](https://codeql.github.com/codeql-query-help/python/py-xxe/)
+query provides a high-precision CWE-611 category, but generic parser guidance
+cannot distinguish source-identical applications whose installed lxml default
+changed at 6.1. Exact runtime and actual iterator execution are therefore
+material precision boundaries.
+
+**Decision.** Add `python-web-lxml-iterparse-xxe` as a separate typed model.
+Accept official `import lxml.etree`, aliased-module, `from lxml import etree`,
+and direct or aliased `from lxml.etree import iterparse` bindings, including a
+bounded parenthesized import. Derive candidate call lines from those exact
+bindings so an arbitrary direct alias remains discoverable without unrelated
+calls consuming the bounded candidate budget; the typed binding resolver
+remains authoritative and rejects every unrelated call. Require the
+request-controlled XML value in positional argument zero or `source=`, and
+require the returned iterator to be driven immediately by an inline `for`
+loop or eager `list`/`tuple` materialization. An inert iterator is not evidence
+that the parser read an entity. Emit when `resolve_entities=True` is literal,
+or when the option is omitted and the nearest dependency boundary supplies
+exactly one `lxml==X.Y.Z` pin below 6.1.0. Explicit `False` or `'internal'`, a
+dynamic value, lxml 6.1.0 or later, a range, duplicate pins, missing version,
+or a parent pin hidden by a nearer `requirements.txt` fails closed.
+
+**Identity and false-positive boundary.** Reject repository-local `lxml.py`
+and `lxml/` shadows, import or member replacement, wrapper-parameter
+shadowing, fixed and wrong-role inputs, star-expanded calls, and comment or
+string lookalikes. The same exact sink proof is reused for same-file,
+single-wrapper, and two- or three-wrapper relative Python paths. The model
+records four terminal facts independently: official binding, iterator
+consumption, explicit or version-derived unsafe mode, and intrinsic local
+external-entity behavior. Host re-audit then requires ten semantic groups in
+both validation and attack path: upload source, wrapper, exact binding, source
+argument, consumption, affected default, `DOCTYPE`/`SYSTEM` mechanics, local
+fixture-file disclosure, Python 3.12.3, and lxml 6.0.2. Evidence in one field
+cannot repair the other. Impact is bounded to demonstrated local-file
+confidentiality; authentication, byte limits, later schema checks, exception
+handling, and discarded results do not undo resolution that already occurred.
+
+**Matched runtime evidence.** The two Flask fixtures preserve route, 64 KiB
+budget, upload stream, relative `parse_events` wrapper, exact `iterparse`
+source, eager consumption, XML payload, witness, and marker. Their only
+operative difference is `lxml==6.0.2` versus `lxml==6.1.1`. In isolated WSL
+environments on Python 3.12.3, 6.0.2 returns
+`fixture-local-xxe-marker` with `disclosed: true`; 6.1.1 raises
+`XMLSyntaxError` with `disclosed: false` and no returned values. The witness
+constructs a `file:` URI only for its own marker and uses no network, shell,
+or non-fixture file. Disposable virtual environments are removed after the
+run. The pair advances the canonical corpus to 110 exploit/control pairs, 220
+cases, and 660 repeated scans.
+
+**Consequence and acceptance.** Direct receiver, module, named alias,
+parenthesized alias, positional/keyword source, explicit-mode, exact-version,
+same-file, two-relay, consumption, shadowing, reassignment, and report-closure
+regressions pass. A first focused run exposed a real false-negative boundary:
+the typed resolver supported direct aliases, but the outer lexical sink filter
+never called it unless the alias retained the spelling `iterparse`. Replacing
+that spelling-only outer gate with binding-derived candidate lines closed the
+gap without letting 80 unrelated calls consume the 64-line budget, while all
+exact binding and flow checks remained in force. The focused Windows lane
+passes 30 tests and 1,839 assertions with one POSIX-only skip; Ubuntu/WSL passes
+all 31 tests and 1,840 assertions, including rejection of a symlinked
+requirements file. The authoritative unrestricted Windows suite passes 1,579
+tests and 11,709 assertions across 174 files, with 22 intentional
+environment/platform skips, zero failures, and a 574.46-second runtime.
+Formatting, generated-model drift, TypeScript compilation, the clean production
+build, and the production dependency audit pass. Strict package inspection
+validates a 259-entry, 1,877,025-byte archive with
+SHA-256
+`4e80e19605bfa573f4fb7ad3a81ad7a83bee40c71056ff97680693e3d74d0afd`;
+a fresh isolated install adds 67 packages and validates public import, CLI
+behavior, and all 79 bundled plugin files. The unique archive directory is
+removed after evidence capture. Poetry, uv, PEP 621, constraints, parser
+factories, delayed iterator consumption, and `ETCompatXMLParser` remain future
+extensions that must preserve these exact identity, version, and execution
+rules.
+
 ## 2026-08-25 — Separate PyTorch full-unpickler and versioned weights-only risk
 
 **Gap and authoritative semantics.** PyTorch's current

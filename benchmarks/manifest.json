@@ -1740,6 +1740,83 @@
       "expected": []
     },
     {
+      "id": "python-lxml-iterparse-xxe",
+      "description": "A Flask XML upload crosses a relative wrapper into eagerly consumed lxml iterparse under the affected pre-6.1 external-entity default.",
+      "fixture": "fixtures/python-lxml-iterparse-xxe",
+      "findingsPaths": [
+        "python-lxml-iterparse-xxe/run-1/findings.json",
+        "python-lxml-iterparse-xxe/run-2/findings.json",
+        "python-lxml-iterparse-xxe/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-lxml-iterparse-local-entity-disclosure",
+          "cwe": ["CWE-611"],
+          "locations": [
+            {
+              "path": "src/parser.py",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["XML upload", "request.files", "uploaded XML stream"],
+            ["parse_events", "wrapper"],
+            ["lxml.etree.iterparse", "etree.iterparse", "iterparse binding"],
+            ["source argument", "argument zero", "argument 0", "source="],
+            ["iterator consumption", "list(", "for loop", "consumed iterator"],
+            [
+              "default resolve_entities=True",
+              "pre-6.1 default",
+              "CVE-2026-41066"
+            ],
+            ["external entity", "SYSTEM entity", "DOCTYPE"],
+            ["local file", "fixture marker", "file URI"],
+            ["Python 3.12.3"],
+            ["lxml 6.0.2", "lxml==6.0.2"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["XML upload", "request.files", "uploaded XML stream"],
+            ["parse_events", "wrapper"],
+            ["lxml.etree.iterparse", "etree.iterparse", "iterparse binding"],
+            ["source argument", "argument zero", "argument 0", "source="],
+            ["iterator consumption", "list(", "for loop", "consumed iterator"],
+            [
+              "default resolve_entities=True",
+              "pre-6.1 default",
+              "CVE-2026-41066"
+            ],
+            ["external entity", "SYSTEM entity", "DOCTYPE"],
+            ["local file", "fixture marker", "file URI"],
+            ["Python 3.12.3"],
+            ["lxml 6.0.2", "lxml==6.0.2"]
+          ],
+          "forbiddenText": [
+            "no_network blocks local files",
+            "lxml import alone proves XXE",
+            "unconsumed iterparse reads the entity",
+            "lxml 6.1.1 retains the vulnerable default"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-lxml-iterparse-patched-control",
+      "description": "The source-identical Flask XML upload uses lxml 6.1.1, whose patched default rejects the local external entity.",
+      "fixture": "fixtures/python-lxml-iterparse-patched-control",
+      "findingsPaths": [
+        "python-lxml-iterparse-patched-control/run-1/findings.json",
+        "python-lxml-iterparse-patched-control/run-2/findings.json",
+        "python-lxml-iterparse-patched-control/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-prototype-pollution",
       "description": "A dotted attacker-controlled path performs recursive computed writes through an ordinary object and permits __proto__ traversal.",
       "fixture": "fixtures/javascript-prototype-pollution",

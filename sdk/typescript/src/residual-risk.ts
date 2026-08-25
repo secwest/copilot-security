@@ -2097,6 +2097,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-web-lxml-iterparse-xxe",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+lxml(?:\.etree)?\b|\bfrom\s+lxml(?:\.etree)?\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-body",
+        expression:
+          /\brequest\.(?:body|data|files|form|json|POST|stream)\b|\brequest\.(?:get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\bBody\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "lxml-iterparse-external-entity-resolution",
+        expression: /\b(?:[A-Za-z_]\w*\s*\.\s*)*iterparse\s*\(/u,
+        cweIds: ["CWE-611"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-pyyaml-unsafe-load",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3156,7 +3183,8 @@ function isPythonUnsafeDeserializationModel(modelId: string): boolean {
     modelId === "python-web-pyyaml-unsafe-load" ||
     modelId === "python-web-numpy-allow-pickle-load" ||
     modelId === "python-web-joblib-unsafe-load" ||
-    modelId === "python-web-torch-unsafe-load"
+    modelId === "python-web-torch-unsafe-load" ||
+    modelId === "python-web-lxml-iterparse-xxe"
   );
 }
 
@@ -3372,6 +3400,19 @@ const TORCH_FIELD_EVIDENCE_REQUIREMENTS = [
   ["torch 2.13.0+cpu", "torch==2.13.0+cpu", "PyTorch 2.13.0+cpu"],
 ] as const;
 
+const LXML_ITERPARSE_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["XML upload", "request.files", "uploaded XML stream"],
+  ["parse_events", "wrapper"],
+  ["lxml.etree.iterparse", "etree.iterparse", "iterparse binding"],
+  ["source argument", "argument zero", "argument 0", "source="],
+  ["iterator consumption", "list(", "for loop", "consumed iterator"],
+  ["default resolve_entities=True", "pre-6.1 default", "CVE-2026-41066"],
+  ["external entity", "SYSTEM entity", "DOCTYPE"],
+  ["local file", "fixture marker", "file URI"],
+  ["Python 3.12.3"],
+  ["lxml 6.0.2", "lxml==6.0.2"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3388,6 +3429,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: TORCH_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: TORCH_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-web-lxml-iterparse-xxe",
+    {
+      validation: LXML_ITERPARSE_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: LXML_ITERPARSE_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -14201,11 +14249,13 @@ function frameworkDataflowRecords(
                   : 8,
               )
           : PYTHON_EXTENSIONS.has(extension)
-            ? matchingPythonModelLines(
-                lines,
-                model.sinks,
-                isPythonUnsafeDeserializationModel(model.id) ? 64 : 8,
-              )
+            ? model.id === "python-web-lxml-iterparse-xxe"
+              ? pythonLxmlIterparseCandidateLines(lines, 64)
+              : matchingPythonModelLines(
+                  lines,
+                  model.sinks,
+                  isPythonUnsafeDeserializationModel(model.id) ? 64 : 8,
+                )
             : extension === ".java" || extension === ".cs"
               ? matchingJavaModelLines(lines, model.sinks, 8)
               : matchingModelLines(lines, model.sinks, 8);
@@ -14418,7 +14468,9 @@ function frameworkDataflowRecords(
                 ? pythonJoblibUnsafeSink(files, path, lines, sink.line)
                 : model.id === "python-web-torch-unsafe-load"
                   ? pythonTorchUnsafeSink(files, path, lines, sink.line)
-                  : undefined;
+                  : model.id === "python-web-lxml-iterparse-xxe"
+                    ? pythonLxmlIterparseXxeSink(files, path, lines, sink.line)
+                    : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -23915,7 +23967,14 @@ function pythonFrameworkWrapperSummaries(
                           file.lines,
                           sink.line,
                         )
-                      : undefined;
+                      : model.id === "python-web-lxml-iterparse-xxe"
+                        ? pythonLxmlIterparseXxeSink(
+                            files,
+                            file.path,
+                            file.lines,
+                            sink.line,
+                          )
+                        : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
@@ -25173,6 +25232,10 @@ interface PythonNumpyBindingContext {
 type PythonJoblibBindingContext = PythonNumpyBindingContext;
 type PythonTorchBindingContext = PythonNumpyBindingContext;
 
+interface PythonLxmlIterparseBinding extends PythonModuleImportBinding {
+  memberPath: string;
+}
+
 function pythonNumpyBindings(
   lines: readonly string[],
 ): PythonNumpyBindingContext {
@@ -25330,6 +25393,123 @@ function pythonTorchBindings(
     }
   }
   return { receivers, functions };
+}
+
+function pythonLxmlIterparseBindings(
+  lines: readonly string[],
+): PythonLxmlIterparseBinding[] {
+  const bindings: PythonLxmlIterparseBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const moduleImport =
+      /^\s*import\s+lxml\.etree(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+        structural,
+      );
+    if (moduleImport !== null) {
+      bindings.push({
+        imported: "lxml.etree.iterparse",
+        local: moduleImport[1] ?? "lxml",
+        memberPath:
+          moduleImport[1] === undefined ? "etree.iterparse" : "iterparse",
+        line: index + 1,
+      });
+      continue;
+    }
+
+    const etreeImport = /^\s*from\s+lxml\s+import\s+(.+?)\s*$/u.exec(
+      structural,
+    );
+    const iterparseImport = /^\s*from\s+lxml\.etree\s+import\s+(.+?)\s*$/u.exec(
+      structural,
+    );
+    const imported = etreeImport?.[1] ?? iterparseImport?.[1];
+    if (imported === undefined) continue;
+    let importedText = imported.trim();
+    if (importedText.startsWith("(") && !importedText.endsWith(")")) {
+      for (
+        let offset = index + 1;
+        offset < Math.min(structuralLines.length, index + 8);
+        offset += 1
+      ) {
+        importedText += `\n${structuralLines[offset] ?? ""}`;
+        if ((structuralLines[offset] ?? "").includes(")")) break;
+      }
+    }
+    if (importedText.startsWith("(") !== importedText.endsWith(")")) {
+      continue;
+    }
+    importedText = importedText.replace(/^\(([\s\S]*)\)$/u, "$1");
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const binding = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      if (binding?.[1] === undefined) continue;
+      if (etreeImport !== null && binding[1] === "etree") {
+        bindings.push({
+          imported: "lxml.etree.iterparse",
+          local: binding[2] ?? "etree",
+          memberPath: "iterparse",
+          line: index + 1,
+        });
+      } else if (iterparseImport !== null && binding[1] === "iterparse") {
+        bindings.push({
+          imported: "lxml.etree.iterparse",
+          local: binding[2] ?? "iterparse",
+          memberPath: "",
+          line: index + 1,
+        });
+      }
+    }
+  }
+  return bindings;
+}
+
+function pythonLxmlIterparseCandidateLines(
+  lines: readonly string[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const bindings = pythonLxmlIterparseBindings(lines).map((binding) => {
+    const memberPattern = binding.memberPath
+      .split(".")
+      .filter(Boolean)
+      .map(escapeRegularExpression)
+      .join("\\s*\\.\\s*");
+    return {
+      binding,
+      callee:
+        memberPattern === ""
+          ? new RegExp(
+              `\\b${escapeRegularExpression(binding.local)}\\s*\\(`,
+              "u",
+            )
+          : new RegExp(
+              `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*${memberPattern}\\s*\\(`,
+              "u",
+            ),
+    };
+  });
+  const structuralLines = pythonStructuralLines(lines);
+  const matches: Array<{ kind: string; line: number }> = [];
+  for (
+    let index = 0;
+    index < structuralLines.length && matches.length < limit;
+    index += 1
+  ) {
+    const line = index + 1;
+    const structural = structuralLines[index] ?? "";
+    if (
+      bindings.some(
+        ({ binding, callee }) => binding.line < line && callee.test(structural),
+      )
+    ) {
+      matches.push({
+        kind: "lxml-iterparse-external-entity-resolution",
+        line,
+      });
+    }
+  }
+  return matches;
 }
 
 interface PythonPinnedRequirement {
@@ -25876,6 +26056,154 @@ function pythonTorchUnsafeSink(
           path: sourcePath,
           line,
           symbol: "torch.load",
+        },
+      ],
+    };
+  }
+  return undefined;
+}
+
+function pythonInlineIterparseConsumption(
+  lines: readonly string[],
+  line: number,
+  callee: RegExp,
+): "eager-materialization" | "for-loop" | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const structural = pythonStructuralLines(callLines).join("\n");
+  const match = callee.exec(structural);
+  if (match === null) return undefined;
+  const firstLineEnd = structural.indexOf("\n");
+  if (firstLineEnd >= 0 && match.index >= firstLineEnd) return undefined;
+  const prefix = structural.slice(0, match.index);
+  if (/\b(?:list|tuple)\s*\(\s*$/u.test(prefix)) {
+    return "eager-materialization";
+  }
+  if (/\bfor\b[^\n]*\bin\s*$/u.test(prefix)) return "for-loop";
+  return undefined;
+}
+
+function pythonLxmlIterparseXxeSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonUnsafeDeserializationSink | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "lxml")) {
+    return undefined;
+  }
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  for (const binding of pythonLxmlIterparseBindings(lines)) {
+    const memberPattern = binding.memberPath
+      .split(".")
+      .filter(Boolean)
+      .map(escapeRegularExpression)
+      .join("\\s*\\.\\s*");
+    const callee =
+      memberPattern === ""
+        ? new RegExp(`\\b${escapeRegularExpression(binding.local)}\\s*\\(`, "u")
+        : new RegExp(
+            `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*${memberPattern}\\s*\\(`,
+            "u",
+          );
+    const rootMember = binding.memberPath.split(".")[0];
+    if (
+      binding.line >= line ||
+      wrapper?.parameters.includes(binding.local) === true ||
+      pythonImportedBindingReassigned(lines, binding, undefined, line) ||
+      (binding.memberPath !== "" &&
+        (pythonImportedBindingReassigned(
+          lines,
+          binding,
+          binding.memberPath,
+          line,
+        ) ||
+          (rootMember !== undefined &&
+            pythonImportedBindingReassigned(lines, binding, rootMember, line))))
+    ) {
+      continue;
+    }
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(lines, line, callee);
+    if (
+      arguments_ === undefined ||
+      arguments_.some((argument) => argument.trim().startsWith("*"))
+    ) {
+      continue;
+    }
+    const positional = pythonPositionalArguments(arguments_);
+    const sourceExpression =
+      pythonKeywordArgument(arguments_, "source") ?? positional[0];
+    if (
+      sourceExpression === undefined ||
+      sourceExpression.trim() === "" ||
+      sourceExpression.trim().startsWith("*")
+    ) {
+      continue;
+    }
+    const consumption = pythonInlineIterparseConsumption(lines, line, callee);
+    if (consumption === undefined) continue;
+
+    const resolveEntitiesExpression = pythonKeywordArgument(
+      arguments_,
+      "resolve_entities",
+    );
+    const resolveEntities =
+      resolveEntitiesExpression === undefined
+        ? undefined
+        : pythonStructuralCode(resolveEntitiesExpression).trim();
+    const pinned = pythonPinnedRequirement(files, sourcePath, "lxml");
+    let unsafeMode:
+      | "explicit-external-entities"
+      | "affected-default"
+      | undefined;
+    if (resolveEntities === "True") {
+      unsafeMode = "explicit-external-entities";
+    } else if (
+      resolveEntities === undefined &&
+      pinned !== undefined &&
+      !pythonPackageVersionAtLeast(pinned.version, [6, 1, 0])
+    ) {
+      unsafeMode = "affected-default";
+    }
+    if (unsafeMode === undefined) continue;
+
+    const modePropagator =
+      unsafeMode === "explicit-external-entities"
+        ? {
+            kind: "explicit-lxml-external-entity-resolution",
+            path: sourcePath,
+            line,
+            symbol: "resolve_entities=True",
+          }
+        : {
+            kind: "affected-lxml-iterparse-default",
+            path: pinned!.path,
+            line: pinned!.line,
+            symbol: `lxml@${pinned!.version}:CVE-2026-41066`,
+          };
+    return {
+      sourceExpression,
+      kind: "lxml-iterparse-untrusted-xml",
+      propagators: [
+        {
+          kind: "lxml-iterparse-binding",
+          path: sourcePath,
+          line: binding.line,
+          symbol: `${binding.imported} as ${binding.local}`,
+        },
+        {
+          kind: "lxml-iterparse-consumption",
+          path: sourcePath,
+          line,
+          symbol: consumption,
+        },
+        modePropagator,
+        {
+          kind: "intrinsic-lxml-external-entity-resolution",
+          path: sourcePath,
+          line,
+          symbol: "local SYSTEM entity",
         },
       ],
     };

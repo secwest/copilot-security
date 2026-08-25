@@ -2070,14 +2070,18 @@ checks, rank and element limits, and witness constant while changing only
 `allow_pickle=True` to `False`. The Joblib pair likewise preserves its model
 upload, relative `parse_model` wrapper, byte budget, exact dependency/runtime
 record, serialized artifact, and harmless in-process witness while replacing
-only pickle-backed `joblib.load` with `json.load` at the unsafe boundary. Each
-The PyTorch pair preserves the same bounded upload, wrapper, patched 2.13 CPU
+only pickle-backed `joblib.load` with `json.load` at the unsafe boundary. The
+PyTorch pair preserves the same bounded upload, wrapper, patched 2.13 CPU
 runtime, and malicious checkpoint while changing only explicit
 `weights_only=False` to `weights_only=True`. Its host model separately proves
 full-unpickler opt-in, a custom pickle module, a pre-2.6 default under an exact
 pin, or an advisory-affected weights-only version instead of treating every
-`torch.load` spelling as exploitable. Each of the 218 cases in 109
-exploit/control pairs is scanned three times, producing 654 scans that measure
+`torch.load` spelling as exploitable. The lxml pair keeps the Flask upload,
+relative `parse_events` wrapper, eager `iterparse` consumption, XML payload,
+and fixture-local marker identical while changing only `lxml==6.0.2` to
+`lxml==6.1.1`; the former discloses the marker through the affected external
+entity default and the latter rejects it. Each of the 220 cases in 110
+exploit/control pairs is scanned three times, producing 660 scans that measure
 both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses
