@@ -131,6 +131,11 @@ completed all five nested runner-recovery cases; process startup across
 `/mnt/c` can exceed that Windows-calibrated harness's 25-second child timeout.
 No production scan, model-turn, retry, or campaign deadline was relaxed.
 
+The authoritative native Windows suite on committed checkpoint
+`f2a86bcb37b6d2312d4c395a515628d8d0231f2c` passes 1,556 tests and
+11,574 assertions across 172 files, with 20 intentional environment/platform
+skips, zero failures, and a 622.05-second elapsed time.
+
 ## 2026-08-25 — Model NumPy object arrays only across explicit pickle opt-in
 
 **Gap and authoritative semantics.** The Python unsafe-deserialization pass

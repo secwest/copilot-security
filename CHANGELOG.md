@@ -101,6 +101,9 @@ All notable scanner, application, benchmark, and operational changes are recorde
   five nested runner-recovery cases under WSL, where process startup across
   `/mnt/c` exceeds that Windows-calibrated test's 25-second child timeout.
   Production scanner and campaign deadlines are unchanged.
+- The authoritative native Windows suite on the committed provenance checkpoint
+  passes 1,556 tests and 11,574 assertions across 172 files, with 20 intentional
+  environment/platform skips and zero failures in 622.05 seconds.
 - Added `python-web-numpy-allow-pickle-load`, a typed Python web-to-NumPy
   object-array deserialization model for CWE-502. It requires an exact live
   `import numpy` receiver or named `from numpy import load` binding, request
