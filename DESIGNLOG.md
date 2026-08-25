@@ -2,6 +2,74 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-24 — Close standard-library pickle callable execution exactly
+
+**Coverage gap and comparative evidence.** The prior Python inventory had a
+broad lexical pickle hint and a model-driven unsafe-deserialization benchmark,
+but no host-proven standard-library binding or exact request-to-argument flow.
+Python's official [`pickle` documentation](https://docs.python.org/3.11/library/pickle.html)
+warns that malicious pickle data can execute arbitrary code, says never to
+unpickle untrusted data, and recommends signing data with HMAC when integrity
+must be established. GitHub's high-precision
+[`py/unsafe-deserialization`](https://codeql.github.com/codeql-query-help/python/py-unsafe-deserialization/)
+query classifies remote flow into pickle loading as CWE-502 with security
+severity 9.8 and uses JSON parsing as its safe alternative. The important
+effectiveness gain is not another lexical match: it is exact module identity,
+argument role, wrapper reachability, and execution semantics suitable for a
+strict exploit/control gate.
+
+**Chosen trust and precision boundary.** Add `python-web-pickle-unsafe-load`
+only for a still-live `import pickle` receiver or named `from pickle import
+load/loads` binding. Admit bounded parenthesized imports and preserve only the
+first ordinary positional argument of `load` or `loads`; reject absent,
+keyword-only, or star-expanded input rather than guessing Python call binding.
+Reuse the bounded relative-import wrapper graph and record the exact terminal
+pickle binding as propagator evidence. Reject serialization APIs, fixed bytes,
+wrong argument roles, receiver or callable reassignment, replacement of
+`pickle.load(s)`, wrapper-parameter shadowing, strings, comments, and a local
+`pickle.py` or `pickle/__init__.py` on an ancestor import path. An unrelated
+nested module does not suppress a valid standard-library binding. This model
+does not silently widen to `_pickle`, `dill`, `cloudpickle`, `joblib`, or
+`pickle.Unpickler(...).load()`; those need separate identity and call-shape
+work.
+
+**Execution and control boundary.** Unlike dependency-gadget-only formats,
+the pickle virtual machine can resolve a callable with `GLOBAL` or
+`STACK_GLOBAL` and invoke it with `REDUCE`; a request-controlled standard-
+library pickle stream therefore establishes the dangerous execution boundary
+without requiring a separately installed gadget package. The correction turn
+must still reopen the exact source, prove request-controlled bytes or stream,
+name the binding and opcode mechanism, and use a bounded non-destructive
+callable witness before reporting code execution. It must not invent a shell,
+network, filesystem, credential, persistence, privilege, or availability
+effect that the evidence does not demonstrate. Return-value checks,
+authentication after load, exception handling, base64/compression wrappers,
+and discarding the result occur too late to stop instructions executed during
+unpickling. A secret-keyed integrity check over the exact serialized bytes
+before loading is strong counterevidence when the key is not attacker
+controlled; an ordinary digest, embedded key, or post-load verification is
+not. Prefer JSON for untrusted data.
+
+**Benchmark evidence.** A topology-identical Flask pair carries raw request
+bytes through one relative wrapper to `src/parser.py:5`. The positive calls
+`pickle.loads`; the control changes only that boundary to `json.loads`. Their
+source-identical bounded witness defines a fixture-local `mark` function and a
+`Probe.__reduce__` tuple, serializes with protocol 4, and observes only an
+in-memory marker. Pickle invokes the callable and returns its dictionary; JSON
+rejects the same non-text bytes and leaves the marker unset. Windows Python
+3.14.5 and WSL Python 3.12.3 produce the same result without shell execution,
+network access, listeners, or file writes. The specialized and canonical
+manifests require exact CWE-502/location/severity, validation, attack-path, and
+code evidence plus standard-library, remote-byte, opcode/callable, and process
+semantics. Eight focused groups pass 42 assertions; the widened Windows lane
+passes 119 tests and 3,008 assertions with one intentional platform skip; WSL
+passes all 120 tests and 3,009 assertions. The authoritative Windows suite
+passes 1,533 tests and 11,394 assertions across 170 files, with 20 intentional
+environment/platform skips and zero failures in 557.46 seconds. The
+canonical corpus advances to 105 exploit/control pairs, 210 cases, and 630
+three-run scans. Full host, package, self-scan, and live-campaign evidence is
+recorded after the implementation checkpoint is sealed.
+
 ## 2026-08-24 — Bind Python request bodies to explicit unsafe PyYAML loaders
 
 **Coverage gap and comparative evidence.** The trusted Python host pass modeled

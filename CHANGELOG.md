@@ -6,6 +6,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-pickle-unsafe-load`, a typed Python web-to-standard-library
+  pickle model for CWE-502. It requires an exact live `import pickle` receiver
+  or named `from pickle import load/loads` binding, traces only argument zero,
+  and follows the existing bounded relative-wrapper graph. It rejects local
+  module shadows, receiver/function reassignment, member replacement, wrapper
+  parameter shadowing, keyword-only and star-expanded inputs, fixed data,
+  `dumps`, safe lookalikes, and comments or strings. Direct, named, aliased,
+  parenthesized, file-stream, cross-file, and two-relay paths are covered.
+- The pickle correction gate now requires exact remote-byte provenance and the
+  standard-library binding, explains intrinsic callable execution through
+  `GLOBAL`/`STACK_GLOBAL` and `REDUCE`, and preserves a source-to-process attack
+  path. Post-load authentication or validation, discarded results,
+  `try`/`except`, encoding, and compression are not execution barriers. A
+  secret-keyed integrity check over the exact bytes before unpickling is strong
+  counterevidence; a checksum, embedded key, or verification after loading is
+  not. Stronger filesystem, network, credential, persistence, or privilege
+  claims still require their own evidence.
+- Added a topology-identical Flask `pickle.loads`/`json.loads` fixture pair, a
+  strict specialized manifest, and eight adversarial regression groups with 42
+  assertions. The source-identical witness serializes only a fixture-local
+  harmless callable whose single effect is an in-memory marker: pickle invokes
+  it before returning, while JSON rejects the same bytes and leaves the marker
+  unset. The witness passes on Windows Python 3.14.5 and WSL Python 3.12.3 and
+  performs no shell, network, listener, or file-write action. The pair advances
+  the canonical corpus to 105 exploit/control pairs, 210 cases, and 630
+  repeated scans. The initial widened Windows lane passes 119 tests and 3,008
+  assertions with one intentional platform skip; the same WSL lane passes all
+  120 tests and 3,009 assertions. The authoritative Windows suite passes 1,533
+  tests and 11,394 assertions across 170 files, with 20 intentional
+  environment/platform skips and zero failures in 557.46 seconds.
 - Added `python-web-pyyaml-unsafe-load`, a typed Python web-to-PyYAML
   deserialization model for CWE-502. It requires an exact `import yaml`
   receiver or named `from yaml import` binding, accepts ordinary and

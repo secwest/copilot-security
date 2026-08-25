@@ -608,6 +608,66 @@
       "expected": []
     },
     {
+      "id": "python-pickle-unsafe-load",
+      "description": "A Flask request body crosses a relative wrapper into standard-library pickle.loads callable execution.",
+      "fixture": "fixtures/python-pickle-unsafe-load",
+      "findingsPaths": [
+        "python-pickle-unsafe-load/run-1/findings.json",
+        "python-pickle-unsafe-load/run-2/findings.json",
+        "python-pickle-unsafe-load/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-pickle-unsafe-deserialization",
+          "cwe": ["CWE-502"],
+          "locations": [
+            {
+              "path": "src/parser.py",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["standard library", "stdlib", "pickle module"],
+            [
+              "request body",
+              "POST body",
+              "attacker-controlled bytes",
+              "request-controlled pickle"
+            ],
+            ["REDUCE", "__reduce__", "callable"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["request body", "POST body", "attacker-controlled bytes"],
+            ["pickle.loads", "pickle load", "unpickling"],
+            ["REDUCE", "callable", "function invocation"],
+            ["process", "code execution", "process integrity"]
+          ],
+          "forbiddenText": [
+            "pickle import alone proves code execution",
+            "pickle.dumps is code execution",
+            "authentication after unpickling prevents execution"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-pickle-json-control",
+      "description": "The same request and wrapper topology parses the bytes with standard-library JSON.",
+      "fixture": "fixtures/python-pickle-json-control",
+      "findingsPaths": [
+        "python-pickle-json-control/run-1/findings.json",
+        "python-pickle-json-control/run-2/findings.json",
+        "python-pickle-json-control/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-pyyaml-unsafe-load",
       "description": "A Flask request body crosses a relative wrapper into PyYAML UnsafeLoader object construction.",
       "fixture": "fixtures/python-pyyaml-unsafe-load",

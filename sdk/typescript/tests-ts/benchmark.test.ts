@@ -69,6 +69,7 @@ describe("effectiveness benchmark", () => {
       ["javascript-ssrf", "javascript-safe-fetch"],
       ["javascript-dns-rebinding-ssrf", "javascript-safe-pinned-dns-fetch"],
       ["python-unsafe-deserialization", "python-safe-json"],
+      ["python-pickle-unsafe-load", "python-pickle-json-control"],
       ["python-pyyaml-unsafe-load", "python-pyyaml-safe-load"],
       ["javascript-reflected-xss", "javascript-safe-html"],
       [

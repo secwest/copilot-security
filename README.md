@@ -57,7 +57,8 @@ request-to-query grammar and deferred database dispatch;
 and Node, Python, and Spring models cover server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. The Python host pass also models request bodies reaching
-PyYAML `unsafe_load` or `load` with an explicit `Loader`, `UnsafeLoader`,
+standard-library `pickle.load` or `pickle.loads`, as well as PyYAML
+`unsafe_load` or `load` with an explicit `Loader`, `UnsafeLoader`,
 `CLoader`, or `CUnsafeLoader`. It proves the exact `yaml` receiver or named
 import and stream argument, follows relative wrappers, and rejects `safe_load`,
 safe or full loaders, absent or dynamic loaders, fixed YAML, reassignment,
@@ -67,6 +68,19 @@ object/state integrity evidence even when deployment metadata is unavailable.
 It records runtime-module and constructor uncertainty as validation limitations
 and requires a bounded constructor or gadget witness before escalating to code
 execution, filesystem, network, credential, or availability impact.
+For pickle, the host proves the exact non-shadowed standard-library receiver or
+named import, argument zero, and relative-wrapper path. It rejects `dumps`,
+fixed or wrong-role data, star expansion, reassignment, member replacement,
+local `pickle` shadows, and text lookalikes. Because the pickle virtual machine
+can invoke serialized callables through `GLOBAL`/`STACK_GLOBAL` and `REDUCE`, a
+request-controlled pickle stream is itself a CWE-502 code-execution boundary;
+no separately installed gadget library is required. Validation must still use
+a bounded non-destructive callable witness and report only the demonstrated
+process effect. A secret-keyed integrity check over the exact serialized bytes
+before loading is strong counterevidence; checksums, embedded keys, post-load
+authentication, return-value validation, and exception handling do not stop
+instructions that execute during unpickling. JSON remains the preferred format
+for untrusted data.
 For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
 bodies, and preserves annotated Spring or servlet-assigned request values
@@ -2036,7 +2050,7 @@ The shell-quote pair carries a remote operator through three wrappers into an
 explicit object token, official `quote()`, and a real POSIX shell dispatch:
 exact 1.8.3 preserves a line terminator and executes only the harmless `pwd`
 second line in `/tmp`, while source-identical 1.8.4 rejects the token before
-serialization. Each of the 208 cases in 104 exploit/control pairs is scanned three times, producing 624
+serialization. Each of the 210 cases in 105 exploit/control pairs is scanned three times, producing 630
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

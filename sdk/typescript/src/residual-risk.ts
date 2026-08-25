@@ -1987,6 +1987,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "python-web-pickle-unsafe-load",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+pickle(?:\s+as\s+[A-Za-z_]\w*)?\b|\bfrom\s+pickle\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-body",
+        expression:
+          /\brequest\.(?:body|data|files|form|json|POST|stream)\b|\brequest\.(?:get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\bBody\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "pickle-unsafe-object-construction",
+        expression: /\b(?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*\s*\(/u,
+        cweIds: ["CWE-502"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-pyyaml-unsafe-load",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3029,7 +3056,7 @@ interface FrameworkFilesystemPathSink {
   operation: string;
 }
 
-interface PythonPyyamlUnsafeSink {
+interface PythonUnsafeDeserializationSink {
   sourceExpression: string;
   kind: string;
   propagators: Array<{
@@ -14014,7 +14041,10 @@ function frameworkDataflowRecords(
             ? matchingPythonModelLines(
                 lines,
                 model.sinks,
-                model.id === "python-web-pyyaml-unsafe-load" ? 64 : 8,
+                model.id === "python-web-pyyaml-unsafe-load" ||
+                  model.id === "python-web-pickle-unsafe-load"
+                  ? 64
+                  : 8,
               )
             : extension === ".java" || extension === ".cs"
               ? matchingJavaModelLines(lines, model.sinks, 8)
@@ -14217,10 +14247,12 @@ function frameworkDataflowRecords(
         model.id === "python-web-path"
           ? pythonFilesystemPathSink(lines, sink.line)
           : undefined;
-      const pythonPyyamlSink =
+      const pythonUnsafeDeserializationSink =
         model.id === "python-web-pyyaml-unsafe-load"
           ? pythonPyyamlUnsafeSink(files, path, lines, sink.line)
-          : undefined;
+          : model.id === "python-web-pickle-unsafe-load"
+            ? pythonPickleUnsafeSink(files, path, lines, sink.line)
+            : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -14487,8 +14519,9 @@ function frameworkDataflowRecords(
         continue;
       }
       if (
-        model.id === "python-web-pyyaml-unsafe-load" &&
-        pythonPyyamlSink === undefined
+        (model.id === "python-web-pyyaml-unsafe-load" ||
+          model.id === "python-web-pickle-unsafe-load") &&
+        pythonUnsafeDeserializationSink === undefined
       ) {
         continue;
       }
@@ -14718,13 +14751,14 @@ function frameworkDataflowRecords(
                                 ),
                               )
                               .find((candidate) => candidate !== undefined)
-                          : model.id === "python-web-pyyaml-unsafe-load" &&
-                              pythonPyyamlSink !== undefined
+                          : (model.id === "python-web-pyyaml-unsafe-load" ||
+                                model.id === "python-web-pickle-unsafe-load") &&
+                              pythonUnsafeDeserializationSink !== undefined
                             ? modeledPythonObjectSource(
                                 lines,
                                 sources,
                                 sink.line,
-                                pythonPyyamlSink.sourceExpression,
+                                pythonUnsafeDeserializationSink.sourceExpression,
                                 model.sources,
                               )
                             : model.id === "node-http-object-authorization" &&
@@ -15015,7 +15049,7 @@ function frameworkDataflowRecords(
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
         nodePrototypeMerge?.kind ??
-        pythonPyyamlSink?.kind ??
+        pythonUnsafeDeserializationSink?.kind ??
         sink.kind;
       const startLine = Math.max(1, effectiveSinkLine - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(
@@ -15209,7 +15243,7 @@ function frameworkDataflowRecords(
                     symbol: `socket.io-parser@${nodeSocketIoServerDos.dependency.child.version}:${nodeSocketIoServerDos.dependency.child.proof}:${nodeSocketIoServerDos.dependency.childDeclaration}:zero-attachment-buffer-retention`,
                   },
                 ]),
-            ...(pythonPyyamlSink?.propagators ?? []),
+            ...(pythonUnsafeDeserializationSink?.propagators ?? []),
             ...(nodeOpcuaServerDos === undefined
               ? []
               : [
@@ -23686,21 +23720,29 @@ function pythonFrameworkWrapperSummaries(
             model.id === "python-web-path"
               ? pythonFilesystemPathSink(file.lines, sink.line)
               : undefined;
-          const pythonPyyamlSink =
+          const pythonUnsafeDeserializationSink =
             model.id === "python-web-pyyaml-unsafe-load"
               ? pythonPyyamlUnsafeSink(files, file.path, file.lines, sink.line)
-              : undefined;
+              : model.id === "python-web-pickle-unsafe-load"
+                ? pythonPickleUnsafeSink(
+                    files,
+                    file.path,
+                    file.lines,
+                    sink.line,
+                  )
+                : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
           if (
-            model.id === "python-web-pyyaml-unsafe-load" &&
-            pythonPyyamlSink === undefined
+            (model.id === "python-web-pyyaml-unsafe-load" ||
+              model.id === "python-web-pickle-unsafe-load") &&
+            pythonUnsafeDeserializationSink === undefined
           ) {
             continue;
           }
           const tracedSinkExpression =
-            pythonPyyamlSink?.sourceExpression ??
+            pythonUnsafeDeserializationSink?.sourceExpression ??
             pythonPathSink?.expressions
               .map(
                 (expression) =>
@@ -23752,13 +23794,15 @@ function pythonFrameworkWrapperSummaries(
               declarationLine: wrapper.startLine,
               sink: {
                 ...sink,
-                kind: pythonPyyamlSink?.kind ?? sink.kind,
+                kind: pythonUnsafeDeserializationSink?.kind ?? sink.kind,
                 cweIds: sinkPattern.cweIds,
               },
               controls: wrapperControls.slice(0, 8),
-              ...(pythonPyyamlSink === undefined
+              ...(pythonUnsafeDeserializationSink === undefined
                 ? {}
-                : { propagators: pythonPyyamlSink.propagators }),
+                : {
+                    propagators: pythonUnsafeDeserializationSink.propagators,
+                  }),
             });
           }
         }
@@ -24931,16 +24975,16 @@ function importedPythonSymbols(
   return imports;
 }
 
-interface PythonPyyamlImportBinding {
+interface PythonModuleImportBinding {
   imported: string;
   local: string;
   line: number;
 }
 
 interface PythonPyyamlBindingContext {
-  receivers: PythonPyyamlImportBinding[];
-  functions: PythonPyyamlImportBinding[];
-  loaders: PythonPyyamlImportBinding[];
+  receivers: PythonModuleImportBinding[];
+  functions: PythonModuleImportBinding[];
+  loaders: PythonModuleImportBinding[];
 }
 
 const PYTHON_PYYAML_UNSAFE_LOADERS = new Set([
@@ -24953,9 +24997,9 @@ const PYTHON_PYYAML_UNSAFE_LOADERS = new Set([
 function pythonPyyamlBindings(
   lines: readonly string[],
 ): PythonPyyamlBindingContext {
-  const receivers: PythonPyyamlImportBinding[] = [];
-  const functions: PythonPyyamlImportBinding[] = [];
-  const loaders: PythonPyyamlImportBinding[] = [];
+  const receivers: PythonModuleImportBinding[] = [];
+  const functions: PythonModuleImportBinding[] = [];
+  const loaders: PythonModuleImportBinding[] = [];
   const structuralLines = pythonStructuralLines(lines);
   for (let index = 0; index < structuralLines.length; index += 1) {
     const structural = structuralLines[index] ?? "";
@@ -25007,16 +25051,17 @@ function pythonPyyamlBindings(
   return { receivers, functions, loaders };
 }
 
-function pythonPyyamlLocalModuleCouldShadow(
+function pythonLocalModuleCouldShadow(
   files: readonly SourceFileSnapshot[],
   sourcePath: string,
+  moduleName: string,
 ): boolean {
   const candidates = new Set<string>();
   let directory = posix.dirname(sourcePath.replaceAll("\\", "/"));
   while (true) {
     const prefix = directory === "." ? "" : `${directory}/`;
-    candidates.add(`${prefix}yaml.py`.toLowerCase());
-    candidates.add(`${prefix}yaml/__init__.py`.toLowerCase());
+    candidates.add(`${prefix}${moduleName}.py`.toLowerCase());
+    candidates.add(`${prefix}${moduleName}/__init__.py`.toLowerCase());
     if (directory === ".") break;
     const parent = posix.dirname(directory);
     if (parent === directory) break;
@@ -25027,9 +25072,9 @@ function pythonPyyamlLocalModuleCouldShadow(
   );
 }
 
-function pythonPyyamlBindingReassigned(
+function pythonImportedBindingReassigned(
   lines: readonly string[],
-  binding: PythonPyyamlImportBinding,
+  binding: PythonModuleImportBinding,
   member: string | undefined,
   callLine: number,
 ): boolean {
@@ -25103,13 +25148,13 @@ function pythonPyyamlLoaderBinding(
   lines: readonly string[],
   loaderExpression: string,
   callLine: number,
-): PythonPyyamlImportBinding | undefined {
+): PythonModuleImportBinding | undefined {
   const loader = loaderExpression.trim();
   for (const binding of context.loaders) {
     if (
       loader === binding.local &&
       binding.line < callLine &&
-      !pythonPyyamlBindingReassigned(lines, binding, undefined, callLine)
+      !pythonImportedBindingReassigned(lines, binding, undefined, callLine)
     ) {
       return binding;
     }
@@ -25123,7 +25168,7 @@ function pythonPyyamlLoaderBinding(
       member !== undefined &&
       PYTHON_PYYAML_UNSAFE_LOADERS.has(member) &&
       receiver.line < callLine &&
-      !pythonPyyamlBindingReassigned(lines, receiver, member, callLine)
+      !pythonImportedBindingReassigned(lines, receiver, member, callLine)
     ) {
       return { imported: member, local: loader, line: receiver.line };
     }
@@ -25136,8 +25181,8 @@ function pythonPyyamlUnsafeSink(
   sourcePath: string,
   lines: readonly string[],
   line: number,
-): PythonPyyamlUnsafeSink | undefined {
-  if (pythonPyyamlLocalModuleCouldShadow(files, sourcePath)) return undefined;
+): PythonUnsafeDeserializationSink | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "yaml")) return undefined;
   const context = pythonPyyamlBindings(lines);
   const wrapper = exportedPythonFunctions(lines).find(
     (candidate) => line >= candidate.startLine && line <= candidate.endLine,
@@ -25153,7 +25198,7 @@ function pythonPyyamlUnsafeSink(
     if (
       call.binding.line >= line ||
       wrapper?.parameters.includes(call.binding.local) === true ||
-      pythonPyyamlBindingReassigned(
+      pythonImportedBindingReassigned(
         lines,
         call.binding,
         context.receivers.includes(call.binding) ? call.member : undefined,
@@ -25220,6 +25265,147 @@ function pythonPyyamlUnsafeSink(
           path: sourcePath,
           line: loader.line,
           symbol: loader.imported,
+        },
+      ],
+    };
+  }
+  return undefined;
+}
+
+interface PythonPickleBindingContext {
+  receivers: PythonModuleImportBinding[];
+  functions: PythonModuleImportBinding[];
+}
+
+function pythonPickleBindings(
+  lines: readonly string[],
+): PythonPickleBindingContext {
+  const receivers: PythonModuleImportBinding[] = [];
+  const functions: PythonModuleImportBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const receiver = /^\s*import\s+pickle(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+      structural,
+    );
+    if (receiver !== null) {
+      receivers.push({
+        imported: "pickle",
+        local: receiver[1] ?? "pickle",
+        line: index + 1,
+      });
+      continue;
+    }
+    const fromImport = /^\s*from\s+pickle\s+import\s+(.+?)\s*$/u.exec(
+      structural,
+    );
+    if (fromImport?.[1] === undefined) continue;
+    let importedText = fromImport[1].trim();
+    if (importedText.startsWith("(") && !importedText.endsWith(")")) {
+      for (
+        let offset = index + 1;
+        offset < Math.min(structuralLines.length, index + 8);
+        offset += 1
+      ) {
+        importedText += `\n${structuralLines[offset] ?? ""}`;
+        if ((structuralLines[offset] ?? "").includes(")")) break;
+      }
+    }
+    if (importedText.startsWith("(") !== importedText.endsWith(")")) {
+      continue;
+    }
+    importedText = importedText.replace(/^\(([\s\S]*)\)$/u, "$1");
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const binding = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      if (
+        binding?.[1] === undefined ||
+        (binding[1] !== "load" && binding[1] !== "loads")
+      ) {
+        continue;
+      }
+      functions.push({
+        imported: binding[1],
+        local: binding[2] ?? binding[1],
+        line: index + 1,
+      });
+    }
+  }
+  return { receivers, functions };
+}
+
+function pythonPickleUnsafeSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonUnsafeDeserializationSink | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "pickle")) {
+    return undefined;
+  }
+  const context = pythonPickleBindings(lines);
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const receiverCalls = context.receivers.flatMap((binding) =>
+    (["load", "loads"] as const).map((member) => ({ binding, member })),
+  );
+  const functionCalls = context.functions.map((binding) => ({
+    binding,
+    member: binding.imported as "load" | "loads",
+  }));
+  for (const call of [...receiverCalls, ...functionCalls]) {
+    const receiverCall = context.receivers.includes(call.binding);
+    if (
+      call.binding.line >= line ||
+      wrapper?.parameters.includes(call.binding.local) === true ||
+      pythonImportedBindingReassigned(
+        lines,
+        call.binding,
+        receiverCall ? call.member : undefined,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const callee = receiverCall
+      ? new RegExp(
+          `\\b${escapeRegularExpression(call.binding.local)}\\s*\\.\\s*${escapeRegularExpression(call.member)}\\s*\\(`,
+          "u",
+        )
+      : new RegExp(
+          `\\b${escapeRegularExpression(call.binding.local)}\\s*\\(`,
+          "u",
+        );
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(lines, line, callee);
+    if (arguments_ === undefined) continue;
+    const sourceExpression = pythonPositionalArguments(arguments_)[0];
+    if (
+      sourceExpression === undefined ||
+      sourceExpression.trim() === "" ||
+      sourceExpression.trim().startsWith("*")
+    ) {
+      continue;
+    }
+    return {
+      sourceExpression,
+      kind:
+        call.member === "loads"
+          ? "pickle-loads-untrusted-bytes"
+          : "pickle-load-untrusted-file",
+      propagators: [
+        {
+          kind: "python-stdlib-pickle-binding",
+          path: sourcePath,
+          line: call.binding.line,
+          symbol: `${call.binding.imported} as ${call.binding.local}`,
+        },
+        {
+          kind: "intrinsic-pickle-reduce-execution",
+          path: sourcePath,
+          line,
+          symbol: call.member,
         },
       ],
     };
