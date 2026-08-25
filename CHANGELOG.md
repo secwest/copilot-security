@@ -6,6 +6,22 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Live campaign
+  `c6fb9c92bed2214f45681dde76518cbc72c2c65850dc1e673b33e16247e494f3`
+  on checkpoint `4cb88e175bb0d06a8ebc400579b54b623f8ba2e4` completed both
+  deep scans on attempt one with stored Copilot credentials and no allowance,
+  quota, rate-limit, classifier, authentication, or transport failure. The
+  unsafe case produced one critical CWE-502 finding with complete coverage;
+  the JSON control produced zero findings with complete coverage. Precision,
+  recall, F1, stability, validation, attack-path, code-evidence, severity, and
+  negative-control metrics were all 1.0 with zero false positives or false
+  negatives. Its sole failed threshold was field-scoped semantics: validation
+  used the exact Python spelling `request.stream`, while the attack path named
+  `decoder.load()` and pickle loading but omitted the preceding `Unpickler`
+  constructor. The semantic gate now accepts `request.stream` as equivalent to
+  “request stream,” while correction guidance requires validation and attack
+  path to each retain request/file source, constructor argument, instance, and
+  later dispatch. The constructor requirement remains strict.
 - Preserved exact framework sink-kind diversity at the 256-record
   whole-repository ceiling. Selection now reserves one ranked record for every
   distinct framework-model ID and sink kind before repeated rows can consume

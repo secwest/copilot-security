@@ -40,13 +40,23 @@
           "requireCodeEvidence": true,
           "requiredValidationTextAnyOf": [
             ["standard library", "standard-library", "stdlib", "pickle module"],
-            ["request stream", "file-like", "attacker-controlled stream"],
+            [
+              "request stream",
+              "request.stream",
+              "file-like",
+              "attacker-controlled stream"
+            ],
             ["Unpickler", "unpickler constructor"],
             ["load()", "load dispatch", "decoder.load"],
             ["REDUCE", "__reduce__", "callable"]
           ],
           "requiredAttackPathTextAnyOf": [
-            ["request stream", "file-like", "attacker-controlled stream"],
+            [
+              "request stream",
+              "request.stream",
+              "file-like",
+              "attacker-controlled stream"
+            ],
             ["Unpickler", "unpickler constructor"],
             ["load()", "load dispatch", "decoder.load"],
             ["REDUCE", "callable", "function invocation"],

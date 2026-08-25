@@ -170,8 +170,14 @@ describe("Python pickle unsafe deserialization model", () => {
       manifest.cases[0]?.expected[0]?.requiredValidationTextAnyOf,
     ).toHaveLength(5);
     expect(
+      manifest.cases[0]?.expected[0]?.requiredValidationTextAnyOf?.[1],
+    ).toContain("request.stream");
+    expect(
       manifest.cases[0]?.expected[0]?.requiredAttackPathTextAnyOf,
     ).toHaveLength(5);
+    expect(
+      manifest.cases[0]?.expected[0]?.requiredAttackPathTextAnyOf?.[0],
+    ).toContain("request.stream");
     expect(manifest.cases[0]?.expected[0]?.forbiddenText).toHaveLength(3);
     expect(manifest.cases[1]?.expected).toEqual([]);
     for (const relativePath of [
@@ -590,6 +596,8 @@ describe("Python pickle unsafe deserialization model", () => {
     expect(prompt).toContain("a two-stage flow");
     expect(prompt).toContain("same non-reassigned instance");
     expect(prompt).toContain("constructor file argument");
+    expect(prompt).toContain("validation and attack path must each");
+    expect(prompt).toContain("retained instance or recorded aliases");
     expect(prompt).toContain("do not collapse construction without load");
     expect(prompt).toContain("GLOBAL/STACK_GLOBAL and REDUCE machinery");
     expect(prompt).toContain("separately installed gadget is not required");

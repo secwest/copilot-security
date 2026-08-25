@@ -2,6 +2,45 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Keep Unpickler construction explicit in the attack path
+
+**Live evidence.** Campaign
+`c6fb9c92bed2214f45681dde76518cbc72c2c65850dc1e673b33e16247e494f3`
+ran the specialized `Unpickler.load` exploit/control pair on checkpoint
+`4cb88e175bb0d06a8ebc400579b54b623f8ba2e4` with `gpt-5.6-terra`, high
+reasoning, deep mode, and two workers. Both scans authenticated from stored
+Copilot credentials and completed on attempt one. There was no allowance,
+quota, credit-limit, rate-limit, classifier, authentication, or transport
+failure. The unsafe case produced one critical CWE-502 finding with complete
+coverage in 4m53s; the JSON control stayed clean with complete coverage in
+3m49s. Structural precision, recall, F1, stable detection, validation,
+attack-path, code-evidence, severity, and negative-case metrics were all 1.0,
+with no false positive or false negative.
+
+**Field-level defect.** The validation was exact: it named `request.stream`,
+the default `pickle.Unpickler`, its file argument and retained decoder, the
+later zero-argument `load()`, and `GLOBAL`/`REDUCE` callable behavior. The
+attack path instead summarized the sink as `decoder.load()` and “pickle
+loading.” That is sufficient to recognize unsafe deserialization but loses the
+new model's defining two-stage boundary. The initial semantic gate also failed
+to recognize the source spelling `request.stream` even though it is the exact
+Python expression and stronger than a prose spelling with a space.
+
+**Decision.** Accept `request.stream` as an exact semantic alternative to
+“request stream” in both field-scoped source gates. Do not relax the separate
+attack-path constructor gate to generic “pickle loading” or `decoder.load()`;
+those phrases cannot distinguish the object API from direct `pickle.load`.
+Instead, require validation and attack path to each name the request/file-like
+source, exact `Unpickler` constructor file argument, retained instance or
+recorded aliases, and later load dispatch. Re-evaluating the immutable finding
+without receipt enforcement proves the source-spelling correction and leaves
+only the intentional missing-constructor failure.
+
+**Consequence.** A future campaign passes only when the report preserves the
+complete constructor-to-dispatch path in the attack-path field itself. Semantic
+equivalence is accepted for syntax; loss of a security-relevant execution step
+is not.
+
 ## 2026-08-25 — Seed framework sink diversity before filling the inventory cap
 
 **Failure mode.** Framework rows have deliberately high priority because they
