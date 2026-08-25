@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: host-maintenance
+  namespace: operations
+spec:
+  selector:
+    matchLabels:
+      app: host-maintenance
+  template:
+    metadata:
+      labels:
+        app: host-maintenance
+    spec:
+      containers:
+        - name: maintenance
+          image: registry.example.invalid/maintenance@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
+              readOnly: false
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory

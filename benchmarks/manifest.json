@@ -4020,6 +4020,45 @@
         "node-multi-hop-repaired-shell-quote-object-token/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "kubernetes-privileged-sensitive-hostpath",
+      "description": "An apps/v1 Deployment runs one privileged Linux container and binds the same exact volume name from the node root into that container read-write, joining workload identity, container authority, hostPath provenance, and effective mount access.",
+      "fixture": "fixtures/kubernetes-privileged-sensitive-hostpath",
+      "findingsPaths": [
+        "kubernetes-privileged-sensitive-hostpath/run-1/findings.json",
+        "kubernetes-privileged-sensitive-hostpath/run-2/findings.json",
+        "kubernetes-privileged-sensitive-hostpath/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "kubernetes-privileged-sensitive-hostpath-write",
+          "cwe": ["CWE-250", "CWE-732"],
+          "locations": [
+            {
+              "path": "src/deploy.yaml",
+              "startLine": 22,
+              "endLine": 22,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "kubernetes-safe-isolated-volume",
+      "description": "The matched control keeps the same workload purpose and container image but opts into a pod user namespace, disables privileged mode, and replaces the host bind with an isolated emptyDir volume.",
+      "fixture": "fixtures/kubernetes-safe-isolated-volume",
+      "findingsPaths": [
+        "kubernetes-safe-isolated-volume/run-1/findings.json",
+        "kubernetes-safe-isolated-volume/run-2/findings.json",
+        "kubernetes-safe-isolated-volume/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

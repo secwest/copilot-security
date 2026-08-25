@@ -247,6 +247,18 @@ The package is ESM-only and provides:
   service identity, network access, Docker socket, tool caches, or later jobs
   survive the untrusted job; a proven freshly destroyed single-job JIT runner
   is strong persistence counterevidence.
+  Kubernetes host-authority hypotheses require an exact supported Linux
+  workload, one exact privileged container or init/ephemeral container, one
+  uniquely named sensitive `hostPath` volume, and a matching absolute
+  read-write mount on that same container. Multi-document YAML and Kubernetes
+  `List` objects retain exact workload, container, volume, source-line, and
+  sink-line provenance. Read-only mounts, `hostUsers: false`, Windows
+  workloads, isolated volumes, safe or dynamic subpaths, mismatched or
+  duplicate names, unsupported API/kind pairs, YAML aliases or duplicate keys,
+  and malformed documents fail closed. Review must still establish rendered
+  deployment, admission and exemption behavior, a concrete attacker path to
+  container execution, and the exact host file, socket, credential, or runtime
+  effect; the manifest does not by itself prove remote node compromise.
   Cross-workflow artifact-poisoning hypotheses require a named pull-request
   producer, untrusted checkout, official upload name/path, matching privileged
   `workflow_run`, official triggering-run download, extraction path, and later

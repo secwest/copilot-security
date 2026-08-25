@@ -6,6 +6,38 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added the first native Kubernetes infrastructure-as-code model,
+  `kubernetes-privileged-sensitive-hostpath`. It joins one exact deployable
+  workload shape, one exact privileged Linux container or init/ephemeral
+  container, one uniquely named sensitive `hostPath` volume, and that same
+  container's absolute read-write mount. The structured row carries workload,
+  namespace, container section/name, normalized host path, mount path, volume
+  identity, CWE-250/CWE-732, and exact source/sink provenance. It supports
+  current Pod, ReplicationController, apps/v1 controller, batch/v1 Job and
+  CronJob layouts, multi-document YAML, and Kubernetes List objects. Read-only
+  mounts, isolated volumes, pod user namespaces, Windows workloads, safe or
+  dynamic subpaths, mismatched or duplicate identities, wrong API/kind pairs,
+  aliases, duplicate keys, malformed documents, and non-YAML lookalikes fail
+  closed. The correction rule separately requires rendered deployment,
+  admission and exemption proof, a realistic attacker prerequisite, and a
+  concrete host effect instead of inventing remote node or cluster compromise.
+  This improves on separate privileged-container and mounted-hostPath warnings
+  by preserving the complete same-container authority path for review.
+- Added the paired perfect-gate
+  `kubernetes-privileged-hostpath-manifest.json` benchmark. The positive is an
+  apps/v1 Deployment whose pinned container mounts the node root read-write
+  while privileged. The matched control opts into `hostUsers: false`, disables
+  privileged mode, and uses `emptyDir`. Seven focused groups pass 42 assertions
+  across workload shapes, all three container sections, multi-document/List
+  parsing, exact line identity, subpaths, typed booleans, Windows and user
+  namespace controls, ambiguity, malformed YAML, prompt guidance, and canonical
+  gate shape. The combined focused and canonical lane passes 24 tests and 1,721
+  assertions on both native Windows and Ubuntu/WSL. Two native self-inventories
+  are byte-identical at 256 rows with SHA-256
+  `51c2c9907f8e8a5bc2e0c1c355616a2cea830afbfe0754d456529048062c6844`;
+  the new structured row survives the global cap and only the vulnerable
+  fixture is retained. The canonical corpus now contains 101 exploit/control
+  pairs, 202 cases, and 606 repeated scans.
 - Complete-draft transport recovery now resumes the mandatory host-audited
   quality gate in a fresh isolated Copilot session before deterministic
   finalization. A timeout or sanitized transport interruption whose session

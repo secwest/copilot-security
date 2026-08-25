@@ -356,6 +356,10 @@ describe("effectiveness benchmark", () => {
         "javascript-safe-linear-alias-validation",
       ],
       [
+        "kubernetes-privileged-sensitive-hostpath",
+        "kubernetes-safe-isolated-volume",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

@@ -2,6 +2,76 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-24 — Join Kubernetes privilege and host filesystem authority
+
+**Coverage gap and comparative evidence.** Application dataflow, package
+advisories, GitHub Actions, secrets, and imported SARIF already had deterministic
+host assistance, but Terraform, Kubernetes, CloudFormation, and Helm had no
+native semantic model. Trivy treats those formats as first-class
+misconfiguration inputs and ships separate Kubernetes checks for privileged
+containers and mounted host paths. Kubernetes itself says privileged containers
+receive all Linux capabilities and override seccomp, AppArmor, and SELinux
+constraints; its volume guidance warns that a read-write hostPath can subvert
+the host mount; and its Baseline Pod Security Standard forbids privileged
+containers and hostPath volumes. See [Trivy misconfiguration
+scanning](https://trivy.dev/docs/dev/scanner/misconfiguration/), [Kubernetes
+privileged-container semantics](https://kubernetes.io/docs/concepts/security/linux-kernel-security-constraints/#privileged-containers),
+[Kubernetes hostPath guidance](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath),
+and the [Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/).
+
+**Chosen precision boundary.** Do not reproduce two independent presence
+warnings. Emit `kubernetes-privileged-sensitive-hostpath` only after joining an
+exact supported workload API/kind, its PodSpec, one exact Linux container in
+`containers`, `initContainers`, or `ephemeralContainers`, boolean
+`securityContext.privileged: true`, one uniquely named sensitive absolute
+hostPath volume, and a matching absolute read-write volumeMount on that same
+container. Preserve exact workload/name/namespace, container section/name,
+volume identity, normalized effective host path after a literal safe subPath,
+mount path, and source/sink lines. The model covers Pod,
+ReplicationController, apps/v1 Deployment/DaemonSet/ReplicaSet/StatefulSet,
+batch/v1 Job/CronJob, multi-document YAML, and v1 List objects.
+
+**Fail-closed and control boundary.** YAML 1.2 parsing is strict and rejects
+aliases, duplicate mapping keys, malformed documents, unsupported or mismatched
+API/kind pairs, missing workload identity, duplicate volume/container names,
+nonboolean security values, unresolved or duplicate volume references,
+nonabsolute mounts, dynamic subPath expressions, parent-escaping subpaths, and
+non-YAML lookalikes. Read-only mounts and nonsensitive effective subpaths close
+the modeled write chain. Explicit `hostUsers: false` closes this host-namespace
+authority model because Kubernetes maps container root and capabilities away
+from the host namespace; Windows PodSpecs and Windows node selectors are outside
+the Linux privileged field's schema. See [Kubernetes user
+namespaces](https://kubernetes.io/docs/concepts/workloads/pods/user-namespaces/).
+Do not credit `readOnlyRootFilesystem`, `runAsNonRoot`,
+`allowPrivilegeEscalation: false`, AppArmor, SELinux, or seccomp as silently
+repairing a privileged container or a separate writable host mount.
+
+**Model review and impact discipline.** The structured row is a high-priority
+host-authority hypothesis, not proof of a remote attacker. The correction turn
+must establish that rendered configuration retains the row, the workload is
+actually admitted and deployed, no non-exempt Baseline/Restricted policy rejects
+it, and a concrete principal, remotely exploitable process, untrusted image or
+plugin, compromised dependency, or exec permission reaches the container. It
+must then identify the exact host file, socket, runtime, credential, persistence,
+or privilege effect. Without that evidence, node takeover and cluster/control-
+plane compromise are not reportable conclusions.
+
+**Effectiveness gate.** The positive fixture is an apps/v1 Deployment with one
+pinned image, boolean privileged mode, a unique host-root volume, and a
+read-write `/host` mount. The matched control preserves workload purpose and
+image but uses `hostUsers: false`, boolean nonprivileged mode, and an isolated
+emptyDir. The dedicated manifest requires perfect completion, precision,
+recall, F1, case and negative-control behavior, stable detection, validation,
+attack-path, code-evidence and severity coverage, with zero false positives.
+Seven focused groups pass 42 assertions. The combined focused and canonical
+lane passes 24 tests and 1,721 assertions on native Windows and Ubuntu/WSL.
+Two native whole-repository inventories are byte-identical at the 256-row cap
+with SHA-256
+`51c2c9907f8e8a5bc2e0c1c355616a2cea830afbfe0754d456529048062c6844`;
+exactly one Kubernetes row survives for the vulnerable fixture and none for the
+control. The canonical benchmark now contains 101 exploit/control pairs, 202
+cases, and 606 repeated scans.
+
 ## 2026-08-24 — Resume host-audited correction after complete-draft transport loss
 
 **Measured gap.** The immutable self-scan established that a late Copilot

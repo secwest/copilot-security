@@ -164,6 +164,22 @@ persistence, labels, and environments do not by themselves prevent persistence
 on the host. Review must prove actual customer-controlled scheduling and runner
 lifecycle; a proven freshly destroyed single-job JIT runner is strong
 counterevidence.
+Kubernetes configuration rows require a complete same-container host-authority
+chain rather than a loose YAML keyword match. The parser accepts exact current
+`Pod`, `ReplicationController`, `apps/v1` controller, `batch/v1` `Job`, and
+`batch/v1` `CronJob` shapes, including multi-document files and Kubernetes
+`List` objects. A row requires one Linux container or init/ephemeral container
+with boolean `securityContext.privileged: true`, one uniquely named `hostPath`
+volume rooted at a sensitive node path, and a matching absolute read-write
+`volumeMount` on that same container. The record preserves workload identity,
+container section/name, normalized host path, mount path, volume identity, and
+exact source/sink lines. Read-only mounts, isolated volumes, `hostUsers: false`,
+Windows workloads, safe subpaths, dynamic subpath expressions, mismatched or
+duplicate names, wrong API/kind pairs, aliases, duplicate YAML keys, malformed
+documents, and non-YAML lookalikes fail closed. Correction still has to prove
+the rendered workload is admitted and deployed plus a concrete attacker path
+to the container; dangerous host authority alone does not invent remote node or
+cluster compromise.
 Cross-workflow artifact rows preserve an unprivileged `pull_request` checkout
 and official artifact upload into a named `workflow_run` consumer, require an
 official download bound to `github.event.workflow_run.id`, and emit only when
@@ -640,6 +656,21 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 
 node benchmarks/witnesses/github-actions-self-hosted-pr/SelfHostedPrWitness.mjs
+```
+
+The Kubernetes host-authority lane pairs a privileged Linux Deployment that
+mounts the node root read-write with a matched workload that uses a pod user
+namespace, disables privileged mode, and replaces the host bind with an
+isolated `emptyDir`. The perfect gate requires exact workload/container/volume
+provenance, validation, attack-path and code evidence, high or critical
+severity, stable detection, and zero false positives:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/kubernetes-privileged-hostpath-manifest.json `
+  --results-dir C:\security-benchmarks\kubernetes-privileged-hostpath `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
 The artifact-poisoning lane pairs an unprivileged pull-request producer with a
@@ -1928,7 +1959,7 @@ The shell-quote pair carries a remote operator through three wrappers into an
 explicit object token, official `quote()`, and a real POSIX shell dispatch:
 exact 1.8.3 preserves a line terminator and executes only the harmless `pwd`
 second line in `/tmp`, while source-identical 1.8.4 rejects the token before
-serialization. Each of the 200 cases in 100 exploit/control pairs is scanned three times, producing 600
+serialization. Each of the 202 cases in 101 exploit/control pairs is scanned three times, producing 606
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: host-maintenance
+  namespace: operations
+spec:
+  selector:
+    matchLabels:
+      app: host-maintenance
+  template:
+    metadata:
+      labels:
+        app: host-maintenance
+    spec:
+      hostUsers: false
+      containers:
+        - name: maintenance
+          image: registry.example.invalid/maintenance@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          securityContext:
+            privileged: false
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+              readOnly: false
+      volumes:
+        - name: workspace
+          emptyDir: {}
