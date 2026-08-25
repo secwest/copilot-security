@@ -133,6 +133,19 @@ object/state-integrity defect, while retaining high or critical for an
 independently justified stronger environment and rejecting low or informational
 classification.
 
+Final exact-source campaign
+`d514ac9c160af504ee551f33ee9e16f03de7aad0ef8172ddb6893d9d701ba1e1`
+on calibrated checkpoint `f2a9c951e9995d2bd3fd85a3348e05bb6c8d8c52`
+closes the loop. The unsafe case produces one medium CWE-502 finding with
+substantive validation, attack path, exact source/sink evidence, and no stronger
+impact overclaim; the topology-identical `safe_load` case produces none. Every
+metric and semantic gate is 1.0, with zero false positives and false negatives.
+Both scans finish on attempt one for $2.291457125 total, and record no
+authentication, quota, credit-limit, or safety-classifier error. All seven
+exact-checkpoint workflow families pass: Node `32816357391`, Windows GUI
+`32816357532`, Linux GUI `32816357459`, container `32816357383`, Java
+`32816357426`, .NET `32816357385`, and Go `32816357392`.
+
 **Consequence.** The scanner gains a deterministic Python CWE-502 path while
 remaining narrower than version-insensitive `yaml.load` lexical rules. Future
 pickle, marshal, `load_all` consumption, ruamel.yaml, or gadget-specific

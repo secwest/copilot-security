@@ -88,6 +88,20 @@ All notable scanner, application, benchmark, and operational changes are recorde
   proven object/state-integrity boundary as well as high or critical when
   independently justified; it still rejects low/informational output and does
   not credit an unproved stronger impact.
+- Final exact-source campaign
+  `d514ac9c160af504ee551f33ee9e16f03de7aad0ef8172ddb6893d9d701ba1e1`
+  on calibrated checkpoint `f2a9c951e9995d2bd3fd85a3348e05bb6c8d8c52`
+  passes every gate. The unsafe case produces one medium CWE-502 finding with
+  substantive validation, attack path, and exact source/sink evidence; the
+  source-identical `safe_load` case produces none. Completion, precision,
+  recall, F1, case pass, negative-case pass, stability, validation, attack-path,
+  code-evidence, severity, and semantic acceptance are all 1.0, with zero false
+  positives and false negatives. Both scans complete on attempt one for a total
+  cost of $2.291457125, with no authentication, quota, credit-limit, or
+  safety-classifier error. All seven exact-checkpoint workflow families pass:
+  Node `32816357391`, Windows GUI `32816357532`, Linux GUI `32816357459`,
+  container `32816357383`, Java `32816357426`, .NET `32816357385`, and Go
+  `32816357392`.
 - Added `cloudformation-public-admin-role`, the first native CloudFormation IAM
   authority model. It joins one exact `AWS::IAM::Role`, an unrestricted
   wildcard AWS-principal `Allow` for `sts:AssumeRole`, and either the exact
