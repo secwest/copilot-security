@@ -6,6 +6,33 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `kubernetes-cluster-admin-broad-subject`, the second native Kubernetes
+  infrastructure-as-code model. It requires an exact
+  `rbac.authorization.k8s.io/v1` `ClusterRoleBinding`, an immutable exact
+  reference to the built-in `cluster-admin` `ClusterRole`, and one documented
+  intrinsic catch-all principal: `system:anonymous`,
+  `system:unauthenticated`, `system:authenticated`, or
+  `system:serviceaccounts`. The structured row preserves binding, role,
+  principal, cluster scope, CWE-269/CWE-284, and exact source/sink lines. Named
+  administrator groups, individual service accounts, namespace-scoped service-
+  account groups, RoleBindings, similar role names, wrong API shapes,
+  namespaces on cluster-scoped objects or User/Group subjects, duplicate
+  subject identities, aliases, duplicate keys, malformed YAML, and non-YAML
+  lookalikes fail closed. Correction separately proves rendered deployment,
+  effective RBAC authorization, credential or anonymous reachability, and the
+  least concrete unauthorized cluster action without inventing a public API or
+  compromised workload.
+- Added the paired perfect-gate
+  `kubernetes-cluster-admin-binding-manifest.json` benchmark. The positive uses
+  Kubernetes' documented strongly discouraged binding of `cluster-admin` to
+  every service account; the source-identical control uses one named platform
+  administrator group. Seven focused groups pass 36 assertions across all four
+  supported broad principals, exact line identity, multi-document/List parsing,
+  narrower scopes and subjects, immutable role references, parser ambiguity,
+  and correction guidance. The combined Kubernetes and canonical lane passes
+  31 tests and 1,768 assertions on both native Windows and Ubuntu/WSL. The
+  canonical corpus now contains 102 exploit/control pairs, 204 cases, and 612
+  repeated scans.
 - Added the first native Kubernetes infrastructure-as-code model,
   `kubernetes-privileged-sensitive-hostpath`. It joins one exact deployable
   workload shape, one exact privileged Linux container or init/ephemeral

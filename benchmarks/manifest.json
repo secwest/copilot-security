@@ -4059,6 +4059,45 @@
         "kubernetes-safe-isolated-volume/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "kubernetes-cluster-admin-broad-subject",
+      "description": "An rbac.authorization.k8s.io/v1 ClusterRoleBinding grants the built-in cluster-admin ClusterRole to the exact system:serviceaccounts group, preserving broad principal, immutable roleRef, cluster scope, and binding identity.",
+      "fixture": "fixtures/kubernetes-cluster-admin-broad-subject",
+      "findingsPaths": [
+        "kubernetes-cluster-admin-broad-subject/run-1/findings.json",
+        "kubernetes-cluster-admin-broad-subject/run-2/findings.json",
+        "kubernetes-cluster-admin-broad-subject/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "kubernetes-cluster-admin-all-serviceaccounts",
+          "cwe": ["CWE-269", "CWE-284"],
+          "locations": [
+            {
+              "path": "src/rbac.yaml",
+              "startLine": 8,
+              "endLine": 8,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "kubernetes-cluster-admin-specific-group",
+      "description": "The source-identical control grants cluster-admin only to one explicitly managed platform administrator group rather than an intrinsic Kubernetes catch-all principal.",
+      "fixture": "fixtures/kubernetes-cluster-admin-specific-group",
+      "findingsPaths": [
+        "kubernetes-cluster-admin-specific-group/run-1/findings.json",
+        "kubernetes-cluster-admin-specific-group/run-2/findings.json",
+        "kubernetes-cluster-admin-specific-group/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

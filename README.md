@@ -180,6 +180,17 @@ documents, and non-YAML lookalikes fail closed. Correction still has to prove
 the rendered workload is admitted and deployed plus a concrete attacker path
 to the container; dangerous host authority alone does not invent remote node or
 cluster compromise.
+Kubernetes RBAC rows separately preserve a complete cluster-wide authority
+grant: an exact `rbac.authorization.k8s.io/v1` `ClusterRoleBinding`, the
+built-in `cluster-admin` `ClusterRole`, and one intrinsic broad principal. The
+initial high-confidence set covers `system:anonymous`,
+`system:unauthenticated`, `system:authenticated`, and
+`system:serviceaccounts`; named administrator groups, individual service
+accounts, namespace-scoped service-account groups, `RoleBinding` objects, and
+similarly named roles remain negative. Review must verify rendering,
+deployment, effective RBAC authorization, and the exact credential or
+anonymous reachability boundary. A manifest proves the authority grant, not an
+internet-reachable API or a compromised workload.
 Cross-workflow artifact rows preserve an unprivileged `pull_request` checkout
 and official artifact upload into a named `workflow_run` consumer, require an
 official download bound to `github.event.workflow_run.id`, and emit only when
@@ -669,6 +680,20 @@ severity, stable detection, and zero false positives:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/kubernetes-privileged-hostpath-manifest.json `
   --results-dir C:\security-benchmarks\kubernetes-privileged-hostpath `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The Kubernetes RBAC lane pairs the documented strongly discouraged grant of
+the built-in `cluster-admin` role to every service account with a
+source-identical binding to one named administrator group. It requires exact
+principal and immutable role-reference evidence, a concrete credential or
+anonymous path, high or critical severity, and zero false positives:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/kubernetes-cluster-admin-binding-manifest.json `
+  --results-dir C:\security-benchmarks\kubernetes-cluster-admin-binding `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

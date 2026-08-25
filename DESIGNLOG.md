@@ -2,6 +2,65 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-24 — Preserve broad-principal Kubernetes cluster-admin grants
+
+**Coverage gap and primary semantics.** The first native Kubernetes model joins
+container and host filesystem authority, but does not cover control-plane
+authorization. Kubernetes defines a ClusterRoleBinding as a cluster-wide grant,
+documents that the built-in `cluster-admin` role provides full control over
+every cluster resource, and specifically warns that binding it to
+`system:serviceaccounts` lets any application act as a cluster administrator.
+Its authentication documentation assigns every successful identity to
+`system:authenticated` and unauthenticated requests to `system:anonymous` plus
+`system:unauthenticated`; RBAC good practices recommend removing unauthenticated
+bindings where possible. See [Kubernetes RBAC
+authorization](https://kubernetes.io/docs/reference/access-authn-authz/rbac/),
+[Kubernetes authentication](https://kubernetes.io/docs/reference/access-authn-authz/authentication/),
+and [Kubernetes RBAC good
+practices](https://kubernetes.io/docs/concepts/security/rbac-good-practices/).
+
+**Chosen precision boundary.** Emit
+`kubernetes-cluster-admin-broad-subject` only for an exact strict-YAML
+`rbac.authorization.k8s.io/v1` ClusterRoleBinding whose immutable `roleRef`
+names the built-in ClusterRole `cluster-admin` and whose exact User or Group is
+one of `system:anonymous`, `system:unauthenticated`,
+`system:authenticated`, or `system:serviceaccounts`. Preserve the binding name,
+API, cluster scope, principal kind/name, role reference, CWE-269/CWE-284, and
+exact lines. Support multi-document YAML and v1 List objects through the same
+parser as the hostPath model.
+
+**Fail-closed and false-positive boundary.** Named administrator groups,
+individual or default ServiceAccounts, namespace-scoped
+`system:serviceaccounts:<namespace>` groups, RoleBindings, custom or similarly
+named roles, beta/wrong APIs, metadata namespaces, namespaces on User or Group
+subjects, duplicate subject identities, aliases, duplicate YAML keys, malformed
+documents, and non-YAML files do not emit. This deliberately misses equivalent
+custom wildcard ClusterRoles until a later model can resolve exact rules and
+aggregation without turning syntax breadth into an impact claim. It also does
+not label every intentional cluster administrator as vulnerable.
+
+**Deployment and attack-path discipline.** A static binding proves declared
+authority, not that an API server admits it or that an attacker possesses the
+principal. Correction must verify rendered selection, deployed object, exact
+roleRef and subject, RBAC in the effective authorizer chain, then the relevant
+reachability boundary: anonymous-auth configuration and API network access,
+valid authenticated credentials, or a realistically obtainable service-account
+token. RBAC grants are additive, so a separate narrow binding does not subtract
+the dangerous grant. If deployed, identify the least concrete secret read,
+workload creation, RBAC change, namespace action, or node-related effect instead
+of inventing public exposure or token theft.
+
+**Effectiveness gate.** The positive fixture uses the exact Kubernetes warning
+shape: built-in cluster-admin bound to `system:serviceaccounts`. Its source-
+identical control changes only the binding identity and subject to one named
+platform-administrator group. The dedicated manifest holds completion,
+precision, recall, F1, stable detection, validation, attack-path, code-evidence,
+severity, and negative-control gates at perfection with zero false positives.
+Seven focused groups pass 36 assertions. The combined Kubernetes and canonical
+lane passes 31 tests and 1,768 assertions on native Windows and Ubuntu/WSL. The
+canonical benchmark advances to 102 exploit/control pairs, 204 cases, and 612
+repeated scans.
+
 ## 2026-08-24 — Join Kubernetes privilege and host filesystem authority
 
 **Coverage gap and comparative evidence.** Application dataflow, package

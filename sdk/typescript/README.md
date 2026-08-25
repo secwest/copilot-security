@@ -259,6 +259,17 @@ The package is ESM-only and provides:
   deployment, admission and exemption behavior, a concrete attacker path to
   container execution, and the exact host file, socket, credential, or runtime
   effect; the manifest does not by itself prove remote node compromise.
+  Kubernetes RBAC hypotheses require an exact
+  `rbac.authorization.k8s.io/v1` `ClusterRoleBinding`, the built-in
+  `cluster-admin` `ClusterRole`, and one intrinsic broad User or Group subject:
+  `system:anonymous`, `system:unauthenticated`, `system:authenticated`, or
+  `system:serviceaccounts`. Named administrator groups, individual service
+  accounts, namespace-scoped service-account groups, `RoleBinding` objects,
+  similarly named roles, malformed YAML, aliases, duplicate keys, and duplicate
+  subject identities fail closed. Review must establish the applied manifest,
+  effective RBAC authorizer, reachable credential or anonymous principal, and
+  least concrete unauthorized cluster action without inventing public API
+  exposure or workload compromise.
   Cross-workflow artifact-poisoning hypotheses require a named pull-request
   producer, untrusted checkout, official upload name/path, matching privileged
   `workflow_run`, official triggering-run download, extraction path, and later

@@ -14,7 +14,7 @@ import {
   githubActionsSelfHostedPrRecords,
   githubActionsWorkflowInjectionRecords,
 } from "./github-actions-risk.js";
-import { kubernetesPrivilegedHostPathRecords } from "./kubernetes-risk.js";
+import { kubernetesRiskRecords } from "./kubernetes-risk.js";
 import { goExecInjectionRecords } from "./go-exec-risk.js";
 import { goHttpSsrfRecords } from "./go-http-risk.js";
 import { goObjectAuthorizationRecords } from "./go-object-authorization-risk.js";
@@ -3248,7 +3248,7 @@ export async function buildResidualRiskInventory(
   for (const file of sourceFiles) {
     records.push(
       ...frameworkDataflowRecords(file.path, file.lines, sourceFiles),
-      ...kubernetesPrivilegedHostPathRecords(file.path, file.lines, file.text),
+      ...kubernetesRiskRecords(file.path, file.lines, file.text),
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
       ...githubActionsSelfHostedPrRecords(file.path, file.lines, file.text),
       ...githubActionsWorkflowInjectionRecords(

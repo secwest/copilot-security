@@ -360,6 +360,10 @@ describe("effectiveness benchmark", () => {
         "kubernetes-safe-isolated-volume",
       ],
       [
+        "kubernetes-cluster-admin-broad-subject",
+        "kubernetes-cluster-admin-specific-group",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

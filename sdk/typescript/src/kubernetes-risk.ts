@@ -87,6 +87,47 @@ export interface KubernetesPrivilegedHostPathRecord {
   };
 }
 
+export interface KubernetesClusterAdminBroadSubjectRecord {
+  path: string;
+  line: number;
+  categories: ["kubernetes-cluster-admin-broad-subject"];
+  priority: number;
+  startLine: number;
+  endLine: number;
+  excerpt: string;
+  sourceExcerpt: string;
+  frameworkModel: {
+    schemaVersion: "1.2";
+    id: "kubernetes-cluster-admin-broad-subject";
+    language: "kubernetes-yaml";
+    scope: "same-file";
+    source: {
+      kind: "broad-kubernetes-principal";
+      path: string;
+      line: number;
+      symbol: string;
+    };
+    sink: {
+      kind: "cluster-admin-clusterrolebinding";
+      path: string;
+      line: number;
+      symbol: string;
+      cweIds: readonly ["CWE-269", "CWE-284"];
+    };
+    propagators: Array<{
+      kind: "kubernetes-clusterrolebinding";
+      path: string;
+      line: number;
+      symbol: string;
+    }>;
+    candidateControls: CandidateControl[];
+  };
+}
+
+export type KubernetesRiskRecord =
+  | KubernetesPrivilegedHostPathRecord
+  | KubernetesClusterAdminBroadSubjectRecord;
+
 interface ParsedDocuments {
   roots: unknown[];
   counter: LineCounter;
@@ -461,6 +502,144 @@ function workloadRecords(
   return records;
 }
 
+const BROAD_CLUSTER_ADMIN_SUBJECTS = new Set([
+  "Group:system:authenticated",
+  "Group:system:serviceaccounts",
+  "Group:system:unauthenticated",
+  "User:system:anonymous",
+]);
+
+function clusterAdminBroadSubjectRecords(
+  path: string,
+  lines: readonly string[],
+  root: unknown,
+  counter: LineCounter,
+): KubernetesClusterAdminBroadSubjectRecord[] {
+  if (!isMap(root)) return [];
+  const apiVersion = scalarText(mapPair(root, "apiVersion")?.value);
+  const kindPair = mapPair(root, "kind");
+  if (
+    apiVersion !== "rbac.authorization.k8s.io/v1" ||
+    scalarText(kindPair?.value) !== "ClusterRoleBinding"
+  ) {
+    return [];
+  }
+  const metadata = mapPair(root, "metadata")?.value;
+  const bindingName = scalarText(mapPair(metadata, "name")?.value)?.trim();
+  if (
+    bindingName === undefined ||
+    bindingName === "" ||
+    mapPair(metadata, "namespace") !== undefined
+  ) {
+    return [];
+  }
+  const roleRef = mapPair(root, "roleRef")?.value;
+  const roleNamePair = mapPair(roleRef, "name");
+  if (
+    scalarText(mapPair(roleRef, "apiGroup")?.value) !==
+      "rbac.authorization.k8s.io" ||
+    scalarText(mapPair(roleRef, "kind")?.value) !== "ClusterRole" ||
+    scalarText(roleNamePair?.value) !== "cluster-admin"
+  ) {
+    return [];
+  }
+  const subjects = mapPair(root, "subjects")?.value;
+  if (!isSeq(subjects)) return [];
+  const identities = subjects.items.map((subject) => {
+    const kind = scalarText(mapPair(subject, "kind")?.value);
+    const name = scalarText(mapPair(subject, "name")?.value);
+    return kind === undefined || name === undefined
+      ? undefined
+      : `${kind}:${name}`;
+  });
+  if (
+    identities.some(
+      (identity, index) =>
+        identity !== undefined && identities.indexOf(identity) !== index,
+    )
+  ) {
+    return [];
+  }
+  const sinkLine = pairLine(roleNamePair, counter);
+  const sinkContext = contextExcerpt(lines, sinkLine);
+  const bindingSymbol = `kind=ClusterRoleBinding;apiVersion=${apiVersion};name=${bindingName}`;
+  const records: KubernetesClusterAdminBroadSubjectRecord[] = [];
+  for (const subject of subjects.items) {
+    if (!isMap(subject) || mapPair(subject, "namespace") !== undefined)
+      continue;
+    const subjectKind = scalarText(mapPair(subject, "kind")?.value);
+    const subjectNamePair = mapPair(subject, "name");
+    const subjectName = scalarText(subjectNamePair?.value);
+    if (
+      (subjectKind !== "Group" && subjectKind !== "User") ||
+      subjectName === undefined ||
+      scalarText(mapPair(subject, "apiGroup")?.value) !==
+        "rbac.authorization.k8s.io" ||
+      !BROAD_CLUSTER_ADMIN_SUBJECTS.has(`${subjectKind}:${subjectName}`)
+    ) {
+      continue;
+    }
+    const sourceLine = pairLine(subjectNamePair, counter);
+    const sourceContext = contextExcerpt(lines, sourceLine);
+    records.push({
+      path,
+      line: sinkLine,
+      categories: ["kubernetes-cluster-admin-broad-subject"],
+      priority: 100,
+      startLine: sinkContext.startLine,
+      endLine: sinkContext.endLine,
+      excerpt: sinkContext.excerpt,
+      sourceExcerpt: sourceContext.excerpt,
+      frameworkModel: {
+        schemaVersion: "1.2",
+        id: "kubernetes-cluster-admin-broad-subject",
+        language: "kubernetes-yaml",
+        scope: "same-file",
+        source: {
+          kind: "broad-kubernetes-principal",
+          path,
+          line: sourceLine,
+          symbol: `kind=${subjectKind};name=${subjectName}`,
+        },
+        sink: {
+          kind: "cluster-admin-clusterrolebinding",
+          path,
+          line: sinkLine,
+          symbol:
+            "apiGroup=rbac.authorization.k8s.io;kind=ClusterRole;name=cluster-admin;scope=cluster",
+          cweIds: ["CWE-269", "CWE-284"],
+        },
+        propagators: [
+          {
+            kind: "kubernetes-clusterrolebinding",
+            path,
+            line: pairLine(kindPair, counter),
+            symbol: bindingSymbol,
+          },
+        ],
+        candidateControls: [],
+      },
+    });
+  }
+  return records;
+}
+
+function privilegedHostPathRecordsFromParsed(
+  path: string,
+  lines: readonly string[],
+  parsed: ParsedDocuments,
+): KubernetesPrivilegedHostPathRecord[] {
+  const records: KubernetesPrivilegedHostPathRecord[] = [];
+  for (const parsedRoot of parsed.roots) {
+    for (const root of rootDocuments(parsedRoot)) {
+      const workload = workloadSpec(root, parsed.counter);
+      if (workload === undefined) continue;
+      records.push(...workloadRecords(path, lines, workload, parsed.counter));
+    }
+  }
+  return records;
+}
+
 export function kubernetesPrivilegedHostPathRecords(
   path: string,
   lines: readonly string[],
@@ -469,12 +648,25 @@ export function kubernetesPrivilegedHostPathRecords(
   if (!/\.ya?ml$/iu.test(path)) return [];
   const parsed = parseDocuments(source);
   if (parsed === undefined) return [];
-  const records: KubernetesPrivilegedHostPathRecord[] = [];
+  return privilegedHostPathRecordsFromParsed(path, lines, parsed);
+}
+
+export function kubernetesRiskRecords(
+  path: string,
+  lines: readonly string[],
+  source: string,
+): KubernetesRiskRecord[] {
+  if (!/\.ya?ml$/iu.test(path)) return [];
+  const parsed = parseDocuments(source);
+  if (parsed === undefined) return [];
+  const records: KubernetesRiskRecord[] = [
+    ...privilegedHostPathRecordsFromParsed(path, lines, parsed),
+  ];
   for (const parsedRoot of parsed.roots) {
     for (const root of rootDocuments(parsedRoot)) {
-      const workload = workloadSpec(root, parsed.counter);
-      if (workload === undefined) continue;
-      records.push(...workloadRecords(path, lines, workload, parsed.counter));
+      records.push(
+        ...clusterAdminBroadSubjectRecords(path, lines, root, parsed.counter),
+      );
     }
   }
   return records;
