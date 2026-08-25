@@ -90,8 +90,44 @@ validates 259 entries and a fresh 67-package install, including public import,
 CLI behavior, and all 79 bundled plugin files. The 1,885,663-byte archive has
 SHA-256
 `c0b1c28853fb39fad842127d72f93bba3d0860f82bc037c4793bd49f915983ea`
-and is removed after validation. A sealed live Copilot campaign remains the
-post-commit evidence gate; this design entry does not anticipate its outcome.
+and is removed after validation.
+
+**Sealed live campaign.** Campaign
+`eda3157f75440e149292731e2556daacae111b6a562304103c0ac354d808605e`
+binds manifest SHA-256
+`03b2bafec2d11c3968b1853a607a45864ebb086528a6caae17f6ea477d2eb401`,
+scanner CLI SHA-256
+`287b9cc996b6ea55518de7cc42205dc430972625fdbe7a6cced6358771d61883`,
+package SHA-256
+`b75279b945ab5201e27651180ae81af81c22b8d7f7d34ccdba59211cd36fcb75`,
+both fixture digests, comparison policy, and source revision
+`787e83e4ce736d1bc378ea2f242d1247a8532570`. Two workers use stored GitHub
+authentication with `gpt-5.6-terra`, high effort, deep mode, and at most three
+isolated attempts. The 6.1.1 control completes on attempt one in 450,022 ms
+with zero findings and complete coverage, recording 1,482,200 input, 1,295,684
+cached, and 33,064 output tokens at $1.398251. The 6.0.2 positive's first draft
+fails closed because one finding-quality and four coverage gaps remain after
+its bounded correction turn. Attempt two completes in 424,429 ms with one high
+CWE-611 finding and complete coverage; deterministic recovery re-anchors two
+code-evidence excerpts from repository bytes. That accepted run records
+1,628,180 input, 1,493,089 cached, and 37,373 output tokens at $1.355991.
+Accepted-run accounting totals 3,110,380 input, 2,788,773 cached, and 70,437
+output tokens at $2.754242. The rejected attempt emits neither usage nor cost,
+so those totals deliberately do not claim to measure its consumption.
+
+The final evaluation contains one true positive, no false positives or false
+negatives, and 1.0 completion, precision, recall, F1, case pass, negative-case
+pass, stability, validation, attack-path, code-evidence, and severity rates;
+false positives per run are zero. Finalize-only replay recomputes that result
+while verifying sealed receipts and artifact hashes and makes no Copilot call.
+The only retry is deterministic content-closure recovery. Campaign logs contain
+no authentication, session, timeout, quota, credit-limit, or classifier-refusal
+error, which directly distinguishes this measured content failure from an
+account allowance problem. All seven implementation-source workflows pass:
+Node `32861983964`, container `32861983978`, Windows GUI `32861984047`, Linux
+GUI `32861983983`, Java `32861984084`, .NET `32861983998`, and Go
+`32861983986`. GitHub reports the repository public with `main` as its default
+branch.
 
 ## 2026-08-25 — Gate lxml iterparse XXE on consumption and exact runtime semantics
 

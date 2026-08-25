@@ -58,6 +58,31 @@ All notable scanner, application, benchmark, and operational changes are recorde
   an isolated install adds 67 packages and validates public import, CLI
   behavior, and all 79 bundled plugin files. The unique package probe and
   fixture bytecode are removed after evidence capture.
+- Sealed live campaign
+  `eda3157f75440e149292731e2556daacae111b6a562304103c0ac354d808605e`
+  binds the specialized manifest and fixture hashes, scanner CLI/package
+  hashes, comparison policy, and source revision
+  `787e83e4ce736d1bc378ea2f242d1247a8532570` to `gpt-5.6-terra`, high
+  effort, deep mode, and stored GitHub authentication. The patched 6.1.1
+  control succeeds on attempt one in 450,022 ms with zero findings and
+  complete coverage, using 1,482,200 input/1,295,684 cached/33,064 output
+  tokens at $1.398251 recorded cost. The affected 6.0.2 case rejects its first
+  draft because one finding-quality and four coverage gaps remain after the
+  bounded correction turn, then succeeds in a fresh attempt in 424,429 ms
+  with one high CWE-611 finding and complete coverage. Host recovery
+  re-anchors two code excerpts from repository bytes; the accepted run uses
+  1,628,180 input/1,493,089 cached/37,373 output tokens at $1.355991 recorded
+  cost. Accepted runs total 3,110,380 input, 2,788,773 cached, and 70,437
+  output tokens at $2.754242; the rejected attempt did not emit usage or cost,
+  so it is not included in that accounting. All twelve strict metrics pass at
+  1.0 except the required zero false positives per run, and finalize-only
+  replay verifies the sealed receipts and artifact hashes without another
+  model call. The sole retry is deterministic content-closure recovery; logs
+  contain no authentication, session, timeout, quota, credit-limit, or
+  classifier-refusal error. All seven implementation-source workflow families
+  pass: Node `32861983964`, container `32861983978`, Windows GUI `32861984047`,
+  Linux GUI `32861983983`, Java `32861984084`, .NET `32861983998`, and Go
+  `32861983986`. GitHub reports the repository public on default branch `main`.
 - Added `python-web-lxml-iterparse-xxe`, a version-aware request-to-parser
   model for CWE-611 and CVE-2026-41066/GHSA-vfmq-68hx-4jfw. It resolves live
   official `lxml.etree.iterparse` module, receiver, direct, aliased, and
