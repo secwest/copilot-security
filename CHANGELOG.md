@@ -6,6 +6,58 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-lxml-etcompat-xxe`, a version-aware CWE-611 model that
+  completes the second parser surface in CVE-2026-41066/GHSA-vfmq-68hx-4jfw.
+  It resolves live official `ETCompatXMLParser` and `XMLTreeBuilder`
+  constructors plus `XML`, `fromstring`, `fromstringlist`, and `parse` calls
+  across module, receiver, direct, aliased, and bounded parenthesized imports.
+  A finding requires request-controlled XML, an exact constructed
+  ET-compatible parser supplied in parser argument one or `parser=`, and
+  either literal `resolve_entities=True` or the affected omitted default under
+  one nearest exact `lxml<6.1.0` `requirements.txt` pin. Ordinary
+  `XMLParser`, parser construction without use, patched or unproved defaults,
+  safe or dynamic modes, positional constructor arguments, unrelated
+  function scopes, local lookalikes, package shadows, reassignment, wrong-role
+  input, and star expansion fail closed.
+- Added source-identical Flask `lxml==6.0.2` and `lxml==6.1.1` ET-compatible
+  parser fixtures and a perfect-gate specialized benchmark. On Python 3.12.3
+  under Linux/WSL, the affected fixture returns
+  `fixture-local-etcompat-marker` through its local `file:` `SYSTEM` entity;
+  the patched control raises `XMLSyntaxError` and returns no marker. The
+  witness uses no network or shell and reads no non-fixture path. The canonical
+  corpus now contains 111 exploit/control pairs, 222 cases, and 666 repeated
+  scans.
+- Added seventeen ET-compatible parser regression groups covering every
+  supported constructor and parse binding, positional and keyword parser use,
+  multiline construction, explicit and version-derived modes, nearest
+  dependency boundaries, one-hop and two-relay aliases, function-scope
+  isolation, dense-call candidate budgets, import invalidation, shadows,
+  lookalikes, wrong argument roles, and ten independent semantic evidence
+  groups in both validation and attack path. A test-discovered expression
+  resolver defect that let an identifier-only assignment absorb a later call
+  is closed, and the existing `iterparse` wrapper-summary discovery now also
+  derives candidates from exact imports instead of spellings.
+- Compared the new model with the official advisory and lxml 6.0.2/6.1.0
+  `parser.pxi` implementations. Those primary sources prove that
+  `ETCompatXMLParser` and its `XMLTreeBuilder` alias retained the external-
+  entity default until 6.1.0, independently of the earlier ordinary
+  `XMLParser` default change. Public CodeQL Python XXE guidance establishes
+  the generic category but does not encode this ET-compatible version/API
+  split. The scanner adds exact constructor-to-parser-use flow, bounded alias
+  resolution, dependency scope, executable paired evidence, and field-local
+  report closure.
+- Final local acceptance is green. Focused Windows tests pass 34 tests and
+  1,852 assertions with one intentional POSIX-only skip; Ubuntu/WSL passes all
+  35 tests and 1,853 assertions. The authoritative unrestricted Windows suite
+  passes 1,595 tests and 11,779 assertions across 175 files with 23 intentional
+  environment/platform skips, zero failures, and a 605.80-second runtime.
+  Formatting, generated-model drift, TypeScript compilation, the clean build,
+  and the high-severity production audit pass. Strict inspection validates a
+  fresh 259-entry, 1,885,663-byte package with SHA-256
+  `c0b1c28853fb39fad842127d72f93bba3d0860f82bc037c4793bd49f915983ea`;
+  an isolated install adds 67 packages and validates public import, CLI
+  behavior, and all 79 bundled plugin files. The unique package probe and
+  fixture bytecode are removed after evidence capture.
 - Added `python-web-lxml-iterparse-xxe`, a version-aware request-to-parser
   model for CWE-611 and CVE-2026-41066/GHSA-vfmq-68hx-4jfw. It resolves live
   official `lxml.etree.iterparse` module, receiver, direct, aliased, and

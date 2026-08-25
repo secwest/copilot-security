@@ -2124,6 +2124,34 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-web-lxml-etcompat-xxe",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+lxml(?:\.etree)?\b|\bfrom\s+lxml(?:\.etree)?\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-body",
+        expression:
+          /\brequest\.(?:body|data|files|form|json|POST|stream)\b|\brequest\.(?:get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\bBody\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "lxml-etcompat-external-entity-resolution",
+        expression:
+          /\b(?:[A-Za-z_]\w*\s*\.\s*)*(?:XML|fromstring|fromstringlist|parse)\s*\(/u,
+        cweIds: ["CWE-611"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-pyyaml-unsafe-load",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3184,7 +3212,8 @@ function isPythonUnsafeDeserializationModel(modelId: string): boolean {
     modelId === "python-web-numpy-allow-pickle-load" ||
     modelId === "python-web-joblib-unsafe-load" ||
     modelId === "python-web-torch-unsafe-load" ||
-    modelId === "python-web-lxml-iterparse-xxe"
+    modelId === "python-web-lxml-iterparse-xxe" ||
+    modelId === "python-web-lxml-etcompat-xxe"
   );
 }
 
@@ -3413,6 +3442,19 @@ const LXML_ITERPARSE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["lxml 6.0.2", "lxml==6.0.2"],
 ] as const;
 
+const LXML_ETCOMPAT_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["XML upload", "request.files", "uploaded XML"],
+  ["parse_document", "wrapper"],
+  ["ETCompatXMLParser", "XMLTreeBuilder"],
+  ["lxml.etree.fromstring", "etree.fromstring", "parse binding"],
+  ["parser argument", "parser=", "argument one", "argument 1"],
+  ["default resolve_entities=True", "pre-6.1 default", "CVE-2026-41066"],
+  ["external entity", "SYSTEM entity", "DOCTYPE"],
+  ["local file", "fixture marker", "file URI"],
+  ["Python 3.12.3"],
+  ["lxml 6.0.2", "lxml==6.0.2"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3436,6 +3478,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: LXML_ITERPARSE_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: LXML_ITERPARSE_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-web-lxml-etcompat-xxe",
+    {
+      validation: LXML_ETCOMPAT_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: LXML_ETCOMPAT_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -14251,11 +14300,13 @@ function frameworkDataflowRecords(
           : PYTHON_EXTENSIONS.has(extension)
             ? model.id === "python-web-lxml-iterparse-xxe"
               ? pythonLxmlIterparseCandidateLines(lines, 64)
-              : matchingPythonModelLines(
-                  lines,
-                  model.sinks,
-                  isPythonUnsafeDeserializationModel(model.id) ? 64 : 8,
-                )
+              : model.id === "python-web-lxml-etcompat-xxe"
+                ? pythonLxmlEtCompatCandidateLines(lines, 64)
+                : matchingPythonModelLines(
+                    lines,
+                    model.sinks,
+                    isPythonUnsafeDeserializationModel(model.id) ? 64 : 8,
+                  )
             : extension === ".java" || extension === ".cs"
               ? matchingJavaModelLines(lines, model.sinks, 8)
               : matchingModelLines(lines, model.sinks, 8);
@@ -14470,7 +14521,9 @@ function frameworkDataflowRecords(
                   ? pythonTorchUnsafeSink(files, path, lines, sink.line)
                   : model.id === "python-web-lxml-iterparse-xxe"
                     ? pythonLxmlIterparseXxeSink(files, path, lines, sink.line)
-                    : undefined;
+                    : model.id === "python-web-lxml-etcompat-xxe"
+                      ? pythonLxmlEtCompatXxeSink(files, path, lines, sink.line)
+                      : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -23920,7 +23973,11 @@ function pythonFrameworkWrapperSummaries(
       const sinks =
         model.id === "python-web-path"
           ? exactFilesystemPathSinkLines(file.lines, model.id, 32)
-          : matchingPythonModelLines(file.lines, model.sinks, 32);
+          : model.id === "python-web-lxml-iterparse-xxe"
+            ? pythonLxmlIterparseCandidateLines(file.lines, 64)
+            : model.id === "python-web-lxml-etcompat-xxe"
+              ? pythonLxmlEtCompatCandidateLines(file.lines, 64)
+              : matchingPythonModelLines(file.lines, model.sinks, 32);
       const controls = matchingPythonModelLines(file.lines, model.controls, 64);
       for (const wrapper of exportedFunctions) {
         for (const sink of sinks) {
@@ -23974,7 +24031,14 @@ function pythonFrameworkWrapperSummaries(
                             file.lines,
                             sink.line,
                           )
-                        : undefined;
+                        : model.id === "python-web-lxml-etcompat-xxe"
+                          ? pythonLxmlEtCompatXxeSink(
+                              files,
+                              file.path,
+                              file.lines,
+                              sink.line,
+                            )
+                          : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
@@ -25512,6 +25576,301 @@ function pythonLxmlIterparseCandidateLines(
   return matches;
 }
 
+interface PythonLxmlEtCompatBinding extends PythonModuleImportBinding {
+  memberPath: string;
+  operation: string;
+}
+
+interface PythonLxmlEtCompatBindingContext {
+  constructors: PythonLxmlEtCompatBinding[];
+  parsers: PythonLxmlEtCompatBinding[];
+}
+
+const PYTHON_LXML_ETCOMPAT_CONSTRUCTORS = new Set([
+  "ETCompatXMLParser",
+  "XMLTreeBuilder",
+]);
+
+const PYTHON_LXML_PARSE_FUNCTIONS = new Set([
+  "XML",
+  "fromstring",
+  "fromstringlist",
+  "parse",
+]);
+
+function pythonLxmlEtCompatBindings(
+  lines: readonly string[],
+): PythonLxmlEtCompatBindingContext {
+  const constructors: PythonLxmlEtCompatBinding[] = [];
+  const parsers: PythonLxmlEtCompatBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  const addReceiverBindings = (
+    local: string,
+    memberPrefix: string,
+    line: number,
+  ): void => {
+    for (const operation of PYTHON_LXML_ETCOMPAT_CONSTRUCTORS) {
+      constructors.push({
+        imported: `lxml.etree.${operation}`,
+        local,
+        memberPath: `${memberPrefix}${operation}`,
+        operation,
+        line,
+      });
+    }
+    for (const operation of PYTHON_LXML_PARSE_FUNCTIONS) {
+      parsers.push({
+        imported: `lxml.etree.${operation}`,
+        local,
+        memberPath: `${memberPrefix}${operation}`,
+        operation,
+        line,
+      });
+    }
+  };
+
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const moduleImport =
+      /^\s*import\s+lxml\.etree(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+        structural,
+      );
+    if (moduleImport !== null) {
+      addReceiverBindings(
+        moduleImport[1] ?? "lxml",
+        moduleImport[1] === undefined ? "etree." : "",
+        index + 1,
+      );
+      continue;
+    }
+
+    const etreeImport = /^\s*from\s+lxml\s+import\s+(.+?)\s*$/u.exec(
+      structural,
+    );
+    const directImport = /^\s*from\s+lxml\.etree\s+import\s+(.+?)\s*$/u.exec(
+      structural,
+    );
+    const imported = etreeImport?.[1] ?? directImport?.[1];
+    if (imported === undefined) continue;
+    let importedText = imported.trim();
+    if (importedText.startsWith("(") && !importedText.endsWith(")")) {
+      for (
+        let offset = index + 1;
+        offset < Math.min(structuralLines.length, index + 8);
+        offset += 1
+      ) {
+        importedText += `\n${structuralLines[offset] ?? ""}`;
+        if ((structuralLines[offset] ?? "").includes(")")) break;
+      }
+    }
+    if (importedText.startsWith("(") !== importedText.endsWith(")")) {
+      continue;
+    }
+    importedText = importedText.replace(/^\(([\s\S]*)\)$/u, "$1");
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const binding = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      if (binding?.[1] === undefined) continue;
+      const importedName = binding[1];
+      const local = binding[2] ?? importedName;
+      if (etreeImport !== null && importedName === "etree") {
+        addReceiverBindings(local, "", index + 1);
+      } else if (
+        directImport !== null &&
+        PYTHON_LXML_ETCOMPAT_CONSTRUCTORS.has(importedName)
+      ) {
+        constructors.push({
+          imported: `lxml.etree.${importedName}`,
+          local,
+          memberPath: "",
+          operation: importedName,
+          line: index + 1,
+        });
+      } else if (
+        directImport !== null &&
+        PYTHON_LXML_PARSE_FUNCTIONS.has(importedName)
+      ) {
+        parsers.push({
+          imported: `lxml.etree.${importedName}`,
+          local,
+          memberPath: "",
+          operation: importedName,
+          line: index + 1,
+        });
+      }
+    }
+  }
+  return { constructors, parsers };
+}
+
+function pythonLxmlBindingCallee(binding: PythonLxmlEtCompatBinding): RegExp {
+  const memberPattern = binding.memberPath
+    .split(".")
+    .filter(Boolean)
+    .map(escapeRegularExpression)
+    .join("\\s*\\.\\s*");
+  return memberPattern === ""
+    ? new RegExp(`\\b${escapeRegularExpression(binding.local)}\\s*\\(`, "u")
+    : new RegExp(
+        `\\b${escapeRegularExpression(binding.local)}\\s*\\.\\s*${memberPattern}\\s*\\(`,
+        "u",
+      );
+}
+
+function pythonLxmlBindingIsLive(
+  lines: readonly string[],
+  binding: PythonLxmlEtCompatBinding,
+  callLine: number,
+  wrapper: ExportedPythonFunction | undefined,
+): boolean {
+  const rootMember = binding.memberPath.split(".")[0];
+  return !(
+    binding.line >= callLine ||
+    wrapper?.parameters.includes(binding.local) === true ||
+    pythonImportedBindingReassigned(lines, binding, undefined, callLine) ||
+    (binding.memberPath !== "" &&
+      (pythonImportedBindingReassigned(
+        lines,
+        binding,
+        binding.memberPath,
+        callLine,
+      ) ||
+        (rootMember !== undefined &&
+          pythonImportedBindingReassigned(
+            lines,
+            binding,
+            rootMember,
+            callLine,
+          ))))
+  );
+}
+
+function pythonLxmlEtCompatCandidateLines(
+  lines: readonly string[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const bindings = pythonLxmlEtCompatBindings(lines).parsers.map((binding) => ({
+    binding,
+    callee: pythonLxmlBindingCallee(binding),
+  }));
+  const structuralLines = pythonStructuralLines(lines);
+  const matches: Array<{ kind: string; line: number }> = [];
+  for (
+    let index = 0;
+    index < structuralLines.length && matches.length < limit;
+    index += 1
+  ) {
+    const line = index + 1;
+    const structural = structuralLines[index] ?? "";
+    if (
+      bindings.some(
+        ({ binding, callee }) => binding.line < line && callee.test(structural),
+      )
+    ) {
+      matches.push({
+        kind: "lxml-etcompat-external-entity-resolution",
+        line,
+      });
+    }
+  }
+  return matches;
+}
+
+interface PythonResolvedExpressionOrigin {
+  expression: string;
+  line: number;
+}
+
+function pythonTopLevelFunctionRangeAtLine(
+  lines: readonly string[],
+  line: number,
+): { startLine: number; endLine: number } | undefined {
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    if (
+      /^\s/u.test(structural) ||
+      !/^(?:async\s+)?def\s+[A-Za-z_]\w*\s*\(/u.test(structural)
+    ) {
+      continue;
+    }
+    const endLine = pythonFunctionEndLine(lines, index);
+    if (line >= index + 1 && line <= endLine) {
+      return { startLine: index + 1, endLine };
+    }
+  }
+  return undefined;
+}
+
+function pythonAssignmentValueAtLine(
+  lines: readonly string[],
+  line: number,
+): string | undefined {
+  const original = lines
+    .slice(line - 1, Math.min(lines.length, line + 12))
+    .join("\n");
+  const equals = pythonStructuralCode(lines[line - 1] ?? "").indexOf("=");
+  if (equals < 0) return undefined;
+  const value = original.slice(equals + 1).trim();
+  const firstLine = value.split("\n", 1)[0] ?? "";
+  const open = pythonStructuralCode(firstLine).indexOf("(");
+  if (open < 0) return firstLine.trim();
+  const close = matchingCallParenthesis(value, open);
+  return (close < 0 ? value : value.slice(0, close + 1)).trim();
+}
+
+function resolvePythonExpressionOrigin(
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+): PythonResolvedExpressionOrigin | undefined {
+  const value = expression.trim();
+  if (value === "" || depth > 8) return undefined;
+  if (!/^[A-Za-z_]\w*$/u.test(value)) {
+    return { expression: value, line: beforeLine };
+  }
+  if (seen.has(value)) return undefined;
+  const earliest = Math.max(1, beforeLine - 64);
+  const structuralLines = pythonStructuralLines(lines);
+  const assignment = new RegExp(
+    `^\\s*${escapeRegularExpression(value)}\\s*(?::[^=]+)?=`,
+    "u",
+  );
+  for (let line = beforeLine - 1; line >= earliest; line -= 1) {
+    if (!assignment.test(structuralLines[line - 1] ?? "")) continue;
+    if (pythonIdentifierReassignedBetween(lines, value, line, beforeLine)) {
+      return undefined;
+    }
+    const assigned = pythonAssignmentValueAtLine(lines, line);
+    if (assigned === undefined) return undefined;
+    return resolvePythonExpressionOrigin(
+      lines,
+      assigned,
+      line,
+      depth + 1,
+      new Set([...seen, value]),
+    );
+  }
+  return { expression: value, line: beforeLine };
+}
+
+function pythonCallArgumentsForExpression(
+  expression: string,
+  callee: RegExp,
+): string[] | undefined {
+  const structural = pythonStructuralCode(expression);
+  const match = callee.exec(structural);
+  if (match === null) return undefined;
+  const open = structural.indexOf("(", match.index);
+  if (open < 0) return undefined;
+  const close = matchingCallParenthesis(expression, open);
+  if (close < 0 || expression.slice(close + 1).trim() !== "") return undefined;
+  return splitPythonArguments(expression.slice(open + 1, close));
+}
+
 interface PythonPinnedRequirement {
   packageName: string;
   version: string;
@@ -26207,6 +26566,183 @@ function pythonLxmlIterparseXxeSink(
         },
       ],
     };
+  }
+  return undefined;
+}
+
+function pythonLxmlEtCompatXxeSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonUnsafeDeserializationSink | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "lxml")) {
+    return undefined;
+  }
+  const context = pythonLxmlEtCompatBindings(lines);
+  const exportedFunctions = exportedPythonFunctions(lines);
+  const wrapper = exportedFunctions.find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  for (const parserBinding of context.parsers) {
+    if (!pythonLxmlBindingIsLive(lines, parserBinding, line, wrapper)) continue;
+    const parserCallee = pythonLxmlBindingCallee(parserBinding);
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(
+      lines,
+      line,
+      parserCallee,
+    );
+    if (
+      arguments_ === undefined ||
+      arguments_.some((argument) => argument.trim().startsWith("*"))
+    ) {
+      continue;
+    }
+    const positional = pythonPositionalArguments(arguments_);
+    const sourceKeyword =
+      parserBinding.operation === "parse"
+        ? "source"
+        : parserBinding.operation === "fromstringlist"
+          ? "strings"
+          : "text";
+    const sourceExpression =
+      pythonKeywordArgument(arguments_, sourceKeyword) ?? positional[0];
+    const parserExpression =
+      pythonKeywordArgument(arguments_, "parser") ?? positional[1];
+    if (
+      sourceExpression === undefined ||
+      sourceExpression.trim() === "" ||
+      parserExpression === undefined ||
+      parserExpression.trim() === ""
+    ) {
+      continue;
+    }
+    const resolvedParser = resolvePythonExpressionOrigin(
+      lines,
+      parserExpression,
+      line,
+    );
+    if (resolvedParser === undefined) continue;
+    const sinkOwner = pythonTopLevelFunctionRangeAtLine(lines, line);
+    const constructionOwner = pythonTopLevelFunctionRangeAtLine(
+      lines,
+      resolvedParser.line,
+    );
+    if (
+      constructionOwner !== undefined &&
+      (sinkOwner === undefined ||
+        constructionOwner.startLine !== sinkOwner.startLine)
+    ) {
+      continue;
+    }
+
+    for (const constructorBinding of context.constructors) {
+      const constructorWrapper =
+        wrapper !== undefined &&
+        resolvedParser.line >= wrapper.startLine &&
+        resolvedParser.line <= wrapper.endLine
+          ? wrapper
+          : undefined;
+      if (
+        !pythonLxmlBindingIsLive(
+          lines,
+          constructorBinding,
+          resolvedParser.line,
+          constructorWrapper,
+        )
+      ) {
+        continue;
+      }
+      const constructorCallee = pythonLxmlBindingCallee(constructorBinding);
+      const constructorArguments = pythonCallArgumentsForExpression(
+        resolvedParser.expression,
+        constructorCallee,
+      );
+      if (
+        constructorArguments === undefined ||
+        constructorArguments.some((argument) =>
+          argument.trim().startsWith("*"),
+        ) ||
+        pythonPositionalArguments(constructorArguments).length > 0
+      ) {
+        continue;
+      }
+      const resolveEntitiesExpression = pythonKeywordArgument(
+        constructorArguments,
+        "resolve_entities",
+      );
+      const resolveEntities =
+        resolveEntitiesExpression === undefined
+          ? undefined
+          : pythonStructuralCode(resolveEntitiesExpression).trim();
+      const pinned = pythonPinnedRequirement(files, sourcePath, "lxml");
+      let unsafeMode:
+        | "explicit-external-entities"
+        | "affected-default"
+        | undefined;
+      if (resolveEntities === "True") {
+        unsafeMode = "explicit-external-entities";
+      } else if (
+        resolveEntities === undefined &&
+        pinned !== undefined &&
+        !pythonPackageVersionAtLeast(pinned.version, [6, 1, 0])
+      ) {
+        unsafeMode = "affected-default";
+      }
+      if (unsafeMode === undefined) continue;
+
+      const modePropagator =
+        unsafeMode === "explicit-external-entities"
+          ? {
+              kind: "explicit-lxml-external-entity-resolution",
+              path: sourcePath,
+              line: resolvedParser.line,
+              symbol: "resolve_entities=True",
+            }
+          : {
+              kind: "affected-lxml-etcompat-default",
+              path: pinned!.path,
+              line: pinned!.line,
+              symbol: `lxml@${pinned!.version}:CVE-2026-41066`,
+            };
+      return {
+        sourceExpression,
+        kind: "lxml-etcompat-untrusted-xml",
+        propagators: [
+          {
+            kind: "lxml-parse-binding",
+            path: sourcePath,
+            line: parserBinding.line,
+            symbol: `${parserBinding.imported} as ${parserBinding.local}`,
+          },
+          {
+            kind: "lxml-etcompat-binding",
+            path: sourcePath,
+            line: constructorBinding.line,
+            symbol: `${constructorBinding.imported} as ${constructorBinding.local}`,
+          },
+          {
+            kind: "lxml-etcompat-construction",
+            path: sourcePath,
+            line: resolvedParser.line,
+            symbol: constructorBinding.operation,
+          },
+          modePropagator,
+          {
+            kind: "lxml-etcompat-parser-use",
+            path: sourcePath,
+            line,
+            symbol: `${parserBinding.operation}:parser`,
+          },
+          {
+            kind: "intrinsic-lxml-external-entity-resolution",
+            path: sourcePath,
+            line,
+            symbol: "local SYSTEM entity",
+          },
+        ],
+      };
+    }
   }
   return undefined;
 }

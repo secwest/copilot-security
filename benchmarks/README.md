@@ -96,7 +96,9 @@ fixture-local `__reduce__` callable witness, a NumPy object-array
 `allow_pickle=True`/`False` upload pair, a pickle-backed `joblib.load`/JSON
 model-upload pair, and a version-sensitive PyTorch full-unpickler/patched
 weights-only checkpoint pair, a source-identical lxml 6.0.2/6.1.1
-`iterparse` external-entity pair, plus a PyYAML `UnsafeLoader`/`safe_load`
+`iterparse` external-entity pair, a second source-identical pair that supplies
+an affected-default `ETCompatXMLParser` to `fromstring`, plus a PyYAML
+`UnsafeLoader`/`safe_load`
 relative-wrapper pair, reflected XSS, XML
 external entities, JWT signature-verification bypass, JWT `alg`/key-type
 confusion that reinterprets an RSA public key as an HMAC secret,
@@ -208,8 +210,11 @@ pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. The lxml
 pair then proves that eagerly consumed `iterparse` under one exact 6.0.2 pin
 retains local external-entity access while source-identical 6.1.1 rejects the
-same fixture-local `SYSTEM` entity. Three runs per case now produce 660 scans
-across 110 exploit/control pairs in the complete corpus. The added
+same fixture-local `SYSTEM` entity. Its ET-compatible companion proves the
+separate constructor default and requires that the exact constructed parser
+actually reach the parse call; ordinary `XMLParser` and construction alone
+remain negative. Three runs per case now produce 666 scans across 111
+exploit/control pairs in the complete corpus. The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size

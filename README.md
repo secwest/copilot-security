@@ -2076,13 +2076,16 @@ runtime, and malicious checkpoint while changing only explicit
 `weights_only=False` to `weights_only=True`. Its host model separately proves
 full-unpickler opt-in, a custom pickle module, a pre-2.6 default under an exact
 pin, or an advisory-affected weights-only version instead of treating every
-`torch.load` spelling as exploitable. The lxml pair keeps the Flask upload,
-relative `parse_events` wrapper, eager `iterparse` consumption, XML payload,
-and fixture-local marker identical while changing only `lxml==6.0.2` to
-`lxml==6.1.1`; the former discloses the marker through the affected external
-entity default and the latter rejects it. Each of the 220 cases in 110
-exploit/control pairs is scanned three times, producing 660 scans that measure
-both accuracy and model variance.
+`torch.load` spelling as exploitable. The lxml pairs keep their Flask upload,
+relative wrapper, XML payload, and fixture-local marker identical while
+changing only `lxml==6.0.2` to `lxml==6.1.1`; the former discloses the marker
+through the affected external-entity default and the latter rejects it. One
+pair requires eager `iterparse` consumption. The other requires a constructed
+`ETCompatXMLParser` (or its `XMLTreeBuilder` alias) to reach the actual `XML`,
+`fromstring`, `fromstringlist`, or `parse` parser argument without conflating
+ordinary `XMLParser`. Each of the 222 cases in 111 exploit/control pairs is
+scanned three times, producing 666 scans that measure both accuracy and model
+variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses
 keyword-mode findings that could not reach the modeled loader branch.

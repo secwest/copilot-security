@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-lxml-etcompat-xxe",
+      "description": "A Flask XML upload crosses a relative wrapper into lxml fromstring with an affected-default ETCompatXMLParser.",
+      "fixture": "fixtures/python-lxml-etcompat-xxe",
+      "findingsPaths": ["python-lxml-etcompat-xxe/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "python-lxml-etcompat-local-entity-disclosure",
+          "cwe": ["CWE-611"],
+          "locations": [
+            {
+              "path": "src/parser.py",
+              "startLine": 6,
+              "endLine": 6,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["XML upload", "request.files", "uploaded XML"],
+            ["parse_document", "wrapper"],
+            ["ETCompatXMLParser", "XMLTreeBuilder"],
+            ["lxml.etree.fromstring", "etree.fromstring", "parse binding"],
+            ["parser argument", "parser=", "argument one", "argument 1"],
+            [
+              "default resolve_entities=True",
+              "pre-6.1 default",
+              "CVE-2026-41066"
+            ],
+            ["external entity", "SYSTEM entity", "DOCTYPE"],
+            ["local file", "fixture marker", "file URI"],
+            ["Python 3.12.3"],
+            ["lxml 6.0.2", "lxml==6.0.2"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["XML upload", "request.files", "uploaded XML"],
+            ["parse_document", "wrapper"],
+            ["ETCompatXMLParser", "XMLTreeBuilder"],
+            ["lxml.etree.fromstring", "etree.fromstring", "parse binding"],
+            ["parser argument", "parser=", "argument one", "argument 1"],
+            [
+              "default resolve_entities=True",
+              "pre-6.1 default",
+              "CVE-2026-41066"
+            ],
+            ["external entity", "SYSTEM entity", "DOCTYPE"],
+            ["local file", "fixture marker", "file URI"],
+            ["Python 3.12.3"],
+            ["lxml 6.0.2", "lxml==6.0.2"]
+          ],
+          "forbiddenText": [
+            "ordinary XMLParser shares this default",
+            "parser construction alone proves XXE",
+            "no_network blocks local files",
+            "lxml 6.1.1 retains the vulnerable default"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-lxml-etcompat-patched-control",
+      "description": "The source-identical Flask XML upload uses lxml 6.1.1, whose patched ETCompatXMLParser default rejects the local external entity.",
+      "fixture": "fixtures/python-lxml-etcompat-patched-control",
+      "findingsPaths": [
+        "python-lxml-etcompat-patched-control/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}
