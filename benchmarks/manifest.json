@@ -757,6 +757,75 @@
       "expected": []
     },
     {
+      "id": "python-torch-unsafe-load",
+      "description": "A Flask model upload crosses a relative wrapper into torch.load with the full pickle unpickler.",
+      "fixture": "fixtures/python-torch-unsafe-load",
+      "findingsPaths": [
+        "python-torch-unsafe-load/run-1/findings.json",
+        "python-torch-unsafe-load/run-2/findings.json",
+        "python-torch-unsafe-load/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-torch-pickle-unsafe-deserialization",
+          "cwe": ["CWE-502"],
+          "locations": [
+            {
+              "path": "src/parser.py",
+              "startLine": 13,
+              "endLine": 13,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["model upload", "request.files", "uploaded stream"],
+            ["parse_model", "wrapper"],
+            ["torch.load", "Torch load"],
+            ["file object", "argument zero", "argument 0", "f="],
+            ["weights_only=False", "full unpickler", "unrestricted unpickler"],
+            ["pickle-backed", "pickle protocol", "Python pickle"],
+            ["__reduce__", "REDUCE", "callable"],
+            ["effects.mark", "in-process effect", "process integrity"],
+            ["Python 3.12.3"],
+            ["torch 2.13.0+cpu", "torch==2.13.0+cpu", "PyTorch 2.13.0+cpu"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["model upload", "request.files", "uploaded stream"],
+            ["parse_model", "wrapper"],
+            ["torch.load", "Torch load"],
+            ["file object", "argument zero", "argument 0", "f="],
+            ["weights_only=False", "full unpickler", "unrestricted unpickler"],
+            ["pickle-backed", "pickle protocol", "Python pickle"],
+            ["__reduce__", "REDUCE", "callable"],
+            ["effects.mark", "in-process effect", "process integrity"],
+            ["Python 3.12.3"],
+            ["torch 2.13.0+cpu", "torch==2.13.0+cpu", "PyTorch 2.13.0+cpu"]
+          ],
+          "forbiddenText": [
+            "Torch import alone proves code execution",
+            "torch.save executes the payload",
+            "map_location prevents pickle execution",
+            "weights_only=True is safe on every PyTorch version"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-torch-weights-only-control",
+      "description": "The identical upload and checkpoint fail closed at patched weights-only loading.",
+      "fixture": "fixtures/python-torch-weights-only-control",
+      "findingsPaths": [
+        "python-torch-weights-only-control/run-1/findings.json",
+        "python-torch-weights-only-control/run-2/findings.json",
+        "python-torch-weights-only-control/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-pickle-unsafe-load",
       "description": "A Flask request body crosses a relative wrapper into standard-library pickle.loads callable execution.",
       "fixture": "fixtures/python-pickle-unsafe-load",

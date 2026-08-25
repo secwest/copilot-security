@@ -51,6 +51,8 @@ const MAX_NODE_PACKAGE_MANIFEST_BYTES = 2 * 1024 * 1024;
 const MAX_NODE_PACKAGE_LOCKFILES = 128;
 const MAX_NODE_PACKAGE_LOCKFILE_BYTES = 16 * 1024 * 1024;
 const MAX_NODE_PACKAGE_LOCKFILE_BYTES_PER_FILE = 4 * 1024 * 1024;
+const MAX_PYTHON_REQUIREMENT_FILES = 512;
+const MAX_PYTHON_REQUIREMENT_BYTES = 2 * 1024 * 1024;
 const CONTEXT_LINES_BEFORE = 3;
 const CONTEXT_LINES_AFTER = 5;
 const MAX_EXCERPT_LINES = 16;
@@ -2068,6 +2070,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-web-torch-unsafe-load",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+torch(?:\s+as\s+[A-Za-z_]\w*)?\b|\bfrom\s+torch\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-body",
+        expression:
+          /\brequest\.(?:body|data|files|form|json|POST|stream)\b|\brequest\.(?:get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\bBody\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "torch-pickle-object-construction",
+        expression: /\b(?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*\s*\(/u,
+        cweIds: ["CWE-502"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-pyyaml-unsafe-load",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3126,7 +3155,8 @@ function isPythonUnsafeDeserializationModel(modelId: string): boolean {
     modelId === "python-web-pickle-unsafe-load" ||
     modelId === "python-web-pyyaml-unsafe-load" ||
     modelId === "python-web-numpy-allow-pickle-load" ||
-    modelId === "python-web-joblib-unsafe-load"
+    modelId === "python-web-joblib-unsafe-load" ||
+    modelId === "python-web-torch-unsafe-load"
   );
 }
 
@@ -3321,6 +3351,27 @@ const JOBLIB_FIELD_EVIDENCE_REQUIREMENTS = [
   ["joblib 1.5.3", "joblib==1.5.3"],
 ] as const;
 
+const TORCH_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["model upload", "request.files", "uploaded stream"],
+  ["parse_model", "wrapper"],
+  ["torch.load", "Torch load"],
+  ["file object", "argument zero", "argument 0", "f="],
+  [
+    "weights_only=False",
+    "full unpickler",
+    "unrestricted unpickler",
+    "custom pickle module",
+    "pre-2.6 default",
+    "affected weights_only",
+    "GHSA-63cw-57p8-fm3p",
+  ],
+  ["pickle-backed", "pickle protocol", "Python pickle"],
+  ["__reduce__", "REDUCE", "callable"],
+  ["effects.mark", "in-process effect", "process integrity"],
+  ["Python 3.12.3"],
+  ["torch 2.13.0+cpu", "torch==2.13.0+cpu", "PyTorch 2.13.0+cpu"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3330,6 +3381,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: JOBLIB_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: JOBLIB_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-web-torch-unsafe-load",
+    {
+      validation: TORCH_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: TORCH_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -3405,6 +3463,12 @@ export async function buildResidualRiskInventory(
 
   sourceFiles.push(
     ...(await nearestNodePackageMetadataSnapshots(
+      canonicalRepository,
+      sourceFiles,
+    )),
+  );
+  sourceFiles.push(
+    ...(await nearestPythonRequirementSnapshots(
       canonicalRepository,
       sourceFiles,
     )),
@@ -14352,7 +14416,9 @@ function frameworkDataflowRecords(
               ? pythonNumpyAllowPickleUnsafeSink(files, path, lines, sink.line)
               : model.id === "python-web-joblib-unsafe-load"
                 ? pythonJoblibUnsafeSink(files, path, lines, sink.line)
-                : undefined;
+                : model.id === "python-web-torch-unsafe-load"
+                  ? pythonTorchUnsafeSink(files, path, lines, sink.line)
+                  : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -23842,7 +23908,14 @@ function pythonFrameworkWrapperSummaries(
                         file.lines,
                         sink.line,
                       )
-                    : undefined;
+                    : model.id === "python-web-torch-unsafe-load"
+                      ? pythonTorchUnsafeSink(
+                          files,
+                          file.path,
+                          file.lines,
+                          sink.line,
+                        )
+                      : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
@@ -25098,6 +25171,7 @@ interface PythonNumpyBindingContext {
 }
 
 type PythonJoblibBindingContext = PythonNumpyBindingContext;
+type PythonTorchBindingContext = PythonNumpyBindingContext;
 
 function pythonNumpyBindings(
   lines: readonly string[],
@@ -25203,6 +25277,136 @@ function pythonJoblibBindings(
     }
   }
   return { receivers, functions };
+}
+
+function pythonTorchBindings(
+  lines: readonly string[],
+): PythonTorchBindingContext {
+  const receivers: PythonModuleImportBinding[] = [];
+  const functions: PythonModuleImportBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const receiver = /^\s*import\s+torch(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+      structural,
+    );
+    if (receiver !== null) {
+      receivers.push({
+        imported: "torch",
+        local: receiver[1] ?? "torch",
+        line: index + 1,
+      });
+      continue;
+    }
+    const fromImport = /^\s*from\s+torch\s+import\s+(.+?)\s*$/u.exec(
+      structural,
+    );
+    if (fromImport?.[1] === undefined) continue;
+    let importedText = fromImport[1].trim();
+    if (importedText.startsWith("(") && !importedText.endsWith(")")) {
+      for (
+        let offset = index + 1;
+        offset < Math.min(structuralLines.length, index + 8);
+        offset += 1
+      ) {
+        importedText += `\n${structuralLines[offset] ?? ""}`;
+        if ((structuralLines[offset] ?? "").includes(")")) break;
+      }
+    }
+    if (importedText.startsWith("(") !== importedText.endsWith(")")) {
+      continue;
+    }
+    importedText = importedText.replace(/^\(([\s\S]*)\)$/u, "$1");
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const binding = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      if (binding?.[1] !== "load") continue;
+      functions.push({
+        imported: "load",
+        local: binding[2] ?? "load",
+        line: index + 1,
+      });
+    }
+  }
+  return { receivers, functions };
+}
+
+interface PythonPinnedRequirement {
+  packageName: string;
+  version: string;
+  path: string;
+  line: number;
+}
+
+function pythonPinnedRequirement(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  packageName: string,
+): PythonPinnedRequirement | undefined {
+  let directory = posix.dirname(sourcePath.replaceAll("\\", "/"));
+  const normalizedPackage = packageName.toLowerCase();
+  const requirement = new RegExp(
+    `^\\s*${escapeRegularExpression(packageName)}(?:\\[[^\\]]+\\])?\\s*==\\s*([0-9]+\\.[0-9]+\\.[0-9]+(?:[+.-][A-Za-z0-9.]+)?)\\s*(?:;[^#]+)?(?:#.*)?$`,
+    "iu",
+  );
+  while (true) {
+    const prefix = directory === "." ? "" : `${directory}/`;
+    const requirementFiles = files.filter(
+      (file) =>
+        file.path.replaceAll("\\", "/").toLowerCase() ===
+        `${prefix}requirements.txt`.toLowerCase(),
+    );
+    if (requirementFiles.length === 1) {
+      const matches = requirementFiles[0]!.lines.flatMap((line, index) => {
+        const parsed = requirement.exec(pythonStructuralCode(line));
+        return parsed?.[1] === undefined
+          ? []
+          : [
+              {
+                packageName: normalizedPackage,
+                version: parsed[1],
+                path: requirementFiles[0]!.path,
+                line: index + 1,
+              },
+            ];
+      });
+      return matches.length === 1 ? matches[0] : undefined;
+    }
+    if (directory === ".") break;
+    const parent = posix.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  return undefined;
+}
+
+function pythonPackageVersionAtMost(
+  version: string,
+  ceiling: readonly [number, number, number],
+): boolean {
+  const parsed = /^(\d+)\.(\d+)\.(\d+)/u.exec(version);
+  if (parsed === null) return false;
+  const values = [Number(parsed[1]), Number(parsed[2]), Number(parsed[3])];
+  for (let index = 0; index < ceiling.length; index += 1) {
+    if (values[index]! < ceiling[index]!) return true;
+    if (values[index]! > ceiling[index]!) return false;
+  }
+  return true;
+}
+
+function pythonPackageVersionAtLeast(
+  version: string,
+  floor: readonly [number, number, number],
+): boolean {
+  const parsed = /^(\d+)\.(\d+)\.(\d+)/u.exec(version);
+  if (parsed === null) return false;
+  const values = [Number(parsed[1]), Number(parsed[2]), Number(parsed[3])];
+  for (let index = 0; index < floor.length; index += 1) {
+    if (values[index]! > floor[index]!) return true;
+    if (values[index]! < floor[index]!) return false;
+  }
+  return true;
 }
 
 interface PythonPyyamlBindingContext {
@@ -25522,6 +25726,156 @@ function pythonJoblibUnsafeSink(
           path: sourcePath,
           line,
           symbol: "joblib.load",
+        },
+      ],
+    };
+  }
+  return undefined;
+}
+
+function pythonTorchUnsafeSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonUnsafeDeserializationSink | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "torch")) {
+    return undefined;
+  }
+  const context = pythonTorchBindings(lines);
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const calls = [
+    ...context.receivers.map((binding) => ({ binding, receiverCall: true })),
+    ...context.functions.map((binding) => ({ binding, receiverCall: false })),
+  ];
+  for (const call of calls) {
+    if (
+      call.binding.line >= line ||
+      wrapper?.parameters.includes(call.binding.local) === true ||
+      pythonImportedBindingReassigned(
+        lines,
+        call.binding,
+        call.receiverCall ? "load" : undefined,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const callee = call.receiverCall
+      ? new RegExp(
+          `\\b${escapeRegularExpression(call.binding.local)}\\s*\\.\\s*load\\s*\\(`,
+          "u",
+        )
+      : new RegExp(
+          `\\b${escapeRegularExpression(call.binding.local)}\\s*\\(`,
+          "u",
+        );
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(lines, line, callee);
+    if (arguments_ === undefined) continue;
+    if (arguments_.some((argument) => argument.trim().startsWith("*"))) {
+      continue;
+    }
+    const positional = pythonPositionalArguments(arguments_);
+    const sourceExpression =
+      pythonKeywordArgument(arguments_, "f") ?? positional[0];
+    if (
+      sourceExpression === undefined ||
+      sourceExpression.trim() === "" ||
+      sourceExpression.trim().startsWith("*")
+    ) {
+      continue;
+    }
+
+    const weightsOnlyExpression = pythonKeywordArgument(
+      arguments_,
+      "weights_only",
+    );
+    const weightsOnly =
+      weightsOnlyExpression === undefined
+        ? undefined
+        : pythonStructuralCode(weightsOnlyExpression).trim();
+    const pickleModuleExpression =
+      pythonKeywordArgument(arguments_, "pickle_module") ?? positional[2];
+    const pinned = pythonPinnedRequirement(files, sourcePath, "torch");
+    let unsafeMode:
+      | "explicit-full-unpickler"
+      | "custom-pickle-module"
+      | "legacy-full-unpickler-default"
+      | "affected-weights-only-unpickler"
+      | undefined;
+    if (weightsOnly === "False") {
+      if (
+        pinned === undefined ||
+        pythonPackageVersionAtLeast(pinned.version, [1, 13, 0])
+      ) {
+        unsafeMode = "explicit-full-unpickler";
+      }
+    } else if (weightsOnly === "True") {
+      if (
+        pinned !== undefined &&
+        pythonPackageVersionAtLeast(pinned.version, [1, 13, 0]) &&
+        pythonPackageVersionAtMost(pinned.version, [2, 9, 1])
+      ) {
+        unsafeMode = "affected-weights-only-unpickler";
+      }
+    } else if (weightsOnly === undefined) {
+      if (pickleModuleExpression !== undefined) {
+        unsafeMode = "custom-pickle-module";
+      } else if (
+        pinned !== undefined &&
+        pythonPackageVersionAtMost(pinned.version, [2, 5, 1])
+      ) {
+        unsafeMode = "legacy-full-unpickler-default";
+      }
+    }
+    if (unsafeMode === undefined) continue;
+
+    const modePropagator =
+      unsafeMode === "explicit-full-unpickler"
+        ? {
+            kind: "explicit-torch-full-unpickler",
+            path: sourcePath,
+            line,
+            symbol: "weights_only=False",
+          }
+        : unsafeMode === "custom-pickle-module"
+          ? {
+              kind: "custom-torch-pickle-module",
+              path: sourcePath,
+              line,
+              symbol: `pickle_module=${pickleModuleExpression!.trim()}`,
+            }
+          : unsafeMode === "legacy-full-unpickler-default"
+            ? {
+                kind: "legacy-torch-full-unpickler-default",
+                path: pinned!.path,
+                line: pinned!.line,
+                symbol: `torch@${pinned!.version}:pre-2.6-default`,
+              }
+            : {
+                kind: "affected-torch-weights-only-version",
+                path: pinned!.path,
+                line: pinned!.line,
+                symbol: `torch@${pinned!.version}:GHSA-63cw-57p8-fm3p`,
+              };
+    return {
+      sourceExpression,
+      kind: "torch-load-untrusted-checkpoint",
+      propagators: [
+        {
+          kind: "torch-load-binding",
+          path: sourcePath,
+          line: call.binding.line,
+          symbol: `${call.binding.imported} as ${call.binding.local}`,
+        },
+        modePropagator,
+        {
+          kind: "intrinsic-torch-checkpoint-unpickling",
+          path: sourcePath,
+          line,
+          symbol: "torch.load",
         },
       ],
     };
@@ -33871,6 +34225,72 @@ async function nearestNodePackageMetadataSnapshots(
     });
   }
   return [...manifests, ...lockfiles].sort((left, right) =>
+    left.path.localeCompare(right.path),
+  );
+}
+
+async function nearestPythonRequirementSnapshots(
+  repository: string,
+  files: readonly SourceFileSnapshot[],
+): Promise<SourceFileSnapshot[]> {
+  const examined = new Map<string, SourceFileSnapshot | null>();
+  const existingBoundaries = new Set<string>();
+  const selected = new Map<string, SourceFileSnapshot>();
+  let totalBytes = 0;
+  sourceFiles: for (const file of files) {
+    if (
+      !PYTHON_EXTENSIONS.has(file.extension) ||
+      selected.size >= MAX_PYTHON_REQUIREMENT_FILES
+    ) {
+      continue;
+    }
+    let directory = posix.dirname(file.path);
+    while (true) {
+      const requirementPath =
+        directory === "."
+          ? "requirements.txt"
+          : posix.join(directory, "requirements.txt");
+      let requirement = examined.get(requirementPath);
+      if (requirement === undefined) {
+        const metadata = await lstat(
+          resolve(repository, requirementPath),
+        ).catch(() => null);
+        if (metadata !== null) existingBoundaries.add(requirementPath);
+        const source = await readBoundedRepositoryFile(
+          repository,
+          requirementPath,
+        );
+        if (source === null || source.includes(0)) {
+          requirement = null;
+        } else if (
+          totalBytes + source.byteLength >
+          MAX_PYTHON_REQUIREMENT_BYTES
+        ) {
+          break sourceFiles;
+        } else {
+          totalBytes += source.byteLength;
+          const text = source.toString("utf8");
+          requirement = {
+            path: requirementPath,
+            extension: ".txt",
+            lines: text.split(/\r?\n/u),
+            text,
+          };
+        }
+        examined.set(requirementPath, requirement);
+      }
+      if (requirement !== null) {
+        selected.set(requirement.path, requirement);
+        break;
+      }
+      if (existingBoundaries.has(requirementPath)) break;
+      if (directory === ".") break;
+      const parent = posix.dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+  }
+  return [...selected.values()].sort((left, right) =>
     left.path.localeCompare(right.path),
   );
 }

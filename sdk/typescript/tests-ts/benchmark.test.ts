@@ -71,6 +71,7 @@ describe("effectiveness benchmark", () => {
       ["python-unsafe-deserialization", "python-safe-json"],
       ["python-numpy-allow-pickle", "python-numpy-no-pickle-control"],
       ["python-joblib-unsafe-load", "python-joblib-json-control"],
+      ["python-torch-unsafe-load", "python-torch-weights-only-control"],
       ["python-pickle-unsafe-load", "python-pickle-json-control"],
       [
         "python-pickle-unpickler-unsafe-load",

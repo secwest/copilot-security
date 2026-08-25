@@ -2,6 +2,107 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Separate PyTorch full-unpickler and versioned weights-only risk
+
+**Gap and authoritative semantics.** PyTorch's current
+[`torch.load`](https://docs.pytorch.org/docs/stable/generated/torch.load.html)
+contract states that it uses an unpickler and must never load untrusted data.
+Its signature now defaults `weights_only=True`; consequently, treating every
+omitted flag as the historical full unpickler would create false positives.
+The official tagged source establishes the other end of the interval:
+[`v1.13.0`](https://github.com/pytorch/pytorch/blob/v1.13.0/torch/serialization.py#L600-L607)
+declares `weights_only`, while
+[`v1.12.1`](https://github.com/pytorch/pytorch/blob/v1.12.1/torch/serialization.py#L557-L563)
+does not. An exact older pin therefore cannot execute the intended restricted
+or explicit-full-unpickler branch through that keyword.
+The project's
+[`SECURITY.md`](https://github.com/pytorch/pytorch/blob/main/SECURITY.md)
+still describes checkpoints as a large attack surface and prefers Safetensors
+for untrusted models. Version matters even in restricted mode:
+[`GHSA-63cw-57p8-fm3p`](https://github.com/pytorch/pytorch/security/advisories/GHSA-63cw-57p8-fm3p)
+affects `weights_only=True` through 2.9.1 and is repaired in 2.10.0. CodeQL's
+high-precision generic Python unsafe-deserialization query establishes the
+CWE-502 source-to-object-construction category, while Semgrep's community
+repository still tracks broader Torch/Joblib/dill/NumPy loader coverage as an
+open request. The gain here is exact application flow and mode/version proof,
+not a claim that unsafe checkpoint loading is an unknown primitive.
+
+**Decision.** Add `python-web-torch-unsafe-load` as a separate model. Accept
+only a live non-shadowed `import torch` receiver or named `from torch import
+load` binding, request control of argument zero or `f=`, and the existing
+bounded relative-wrapper path. Emit for four independently recorded modes:
+literal `weights_only=False`; an explicit custom `pickle_module` without
+`weights_only=True`; an omitted flag when a nearest exact pin proves Torch is
+at the pre-2.6 default; or explicit `weights_only=True` when a nearest exact pin
+falls in the current affected range. Do not derive versions from ranges,
+duplicate pins, parent metadata across an existing nested requirements
+boundary, or an unpinned environment. Reject fixed and wrong-role artifacts,
+dynamic flags, star calls, `torch.save`, local Torch shadows, replaced imports
+or members, parameter shadowing, and comments or strings. `map_location`,
+`mmap`, authentication, byte limits, post-load type/state-dict checks, and
+discarding the return value do not undo deserialization already performed.
+For keyword-bearing modes, require an exact pin to be at least 1.13.0 when a
+pin is available; an unpinned explicit `weights_only=False` remains actionable
+because the scanner cannot prove an older runtime.
+
+**Dependency boundary.** Read only the nearest `requirements.txt` for each
+Python source file, under separate 512-file and 2 MiB aggregate limits, with
+the same containment, regular-file, and symlink rejection used for source
+reads. Add these snapshots after lexical discovery so dependency text cannot
+consume or distort risk-signal selection. Only one exact `torch==X.Y.Z`
+declaration is accepted. This is intentionally narrower than a general Python
+resolver; future Poetry, uv, PEP 621, constraints, or lockfile support should
+retain exact project-boundary and ambiguity rules.
+
+**Matched runtime evidence.** The Flask fixtures preserve route, bounded
+upload, `parse_model` wrapper, package/runtime contract, malicious checkpoint,
+and harmless fixture-local `effects.mark` callable. Their sole parser change is
+`weights_only=False` versus `True` on the official patched
+`torch==2.13.0+cpu` build. In an isolated WSL environment, Python 3.12.3 and
+Torch 2.13.0+cpu make the positive return a dictionary after setting the
+marker, while the control raises `UnpicklingError` with the marker still null.
+The unique temporary virtual environment was removed after execution. Host
+closure independently requires ten semantic groups in validation and attack
+path, including exact fixture versions and a clear distinction from deployment
+proof. The canonical benchmark advances to 109 exploit/control pairs, 218
+cases, and 654 repeated scans.
+
+**Consequence.** Direct, aliased, parenthesized, keyword, cross-file,
+two-relay, versioned-mode, wrong-role, invalidated-binding, and report-closure
+regressions pass in Windows and WSL. The authoritative native Windows suite
+passes 1,566 tests and 11,634 assertions across 173 files, with 20 intentional
+environment/platform skips, zero failures, and a 630.41-second elapsed time.
+The final manifest-coherence, requirements-symlink, and exact 1.12.1/1.13.0
+API-boundary gate then passes 29 Windows tests with one intentional skip and
+1,827 assertions, while WSL passes all 30 tests and 1,828 assertions. The
+design catches explicit
+full-unpickler risk whenever the keyword is supported or the version is
+unproved, but does not convert a known pre-keyword call, modern omitted default,
+or patched restricted loader into a deterministic finding without
+contradictory evidence. Environment overrides, safe-global allowlists,
+non-`requirements.txt` resolvers, TorchScript, and `torch.hub.load` remain
+explicit future extensions.
+
+Generated-model drift, formatting, TypeScript compilation, the clean build,
+and the production advisory audit are green. A fresh 259-entry, 1,871,846-byte
+npm archive has SHA-256
+`d70cbc3a29d38896813a06de8bd7fbfdcf8dbd57c32f5a1d97690c3f7948f754`.
+Two isolated 67-package consumers independently validate public import, CLI
+behavior, and all 79 bundled plugin files. The unique package directory and
+archive were removed after acceptance.
+
+**Prior-checkpoint operational closure.** Checkpoint
+`2c5f2ce1e5b18c47a0e0030196922742d2d856fb` passes its production advisory
+audit and all six hosted workflow families. Node run `32845476828` is green on
+seven Ubuntu, Windows, and macOS version/platform jobs; Windows GUI
+`32845476873`, Linux GUI `32845476864`, Go `32845476802`, Java `32845476755`,
+and .NET `32845476877` also pass. Its 259-entry, 1,867,960-byte package has
+SHA-256
+`ef34269e17817524d22ff1861bacfc65c050336144dd8efa38912d7d37149823`;
+two fresh isolated 67-package consumers validated public import, CLI behavior,
+and all 79 plugin files before the archive and temporary directory were
+removed.
+
 ## 2026-08-25 — Trace untrusted Joblib artifacts through exact live bindings
 
 **Authoritative behavior and comparative coverage.** Joblib's official

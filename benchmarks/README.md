@@ -74,7 +74,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains 108 vulnerable/control pairs:
+The versioned corpus currently contains 109 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -94,8 +94,9 @@ standard-library `pickle.loads`/JSON relative-wrapper pair and a separate
 `pickle.Unpickler(file).load()`/JSON request-stream pair with a bounded
 fixture-local `__reduce__` callable witness, a NumPy object-array
 `allow_pickle=True`/`False` upload pair, a pickle-backed `joblib.load`/JSON
-model-upload pair, plus a PyYAML `UnsafeLoader`/`safe_load` relative-wrapper
-pair, reflected XSS, XML
+model-upload pair, and a version-sensitive PyTorch full-unpickler/patched
+weights-only checkpoint pair, plus a PyYAML `UnsafeLoader`/`safe_load`
+relative-wrapper pair, reflected XSS, XML
 external entities, JWT signature-verification bypass, JWT `alg`/key-type
 confusion that reinterprets an RSA public key as an HMAC secret,
 attacker-controlled JWT/OIDC JWKS key origin, signed OIDC ID-token
@@ -204,7 +205,7 @@ Decoder API. The latest pair reaches the same state through the public
 while declaration-consistent npm locks select parser 4.2.6 or 4.2.7. The newest
 pair carries a remote negative size through three wrappers into
 `nanoid/non-secure` 5.1.15 and pairs it with source-identical 5.1.16. Three runs
-per case now produce 600 scans across 100 exploit/control pairs in the complete
+per case now produce 654 scans across 109 exploit/control pairs in the complete
 corpus. The added industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size

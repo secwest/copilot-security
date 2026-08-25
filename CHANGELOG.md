@@ -6,6 +6,54 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-torch-unsafe-load`, a typed request-to-PyTorch checkpoint
+  model for CWE-502. It resolves only live official `torch.load` receiver or
+  named bindings, the artifact in argument zero or `f=`, and bounded relative
+  wrappers. It emits only for explicit `weights_only=False`, a custom
+  `pickle_module` without an explicit safe mode, an omitted flag under an exact
+  pre-2.6 `requirements.txt` pin, or `weights_only=True` under an exact version
+  affected by GHSA-63cw-57p8-fm3p. Modern unpinned defaults, patched explicit
+  weights-only loads, exact pre-1.13 pins whose runtime does not implement the
+  keyword, dynamic modes, wrong-role or fixed inputs, star expansion,
+  `torch.save`, local shadows, reassignment, and text lookalikes remain
+  negative.
+- Added bounded, symlink-rejecting nearest Python `requirements.txt` snapshots
+  for exact package provenance without admitting dependency files into lexical
+  risk discovery. Ambiguous duplicate pins, ranges, nested boundary files, and
+  missing versions fail closed rather than being interpreted as advisory
+  evidence.
+- Added a topology-identical Flask checkpoint pair and strict benchmark. The
+  official `torch==2.13.0+cpu` witness on Python 3.12.3 proves that the positive
+  explicit full unpickler invokes only fixture-local `effects.mark`, while
+  changing only to `weights_only=True` raises `UnpicklingError` with the marker
+  unset. Ten focused groups cover aliases, `f=`, all four unsafe modes, exact
+  version boundaries, same-file and two-relay flow, import invalidation,
+  negative controls, and independent validation/attack-path closure. The
+  canonical corpus now contains 109 exploit/control pairs, 218 cases, and 654
+  repeated scans.
+- The authoritative native Windows suite with the PyTorch model passes 1,566
+  tests and 11,634 assertions across 173 files, with 20 intentional
+  environment/platform skips and zero failures in 630.41 seconds. After that
+  aggregate, the final manifest-coherence, requirements-symlink, and exact
+  1.12.1/1.13.0 API-boundary assertions pass in a 29-test native Windows gate
+  with one intentional symlink skip and 1,827 assertions; WSL passes all 30
+  tests and 1,828 assertions.
+- Generated-model drift, formatting, TypeScript, the clean production build,
+  and the high-severity production advisory audit are clean. A fresh 259-entry,
+  1,871,846-byte package with SHA-256
+  `d70cbc3a29d38896813a06de8bd7fbfdcf8dbd57c32f5a1d97690c3f7948f754`
+  passed two isolated 67-package installs, public import, CLI, and all 79
+  bundled-plugin file checks; its unique temporary directory was removed.
+- Compared the extension with current primary sources. PyTorch documents that
+  `torch.load` uses an unpickler and must not consume untrusted data, while its
+  security policy prefers Safetensors for untrusted models. The current
+  weights-only advisory affects releases through 2.9.1 and is repaired in
+  2.10.0. CodeQL supplies a high-precision generic Python unsafe-deserialization
+  query, and Semgrep's community repository still tracks broader ML-loader
+  coverage as an open request. This model adds exact application reachability,
+  binding invalidation, version-gated modes, executable control evidence, and
+  field-local report closure rather than claiming that the primitive is
+  unknown elsewhere.
 - Added `python-web-joblib-unsafe-load`, a typed Python request-to-Joblib
   deserialization model for CWE-502. It accepts only a live non-shadowed
   `import joblib` receiver or named `from joblib import load` binding and
@@ -1302,6 +1350,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Operational verification
 
+- Final acceptance for Joblib report closure and benchmark build provenance is
+  green at exact checkpoint
+  `2c5f2ce1e5b18c47a0e0030196922742d2d856fb`. The production advisory audit
+  reports no known vulnerabilities. A fresh 259-entry, 1,867,960-byte archive
+  with SHA-256
+  `ef34269e17817524d22ff1861bacfc65c050336144dd8efa38912d7d37149823`
+  passed two isolated 67-package installs, public import, CLI, and all 79
+  bundled-plugin file checks before its unique temporary directory was
+  removed. Exact-source hosted runs pass for Node `32845476828`, Windows GUI
+  `32845476873`, Linux GUI `32845476864`, Go fixtures `32845476802`, Java
+  fixtures `32845476755`, and .NET fixtures `32845476877`. The Node matrix is
+  green on Ubuntu Node 22, 24, 24.0.0, 26, and 26.0.0, Windows Node 22, and
+  macOS Node 22.
 - The Axios lane's six focused regressions pass 31 assertions; the broader SSRF and residual-model gate passes 82 tests and 1,156 assertions with one intentional skip. The complete rebuilt scanner suite passes 696 tests and 6,144 assertions across 96 files, with 19 environment-specific skips and no failures. A deterministic self-review emits exactly the vulnerable and controlled Axios benchmark paths and no production-code Axios hypothesis. A fresh-key self-scan examines 1,018 current plaintext files plus 2,302 reachable historical blobs totaling 52,004,864 bytes, reports zero candidates, and completes without truncation. Formatting, generated-model drift, TypeScript checks, and the production advisory query are clean; the 203-entry archive passes isolated installation, public import, CLI, and all 79 bundled-plugin file checks.
 - The reachable-history corpus recovers all three deleted credentials with zero false positives or false negatives and deduplicates one credential across distinct blobs. A fresh-key 128-commit self-scan examines 1,008 current plaintext files plus 2,274 unique historical plaintext blobs totaling 51,094,954 bytes; it reports zero candidates, complete history, and no truncation after the environment-reference control. The complete scanner suite passes 690 tests and 6,113 assertions across 95 files, with 19 environment-specific skips and no failures. Formatting, generated-model drift, TypeScript checks, and the production advisory query are clean; the 203-entry archive passes isolated installation, public import, CLI, and all 79 bundled-plugin file checks. Windows and Linux GUI builds remain warning-free, with shared desktop, Windows core, and Linux headless tests passing 3/3, 7/7, and 2/2.
 - The deterministic secret corpus reports 14/14 true positives, zero false positives, and zero false negatives; a no-baseline self-scan of 1,005 scanner plaintext files reports zero candidates and no truncation after semantic fixture/expression controls. The complete scanner suite passes 686 tests and 6,063 assertions across 93 files, with 19 environment-specific skips and no failures. Windows and Linux GUI builds are warning-free; shared desktop, Windows core, and Linux headless tests pass 3/3, 7/7, and 2/2. The production advisory query reports no known vulnerability, and the 203-entry archive passes isolated installation, public import, CLI, and all 79 bundled-plugin file checks.

@@ -1966,7 +1966,8 @@ command injection, path traversal, archive symlink/hardlink write pivots,
 decompression bombs with actual-output and cumulative expansion budgets,
 object-level authorization, SQL injection,
 server-side request forgery, unsafe deserialization including a matched PyYAML
-UnsafeLoader/safe-load wrapper pair, reflected XSS, XML
+UnsafeLoader/safe-load wrapper pair and exact NumPy, Joblib, and PyTorch model
+loaders, reflected XSS, XML
 external entities, JWT signature-verification bypass, attacker-controlled
 JWT `alg`/key-type confusion that reuses an RSA public key as an HMAC secret,
 attacker-controlled JWT/OIDC JWKS key origin, signed OIDC ID-token
@@ -2070,8 +2071,17 @@ checks, rank and element limits, and witness constant while changing only
 upload, relative `parse_model` wrapper, byte budget, exact dependency/runtime
 record, serialized artifact, and harmless in-process witness while replacing
 only pickle-backed `joblib.load` with `json.load` at the unsafe boundary. Each
-of the 216 cases in 108 exploit/control pairs is scanned three times, producing 648
-scans that measure both accuracy and model variance.
+The PyTorch pair preserves the same bounded upload, wrapper, patched 2.13 CPU
+runtime, and malicious checkpoint while changing only explicit
+`weights_only=False` to `weights_only=True`. Its host model separately proves
+full-unpickler opt-in, a custom pickle module, a pre-2.6 default under an exact
+pin, or an advisory-affected weights-only version instead of treating every
+`torch.load` spelling as exploitable. Each of the 218 cases in 109
+exploit/control pairs is scanned three times, producing 654 scans that measure
+both accuracy and model variance.
+Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
+the first supported `weights_only` boundary, so an exact older pin suppresses
+keyword-mode findings that could not reach the modeled loader branch.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild
 the selected manifest and report from the sealed campaign receipts.
