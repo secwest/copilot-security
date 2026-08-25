@@ -52,6 +52,24 @@ All notable scanner, application, benchmark, and operational changes are recorde
   passes strict archive inspection, a fresh 67-package isolated install,
   public import, CLI behavior, and all 79 bundled plugin-file checks. The
   unique package probe is removed after recording this acceptance evidence.
+- The sealed first-attempt live campaign
+  `8242ce452acbd49b49edfa0ffa791877a66612140ed5132ef105d6136805cef6`
+  binds the strict lxml pair to source revision
+  `09c4a7747b78afb349e305c96524d40899ae5c9e`, the exact scanner and manifest
+  hashes, `gpt-5.6-terra`, high effort, deep mode, and stored GitHub
+  authentication. The affected 6.0.2 case completes in 367,891 ms with one
+  high finding, complete coverage, 1,013,919 input/894,470 cached/25,485
+  output tokens, and $0.979140625 recorded cost. The source-identical 6.1.1
+  control completes in 416,696 ms with zero findings, complete coverage,
+  1,667,768 input/1,451,493 cached/38,488 output tokens, and $1.615667
+  recorded cost. All twelve strict metrics are 1.0 except the required zero
+  false positives per run, and finalize-only replay re-verifies every sealed
+  receipt and artifact hash. Neither case retries, times out, nor reports an
+  authentication, session, quota, credit-limit, or classifier-refusal error.
+  All seven exact-source workflow families pass: Node `32857049691`, container
+  `32857049575`, Windows GUI `32857049629`, Linux GUI `32857049673`, Java
+  `32857049666`, .NET `32857049597`, and Go `32857049641`. The repository
+  remains public on default branch `main`.
 - Added `python-web-torch-unsafe-load`, a typed request-to-PyTorch checkpoint
   model for CWE-502. It resolves only live official `torch.load` receiver or
   named bindings, the artifact in argument zero or `f=`, and bounded relative

@@ -88,6 +88,28 @@ factories, delayed iterator consumption, and `ETCompatXMLParser` remain future
 extensions that must preserve these exact identity, version, and execution
 rules.
 
+**Sealed live campaign.** Campaign
+`8242ce452acbd49b49edfa0ffa791877a66612140ed5132ef105d6136805cef6`
+binds the specialized manifest, both fixture digests, comparison policy, exact
+scanner CLI and package hashes, and source revision
+`09c4a7747b78afb349e305c96524d40899ae5c9e`. Two parallel first attempts use
+stored GitHub authentication with `gpt-5.6-terra`, high effort, and deep mode.
+The affected 6.0.2 fixture completes in 367,891 ms with complete coverage and
+one high CWE-611 finding; the matched 6.1.1 control completes in 416,696 ms with
+complete coverage and no finding. The affected run records 1,013,919 input,
+894,470 cached, and 25,485 output tokens at $0.979140625; the control records
+1,667,768 input, 1,451,493 cached, and 38,488 output tokens at $1.615667. The
+strict evaluation has one true positive, no false positive or false negative,
+and 1.0 completion, precision, recall, F1, case pass, negative-case pass,
+stability, validation, attack-path, code-evidence, and severity rates. A
+finalize-only replay re-verifies the campaign receipts and sealed artifact
+hashes without invoking Copilot. Neither run retries, times out, or records an
+authentication, session, quota, credit-limit, or classifier-refusal error.
+All seven exact-source workflow families pass: Node `32857049691`, container
+`32857049575`, Windows GUI `32857049629`, Linux GUI `32857049673`, Java
+`32857049666`, .NET `32857049597`, and Go `32857049641`. GitHub reports the
+repository public on default branch `main`.
+
 ## 2026-08-25 — Separate PyTorch full-unpickler and versioned weights-only risk
 
 **Gap and authoritative semantics.** PyTorch's current
