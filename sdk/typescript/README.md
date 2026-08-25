@@ -270,6 +270,21 @@ The package is ESM-only and provides:
   effective RBAC authorizer, reachable credential or anonymous principal, and
   least concrete unauthorized cluster action without inventing public API
   exposure or workload compromise.
+  CloudFormation IAM hypotheses require one exact `AWS::IAM::Role` whose
+  unrestricted `Allow` trust gives `Principal: "*"` or an AWS-principal `"*"`
+  `sts:AssumeRole`, `sts:*`, or `*`, and whose same properties attach the exact
+  AWS-managed `AdministratorAccess` policy or an unrestricted inline wildcard
+  action and resource. Strict YAML 1.2, JSON, and `.template` inputs retain
+  exact logical-role, optional role-name, trust, action, condition, policy,
+  permissions-boundary, source-line, and sink-line provenance. Empty
+  conditions remain unrestricted; nonempty or dynamic trust conditions,
+  genuinely restrictive or unresolved boundaries, specific principals,
+  narrower permissions, unresolved intrinsics at modeled boundaries, aliases,
+  duplicate keys, malformed documents, and non-template shapes fail closed.
+  Review must establish the rendered and deployed stack, transforms, macros,
+  nested or generated templates, drift, caller reachability, same- versus
+  cross-account permission, SCP/session/explicit denies, and a concrete
+  administrator effect without inventing public access or valid credentials.
   Cross-workflow artifact-poisoning hypotheses require a named pull-request
   producer, untrusted checkout, official upload name/path, matching privileged
   `workflow_run`, official triggering-run download, extraction path, and later

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "completionRate": 1,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "casePassRate": 1,
+    "negativeControlPassRate": 1,
+    "stableDetectionRate": 1,
+    "validationCoverage": 1,
+    "attackPathCoverage": 1,
+    "codeEvidenceCoverage": 1,
+    "severityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "cloudformation-public-admin-role",
+      "fixture": "fixtures/cloudformation-public-admin-role",
+      "expected": [
+        {
+          "title": "CloudFormation creates a conditionless public administrator role",
+          "cwe": ["CWE-269", "CWE-284"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/template.yaml",
+          "line": 17,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "cloudformation-specific-admin-role",
+      "fixture": "fixtures/cloudformation-specific-admin-role",
+      "expected": []
+    }
+  ]
+}

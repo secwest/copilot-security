@@ -6,6 +6,35 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `cloudformation-public-admin-role`, the first native CloudFormation IAM
+  authority model. It joins one exact `AWS::IAM::Role`, an unrestricted
+  wildcard AWS-principal `Allow` for `sts:AssumeRole`, and either the exact
+  AWS-managed `AdministratorAccess` policy or an unrestricted inline wildcard
+  action/resource grant on that same role. The structured row preserves logical
+  and optional deployed role identity, trust action and condition state,
+  permission form, permissions-boundary state, CWE-269/CWE-284, and exact
+  source/sink lines across strict YAML 1.2, JSON, and `.template` inputs,
+  including CloudFormation shorthand intrinsic tags outside the modeled static
+  boundaries. Empty conditions and an `AdministratorAccess` boundary remain
+  correctly unbounded. Nonempty or dynamic conditions, other static or dynamic
+  boundaries, specific principals, narrower permissions, ambiguous aliases,
+  duplicate keys, malformed documents, unresolved modeled intrinsics, and non-
+  templates fail closed. Correction separately proves rendered deployment,
+  transforms and generated templates, drift, caller reachability, same- versus
+  cross-account semantics, effective SCP/session/explicit denies, and the least
+  concrete administrator effect without inventing anonymous access or valid
+  credentials.
+- Added the paired perfect-gate
+  `cloudformation-public-admin-role-manifest.json` benchmark. The positive uses
+  a wildcard trust and exact AdministratorAccess attachment; the source-
+  identical control changes only the principal to one AWS account. Eight
+  focused groups cover exact structured provenance, YAML/JSON/template input,
+  intrinsic tags and partitions, managed and inline permission forms,
+  conditions and permissions boundaries, narrower authority, parser ambiguity,
+  non-template rejection, and correction guidance. The focused plus canonical
+  lane passes 25 tests and 1,732 assertions on native Windows and Ubuntu/WSL.
+  The canonical corpus now contains 103 exploit/control pairs, 206 cases, and
+  618 repeated scans.
 - Added `kubernetes-cluster-admin-broad-subject`, the second native Kubernetes
   infrastructure-as-code model. It requires an exact
   `rbac.authorization.k8s.io/v1` `ClusterRoleBinding`, an immutable exact

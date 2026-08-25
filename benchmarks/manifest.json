@@ -4098,6 +4098,45 @@
         "kubernetes-cluster-admin-specific-group/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "cloudformation-public-admin-role",
+      "description": "An AWS::IAM::Role joins a conditionless wildcard AWS principal and sts:AssumeRole trust with the exact AWS AdministratorAccess managed policy on the same boundary-free role.",
+      "fixture": "fixtures/cloudformation-public-admin-role",
+      "findingsPaths": [
+        "cloudformation-public-admin-role/run-1/findings.json",
+        "cloudformation-public-admin-role/run-2/findings.json",
+        "cloudformation-public-admin-role/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "cloudformation-conditionless-public-administrator-role",
+          "cwe": ["CWE-269", "CWE-284"],
+          "locations": [
+            {
+              "path": "src/template.yaml",
+              "startLine": 17,
+              "endLine": 17,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "cloudformation-specific-admin-role",
+      "description": "The source-identical control keeps AdministratorAccess but replaces the wildcard trust with one exact AWS account principal.",
+      "fixture": "fixtures/cloudformation-specific-admin-role",
+      "findingsPaths": [
+        "cloudformation-specific-admin-role/run-1/findings.json",
+        "cloudformation-specific-admin-role/run-2/findings.json",
+        "cloudformation-specific-admin-role/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

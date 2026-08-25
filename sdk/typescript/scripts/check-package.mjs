@@ -144,6 +144,7 @@ const distFiles = new Set(
     "benchmark",
     "bulk-scan-discovery",
     "cli",
+    "cloudformation-risk",
     "config",
     "contract",
     "copilot-client",

@@ -364,6 +364,10 @@ describe("effectiveness benchmark", () => {
         "kubernetes-cluster-admin-specific-group",
       ],
       [
+        "cloudformation-public-admin-role",
+        "cloudformation-specific-admin-role",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

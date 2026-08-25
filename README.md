@@ -191,6 +191,23 @@ similarly named roles remain negative. Review must verify rendering,
 deployment, effective RBAC authorization, and the exact credential or
 anonymous reachability boundary. A manifest proves the authority grant, not an
 internet-reachable API or a compromised workload.
+CloudFormation IAM rows preserve a complete same-role public-administrator
+chain in strict YAML 1.2 or JSON. A row requires an exact `AWS::IAM::Role`, an
+unrestricted `Allow` trust statement whose `Principal` is `*` or whose AWS
+principal contains `*`, an `sts:AssumeRole`, `sts:*`, or `*` action, and either
+the exact AWS-managed `AdministratorAccess` policy or an unrestricted inline
+`Action: "*"`/`Resource: "*"` grant. An absent permissions boundary and the
+`AdministratorAccess` policy used as a boundary are both unbounded. A nonempty
+or dynamic trust condition, any other static or dynamic permissions boundary,
+a specific principal, narrower authority, intrinsic value at a modeled
+boundary, aliases, duplicate keys, malformed input, or a non-template shape
+fails closed. The record retains logical role identity, optional deployed role
+name, trust and permission forms, conditions, boundary state, CWE-269/CWE-284,
+and exact source/sink lines. Review must still prove synthesis or transform
+output, stack selection and deployment, drift, caller reachability, same- or
+cross-account permission semantics, SCP/session/explicit denies, and the least
+concrete administrator effect; a template does not prove anonymous internet
+access, valid credentials, or a successful role session.
 Cross-workflow artifact rows preserve an unprivileged `pull_request` checkout
 and official artifact upload into a named `workflow_run` consumer, require an
 official download bound to `github.event.workflow_run.id`, and emit only when
@@ -694,6 +711,20 @@ anonymous path, high or critical severity, and zero false positives:
 node benchmarks/run-benchmark.mjs `
   --manifest benchmarks/kubernetes-cluster-admin-binding-manifest.json `
   --results-dir C:\security-benchmarks\kubernetes-cluster-admin-binding `
+  --runs 1 --selection-only `
+  --auth github --model gpt-5.6-terra --effort high --mode deep
+```
+
+The CloudFormation IAM lane pairs a public wildcard trust plus unbounded
+administrator permission on one role with a source-identical role trusted only
+to one AWS account. It requires exact trust, role, policy, condition and
+permissions-boundary evidence, a concrete reachable caller, high or critical
+severity, and zero false positives:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/cloudformation-public-admin-role-manifest.json `
+  --results-dir C:\security-benchmarks\cloudformation-public-admin-role `
   --runs 1 --selection-only `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```

@@ -2,6 +2,98 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-24 — Join public CloudFormation trust to administrator authority
+
+**Coverage gap and primary semantics.** The scanner's native infrastructure
+models covered Kubernetes host and cluster authority, but not AWS identity
+configuration. CloudFormation represents role trust in
+[`AWS::IAM::Role.AssumeRolePolicyDocument`](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-iam-role.html).
+AWS documents that a wildcard principal permits every principal of the stated
+type, that role trust and caller identity policies interact differently for
+same- and cross-account callers, and that the managed
+[`AdministratorAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html)
+policy allows every action on every resource. Permissions boundaries cap the
+maximum identity-policy permission rather than granting permission themselves;
+the same unrestricted AdministratorAccess policy used as a boundary therefore
+does not reduce this role. See AWS's [`Principal` element](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html),
+[permissions-boundary](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html),
+and [policy-evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html)
+documentation.
+
+**Comparative lesson.** Trivy deliberately normalizes multiple infrastructure
+formats into one representation, a useful direction for later cross-format
+coverage. For this increment, retain native CloudFormation syntax so exact
+lines and fail-closed intrinsic values remain auditable. A public Checkov issue
+records a concrete false positive where a wildcard principal was constrained
+by a trust condition. That failure mode is more important than broad keyword
+coverage: a wildcard principal, administrator policy, or wildcard action alone
+must never become the complete finding. See [Trivy misconfiguration
+scanning](https://github.com/aquasecurity/trivy/blob/main/docs/guide/scanner/misconfiguration/index.md),
+[Trivy checks contribution model](https://github.com/aquasecurity/trivy-checks/blob/main/CONTRIBUTING.md),
+and [Checkov issue 7304](https://github.com/bridgecrewio/checkov/issues/7304).
+
+**Chosen precision boundary.** Emit `cloudformation-public-admin-role` only
+when one exact `AWS::IAM::Role` joins both halves. Its trust must contain an
+unrestricted `Allow`, `Principal: "*"` or AWS-principal `"*"`, and
+case-insensitive `sts:AssumeRole`, `sts:*`, or `*`. Its permission side must
+contain the exact AdministratorAccess ARN for the commercial, China, or GovCloud
+partition, or an inline unrestricted `Allow` whose action and resource each
+contain `"*"`. Preserve logical ID, optional literal RoleName, role type,
+principal, action, condition state, permission form, boundary state,
+CWE-269/CWE-284, and exact source/sink lines. An absent boundary and the exact
+AdministratorAccess boundary are both explicitly recorded as unbounded.
+
+**Parser and false-positive boundary.** Parse only `.yaml`, `.yml`, `.json`,
+and `.template` source as strict YAML 1.2 with unique mapping keys; JSON is a
+strict subset. Recognize CloudFormation shorthand intrinsic tags so unrelated
+outputs or metadata do not invalidate an otherwise static role, while an
+intrinsic or other dynamic value at a modeled principal, action, permission, or
+boundary fails closed. Reject aliases anywhere, malformed documents, invalid
+policy versions, non-template shapes, ambiguous statement and policy shapes,
+duplicate inline-policy identities, nonempty or dynamic trust or inline-policy
+conditions, `NotAction`/`NotPrincipal`/`NotResource`, specific principals,
+narrower actions or resources, and every other static or dynamic permissions
+boundary. This deliberately misses parameter-resolved public roles and
+semantically permissive custom managed policies until exact resolution can be
+added without guessing. Empty condition maps remain unrestricted rather than
+being credited as a control.
+
+**Deployment and attack-path discipline.** Static template evidence proves a
+declared authority path, not a deployed role or reachable caller. Correction
+must reopen the exact role and verify template selection, transforms, macros,
+nested stacks, StackSets, CDK/SAM synthesis, overlays, deployment success, and
+drift. It must independently prove caller credentials and permission, including
+the different same- and cross-account role-trust rules, plus applicable SCPs,
+session policies, permissions boundaries, explicit denies, MFA/external-ID
+conditions, and current role state. Report the least concrete unauthorized
+secret, IAM, data, workload, persistence, billing, or destructive effect; do not
+infer anonymous internet access, valid AWS credentials, a successful session,
+or organization-wide compromise from a template alone.
+
+**Effectiveness gate.** The positive fixture attaches AdministratorAccess to a
+role with a wildcard AWS principal and no trust condition. Its source-identical
+control changes only the principal to one account root. The dedicated manifest
+holds completion, precision, recall, F1, stable detection, validation,
+attack-path, code-evidence, severity, and negative-control gates at perfection
+with zero false positives. Eight focused groups cover exact row identity,
+YAML/JSON/template parsing, CloudFormation tags, all AWS partitions, managed and
+inline permission forms, empty versus effective conditions, unbounded versus
+restrictive boundaries, narrower authority, malformed and ambiguous input, and
+reviewer guidance. The focused and canonical lanes pass 25 tests and 1,732
+assertions on native Windows and Ubuntu/WSL. The canonical benchmark advances
+to 103 exploit/control pairs, 206 cases, and 618 repeated scans.
+
+**Consequence.** Review now receives a joined public-trust-to-administrator path
+instead of two disconnected IAM keywords, with exact counterevidence boundaries
+for the common condition and permissions-boundary false-positive classes.
+Future work includes `Fn::If` and parameter resolution, custom managed-policy
+documents and attachments, nested/generated-template graph resolution, SAM/CDK
+synthesis, Terraform and Pulumi equivalents, federation and OIDC trust,
+service-linked roles, resource-policy and privilege-escalation chains, and
+deployment-state comparison. Each extension must preserve same-principal and
+same-role identity, effective policy intersection, exact provenance, bounded
+resolution, and a clear fail-closed state.
+
 ## 2026-08-24 — Preserve broad-principal Kubernetes cluster-admin grants
 
 **Coverage gap and primary semantics.** The first native Kubernetes model joins

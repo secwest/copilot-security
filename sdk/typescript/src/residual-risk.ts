@@ -14,6 +14,7 @@ import {
   githubActionsSelfHostedPrRecords,
   githubActionsWorkflowInjectionRecords,
 } from "./github-actions-risk.js";
+import { cloudFormationRiskRecords } from "./cloudformation-risk.js";
 import { kubernetesRiskRecords } from "./kubernetes-risk.js";
 import { goExecInjectionRecords } from "./go-exec-risk.js";
 import { goHttpSsrfRecords } from "./go-http-risk.js";
@@ -86,6 +87,7 @@ const SOURCE_EXTENSIONS = new Set([
   ".hrl",
   ".java",
   ".js",
+  ".json",
   ".jsx",
   ".kt",
   ".kts",
@@ -108,6 +110,7 @@ const SOURCE_EXTENSIONS = new Set([
   ".sql",
   ".svelte",
   ".swift",
+  ".template",
   ".tf",
   ".ts",
   ".tsx",
@@ -3238,16 +3241,20 @@ export async function buildResidualRiskInventory(
     );
   }
 
+  const knownSourcePaths = new Set(sourceFiles.map((file) => file.path));
   sourceFiles.push(
-    ...(await nearestNodePackageMetadataSnapshots(
-      canonicalRepository,
-      sourceFiles,
-    )),
+    ...(
+      await nearestNodePackageMetadataSnapshots(
+        canonicalRepository,
+        sourceFiles,
+      )
+    ).filter((file) => !knownSourcePaths.has(file.path)),
   );
 
   for (const file of sourceFiles) {
     records.push(
       ...frameworkDataflowRecords(file.path, file.lines, sourceFiles),
+      ...cloudFormationRiskRecords(file.path, file.lines, file.text),
       ...kubernetesRiskRecords(file.path, file.lines, file.text),
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
       ...githubActionsSelfHostedPrRecords(file.path, file.lines, file.text),
