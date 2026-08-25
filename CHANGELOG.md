@@ -67,6 +67,27 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `parse_array` → `numpy.load(..., allow_pickle=True)` → object-dtype `.npy` →
   `__reduce__` callable → process-effect chain. Evidence elsewhere in a report
   cannot satisfy an omitted field-local step.
+- Campaign
+  `f0abd2474ae3c4b0e8ccea770a44a70d55ca70335710b716f7056877c5aef173`
+  on checkpoint `689033c4112c1edcb9b2272077c3d63fcdb26933` again
+  completed both deep scans on attempt one with stored Copilot credentials and
+  no account, allowance, quota, rate-limit, classifier, authentication, or
+  transport failure. The positive produced one high CWE-502 finding with
+  complete coverage in 6m16s; the control produced zero findings with complete
+  coverage in 5m21s. The total estimated cost was $2.97711025. Every structural
+  and classification metric was 1.0 with zero false positives or false
+  negatives. Its report contained all ten required facts in validation and
+  attack path, but the literal evaluator rejected the exact alias `np.load`,
+  the concrete in-process `src.effects.mark` effect, and coordinated version
+  wording such as “Python 3.12.3 and 3.14.5.”
+- Corrected the NumPy semantic alternatives without weakening any required
+  fact. `np.load` is now equivalent to its proven `numpy.load` binding;
+  `effects.mark` or an observable harmless effect is equivalent to the generic
+  process-effect label; and both exact Python numbers may be expressed in one
+  coordinated phrase. Re-evaluating the immutable findings with receipt
+  enforcement intentionally disabled passes every threshold, proving the
+  change repairs evaluator spelling rather than scanner output. A new
+  receipt-bound campaign remains required for final live acceptance.
 - Live campaign
   `c6fb9c92bed2214f45681dde76518cbc72c2c65850dc1e673b33e16247e494f3`
   on checkpoint `4cb88e175bb0d06a8ebc400579b54b623f8ba2e4` completed both

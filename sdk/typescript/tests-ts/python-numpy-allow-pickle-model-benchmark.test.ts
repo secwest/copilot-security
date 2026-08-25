@@ -95,6 +95,18 @@ describe("Python NumPy allow_pickle unsafe deserialization model", () => {
     expect(
       manifest.cases[0]?.expected[0]?.requiredAttackPathTextAnyOf,
     ).toHaveLength(10);
+    expect(
+      manifest.cases[0]?.expected[0]?.requiredValidationTextAnyOf,
+    ).toContainEqual(["numpy.load", "np.load", "NumPy load"]);
+    expect(
+      manifest.cases[0]?.expected[0]?.requiredAttackPathTextAnyOf,
+    ).toContainEqual(
+      expect.arrayContaining([
+        "Python 3.14.5",
+        "3.12.3 and 3.14.5",
+        "3.12.3 or 3.14.5",
+      ]),
+    );
     expect(manifest.cases[0]?.expected[0]?.forbiddenText).toHaveLength(3);
     expect(manifest.cases[1]?.expected).toEqual([]);
     for (const relativePath of [
@@ -375,6 +387,8 @@ describe("Python NumPy allow_pickle unsafe deserialization model", () => {
     expect(prompt).toContain("exact tested Python and NumPy versions");
     expect(prompt).toContain("Validation and attack path must each separately");
     expect(prompt).toContain("parse_array wrapper");
+    expect(prompt).toContain("exact source spelling such as np.load");
+    expect(prompt).toContain("fixture-local effects.mark state change");
     expect(prompt).toContain("Python 3.12.3 and 3.14.5 with NumPy 2.5.2");
     expect(prompt).toContain("__reduce__ callable");
     expect(prompt).toContain("inert .npz archive that is never indexed");

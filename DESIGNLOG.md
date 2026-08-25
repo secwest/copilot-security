@@ -98,6 +98,36 @@ equivalent callable dispatch, and the demonstrated process effect. This makes
 the output auditable without relaxing a gate or encouraging invented runtime
 facts.
 
+**Exact alias and coordinated-version semantics.** Campaign
+`f0abd2474ae3c4b0e8ccea770a44a70d55ca70335710b716f7056877c5aef173`
+on checkpoint `689033c4112c1edcb9b2272077c3d63fcdb26933` completed both
+deep scans on attempt one using stored Copilot credentials, without any
+account, allowance, quota, rate-limit, classifier, authentication, or
+transport error. The positive produced one high CWE-502 finding with complete
+coverage in 6m16s, and the negative produced no finding with complete coverage
+in 5m21s. Precision, recall, F1, stability, validation, attack path, code
+evidence, severity, and negative-case rates were all 1.0, with no false
+positive or false negative. Total estimated cost was $2.97711025.
+
+Both validation and attack path retained the upload, `parse_array`, object
+dtype, explicit flag, callable dispatch, `src.effects.mark`, both Python
+versions, and NumPy 2.5.2. The evaluator nevertheless failed three literal
+groups. First, source and code evidence correctly spell the imported receiver
+as `np.load`, while the gate accepted only `numpy.load`. Second, the concrete
+fixture-local `effects.mark` mutation is stronger evidence than the generic
+word “process.” Third, ordinary coordinated text—“Python 3.12.3 and 3.14.5” or
+“Python 3.12.3 or 3.14.5”—does not repeat the word Python before the second
+number.
+
+Accept those exact semantic equivalents and nothing broader: `np.load` only
+where the binding is already proven as NumPy, the named fixture effect or an
+explicit observable harmless effect, and coordinated phrases containing both
+exact version numbers. The ten independent field-local groups remain. An
+evaluation of the immutable outputs with receipt enforcement disabled then
+passes every threshold, which isolates the change to comparison semantics.
+Because the manifest hash changed, that compatibility result is diagnostic;
+the next acceptance campaign must bind fresh receipts to the new manifest.
+
 ## 2026-08-25 — Keep Unpickler construction explicit in the attack path
 
 **Live evidence.** Campaign
