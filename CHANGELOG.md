@@ -49,6 +49,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `0840d319146ee7cd89c6d917a6e7e1dce20e7f103969739c832f950ddb0f7b5e`;
   isolated consumers validate the public import, CLI, and all 79 bundled plugin
   files.
+- Exact-commit hosted acceptance is green for `1f5181421ec589fbacb8b5ac8afd191ff0380076`:
+  Node `32792460240`, container `32792460282`, Windows GUI `32792460242`,
+  Linux GUI `32792460254`, Java `32792460241`, .NET `32792460302`, and Go
+  `32792460232` all succeed. A deep self-scan of an immutable archive of that
+  commit also exercises late transport recovery successfully: Copilot's stream
+  ends after draft creation, the deterministic workbench validates and seals
+  the artifacts, and no finding survives. It correctly reports partial rather
+  than overstating coverage because 415 of 417 inventory paths lack exact
+  per-file closure. This exposes the next effectiveness target: recovered
+  complete drafts must still receive bounded coverage correction, potentially
+  in a fresh session, before completeness can be claimed. The scan takes 16m
+  25s and records 15,329,102 input tokens (13,367,459 cached), 136,262 output
+  tokens, and estimated cost $11.513870375.
 - Local acceptance for the seed-coverage contract is green. The authoritative
   Windows suite passes 1,482 tests and 11,059 assertions across 165 files in
   559.22 seconds, with 20 intentional platform/environment skips and zero

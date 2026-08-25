@@ -102,6 +102,25 @@ vulnerabilities. Windows and Linux strict package inspection accepts the same
 isolated consumers validate the public import, CLI, and all 79 bundled plugin
 files. The archive is removed after recording this evidence.
 
+**Exact-commit hosted and self-scan evidence.** All workflow families pass on
+checkpoint `1f5181421ec589fbacb8b5ac8afd191ff0380076`: Node `32792460240`,
+container `32792460282`, Windows GUI `32792460242`, Linux GUI `32792460254`,
+Java `32792460241`, .NET `32792460302`, and Go `32792460232`. A deep scan of a
+2,766-file immutable Git archive of the same checkpoint reaches a late Copilot
+stream termination after the drafts are written. The deterministic workbench
+validates and recovers those artifacts, producing zero findings in 16m 25s
+with 15,329,102 input tokens (13,367,459 cached), 136,262 output tokens, and an
+estimated $11.513870375 cost. The host does not accept the model's broad
+417-entry pass-completion claims as file evidence: only two paths have exact
+coverage surfaces, so it adds 415 `needs_follow_up` rows and seals partial
+coverage. This is the correct fail-closed result and a concrete residual
+effectiveness gap. A complete-draft transport recovery currently reaches host
+finalization before the normal bounded quality-correction turn; future recovery
+work should resume coverage correction, using a fresh isolated session if the
+original stream cannot continue, while retaining direct-file-review telemetry
+and the existing bounded repair limit. The archive, extracted snapshot, and
+scan results are removed after this evidence is recorded.
+
 **Local acceptance.** The authoritative Windows Bun 1.3.14 suite passes 1,482
 tests and 11,059 assertions across 165 files in 559.22 seconds, with 20
 intentional platform/environment skips and zero failures. Ubuntu/WSL passes all
