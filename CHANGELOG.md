@@ -59,6 +59,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
   two isolated installs each add 67 packages and validate public import, CLI
   behavior, and all 79 bundled plugin files. The unique package staging
   directory was removed after evidence capture.
+- Sealed live campaign
+  `ca24307ff087c589f2ae9142f3db6550c8d56389f249e7244328840e14cc5035`
+  binds implementation revision
+  `587d096a1afa1030c2f3a7611aab3d7f2b5e9591`, the exact specialized
+  manifest and fixtures, comparison policy, runner, scanner CLI, packaged
+  scanner, stored GitHub authentication, `gpt-5.6-terra`, high effort, deep
+  mode, and two workers with no artificial credit ceiling. Both cases complete
+  on attempt one with complete coverage. The 1.3.3 case emits exactly one high
+  CWE-94/CWE-470 finding in 9m56s; the 1.3.4 control emits zero findings in
+  4m19s. Completion, precision, recall, F1, case and negative-case pass,
+  stability, validation, attack path, code evidence, and severity are all 1.0,
+  with zero false positives per run. A finalize-only replay verifies the same
+  sealed receipts without a model call.
+- The two campaign scans use 3,929,339 input, 3,553,238 cached, and 69,000
+  output tokens at an estimated $3.098068875. The host re-anchors one excerpt
+  and aligns one endpoint role from repository bytes before sealing the
+  positive finding; no model retry is needed. Bounded logs contain no
+  allowance, quota, credit-limit, rate-limit, classifier-refusal, reconnect,
+  timeout, transport, authentication, or authorization failure. Exact-commit
+  deterministic self-review is byte-for-byte stable across two runs at 256
+  rows and 522,247 bytes, SHA-256
+  `a35433dedad30d4d8f921180e16e98995f420a0766a907092a7b31bf59979609`.
+  Its only Hydra row is the intentional 1.3.3 fixture; the 1.3.4 control and
+  production scanner code emit none.
+- Raised the Windows-capable Node workflow test-step deadline from 10 to 15
+  minutes after the exact implementation workflow killed the otherwise-green
+  1,620-test Windows lane at the old deadline. The measured authoritative local
+  run is 10m58s, while all Linux and macOS matrix jobs completed successfully;
+  the wider bound preserves the same commands and assertions instead of
+  splitting or weakening the suite.
 - Added `python-web-tarfile-unsafe-extraction`, a Python-standard-library
   CWE-22 model for remote tar archive extraction outside the intended
   destination. It resolves live `tarfile.open` and `TarFile` bindings across

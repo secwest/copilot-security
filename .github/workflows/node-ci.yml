@@ -68,7 +68,7 @@ jobs:
         run: pnpm --dir sdk/typescript run types
 
       - name: Test
-        timeout-minutes: 10
+        timeout-minutes: 15
         env:
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}

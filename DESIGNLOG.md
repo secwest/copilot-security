@@ -99,6 +99,53 @@ must preserve the strict negative identities and report-impact discipline, and
 must rerun the perfect-gate sealed campaign after any material model or fixture
 change.
 
+**Hosted deadline correction.** The first exact-head hosted run closed every
+Linux and macOS Node job plus container, Windows GUI, Linux GUI, Go, Java, and
+.NET workflows, but GitHub cancelled the Windows Node `Test` step at its exact
+10-minute deadline. The authoritative identical local Windows lane takes
+658.21 seconds, and the hosted job reported only the deadline annotation rather
+than a failing assertion. Increase only that test-step timeout from 10 to 15
+minutes. The job-level 20-minute bound, matrix, test command, assertions, audit,
+format, build, package inspection, and installed-runtime smoke remain
+unchanged. The affected workflow must rerun and pass on the correction commit;
+the timed-out implementation run remains recorded rather than relabeled.
+
+**Sealed campaign and self-review evidence.** Campaign
+`ca24307ff087c589f2ae9142f3db6550c8d56389f249e7244328840e14cc5035`
+binds implementation revision
+`587d096a1afa1030c2f3a7611aab3d7f2b5e9591`, manifest
+`f71097b3f0f8cd57b6d21574c3c60888745b99bc6e272e68f6674c48dcda1ce3`,
+corpus `90388ec631b8af4a6f84e48bd4c3b64264017874045e2593c832ad6703212e1e`,
+comparison policy
+`e4db2ca57992f1ed2cf881dc6a0a0ee28c84064611ed5537d3814a1d3cd11cab`,
+scanner CLI
+`287b9cc996b6ea55518de7cc42205dc430972625fdbe7a6cced6358771d61883`,
+and package
+`0810ea2416b7c432844f2a4e05a4bad995aef9a3a67a31f11e4574041d64d3da`.
+Both stored-GitHub-authentication workers use `gpt-5.6-terra`, high effort,
+deep mode, and no credit ceiling. The control completes attempt one in 4m19s
+with zero findings and complete coverage, using 1,149,399 input, 1,036,538
+cached, and 18,721 output tokens at $0.892606375. The affected fixture completes
+attempt one in 9m56s with one expected high CWE-94/CWE-470 finding and complete
+coverage, using 2,779,940 input, 2,516,700 cached, and 50,279 output tokens at
+$2.2054625. All twelve gates pass: completion, precision, recall, F1, case
+pass, negative-case pass, stability, validation, attack path, code evidence,
+and severity are 1.0, while false positives per run are zero. The host
+deterministically re-anchors one excerpt and aligns one endpoint role from
+repository bytes before sealing; no model retry occurs. A finalize-only replay
+reconstructs the identical passing evaluation from the sealed receipts without
+invoking Copilot. No bounded log reports an allowance, quota, credit-limit,
+rate-limit, classifier-refusal, reconnect, timeout, transport, authentication,
+or authorization failure.
+
+An exact detached worktree of the same revision produces byte-identical host
+self-review output twice: 256 rows, 522,247 bytes, and SHA-256
+`a35433dedad30d4d8f921180e16e98995f420a0766a907092a7b31bf59979609`.
+Exactly one row identifies
+`benchmarks/fixtures/python-hydra-unsafe-instantiate/src/factory.py:7`; the
+1.3.4 control and production scanner source emit no Hydra row. The temporary
+worktree is removed after capture.
+
 ## 2026-08-25 — Bind Python tar extraction to runtime and effective filter semantics
 
 **Gap and authoritative semantics.** Python's
