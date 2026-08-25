@@ -66,16 +66,40 @@ matrices for renderer, template/data role, lifecycle, identity, mutation,
 provenance, and repository-path controls. The pair advances the canonical
 corpus to 117 exploit/control pairs, 234 cases, and 702 repeated scans.
 
-**Pre-commit acceptance.** A clean production build precedes the authoritative
-native Windows Bun run: 1,658 pass, 25 intentional skips, zero fail, 12,119
-assertions, and 181 files in 615.00 seconds. The compact authoritative WSL lane
-passes 33 tests and 1,920 assertions across four files in 6.00 seconds. Exact
-types and generated-model checks, formatting, production build, diff hygiene,
-and production dependency audit are green; the audit reports no known
-vulnerabilities. The 1,909,482-byte package has 259 entries and passes the
-strict isolated-consumer check for its public import, CLI, and 79 bundled
-plugin files. Immutable-revision self-inventory, hosted workflows, and package
-hash are intentionally recorded only after the implementation commit exists.
+**Final local acceptance.** Immutable implementation checkpoint
+`ad7d4933c97f325950c8426b7872d8aa4158b069` has a clean production build and
+passes the authoritative native Windows Bun run: 1,658 pass, 25 intentional
+skips, zero fail, 12,119 assertions, and 181 files in 615.00 seconds. The
+compact authoritative WSL lane passes 33 tests and 1,920 assertions across four
+files in 6.00 seconds. Exact types and generated-model checks, formatting,
+production build, diff hygiene, and production dependency audit are green; the
+audit reports no known vulnerabilities. Two compiled inventories of a
+disposable repository-root archive take 15,154.982 and 15,952.777 milliseconds
+and produce 256 byte-identical rows totaling 527,158 bytes with SHA-256
+`e9a34442f667f65efca97efbcbc5db9e42e8ccaa7c726f617c688723f82609e0`.
+They retain 186 structured records and 70 lexical leads across 232 fixture and
+24 non-fixture paths. Exactly one Prompty record preserves the HTTP source at
+`src/server.js:8`, final renderer sink at `src/renderer.js:6`, both CWEs, nine
+ordered wrapper/import transitions, and exact beta.4 dependency provenance;
+the beta.5 control is absent. Strict inspection validates a 259-entry,
+1,909,482-byte npm archive with SHA-256
+`39a150979817b1833f0a3c8ef551ff3b4296e82b23101df1dee193d52d96d918`.
+Its isolated consumer installs 67 production packages and validates the public
+import, CLI, and all 79 bundled plugin files. The exact-commit archive, npm
+archive, and isolated consumer are removed after evidence capture.
+
+**Hosted and publication evidence.** All seven exact-source workflow families
+pass: [Node](https://github.com/secwest/copilot-security/actions/runs/32906598888),
+[container](https://github.com/secwest/copilot-security/actions/runs/32906598804),
+[Windows GUI](https://github.com/secwest/copilot-security/actions/runs/32906598931),
+[Linux GUI](https://github.com/secwest/copilot-security/actions/runs/32906598895),
+[Go](https://github.com/secwest/copilot-security/actions/runs/32906598802),
+[Java](https://github.com/secwest/copilot-security/actions/runs/32906598811), and
+[.NET](https://github.com/secwest/copilot-security/actions/runs/32906599208).
+The Node family covers Windows and macOS on Node 22 plus Ubuntu on Node 22, 24,
+24.0.0, 26, and 26.0.0; every job completes package inspection and runtime
+smoke. GitHub reports `secwest/copilot-security` public on default branch
+`main`.
 
 ## 2026-08-25 — Require datamodel-code-generator output execution, not generation alone
 

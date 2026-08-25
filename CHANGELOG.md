@@ -40,14 +40,32 @@ All notable scanner, application, benchmark, and operational changes are recorde
   and 1,952 assertions across the new model, adjacent LiquidJS lifecycle
   model, same-file and multi-hop framework lanes, and canonical corpus; exact
   TypeScript/generated-model checks are also green.
-- Full pre-commit acceptance is green. After a clean production build, the
-  authoritative native Windows Bun suite passes 1,658 tests and 12,119
-  assertions across 181 files, with 25 intentional skips and zero failures in
-  615.00 seconds. The compact authoritative WSL lane passes 33 tests and 1,920
-  assertions across four files in 6.00 seconds. Production dependency audit
-  reports no known vulnerabilities. The 1,909,482-byte npm archive passes the
-  strict isolated-install check: 259 entries, the public import and CLI, and
-  all 79 bundled plugin files validate successfully.
+- Final local acceptance is green at immutable implementation revision
+  `ad7d4933c97f325950c8426b7872d8aa4158b069`. After a clean production
+  build, the authoritative native Windows Bun suite passes 1,658 tests and
+  12,119 assertions across 181 files, with 25 intentional skips and zero
+  failures in 615.00 seconds. The compact authoritative WSL lane passes 33
+  tests and 1,920 assertions across four files in 6.00 seconds. Production
+  dependency audit reports no known vulnerabilities.
+- Two compiled inventories of a disposable repository-root archive take
+  15,154.982 and 15,952.777 milliseconds and produce 256 byte-identical rows
+  totaling 527,158 bytes with SHA-256
+  `e9a34442f667f65efca97efbcbc5db9e42e8ccaa7c726f617c688723f82609e0`.
+  All 186 structured records survive ahead of 70 lexical leads, with 232
+  fixture and 24 non-fixture rows. Exactly one Prompty record retains source
+  `src/server.js:8`, sink `src/renderer.js:6`, CWE-94/CWE-1336, nine ordered
+  wrapper/import transitions, and exact beta.4 dependency provenance; the
+  topology-identical beta.5 control is absent.
+- Strict inspection validates a 259-entry, 1,909,482-byte npm archive with
+  SHA-256
+  `39a150979817b1833f0a3c8ef551ff3b4296e82b23101df1dee193d52d96d918`.
+  Its isolated consumer installs 67 production packages and validates the
+  public import, executable CLI, and all 79 bundled plugin files.
+- All seven exact-source workflow families pass: Node `32906598888`, container
+  `32906598804`, Windows GUI `32906598931`, Linux GUI `32906598895`, Go
+  `32906598802`, Java `32906598811`, and .NET `32906599208`. GitHub reports the
+  repository public on default branch `main`. The disposable exact-commit
+  archive, npm archive, and isolated consumer are removed after acceptance.
 - Added `python-web-datamodel-codegen-import-injection`, a version- and
   lifecycle-aware CWE-94/CWE-95 model for request-controlled OpenAPI or JSON
   Schema data reaching the official `datamodel_code_generator.generate` API
