@@ -204,10 +204,16 @@ boundary, aliases, duplicate keys, malformed input, or a non-template shape
 fails closed. The record retains logical role identity, optional deployed role
 name, trust and permission forms, conditions, boundary state, CWE-269/CWE-284,
 and exact source/sink lines. Review must still prove synthesis or transform
-output, stack selection and deployment, drift, caller reachability, same- or
-cross-account permission semantics, SCP/session/explicit denies, and the least
-concrete administrator effect; a template does not prove anonymous internet
-access, valid credentials, or a successful role session.
+output, repository-visible stack selection, overlays, effective controls, and
+same- or cross-account permission semantics. The complete static chain is a
+reportable IaC defect with unchanged deployment and caller permission stated as
+preconditions; absence of live account telemetry or attacker credentials is
+uncertainty, not suppression evidence. Only positive evidence that rendering,
+deployment, or an effective control removes the chain closes it. SCP/session/
+explicit denies, drift, current role state, and the least concrete administrator
+effect calibrate confidence and impact; a template does not prove anonymous
+internet access, active deployment, valid credentials, or a successful role
+session.
 Cross-workflow artifact rows preserve an unprivileged `pull_request` checkout
 and official artifact upload into a named `workflow_run` consumer, require an
 official download bound to `github.event.workflow_run.id`, and emit only when

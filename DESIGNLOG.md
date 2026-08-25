@@ -66,16 +66,25 @@ arbitrarily named CloudFormation JSON without spending the application and
 package-analysis budget on unrelated metadata.
 
 **Deployment and attack-path discipline.** Static template evidence proves a
-declared authority path, not a deployed role or reachable caller. Correction
-must reopen the exact role and verify template selection, transforms, macros,
-nested stacks, StackSets, CDK/SAM synthesis, overlays, deployment success, and
-drift. It must independently prove caller credentials and permission, including
-the different same- and cross-account role-trust rules, plus applicable SCPs,
-session policies, permissions boundaries, explicit denies, MFA/external-ID
-conditions, and current role state. Report the least concrete unauthorized
-secret, IAM, data, workload, persistence, billing, or destructive effect; do not
-infer anonymous internet access, valid AWS credentials, a successful session,
-or organization-wide compromise from a template alone.
+declared source-level authority defect, not an active role or successful
+session. The exact joined chain is nevertheless reportable with unchanged
+deployment and caller permission stated as conditional preconditions. An
+attacker who controls an external AWS account can create or control an AWS
+principal and grant its caller-side `sts:AssumeRole` permission; the target
+repository need not contain that attacker's credential. Correction must reopen
+the role and inspect repository-visible template selection, transforms, macros,
+nested stacks, StackSets, CDK/SAM synthesis, overlays, and effective controls.
+Missing deployment telemetry, current role state, target account identity, or a
+named caller is remaining uncertainty, not suppression evidence. Only positive
+repository or runtime evidence that the stack is excluded or rejected, the role
+does not exist, rendering replaces the policy, or an effective control closes
+the chain is deployment counterevidence. The different same- and cross-account
+trust rules, applicable SCPs, session policies, permissions boundaries,
+explicit denies, MFA/external-ID conditions, drift, and current role state
+calibrate confidence and realized impact. Report the least concrete conditional
+secret, IAM, data, workload, persistence, billing, or destructive capability;
+do not infer anonymous internet access, active deployment, valid credentials, a
+successful session, or organization-wide compromise from a template alone.
 
 **Effectiveness gate.** The positive fixture attaches AdministratorAccess to a
 role with a wildcard AWS principal and no trust condition. Its source-identical
@@ -86,7 +95,7 @@ with zero false positives. Eight focused groups cover exact row identity,
 YAML/JSON/template parsing, CloudFormation tags, all AWS partitions, managed and
 inline permission forms, empty versus effective conditions, unbounded versus
 restrictive boundaries, narrower authority, malformed and ambiguous input, and
-reviewer guidance. The focused and canonical lanes pass 25 tests and 1,732
+reviewer guidance. The focused and canonical lanes pass 25 tests and 1,739
 assertions on native Windows and Ubuntu/WSL. The canonical benchmark advances
 to 103 exploit/control pairs, 206 cases, and 618 repeated scans.
 
@@ -123,6 +132,32 @@ and all 79 bundled plugin files. Every exact-source workflow succeeds: Node
 `32806856384`, Java `32806856341`, .NET `32806856380`, and Go `32806856368`.
 Remove the exact-commit archive and snapshot, inventories, npm package, and
 isolated installs after acceptance.
+
+**First live gate and corrective decision.** Campaign
+`c540268ea0c49f75e7b1a4aac598d4b528e41308c62e115e126fc479e921d499`
+completed both cases on attempt one without refusal, retry, rate limit, or
+transport recovery. The specific-principal control correctly closed with zero
+findings in 3m14s. The vulnerable case closed with zero in 4m23s, so recall,
+F1, case pass, and stable detection failed. This was not a discovery miss: all
+six independent passes recommended reporting the exact wildcard-trust plus
+AdministratorAccess chain. Central validation then rejected it solely because
+the immutable fixture did not prove selected deployment, live role state, or a
+specific reachable caller. That contradicts the existing validation rule that
+missing runtime setup is a proof gap rather than counterevidence, and it makes
+standalone IaC scanning structurally unable to report its primary defect class.
+
+Strengthen both the host correction prompt and packaged validation guidance.
+They now require the exact static chain to survive as a conditional IaC finding,
+identify an attacker-controlled external AWS account and caller-side
+`sts:AssumeRole` permission as the realistic principal precondition, and use
+missing deployment/account facts only to calibrate confidence, severity, and
+wording. They allow suppression only from positive exclusion, deployment
+failure, nonexistence, rendered-policy replacement, or an effective condition/
+boundary/principal/permission control. Anonymous access, active role use,
+successful session, target-account identity, and critical compromise remain
+forbidden without direct proof. Preserve the failed campaign as an effectiveness
+baseline: it used 2,869,984 input tokens (2,583,325 cached), 47,314 output tokens,
+and estimated cost $2.251245625 over 4m31s.
 
 **Consequence.** Review now receives a joined public-trust-to-administrator path
 instead of two disconnected IAM keywords, with exact counterevidence boundaries

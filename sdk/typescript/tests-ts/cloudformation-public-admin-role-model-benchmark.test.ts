@@ -310,17 +310,41 @@ describe("CloudFormation public administrator role model benchmark", () => {
     expect(await repositoryInventory(controls)).toEqual([]);
   });
 
-  test("gives correction exact deployment, caller, and effective-permission boundaries", () => {
+  test("gives correction exact deployment, caller, and effective-permission boundaries", async () => {
     const prompt = scanQualityGatePrompt(
       '{"frameworkModel":{"id":"cloudformation-public-admin-role"}}',
     );
     expect(prompt).toContain("For cloudformation-public-admin-role rows");
     expect(prompt).toContain("same-account identities may need no separate");
     expect(prompt).toContain("cross-account callers normally need");
+    expect(prompt).toContain("source-level IaC chain is a reportable");
+    expect(prompt).toContain("must not by itself reject or defer");
+    expect(prompt).toContain("attacker who controls an AWS account");
+    expect(prompt).toContain("use the missing runtime facts to calibrate");
     expect(prompt).toContain("PermissionsBoundary");
     expect(prompt).toContain(
       "macros, StackSets, nested stacks, CDK/SAM synthesis",
     );
     expect(prompt).toContain("Do not infer anonymous internet access");
+    const validationGuidance = await readFile(
+      resolve(
+        process.cwd(),
+        "_bundled_plugin",
+        "skills",
+        "validation",
+        "references",
+        "validation-guidance.md",
+      ),
+      "utf8",
+    );
+    expect(validationGuidance).toContain(
+      "distinguish the declared security defect from confirmation",
+    );
+    expect(validationGuidance).toContain(
+      "it is not by itself counterevidence, a suppression reason",
+    );
+    expect(validationGuidance).toContain(
+      "do not require the target repository to contain the attacker's credentials",
+    );
   });
 });

@@ -35,7 +35,7 @@ All notable scanner, application, benchmark, and operational changes are recorde
   intrinsic tags and partitions, managed and inline permission forms,
   conditions and permissions boundaries, narrower authority, parser ambiguity,
   non-template rejection, and correction guidance. The focused plus canonical
-  lane passes 25 tests and 1,732 assertions on native Windows and Ubuntu/WSL.
+  lane passes 25 tests and 1,739 assertions on native Windows and Ubuntu/WSL.
   The canonical corpus now contains 103 exploit/control pairs, 206 cases, and
   618 repeated scans.
 - Final local and hosted acceptance for the CloudFormation model is green at
@@ -64,6 +64,26 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `32806856384`, Java `32806856341`, .NET `32806856380`, and Go `32806856368`.
   The package archive, immutable source snapshot, inventories, and isolated
   installs are removed after acceptance.
+- A first live CloudFormation campaign exposed a validation false negative,
+  rather than a model-service failure. Campaign
+  `c540268ea0c49f75e7b1a4aac598d4b528e41308c62e115e126fc479e921d499`
+  completed both cases on their first attempts without refusal, retry, rate
+  limit, or transport recovery. The specific-principal control correctly
+  produced zero findings, but the vulnerable case also produced zero even
+  though all six independent discovery passes called the joined policy
+  reportable. Central validation incorrectly treated absent live AWS deployment
+  telemetry and an attacker credential in the repository as counterevidence.
+  The host quality gate and bundled validation guidance now make the declared
+  IaC defect/reportability boundary explicit: exact unsafe trust and authority
+  are reportable with unchanged deployment and caller permission recorded as
+  preconditions; missing live telemetry calibrates confidence and wording, and
+  only positive exclusion, rejection, replacement, or effective-control
+  evidence suppresses the row. The same rule requires an attacker-controlled
+  external AWS principal with caller-side `sts:AssumeRole`, while continuing to
+  forbid anonymous-access, active-session, or critical-compromise claims without
+  runtime proof. The failed baseline used 2,869,984 input tokens (2,583,325
+  cached), 47,314 output tokens, and estimated cost $2.251245625 over 4m31s and
+  remains isolated for comparison.
 - Added `kubernetes-cluster-admin-broad-subject`, the second native Kubernetes
   infrastructure-as-code model. It requires an exact
   `rbac.authorization.k8s.io/v1` `ClusterRoleBinding`, an immutable exact

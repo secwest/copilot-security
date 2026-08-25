@@ -281,10 +281,15 @@ The package is ESM-only and provides:
   genuinely restrictive or unresolved boundaries, specific principals,
   narrower permissions, unresolved intrinsics at modeled boundaries, aliases,
   duplicate keys, malformed documents, and non-template shapes fail closed.
-  Review must establish the rendered and deployed stack, transforms, macros,
-  nested or generated templates, drift, caller reachability, same- versus
-  cross-account permission, SCP/session/explicit denies, and a concrete
-  administrator effect without inventing public access or valid credentials.
+  Review must inspect repository-visible rendering, transforms, macros, nested
+  or generated templates, selection, overlays, and effective controls. The
+  complete static chain remains reportable with unchanged deployment and caller
+  permission stated as preconditions; missing live account telemetry or
+  attacker credentials is uncertainty, not a suppression reason. Only positive
+  exclusion, rejection, replacement, or effective-control evidence closes it.
+  Drift, same- versus cross-account permission, SCP/session/explicit denies,
+  current role state, and a concrete administrator effect calibrate confidence
+  without inventing anonymous access, active deployment, or valid credentials.
   Cross-workflow artifact-poisoning hypotheses require a named pull-request
   producer, untrusted checkout, official upload name/path, matching privileged
   `workflow_run`, official triggering-run download, extraction path, and later
