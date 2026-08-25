@@ -54,9 +54,52 @@ All notable scanner, application, benchmark, and operational changes are recorde
   Windows-only skips. The separate elevated native transport lane passes all
   39 tests and 179 assertions, including creation and verification of the
   private `copilot-security-home` ACL. Generated-model drift and TypeScript
-  compilation are clean. Full native and WSL regression, package, audit,
-  deterministic self-scan, sealed live paired campaign, and hosted workflow
-  evidence remain the acceptance checkpoint.
+  compilation are clean.
+- Final local acceptance is green at implementation revision
+  `ada24aab2760bffdc205cf56f04f97f006acd73b`. After a clean production build,
+  the authoritative native Windows suite passes 1,632 tests and 11,971
+  assertions across 178 files with 24 intentional environment/platform skips,
+  zero failures, and a 569.09-second runtime. The focused Ubuntu/WSL SymPy,
+  Python cross-file, Python multi-hop, canonical benchmark, and Copilot adapter
+  lane passes 74 tests and 2,115 assertions with one Windows-launcher skip and
+  zero failures. Generated-model drift, formatting, TypeScript checking, and
+  the clean build pass. The production high-severity audit reports no known
+  vulnerabilities.
+- Strict package inspection accepts the fresh 259-entry npm archive. Two clean
+  install-smoke passes each add 67 production packages and validate the public
+  import, executable CLI, and all 79 bundled plugin files. The isolated package
+  and exact-commit self-review directories were verified beneath the system
+  temporary root and removed after evidence capture.
+- Sealed campaign
+  `fa8711193f1444f805040af9d0c5c251f8c541bb1f8b8636007dda3a9a786148`
+  binds implementation revision
+  `ada24aab2760bffdc205cf56f04f97f006acd73b`, manifest SHA-256
+  `f972cae431bfef9d71b8d779e8a39e9aab7badbf46bb76f964de9d242e93c3f2`,
+  exact fixture hashes, comparison policy, runner, scanner CLI, and packaged
+  scanner to stored GitHub authentication, `gpt-5.6-terra`, high effort, deep
+  mode, two workers, three bounded outer attempts, and no artificial credit
+  ceiling. Both cases complete on attempt one with complete coverage. The
+  affected case emits exactly one high CWE-94/CWE-95 finding in 4m59s; the
+  restricted-namespace control emits zero findings in 10m44s. Completion,
+  precision, recall, F1, case and negative-case pass, stability, validation,
+  attack path, code evidence, and severity are all 1.0, with zero false
+  positives per run. A finalize-only replay reproduces the same campaign and
+  sealed evaluation without invoking Copilot.
+- The two live scans use 3,840,923 input, 3,437,207 cached, and 84,412 output
+  tokens at an estimated $3.386957375. The host re-anchors two excerpts and
+  aligns two endpoint roles from immutable repository bytes before sealing the
+  positive finding; no model or process retry occurs. Bounded campaign output
+  contains no allowance, quota, credit-limit, rate-limit, classifier-refusal,
+  reconnect, timeout, transport, authentication, or authorization failure.
+  Two whole-repository inventories of the exact implementation archive are
+  byte-identical at 256 rows and 523,955 bytes, SHA-256
+  `c3be5ffc4d4cc86f0da64d856cfff373826df6107e89e44191cbc684e69f3e0a`.
+  Exactly one row identifies the affected SymPy fixture at `src/parser.py:7`;
+  the restricted control and production scanner source emit no SymPy row.
+- All seven hosted workflow families pass on the same implementation revision:
+  Node `32885914255`, container `32885914187`, Windows GUI `32885914173`,
+  Linux GUI `32885914194`, Go `32885914170`, Java `32885914172`, and .NET
+  `32885914287`. GitHub reports the repository public on default branch `main`.
 - Added `python-web-hydra-unsafe-instantiate`, a version-aware CWE-94/CWE-470
   model for remote Hydra object-instantiation configuration under
   GHSA-2cp2-2r3c-7p7r / CVE-2026-68508. It resolves the official

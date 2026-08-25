@@ -97,6 +97,68 @@ builtin mapping, local allowlist discipline, realistic Qwed-length flow, and
 the rule that arithmetic capability evidence is not itself deployment-level
 compromise proof.
 
+**Full scanner, Linux, distribution, and dependency acceptance.** Immutable
+implementation revision `ada24aab2760bffdc205cf56f04f97f006acd73b` passes the
+authoritative native Windows Bun 1.3.14 suite after a clean build: 1,632 tests,
+11,971 assertions, 24 intentional environment or platform skips, zero
+failures, 178 files, and 569.09 seconds. The focused Ubuntu/WSL SymPy,
+cross-file, multi-hop, canonical benchmark, and Copilot adapter lane passes 74
+tests and 2,115 assertions with only the expected Windows-launcher skip.
+Generated-model drift, formatting, TypeScript compilation, and a clean
+production build pass. The production high-severity audit reports no known
+vulnerabilities. Strict inspection validates a fresh 259-entry npm archive;
+two isolated consumers each install 67 packages and validate the public
+import, executable CLI, and all 79 bundled plugin files.
+
+**Sealed scanner campaign.** Campaign
+`fa8711193f1444f805040af9d0c5c251f8c541bb1f8b8636007dda3a9a786148`
+binds the implementation revision, specialized manifest SHA-256
+`f972cae431bfef9d71b8d779e8a39e9aab7badbf46bb76f964de9d242e93c3f2`,
+fixture hashes, corpus, comparison and scan policies, runner, scanner CLI, and
+packaged scanner. Two workers use stored GitHub authentication,
+`gpt-5.6-terra`, high effort, deep mode, three bounded outer attempts, and no
+credit ceiling. The affected fixture completes attempt one in 4m59s with one
+expected high CWE-94/CWE-95 finding and complete coverage, using 1,102,762
+input, 967,797 cached, and 28,599 output tokens at $1.09264925. The restricted
+namespace completes attempt one in 10m44s with zero findings and complete
+coverage, using 2,738,161 input, 2,469,410 cached, and 55,813 output tokens at
+$2.294308125. All twelve configured gates pass: completion, precision, recall,
+F1, case pass, negative-case pass, stability, validation, attack path, code
+evidence, and severity are 1.0, while false positives per run are zero. The
+host deterministically re-anchors two excerpts and aligns two endpoint roles
+from repository bytes before sealing; neither scan retries. A finalize-only
+replay reproduces the identical passing campaign from sealed receipts without
+a Copilot call. Bounded campaign output contains no allowance, quota,
+credit-limit, rate-limit, classifier-refusal, reconnect, timeout, transport,
+authentication, or authorization failure.
+
+**Exact-commit self-review and hosted closure.** Two inventories of a
+repository-root archive of the same revision are byte-identical: 256 rows,
+523,955 bytes, and SHA-256
+`c3be5ffc4d4cc86f0da64d856cfff373826df6107e89e44191cbc684e69f3e0a`,
+in 35,169.223 and 15,915.413 ms. Exactly one SymPy row joins the remote source
+at `benchmarks/fixtures/python-sympy-unsafe-parse-expr/src/server.py:14` to the
+official sink at `src/parser.py:7`; the restricted-namespace fixture and
+production scanner source emit no SymPy row. All seven hosted workflow
+families pass on that exact implementation revision: [Node
+`32885914255`](https://github.com/secwest/copilot-security/actions/runs/32885914255),
+[container
+`32885914187`](https://github.com/secwest/copilot-security/actions/runs/32885914187),
+[Windows GUI
+`32885914173`](https://github.com/secwest/copilot-security/actions/runs/32885914173),
+[Linux GUI
+`32885914194`](https://github.com/secwest/copilot-security/actions/runs/32885914194),
+[Go
+`32885914170`](https://github.com/secwest/copilot-security/actions/runs/32885914170),
+[Java
+`32885914172`](https://github.com/secwest/copilot-security/actions/runs/32885914172),
+and [.NET
+`32885914287`](https://github.com/secwest/copilot-security/actions/runs/32885914287).
+GitHub reports the repository public on default branch `main`. The disposable
+package and self-review trees were removed after capture; the two protected
+untracked workspace paths remain untouched. This closes the SymPy increment,
+not the standing scanner-effectiveness goal.
+
 ## 2026-08-25 — Bind Hydra instantiation to untrusted target selection and affected runtime proof
 
 **Gap and authoritative semantics.** The reviewed
