@@ -75,8 +75,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   rather than the narrower benchmark literals. The benchmark now recognizes
   these exact equivalent phrases, and correction guidance explicitly requires
   the request/YAML boundary in validation and Python construction outcome in
-  the attack path. It does not relax CWE, location, severity, substantive-field,
-  safe-control, or impact-overclaim gates.
+  the attack path. It does not relax CWE, location, substantive-field,
+  safe-control, or impact-overclaim gates; severity calibration is addressed by
+  the next campaign.
+- Final-candidate campaign
+  `71fcc965504a51e68508a1bf947f172b43a24b1a3df67194f62ad0ee130f22a2`
+  on `f99a720e0aa59237ed865bcf614c5447bd6b7b62` passes every
+  structural and field-scoped semantic gate, emits one unsafe-case finding and
+  no safe-control finding, but exposes severity calibration as the sole failed
+  threshold. The model selected medium after explicitly declining to infer a
+  runtime gadget or stronger effect. The benchmark now accepts medium for the
+  proven object/state-integrity boundary as well as high or critical when
+  independently justified; it still rejects low/informational output and does
+  not credit an unproved stronger impact.
 - Added `cloudformation-public-admin-role`, the first native CloudFormation IAM
   authority model. It joins one exact `AWS::IAM::Role`, an unrestricted
   wildcard AWS-principal `Allow` for `sts:AssumeRole`, and either the exact

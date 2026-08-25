@@ -32,6 +32,7 @@ interface BenchmarkManifest {
     findingsPaths: string[];
     expected: Array<{
       cwe?: string[];
+      acceptableSeverities?: string[];
       requiredValidationTextAnyOf?: string[][];
       requiredAttackPathTextAnyOf?: string[][];
       forbiddenText?: string[];
@@ -100,6 +101,11 @@ describe("Python PyYAML unsafe deserialization model", () => {
     ]);
     expect(manifest.cases[0]?.findingsPaths).toHaveLength(1);
     expect(manifest.cases[0]?.expected[0]?.cwe).toEqual(["CWE-502"]);
+    expect(manifest.cases[0]?.expected[0]?.acceptableSeverities).toEqual([
+      "critical",
+      "high",
+      "medium",
+    ]);
     expect(
       manifest.cases[0]?.expected[0]?.requiredValidationTextAnyOf,
     ).toHaveLength(3);

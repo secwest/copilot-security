@@ -36,7 +36,7 @@
               "lineTolerance": 3
             }
           ],
-          "acceptableSeverities": ["critical", "high"],
+          "acceptableSeverities": ["critical", "high", "medium"],
           "requireValidation": true,
           "requireAttackPath": true,
           "requireCodeEvidence": true

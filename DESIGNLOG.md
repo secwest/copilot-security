@@ -120,6 +120,19 @@ the Python construction outcome in attack-path data. CWE-502, exact location,
 high/critical severity, substantive evidence, safe-control, and impact-overclaim
 gates remain unchanged.
 
+Final-candidate campaign
+`71fcc965504a51e68508a1bf947f172b43a24b1a3df67194f62ad0ee130f22a2`
+on checkpoint `f99a720e0aa59237ed865bcf614c5447bd6b7b62` proves that
+the refined field semantics are stable: all structural and semantic gates pass,
+the unsafe case produces one finding, and the safe control stays clean. Its
+only failed threshold is severity because this run chooses medium after
+explicitly declining to infer an unobserved runtime gadget or downstream
+effect. Requiring high in that state rewards impact inflation and conflicts
+with the corrected reportability boundary. Accept medium for the proven remote
+object/state-integrity defect, while retaining high or critical for an
+independently justified stronger environment and rejecting low or informational
+classification.
+
 **Consequence.** The scanner gains a deterministic Python CWE-502 path while
 remaining narrower than version-insensitive `yaml.load` lexical rules. Future
 pickle, marshal, `load_all` consumption, ruamel.yaml, or gadget-specific
