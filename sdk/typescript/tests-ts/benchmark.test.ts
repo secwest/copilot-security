@@ -2374,6 +2374,110 @@ describe("effectiveness benchmark", () => {
     });
   });
 
+  test("enforces required and forbidden finding semantics without regex execution", async () => {
+    const root = await fixtureRoot();
+    const findingsPath = join(
+      root,
+      "results",
+      "conditional-iac",
+      "findings.json",
+    );
+    await writeJson(join(root, "manifest.json"), {
+      schemaVersion: "1.0",
+      cases: [
+        {
+          id: "conditional-iac",
+          findingsPath: "conditional-iac/findings.json",
+          expected: [
+            {
+              id: "public-role",
+              cwe: ["CWE-269"],
+              locations: [{ path: "template.yaml", startLine: 17 }],
+              requiredValidationTextAnyOf: [
+                ["caller-side sts:AssumeRole permission", "identity policy"],
+                ["if deployed", "deployed unchanged"],
+              ],
+              requiredAttackPathTextAnyOf: [
+                ["caller-side sts:AssumeRole permission", "identity policy"],
+                ["if deployed", "deployed unchanged"],
+              ],
+              forbiddenText: [
+                "an AWS principal is the only precondition",
+                "STS returns a role session",
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    await writeFindings(findingsPath, [
+      finding({
+        id: "public-role",
+        cwe: ["CWE-269"],
+        path: "template.yaml",
+        line: 17,
+        validation: {
+          remainingUncertainty:
+            "Deployment is unknown, but an AWS principal is the only precondition.",
+        },
+        attackPath: { outcome: "STS returns a role session." },
+      }),
+    ]);
+
+    const rejected = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+      requireRunStatus: false,
+    });
+    expect(rejected.passed).toBe(false);
+    expect(rejected.cases[0]?.runs[0]?.matches[0]).toMatchObject({
+      contentSemanticsAccepted: false,
+      missingRequiredTextAnyOf: [],
+      missingRequiredValidationTextAnyOf: [
+        ["caller-side sts:AssumeRole permission", "identity policy"],
+        ["if deployed", "deployed unchanged"],
+      ],
+      missingRequiredAttackPathTextAnyOf: [
+        ["caller-side sts:AssumeRole permission", "identity policy"],
+        ["if deployed", "deployed unchanged"],
+      ],
+      presentForbiddenText: [
+        "an AWS principal is the only precondition",
+        "STS returns a role session",
+      ],
+    });
+
+    await writeFindings(findingsPath, [
+      finding({
+        id: "public-role",
+        cwe: ["CWE-269"],
+        path: "template.yaml",
+        line: 17,
+        validation: {
+          remainingUncertainty:
+            "If deployed unchanged, an external caller still needs caller-side sts:AssumeRole permission.",
+        },
+        attackPath: {
+          outcome:
+            "If deployed unchanged, the external caller obtains a role session only with caller-side sts:AssumeRole permission.",
+        },
+      }),
+    ]);
+    const accepted = await evaluateBenchmark({
+      manifestPath: join(root, "manifest.json"),
+      resultsDirectory: join(root, "results"),
+      requireRunStatus: false,
+    });
+    expect(accepted.passed).toBe(true);
+    expect(accepted.cases[0]?.runs[0]?.matches[0]).toMatchObject({
+      contentSemanticsAccepted: true,
+      missingRequiredTextAnyOf: [],
+      missingRequiredValidationTextAnyOf: [],
+      missingRequiredAttackPathTextAnyOf: [],
+      presentForbiddenText: [],
+    });
+  });
+
   test("does not credit code evidence whose endpoint roles contradict finding locations", async () => {
     const root = await fixtureRoot();
     await writeJson(join(root, "manifest.json"), {

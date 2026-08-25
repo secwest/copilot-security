@@ -95,7 +95,7 @@ with zero false positives. Eight focused groups cover exact row identity,
 YAML/JSON/template parsing, CloudFormation tags, all AWS partitions, managed and
 inline permission forms, empty versus effective conditions, unbounded versus
 restrictive boundaries, narrower authority, malformed and ambiguous input, and
-reviewer guidance. The focused and canonical lanes pass 25 tests and 1,739
+reviewer guidance. The focused and canonical lanes pass 26 tests and 1,748
 assertions on native Windows and Ubuntu/WSL. The canonical benchmark advances
 to 103 exploit/control pairs, 206 cases, and 618 repeated scans.
 
@@ -158,6 +158,37 @@ successful session, target-account identity, and critical compromise remain
 forbidden without direct proof. Preserve the failed campaign as an effectiveness
 baseline: it used 2,869,984 input tokens (2,583,325 cached), 47,314 output tokens,
 and estimated cost $2.251245625 over 4m31s.
+
+**Second live gate and semantic benchmark correction.** Campaign
+`f8be18fa5cd43c2acd0eef46f9c6f9ac86b0b2107fe1cf82c2ab5b660a5688c4`
+at source checkpoint `31e3d3bc5f37a05848caf6c5523aeddefe8f3d1e`
+retained the vulnerable row as one high-severity finding in 2m25s and rejected
+the specific-principal control in 3m41s. Both completed on attempt one; the
+positive used 1,092,956 input tokens (989,275 cached), 13,769 output tokens and
+$0.77748875, while the control used 1,194,894 input (1,037,278 cached), 24,155
+output and $1.114143875. The original structural manifest therefore passed all
+perfect gates with one true positive, no false positive or miss, and no
+refusal, retry, rate-limit, authentication, or transport event.
+
+Do not mistake that pass for semantic acceptance. The validation and attack-
+path ledgers said that any AWS principal was the only precondition, described
+STS session issuance as unconditional, and assigned critical/account-wide
+impact without the required cross-account identity permission. The final
+finding was less severe but retained the same unconditional reachability in
+multiple fields. Add generic, bounded whole-finding, validation-scoped, and
+attack-path-scoped alternative groups plus forbidden literals to benchmark
+expectations. Matching is literal, case-insensitive, whitespace-normalized, and
+limited in group, alternative, and string size; no manifest regex is compiled
+or executed. Semantic failure is a case failure and the report identifies the
+exact scoped missing groups and present forbidden claims. Re-evaluation of the
+immutable campaign now fails with caller permission missing from validation,
+caller permission and deployment missing from the attack path, and three
+overclaims present. Strengthen
+the correction turn and packaged validation guidance so both unchanged
+deployment and effective caller-side `sts:AssumeRole` authorization appear as
+explicit remaining uncertainties and every outcome is conditional. This turns
+manual reviewer judgment into a repeatable effectiveness gate before spending
+another live campaign.
 
 **Consequence.** Review now receives a joined public-trust-to-administrator path
 instead of two disconnected IAM keywords, with exact counterevidence boundaries

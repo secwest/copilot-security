@@ -35,6 +35,9 @@ const MAX_CASES = 10_000;
 const MAX_RUNS_PER_CASE = 100;
 const MAX_EXPECTATIONS_PER_CASE = 10_000;
 const MAX_SEED_SARIF_PER_CASE = 32;
+const MAX_SEMANTIC_TEXT_GROUPS = 32;
+const MAX_SEMANTIC_TEXT_ALTERNATIVES = 16;
+const MAX_SEMANTIC_TEXT_LENGTH = 512;
 const DEFAULT_LINE_TOLERANCE = 3;
 
 export interface BenchmarkThresholds {
@@ -67,6 +70,14 @@ export interface BenchmarkFindingExpectation {
   requireValidation?: boolean;
   requireAttackPath?: boolean;
   requireCodeEvidence?: boolean;
+  /** Every group must have at least one literal present in the finding text. */
+  requiredTextAnyOf?: string[][];
+  /** Every group must have at least one literal in validation. */
+  requiredValidationTextAnyOf?: string[][];
+  /** Every group must have at least one literal in the attack path. */
+  requiredAttackPathTextAnyOf?: string[][];
+  /** None of these literals may appear in the finding text. */
+  forbiddenText?: string[];
 }
 
 export interface BenchmarkCase {
@@ -107,6 +118,11 @@ export interface BenchmarkMatch {
   codeEvidencePresent: boolean;
   codeEvidenceSubstantive: boolean;
   severityAccepted: boolean | null;
+  contentSemanticsAccepted?: boolean;
+  missingRequiredTextAnyOf?: string[][];
+  missingRequiredValidationTextAnyOf?: string[][];
+  missingRequiredAttackPathTextAnyOf?: string[][];
+  presentForbiddenText?: string[];
 }
 
 export interface BenchmarkRunResult {
@@ -197,6 +213,9 @@ interface BenchmarkFinding {
   attackPathSubstantive: boolean;
   codeEvidencePresent: boolean;
   codeEvidenceSubstantive: boolean;
+  searchableText: string;
+  validationText: string;
+  attackPathText: string;
 }
 
 interface CandidateMatch {
@@ -601,6 +620,7 @@ function evaluateRun(
     .map((match) => {
       const expectation = benchmarkCase.expected[match.expectedIndex]!;
       const finding = findings[match.findingIndex]!;
+      const contentSemantics = evaluateContentSemantics(expectation, finding);
       return {
         expectationId: expectation.id,
         findingId: finding.id,
@@ -616,6 +636,18 @@ function evaluateRun(
             ? null
             : finding.severity !== null &&
               expectation.acceptableSeverities.includes(finding.severity),
+        ...(contentSemantics === null
+          ? {}
+          : {
+              contentSemanticsAccepted: contentSemantics.accepted,
+              missingRequiredTextAnyOf:
+                contentSemantics.missingRequiredTextAnyOf,
+              missingRequiredValidationTextAnyOf:
+                contentSemantics.missingRequiredValidationTextAnyOf,
+              missingRequiredAttackPathTextAnyOf:
+                contentSemantics.missingRequiredAttackPathTextAnyOf,
+              presentForbiddenText: contentSemantics.presentForbiddenText,
+            }),
       };
     })
     .sort(
@@ -637,7 +669,8 @@ function evaluateRun(
       (!expectation.requireValidation || match.validationSubstantive) &&
       (!expectation.requireAttackPath || match.attackPathSubstantive) &&
       (!expectation.requireCodeEvidence || match.codeEvidenceSubstantive) &&
-      match.severityAccepted !== false
+      match.severityAccepted !== false &&
+      match.contentSemanticsAccepted !== false
     );
   });
   return {
@@ -657,6 +690,67 @@ function evaluateRun(
     missedExpectations,
     unexpectedFindings,
   };
+}
+
+function evaluateContentSemantics(
+  expectation: BenchmarkFindingExpectation,
+  finding: BenchmarkFinding,
+): {
+  accepted: boolean;
+  missingRequiredTextAnyOf: string[][];
+  missingRequiredValidationTextAnyOf: string[][];
+  missingRequiredAttackPathTextAnyOf: string[][];
+  presentForbiddenText: string[];
+} | null {
+  const required = expectation.requiredTextAnyOf ?? [];
+  const requiredValidation = expectation.requiredValidationTextAnyOf ?? [];
+  const requiredAttackPath = expectation.requiredAttackPathTextAnyOf ?? [];
+  const forbidden = expectation.forbiddenText ?? [];
+  if (
+    required.length === 0 &&
+    requiredValidation.length === 0 &&
+    requiredAttackPath.length === 0 &&
+    forbidden.length === 0
+  )
+    return null;
+  const missingRequiredTextAnyOf = missingSemanticTextGroups(
+    required,
+    finding.searchableText,
+  );
+  const missingRequiredValidationTextAnyOf = missingSemanticTextGroups(
+    requiredValidation,
+    finding.validationText,
+  );
+  const missingRequiredAttackPathTextAnyOf = missingSemanticTextGroups(
+    requiredAttackPath,
+    finding.attackPathText,
+  );
+  const presentForbiddenText = forbidden.filter((literal) =>
+    finding.searchableText.includes(normalizeSemanticText(literal)),
+  );
+  return {
+    accepted:
+      missingRequiredTextAnyOf.length === 0 &&
+      missingRequiredValidationTextAnyOf.length === 0 &&
+      missingRequiredAttackPathTextAnyOf.length === 0 &&
+      presentForbiddenText.length === 0,
+    missingRequiredTextAnyOf,
+    missingRequiredValidationTextAnyOf,
+    missingRequiredAttackPathTextAnyOf,
+    presentForbiddenText,
+  };
+}
+
+function missingSemanticTextGroups(
+  groups: string[][],
+  searchableText: string,
+): string[][] {
+  return groups.filter(
+    (alternatives) =>
+      !alternatives.some((literal) =>
+        searchableText.includes(normalizeSemanticText(literal)),
+      ),
+  );
 }
 
 function failedRun(
@@ -1133,6 +1227,36 @@ function parseExpectation(
           value["acceptableSeverities"],
           `Benchmark expectation ${caseId}/${id} acceptableSeverities`,
         );
+  const requiredTextAnyOf =
+    value["requiredTextAnyOf"] === undefined
+      ? undefined
+      : requireSemanticTextGroups(
+          value["requiredTextAnyOf"],
+          `Benchmark expectation ${caseId}/${id} requiredTextAnyOf`,
+        );
+  const requiredValidationTextAnyOf =
+    value["requiredValidationTextAnyOf"] === undefined
+      ? undefined
+      : requireSemanticTextGroups(
+          value["requiredValidationTextAnyOf"],
+          `Benchmark expectation ${caseId}/${id} requiredValidationTextAnyOf`,
+        );
+  const requiredAttackPathTextAnyOf =
+    value["requiredAttackPathTextAnyOf"] === undefined
+      ? undefined
+      : requireSemanticTextGroups(
+          value["requiredAttackPathTextAnyOf"],
+          `Benchmark expectation ${caseId}/${id} requiredAttackPathTextAnyOf`,
+        );
+  const forbiddenText =
+    value["forbiddenText"] === undefined
+      ? undefined
+      : requireBoundedStringArray(
+          value["forbiddenText"],
+          `Benchmark expectation ${caseId}/${id} forbiddenText`,
+          MAX_SEMANTIC_TEXT_GROUPS,
+          MAX_SEMANTIC_TEXT_LENGTH,
+        );
   return {
     id,
     cwe,
@@ -1141,6 +1265,14 @@ function parseExpectation(
     requireValidation: value["requireValidation"] === true,
     requireAttackPath: value["requireAttackPath"] === true,
     requireCodeEvidence: value["requireCodeEvidence"] === true,
+    ...(requiredTextAnyOf === undefined ? {} : { requiredTextAnyOf }),
+    ...(requiredValidationTextAnyOf === undefined
+      ? {}
+      : { requiredValidationTextAnyOf }),
+    ...(requiredAttackPathTextAnyOf === undefined
+      ? {}
+      : { requiredAttackPathTextAnyOf }),
+    ...(forbiddenText === undefined ? {} : { forbiddenText }),
   };
 }
 
@@ -1270,6 +1402,15 @@ function parseFindings(
         codeEvidenceSubstantive: isSubstantiveCodeEvidence(
           codeEvidence,
           parsedLocations,
+        ),
+        searchableText: normalizeSemanticText(
+          collectStringValues(finding).join(" "),
+        ),
+        validationText: normalizeSemanticText(
+          collectStringValues(validation).join(" "),
+        ),
+        attackPathText: normalizeSemanticText(
+          collectStringValues(attackPath).join(" "),
         ),
       };
     }),
@@ -1486,6 +1627,44 @@ function requireStringArray(
   return value.map((entry) => (entry as string).trim());
 }
 
+function requireBoundedStringArray(
+  value: unknown,
+  label: string,
+  maxLength: number,
+  maxStringLength: number,
+): string[] {
+  const values = requireStringArray(value, label, maxLength);
+  if (
+    values.length === 0 ||
+    values.some((entry) => entry.length > maxStringLength)
+  ) {
+    throw new CopilotSecurityError(
+      `${label} must contain 1-${maxLength} strings of at most ${maxStringLength} characters.`,
+    );
+  }
+  return values;
+}
+
+function requireSemanticTextGroups(value: unknown, label: string): string[][] {
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > MAX_SEMANTIC_TEXT_GROUPS
+  ) {
+    throw new CopilotSecurityError(
+      `${label} must contain 1-${MAX_SEMANTIC_TEXT_GROUPS} alternative groups.`,
+    );
+  }
+  return value.map((group, index) =>
+    requireBoundedStringArray(
+      group,
+      `${label}[${index}]`,
+      MAX_SEMANTIC_TEXT_ALTERNATIVES,
+      MAX_SEMANTIC_TEXT_LENGTH,
+    ),
+  );
+}
+
 function requireSeverityArray(value: unknown, label: string): SeverityLevel[] {
   if (
     !Array.isArray(value) ||
@@ -1546,6 +1725,17 @@ function normalizePath(path: string): string {
 
 function normalizeCwe(value: string): string {
   return value.trim().toUpperCase();
+}
+
+function normalizeSemanticText(value: string): string {
+  return value.toLowerCase().replace(/\s+/gu, " ").trim();
+}
+
+function collectStringValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(collectStringValues);
+  if (isRecord(value)) return Object.values(value).flatMap(collectStringValues);
+  return [];
 }
 
 function sum(values: number[]): number {

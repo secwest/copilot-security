@@ -28,7 +28,44 @@
           "lineTolerance": 1,
           "requireValidation": true,
           "requireAttackPath": true,
-          "requireCodeEvidence": true
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            [
+              "caller-side sts:AssumeRole permission",
+              "identity-based permission to call sts:AssumeRole",
+              "caller identity policy",
+              "caller-side authorization",
+              "separate effective sts:AssumeRole authorization"
+            ],
+            [
+              "if deployed",
+              "deployed as written",
+              "deployment of this resource",
+              "template is deployed"
+            ]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            [
+              "caller-side sts:AssumeRole permission",
+              "identity-based permission to call sts:AssumeRole",
+              "caller identity policy",
+              "caller-side authorization",
+              "separate effective sts:AssumeRole authorization"
+            ],
+            [
+              "if deployed",
+              "deployed as written",
+              "deployment of this resource",
+              "template is deployed"
+            ]
+          ],
+          "forbiddenText": [
+            "an AWS principal is the only precondition",
+            "any AWS principal can obtain account-administrator",
+            "STS returns a role session",
+            "an AdministratorAccess role session is issued",
+            "arbitrary AWS principal crosses the role trust boundary and obtains"
+          ]
         }
       ]
     },

@@ -724,8 +724,11 @@ node benchmarks/run-benchmark.mjs `
 The CloudFormation IAM lane pairs a public wildcard trust plus unbounded
 administrator permission on one role with a source-identical role trusted only
 to one AWS account. It requires exact trust, role, policy, condition and
-permissions-boundary evidence, a concrete reachable caller, high or critical
-severity, and zero false positives:
+permissions-boundary evidence, conditional deployment, effective caller-side
+`sts:AssumeRole` authorization, high or critical severity, and zero false
+positives. Its semantic gate rejects unqualified session-issuance or "any AWS
+principal is sufficient" claims even when structural validation and attack-
+path fields are otherwise substantive:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `

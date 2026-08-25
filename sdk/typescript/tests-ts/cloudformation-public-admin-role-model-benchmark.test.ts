@@ -43,6 +43,10 @@ interface BenchmarkManifest {
       requireValidation?: boolean;
       requireAttackPath?: boolean;
       requireCodeEvidence?: boolean;
+      requiredTextAnyOf?: string[][];
+      requiredValidationTextAnyOf?: string[][];
+      requiredAttackPathTextAnyOf?: string[][];
+      forbiddenText?: string[];
     }>;
   }>;
 }
@@ -144,6 +148,21 @@ describe("CloudFormation public administrator role model benchmark", () => {
       requireAttackPath: true,
       requireCodeEvidence: true,
     });
+    for (const groups of [
+      benchmark.cases[0]?.expected[0]?.requiredValidationTextAnyOf,
+      benchmark.cases[0]?.expected[0]?.requiredAttackPathTextAnyOf,
+    ]) {
+      expect(groups).toEqual([
+        expect.arrayContaining(["caller-side sts:AssumeRole permission"]),
+        expect.arrayContaining(["if deployed"]),
+      ]);
+    }
+    expect(benchmark.cases[0]?.expected[0]?.forbiddenText).toEqual(
+      expect.arrayContaining([
+        "an AWS principal is the only precondition",
+        "STS returns a role session",
+      ]),
+    );
     expect(benchmark.cases[1]?.expected).toEqual([]);
   });
 
@@ -321,6 +340,10 @@ describe("CloudFormation public administrator role model benchmark", () => {
     expect(prompt).toContain("must not by itself reject or defer");
     expect(prompt).toContain("attacker who controls an AWS account");
     expect(prompt).toContain("use the missing runtime facts to calibrate");
+    expect(prompt).toContain(
+      "every validation and attack-path projection must explicitly state",
+    );
+    expect(prompt).toContain("Never serialize an unconditional session-issued");
     expect(prompt).toContain("PermissionsBoundary");
     expect(prompt).toContain(
       "macros, StackSets, nested stacks, CDK/SAM synthesis",

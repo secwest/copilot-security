@@ -518,3 +518,11 @@ completion, validation, attack-path, evidence, and severity metrics. Use
 campaign-bound runner receipts are required by default. The explicit
 `--no-require-status` compatibility mode accepts manually imported or
 cross-provider findings without claiming that their scanner process completed.
+
+An expectation may also define bounded `requiredTextAnyOf`,
+`requiredValidationTextAnyOf`, and `requiredAttackPathTextAnyOf` groups plus
+`forbiddenText` literals. Every alternative group must match at least one
+case-insensitive, whitespace-normalized string in its specified scope and no
+forbidden literal may match anywhere in the finding. These semantic contracts
+fail the case and report the exact scoped missing groups or present overclaims;
+manifests never supply executable regular expressions.

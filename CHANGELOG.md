@@ -35,7 +35,7 @@ All notable scanner, application, benchmark, and operational changes are recorde
   intrinsic tags and partitions, managed and inline permission forms,
   conditions and permissions boundaries, narrower authority, parser ambiguity,
   non-template rejection, and correction guidance. The focused plus canonical
-  lane passes 25 tests and 1,739 assertions on native Windows and Ubuntu/WSL.
+  lane passes 26 tests and 1,748 assertions on native Windows and Ubuntu/WSL.
   The canonical corpus now contains 103 exploit/control pairs, 206 cases, and
   618 repeated scans.
 - Final local and hosted acceptance for the CloudFormation model is green at
@@ -84,6 +84,25 @@ All notable scanner, application, benchmark, and operational changes are recorde
   runtime proof. The failed baseline used 2,869,984 input tokens (2,583,325
   cached), 47,314 output tokens, and estimated cost $2.251245625 over 4m31s and
   remains isolated for comparison.
+- A second live campaign, `f8be18fa5cd43c2acd0eef46f9c6f9ac86b0b2107fe1cf82c2ab5b660a5688c4`,
+  proved the reportability correction: the vulnerable case produced one high-
+  severity finding and the specific-principal control produced none, both on
+  attempt one without refusal or transport recovery. The then-current
+  structural gate reported perfect precision, recall, F1, validation, attack-
+  path, code-evidence, severity, stability, and negative-control metrics.
+  Manual artifact review still found an important reachability overclaim: the
+  attack-path ledger called operating any AWS principal the only precondition
+  and described session issuance as unconditional, omitting cross-account
+  caller-side authorization. Benchmark expectations now support bounded,
+  case-insensitive whole-finding, validation-scoped, and attack-path-scoped
+  alternative groups plus forbidden literals; the evaluator reports exact
+  missing groups and present overclaims and never executes manifest regexes.
+  Re-evaluating that preserved campaign now fails the vulnerable case for a
+  missing validation caller-permission group, missing attack-path caller and
+  deployment groups, and three unqualified outcome phrases. The quality gate and packaged guidance also
+  require unchanged deployment plus effective caller-side `sts:AssumeRole` in
+  both validation uncertainty and attack-path serialization. The combined generic
+  benchmark and CloudFormation lanes pass 26 tests and 1,748 assertions.
 - Added `kubernetes-cluster-admin-broad-subject`, the second native Kubernetes
   infrastructure-as-code model. It requires an exact
   `rbac.authorization.k8s.io/v1` `ClusterRoleBinding`, an immutable exact
