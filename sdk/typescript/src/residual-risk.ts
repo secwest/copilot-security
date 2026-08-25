@@ -1987,6 +1987,33 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "python-web-pyyaml-unsafe-load",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+yaml(?:\s+as\s+[A-Za-z_]\w*)?\b|\bfrom\s+yaml\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-body",
+        expression:
+          /\brequest\.(?:body|data|form|json|POST)\b|\brequest\.(?:get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\bBody\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "pyyaml-unsafe-object-construction",
+        expression: /\b(?:[A-Za-z_]\w*\s*\.\s*)?[A-Za-z_]\w*\s*\(/u,
+        cweIds: ["CWE-502"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-sql",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3000,6 +3027,17 @@ interface ImportedPythonSymbol {
 interface FrameworkFilesystemPathSink {
   expressions: readonly string[];
   operation: string;
+}
+
+interface PythonPyyamlUnsafeSink {
+  sourceExpression: string;
+  kind: string;
+  propagators: Array<{
+    kind: string;
+    path: string;
+    line: number;
+    symbol?: string;
+  }>;
 }
 
 const NODE_FILESYSTEM_PATH_ARGUMENTS: ReadonlyMap<string, readonly number[]> =
@@ -13973,7 +14011,11 @@ function frameworkDataflowRecords(
                   : 8,
               )
           : PYTHON_EXTENSIONS.has(extension)
-            ? matchingPythonModelLines(lines, model.sinks, 8)
+            ? matchingPythonModelLines(
+                lines,
+                model.sinks,
+                model.id === "python-web-pyyaml-unsafe-load" ? 64 : 8,
+              )
             : extension === ".java" || extension === ".cs"
               ? matchingJavaModelLines(lines, model.sinks, 8)
               : matchingModelLines(lines, model.sinks, 8);
@@ -14174,6 +14216,10 @@ function frameworkDataflowRecords(
       const pythonPathSink =
         model.id === "python-web-path"
           ? pythonFilesystemPathSink(lines, sink.line)
+          : undefined;
+      const pythonPyyamlSink =
+        model.id === "python-web-pyyaml-unsafe-load"
+          ? pythonPyyamlUnsafeSink(files, path, lines, sink.line)
           : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
@@ -14441,6 +14487,12 @@ function frameworkDataflowRecords(
         continue;
       }
       if (
+        model.id === "python-web-pyyaml-unsafe-load" &&
+        pythonPyyamlSink === undefined
+      ) {
+        continue;
+      }
+      if (
         model.id === "aspnet-http-object-authorization" &&
         (dotnetObjectSink === undefined ||
           !dotnetEfObjectLookupHasTypedReceiver(lines, dotnetObjectSink))
@@ -14666,110 +14718,120 @@ function frameworkDataflowRecords(
                                 ),
                               )
                               .find((candidate) => candidate !== undefined)
-                          : model.id === "node-http-object-authorization" &&
-                              nodeObjectSink !== undefined
-                            ? modeledObjectLookupSource(
+                          : model.id === "python-web-pyyaml-unsafe-load" &&
+                              pythonPyyamlSink !== undefined
+                            ? modeledPythonObjectSource(
                                 lines,
                                 sources,
                                 sink.line,
-                                nodeObjectSink.argument,
+                                pythonPyyamlSink.sourceExpression,
                                 model.sources,
                               )
-                            : model.id === "node-http-ssrf" &&
-                                nodeHttpSink?.urlExpression !== undefined
-                              ? modeledCallSource(
+                            : model.id === "node-http-object-authorization" &&
+                                nodeObjectSink !== undefined
+                              ? modeledObjectLookupSource(
                                   lines,
                                   sources,
                                   sink.line,
-                                  nodeHttpSink.urlExpression,
+                                  nodeObjectSink.argument,
                                   model.sources,
                                 )
-                              : model.id ===
-                                  "node-copilot-system-prompt-injection"
-                                ? nodeCopilotResolution?.source
-                                : extension === ".java" &&
-                                    model.id ===
-                                      "spring-http-object-authorization" &&
-                                    javaObjectSink !== undefined
-                                  ? modeledSameFileJavaObjectSource(
-                                      lines,
-                                      sink.line,
-                                      javaObjectSink.argument,
-                                      model.sources,
-                                    )
+                              : model.id === "node-http-ssrf" &&
+                                  nodeHttpSink?.urlExpression !== undefined
+                                ? modeledCallSource(
+                                    lines,
+                                    sources,
+                                    sink.line,
+                                    nodeHttpSink.urlExpression,
+                                    model.sources,
+                                  )
+                                : model.id ===
+                                    "node-copilot-system-prompt-injection"
+                                  ? nodeCopilotResolution?.source
                                   : extension === ".java" &&
                                       model.id ===
-                                        "spring-mvc-jpa-mass-assignment" &&
-                                      javaJpaSink !== undefined &&
-                                      javaJpaDomainType !== undefined
-                                    ? (() => {
-                                        const method = exportedJavaMethods(
-                                          lines,
-                                        ).find(
-                                          (candidate) =>
-                                            sink.line >= candidate.startLine &&
-                                            sink.line <= candidate.endLine,
-                                        );
-                                        return method === undefined
-                                          ? undefined
-                                          : modeledJavaMassAssignmentSource(
-                                              lines,
-                                              method,
-                                              sink.line,
-                                              javaJpaSink.argument,
-                                              javaJpaDomainType,
-                                            );
-                                      })()
+                                        "spring-http-object-authorization" &&
+                                      javaObjectSink !== undefined
+                                    ? modeledSameFileJavaObjectSource(
+                                        lines,
+                                        sink.line,
+                                        javaObjectSink.argument,
+                                        model.sources,
+                                      )
                                     : extension === ".java" &&
-                                        (model.id === "spring-http-ssrf" ||
-                                          model.id === "spring-http-path")
-                                      ? modeledSameFileJavaSource(
-                                          lines,
-                                          sink.line,
-                                          model.id,
-                                          model.sources,
-                                        )
-                                      : extension === ".cs" &&
-                                          model.id ===
-                                            "aspnet-http-template-injection"
-                                        ? modeledSameFileDotnetTemplateSource(
+                                        model.id ===
+                                          "spring-mvc-jpa-mass-assignment" &&
+                                        javaJpaSink !== undefined &&
+                                        javaJpaDomainType !== undefined
+                                      ? (() => {
+                                          const method = exportedJavaMethods(
+                                            lines,
+                                          ).find(
+                                            (candidate) =>
+                                              sink.line >=
+                                                candidate.startLine &&
+                                              sink.line <= candidate.endLine,
+                                          );
+                                          return method === undefined
+                                            ? undefined
+                                            : modeledJavaMassAssignmentSource(
+                                                lines,
+                                                method,
+                                                sink.line,
+                                                javaJpaSink.argument,
+                                                javaJpaDomainType,
+                                              );
+                                        })()
+                                      : extension === ".java" &&
+                                          (model.id === "spring-http-ssrf" ||
+                                            model.id === "spring-http-path")
+                                        ? modeledSameFileJavaSource(
                                             lines,
                                             sink.line,
+                                            model.id,
                                             model.sources,
-                                            files,
-                                            path,
                                           )
                                         : extension === ".cs" &&
                                             model.id ===
-                                              "aspnet-http-object-authorization" &&
-                                            dotnetObjectSink !== undefined
-                                          ? modeledSameFileDotnetObjectSource(
+                                              "aspnet-http-template-injection"
+                                          ? modeledSameFileDotnetTemplateSource(
                                               lines,
                                               sink.line,
-                                              dotnetObjectSink.argument,
                                               model.sources,
                                               files,
                                               path,
                                             )
                                           : extension === ".cs" &&
-                                              model.id.startsWith(
-                                                "aspnet-http-",
-                                              )
-                                            ? modeledSameFileDotnetSource(
+                                              model.id ===
+                                                "aspnet-http-object-authorization" &&
+                                              dotnetObjectSink !== undefined
+                                            ? modeledSameFileDotnetObjectSource(
                                                 lines,
                                                 sink.line,
+                                                dotnetObjectSink.argument,
                                                 model.sources,
                                                 files,
                                                 path,
-                                              ) ??
-                                              nearestModeledSource(
-                                                matchedSources,
-                                                sink.line,
                                               )
-                                            : nearestModeledSource(
-                                                sources,
-                                                sink.line,
-                                              );
+                                            : extension === ".cs" &&
+                                                model.id.startsWith(
+                                                  "aspnet-http-",
+                                                )
+                                              ? modeledSameFileDotnetSource(
+                                                  lines,
+                                                  sink.line,
+                                                  model.sources,
+                                                  files,
+                                                  path,
+                                                ) ??
+                                                nearestModeledSource(
+                                                  matchedSources,
+                                                  sink.line,
+                                                )
+                                              : nearestModeledSource(
+                                                  sources,
+                                                  sink.line,
+                                                );
       const source =
         model.id === "node-http-fastify-static-route-guard-bypass"
           ? nodeFastifyStatic?.source
@@ -14953,6 +15015,7 @@ function frameworkDataflowRecords(
         nodeFlatUnflatten?.kind ??
         nodeJsToml?.kind ??
         nodePrototypeMerge?.kind ??
+        pythonPyyamlSink?.kind ??
         sink.kind;
       const startLine = Math.max(1, effectiveSinkLine - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(
@@ -15146,6 +15209,7 @@ function frameworkDataflowRecords(
                     symbol: `socket.io-parser@${nodeSocketIoServerDos.dependency.child.version}:${nodeSocketIoServerDos.dependency.child.proof}:${nodeSocketIoServerDos.dependency.childDeclaration}:zero-attachment-buffer-retention`,
                   },
                 ]),
+            ...(pythonPyyamlSink?.propagators ?? []),
             ...(nodeOpcuaServerDos === undefined
               ? []
               : [
@@ -20747,6 +20811,7 @@ function frameworkDirectPythonDataflowRecords(
                   line: summary.declarationLine,
                   symbol: summary.parameter,
                 },
+                ...(summary.propagators ?? []),
               ],
               candidateControls: summary.controls.map((control) => ({
                 ...control,
@@ -21544,6 +21609,7 @@ function frameworkPythonMultiHopDataflowRecords(
                   line: sinkSummary.declarationLine,
                   symbol: sinkSummary.parameter,
                 },
+                ...(sinkSummary.propagators ?? []),
               ],
               candidateControls,
             },
@@ -23620,17 +23686,29 @@ function pythonFrameworkWrapperSummaries(
             model.id === "python-web-path"
               ? pythonFilesystemPathSink(file.lines, sink.line)
               : undefined;
+          const pythonPyyamlSink =
+            model.id === "python-web-pyyaml-unsafe-load"
+              ? pythonPyyamlUnsafeSink(files, file.path, file.lines, sink.line)
+              : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
+          if (
+            model.id === "python-web-pyyaml-unsafe-load" &&
+            pythonPyyamlSink === undefined
+          ) {
+            continue;
+          }
           const tracedSinkExpression =
+            pythonPyyamlSink?.sourceExpression ??
             pythonPathSink?.expressions
               .map(
                 (expression) =>
                   resolvePythonExpression(file.lines, expression, sink.line) ??
                   expression,
               )
-              .join("\n") ?? sinkExpression;
+              .join("\n") ??
+            sinkExpression;
           const parameterIndexes = wrapper.parameters.flatMap(
             (parameter, parameterIndex) =>
               pythonLineReferencesIdentifier(tracedSinkExpression, parameter)
@@ -23672,8 +23750,15 @@ function pythonFrameworkWrapperSummaries(
               parameter: wrapper.parameters[parameterIndex]!,
               parameterIndex,
               declarationLine: wrapper.startLine,
-              sink: { ...sink, cweIds: sinkPattern.cweIds },
+              sink: {
+                ...sink,
+                kind: pythonPyyamlSink?.kind ?? sink.kind,
+                cweIds: sinkPattern.cweIds,
+              },
               controls: wrapperControls.slice(0, 8),
+              ...(pythonPyyamlSink === undefined
+                ? {}
+                : { propagators: pythonPyyamlSink.propagators }),
             });
           }
         }
@@ -24844,6 +24929,302 @@ function importedPythonSymbols(
     }
   }
   return imports;
+}
+
+interface PythonPyyamlImportBinding {
+  imported: string;
+  local: string;
+  line: number;
+}
+
+interface PythonPyyamlBindingContext {
+  receivers: PythonPyyamlImportBinding[];
+  functions: PythonPyyamlImportBinding[];
+  loaders: PythonPyyamlImportBinding[];
+}
+
+const PYTHON_PYYAML_UNSAFE_LOADERS = new Set([
+  "Loader",
+  "UnsafeLoader",
+  "CLoader",
+  "CUnsafeLoader",
+]);
+
+function pythonPyyamlBindings(
+  lines: readonly string[],
+): PythonPyyamlBindingContext {
+  const receivers: PythonPyyamlImportBinding[] = [];
+  const functions: PythonPyyamlImportBinding[] = [];
+  const loaders: PythonPyyamlImportBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const receiver = /^\s*import\s+yaml(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+      structural,
+    );
+    if (receiver !== null) {
+      receivers.push({
+        imported: "yaml",
+        local: receiver[1] ?? "yaml",
+        line: index + 1,
+      });
+      continue;
+    }
+    const fromImport = /^\s*from\s+yaml\s+import\s+(.+?)\s*$/u.exec(structural);
+    if (fromImport?.[1] === undefined) continue;
+    let importedText = fromImport[1].trim();
+    if (importedText.startsWith("(") && !importedText.endsWith(")")) {
+      for (
+        let offset = index + 1;
+        offset < Math.min(structuralLines.length, index + 8);
+        offset += 1
+      ) {
+        importedText += `\n${structuralLines[offset] ?? ""}`;
+        if ((structuralLines[offset] ?? "").includes(")")) break;
+      }
+    }
+    if (importedText.startsWith("(") !== importedText.endsWith(")")) {
+      continue;
+    }
+    importedText = importedText.replace(/^\(([\s\S]*)\)$/u, "$1");
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const binding = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      if (binding?.[1] === undefined) continue;
+      const entry = {
+        imported: binding[1],
+        local: binding[2] ?? binding[1],
+        line: index + 1,
+      };
+      if (entry.imported === "load" || entry.imported === "unsafe_load") {
+        functions.push(entry);
+      } else if (PYTHON_PYYAML_UNSAFE_LOADERS.has(entry.imported)) {
+        loaders.push(entry);
+      }
+    }
+  }
+  return { receivers, functions, loaders };
+}
+
+function pythonPyyamlLocalModuleCouldShadow(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+): boolean {
+  const candidates = new Set<string>();
+  let directory = posix.dirname(sourcePath.replaceAll("\\", "/"));
+  while (true) {
+    const prefix = directory === "." ? "" : `${directory}/`;
+    candidates.add(`${prefix}yaml.py`.toLowerCase());
+    candidates.add(`${prefix}yaml/__init__.py`.toLowerCase());
+    if (directory === ".") break;
+    const parent = posix.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  return files.some((file) =>
+    candidates.has(file.path.replaceAll("\\", "/").toLowerCase()),
+  );
+}
+
+function pythonPyyamlBindingReassigned(
+  lines: readonly string[],
+  binding: PythonPyyamlImportBinding,
+  member: string | undefined,
+  callLine: number,
+): boolean {
+  if (
+    pythonIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      callLine,
+    )
+  ) {
+    return true;
+  }
+  if (member === undefined) return false;
+  const replacement = new RegExp(
+    `^\\s*${escapeRegularExpression(binding.local)}\\s*\\.\\s*${escapeRegularExpression(member)}\\s*(?:[+\\-*/%&|^]?=|:=)`,
+    "u",
+  );
+  return pythonStructuralLines(lines)
+    .slice(binding.line, Math.max(binding.line, callLine - 1))
+    .some((candidate) => replacement.test(candidate));
+}
+
+function pythonCallArgumentsForCalleeAtLine(
+  lines: readonly string[],
+  line: number,
+  callee: RegExp,
+): string[] | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const original = callLines.join("\n");
+  const structural = pythonStructuralLines(callLines).join("\n");
+  const match = callee.exec(structural);
+  if (match === null) return undefined;
+  const firstLineEnd = structural.indexOf("\n");
+  if (firstLineEnd >= 0 && match.index >= firstLineEnd) return undefined;
+  const open = structural.indexOf("(", match.index);
+  if (open < 0) return undefined;
+  const close = matchingCallParenthesis(original, open);
+  if (close < 0) return undefined;
+  return splitPythonArguments(original.slice(open + 1, close));
+}
+
+function pythonKeywordArgument(
+  arguments_: readonly string[],
+  name: string,
+): string | undefined {
+  const expression = new RegExp(
+    `^${escapeRegularExpression(name)}\\s*=\\s*([\\s\\S]+)$`,
+    "u",
+  );
+  for (const argument of arguments_) {
+    const match = expression.exec(argument.trim());
+    if (match?.[1] !== undefined) return match[1].trim();
+  }
+  return undefined;
+}
+
+function pythonPositionalArguments(arguments_: readonly string[]): string[] {
+  return arguments_
+    .map((argument) => argument.trim())
+    .filter(
+      (argument) =>
+        argument !== "" &&
+        !/^[A-Za-z_]\w*\s*=/u.test(argument) &&
+        !argument.startsWith("**"),
+    );
+}
+
+function pythonPyyamlLoaderBinding(
+  context: PythonPyyamlBindingContext,
+  lines: readonly string[],
+  loaderExpression: string,
+  callLine: number,
+): PythonPyyamlImportBinding | undefined {
+  const loader = loaderExpression.trim();
+  for (const binding of context.loaders) {
+    if (
+      loader === binding.local &&
+      binding.line < callLine &&
+      !pythonPyyamlBindingReassigned(lines, binding, undefined, callLine)
+    ) {
+      return binding;
+    }
+  }
+  for (const receiver of context.receivers) {
+    const member = new RegExp(
+      `^${escapeRegularExpression(receiver.local)}\\s*\\.\\s*([A-Za-z_]\\w*)$`,
+      "u",
+    ).exec(loader)?.[1];
+    if (
+      member !== undefined &&
+      PYTHON_PYYAML_UNSAFE_LOADERS.has(member) &&
+      receiver.line < callLine &&
+      !pythonPyyamlBindingReassigned(lines, receiver, member, callLine)
+    ) {
+      return { imported: member, local: loader, line: receiver.line };
+    }
+  }
+  return undefined;
+}
+
+function pythonPyyamlUnsafeSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonPyyamlUnsafeSink | undefined {
+  if (pythonPyyamlLocalModuleCouldShadow(files, sourcePath)) return undefined;
+  const context = pythonPyyamlBindings(lines);
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const receiverCalls = context.receivers.flatMap((binding) =>
+    (["unsafe_load", "load"] as const).map((member) => ({ binding, member })),
+  );
+  const functionCalls = context.functions.map((binding) => ({
+    binding,
+    member: binding.imported as "unsafe_load" | "load",
+  }));
+  for (const call of [...receiverCalls, ...functionCalls]) {
+    if (
+      call.binding.line >= line ||
+      wrapper?.parameters.includes(call.binding.local) === true ||
+      pythonPyyamlBindingReassigned(
+        lines,
+        call.binding,
+        context.receivers.includes(call.binding) ? call.member : undefined,
+        line,
+      )
+    ) {
+      continue;
+    }
+    const callee = context.receivers.includes(call.binding)
+      ? new RegExp(
+          `\\b${escapeRegularExpression(call.binding.local)}\\s*\\.\\s*${escapeRegularExpression(call.member)}\\s*\\(`,
+          "u",
+        )
+      : new RegExp(
+          `\\b${escapeRegularExpression(call.binding.local)}\\s*\\(`,
+          "u",
+        );
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(lines, line, callee);
+    if (arguments_ === undefined) continue;
+    const positional = pythonPositionalArguments(arguments_);
+    const sourceExpression =
+      pythonKeywordArgument(arguments_, "stream") ?? positional[0];
+    if (sourceExpression === undefined || sourceExpression.trim() === "") {
+      continue;
+    }
+    const bindingSymbol = `${call.binding.imported} as ${call.binding.local}`;
+    if (call.member === "unsafe_load") {
+      return {
+        sourceExpression,
+        kind: "pyyaml-explicit-unsafe-load",
+        propagators: [
+          {
+            kind: "pyyaml-module-binding",
+            path: sourcePath,
+            line: call.binding.line,
+            symbol: bindingSymbol,
+          },
+        ],
+      };
+    }
+    const loaderExpression =
+      pythonKeywordArgument(arguments_, "Loader") ?? positional[1];
+    if (loaderExpression === undefined) continue;
+    const loader = pythonPyyamlLoaderBinding(
+      context,
+      lines,
+      loaderExpression,
+      line,
+    );
+    if (loader === undefined) continue;
+    const normalizedLoader = loader.imported.toLowerCase();
+    return {
+      sourceExpression,
+      kind: `pyyaml-load-with-${normalizedLoader}`,
+      propagators: [
+        {
+          kind: "pyyaml-module-binding",
+          path: sourcePath,
+          line: call.binding.line,
+          symbol: bindingSymbol,
+        },
+        {
+          kind: "explicit-unsafe-pyyaml-loader",
+          path: sourcePath,
+          line: loader.line,
+          symbol: loader.imported,
+        },
+      ],
+    };
+  }
+  return undefined;
 }
 
 function pythonFastApiParameterSourceHasOfficialBinding(

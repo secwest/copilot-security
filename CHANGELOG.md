@@ -6,6 +6,49 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-pyyaml-unsafe-load`, a typed Python web-to-PyYAML
+  deserialization model for CWE-502. It requires an exact `import yaml`
+  receiver or named `from yaml import` binding, accepts ordinary and
+  parenthesized aliases, traces only the `stream`/argument-zero value, and
+  follows the existing bounded relative-wrapper graph. Reportable host rows are
+  limited to explicit `unsafe_load` or `load` with `Loader`, `UnsafeLoader`,
+  `CLoader`, or `CUnsafeLoader`. `safe_load`, `SafeLoader`, `CSafeLoader`,
+  `full_load`, `FullLoader`, missing or dynamic loaders, fixed YAML, request data
+  in another argument, reassignment, member replacement, local import shadows,
+  comments, strings, and unrelated nested `yaml` modules remain negative. The
+  correction pass verifies that the deployed module is PyYAML and requires a
+  bounded non-destructive constructor/gadget witness plus concrete impact; the
+  host row alone never becomes an automatic remote-code-execution claim.
+- Added a topology-identical Flask `UnsafeLoader`/`safe_load` fixture pair, a
+  strict semantic specialized manifest, and adversarial regression coverage for
+  module/named aliases, positional and keyword stream and loader roles,
+  multiline imports, safe/full/unproved loaders, fixed and unrelated inputs,
+  shadowing, reassignment, member replacement, and presentation-only text. The
+  source-identical Python witness uses only the harmless `!!python/tuple` tag:
+  PyYAML 6.0.1 with `UnsafeLoader` constructs a tuple, while `safe_load` rejects
+  the same bytes with `ConstructorError`; neither path starts a listener, makes
+  a network request, invokes a shell, or writes a file. The initial focused lane
+  passes eight tests and 53 assertions, including a two-relay terminal-binding
+  path. The pair also advances the canonical corpus to 104 exploit/control
+  pairs, 208 cases, and 624 repeated scans.
+- Final local acceptance for the PyYAML model is green. The authoritative
+  Windows Bun suite passes 1,525 tests and 11,332 assertions across 169 files in
+  569.92 seconds, with 20 intentional platform/environment skips and zero
+  failures. WSL passes the focused PyYAML, Python cross-file, Python multi-hop,
+  and canonical benchmark lane with 32 tests and 1,832 assertions. Generated
+  model drift, repository formatting, TypeScript, the production build, and
+  `pnpm audit --prod --audit-level high` are green with no known
+  vulnerabilities. Two compiled self-inventories take 16,872.064 and
+  16,113.658 ms and produce 256 byte-identical rows totaling 583,378 bytes with
+  SHA-256 `aef2238821366bb8e3b908cb5fb9bcdf8afe82a63c9d8231758161ae2e63ca92`.
+  Exactly one PyYAML row remains at the unsafe fixture's `src/parser.py:5`, with
+  `cross-file-wrapper` scope and `pyyaml-load-with-unsafeloader` sink; the safe
+  control and production sources have no PyYAML row. Strict Windows and WSL
+  inspection validates the same 259-entry, 1,850,906-byte npm archive with
+  SHA-256 `2d10f411533bf65858a96b4d5632a8227b1c6c26ba9a45bc41d365808b8b7e56`;
+  isolated installs validate the public import, executable CLI, and all 79
+  bundled plugin files. Temporary archives and isolated installs are removed
+  after acceptance.
 - Added `cloudformation-public-admin-role`, the first native CloudFormation IAM
   authority model. It joins one exact `AWS::IAM::Role`, an unrestricted
   wildcard AWS-principal `Allow` for `sts:AssumeRole`, and either the exact

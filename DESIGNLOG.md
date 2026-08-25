@@ -2,6 +2,92 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-24 — Bind Python request bodies to explicit unsafe PyYAML loaders
+
+**Coverage gap and comparative evidence.** The trusted Python host pass modeled
+command, SQL, SSRF, path, and template boundaries, while unsafe
+deserialization remained only a broad lexical hint and a model-driven pickle
+benchmark. GitHub's current
+[`py/unsafe-deserialization`](https://codeql.github.com/codeql-query-help/python/py-unsafe-deserialization/)
+query treats remote flow into Pickle, Marshal, and YAML object construction as
+a high-precision CWE-502 path and recommends `yaml.safe_load`. PyYAML's own
+[documentation](https://pyyaml.org/wiki/PyYAMLDocumentation) states that its
+general loader can construct arbitrary Python objects and that `safe_load`
+limits construction to standard YAML tags. Semgrep's published
+[PyYAML API matrix](https://semgrep.dev/blog/2022/testing-vulnerable-pyyaml-versions)
+adds an important precision boundary: `Loader`, `UnsafeLoader`, and their C
+variants remain intentionally unsafe, while modern `full_load` should not be
+collapsed into the same result merely because older releases had exploitable
+behavior.
+
+**Chosen trust and precision boundary.** Add
+`python-web-pyyaml-unsafe-load` only for a still-live `import yaml` receiver or
+named `from yaml import` function, with the exact request-derived stream value
+in argument zero or `stream=`. Accept `unsafe_load` directly and `load` only
+when the second positional argument or exact `Loader=` binding resolves to
+`Loader`, `UnsafeLoader`, `CLoader`, or `CUnsafeLoader` imported from the same
+module. Preserve single-line and bounded parenthesized aliases. Reject safe and
+full loaders, missing or dynamic loader provenance, fixed streams, request data
+in unrelated arguments, reassignment, member replacement, strings, comments,
+and a repository-local `yaml.py` or `yaml/__init__.py` on an ancestor import
+path. Do not let an unrelated nested module suppress a valid path. The host
+records module identity as a validation requirement rather than demanding a
+particular packaging manifest, because deployment may supply PyYAML outside
+the repository and a declaration-only requirement would create a false
+negative.
+
+**Reachability and impact boundary.** Reuse the bounded Python relative-import
+wrapper graph, but preserve the exact unsafe-loader import as additional
+propagator evidence on direct and multi-hop rows. Application validation after
+loading and discarding the return value are not constructor barriers, because
+object construction occurs during parsing. Conversely, unsafe API selection is
+not proof that a usable gadget exists or that code execution follows. Reviewer
+guidance requires the deployed module identity, retained attacker-controlled
+YAML tags and bytes, a bounded non-destructive payload against the exact
+environment, available constructors or gadgets, process privilege and
+containment, error behavior, and the least concrete execution, filesystem,
+network, credential, integrity, or availability effect.
+
+**Benchmark evidence.** A topology-identical Flask pair carries the request
+body through one relative wrapper. The positive calls
+`yaml.load(document, Loader=yaml.UnsafeLoader)` at `src/parser.py:5`; the
+control changes only that boundary to `yaml.safe_load`. Its specialized
+manifest requires CWE-502, exact code evidence, validation and attack path,
+explicit PyYAML/module, unsafe-loader, request-body, and object-construction
+semantics, while forbidding automatic import- or loader-only RCE claims.
+Eight initial groups pass 53 assertions across exact direct and two-relay
+propagation, receiver and
+named aliases, positional and keyword roles, multiline imports, every safe or
+unproved boundary, local-shadow scoping, source-identical witness code, and
+correction guidance. Native WSL Python 3.12.3 with PyYAML 6.0.1 constructs a
+real tuple from the harmless `!!python/tuple [alpha, beta]` tag through the
+unsafe fixture; the safe control rejects the same bytes with `ConstructorError`.
+Neither path starts a listener, makes a network request, invokes a shell, or
+writes a file. The canonical corpus advances to 104 exploit/control pairs, 208
+cases, and 624 three-run scans. The authoritative Windows Bun suite passes
+1,525 tests and 11,332 assertions across 169 files in 569.92 seconds, with 20
+intentional platform/environment skips and zero failures. WSL passes the
+focused PyYAML, Python cross-file, Python multi-hop, and canonical benchmark
+lane with 32 tests and 1,832 assertions. Generated-model drift, formatting,
+TypeScript, the production build, and the production advisory audit are clean.
+Two compiled self-inventories take 16,872.064 and 16,113.658 ms and produce 256
+byte-identical rows totaling 583,378 bytes with SHA-256
+`aef2238821366bb8e3b908cb5fb9bcdf8afe82a63c9d8231758161ae2e63ca92`.
+Exactly one PyYAML row remains at the unsafe fixture's `src/parser.py:5`, with
+`cross-file-wrapper` scope and `pyyaml-load-with-unsafeloader` sink; the safe
+control and production sources have no PyYAML row. Strict Windows and WSL
+inspection validates the same 259-entry, 1,850,906-byte npm archive with
+SHA-256 `2d10f411533bf65858a96b4d5632a8227b1c6c26ba9a45bc41d365808b8b7e56`;
+fresh installs validate the public import, executable CLI, and all 79 bundled
+plugin files. Temporary package artifacts are removed. Hosted evidence follows
+the implementation checkpoint.
+
+**Consequence.** The scanner gains a deterministic Python CWE-502 path while
+remaining narrower than version-insensitive `yaml.load` lexical rules. Future
+pickle, marshal, `load_all` consumption, ruamel.yaml, or gadget-specific
+coverage should add exact API identity, execution semantics, and matched
+controls rather than weakening this loader proof.
+
 ## 2026-08-24 — Join public CloudFormation trust to administrator authority
 
 **Coverage gap and primary semantics.** The scanner's native infrastructure

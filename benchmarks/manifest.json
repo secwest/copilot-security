@@ -608,6 +608,59 @@
       "expected": []
     },
     {
+      "id": "python-pyyaml-unsafe-load",
+      "description": "A Flask request body crosses a relative wrapper into PyYAML UnsafeLoader object construction.",
+      "fixture": "fixtures/python-pyyaml-unsafe-load",
+      "findingsPaths": [
+        "python-pyyaml-unsafe-load/run-1/findings.json",
+        "python-pyyaml-unsafe-load/run-2/findings.json",
+        "python-pyyaml-unsafe-load/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-pyyaml-unsafe-deserialization",
+          "cwe": ["CWE-502"],
+          "locations": [
+            {
+              "path": "src/parser.py",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["PyYAML", "yaml module"],
+            ["UnsafeLoader", "unsafe loader"],
+            ["request body", "attacker-controlled YAML"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["request body", "attacker-controlled YAML"],
+            ["UnsafeLoader", "unsafe loader"],
+            ["object construction", "Python object"]
+          ],
+          "forbiddenText": [
+            "import alone proves code execution",
+            "UnsafeLoader alone proves remote code execution"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-pyyaml-safe-load",
+      "description": "The same request and wrapper topology uses PyYAML safe_load.",
+      "fixture": "fixtures/python-pyyaml-safe-load",
+      "findingsPaths": [
+        "python-pyyaml-safe-load/run-1/findings.json",
+        "python-pyyaml-safe-load/run-2/findings.json",
+        "python-pyyaml-safe-load/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "javascript-reflected-xss",
       "description": "Attacker-controlled query input is interpolated into an HTML response.",
       "fixture": "fixtures/javascript-reflected-xss",

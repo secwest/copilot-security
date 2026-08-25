@@ -34,7 +34,10 @@ The package is ESM-only and provides:
   telemetry for every stored-credential shell completion; token-authenticated
   sessions remove public token aliases and expose no shell tools
 - typed host-generated Node HTTP, Python web, Spring/servlet, and ASP.NET
-  command/SQL/SSRF/filesystem-path data-flow hypotheses, including JDK
+  command/SQL/SSRF/filesystem-path data-flow hypotheses, plus exact Python
+  request-to-PyYAML unsafe-loader hypotheses that preserve the stream argument
+  and relative wrappers while rejecting safe/full loaders, fixed data,
+  reassignment, and local module shadows; including JDK
   `HttpClient`, Spring `RestTemplate`, reactive Spring `WebClient`, and
   module-bound Axios clients and instances; Axios preserves only the URL
   argument or request-config `url` property and keeps request bodies out of

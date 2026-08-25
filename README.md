@@ -56,7 +56,15 @@ Masterminds/Squirrel, `pgx/v5`, `pgxpool`, and low-level `pgconn` models cover
 request-to-query grammar and deferred database dispatch;
 and Node, Python, and Spring models cover server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
-candidate controls. For Java, the host resolves uniquely named service types
+candidate controls. The Python host pass also models request bodies reaching
+PyYAML `unsafe_load` or `load` with an explicit `Loader`, `UnsafeLoader`,
+`CLoader`, or `CUnsafeLoader`. It proves the exact `yaml` receiver or named
+import and stream argument, follows relative wrappers, and rejects `safe_load`,
+safe or full loaders, absent or dynamic loaders, fixed YAML, reassignment,
+local `yaml` module shadows, and comment/string lookalikes. The correction pass
+must still verify that the deployed module is PyYAML, reproduce a bounded
+constructor or gadget, and establish concrete impact before reporting CWE-502.
+For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
 bodies, and preserves annotated Spring or servlet-assigned request values
 through the exact call argument and wrapper parameter. Java can follow one
@@ -1929,7 +1937,8 @@ failure/recovery behavior.
 command injection, path traversal, archive symlink/hardlink write pivots,
 decompression bombs with actual-output and cumulative expansion budgets,
 object-level authorization, SQL injection,
-server-side request forgery, unsafe deserialization, reflected XSS, XML
+server-side request forgery, unsafe deserialization including a matched PyYAML
+UnsafeLoader/safe-load wrapper pair, reflected XSS, XML
 external entities, JWT signature-verification bypass, attacker-controlled
 JWT `alg`/key-type confusion that reuses an RSA public key as an HMAC secret,
 attacker-controlled JWT/OIDC JWKS key origin, signed OIDC ID-token
@@ -2024,7 +2033,7 @@ The shell-quote pair carries a remote operator through three wrappers into an
 explicit object token, official `quote()`, and a real POSIX shell dispatch:
 exact 1.8.3 preserves a line terminator and executes only the harmless `pwd`
 second line in `/tmp`, while source-identical 1.8.4 rejects the token before
-serialization. Each of the 202 cases in 101 exploit/control pairs is scanned three times, producing 606
+serialization. Each of the 208 cases in 104 exploit/control pairs is scanned three times, producing 624
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild
