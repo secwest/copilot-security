@@ -623,8 +623,8 @@
           "locations": [
             {
               "path": "src/parser.py",
-              "startLine": 5,
-              "endLine": 5,
+              "startLine": 31,
+              "endLine": 31,
               "lineTolerance": 1
             }
           ],

@@ -28,6 +28,24 @@ All notable scanner, application, benchmark, and operational changes are recorde
   evidence. It rejects numeric-only arrays, lazy `.npz` archives that are never
   indexed, package/import presence, `numpy.save`, default loading, and the
   fail-closed control as execution evidence.
+- First live campaign
+  `72a1864d3d72d579948eed8d48341991d81fb7154491e2b21b2e5788db661e80`
+  authenticated from stored Copilot credentials and completed both deep scans
+  on attempt one with no allowance, quota, rate-limit, classifier,
+  authentication, or transport error. The positive produced one critical
+  CWE-502 finding with complete coverage and the exact upload-to-NumPy path.
+  The negative produced no deserialization finding, but correctly found a
+  separate medium CWE-400: the original pair had no request, decoded-byte,
+  shape, element-count, or work bound. That is a valid benchmark-confounder,
+  not a scanner false positive. Evaluation of the positive was additionally
+  invalidated when its expected line moved during the still-running campaign;
+  results from this campaign are retained only as diagnostic evidence.
+- Hardened both NumPy fixtures identically with Flask's complete-request limit
+  plus independent stream-byte, header-size, format-version, rank, element
+  count, and dtype checks before `numpy.load`. The only parser difference
+  remains literal `allow_pickle=True` versus `False`; the bounded object-array
+  witness still executes only in the positive. The paired campaign must be
+  rerun from an immutable checkpoint before live acceptance is claimed.
 - Live campaign
   `c6fb9c92bed2214f45681dde76518cbc72c2c65850dc1e673b33e16247e494f3`
   on checkpoint `4cb88e175bb0d06a8ebc400579b54b623f8ba2e4` completed both

@@ -125,6 +125,32 @@ describe("Python NumPy allow_pickle unsafe deserialization model", () => {
         ),
       );
     }
+    const unsafeParser = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        "python-numpy-allow-pickle",
+        "src",
+        "parser.py",
+      ),
+      "utf8",
+    );
+    const controlParser = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        "python-numpy-no-pickle-control",
+        "src",
+        "parser.py",
+      ),
+      "utf8",
+    );
+    expect(
+      unsafeParser.replace("allow_pickle=True", "allow_pickle=False"),
+    ).toBe(controlParser);
+    expect(unsafeParser).toContain("MAX_ARRAY_BYTES");
+    expect(unsafeParser).toContain("MAX_ARRAY_ELEMENTS");
+    expect(unsafeParser).toContain("max_header_size=1024");
   });
 
   test("emits the exact cross-file stream-to-object-array unpickling path", async () => {
@@ -186,12 +212,12 @@ describe("Python NumPy allow_pickle unsafe deserialization model", () => {
     expect(unsafe[0]?.frameworkModel?.source).toMatchObject({
       kind: "framework-request-body",
       path: "src/server.py",
-      line: 10,
+      line: 11,
     });
     expect(unsafe[0]?.frameworkModel?.sink).toMatchObject({
       kind: "numpy-load-allow-pickle-untrusted-file",
       path: "src/parser.py",
-      line: 5,
+      line: 31,
       cweIds: ["CWE-502"],
     });
   });

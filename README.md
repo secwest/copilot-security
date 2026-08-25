@@ -2064,7 +2064,8 @@ explicit object token, official `quote()`, and a real POSIX shell dispatch:
 exact 1.8.3 preserves a line terminator and executes only the harmless `pwd`
 second line in `/tmp`, while source-identical 1.8.4 rejects the token before
 serialization. The NumPy pair holds the upload, relative wrapper, package,
-object-dtype payload, and witness constant while changing only
+object-dtype payload, request and decoded-byte budgets, header and format
+checks, rank and element limits, and witness constant while changing only
 `allow_pickle=True` to `False`. Each of the 214 cases in 107 exploit/control
 pairs is scanned three times, producing 642
 scans that measure both accuracy and model variance.

@@ -47,6 +47,27 @@ executable witness, and matched control. Package-name co-occurrence must not
 collapse these independently testable boundaries into a generic deserializer
 alert.
 
+**First live-campaign correction.** Campaign
+`72a1864d3d72d579948eed8d48341991d81fb7154491e2b21b2e5788db661e80`
+completed both deep scans on their first attempt with stored Copilot
+credentials and no allowance, quota, rate-limit, classifier, authentication,
+or transport failure. The positive reported the intended critical CWE-502
+path. The `allow_pickle=False` case correctly rejected deserialization but
+reported a separate medium CWE-400 because the initial fixture let an
+unauthenticated caller stream an unbounded numeric array into materialization.
+This is valid security behavior and means the negative was not isolated enough
+to measure only the pickle boundary. The positive's expected source location
+also moved while the campaign was running, so its final match score is not
+acceptance evidence.
+
+Do not weaken the zero-finding negative gate or suppress generic resource
+findings. Instead, preserve both topologies while adding Flask's complete-body
+limit and parser-local byte, header, format-version, rank, element-count, and
+dtype checks before the load. The bounded object-dtype witness remains valid,
+and source identity is asserted after replacing only the literal Boolean flag.
+This turns the unexpected finding into a better fixture and preserves the
+scanner's broader availability coverage.
+
 ## 2026-08-25 — Keep Unpickler construction explicit in the attack path
 
 **Live evidence.** Campaign
