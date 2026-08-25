@@ -6,6 +6,38 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Complete-draft transport recovery now resumes the mandatory host-audited
+  quality gate in a fresh isolated Copilot session before deterministic
+  finalization. A timeout or sanitized transport interruption whose session
+  already wrote all three bounded draft artifacts enters a dedicated
+  `draft_quality_correction` phase within the existing one-to-five-session
+  budget; it does not replay the full repository scan. The replacement session
+  receives freshly computed residual-risk, secret-candidate, coverage-gap, and
+  finding-quality inventories, and every correction remains subject to the
+  existing deterministic re-audit and bounded repair series. Successful
+  built-in file views accumulate across isolated sessions, while unfinished
+  tool calls are cleared at each boundary so a reused tool-call ID cannot
+  manufacture direct-review evidence. Authentication, authorization, safety,
+  sandbox, contract, cancellation, and unrelated model failures remain
+  non-retryable. SDK observers and the CLI expose the sanitized correction
+  phase without forwarding provider error text. A deterministic recovery
+  benchmark proves that one completed first-session view remains valid, a
+  stale completion closes nothing, and exact replacement-session views reduce
+  the remaining coverage gaps from two to zero.
+- Final local acceptance for fresh-session draft correction is green. The
+  authoritative Windows suite passes 1,494 tests and 11,110 assertions across
+  165 files in 647.36 seconds, with 20 intentional platform/environment skips
+  and zero failures. The changed orchestration/API/CLI lane passes 142 tests
+  and 1,378 assertions on Windows with one intentional skip and passes the
+  corresponding WSL/Linux lane with only its Windows-launcher skip. Generated
+  models, full formatting, TypeScript, and the clean production build pass;
+  the production audit reports no known vulnerabilities. Strict Windows and
+  Linux inspection accepts the same 251-entry, 1,810,430-byte npm archive with
+  SHA-256
+  `e994930f48909f8153e5cdc4e4a63fada70deaab425c2376c0dfa39d98ab39e9`;
+  isolated consumers install 67 and 75 packages respectively and validate the
+  public import, CLI, and all 79 bundled plugin files. The archive and isolated
+  installs are removed after acceptance.
 - Added deterministic external-SARIF seed-coverage receipts. Seeded scans now
   bind the exact normalized candidate count and JSONL SHA-256 plus ordered
   source digests into the trusted workbench recipe; reject partial, malformed,

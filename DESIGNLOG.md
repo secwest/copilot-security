@@ -2,6 +2,67 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-24 — Resume host-audited correction after complete-draft transport loss
+
+**Measured gap.** The immutable self-scan established that a late Copilot
+transport loss can leave all three draft artifacts present but 415 of 417
+inventory paths without exact direct-file closure. The client converted that
+state into `CompleteDraftArtifactsError`, deliberately excluded the error from
+ordinary fresh-session retry, and let the API invoke deterministic
+finalization. A correction-turn transport break was weaker still: the client
+emitted `quality_gate_incomplete` and reported `turn.completed` whenever the
+draft files still existed. The finalizer correctly refused to invent coverage,
+but the orchestrator had abandoned useful bounded correction capacity.
+
+**Dedicated recovery phase.** Inspect only the cause of a complete-draft
+signal. When it is the scanner-owned model deadline or a sanitized transport
+interruption, schedule the next isolated session as
+`draft_quality_correction` inside the existing configured fresh-session
+budget. That session skips the full initial scan prompt and starts with the
+mandatory quality gate, freshly rebuilding residual-risk, secret-candidate,
+coverage-gap, and finding-quality inventories from the current drafts and
+immutable repository inputs. A repeated retryable transport loss remains in
+the correction phase until the shared one-to-five-session budget is exhausted.
+The final failure then retains the complete-draft signal for deterministic
+host handling. Never extend this classification to authentication,
+authorization, safety, sandbox, contract, cancellation, or arbitrary model
+errors.
+
+**Cross-session evidence invariant.** Successful built-in `view` completions
+are host telemetry about the same staged, repository-read-only snapshot, so
+preserve their exact normalized inventory paths across session replacement.
+Pending tool calls are not evidence and are scoped to one session. Clear them
+before each replacement session; otherwise a colliding tool-call ID could turn
+an old interrupted view into a false success. Shell reads, model coverage
+labels, receipts, and summaries still cannot populate the host evidence set.
+Final inventory-digest verification continues to bind the staged snapshot
+before sealing.
+
+**Observability and regression evidence.** Fresh-session events carry only the
+bounded retry reason plus `scan` or `draft_quality_correction`; API observers
+validate that phase and the CLI explains it without provider text. Unit tests
+cover timeout-to-correction transition, repeated timeout/transport correction,
+shared-budget exhaustion behavior, non-retryable causes, stale tool-call-ID
+reuse, and phase rendering. The deterministic recovery benchmark starts with
+three apparently closed coverage rows: one successful first-session view
+leaves two gaps, a stale completion after replacement leaves both gaps, and two
+exact replacement-session views reduce the host gap count to zero. Focused
+Windows acceptance passes 142 tests and 1,378 assertions with one intentional
+skip; the corresponding WSL/Linux lane passes with only its intentional
+Windows-launcher skip.
+
+**Final acceptance.** The authoritative Windows Bun 1.3.14 suite passes 1,494
+tests and 11,110 assertions across 165 files in 647.36 seconds, with 20
+intentional platform/environment skips and no failures. Generated-model drift,
+repository formatting, TypeScript checking, and a clean production build are
+green; the production audit reports no known vulnerabilities. Windows and
+Linux strictly inspect the same 251-entry, 1,810,430-byte npm archive with
+SHA-256
+`e994930f48909f8153e5cdc4e4a63fada70deaab425c2376c0dfa39d98ab39e9`.
+Their isolated consumers install 67 and 75 packages respectively and validate
+the public import, CLI, and all 79 bundled plugin files. The archive and
+isolated installation directories are removed after acceptance.
+
 ## 2026-08-24 — Make imported-analyzer closure a sealed host fact
 
 **Gap and external semantics.** SARIF interchange increases recall only if the

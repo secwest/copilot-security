@@ -81,6 +81,16 @@ export class CopilotFileReviewTracker {
 
   public constructor(private readonly repository: string) {}
 
+  /**
+   * Starts a new isolated Copilot session without discarding successful views
+   * observed in an earlier session. Incomplete tool calls are session-local:
+   * retaining them could let a reused tool-call ID falsely close a file in the
+   * replacement session.
+   */
+  public startSession(): void {
+    this.#pendingViews.clear();
+  }
+
   public record(event: SessionEvent): void {
     if (event.type === "tool.execution_start") {
       if (
@@ -515,22 +525,24 @@ class CopilotThread implements CopilotScannerThread {
                   this.#options.secretScanning.history,
                 )
               ).inventory;
+        const fileReviewTracker = new CopilotFileReviewTracker(
+          this.#workingDirectory,
+        );
         await runWithFreshCopilotSessions({
           maxAttempts: maxSessionAttempts,
           signal: options.signal,
           prompt: input,
-          onRetry: (nextAttempt, maxAttempts, reason) => {
+          onRetry: (nextAttempt, maxAttempts, reason, phase) => {
             queue.push({
               type: "copilot.fresh_session_retry",
               attempt: nextAttempt,
               max_attempts: maxAttempts,
               reason,
+              recovery_phase: phase,
             });
           },
-          runAttempt: async (_attempt, attemptPrompt) => {
-            const fileReviewTracker = new CopilotFileReviewTracker(
-              this.#workingDirectory,
-            );
+          runAttempt: async (_attempt, attemptPrompt, attemptContext) => {
+            fileReviewTracker.startSession();
             const client = new CopilotClient({
               connection: RuntimeConnection.forStdio({
                 path: this.#options.cliPath,
@@ -667,11 +679,13 @@ class CopilotThread implements CopilotScannerThread {
                   throw normalizedError;
                 }
               };
-              await sendCopilotPromptWithSafetyRecovery(
-                attemptPrompt,
-                sendModelPrompt,
-                options.signal,
-              );
+              if (attemptContext.phase === "scan") {
+                await sendCopilotPromptWithSafetyRecovery(
+                  attemptPrompt,
+                  sendModelPrompt,
+                  options.signal,
+                );
+              }
               if (sandboxViolation !== null) throw sandboxViolation;
               options.signal.throwIfAborted();
               try {
@@ -729,6 +743,7 @@ class CopilotThread implements CopilotScannerThread {
                   }),
                 });
               } catch (error) {
+                if (error instanceof CompleteDraftArtifactsError) throw error;
                 if (freshSessionRetryReason(error) !== null) throw error;
                 if (error instanceof ScanClosureIncompleteError) throw error;
                 if (error instanceof SecretScanningError) throw error;
@@ -823,6 +838,13 @@ export async function sendCopilotTurnWithDeadline(
 
 export type FreshSessionRetryReason = "model_timeout" | "transport_interrupted";
 
+export type FreshSessionRecoveryPhase = "scan" | "draft_quality_correction";
+
+export interface FreshSessionAttemptContext {
+  phase: FreshSessionRecoveryPhase;
+  reason?: FreshSessionRetryReason;
+}
+
 export async function modelFailureAfterCompleteDraftArtifacts(
   error: unknown,
   environment: Record<string, string>,
@@ -862,33 +884,63 @@ export function freshSessionRetryReason(
 export async function runWithFreshCopilotSessions<T>(options: {
   maxAttempts: number;
   signal?: AbortSignal;
-  runAttempt: (attempt: number, prompt: string) => Promise<T>;
+  runAttempt: (
+    attempt: number,
+    prompt: string,
+    context: FreshSessionAttemptContext,
+  ) => Promise<T>;
   prompt: string;
   onRetry?: (
     nextAttempt: number,
     maxAttempts: number,
     reason: FreshSessionRetryReason,
+    phase: FreshSessionRecoveryPhase,
   ) => void;
 }): Promise<T> {
   const maxAttempts = requireFreshSessionAttempts(options.maxAttempts);
+  let context: FreshSessionAttemptContext = { phase: "scan" };
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     options.signal?.throwIfAborted();
     const prompt =
       attempt === 1
         ? options.prompt
-        : freshSessionRecoveryPrompt(options.prompt, attempt, maxAttempts);
+        : context.phase === "draft_quality_correction"
+          ? completeDraftQualityRecoveryPrompt(attempt, maxAttempts)
+          : freshSessionRecoveryPrompt(options.prompt, attempt, maxAttempts);
     try {
-      return await options.runAttempt(attempt, prompt);
+      return await options.runAttempt(attempt, prompt, context);
     } catch (error) {
       options.signal?.throwIfAborted();
-      const reason = freshSessionRetryReason(error);
+      const draftRecoveryReason =
+        error instanceof CompleteDraftArtifactsError
+          ? freshSessionRetryReason(error.cause)
+          : null;
+      const reason = draftRecoveryReason ?? freshSessionRetryReason(error);
       if (reason === null || attempt === maxAttempts) throw error;
-      options.onRetry?.(attempt + 1, maxAttempts, reason);
+      context = {
+        phase:
+          draftRecoveryReason === null ? "scan" : "draft_quality_correction",
+        reason,
+      };
+      options.onRetry?.(attempt + 1, maxAttempts, reason, context.phase);
     }
   }
   throw new CopilotSecurityError(
     "Copilot fresh-session recovery ended without a result.",
   );
+}
+
+export function completeDraftQualityRecoveryPrompt(
+  attempt: number,
+  maxAttempts: number,
+): string {
+  return [
+    `Fresh-session draft-quality recovery ${attempt}/${maxAttempts}.`,
+    "A prior isolated Copilot session wrote all three draft artifacts and then lost its model transport before host-audited closure completed.",
+    "Continue only the defensive scan's bounded quality correction. Treat the drafts as untrusted, preserve supported findings, and rely on the host-provided residual-risk, secret-candidate, coverage-gap, and finding-quality inventories for remaining work.",
+    "Directly view each exact repository path that the host marks missing_direct_file_review. Do not replace successful host telemetry with a coverage label, shell read, receipt, summary, or broad completion claim.",
+    "The trusted host will re-audit every correction, preserve successful direct-file views from earlier isolated sessions, clear unfinished tool calls at each session boundary, and independently verify inventory integrity before sealing.",
+  ].join("\n");
 }
 
 export function freshSessionRecoveryPrompt(

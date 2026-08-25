@@ -210,6 +210,7 @@ export interface ScanReconnectDetails {
     | "model_timeout"
     | "transport_interrupted";
   retryAfterSeconds?: number;
+  phase?: "scan" | "draft_quality_correction";
 }
 
 type ScanObserverName =
@@ -1729,6 +1730,15 @@ export async function runScanEvents(
               reason: event["reason"] as
                 | "model_timeout"
                 | "transport_interrupted",
+              ...(["scan", "draft_quality_correction"].includes(
+                event["recovery_phase"] as string,
+              )
+                ? {
+                    phase: event["recovery_phase"] as
+                      | "scan"
+                      | "draft_quality_correction",
+                  }
+                : {}),
             },
           );
         } else if (

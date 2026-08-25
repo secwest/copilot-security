@@ -326,10 +326,13 @@ the SDK's maximum process lifetime. Set
 Keep this inner deadline below an outer benchmark or service process deadline
 so the scanner can perform its own bounded recovery first. If a deadline or
 recognized transport interruption occurs after all three draft artifacts
-exist, the scanner stops replaying the full scan and hands the drafts to the
-deterministic workbench. The workbench must normalize, validate, and seal them
-before the result can succeed; missing drafts still start a fresh isolated
-session.
+exist, the scanner stops replaying the full scan and starts a fresh isolated
+session in `draft_quality_correction`. That session receives newly computed
+host gap inventories and resumes the mandatory correction and deterministic
+re-audit series. If the configured session budget is exhausted, the remaining
+drafts still have to pass deterministic workbench normalization, validation,
+and sealing before any partial result can survive; missing drafts use ordinary
+fresh-session scan recovery.
 
 Model turns occasionally leave complete flow-style object literals instead of
 strict JSON. Before workbench sealing, the host may normalize only bounded,
@@ -347,12 +350,17 @@ immutable host worklist. Direct scans allow three sessions by default. Set
 `1` disables fresh-session recovery. Authentication, authorization, scanner
 contract, sandbox, cancellation, cost-limit, and exhausted safety-classifier
 failures remain terminal. Recovery never trusts conversational state or a
-prior session's files: the new session must re-consume the inventory, treat
-existing artifacts as possibly partial drafts, reopen repository evidence,
-and pass the same deterministic host audits before sealing. Session shutdown
-is bounded so a hung disconnect cannot prevent the next attempt. Streamed and
-persisted token usage is accumulated across all attempt roots and their
-subagents, so scanner-owned cost enforcement cannot be reset by recovery.
+prior session's artifact claims: an ordinary replacement must re-consume the
+inventory, while draft-quality recovery treats existing artifacts as untrusted
+drafts and consumes freshly computed host gap inventories. Successful built-in
+file views remain valid host telemetry across sessions over the same immutable
+snapshot; unfinished tool calls are cleared at every session boundary, and
+shell reads, labels, receipts, or summaries cannot replace direct-view
+evidence. Every path still passes the same deterministic host audits before
+sealing. Session shutdown is bounded so a hung disconnect cannot prevent the
+next attempt. Streamed and persisted token usage is accumulated across all
+attempt roots and their subagents, so scanner-owned cost enforcement cannot be
+reset by recovery.
 
 ## Requirements
 

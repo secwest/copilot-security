@@ -652,6 +652,7 @@ describe("one-shot scan events", () => {
         attempt: 2,
         max_attempts: 3,
         reason: "model_timeout",
+        recovery_phase: "draft_quality_correction",
         provider_error: "private provider detail",
       };
       yield {
@@ -686,7 +687,10 @@ describe("one-shot scan events", () => {
       {
         attempt: 2,
         maximum: 3,
-        details: { reason: "model_timeout" },
+        details: {
+          reason: "model_timeout",
+          phase: "draft_quality_correction",
+        },
       },
     ]);
     expect(JSON.stringify(reconnects)).not.toContain("private provider detail");

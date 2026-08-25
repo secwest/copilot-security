@@ -380,11 +380,18 @@ transport interruptions open a new session. Authentication, authorization,
 contract, sandbox, cancellation, cost-limit, and exhausted safety-filter
 failures remain terminal. A new session receives the original scan contract,
 re-consumes the immutable host inventory, and treats existing artifacts as
-untrusted partial drafts. Direct writes to host-owned inventory files are
-denied, and the original in-scope inventory digest is verified independently
-by both completion phases. Native AI-credit limits apply per fresh session;
-scanner-owned cost tracking is cumulative across all attempt roots and their
-subagents.
+untrusted partial drafts. When all three drafts already exist, a retryable
+deadline or transport failure instead enters `draft_quality_correction`: the
+replacement session skips full scan replay, consumes freshly computed
+residual-risk, secret-candidate, coverage-gap, and finding-quality inventories,
+and resumes the bounded correction/re-audit series. Successful built-in file
+views accumulate across isolated sessions over the same staged snapshot;
+unfinished tool calls are cleared at each boundary, and model labels, shell
+reads, receipts, or summaries cannot create direct-review evidence. Direct
+writes to host-owned inventory files are denied, and the original in-scope
+inventory digest is verified independently by both completion phases. Native
+AI-credit limits apply per fresh session; scanner-owned cost tracking is
+cumulative across all attempt roots and their subagents.
 Scanner-owned state is isolated under `COPILOT_SECURITY_HOME` (default:
 `~/.copilot-security`). `COPILOT_HOME` is read only as the source of existing
 Copilot CLI authentication; a private copy is prepared under the scanner-owned

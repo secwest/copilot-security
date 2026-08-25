@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import {
   addCopilotUsage,
   closureGapCounts,
+  completeDraftQualityRecoveryPrompt,
   CopilotFileReviewTracker,
   copilotModelTurnTimeoutMilliseconds,
   copilotModelErrorRecovery,
@@ -34,6 +35,7 @@ import {
   type CopilotScannerOptions,
 } from "../src/copilot-client.js";
 import {
+  CompleteDraftArtifactsError,
   CopilotSecurity,
   CopilotSecurityError,
   ModelTransportInterruptedError,
@@ -45,6 +47,7 @@ import {
   copilotSecurityCredentialHome,
   copilotSecurityStateDirectory,
 } from "../src/runtime.js";
+import { buildCoverageGapInventory } from "../src/residual-risk.js";
 
 const temporaryPaths: string[] = [];
 
@@ -106,6 +109,112 @@ describe("Copilot port", () => {
     complete("mcp", true);
 
     expect([...tracker.reviewedInventoryPaths]).toEqual(["src/accepted.ts"]);
+  });
+
+  test("preserves successful views but clears unfinished calls across fresh sessions", () => {
+    const repository = join(tmpdir(), "copilot-review-session-boundary");
+    const tracker = new CopilotFileReviewTracker(repository);
+    const start = (toolCallId: string, path: string): void => {
+      tracker.record({
+        type: "tool.execution_start",
+        data: {
+          toolCallId,
+          toolName: "view",
+          arguments: { path },
+        },
+      } as never);
+    };
+    const complete = (toolCallId: string): void => {
+      tracker.record({
+        type: "tool.execution_complete",
+        data: { toolCallId, success: true },
+      } as never);
+    };
+
+    start("completed", join(repository, "src", "first.ts"));
+    complete("completed");
+    start("reused", join(repository, "src", "interrupted.ts"));
+
+    tracker.startSession();
+    complete("reused");
+    expect([...tracker.reviewedInventoryPaths]).toEqual(["src/first.ts"]);
+
+    start("reused", join(repository, "src", "second.ts"));
+    complete("reused");
+    expect([...tracker.reviewedInventoryPaths]).toEqual([
+      "src/first.ts",
+      "src/second.ts",
+    ]);
+  });
+
+  test("benchmarks exact coverage closure across an interrupted replacement session", async () => {
+    const root = join(tmpdir(), `copilot-review-recovery-${randomUUID()}`);
+    const repository = join(root, "repository");
+    const scanDirectory = join(root, "scan");
+    const discoveryDirectory = join(scanDirectory, "artifacts", "02_discovery");
+    temporaryPaths.push(root);
+    await mkdir(repository, { recursive: true });
+    await mkdir(discoveryDirectory, { recursive: true });
+    await writeFile(
+      join(discoveryDirectory, "in_scope_files.txt"),
+      "src/first.ts\nsrc/interrupted.ts\nsrc/replacement.ts\n",
+    );
+    await writeFile(
+      join(scanDirectory, "coverage.json"),
+      JSON.stringify({
+        surfaces: [
+          { label: "src/first.ts", disposition: "no_issue_found" },
+          { label: "src/interrupted.ts", disposition: "no_issue_found" },
+          { label: "src/replacement.ts", disposition: "no_issue_found" },
+        ],
+      }),
+    );
+
+    const tracker = new CopilotFileReviewTracker(repository);
+    const start = (toolCallId: string, path: string): void => {
+      tracker.record({
+        type: "tool.execution_start",
+        data: {
+          toolCallId,
+          toolName: "view",
+          arguments: { path: join(repository, path) },
+        },
+      } as never);
+    };
+    const complete = (toolCallId: string): void => {
+      tracker.record({
+        type: "tool.execution_complete",
+        data: { toolCallId, success: true },
+      } as never);
+    };
+    const gapCount = async (): Promise<number> =>
+      closureGapCounts(
+        await buildCoverageGapInventory(
+          scanDirectory,
+          tracker.reviewedInventoryPaths,
+        ),
+        "",
+      ).coverage;
+
+    start("first", "src/first.ts");
+    complete("first");
+    start("reused", "src/interrupted.ts");
+    expect(await gapCount()).toBe(2);
+
+    tracker.startSession();
+    complete("reused");
+    expect(await gapCount()).toBe(2);
+
+    start("reused", "src/interrupted.ts");
+    complete("reused");
+    start("replacement", "src/replacement.ts");
+    complete("replacement");
+    expect(await gapCount()).toBe(0);
+    expect([...tracker.reviewedInventoryPaths]).toEqual([
+      "src/first.ts",
+      "src/interrupted.ts",
+      "src/replacement.ts",
+    ]);
   });
 
   test("restricts noninteractive permission approval to isolated scan writes", async () => {
@@ -527,6 +636,109 @@ describe("Copilot port", () => {
     ).toBeNull();
   });
 
+  test("moves complete timed-out drafts into bounded fresh-session quality correction", async () => {
+    const root = join(tmpdir(), `copilot-draft-correction-${randomUUID()}`);
+    const scanDirectory = join(root, "scan");
+    temporaryPaths.push(root);
+    await mkdir(scanDirectory, { recursive: true });
+    for (const name of [
+      "scan-manifest.json",
+      "findings.json",
+      "coverage.json",
+    ]) {
+      await writeFile(join(scanDirectory, name), "{}\n");
+    }
+    const failure = await modelFailureAfterCompleteDraftArtifacts(
+      new ModelTurnDeadlineExceededError(60_000),
+      { COPILOT_SECURITY_SCAN_DIR: scanDirectory },
+    );
+    if (failure === null) throw new Error("expected complete-draft failure");
+
+    const attempts: Array<{
+      attempt: number;
+      prompt: string;
+      phase: string;
+      reason?: string;
+    }> = [];
+    const retries: Array<[number, number, string, string]> = [];
+    const result = await runWithFreshCopilotSessions({
+      maxAttempts: 3,
+      prompt: "perform the complete repository scan",
+      runAttempt: async (attempt, prompt, context) => {
+        attempts.push({ attempt, prompt, ...context });
+        if (attempt === 1) throw failure;
+        return "corrected";
+      },
+      onRetry: (attempt, maximum, reason, phase) => {
+        retries.push([attempt, maximum, reason, phase]);
+      },
+    });
+
+    expect(result).toBe("corrected");
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toMatchObject({ attempt: 1, phase: "scan" });
+    expect(attempts[1]).toMatchObject({
+      attempt: 2,
+      phase: "draft_quality_correction",
+      reason: "model_timeout",
+    });
+    expect(attempts[1]?.prompt).toContain(
+      "Fresh-session draft-quality recovery 2/3",
+    );
+    expect(attempts[1]?.prompt).toContain("missing_direct_file_review");
+    expect(attempts[1]?.prompt).not.toContain(
+      "perform the complete repository scan",
+    );
+    expect(retries).toEqual([
+      [2, 3, "model_timeout", "draft_quality_correction"],
+    ]);
+    expect(completeDraftQualityRecoveryPrompt(3, 5)).toContain(
+      "preserve successful direct-file views",
+    );
+  });
+
+  test("keeps repeated draft correction transport failures inside the session budget", async () => {
+    const phases: string[] = [];
+    const prompts: string[] = [];
+    const retries: Array<[string, string]> = [];
+    const result = await runWithFreshCopilotSessions({
+      maxAttempts: 3,
+      prompt: "initial scan",
+      runAttempt: async (attempt, prompt, context) => {
+        phases.push(context.phase);
+        prompts.push(prompt);
+        if (attempt === 1) {
+          throw new CompleteDraftArtifactsError("draft timeout", {
+            cause: new ModelTurnDeadlineExceededError(60_000),
+          });
+        }
+        if (attempt === 2) {
+          throw new CompleteDraftArtifactsError("draft transport", {
+            cause: new ModelTransportInterruptedError(),
+          });
+        }
+        return "closed";
+      },
+      onRetry: (_attempt, _maximum, reason, phase) => {
+        retries.push([reason, phase]);
+      },
+    });
+
+    expect(result).toBe("closed");
+    expect(phases).toEqual([
+      "scan",
+      "draft_quality_correction",
+      "draft_quality_correction",
+    ]);
+    expect(prompts[0]).toBe("initial scan");
+    expect(prompts[1]).toContain("draft-quality recovery 2/3");
+    expect(prompts[2]).toContain("draft-quality recovery 3/3");
+    expect(retries).toEqual([
+      ["model_timeout", "draft_quality_correction"],
+      ["transport_interrupted", "draft_quality_correction"],
+    ]);
+  });
+
   test("fails closed after the configured fresh-session budget", async () => {
     const terminal = new ModelTurnDeadlineExceededError(60_000);
     const attempts: number[] = [];
@@ -549,6 +761,9 @@ describe("Copilot port", () => {
       new Error("401 unauthorized token"),
       new Error("Safety classifier rejected the response"),
       new Error("coverage contract validation failed"),
+      new CompleteDraftArtifactsError("unretryable complete drafts", {
+        cause: new CopilotSecurityError("401 authentication failed"),
+      }),
     ]) {
       let attempts = 0;
       await expect(

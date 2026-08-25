@@ -2031,6 +2031,10 @@ describe("CLI", () => {
         options?.onReconnect?.(3, 3, {
           reason: "transport_interrupted",
         });
+        options?.onReconnect?.(2, 3, {
+          reason: "transport_interrupted",
+          phase: "draft_quality_correction",
+        });
         options?.onReconnect?.(2, 5, { reason: "authentication" });
         options?.onReconnect?.(3, 5, { reason: "authorization" });
         return fakeResult();
@@ -2048,6 +2052,9 @@ describe("CLI", () => {
     );
     expect(stderr.text()).toContain(
       "Model transport ended; starting fresh session (3/3).",
+    );
+    expect(stderr.text()).toContain(
+      "Draft transport ended; continuing host-audited quality correction in a fresh session (2/3).",
     );
     expect(stderr.text()).toContain("Authentication interrupted; retrying");
     expect(stderr.text()).toContain("Model access interrupted; retrying");
