@@ -2,6 +2,51 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Model NumPy object arrays only across explicit pickle opt-in
+
+**Gap and authoritative semantics.** The Python unsafe-deserialization pass
+covered standard-library pickle and explicit unsafe PyYAML constructors but
+not NumPy object arrays. NumPy's official
+[`numpy.load`](https://numpy.org/doc/stable/reference/generated/numpy.load.html)
+contract says that object-array loading uses pickle, warns that malicious data
+is unsafe, and states that loading pickled data can execute arbitrary code. It
+also supplies an unusually strong precision boundary: `allow_pickle=False` is
+the default, and an object array must raise `ValueError` when pickle is
+disallowed. GitHub's high-precision
+[`py/unsafe-deserialization`](https://codeql.github.com/codeql-query-help/python/py-unsafe-deserialization/)
+classifies remote flow into arbitrary-object construction as CWE-502 but lists
+only Pickle, Marshal, and YAML as current framework coverage. NumPy therefore
+provides both a defensible gap and a topology-identical negative control.
+
+**Decision.** Add a distinct `python-web-numpy-allow-pickle-load` model rather
+than broadening the standard-library pickle identity. Accept only a live
+non-shadowed `import numpy` receiver or `from numpy import load` binding, file
+argument zero or the `file` keyword, and the literal Boolean boundary
+`allow_pickle=True`. Preserve relative Python wrappers and record the binding,
+explicit opt-in, and intrinsic object-array unpickling as separate
+propagators. Fail closed for omitted, false, or dynamic flags; other argument
+positions; fixed or star-expanded input; local `numpy.py` or package shadows;
+binding or member replacement; and text-only lookalikes. Do not infer a
+dangerous payload from numeric-only arrays or from an `.npz` container whose
+lazy member is never accessed.
+
+**Executable evidence and benchmark.** The paired Flask fixtures retain the
+same upload stream, relative wrapper, NumPy version, object-dtype `.npy`
+payload, and bounded fixture-local `__reduce__` callable. On Python 3.14.5 and
+NumPy 2.5.2, literal `allow_pickle=True` invokes the harmless in-process marker
+and returns an object array; changing only the flag to `False` raises
+`ValueError` and leaves the marker unset. The strict single-run manifest and
+three-run canonical integration require CWE-502, exact source/sink evidence,
+validation, attack path, code evidence, severity accuracy, and zero control
+findings. The canonical corpus advances to 107 exploit/control pairs, 214
+cases, and 642 repeated scans.
+
+**Consequence.** Future extensions to joblib, cloudpickle, dill, Torch, or lazy
+NumPy archives need their own exact import identity, dispatch semantics,
+executable witness, and matched control. Package-name co-occurrence must not
+collapse these independently testable boundaries into a generic deserializer
+alert.
+
 ## 2026-08-25 — Keep Unpickler construction explicit in the attack path
 
 **Live evidence.** Campaign

@@ -57,7 +57,8 @@ request-to-query grammar and deferred database dispatch;
 and Node, Python, and Spring models cover server-side template injection. Each applicable
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. The Python host pass also models request bodies reaching
-standard-library `pickle.load` or `pickle.loads`, as well as PyYAML
+standard-library `pickle.load` or `pickle.loads`, NumPy `load` with literal
+`allow_pickle=True`, as well as PyYAML
 `unsafe_load` or `load` with an explicit `Loader`, `UnsafeLoader`,
 `CLoader`, or `CUnsafeLoader`. It proves the exact `yaml` receiver or named
 import and stream argument, follows relative wrappers, and rejects `safe_load`,
@@ -81,6 +82,16 @@ before loading is strong counterevidence; checksums, embedded keys, post-load
 authentication, return-value validation, and exception handling do not stop
 instructions that execute during unpickling. JSON remains the preferred format
 for untrusted data.
+For NumPy, the host accepts only a live non-shadowed `numpy.load` binding,
+request control of its file argument, and literal `allow_pickle=True`. It
+rejects NumPy's safe default, explicit `allow_pickle=False`, dynamic flags,
+fixed or wrong-role input, star expansion, reassignment, local `numpy`
+shadows, and text lookalikes. Validation requires an object-dtype `.npy`
+payload and exact Python/NumPy versions: numeric-only arrays do not establish
+pickle execution, and an `.npz` archive must actually access its lazy member.
+The paired witness proves bounded `__reduce__` callable execution while the
+otherwise identical `allow_pickle=False` control fails closed before the
+callable runs.
 For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
 bodies, and preserves annotated Spring or servlet-assigned request values
@@ -2052,7 +2063,10 @@ fixture-local callable witness for both call shapes. The shell-quote pair carrie
 explicit object token, official `quote()`, and a real POSIX shell dispatch:
 exact 1.8.3 preserves a line terminator and executes only the harmless `pwd`
 second line in `/tmp`, while source-identical 1.8.4 rejects the token before
-serialization. Each of the 212 cases in 106 exploit/control pairs is scanned three times, producing 636
+serialization. The NumPy pair holds the upload, relative wrapper, package,
+object-dtype payload, and witness constant while changing only
+`allow_pickle=True` to `False`. Each of the 214 cases in 107 exploit/control
+pairs is scanned three times, producing 642
 scans that measure both accuracy and model variance.
 Interrupted benchmark finalization is recoverable without another model call:
 repeat the identical runner command with `--finalize-only` to atomically rebuild

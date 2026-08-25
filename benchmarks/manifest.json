@@ -608,6 +608,67 @@
       "expected": []
     },
     {
+      "id": "python-numpy-allow-pickle",
+      "description": "A Flask upload stream crosses a relative wrapper into NumPy object-array unpickling with allow_pickle=True.",
+      "fixture": "fixtures/python-numpy-allow-pickle",
+      "findingsPaths": [
+        "python-numpy-allow-pickle/run-1/findings.json",
+        "python-numpy-allow-pickle/run-2/findings.json",
+        "python-numpy-allow-pickle/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-numpy-object-array-unsafe-deserialization",
+          "cwe": ["CWE-502"],
+          "locations": [
+            {
+              "path": "src/parser.py",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["NumPy", "numpy.load"],
+            ["allow_pickle=True", "allow pickle true"],
+            ["object-dtype", "object array", ".npy"],
+            ["__reduce__", "REDUCE", "callable"],
+            ["Python 3", "Python version", "interpreter"],
+            ["NumPy 2", "NumPy version", "numpy=="]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["upload", "request.files", "uploaded stream"],
+            ["parse_array", "wrapper"],
+            ["numpy.load", "NumPy load"],
+            ["allow_pickle=True", "allow pickle true"],
+            ["object-dtype", "object array", ".npy"],
+            ["__reduce__", "callable", "function invocation"],
+            ["process", "code execution", "process integrity"]
+          ],
+          "forbiddenText": [
+            "NumPy import alone proves code execution",
+            "allow_pickle=False executes the payload",
+            "authentication after loading prevents execution"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-numpy-no-pickle-control",
+      "description": "The identical upload, wrapper, and object-array witness fail closed with allow_pickle=False.",
+      "fixture": "fixtures/python-numpy-no-pickle-control",
+      "findingsPaths": [
+        "python-numpy-no-pickle-control/run-1/findings.json",
+        "python-numpy-no-pickle-control/run-2/findings.json",
+        "python-numpy-no-pickle-control/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-pickle-unsafe-load",
       "description": "A Flask request body crosses a relative wrapper into standard-library pickle.loads callable execution.",
       "fixture": "fixtures/python-pickle-unsafe-load",

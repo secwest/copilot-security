@@ -6,6 +6,28 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-web-numpy-allow-pickle-load`, a typed Python web-to-NumPy
+  object-array deserialization model for CWE-502. It requires an exact live
+  `import numpy` receiver or named `from numpy import load` binding, request
+  control of the file argument, and literal `allow_pickle=True`. It follows
+  bounded relative wrappers while rejecting the safe default,
+  `allow_pickle=False`, dynamic flags, fixed and wrong-role values, star
+  expansion, reassignment, member replacement, repository-local NumPy shadows,
+  and text lookalikes.
+- Added a topology-identical Flask upload pair and strict benchmark. Its
+  object-dtype `.npy` witness on Python 3.14.5 and NumPy 2.5.2 invokes only a
+  fixture-local in-memory marker with `allow_pickle=True`; the otherwise
+  identical `allow_pickle=False` control raises `ValueError` and leaves the
+  marker unset. Direct, named, parenthesized, positional, keyword, cross-file,
+  two-relay, invalidated-binding, wrong-role, and false-control regressions are
+  covered. The canonical corpus advances to 107 exploit/control pairs, 214
+  cases, and 642 repeated scans.
+- The NumPy correction gate requires exact Python and NumPy versions, a
+  complete object-dtype `.npy` payload, the explicit flag, wrapper chain,
+  unpickling and bounded callable effect in both validation and attack-path
+  evidence. It rejects numeric-only arrays, lazy `.npz` archives that are never
+  indexed, package/import presence, `numpy.save`, default loading, and the
+  fail-closed control as execution evidence.
 - Live campaign
   `c6fb9c92bed2214f45681dde76518cbc72c2c65850dc1e673b33e16247e494f3`
   on checkpoint `4cb88e175bb0d06a8ebc400579b54b623f8ba2e4` completed both
