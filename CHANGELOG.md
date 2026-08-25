@@ -6,6 +6,23 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Preserved exact framework sink-kind diversity at the 256-record
+  whole-repository ceiling. Selection now reserves one ranked record for every
+  distinct framework-model ID and sink kind before repeated rows can consume
+  the remaining capacity. A 261-file saturation regression proves that both
+  `pickle.loads` and the later-ranked `pickle.Unpickler(...).load()` flow remain
+  available to the model while the inventory stays bounded at 256 rows.
+- Corrected the self-scan acceptance procedure to archive and scan from the Git
+  repository root. The earlier replay archive was unintentionally rooted at
+  `sdk/typescript`, so it correctly contained no executable Python fixture and
+  could not establish a pickle-family false negative. The whole-repository
+  replay now includes the real exploit/control corpus and retains both exact
+  pickle sink kinds at the hard inventory limit.
+- The focused native WSL lane passes 97 tests and 2,874 assertions. The
+  authoritative Windows lane passes 1,538 tests and 11,444 assertions across
+  170 files with 20 intentional platform/environment skips, zero failures, and
+  a 610.64-second runtime. Formatting, generated-model drift, TypeScript, and
+  the clean production build remain green after the global selector change.
 - Extended `python-web-pickle-unsafe-load` across the standard-library
   `pickle.Unpickler(file).load()` boundary. The host now links request control
   at constructor argument zero to a later zero-argument `load()` on the same

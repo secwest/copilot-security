@@ -1432,6 +1432,58 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("preserves distinct framework sink kinds under whole-repository saturation", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-framework-saturation-"),
+    );
+    temporaryPaths.push(repository);
+    await Promise.all(
+      Array.from({ length: 260 }, (_, index) =>
+        writeFile(
+          join(repository, `a-${index.toString().padStart(3, "0")}.py`),
+          [
+            "import pickle",
+            "def route(request):",
+            "    return pickle.loads(request.data)",
+          ].join("\n"),
+        ),
+      ),
+    );
+    await writeFile(
+      join(repository, "z-unpickler.py"),
+      [
+        "import pickle",
+        "def route(request):",
+        "    decoder = pickle.Unpickler(request.stream)",
+        "    return decoder.load()",
+      ].join("\n"),
+    );
+
+    const records = (await buildRawResidualRiskInventory(repository))
+      .split("\n")
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            frameworkModel?: { id: string; sink: { kind: string } };
+          },
+      );
+    const pickleSinkKinds = new Set(
+      records.flatMap((record) =>
+        record.frameworkModel?.id === "python-web-pickle-unsafe-load"
+          ? [record.frameworkModel.sink.kind]
+          : [],
+      ),
+    );
+
+    expect(records.length).toBeLessThanOrEqual(256);
+    expect(pickleSinkKinds).toEqual(
+      new Set([
+        "pickle-loads-untrusted-bytes",
+        "pickle-unpickler-load-untrusted-file",
+      ]),
+    );
+  });
+
   test("pairs cross-site ambient session state changes with a session-bound CSRF token", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-csrf-recovery-email"),

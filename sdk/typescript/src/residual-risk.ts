@@ -32981,6 +32981,15 @@ function selectResidualRiskRecords(
     selectedRecords.add(record);
   };
 
+  const representedFrameworkSinkKinds = new Set<string>();
+  for (const record of ranked) {
+    const framework = record.frameworkModel;
+    if (framework === undefined) continue;
+    const key = `${framework.id}\0${framework.sink.kind}`;
+    if (representedFrameworkSinkKinds.has(key)) continue;
+    add(record);
+    representedFrameworkSinkKinds.add(key);
+  }
   for (const record of ranked) {
     if (record.frameworkModel !== undefined) add(record);
   }

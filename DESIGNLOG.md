@@ -2,6 +2,46 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Seed framework sink diversity before filling the inventory cap
+
+**Failure mode.** Framework rows have deliberately high priority because they
+carry typed source, sink, propagator, control, and CWE evidence. The bounded
+selector formerly appended every ranked framework row first. Under saturation,
+many repetitions of an earlier-ranked sink could therefore fill all 256 slots
+before a distinct sink kind in the same framework family was considered. The
+new `pickle.Unpickler(...).load()` boundary made this ordering weakness concrete:
+retaining hundreds of `pickle.loads` rows is less useful than retaining at
+least one exact row for each independently actionable sink shape.
+
+**Decision.** Before the ordinary framework-priority pass, seed one ranked row
+for every exact `(framework model ID, sink kind)` pair. Then fill the remaining
+capacity with the existing framework, category, path, per-file, and global
+ranking passes. This does not raise the 256-row prompt bound, lower the priority
+of typed evidence, or manufacture a family-level conclusion. It only prevents
+duplicate occurrences from erasing a distinct modeled operation before the AI
+review receives the deterministic inventory.
+
+**Regression and acceptance boundary.** A 261-file regression places 260
+direct `pickle.loads(request.data)` flows before one assigned
+`pickle.Unpickler(request.stream).load()` flow. The selected inventory remains
+at most 256 rows and contains both exact sink kinds. A whole-repository scan of
+the actual checkout likewise reaches 256 rows while retaining the existing
+`pickle.loads` fixtures and the new `Unpickler.load` fixture. The first replay
+attempt used an archive created from `sdk/typescript`; because Git scoped that
+archive to the current subtree, it contained no executable Python fixtures.
+Its empty pickle-framework result was correct and is not counted as evidence
+of a scanner miss. Exact-head acceptance must create the archive from the Git
+repository root and verify its top-level inventory before drawing family-level
+conclusions. The focused native WSL lane passes 97 tests and 2,874 assertions.
+The authoritative Windows lane passes 1,538 tests and 11,444 assertions across
+170 files with 20 intentional skips and zero failures in 610.64 seconds.
+
+**Consequence.** Future framework families that add a second dispatch mode do
+not need to outrank hundreds of first-mode occurrences merely to reach the
+model. If the number of distinct modeled sink kinds ever exceeds the global
+cap, ranking still determines which bounded set survives; that condition must
+be measured explicitly rather than silently increasing prompt size.
+
 ## 2026-08-25 — Link standard-library Unpickler construction to load dispatch
 
 **Gap and authoritative semantics.** Direct `pickle.load` and `pickle.loads`
