@@ -78,13 +78,69 @@ strict negative repositories, regular-file dependency provenance, two relays,
 eighty dense `.start()` decoys, field-local quality closure, and correction
 guidance. The full Python model lane passes 127 tests and 683 assertions with
 four intentional Windows symlink skips. The canonical corpus advances to 115
-pairs, 230 cases, and 690
-three-run scans. Full-suite, cross-platform, packaging, deterministic
-self-review, sealed live campaign, and hosted workflow evidence remain future
-acceptance checkpoints rather than being inferred from focused success. Future
-changes must preserve the same-receiver lifecycle, exact dependency evidence,
-repaired default, explicit trusted opt-in, and the distinction between
-capability proof and deployed compromise.
+pairs, 230 cases, and 690 three-run scans.
+
+**Full scanner, Linux, distribution, and dependency acceptance.** Immutable
+implementation revision `002d3e8ca02abd4f69c867178897fa0c427fbd82` passes
+the authoritative native Windows Bun 1.3.14 suite after a clean production
+build: 1,640 tests, 12,026 assertions, 25 intentional environment or platform
+skips, zero failures, 179 files, and 609.22 seconds. The focused Ubuntu/WSL
+StateMachine, canonical corpus, Python cross-file and multi-hop,
+framework-dataflow, residual-risk, and Copilot adapter lane passes 152 tests
+and 3,241 assertions with only the expected Windows-launcher skip. Generated
+model drift, formatting, TypeScript compilation, and the clean build pass. The
+production high-severity audit reports no known vulnerabilities. Strict
+inspection validates a fresh 259-entry npm archive with SHA-256
+`c8a44308d1b6b5b1ae0da14890caafed060d6c4dbae7b07c5fc87f67e95c98a4`;
+two isolated consumers each install 67 packages and validate the public
+import, executable CLI, and all 79 bundled plugin files.
+
+**Package witness and deterministic self-review.** The real CPython 3.12.3
+package differential confirms the intended boundary: `python-statemachine`
+3.1.2 evaluates the bounded capability probe and returns 42, whereas 3.2.0's
+default evaluator raises `InvalidDefinition` for it while preserving ordinary
+arithmetic at 42. Two inventories of a repository-root archive of the exact
+implementation revision are byte-identical at 256 rows and 522,460 bytes,
+SHA-256
+`45b76fd78ad6549c7922004e23baa6245833a8ef930abfc94912ab2cbf422766`,
+in 35,578.623 and 15,733.205 milliseconds. Exactly one StateMachine row joins
+the affected fixture's remote source to `src/loader.py:9`; the restricted
+control and production scanner source emit no StateMachine row. Two SDK
+package-archive inventories are independently identical at 256 rows and
+242,315 bytes, SHA-256
+`7b951f07c7b8026fbe102c9a14d5f486efb5e11f6dc01b2d9ac8873c3965174f`.
+A focused compiled inventory also returns one affected row and zero control
+rows.
+
+**Sealed scanner campaign.** Campaign
+`af4b3aaf2e0f06f4ff29c755de057f66f2cbf67c20181a3635593e010d204486`
+binds the implementation revision, specialized manifest SHA-256
+`3cd8e442450b25e25798f4a6b640e9c123a049239cd79e335cf89699b1194dc3`,
+fixture hashes, corpus, comparison and scan policies, runner, scanner CLI, and
+packaged scanner. Two workers use stored GitHub authentication,
+`gpt-5.6-terra`, high effort, deep mode, three bounded outer attempts, and no
+credit ceiling. The affected fixture completes attempt one in 4m50s with one
+expected high CWE-95 finding and complete coverage, using 1,141,245 input,
+1,019,318 cached, and 22,811 output tokens at $0.97798825. The 3.2.0
+restricted-evaluator control completes attempt one in 5m00s with zero findings
+and complete coverage, using 1,208,723 input, 1,065,701 cached, and 29,518
+output tokens at $1.155772125. All twelve configured gates pass: completion,
+precision, recall, F1, case pass, negative-case pass, stability, validation,
+attack path, code evidence, and severity are 1.0, while false positives per
+run are zero. The host deterministically re-anchors two excerpts from
+repository bytes before sealing; neither scan retries. A finalize-only replay
+reproduces the identical passing campaign from sealed receipts without a
+Copilot call. Bounded campaign output contains no allowance, quota,
+credit-limit, rate-limit, classifier-refusal, reconnect, timeout, transport,
+authentication, or authorization failure.
+
+**Consequence.** The StateMachine increment now has independent static,
+executable-package, deterministic self-review, real-model, package-consumer,
+Windows, and Linux evidence. Hosted workflow closure remains separate and must
+be evaluated on the pushed acceptance head. Future changes must preserve the
+same-receiver lifecycle, exact dependency evidence, repaired default, explicit
+trusted opt-in, and the distinction between capability proof and deployed
+compromise.
 
 ## 2026-08-25 — Treat SymPy `parse_expr` as Python evaluation, not mathematical parsing
 

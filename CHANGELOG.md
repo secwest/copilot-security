@@ -47,9 +47,59 @@ expr>` resolve `__import__` and ask `builtins.eval` to evaluate only `6 * 7`,
   multi-hop flow, dense unrelated `start()` calls, field-local evidence
   closure, regular-file dependency provenance, and the strict negative matrix.
   The full Python model lane passes 127 tests and 683 assertions with four
-  intentional Windows symlink skips. Wider suite, package, self-review, live
-  paired scan, and hosted workflow evidence remain separate acceptance
-  checkpoints.
+  intentional Windows symlink skips.
+- Final local acceptance is green at immutable implementation revision
+  `002d3e8ca02abd4f69c867178897fa0c427fbd82`. After a clean production
+  build, the authoritative native Windows Bun 1.3.14 suite passes 1,640 tests
+  and 12,026 assertions across 179 files with 25 intentional environment or
+  platform skips, zero failures, and a 609.22-second runtime. The focused
+  Ubuntu/WSL StateMachine, canonical corpus, Python cross-file and multi-hop,
+  framework-dataflow, residual-risk, and Copilot adapter lane passes 152 tests
+  and 3,241 assertions with one Windows-launcher skip and zero failures.
+  Generated-model drift, formatting, TypeScript compilation, and a clean
+  production build pass. The production high-severity audit reports no known
+  vulnerabilities.
+- Strict package inspection accepts the fresh 259-entry npm archive at
+  SHA-256
+  `c8a44308d1b6b5b1ae0da14890caafed060d6c4dbae7b07c5fc87f67e95c98a4`.
+  Two clean consumers each install 67 production packages and validate the
+  public import, executable CLI, and all 79 bundled plugin files. The real
+  CPython 3.12.3 package witness confirms that 3.1.2 reaches the bounded
+  capability sentinel and returns 42 while 3.2.0 raises `InvalidDefinition`
+  for that probe and still evaluates ordinary arithmetic to 42.
+- Two inventories of an exact-commit repository-root archive are
+  byte-identical at 256 rows and 522,460 bytes, SHA-256
+  `45b76fd78ad6549c7922004e23baa6245833a8ef930abfc94912ab2cbf422766`,
+  in 35,578.623 and 15,733.205 milliseconds. Exactly one StateMachine row
+  identifies the affected fixture at `src/loader.py:9`; the restricted control
+  and production scanner source emit no StateMachine row. Two independent
+  inventories of the publishable SDK archive are also identical at 256 rows
+  and 242,315 bytes, SHA-256
+  `7b951f07c7b8026fbe102c9a14d5f486efb5e11f6dc01b2d9ac8873c3965174f`.
+  A focused compiled inventory independently returns one affected row and zero
+  control rows.
+- Sealed campaign
+  `af4b3aaf2e0f06f4ff29c755de057f66f2cbf67c20181a3635593e010d204486`
+  binds the implementation revision, manifest SHA-256
+  `3cd8e442450b25e25798f4a6b640e9c123a049239cd79e335cf89699b1194dc3`,
+  exact fixture hashes, corpus, comparison and scan policies, runner, scanner
+  CLI, and packaged scanner to stored GitHub authentication,
+  `gpt-5.6-terra`, high effort, deep mode, two workers, three bounded outer
+  attempts, and no artificial credit ceiling. Both cases complete on attempt
+  one with complete coverage. The affected case emits exactly one high CWE-95
+  finding in 4m50s; the 3.2.0 restricted-evaluator control emits zero findings
+  in 5m00s. Completion, precision, recall, F1, case and negative-case pass,
+  stability, validation, attack path, code evidence, and severity are all 1.0,
+  with zero false positives per run. A finalize-only replay reproduces the
+  same campaign and sealed evaluation without invoking Copilot.
+- The two live scans use 2,349,968 input, 2,085,019 cached, and 52,329 output
+  tokens at an estimated $2.133760375. The host re-anchors two code-evidence
+  excerpts from immutable repository bytes before sealing the positive
+  finding; no model, process, or campaign retry occurs. Bounded campaign output
+  contains no allowance, quota, credit-limit, rate-limit, classifier-refusal,
+  reconnect, timeout, transport, authentication, or authorization failure.
+  Hosted workflow evidence remains a separate exact-head acceptance
+  checkpoint.
 - Added `python-web-sympy-unsafe-parse-expr`, a primitive-wide CWE-94/CWE-95
   model for request-controlled strings reaching the official
   `sympy.parsing.sympy_parser.parse_expr` evaluator without a provably
