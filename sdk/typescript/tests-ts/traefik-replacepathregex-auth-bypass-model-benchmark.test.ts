@@ -199,7 +199,7 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
     for (const version of [
       "2.0.0",
       "2.11.51",
-      "3.0.0",
+      "3.6.0",
       "3.6.22",
       "3.7.0",
       "3.7.6",
@@ -208,6 +208,8 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
     }
     for (const version of [
       "2.11.52",
+      "3.0.0",
+      "3.5.4",
       "3.6.23",
       "3.7.7",
       "3.8.0",

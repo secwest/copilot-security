@@ -180,7 +180,7 @@ function affectedVersion(version: string): boolean {
   if (parsed === undefined) return false;
   if (parsed[0] === 2) return compareVersion(parsed, [2, 11, 51]) <= 0;
   if (parsed[0] !== 3) return false;
-  if (compareVersion(parsed, [3, 0, 0]) < 0) return false;
+  if (compareVersion(parsed, [3, 6, 0]) < 0) return false;
   if (compareVersion(parsed, [3, 6, 22]) <= 0) return true;
   return (
     compareVersion(parsed, [3, 7, 0]) >= 0 &&

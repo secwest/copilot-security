@@ -13,7 +13,8 @@ path, and a normalizing backend resolves it to the protected `/admin` route
 without executing the sibling router's auth middleware. Official commit
 [`3f10dd4`](https://github.com/traefik/traefik/commit/3f10dd4) rejects a replaced
 path that differs from its normalized form. Affected stable branches end at
-2.11.51, 3.6.22, and 3.7.6; repairs are 2.11.52, 3.6.23, and 3.7.7. Authenticated
+2.11.51, 3.6.22, and 3.7.6; the v3 interval begins at 3.6.0, and repairs are
+2.11.52, 3.6.23, and 3.7.7. Authenticated
 current-source searches found neither the advisory nor `ReplacePathRegex` in
 `github/codeql` or `semgrep/semgrep-rules`.
 

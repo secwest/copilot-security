@@ -6,6 +6,10 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Corrected the Traefik v3 lower bound to the official 3.6.0 introduction.
+  Releases 3.0.0 through 3.5.x now remain negative instead of inheriting the
+  affected 3.6 branch, and the focused release matrix and reviewer contract
+  preserve that false-positive boundary.
 - Added the first `traefik-replacepathregex-auth-bypass` implementation for
   [GHSA-cxjq-mrr5-89rv](https://github.com/traefik/traefik/security/advisories/GHSA-cxjq-mrr5-89rv).
   The cross-file configuration model binds an exact affected official Traefik
