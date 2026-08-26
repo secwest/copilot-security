@@ -183,6 +183,16 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
       "fixtures",
       "traefik-replacepathregex-repaired",
     );
+    const dockerAffectedRoot = join(
+      benchmarkRoot,
+      "fixtures",
+      "traefik-docker-label-replacepathregex-auth-bypass",
+    );
+    const dockerRepairedRoot = join(
+      benchmarkRoot,
+      "fixtures",
+      "traefik-docker-label-replacepathregex-repaired",
+    );
     const affectedCompose = await readFile(
       join(affectedRoot, "compose.yml"),
       "utf8",
@@ -197,6 +207,20 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
         await readFile(join(repairedRoot, path), "utf8"),
       );
     }
+    const dockerAffectedCompose = await readFile(
+      join(dockerAffectedRoot, "compose.yml"),
+      "utf8",
+    );
+    const dockerRepairedCompose = await readFile(
+      join(dockerRepairedRoot, "compose.yml"),
+      "utf8",
+    );
+    expect(dockerAffectedCompose.replace("3.7.6", "3.7.7")).toBe(
+      dockerRepairedCompose,
+    );
+    expect(
+      await readFile(join(dockerAffectedRoot, "src/backend.mjs"), "utf8"),
+    ).toBe(await readFile(join(dockerRepairedRoot, "src/backend.mjs"), "utf8"));
 
     const affected = records(await buildResidualRiskInventory(affectedRoot));
     expect(affected).toHaveLength(1);
@@ -207,6 +231,20 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
     expect(affected[0]?.line).toBe(15);
     expect(affected[0]?.frameworkModel?.source.line).toBe(3);
     expect(affected[0]?.frameworkModel?.propagators.at(-1)?.line).toBe(3);
+    const dockerAffected = records(
+      await buildResidualRiskInventory(dockerAffectedRoot),
+    );
+    expect(dockerAffected).toHaveLength(1);
+    expect(
+      records(await buildResidualRiskInventory(dockerRepairedRoot)),
+    ).toHaveLength(0);
+    expect(dockerAffected[0]?.path).toBe("compose.yml");
+    expect(dockerAffected[0]?.line).toBe(29);
+    expect(dockerAffected[0]?.frameworkModel?.source.line).toBe(21);
+    expect(dockerAffected[0]?.frameworkModel?.propagators.at(-2)?.line).toBe(
+      32,
+    );
+    expect(dockerAffected[0]?.frameworkModel?.propagators.at(-1)?.line).toBe(3);
 
     const manifest = JSON.parse(
       await readFile(
@@ -220,9 +258,13 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([
       "traefik-replacepathregex-auth-bypass",
       "traefik-replacepathregex-repaired",
+      "traefik-docker-label-replacepathregex-auth-bypass",
+      "traefik-docker-label-replacepathregex-repaired",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
+    expect(manifest.cases[2]?.expected).toHaveLength(1);
+    expect(manifest.cases[3]?.expected).toEqual([]);
     expect(manifest.thresholds["precision"]).toBe(1);
     expect(manifest.thresholds["recall"]).toBe(1);
     expect(manifest.thresholds["maxFalsePositives"]).toBe(0);

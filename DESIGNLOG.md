@@ -58,6 +58,18 @@ repaired controls.
 Together with the canonical benchmark contract, both Windows and native
 Ubuntu/WSL pass 29 tests and 2,103 assertions.
 
+**Docker-label benchmark.** Add a second source-identical Traefik pair whose
+only operational difference is the proxy image changing from 3.7.6 to 3.7.7.
+The project publishes only the proxy entry point on loopback; its backend is
+reachable only on the Compose network and serves one inert marker after URL
+normalization. Exact Docker labels retain explicit enablement, one shared
+service and entry point, inline BasicAuth, a concrete port, and the official
+Compose escape for `${1}`. The specialized and canonical manifests require one
+high/CWE-22 record at `compose.yml:29` and an empty repaired control, under the
+same three-run evidence gates. Canonical registration advances the corpus to
+131 pairs, 262 cases, and 786 scans. The expanded Windows lane passes 29 tests
+and 2,125 assertions, as does the native Ubuntu/WSL lane.
+
 Mount writability is deliberately not a gate: the flaw is in request-path
 normalization, not provider-file mutation. Both short and long Compose bind
 syntax are accepted with read-only, explicit read-write, or default mode.

@@ -5471,6 +5471,45 @@
         "traefik-replacepathregex-repaired/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "traefik-docker-label-replacepathregex-auth-bypass",
+      "description": "Traefik 3.7.6 loads a public separator-free rewrite and authenticated sibling route from one Docker-labeled backend container.",
+      "fixture": "fixtures/traefik-docker-label-replacepathregex-auth-bypass",
+      "findingsPaths": [
+        "traefik-docker-label-replacepathregex-auth-bypass/run-1/findings.json",
+        "traefik-docker-label-replacepathregex-auth-bypass/run-2/findings.json",
+        "traefik-docker-label-replacepathregex-auth-bypass/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "traefik-replacepathregex-auth-bypass",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "compose.yml",
+              "startLine": 29,
+              "endLine": 29,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "traefik-docker-label-replacepathregex-repaired",
+      "description": "The source-identical Docker-label control changes only Traefik to 3.7.7, which rejects the non-normalized replacement before proxying.",
+      "fixture": "fixtures/traefik-docker-label-replacepathregex-repaired",
+      "findingsPaths": [
+        "traefik-docker-label-replacepathregex-repaired/run-1/findings.json",
+        "traefik-docker-label-replacepathregex-repaired/run-2/findings.json",
+        "traefik-docker-label-replacepathregex-repaired/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

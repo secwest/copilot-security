@@ -452,6 +452,10 @@ describe("effectiveness benchmark", () => {
         "traefik-replacepathregex-repaired",
       ],
       [
+        "traefik-docker-label-replacepathregex-auth-bypass",
+        "traefik-docker-label-replacepathregex-repaired",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

@@ -1,0 +1,32 @@
+services:
+  proxy:
+    image: traefik:v3.7.7
+    command:
+      - "--entrypoints.web.address=:8080"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--api=false"
+    ports:
+      - "127.0.0.1:18080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+  backend:
+    image: node:22.23.1-alpine
+    working_dir: /app
+    command: ["node", "src/backend.mjs"]
+    volumes:
+      - "./src:/app/src:ro"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.public-api.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.public-api.entrypoints=web"
+      - "traefik.http.routers.public-api.middlewares=rewrite-api"
+      - "traefik.http.routers.public-api.service=backend-svc"
+      - "traefik.http.routers.protected-admin.rule=PathPrefix(`/admin`)"
+      - "traefik.http.routers.protected-admin.entrypoints=web"
+      - "traefik.http.routers.protected-admin.middlewares=auth"
+      - "traefik.http.routers.protected-admin.service=backend-svc"
+      - "traefik.http.middlewares.rewrite-api.replacepathregex.regex=^/api(.*)"
+      - "traefik.http.middlewares.rewrite-api.replacepathregex.replacement=/$${1}"
+      - "traefik.http.middlewares.auth.basicauth.users=benchmark:$$apr1$$H6uskkkW$$IgXLP6ewTrSuBkTrqE8wj/"
+      - "traefik.http.services.backend-svc.loadbalancer.server.port=3000"

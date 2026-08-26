@@ -6,6 +6,14 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added a source-identical Docker-provider Traefik exploit/control pair that
+  changes only the proxy image from 3.7.6 to 3.7.7. The operational Compose
+  topology keeps the proxy entry point loopback-published, the inert backend
+  unexposed, explicit container enablement, a canonical read-only Docker socket
+  bind, escaped replacement labels, inline BasicAuth, and an exact backend
+  port. Its strict specialized and canonical expectations require one
+  `compose.yml:29` high/CWE-22 finding on the affected fixture and none on the
+  repaired fixture. The corpus advances to 131 pairs, 262 cases, and 786 scans.
 - Corrected the Traefik v3 lower bound to the official 3.6.0 introduction.
   Releases 3.0.0 through 3.5.x now remain negative instead of inheriting the
   affected 3.6 branch, and the focused release matrix and reviewer contract
