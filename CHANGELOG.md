@@ -6,6 +6,15 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended the Traefik file-provider model from one YAML filename to exact
+  YAML or TOML filename and directory configurations. Directory providers bind
+  an exact Compose mount and merge routers, middlewares, and services from
+  immediate top-level `.yml`, `.yaml`, and `.toml` children, preserving each
+  source and sink location and accepting explicit `@file` references. Malformed
+  supported siblings, duplicate cross-file resource names, nested or adjacent
+  paths, ambiguous filename/directory commands, unsupported extensions, and
+  cross-provider references fail closed. The focused suite now passes 12 groups
+  and 135 assertions.
 - Added a source-identical Docker-provider Traefik exploit/control pair that
   changes only the proxy image from 3.7.6 to 3.7.7. The operational Compose
   topology keeps the proxy entry point loopback-published, the inert backend

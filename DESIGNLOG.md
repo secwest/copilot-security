@@ -18,6 +18,22 @@ path that differs from its normalized form. Affected stable branches end at
 current-source searches found neither the advisory nor `ReplacePathRegex` in
 `github/codeql` or `semgrep/semgrep-rules`.
 
+**TOML and directory-provider expansion.** Traefik's official
+[file-provider reference](https://doc.traefik.io/traefik/reference/dynamic-configuration/file/)
+defines dynamic routing configuration in YAML or TOML and permits a directory
+containing multiple files; the official
+[CLI option reference](https://doc.traefik.io/traefik/reference/install-configuration/cli-options-list/)
+specifies that `providers.file.directory` loads one or more `.yml`, `.yaml`, or
+`.toml` files. Extend the exact Compose mount binding to either one filename or
+one directory command. For a directory, load only immediate supported children
+and merge named routers, middlewares, and services while retaining the defining
+file and line for every evidence node. Normalize only unqualified and explicit
+`@file` references. A malformed supported sibling, duplicate resource name,
+ambiguous filename/directory selection, nested or adjacent path, unsupported
+extension, or other provider suffix fails closed. This deliberately models the
+documented top-level directory contract without guessing recursive discovery or
+Traefik's runtime conflict resolution.
+
 **Initial topology decision.** Do not report an affected image or rewrite
 alone. Bind an exact official Compose image to `--providers.file.filename`, a
 matching non-traversing mounted dynamic file, one public router with exactly
@@ -26,10 +42,11 @@ BasicAuth, DigestAuth, or ForwardAuth on the same entry point and defined
 backend service. Reject safe separator-bearing regexes, replacements that
 cannot create the traversal, public auth, empty protected auth, different
 services or entry points, undefined services, unmatched provider mounts,
-prereleases, repaired tags, duplicate YAML keys, and aliases. This begins with
-the common file-provider topology; Docker-label, directory-provider, TOML, and
-orchestrator variants require their own exact binding rules rather than loose
-text matches.
+prereleases, repaired tags, duplicate YAML keys, and aliases. This initial
+increment began with the common single-YAML file topology; the exact
+Docker-label, directory-provider, and TOML expansions are recorded separately
+below, while orchestrator variants still require their own binding rules rather
+than loose text matches.
 
 **Docker-label expansion.** Traefik's official Docker routing reference defines
 `traefik.http.routers.*`, `middlewares.*`, and
@@ -44,9 +61,9 @@ on one enabled application container. If the proxy sets
 Duplicate relevant labels, aliases, interpolation, disabled containers,
 cross-provider middleware names, provider constraints, nonlocal endpoints,
 Swarm mode, unproved auth files, invalid ports, incomplete topology, and safe
-replacement shapes fail closed. Directory-provider, TOML, authenticated remote
-endpoint, Swarm, and other orchestrator variants remain separate future
-contracts.
+replacement shapes fail closed. Directory-provider and TOML support use the
+separate exact contract above; authenticated remote endpoints, Swarm, and other
+orchestrator variants remain future contracts.
 
 The expanded focused suite passes 11 groups and 97 assertions. Its Docker
 matrix covers sequence and mapping labels, short and long socket binds,

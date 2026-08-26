@@ -1,5 +1,6 @@
 import { posix } from "node:path";
 
+import { parse as parseToml } from "smol-toml";
 import { parseDocument } from "yaml";
 
 import type { GoHttpSourceFile } from "./go-http-risk.js";
@@ -13,12 +14,23 @@ const AUTH_MIDDLEWARE_KEYS = new Set([
   "forwardAuth",
 ]);
 
-interface TraefikFileRuntime {
+interface TraefikFilenameRuntime {
   composePath: string;
   imageLine: number;
   version: string;
+  providerMode: "filename";
   dynamicPath: string;
 }
+
+interface TraefikDirectoryRuntime {
+  composePath: string;
+  imageLine: number;
+  version: string;
+  providerMode: "directory";
+  dynamicDirectory: string;
+}
+
+type TraefikFileRuntime = TraefikFilenameRuntime | TraefikDirectoryRuntime;
 
 interface TraefikDockerRuntime {
   composePath: string;
@@ -34,11 +46,26 @@ interface ComposeLabel {
 
 interface TraefikRouter {
   name: string;
+  path: string;
   prefix: string;
   service: string;
   middlewares: string[];
   entryPoints: string[];
   line: number;
+}
+
+interface TraefikMiddleware {
+  name: string;
+  path: string;
+  line: number;
+  value: unknown;
+}
+
+interface TraefikRoutingGraph {
+  files: ReadonlyMap<string, GoHttpSourceFile>;
+  routers: TraefikRouter[];
+  middlewares: ReadonlyMap<string, TraefikMiddleware>;
+  services: ReadonlySet<string>;
 }
 
 export interface TraefikReplacePathRegexRecord {
@@ -53,7 +80,7 @@ export interface TraefikReplacePathRegexRecord {
   frameworkModel: {
     schemaVersion: "1.2";
     id: "traefik-replacepathregex-auth-bypass";
-    language: "traefik-yaml" | "traefik-compose-labels";
+    language: "traefik-yaml" | "traefik-toml" | "traefik-compose-labels";
     scope: "cross-file";
     source: { kind: string; path: string; line: number; symbol: string };
     sink: {
@@ -108,6 +135,20 @@ function yamlRoot(file: GoHttpSourceFile): Record<string, unknown> | undefined {
   }
 }
 
+function routingRoot(
+  file: GoHttpSourceFile,
+): Record<string, unknown> | undefined {
+  if (file.extension === ".yaml" || file.extension === ".yml") {
+    return yamlRoot(file);
+  }
+  if (file.extension !== ".toml") return undefined;
+  try {
+    return recordValue(parseToml(file.text));
+  } catch {
+    return undefined;
+  }
+}
+
 function escapeRegularExpression(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
@@ -121,6 +162,24 @@ function excludedPath(path: string): boolean {
 function keyExpression(key: string): RegExp {
   const escaped = escapeRegularExpression(key);
   return new RegExp(`^\\s*(?:${escaped}|"${escaped}"|'${escaped}')\\s*:`, "u");
+}
+
+function tomlKeyExpression(key: string): string {
+  const escaped = escapeRegularExpression(key);
+  return `(?:${escaped}|"${escaped}"|'${escaped}')`;
+}
+
+function tomlTableLine(
+  file: GoHttpSourceFile,
+  segments: readonly string[],
+): number | undefined {
+  if (file.extension !== ".toml") return undefined;
+  const path = segments.map(tomlKeyExpression).join("\\s*\\.\\s*");
+  const expression = new RegExp(`^\\s*\\[\\s*${path}\\s*\\]\\s*(?:#.*)?$`, "u");
+  for (let index = 0; index < file.lines.length; index += 1) {
+    if (expression.test(file.lines[index] ?? "")) return index + 1;
+  }
+  return undefined;
 }
 
 function keyLine(
@@ -275,10 +334,21 @@ function fileRuntimes(
       const commands = stringOrStringList(configuration["command"]);
       const volumes = configuration["volumes"];
       if (commands === undefined || !Array.isArray(volumes)) continue;
-      const provider = commands
+      const filenameProviders = commands
         .map((command) => /^--providers\.file\.filename=(.+)$/u.exec(command))
-        .find((match) => match !== null);
-      if (provider === undefined || provider === null) continue;
+        .filter((match): match is RegExpExecArray => match !== null);
+      const directoryProviders = commands
+        .map((command) => /^--providers\.file\.directory=(.+)$/u.exec(command))
+        .filter((match): match is RegExpExecArray => match !== null);
+      if (
+        commands.includes("--providers.file=false") ||
+        filenameProviders.length + directoryProviders.length !== 1
+      ) {
+        continue;
+      }
+      const providerMode =
+        filenameProviders.length === 1 ? "filename" : "directory";
+      const provider = filenameProviders[0] ?? directoryProviders[0]!;
       const source = volumes
         .map((volume) => mountedVolumeSource(volume, provider[1]!))
         .find((candidate) => candidate !== undefined);
@@ -290,12 +360,23 @@ function fileRuntimes(
       const serviceLine = childKeyLine(file.lines, servicesLine, serviceName);
       const imageLine = childKeyLine(file.lines, serviceLine, "image");
       if (imageLine === undefined) continue;
-      runtimes.push({
-        composePath: file.path,
-        imageLine,
-        version: imageMatch[1]!,
-        dynamicPath,
-      });
+      if (providerMode === "filename") {
+        runtimes.push({
+          composePath: file.path,
+          imageLine,
+          version: imageMatch[1]!,
+          providerMode,
+          dynamicPath,
+        });
+      } else {
+        runtimes.push({
+          composePath: file.path,
+          imageLine,
+          version: imageMatch[1]!,
+          providerMode,
+          dynamicDirectory: dynamicPath,
+        });
+      }
     }
   }
   return runtimes;
@@ -380,6 +461,46 @@ function pathPrefix(rule: unknown): string | undefined {
   return prefix;
 }
 
+function fileResourceName(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  const providerSeparator = trimmed.lastIndexOf("@");
+  if (providerSeparator < 0) return trimmed;
+  if (trimmed.slice(providerSeparator + 1).toLowerCase() !== "file") {
+    return undefined;
+  }
+  const name = trimmed.slice(0, providerSeparator);
+  return name === "" || name.includes("@") ? undefined : name;
+}
+
+function routingObjectLine(
+  file: GoHttpSourceFile,
+  section: "routers" | "middlewares" | "services",
+  name: string,
+): number | undefined {
+  if (file.extension === ".toml") {
+    return tomlTableLine(file, ["http", section, name]);
+  }
+  const httpLine = keyLine(file.lines, "http");
+  const sectionLine = childKeyLine(file.lines, httpLine, section);
+  return childKeyLine(file.lines, sectionLine, name);
+}
+
+function middlewareTypeLine(
+  file: GoHttpSourceFile,
+  name: string,
+  type: string,
+): number | undefined {
+  if (file.extension === ".toml") {
+    return tomlTableLine(file, ["http", "middlewares", name, type]);
+  }
+  return childKeyLine(
+    file.lines,
+    routingObjectLine(file, "middlewares", name),
+    type,
+  );
+}
+
 function routers(
   file: GoHttpSourceFile,
   value: Record<string, unknown>,
@@ -389,33 +510,48 @@ function routers(
   for (const [name, raw] of Object.entries(value)) {
     const router = recordValue(raw);
     const prefix = pathPrefix(router?.["rule"]);
-    const service = router?.["service"];
-    const middlewares = stringList(router?.["middlewares"]);
+    const rawService = router?.["service"];
+    const service =
+      typeof rawService === "string" ? fileResourceName(rawService) : undefined;
+    const middlewares = stringList(router?.["middlewares"])?.map(
+      fileResourceName,
+    );
     const entryPoints = stringList(router?.["entryPoints"]);
-    const line = childKeyLine(file.lines, routersLine, name);
+    const line =
+      file.extension === ".toml"
+        ? routingObjectLine(file, "routers", name)
+        : childKeyLine(file.lines, routersLine, name);
     if (
       prefix === undefined ||
-      typeof service !== "string" ||
-      service === "" ||
+      service === undefined ||
       middlewares === undefined ||
       middlewares.length === 0 ||
+      middlewares.some((middleware) => middleware === undefined) ||
       entryPoints === undefined ||
       entryPoints.length === 0 ||
       line === undefined
     ) {
       continue;
     }
-    result.push({ name, prefix, service, middlewares, entryPoints, line });
+    result.push({
+      name,
+      path: file.path,
+      prefix,
+      service,
+      middlewares: middlewares as string[],
+      entryPoints,
+      line,
+    });
   }
   return result;
 }
 
 function hasAuthMiddleware(
   router: TraefikRouter,
-  middlewares: Record<string, unknown>,
+  middlewares: ReadonlyMap<string, TraefikMiddleware>,
 ): boolean {
   return router.middlewares.some((name) => {
-    const middleware = recordValue(middlewares[name]);
+    const middleware = recordValue(middlewares.get(name)?.value);
     if (middleware === undefined) return false;
     return Object.entries(middleware).some(([key, value]) => {
       if (!AUTH_MIDDLEWARE_KEYS.has(key)) return false;
@@ -457,62 +593,144 @@ function vulnerableRewrite(
   return { regex, replacement };
 }
 
+function routingGraph(
+  files: readonly GoHttpSourceFile[],
+): TraefikRoutingGraph | undefined {
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const configuredRouters: TraefikRouter[] = [];
+  const middlewares = new Map<string, TraefikMiddleware>();
+  const services = new Set<string>();
+  const routerNames = new Set<string>();
+  const middlewareNames = new Set<string>();
+  for (const file of files) {
+    const root = routingRoot(file);
+    if (root === undefined) return undefined;
+    if (root["http"] === undefined) continue;
+    const http = recordValue(root["http"]);
+    if (http === undefined) return undefined;
+    const routerMap =
+      http["routers"] === undefined ? undefined : recordValue(http["routers"]);
+    const middlewareMap =
+      http["middlewares"] === undefined
+        ? undefined
+        : recordValue(http["middlewares"]);
+    const serviceMap =
+      http["services"] === undefined
+        ? undefined
+        : recordValue(http["services"]);
+    if (
+      (http["routers"] !== undefined && routerMap === undefined) ||
+      (http["middlewares"] !== undefined && middlewareMap === undefined) ||
+      (http["services"] !== undefined && serviceMap === undefined)
+    ) {
+      return undefined;
+    }
+    if (routerMap !== undefined) {
+      for (const name of Object.keys(routerMap)) {
+        if (routerNames.has(name)) return undefined;
+        routerNames.add(name);
+      }
+      const httpLine = keyLine(file.lines, "http");
+      const routersLine = childKeyLine(file.lines, httpLine, "routers");
+      configuredRouters.push(...routers(file, routerMap, routersLine));
+    }
+    if (middlewareMap !== undefined) {
+      for (const [name, value] of Object.entries(middlewareMap)) {
+        if (middlewareNames.has(name)) return undefined;
+        middlewareNames.add(name);
+        const line =
+          routingObjectLine(file, "middlewares", name) ??
+          middlewareTypeLine(file, name, "replacePathRegex") ??
+          middlewareTypeLine(file, name, "basicAuth") ??
+          middlewareTypeLine(file, name, "digestAuth") ??
+          middlewareTypeLine(file, name, "forwardAuth");
+        if (line === undefined) continue;
+        middlewares.set(name, { name, path: file.path, line, value });
+      }
+    }
+    if (serviceMap !== undefined) {
+      for (const name of Object.keys(serviceMap)) {
+        if (services.has(name)) return undefined;
+        services.add(name);
+      }
+    }
+  }
+  return {
+    files: filesByPath,
+    routers: configuredRouters,
+    middlewares,
+    services,
+  };
+}
+
 function recordsForRuntime(
-  file: GoHttpSourceFile,
+  graph: TraefikRoutingGraph,
   runtime: TraefikFileRuntime,
 ): TraefikReplacePathRegexRecord[] {
-  const root = yamlRoot(file);
-  const http = recordValue(root?.["http"]);
-  const routerMap = recordValue(http?.["routers"]);
-  const middlewareMap = recordValue(http?.["middlewares"]);
-  const services = recordValue(http?.["services"]);
-  if (
-    routerMap === undefined ||
-    middlewareMap === undefined ||
-    services === undefined
-  ) {
-    return [];
-  }
-  const httpLine = keyLine(file.lines, "http");
-  const routersLine = childKeyLine(file.lines, httpLine, "routers");
-  const middlewaresLine = childKeyLine(file.lines, httpLine, "middlewares");
-  const configuredRouters = routers(file, routerMap, routersLine);
   const records: TraefikReplacePathRegexRecord[] = [];
-  for (const publicRouter of configuredRouters) {
+  for (const publicRouter of graph.routers) {
     if (publicRouter.middlewares.length !== 1) continue;
     const rewriteName = publicRouter.middlewares[0]!;
+    const rewriteMiddleware = graph.middlewares.get(rewriteName);
     const rewrite = vulnerableRewrite(
-      middlewareMap[rewriteName],
+      rewriteMiddleware?.value,
       publicRouter.prefix,
     );
-    if (rewrite === undefined || services[publicRouter.service] === undefined)
+    if (rewrite === undefined || !graph.services.has(publicRouter.service))
       continue;
-    const protectedRouter = configuredRouters.find(
+    const protectedRouter = graph.routers.find(
       (candidate) =>
         candidate.name !== publicRouter.name &&
         candidate.service === publicRouter.service &&
         candidate.prefix !== publicRouter.prefix &&
         sameEntryPoint(candidate, publicRouter) &&
-        hasAuthMiddleware(candidate, middlewareMap),
+        hasAuthMiddleware(candidate, graph.middlewares),
     );
     if (protectedRouter === undefined) continue;
-    const rewriteNameLine = childKeyLine(
-      file.lines,
-      middlewaresLine,
+    if (rewriteMiddleware === undefined) continue;
+    const sinkFile = graph.files.get(rewriteMiddleware.path);
+    const sourceFile = graph.files.get(publicRouter.path);
+    const protectedFile = graph.files.get(protectedRouter.path);
+    if (
+      sinkFile === undefined ||
+      sourceFile === undefined ||
+      protectedFile === undefined
+    ) {
+      continue;
+    }
+    const sinkLine = middlewareTypeLine(
+      sinkFile,
       rewriteName,
-    );
-    const sinkLine = childKeyLine(
-      file.lines,
-      rewriteNameLine,
       "replacePathRegex",
     );
-    if (rewriteNameLine === undefined || sinkLine === undefined) continue;
+    if (sinkLine === undefined) continue;
     const startLine = Math.max(1, sinkLine - CONTEXT_LINES_BEFORE);
-    const endLine = Math.min(file.lines.length, sinkLine + CONTEXT_LINES_AFTER);
+    const endLine = Math.min(
+      sinkFile.lines.length,
+      sinkLine + CONTEXT_LINES_AFTER,
+    );
     const sourceStart = Math.max(1, publicRouter.line - 1);
-    const sourceEnd = Math.min(file.lines.length, protectedRouter.line + 6);
+    const sourceEnd = Math.min(
+      sourceFile.lines.length,
+      publicRouter.path === protectedRouter.path
+        ? Math.max(publicRouter.line, protectedRouter.line) + 6
+        : publicRouter.line + 4,
+    );
+    const sourceExcerpts = [
+      `[${sourceFile.path}]\n${sourceExcerpt(sourceFile.lines, sourceStart, sourceEnd)}`,
+    ];
+    if (protectedRouter.path !== publicRouter.path) {
+      const protectedStart = Math.max(1, protectedRouter.line - 1);
+      const protectedEnd = Math.min(
+        protectedFile.lines.length,
+        protectedRouter.line + 4,
+      );
+      sourceExcerpts.push(
+        `[${protectedFile.path}]\n${sourceExcerpt(protectedFile.lines, protectedStart, protectedEnd)}`,
+      );
+    }
     records.push({
-      path: file.path,
+      path: sinkFile.path,
       line: sinkLine,
       categories: [
         "framework-dataflow:traefik-replacepathregex-auth-bypass",
@@ -522,22 +740,23 @@ function recordsForRuntime(
       priority: 138,
       startLine,
       endLine,
-      excerpt: sourceExcerpt(file.lines, startLine, endLine),
-      sourceExcerpt: sourceExcerpt(file.lines, sourceStart, sourceEnd),
+      excerpt: sourceExcerpt(sinkFile.lines, startLine, endLine),
+      sourceExcerpt: sourceExcerpts.join("\n"),
       frameworkModel: {
         schemaVersion: "1.2",
         id: "traefik-replacepathregex-auth-bypass",
-        language: "traefik-yaml",
+        language:
+          sinkFile.extension === ".toml" ? "traefik-toml" : "traefik-yaml",
         scope: "cross-file",
         source: {
           kind: "public-traefik-prefix-router",
-          path: file.path,
+          path: publicRouter.path,
           line: publicRouter.line,
           symbol: publicRouter.name,
         },
         sink: {
           kind: "traefik-replacepathregex-prefix-rewrite",
-          path: file.path,
+          path: sinkFile.path,
           line: sinkLine,
           symbol: rewriteName,
           cweIds: ["CWE-22"],
@@ -545,15 +764,27 @@ function recordsForRuntime(
         propagators: [
           {
             kind: "separator-free-prefix-capture",
-            path: file.path,
+            path: sinkFile.path,
             line: sinkLine,
             symbol: `${rewrite.regex} -> ${rewrite.replacement}`,
           },
           {
             kind: "shared-protected-backend",
-            path: file.path,
+            path: protectedRouter.path,
             line: protectedRouter.line,
             symbol: `${protectedRouter.name}:${protectedRouter.prefix}`,
+          },
+          {
+            kind:
+              runtime.providerMode === "directory"
+                ? "mounted-file-provider-directory"
+                : "mounted-file-provider",
+            path: runtime.composePath,
+            line: runtime.imageLine,
+            symbol:
+              runtime.providerMode === "directory"
+                ? runtime.dynamicDirectory
+                : runtime.dynamicPath,
           },
           {
             kind: "affected-traefik-container",
@@ -659,6 +890,7 @@ function dockerResourceName(value: string): string | undefined {
 
 function dockerRouters(
   labels: ReadonlyMap<string, ComposeLabel>,
+  path: string,
 ): TraefikRouter[] {
   const names = [...labels.keys()]
     .map((key) => /^traefik\.http\.routers\.([^.]+)\.rule$/u.exec(key)?.[1])
@@ -690,6 +922,7 @@ function dockerRouters(
     }
     routers.push({
       name,
+      path,
       prefix,
       service,
       middlewares: middlewares as string[],
@@ -789,7 +1022,7 @@ function dockerLabelRecords(
     ) {
       continue;
     }
-    const configuredRouters = dockerRouters(labels);
+    const configuredRouters = dockerRouters(labels, file.path);
     for (const publicRouter of configuredRouters) {
       if (publicRouter.middlewares.length !== 1) continue;
       const rewriteName = publicRouter.middlewares[0]!;
@@ -896,10 +1129,26 @@ export function traefikReplacePathRegexRecords(
   const records: TraefikReplacePathRegexRecord[] = [];
   const emitted = new Set<string>();
   for (const runtime of fileRuntimes(files)) {
-    const dynamicFile = byPath.get(runtime.dynamicPath);
-    if (dynamicFile === undefined || excludedPath(dynamicFile.path)) continue;
-    for (const record of recordsForRuntime(dynamicFile, runtime)) {
-      const identity = `${record.path}:${record.line}:${runtime.composePath}:${runtime.version}`;
+    const dynamicFiles =
+      runtime.providerMode === "filename"
+        ? [byPath.get(runtime.dynamicPath)].filter(
+            (file): file is GoHttpSourceFile => file !== undefined,
+          )
+        : files.filter(
+            (file) =>
+              posix.dirname(file.path) === runtime.dynamicDirectory &&
+              [".toml", ".yaml", ".yml"].includes(file.extension),
+          );
+    if (
+      dynamicFiles.length === 0 ||
+      dynamicFiles.some((file) => excludedPath(file.path))
+    ) {
+      continue;
+    }
+    const graph = routingGraph(dynamicFiles);
+    if (graph === undefined) continue;
+    for (const record of recordsForRuntime(graph, runtime)) {
+      const identity = `${record.path}:${record.line}:${runtime.composePath}:${runtime.version}:${runtime.providerMode}`;
       if (emitted.has(identity)) continue;
       emitted.add(identity);
       records.push(record);

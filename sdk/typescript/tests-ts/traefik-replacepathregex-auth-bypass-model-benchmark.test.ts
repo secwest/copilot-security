@@ -11,6 +11,7 @@ interface TraefikRecord {
   line: number;
   frameworkModel?: {
     id: string;
+    language: string;
     source: { kind: string; path: string; line: number; symbol?: string };
     sink: { path: string; line: number; symbol?: string; cweIds: string[] };
     propagators: Array<{
@@ -67,6 +68,32 @@ function dynamicConfiguration(
 `;
 }
 
+function tomlConfiguration(): string {
+  return `[http.routers."public-api"]
+rule = "PathPrefix(\`/api\`)"
+entryPoints = ["web"]
+middlewares = ["rewrite-api@file"]
+service = "backend-svc@file"
+
+[http.routers."protected-admin"]
+rule = "PathPrefix(\`/admin\`)"
+entryPoints = ["web"]
+middlewares = ["auth@file"]
+service = "backend-svc@file"
+
+[http.middlewares."rewrite-api".replacePathRegex]
+regex = "^/api(.*)"
+replacement = "/$1"
+
+[http.middlewares.auth.basicAuth]
+users = ["admin:hash"]
+
+[http.services."backend-svc".loadBalancer]
+[[http.services."backend-svc".loadBalancer.servers]]
+url = "http://backend:3000"
+`;
+}
+
 function compose(
   version = "3.7.6",
   command = "--providers.file.filename=/etc/traefik/dynamic.yml",
@@ -80,6 +107,14 @@ function compose(
     volumes:
       - "${volume}"
 `;
+}
+
+function directoryCompose(
+  version = "3.7.6",
+  command = "--providers.file.directory=/etc/traefik/dynamic",
+  volume = "./dynamic:/etc/traefik/dynamic:ro",
+): string {
+  return compose(version, command, volume);
 }
 
 function dockerCompose({
@@ -156,18 +191,22 @@ async function scan(
   dynamicPath = "dynamic.yml",
   composePath = "compose.yml",
 ): Promise<TraefikRecord[]> {
+  return scanFiles({
+    [composePath]: composeSource,
+    [dynamicPath]: dynamic,
+  });
+}
+
+async function scanFiles(
+  sources: Readonly<Record<string, string>>,
+): Promise<TraefikRecord[]> {
   const root = await mkdtemp(join(tmpdir(), "copilot-security-traefik-"));
   temporaryPaths.push(root);
-  const absoluteCompose = join(root, composePath);
-  if (composePath.includes("/")) {
-    await mkdir(dirname(absoluteCompose), { recursive: true });
+  for (const [path, source] of Object.entries(sources)) {
+    const absolute = join(root, path);
+    await mkdir(dirname(absolute), { recursive: true });
+    await writeFile(absolute, source);
   }
-  await writeFile(absoluteCompose, composeSource);
-  const absoluteDynamic = join(root, dynamicPath);
-  if (dynamicPath.includes("/")) {
-    await mkdir(dirname(absoluteDynamic), { recursive: true });
-  }
-  await writeFile(absoluteDynamic, dynamic);
   return records(await buildResidualRiskInventory(root));
 }
 
@@ -441,6 +480,141 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
         undefined,
         compose().replace("traefik:v3.7.6", "example/traefik:v3.7.6"),
       ),
+    ).toHaveLength(0);
+  });
+
+  test("loads exact TOML filenames and merged top-level provider directories", async () => {
+    const toml = await scan(
+      tomlConfiguration(),
+      compose(
+        undefined,
+        "--providers.file.filename=/etc/traefik/dynamic.toml",
+        "./dynamic.toml:/etc/traefik/dynamic.toml:ro",
+      ),
+      "dynamic.toml",
+    );
+    expect(toml).toHaveLength(1);
+    expect(toml[0]?.path).toBe("dynamic.toml");
+    expect(toml[0]?.line).toBe(13);
+    expect(toml[0]?.frameworkModel?.language).toBe("traefik-toml");
+    expect(toml[0]?.frameworkModel?.source).toEqual({
+      kind: "public-traefik-prefix-router",
+      path: "dynamic.toml",
+      line: 1,
+      symbol: "public-api",
+    });
+
+    const splitSources = {
+      "compose.yml": directoryCompose(),
+      "dynamic/routers.toml": `[http.routers."public-api"]
+rule = "PathPrefix(\`/api\`)"
+entryPoints = ["web"]
+middlewares = ["rewrite-api@file"]
+service = "backend-svc@file"
+
+[http.routers."protected-admin"]
+rule = "PathPrefix(\`/admin\`)"
+entryPoints = ["web"]
+middlewares = ["auth@file"]
+service = "backend-svc@file"
+`,
+      "dynamic/middlewares.yml": `http:
+  middlewares:
+    rewrite-api:
+      replacePathRegex:
+        regex: "^/api(.*)"
+        replacement: "/$1"
+    auth:
+      basicAuth:
+        users: ["admin:hash"]
+`,
+      "dynamic/services.toml": `[http.services."backend-svc".loadBalancer]
+[[http.services."backend-svc".loadBalancer.servers]]
+url = "http://backend:3000"
+`,
+    };
+    const split = await scanFiles(splitSources);
+    expect(split).toHaveLength(1);
+    expect(split[0]?.path).toBe("dynamic/middlewares.yml");
+    expect(split[0]?.line).toBe(4);
+    expect(split[0]?.frameworkModel?.source.path).toBe("dynamic/routers.toml");
+    expect(split[0]?.frameworkModel?.propagators.at(-2)).toEqual({
+      kind: "mounted-file-provider-directory",
+      path: "compose.yml",
+      line: 3,
+      symbol: "dynamic",
+    });
+
+    expect(
+      await scanFiles({
+        "compose.yml": directoryCompose(),
+        "dynamic/routes.yml": dynamicConfiguration(),
+      }),
+    ).toHaveLength(1);
+    expect(
+      await scanFiles({
+        "compose.yml": directoryCompose(),
+        "dynamic/routes.toml": tomlConfiguration(),
+      }),
+    ).toHaveLength(1);
+
+    expect(
+      await scanFiles({
+        ...splitSources,
+        "dynamic/broken.toml": "[http.routers\n",
+      }),
+    ).toHaveLength(0);
+    expect(
+      await scanFiles({
+        ...splitSources,
+        "dynamic/duplicate.yml": `http:\n  middlewares:\n    rewrite-api:\n      replacePathRegex:\n        regex: "^/api(.*)"\n        replacement: "/$1"\n`,
+      }),
+    ).toHaveLength(0);
+    expect(
+      await scanFiles({
+        "compose.yml": directoryCompose(),
+        "dynamic/nested/routes.toml": tomlConfiguration(),
+      }),
+    ).toHaveLength(0);
+    expect(
+      await scanFiles({
+        "compose.yml": directoryCompose(),
+        "dynamic-other/routes.toml": tomlConfiguration(),
+      }),
+    ).toHaveLength(0);
+    expect(
+      await scanFiles({
+        "compose.yml": directoryCompose(
+          undefined,
+          undefined,
+          "./elsewhere:/etc/traefik/dynamic:ro",
+        ),
+        "dynamic/routes.toml": tomlConfiguration(),
+      }),
+    ).toHaveLength(0);
+    expect(
+      await scanFiles({
+        "compose.yml": directoryCompose().replace(
+          '      - "--providers.file.directory=/etc/traefik/dynamic"',
+          '      - "--providers.file.directory=/etc/traefik/dynamic"\n      - "--providers.file.filename=/etc/traefik/dynamic/routes.toml"',
+        ),
+        "dynamic/routes.toml": tomlConfiguration(),
+      }),
+    ).toHaveLength(0);
+    expect(
+      await scanFiles({
+        "compose.yml": directoryCompose(),
+        "dynamic/routes.txt": tomlConfiguration(),
+      }),
+    ).toHaveLength(0);
+    expect(
+      await scanFiles({
+        "compose.yml": directoryCompose(),
+        "dynamic/routes.toml": tomlConfiguration().replaceAll(
+          "@file",
+          "@docker",
+        ),
+      }),
     ).toHaveLength(0);
   });
 
