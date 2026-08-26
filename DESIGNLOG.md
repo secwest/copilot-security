@@ -108,6 +108,46 @@ serialized `provider`/`sourceUrl` value reaching iframe creation; a package-only
 rule would regress precision. Defer it until those two surfaces can be composed
 rather than shipping a membership alert.
 
+**Final acceptance evidence.** Exact implementation checkpoint
+`68df325d2ada7e688de5031918103c56599b2631` passes the rebuilt authoritative
+Windows Bun 1.3.14 suite with 1,687 passes, 25 intentional skips, zero failures,
+and 12,267 assertions across 186 files in 648.99 seconds. The focused WSL lane
+passes 40 tests and 2,005 assertions. The real 9.14.2/9.14.3 package witnesses
+pass on both hosts. Generated-model drift, formatting, TypeScript, the clean
+production build, and `pnpm audit --prod --audit-level high` are green.
+
+Two compiled inventories of a disposable archive of the exact checkpoint take
+28,020.143 and 14,915.281 ms and produce the same 256 rows, 533,915 bytes, and
+SHA-256 `a4a6365664b5e41d08b3085bc12f2f0d5e862f56a57334af3a8531704d1e6237`.
+Structured-first selection retains all 187 framework records ahead of 69
+lexical leads; 236 rows are fixture paths and 20 are not. Exactly one Intlify
+record remains: HTTP source
+`benchmarks/fixtures/node-multi-hop-intlify-flat-json-prototype-pollution/src/server.js:4`,
+sink `src/i18n.js:4`, CWE-1321, nine ordered import/call/parameter transitions,
+`vue-i18n@9.14.2:manifest-exact:create-i18n-messages`, and the independent
+`flatJson:true` proof. The source-identical 9.14.3 control is absent. The input
+is an immutable Git archive, so protected untracked workspace material is not
+part of either scan.
+
+Strict package inspection accepts 259 entries, 1,950,207 bytes, and SHA-256
+`a19c0f4f1f4431ff5b00106098f97d30e555c0dc43a2b0d23fd7ddf31dd6d214`;
+two isolated installations validate the public import, executable CLI, and all
+79 bundled plugin files. Windows builds the GUI without warnings or errors,
+passes 7/7 core and 3/3 shared tests, survives hidden startup, and publishes a
+346,796-byte executable with SHA-256
+`3586e31fd9ae7278db7d624b3dbc59faed4cbbf460a819ff889f99784dc9de7e`.
+Ubuntu/WSL builds without warnings or errors, passes 7/7 core, 3/3 shared, and
+2/2 Linux GUI tests, and passes non-graphical plus X11/Xvfb startup; its
+72,568-byte executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+All seven exact-source workflow families pass: Node `32928158512`, container
+`32928158506`, Windows GUI `32928158537`, Linux GUI `32928158521`, Java
+`32928158545`, .NET `32928158526`, and Go `32928158567`. GitHub reports the
+repository public on default branch `main`. The fixture dependency trees,
+research packages, package archive, isolated consumers, GUI publications,
+exact-commit archive, and self-scan outputs created for this increment are
+removed. This closes the increment, not the standing effectiveness goal.
+
 ## 2026-08-25 — Bind Rhinostone Swig traversal to loader root and template locals
 
 **Gap and primary evidence.** The reviewed

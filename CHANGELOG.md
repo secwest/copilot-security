@@ -52,6 +52,46 @@ messages })` initialization, and `setLocaleMessage` or `mergeLocaleMessage`
   directory ACLs instead of masking later recovery diagnostics with a generic
   unreadable-inventory error.
 
+### Validation and distribution
+
+- Exact implementation checkpoint
+  `68df325d2ada7e688de5031918103c56599b2631` passes the post-build Windows Bun
+  1.3.14 suite with 1,687 tests, 12,267 assertions, 25 intentional
+  platform/environment skips, and zero failures across 186 files in 648.99
+  seconds. The isolated recovery suite passes 83/83 tests and the new Windows
+  backend test passes its real verified-read/atomic-write/delete round trip.
+  The focused Ubuntu/WSL model, dataflow, and canonical benchmark lane passes
+  40 tests and 2,005 assertions, and both hosts reproduce the bounded
+  Vue I18n 9.14.2 prototype write and 9.14.3 rejection.
+- Two compiled inventories of a disposable archive of that exact checkpoint
+  complete in 28,020.143 and 14,915.281 ms and are byte-identical at 256 rows,
+  533,915 bytes, and SHA-256
+  `a4a6365664b5e41d08b3085bc12f2f0d5e862f56a57334af3a8531704d1e6237`.
+  All 187 structured rows survive ahead of 69 lexical leads. Exactly one
+  Intlify row retains request source `src/server.js:4`, transformer sink
+  `src/i18n.js:4`, CWE-1321, nine ordered wrapper transitions, exact
+  `vue-i18n@9.14.2:manifest-exact:create-i18n-messages` provenance, and the
+  `flatJson:true` configuration proof; the source-identical 9.14.3 control is
+  absent.
+- Generated-model drift, formatting, TypeScript, the production build, and the
+  production advisory audit are green. Strict inspection validates a
+  259-entry, 1,950,207-byte npm archive at SHA-256
+  `a19c0f4f1f4431ff5b00106098f97d30e555c0dc43a2b0d23fd7ddf31dd6d214`;
+  two isolated installs validate the public SDK import, CLI, and all 79 bundled
+  plugin files. Windows GUI core/shared tests pass 7/7 and 3/3, hidden startup
+  survives, and its 346,796-byte executable has SHA-256
+  `3586e31fd9ae7278db7d624b3dbc59faed4cbbf460a819ff889f99784dc9de7e`.
+  Ubuntu/WSL passes 7/7 core, 3/3 shared, and 2/2 Linux GUI tests plus both
+  startup modes; its 72,568-byte executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+  All seven exact-source workflow families pass: Node `32928158512`, container
+  `32928158506`, Windows GUI `32928158537`, Linux GUI `32928158521`, Java
+  `32928158545`, .NET `32928158526`, and Go `32928158567`. The repository is
+  public on default branch `main`, and all disposable acceptance artifacts are
+  removed.
+
+### Scanner effectiveness
+
 - Added `node-http-rhinostone-swig-template-path-traversal`, an exact
   provenance-, renderer-, loader-configuration-, template-, and locals-flow
   aware CWE-22 model for
