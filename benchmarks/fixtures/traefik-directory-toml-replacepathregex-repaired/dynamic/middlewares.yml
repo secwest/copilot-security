@@ -1,0 +1,9 @@
+http:
+  middlewares:
+    rewrite-api:
+      replacePathRegex:
+        regex: "^/api(.*)"
+        replacement: "/$1"
+    auth:
+      basicAuth:
+        users: ["benchmark:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/"]

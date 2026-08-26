@@ -289,12 +289,17 @@ proves the direct route is denied on both builds, and distinguishes affected
 route boundary under perfect three-run gates. The positive must retain the
 exact official affected image, file-provider mount, public separator-free
 rewrite, authenticated sibling, shared service and entry point, CWE-22,
-validation, attack-path analysis, code evidence, high severity, and exact
-`dynamic.yml:15` location. The control changes only 3.7.6 to 3.7.7 and must
-remain empty. The source-identical witness requires exact official binaries,
-binds Traefik and the inert backend only to ephemeral loopback ports, proves
-the direct route is denied, and distinguishes vulnerable marker forwarding
-from repaired rejection without a real credential or external service.
+validation, attack-path analysis, code evidence, high severity, and an exact
+sink location. Three source-identical exploit/control pairs cover a mounted
+YAML filename at `dynamic.yml:15`, operational Docker labels at
+`compose.yml:29`, and a mounted directory that merges TOML routers, YAML
+middlewares, and a TOML service at `dynamic/middlewares.yml:4`. Each control
+changes only 3.7.6 to 3.7.7 and must remain empty. The binary witnesses bind
+Traefik and the inert backend only to ephemeral loopback ports, prove the
+direct route is denied, and distinguish vulnerable marker forwarding from
+repaired rejection without a real credential or external service. The Docker
+label witness uses an isolated Compose project and cleans all project
+resources.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all

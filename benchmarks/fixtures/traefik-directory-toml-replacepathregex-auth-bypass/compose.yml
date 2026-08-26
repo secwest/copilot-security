@@ -1,0 +1,7 @@
+services:
+  proxy:
+    image: traefik:v3.7.6
+    command:
+      - "--providers.file.directory=/etc/traefik/dynamic"
+    volumes:
+      - "./dynamic:/etc/traefik/dynamic:ro"

@@ -14,7 +14,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   supported siblings, duplicate cross-file resource names, nested or adjacent
   paths, ambiguous filename/directory commands, unsupported extensions, and
   cross-provider references fail closed. The focused suite now passes 12 groups
-  and 135 assertions.
+  and 144 assertions. Added a third source-identical Traefik exploit/control
+  pair that changes only 3.7.6 to 3.7.7 while splitting TOML routers, YAML
+  middlewares, and a TOML service across one mounted directory. Its strict
+  specialized and canonical expectations require one high/CWE-22 finding at
+  `dynamic/middlewares.yml:4` and none on the repaired fixture. The corpus
+  advances to 132 pairs, 264 cases, and 792 scans; Windows and native Ubuntu/WSL
+  both pass the combined focused and canonical lane's 30 tests and 2,186
+  assertions. A real-binary WSL witness extracted the exact executables from
+  cached official image IDs
+  `21a3d8369637` and `1cb3845d7a05`: 3.7.6 kept direct HTTP 401, forwarded raw
+  `/../admin` to normalized `/admin`, and returned the inert marker with 200;
+  3.7.7 kept direct 401, returned 400, and recorded no crafted backend hit.
+  Both temporary binaries and extraction containers were removed.
 - Added a source-identical Docker-provider Traefik exploit/control pair that
   changes only the proxy image from 3.7.6 to 3.7.7. The operational Compose
   topology keeps the proxy entry point loopback-published, the inert backend

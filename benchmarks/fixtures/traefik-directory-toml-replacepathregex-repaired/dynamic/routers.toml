@@ -1,0 +1,11 @@
+[http.routers."public-api"]
+rule = "PathPrefix(`/api`)"
+entryPoints = ["web"]
+middlewares = ["rewrite-api@file"]
+service = "backend-svc@file"
+
+[http.routers."protected-admin"]
+rule = "PathPrefix(`/admin`)"
+entryPoints = ["web"]
+middlewares = ["auth@file"]
+service = "backend-svc@file"

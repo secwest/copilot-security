@@ -5510,6 +5510,45 @@
         "traefik-docker-label-replacepathregex-repaired/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "traefik-directory-toml-replacepathregex-auth-bypass",
+      "description": "Traefik 3.7.6 merges TOML routers, YAML middlewares, and a TOML service from one mounted file-provider directory.",
+      "fixture": "fixtures/traefik-directory-toml-replacepathregex-auth-bypass",
+      "findingsPaths": [
+        "traefik-directory-toml-replacepathregex-auth-bypass/run-1/findings.json",
+        "traefik-directory-toml-replacepathregex-auth-bypass/run-2/findings.json",
+        "traefik-directory-toml-replacepathregex-auth-bypass/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "traefik-replacepathregex-auth-bypass",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "dynamic/middlewares.yml",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "traefik-directory-toml-replacepathregex-repaired",
+      "description": "The source-identical split-directory control changes only Traefik to 3.7.7, which rejects the non-normalized replacement before proxying.",
+      "fixture": "fixtures/traefik-directory-toml-replacepathregex-repaired",
+      "findingsPaths": [
+        "traefik-directory-toml-replacepathregex-repaired/run-1/findings.json",
+        "traefik-directory-toml-replacepathregex-repaired/run-2/findings.json",
+        "traefik-directory-toml-replacepathregex-repaired/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

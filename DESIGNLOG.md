@@ -34,6 +34,28 @@ extension, or other provider suffix fails closed. This deliberately models the
 documented top-level directory contract without guessing recursive discovery or
 Traefik's runtime conflict resolution.
 
+**Directory/TOML benchmark and runtime evidence.** Add a third strict
+source-identical pair whose only operational difference is the exact official
+Traefik image changing from 3.7.6 to 3.7.7. The mounted directory splits TOML
+routers, YAML middlewares, and a TOML service, and its specialized and canonical
+contracts require one high/CWE-22 row at `dynamic/middlewares.yml:4` on the
+affected case and none on the control. This advances the canonical corpus to
+132 pairs, 264 cases, and 792 scans. The benchmark witness copies those three
+committed routing files to a fresh temporary directory, replaces only the inert
+backend's ephemeral loopback port, verifies the exact binary version, and
+removes the directory and processes in `finally`.
+
+On WSL, executables extracted from cached official image IDs
+`sha256:21a3d8369637` (3.7.6) and `sha256:1cb3845d7a05` (3.7.7) have binary
+SHA-256 values `53316b78f05303b2f5bf7fb6d69972a05404d825fb88cce4eb7c5d1f111c35cd`
+and `d928a4ecb24a4bf5e7432d0ad75dbeb93238d2be6759cde564cbe98782acf553`.
+The affected binary denies direct `/admin` with 401, forwards crafted
+`/api../admin` as raw `/../admin`, reaches the backend-normalized `/admin`
+marker, and returns 200. The repaired binary keeps direct 401, returns 400, and
+records no crafted backend hit. The exact temporary extraction directory and
+containers are absent after cleanup. Windows and native Ubuntu/WSL both pass
+the resulting 30-test focused/canonical lane with 2,186 assertions.
+
 **Initial topology decision.** Do not report an affected image or rewrite
 alone. Bind an exact official Compose image to `--providers.file.filename`, a
 matching non-traversing mounted dynamic file, one public router with exactly

@@ -232,6 +232,16 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
       "fixtures",
       "traefik-docker-label-replacepathregex-repaired",
     );
+    const directoryAffectedRoot = join(
+      benchmarkRoot,
+      "fixtures",
+      "traefik-directory-toml-replacepathregex-auth-bypass",
+    );
+    const directoryRepairedRoot = join(
+      benchmarkRoot,
+      "fixtures",
+      "traefik-directory-toml-replacepathregex-repaired",
+    );
     const affectedCompose = await readFile(
       join(affectedRoot, "compose.yml"),
       "utf8",
@@ -262,6 +272,27 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
         await readFile(join(dockerRepairedRoot, path), "utf8"),
       );
     }
+    const directoryAffectedCompose = await readFile(
+      join(directoryAffectedRoot, "compose.yml"),
+      "utf8",
+    );
+    const directoryRepairedCompose = await readFile(
+      join(directoryRepairedRoot, "compose.yml"),
+      "utf8",
+    );
+    expect(directoryAffectedCompose.replace("3.7.6", "3.7.7")).toBe(
+      directoryRepairedCompose,
+    );
+    for (const path of [
+      "dynamic/routers.toml",
+      "dynamic/middlewares.yml",
+      "dynamic/services.toml",
+      "src/witness.mjs",
+    ]) {
+      expect(await readFile(join(directoryAffectedRoot, path), "utf8")).toBe(
+        await readFile(join(directoryRepairedRoot, path), "utf8"),
+      );
+    }
 
     const affected = records(await buildResidualRiskInventory(affectedRoot));
     expect(affected).toHaveLength(1);
@@ -286,6 +317,30 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
       32,
     );
     expect(dockerAffected[0]?.frameworkModel?.propagators.at(-1)?.line).toBe(3);
+    const directoryAffected = records(
+      await buildResidualRiskInventory(directoryAffectedRoot),
+    );
+    expect(directoryAffected).toHaveLength(1);
+    expect(
+      records(await buildResidualRiskInventory(directoryRepairedRoot)),
+    ).toHaveLength(0);
+    expect(directoryAffected[0]?.path).toBe("dynamic/middlewares.yml");
+    expect(directoryAffected[0]?.line).toBe(4);
+    expect(directoryAffected[0]?.frameworkModel?.source).toEqual({
+      kind: "public-traefik-prefix-router",
+      path: "dynamic/routers.toml",
+      line: 1,
+      symbol: "public-api",
+    });
+    expect(directoryAffected[0]?.frameworkModel?.propagators.at(-2)).toEqual({
+      kind: "mounted-file-provider-directory",
+      path: "compose.yml",
+      line: 3,
+      symbol: "dynamic",
+    });
+    expect(directoryAffected[0]?.frameworkModel?.propagators.at(-1)?.line).toBe(
+      3,
+    );
 
     const manifest = JSON.parse(
       await readFile(
@@ -301,11 +356,15 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
       "traefik-replacepathregex-repaired",
       "traefik-docker-label-replacepathregex-auth-bypass",
       "traefik-docker-label-replacepathregex-repaired",
+      "traefik-directory-toml-replacepathregex-auth-bypass",
+      "traefik-directory-toml-replacepathregex-repaired",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
     expect(manifest.cases[2]?.expected).toHaveLength(1);
     expect(manifest.cases[3]?.expected).toEqual([]);
+    expect(manifest.cases[4]?.expected).toHaveLength(1);
+    expect(manifest.cases[5]?.expected).toEqual([]);
     expect(manifest.thresholds["precision"]).toBe(1);
     expect(manifest.thresholds["recall"]).toBe(1);
     expect(manifest.thresholds["maxFalsePositives"]).toBe(0);
@@ -827,6 +886,10 @@ url = "http://backend:3000"
     expect(prompt).toContain("GHSA-cxjq-mrr5-89rv");
     expect(prompt).toContain("v3.6.0 through 3.6.22");
     expect(prompt).toContain("Docker provider");
+    expect(prompt).toContain("--providers.file.directory");
+    expect(prompt).toContain("YAML or TOML");
+    expect(prompt).toContain("immediate top-level");
+    expect(prompt).toContain("malformed supported sibling");
     expect(prompt).toContain("exposedByDefault");
     expect(prompt).toContain("/api../protected");
     expect(prompt).toContain("loopback-only processes");
@@ -855,5 +918,21 @@ url = "http://backend:3000"
       "127.0.0.1:${TRAEFIK_BENCHMARK_PORT:-18080}:8080",
     );
     expect(dockerFixtureCompose).not.toContain("0.0.0.0:");
+    const directoryWitness = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        "traefik-directory-toml-replacepathregex-auth-bypass",
+        "src/witness.mjs",
+      ),
+      "utf8",
+    );
+    expect(directoryWitness).toContain("--providers.file.directory=");
+    expect(directoryWitness).toContain(
+      '["routers.toml", "middlewares.yml", "services.toml"]',
+    );
+    expect(directoryWitness).toContain('server.listen(0, "127.0.0.1"');
+    expect(directoryWitness).toContain("await rm(root");
+    expect(directoryWitness).not.toContain("0.0.0.0");
   });
 });
