@@ -2157,8 +2157,12 @@ workspace, and bounded loopback gzip-tar witness while changing only Nx 22.7.6
 to 22.7.7. The affected release writes one inert sentinel beyond its per-hash
 cache directory but still inside the disposable root; the repaired release
 contains or rejects identical bytes. Each of the 254 cases in 127
-exploit/control pairs is scanned three times, producing 762 scans that measure
-both accuracy and model variance.
+exploit/control pairs is scanned three times. The Undici SOCKS5 pair then keeps
+one remote first origin, later credentialed origin, shared agent, and bounded
+three-listener loopback witness constant while changing only Undici 7.27.2 to
+7.28.0. The affected release sends both requests to the first origin; the
+repaired release uses one pool per origin. The complete 128-pair, 256-case
+corpus produces 768 scans that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses
 keyword-mode findings that could not reach the modeled loader branch.

@@ -440,6 +440,10 @@ describe("effectiveness benchmark", () => {
         "node-nx-self-hosted-cache-archive-contained",
       ],
       [
+        "node-undici-socks5-cross-origin-routing",
+        "node-undici-socks5-per-origin-pools",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

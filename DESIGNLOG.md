@@ -2,6 +2,55 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — Bind Undici SOCKS5 pool identity to request origin
+
+**Gap and primary evidence.** The official
+[`GHSA-hm92-r4w5-c3mj / CVE-2026-6734`](https://github.com/nodejs/undici/security/advisories/GHSA-hm92-r4w5-c3mj)
+rates this origin-validation defect high and assigns CWE-346. Undici 7.23.0
+through 7.27.x and 8.0.0 through 8.1.x kept one `Socks5ProxyAgent` pool created
+for the first request origin and reused it for later origins. Request headers,
+credentials, and response trust could therefore cross the intended origin
+boundary. Official commit
+[`3805b8f8`](https://github.com/nodejs/undici/commit/3805b8f8) replaces the
+single pool with a map keyed by origin; 7.28.0 and 8.2.0 contain the repair.
+Authenticated current-source searches found no `Socks5ProxyAgent`, advisory,
+or CVE match in `github/codeql` or `semgrep/semgrep-rules`.
+
+**Reachability and precision decision.** Do not report package membership or a
+SOCKS5 agent alone. Require one stable official agent, a request-controlled
+first destination, and a later request or fetch through that same explicit or
+global dispatcher with a nonempty standard `Authorization`, `Cookie`, or
+`Proxy-Authorization` header. Preserve request order and exact stable affected
+production provenance. Reject repaired and prerelease versions, dev-only or
+unproved dependencies, fixed first destinations, custom headers, reversed
+order, separate or reassigned agents, overwritten global dispatchers, local
+lookalikes, and test/example paths. This is deliberately narrower than generic
+proxy or SSRF detection: it proves the cross-origin pool topology that activates
+the package defect.
+
+**Validation and impact discipline.** The source-identical pair changes only
+Undici 7.27.2 to 7.28.0. Its witness creates two ephemeral loopback HTTP
+origins and one minimal loopback-only SOCKS5 proxy. The first request drains its
+body before a second request carries one inert authorization marker. On 7.27.2,
+origin A receives both paths and the marker while origin B receives none; on
+7.28.0, each origin receives its intended request. The witness closes the agent
+and all listeners in `finally`, opens no external connection, and uses no real
+credential. A report must separately establish actual credential scope,
+attacker control of the first origin or proxy, TLS and `requestTls` behavior,
+pool lifetime, and the downstream response consumer before claiming theft,
+downgrade, or response compromise.
+
+**Benchmark contract.** The strict pair requires high severity, exact line-7
+sink location, CWE-346, validation, attack-path analysis, code evidence,
+stability, and zero false positives. Focused regressions cover both affected
+branches, fixed/prerelease edges, exact and modern-lock provenance, named,
+aliased, namespace, and CommonJS bindings, explicit and global dispatch,
+request order, standard credentials, shared-agent identity, reassignment,
+lookalikes, source identity, and correction-prompt discipline. The pair advances
+the canonical corpus to 128 exploit/control pairs, 256 cases, and 768 repeated
+scans. Full scanner, package, desktop, Linux/WSL, self-scan, and hosted acceptance
+follow the implementation checkpoint.
+
 ## 2026-08-26 — Bind Nx archive risk to a self-hosted cache read path
 
 **Gap and primary evidence.** The official

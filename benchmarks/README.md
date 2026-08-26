@@ -245,8 +245,12 @@ pair then preserves its operational CI configuration, task, workspace, and
 loopback-only gzip-tar witness while changing only Nx 22.7.6 to 22.7.7. The
 affected release writes an inert sentinel outside its per-hash cache directory
 but inside the disposable root; the repaired release does not. Three runs per
-case now produce 762 scans across 127 exploit/control pairs in the complete
-corpus. The added
+case are also applied to the Undici SOCKS5 pair, which keeps a remote first
+origin, later credentialed origin, shared agent, and bounded loopback witness
+constant while changing only 7.27.2 to 7.28.0. The affected build routes both
+requests to the first origin; the repaired build creates one pool per origin.
+The complete corpus now produces 768 scans across 128 exploit/control pairs.
+The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size

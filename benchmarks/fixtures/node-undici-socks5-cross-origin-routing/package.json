@@ -1,0 +1,11 @@
+{
+  "name": "node-undici-socks5-cross-origin-routing",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "undici": "7.27.2"
+  }
+}

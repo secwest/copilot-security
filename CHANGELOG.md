@@ -6,6 +6,26 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-undici-socks5-cross-origin-routing` for
+  [GHSA-hm92-r4w5-c3mj / CVE-2026-6734](https://github.com/nodejs/undici/security/advisories/GHSA-hm92-r4w5-c3mj).
+  The model requires one official stable `Socks5ProxyAgent`, a request-controlled
+  first destination, a later standard credential-bearing request through the
+  same explicit or global dispatcher, correct call ordering, stable bindings,
+  and exact affected production provenance in Undici 7.23.0 through 7.27.x or
+  8.0.0 through 8.1.x. Repaired/prerelease versions, development-only or stale
+  metadata, fixed first destinations, missing or custom headers, separate or
+  reassigned agents, overwritten global dispatchers, local lookalikes, and
+  tests/examples fail closed.
+- Added source-identical Undici 7.27.2/7.28.0 fixtures, exact npm locks, a
+  strict specialized manifest, canonical registration, field-local correction
+  guidance, and adversarial regressions across both release windows, modern
+  lock proof, named/aliased/namespace/CommonJS bindings, explicit and global
+  dispatch, ordering, credentials, agent identity, mutation, and provenance.
+  A bounded real-package differential uses two loopback HTTP origins, one
+  loopback-only SOCKS5 proxy, and an inert authorization marker: 7.27.2 sends
+  both requests to the first origin, while 7.28.0 sends the second request to
+  its intended origin. The canonical corpus advances to 128 exploit/control
+  pairs, 256 cases, and 768 repeated scans.
 - Added `node-nx-self-hosted-cache-archive-escape`, an operational
   configuration-, task-execution-, provider-, and exact build-dependency model
   for

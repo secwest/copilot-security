@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Undici SOCKS5 per-origin pool boundary",
+  "description": "Measures reachable GHSA-hm92-r4w5-c3mj cross-origin routing through one shared Socks5ProxyAgent while keeping the source-identical 7.28.0 repair negative.",
+  "thresholds": {
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "locationAccuracy": 1,
+    "severityAccuracy": 1,
+    "validationRate": 1,
+    "attackPathRate": 1,
+    "codeEvidenceRate": 1,
+    "stabilityRate": 1,
+    "maxFalsePositives": 0,
+    "maxFalseNegatives": 0,
+    "maxNondeterministicFindings": 0,
+    "maxLocationMismatch": 0
+  },
+  "cases": [
+    {
+      "id": "node-undici-socks5-cross-origin-routing",
+      "description": "A request-controlled first origin primes an affected shared Undici SOCKS5 pool before a later credentialed billing request.",
+      "fixture": "fixtures/node-undici-socks5-cross-origin-routing",
+      "findingsPaths": [
+        "node-undici-socks5-cross-origin-routing/run-1/findings.json",
+        "node-undici-socks5-cross-origin-routing/run-2/findings.json",
+        "node-undici-socks5-cross-origin-routing/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-undici-socks5-cross-origin-routing",
+          "cwe": ["CWE-346"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-undici-socks5-per-origin-pools",
+      "description": "The source-identical control changes only Undici to 7.28.0, which uses a distinct pool for each request origin.",
+      "fixture": "fixtures/node-undici-socks5-per-origin-pools",
+      "findingsPaths": [
+        "node-undici-socks5-per-origin-pools/run-1/findings.json",
+        "node-undici-socks5-per-origin-pools/run-2/findings.json",
+        "node-undici-socks5-per-origin-pools/run-3/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

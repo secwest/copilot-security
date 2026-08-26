@@ -1,0 +1,11 @@
+{
+  "name": "node-undici-socks5-per-origin-pools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "undici": "7.28.0"
+  }
+}

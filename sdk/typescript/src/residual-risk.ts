@@ -3957,6 +3957,14 @@ const NX_SELF_HOSTED_CACHE_ARCHIVE_ESCAPE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-22", "CWE-59", "arbitrary file write"],
 ] as const;
 
+const UNDICI_SOCKS5_CROSS_ORIGIN_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Socks5ProxyAgent", "shared SOCKS5 agent"],
+  ["first origin", "remote first destination"],
+  ["later origin", "later credentialed destination"],
+  ["Authorization", "credential-bearing request"],
+  ["undici@", "affected runtime dependency"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -4100,6 +4108,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
         NX_SELF_HOSTED_CACHE_ARCHIVE_ESCAPE_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
+  [
+    "node-undici-socks5-cross-origin-routing",
+    {
+      validation: UNDICI_SOCKS5_CROSS_ORIGIN_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: UNDICI_SOCKS5_CROSS_ORIGIN_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
 ]);
 
 export async function buildResidualRiskInventory(
@@ -4223,6 +4238,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
   records.push(...nodePickemTerminalInjectionRecords(sourceFiles));
   records.push(...nodeNxSelfHostedCacheArchiveEscapeRecords(sourceFiles));
+  records.push(...nodeUndiciSocks5CrossOriginRoutingRecords(sourceFiles));
   records.push(...nodeAuthJsConfigurationErrorFailOpenRecords(sourceFiles));
   records.push(...nodeKeystoneNegativeTakeBypassRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
@@ -25047,6 +25063,400 @@ function nodeNxSelfHostedCacheArchiveEscapeRecord(
       candidateControls: [],
     },
   };
+}
+
+interface NodeUndiciAgentBinding {
+  local: string;
+  line: number;
+  constructor: string;
+}
+
+interface NodeUndiciRequestUse {
+  file: SourceFileSnapshot;
+  line: number;
+  operation: "fetch" | "request";
+  target: string;
+  options: string;
+}
+
+function nodeUndiciSocks5VersionIsCrossOriginVulnerable(
+  version: string,
+): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version);
+  if (match === null) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return (
+    (major === 7 && minor >= 23 && minor < 28) || (major === 8 && minor < 2)
+  );
+}
+
+function nodeUndiciOfficialExpressions(lines: readonly string[]): {
+  constructors: Array<{
+    expression: string;
+    protections: NodeShescapeBindingProtection[];
+  }>;
+  requests: Array<{
+    expression: string;
+    operation: "fetch" | "request";
+    protections: NodeShescapeBindingProtection[];
+  }>;
+  setters: Array<{
+    expression: string;
+    protections: NodeShescapeBindingProtection[];
+  }>;
+} {
+  const constructors: Array<{
+    expression: string;
+    protections: NodeShescapeBindingProtection[];
+  }> = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "undici" &&
+        binding.imported === "Socks5ProxyAgent",
+    )
+    .map((binding) => ({
+      expression: binding.local,
+      protections: [{ local: binding.local, line: binding.line }],
+    }));
+  const requests: Array<{
+    expression: string;
+    operation: "fetch" | "request";
+    protections: NodeShescapeBindingProtection[];
+  }> = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "undici" &&
+        (binding.imported === "fetch" || binding.imported === "request"),
+    )
+    .map((binding) => ({
+      expression: binding.local,
+      operation: binding.imported as "fetch" | "request",
+      protections: [{ local: binding.local, line: binding.line }],
+    }));
+  const setters: Array<{
+    expression: string;
+    protections: NodeShescapeBindingProtection[];
+  }> = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "undici" &&
+        binding.imported === "setGlobalDispatcher",
+    )
+    .map((binding) => ({
+      expression: binding.local,
+      protections: [{ local: binding.local, line: binding.line }],
+    }));
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const line = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']undici["']/u.exec(
+        line,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']undici["']\s*\)/u.exec(
+        line,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']undici["']\s*\)/u.exec(
+        line,
+      );
+    if (receiver === null) continue;
+    const local = receiver[1]!;
+    const lineNumber = index + 1;
+    constructors.push({
+      expression: `${local}\\s*\\.\\s*Socks5ProxyAgent`,
+      protections: [
+        { local, line: lineNumber },
+        { local, line: lineNumber, member: "Socks5ProxyAgent" },
+      ],
+    });
+    requests.push(
+      {
+        expression: `${local}\\s*\\.\\s*fetch`,
+        operation: "fetch",
+        protections: [
+          { local, line: lineNumber },
+          { local, line: lineNumber, member: "fetch" },
+        ],
+      },
+      {
+        expression: `${local}\\s*\\.\\s*request`,
+        operation: "request",
+        protections: [
+          { local, line: lineNumber },
+          { local, line: lineNumber, member: "request" },
+        ],
+      },
+    );
+    setters.push({
+      expression: `${local}\\s*\\.\\s*setGlobalDispatcher`,
+      protections: [
+        { local, line: lineNumber },
+        { local, line: lineNumber, member: "setGlobalDispatcher" },
+      ],
+    });
+  }
+  return { constructors, requests, setters };
+}
+
+function nodeUndiciResolvedExpression(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): string {
+  return (
+    resolveJavascriptExpression(lines, expression, line)?.value ?? expression
+  );
+}
+
+function nodeUndiciRemoteTarget(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): boolean {
+  const value = nodeUndiciResolvedExpression(lines, expression, line);
+  return /\b(?:req|request)\s*(?:\.|\[)\s*(?:body|cookies|headers|params|query)\b|\bctx\s*\.\s*(?:headers|params|query|request\s*\.\s*body)\b|\b(?:searchParams|nextUrl\s*\.\s*searchParams)\s*\.\s*(?:get|getAll)\s*\(/iu.test(
+    value,
+  );
+}
+
+function nodeUndiciCredentialedOptions(options: string): boolean {
+  return /(?:^|[,{]\s*)(?:["']?(?:authorization|cookie|proxy-authorization)["']?)\s*:\s*(?!["']{2}|false\b|null\b|undefined\b)[^,}]+/iu.test(
+    options,
+  );
+}
+
+function nodeUndiciSocks5CrossOriginRoutingRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  for (const file of files) {
+    if (
+      javascriptTestOrExamplePath(file.path) ||
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      !file.text.includes("Socks5ProxyAgent")
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "undici");
+    if (
+      dependency === undefined ||
+      !nodeUndiciSocks5VersionIsCrossOriginVulnerable(dependency.version)
+    ) {
+      continue;
+    }
+    const official = nodeUndiciOfficialExpressions(file.lines);
+    if (official.constructors.length === 0 || official.requests.length === 0) {
+      continue;
+    }
+    const structural = javascriptStructuralLines(file.lines);
+    const agents: NodeUndiciAgentBinding[] = [];
+    for (let index = 0; index < structural.length; index += 1) {
+      for (const constructor of official.constructors) {
+        const declaration = new RegExp(
+          `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*new\\s+${constructor.expression}\\s*\\(`,
+          "u",
+        ).exec(structural[index] ?? "");
+        if (
+          declaration !== null &&
+          nodePackageBindingUsable(
+            file.lines,
+            constructor.protections,
+            index + 1,
+          )
+        ) {
+          agents.push({
+            local: declaration[1]!,
+            line: index + 1,
+            constructor: constructor.expression,
+          });
+        }
+      }
+    }
+    for (const agent of agents) {
+      const uses: NodeUndiciRequestUse[] = [];
+      const globalAssignments: Array<{ line: number; dispatcher: string }> = [];
+      for (let index = agent.line; index < structural.length; index += 1) {
+        for (const setter of official.setters) {
+          if (
+            !nodePackageBindingUsable(file.lines, setter.protections, index + 1)
+          ) {
+            continue;
+          }
+          const callee = new RegExp(`\\b${setter.expression}\\s*\\(`, "u");
+          if (!callee.test(structural[index] ?? "")) continue;
+          const arguments_ = javascriptCallArgumentsAtLine(
+            file.lines,
+            index + 1,
+            callee,
+          );
+          const dispatcher = arguments_?.[0]?.trim();
+          if (dispatcher !== undefined) {
+            globalAssignments.push({ line: index + 1, dispatcher });
+          }
+        }
+      }
+      for (let index = agent.line; index < structural.length; index += 1) {
+        if (
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            agent.local,
+            agent.line,
+            index + 2,
+          )
+        ) {
+          break;
+        }
+        for (const request of official.requests) {
+          if (
+            !nodePackageBindingUsable(
+              file.lines,
+              request.protections,
+              index + 1,
+            )
+          ) {
+            continue;
+          }
+          const callee = new RegExp(`\\b${request.expression}\\s*\\(`, "u");
+          if (!callee.test(structural[index] ?? "")) continue;
+          const arguments_ = javascriptCallArgumentsAtLine(
+            file.lines,
+            index + 1,
+            callee,
+          );
+          if (arguments_ === undefined || arguments_.length < 1) continue;
+          const options = nodeUndiciResolvedExpression(
+            file.lines,
+            arguments_[1] ?? "{}",
+            index + 1,
+          );
+          const explicitDispatcher = javascriptObjectPropertyValue(
+            options,
+            "dispatcher",
+          )?.trim();
+          const activeGlobal = globalAssignments
+            .filter((assignment) => assignment.line < index + 1)
+            .at(-1)?.dispatcher;
+          if (
+            explicitDispatcher !== agent.local &&
+            !(explicitDispatcher === undefined && activeGlobal === agent.local)
+          ) {
+            continue;
+          }
+          uses.push({
+            file,
+            line: index + 1,
+            operation: request.operation,
+            target: arguments_[0]?.trim() ?? "",
+            options,
+          });
+        }
+      }
+      const first = uses.find((use) =>
+        nodeUndiciRemoteTarget(file.lines, use.target, use.line),
+      );
+      const later = uses.find(
+        (use) =>
+          first !== undefined &&
+          use.line > first.line &&
+          nodeUndiciCredentialedOptions(use.options),
+      );
+      if (first === undefined || later === undefined) continue;
+      const startLine = Math.max(1, later.line - CONTEXT_LINES_BEFORE);
+      const endLine = Math.min(
+        file.lines.length,
+        later.line + CONTEXT_LINES_AFTER,
+      );
+      const sourceStart = Math.max(1, first.line - CONTEXT_LINES_BEFORE);
+      const sourceEnd = Math.min(
+        file.lines.length,
+        first.line + CONTEXT_LINES_AFTER,
+      );
+      records.push({
+        path: file.path,
+        line: later.line,
+        categories: [
+          "framework-dataflow:node-undici-socks5-cross-origin-routing",
+          "modeled-source:remote-first-socks5-origin",
+          "modeled-sink:credentialed-later-socks5-origin",
+          "broken-control:single-cross-origin-socks5-pool",
+        ],
+        priority: 125,
+        startLine,
+        endLine,
+        excerpt: sourceExcerpt(file.lines, startLine, endLine),
+        sourceExcerpt: sourceExcerpt(file.lines, sourceStart, sourceEnd),
+        frameworkModel: {
+          schemaVersion: "1.2",
+          id: "node-undici-socks5-cross-origin-routing",
+          language: "javascript-typescript",
+          scope: "same-file",
+          source: {
+            kind: "remote-first-socks5-origin",
+            path: file.path,
+            line: first.line,
+          },
+          sink: {
+            kind:
+              dependency.proof === "npm-lockfile"
+                ? "lock-resolved-credentialed-later-socks5-origin"
+                : "credentialed-later-socks5-origin",
+            path: file.path,
+            line: later.line,
+            cweIds: ["CWE-346"],
+          },
+          propagators: [
+            {
+              kind: "shared-undici-socks5-agent",
+              path: file.path,
+              line: agent.line,
+              symbol: agent.local,
+            },
+            ...(() => {
+              const activation = globalAssignments
+                .filter(
+                  (assignment) =>
+                    assignment.line < first.line &&
+                    assignment.dispatcher === agent.local,
+                )
+                .at(-1);
+              return activation === undefined
+                ? []
+                : [
+                    {
+                      kind: "undici-global-dispatcher-activation",
+                      path: file.path,
+                      line: activation.line,
+                      symbol: agent.local,
+                    },
+                  ];
+            })(),
+            {
+              kind: "remote-first-socks5-origin",
+              path: file.path,
+              line: first.line,
+              symbol: first.operation,
+            },
+            {
+              kind: "credentialed-later-socks5-origin",
+              path: file.path,
+              line: later.line,
+              symbol: later.operation,
+            },
+            {
+              kind: "undici-runtime-dependency",
+              path: dependency.manifestPath,
+              line: dependency.line,
+              symbol: `undici@${dependency.version}:${dependency.proof}:single-cross-origin-socks5-pool`,
+            },
+          ],
+          candidateControls: [],
+        },
+      });
+      if (records.length >= MAX_FRAMEWORK_MULTI_HOP_RECORDS) return records;
+    }
+  }
+  return records;
 }
 
 interface NodeAuthJsFactoryBinding {
