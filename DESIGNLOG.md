@@ -20,6 +20,19 @@ creating an evidence-free retry commit. A dispatched job must still execute
 the complete package, core, desktop, headless GUI, publish, and artifact checks;
 the control does not waive or shorten acceptance.
 
+**Hosted result.** Manual Linux run `32986968743` acquired a runner and passed
+every step in 2m30s, including package inspection, shared core and desktop
+tests, headless GUI tests, self-contained publication, non-graphical and X11
+startup, archive assembly, and artifact retention. A fresh manual container run
+(`32987171001`) then acquired a runner and passed its hardened build-context,
+image, bundled-scanner, Compose, noninteractive-discovery, and host-scoped
+credential checks in 2m16s. Together with green Node (`32985953331`), Go
+(`32986015950`), .NET (`32986478961`), Java (`32986478963`), and Windows GUI
+(`32986479000`) runs on the exact scanner implementation, all seven hosted
+acceptance lanes have executed successfully. The retry-control commit changes
+workflow and documentation only, so it does not alter the accepted LogTape
+model, benchmark fixtures, or product package.
+
 ## 2026-08-26 — LogTape syslog structured-data injection
 
 **Gap and primary evidence.** The official

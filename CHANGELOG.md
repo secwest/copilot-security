@@ -60,6 +60,16 @@ All notable scanner, application, benchmark, and operational changes are recorde
   fixture topology while the source-identical 2.1.5 control remains absent.
   Package, self-scan, and real-runtime dependency artifacts were removed after
   verification.
+- Completed the hosted acceptance matrix for the LogTape scanner checkpoint.
+  Node (`32985953331`), Go (`32986015950`), .NET (`32986478961`), Java
+  (`32986478963`), and Windows GUI (`32986479000`) passed on the exact
+  implementation commit. The retry-control commit changes no scanner or
+  fixture source; its manually dispatched Linux GUI run (`32986968743`) passed
+  all package, core, desktop, headless, publish, non-graphical/X11 startup, and
+  artifact checks in 2m30s, while container run `32987171001` passed all
+  customer-context, image, bundled-scanner, hardened Compose, discovery, and
+  credential checks in 2m16s. The superseded Linux and container attempts
+  executed zero steps and are classified only as runner allocation failures.
 - Extended the Traefik file-provider model from one YAML filename to exact
   YAML or TOML filename and directory configurations. Directory providers bind
   an exact Compose mount and merge routers, middlewares, and services from
