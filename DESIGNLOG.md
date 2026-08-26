@@ -48,8 +48,61 @@ aliased, namespace, and CommonJS bindings, explicit and global dispatch,
 request order, standard credentials, shared-agent identity, reassignment,
 lookalikes, source identity, and correction-prompt discipline. The pair advances
 the canonical corpus to 128 exploit/control pairs, 256 cases, and 768 repeated
-scans. Full scanner, package, desktop, Linux/WSL, self-scan, and hosted acceptance
-follow the implementation checkpoint.
+scans.
+
+**Full scanner and distribution acceptance.** Exact implementation checkpoint
+`52be9d450c769eed259c0d41671f6d87bc0adf3f`, authored and committed by
+`Dragos Ruiu <dr@secwest.net>`, passes the nine-test focused lane with 43
+assertions. The adjacent Windows model/framework/canonical lane records 115
+passes, one intentional platform skip, and 3,177 assertions; Ubuntu/WSL records
+116 passes and 3,178 assertions. Both platforms reproduce the real affected and
+repaired witness outcomes. The complete Windows Bun aggregate records 1,740
+passes, 25 intentional platform/environment skips, and 12,692 assertions across
+1,767 tests and 193 files in 606.70 seconds. Its only two failures are the known
+managed child-Git sandbox and private Windows ACL boundaries. Their exact native
+rerun passes 2/2 tests and seven assertions. Generated-model drift, repository
+formatting, TypeScript, the clean production build, and the production advisory
+audit all pass.
+
+Strict inspection accepts a 259-entry, 2,039,028-byte npm archive with SHA-256
+`17a47234b38c77e3f51e7b4f00c53b709bcb0350e1e3544f5301c213ce44f47d`.
+Fresh Windows and Ubuntu consumers add 67 and 75 packages and validate the
+public SDK import, executable CLI, and all 79 bundled plugin files. Windows
+builds with zero warnings or errors, passes 7/7 core and 3/3 shared tests,
+survives bounded hidden startup, and publishes a 346,796-byte executable with
+SHA-256
+`a6630a86308d4b50dcb29856f7c870fab8483a7fa17471206cfbe8867390c939`.
+Ubuntu/WSL performs locked restores, builds with zero warnings or errors, passes
+7/7 core, 3/3 shared, and 2/2 Linux UI tests, and passes non-graphical plus real
+X11/Xvfb startup. Its self-contained 72,568-byte executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+
+**Exact-commit self-review and hosted closure.** Two production-build
+inventories of a tracked-only `git archive` of the implementation checkpoint
+complete in 31,036.171 and 15,682.558 ms. They emit 256 byte-identical rows
+totaling 542,005 bytes with SHA-256
+`5e8e323fb7907fa3a4922a93399b3f9ec6255d01406444d2d425cd1806a348ab`.
+All 192 structured records survive ahead of 64 lexical leads; 241 rows are
+fixture paths and 15 are not. Exactly one Undici record remains. It binds the
+remote first request at
+`benchmarks/fixtures/node-undici-socks5-cross-origin-routing/src/server.js:6`
+to the credentialed later request at line 7, retains CWE-346 and the ordered
+shared-agent, first-origin, credentialed-origin, and dependency transitions,
+and proves
+`undici@7.27.2:manifest-exact:single-cross-origin-socks5-pool` from
+`package.json:9`. The source-identical 7.28.0 control emits no row.
+
+All seven exact-checkpoint workflows pass: [Node `32960600167`](https://github.com/secwest/copilot-security/actions/runs/32960600167),
+[Windows GUI `32960600187`](https://github.com/secwest/copilot-security/actions/runs/32960600187),
+[Linux GUI `32960600250`](https://github.com/secwest/copilot-security/actions/runs/32960600250),
+[container `32960600218`](https://github.com/secwest/copilot-security/actions/runs/32960600218),
+[Go `32960600249`](https://github.com/secwest/copilot-security/actions/runs/32960600249),
+[Java `32960600146`](https://github.com/secwest/copilot-security/actions/runs/32960600146),
+and [.NET `32960600220`](https://github.com/secwest/copilot-security/actions/runs/32960600220).
+The immutable archive excludes both protected untracked paths by construction.
+Npm, GUI, exact-commit tree, and inventory artifacts are removed after their
+hashes are recorded. This closes the Undici increment, not the standing
+scanner-effectiveness goal.
 
 ## 2026-08-26 — Bind Nx archive risk to a self-hosted cache read path
 
