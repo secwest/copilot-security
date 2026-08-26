@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8" />
+<textarea id="editor"></textarea>
+<pre id="result">pending</pre>
+<script src="./node_modules/suneditor/dist/suneditor.min.js"></script>
+<script src="./node_modules/suneditor/src/langs/en.js"></script>
+<script>
+  (async () => {
+    try {
+      const editor = SUNEDITOR.create("#editor", {
+        lang: SUNEDITOR_LANG.en,
+        plugins: SUNEDITOR.plugins,
+        buttonList: [["embed"]],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const plugin = editor.$?.plugins?.embed;
+      const port = new URL(location.href).searchParams.get("port");
+      const payload = `<iframe src="https://www.youtube.com/embed/inert"></iframe><script src="http://127.0.0.1:${port}/payload.js"><\/script>`;
+      const submitted = await plugin.submitSRC(payload);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const metrics = await (await fetch("/metrics")).json();
+      document.querySelector("#result").textContent = JSON.stringify({
+        editor: Boolean(editor),
+        plugin: Boolean(plugin),
+        submitSRC: typeof plugin?.submitSRC,
+        submitted,
+        requestCount: metrics.requestCount,
+        sentinel: globalThis.__suneditorInertSentinel || 0,
+      });
+    } catch (error) {
+      document.querySelector("#result").textContent = JSON.stringify({
+        error: String(error),
+        stack: error?.stack,
+        pluginKeys: Object.keys(SUNEDITOR.plugins || {}),
+        embedType: typeof SUNEDITOR.plugins?.embed,
+      });
+    }
+  })();
+</script>

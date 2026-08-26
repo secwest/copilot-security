@@ -440,6 +440,10 @@ describe("effectiveness benchmark", () => {
         "node-logtape-syslog-structured-data-escaped",
       ],
       [
+        "node-suneditor-embed-external-script-xss",
+        "node-suneditor-embed-external-script-blocked",
+      ],
+      [
         "node-nx-self-hosted-cache-archive-escape",
         "node-nx-self-hosted-cache-archive-contained",
       ],

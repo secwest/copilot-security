@@ -6,6 +6,32 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-suneditor-embed-external-script-xss`, an exact production model
+  for
+  [GHSA-w93q-cq9w-58p7 / CVE-2026-54606](https://github.com/advisories/GHSA-w93q-cq9w-58p7).
+  It requires SunEditor through affected 3.1.3, an official stable create
+  binding, an official Embed binding keyed as `embed` in the real plugin object
+  or the complete official aggregate, a literal embed toolbar entry, and remote
+  request content at the initial editor value or stable instance's
+  `setContents` boundary. Exact 3.1.4+, prereleases, unlocked ranges,
+  development-only or wrong packages, invalid plugin arrays, disconnected or
+  missing plugins/buttons, trusted content, unrelated remote options,
+  unexported entry points, lookalikes, and reassigned bindings, members, or
+  editor instances fail closed. Seven focused tests and 55 assertions cover
+  affected boundaries, fresh npm v3 lock proof, five official import families,
+  both content boundaries, and adversarial controls.
+- Added a source-identical SunEditor 3.1.3/3.1.4 benchmark pair with exact npm
+  locks, high/CWE-79 ground truth at `src/editor.js:5`, and perfect three-run
+  evidence gates. The corpus advances to 134 pairs, 268 cases, and 804 scans;
+  the specialized plus canonical lane passes 25 tests and 2,105 assertions on
+  both Windows and native Ubuntu/WSL. Exact installed-package checks report the
+  3.1.4 default-deny script gate only in the repaired build. A disposable Edge
+  differential binds a random `127.0.0.1` port and submits identical inert
+  iframe-plus-script bytes through the official initialized Embed instance:
+  3.1.3 returns submitted=true, requests the loopback script once, and sets the
+  in-memory sentinel once; 3.1.4 returns submitted=false, makes zero script
+  requests, and leaves the sentinel unset. Generated installs, browser
+  profiles, and capture files were removed after verification.
 - Added `node-logtape-syslog-structured-data-injection`, an exact
   production-provenance model for
   [GHSA-8h6h-x5pq-56fq / CVE-2026-54511](https://github.com/dahlia/logtape/security/advisories/GHSA-8h6h-x5pq-56fq).

@@ -3960,6 +3960,20 @@ const LOGTAPE_SYSLOG_INJECTION_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-93", "CWE-117", "log injection"],
 ] as const;
 
+const SUNEDITOR_EMBED_XSS_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["GHSA-w93q-cq9w-58p7", "CVE-2026-54606", "SunEditor Embed"],
+  ["suneditor 3.1.3", "suneditor@3.1.3", "affected release"],
+  ["official SunEditor create binding", "SUNEDITOR.create"],
+  ["official embed plugin", "suneditor/plugins", "modal/embed"],
+  ["plugins option", "embed enabled", "embed toolbar button"],
+  ["stored editor content", "remote request body", "setContents"],
+  ["iframe sibling script", "external script src", "live DOM append"],
+  ["loopback script endpoint", "inert browser sentinel", "request count"],
+  ["3.1.4", "scriptSrcWhitelist", "repaired control"],
+  ["backend HTML sanitizer", "CSP", "trusted embed providers"],
+  ["CWE-79", "stored cross-site scripting", "DOM XSS"],
+] as const;
+
 const NX_SELF_HOSTED_CACHE_ARCHIVE_ESCAPE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["GHSA-vp3h-ghgh-jr7g", "CVE-2026-71476", "Nx remote cache"],
   ["NX_SELF_HOSTED_REMOTE_CACHE_SERVER", "self-hosted HTTP cache"],
@@ -4165,6 +4179,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     },
   ],
   [
+    "node-suneditor-embed-external-script-xss",
+    {
+      validation: SUNEDITOR_EMBED_XSS_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: SUNEDITOR_EMBED_XSS_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
     "node-nx-self-hosted-cache-archive-escape",
     {
       validation:
@@ -4319,6 +4340,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
   records.push(...nodePickemTerminalInjectionRecords(sourceFiles));
   records.push(...nodeLogtapeSyslogInjectionRecords(sourceFiles));
+  records.push(...nodeSunEditorEmbedXssRecords(sourceFiles));
   records.push(...nodeNxSelfHostedCacheArchiveEscapeRecords(sourceFiles));
   records.push(...nodeUndiciSocks5CrossOriginRoutingRecords(sourceFiles));
   records.push(...nodeAuthJsConfigurationErrorFailOpenRecords(sourceFiles));
@@ -25398,6 +25420,470 @@ function nodeLogtapeSyslogInjectionRecords(
                 path: dependency.manifestPath,
                 line: dependency.line,
                 symbol: `@logtape/syslog@${dependency.version}:${dependency.proof}:unescaped-structured-data`,
+              },
+            ],
+            candidateControls: [],
+          },
+        });
+        if (records.length >= MAX_FRAMEWORK_MULTI_HOP_RECORDS) return records;
+      }
+    }
+  }
+  return records;
+}
+
+interface NodeSunEditorBinding {
+  line: number;
+  local: string;
+  member: "create" | "embed" | undefined;
+}
+
+interface NodeSunEditorRemoteContent {
+  kind: string;
+  line: number;
+  symbol: string;
+}
+
+function nodeSunEditorVersionHasEmbedXss(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return (
+    major < 3 || (major === 3 && (minor < 1 || (minor === 1 && patch < 4)))
+  );
+}
+
+function nodeSunEditorBindingPattern(binding: NodeSunEditorBinding): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.member === undefined
+    ? local
+    : `${local}\\s*\\.\\s*${binding.member}`;
+}
+
+function nodeSunEditorBindings(
+  lines: readonly string[],
+  kind: "create" | "embed",
+): NodeSunEditorBinding[] {
+  const bindings: NodeSunEditorBinding[] = [];
+  const aggregatePlugin =
+    /^suneditor\/(?:plugins|src\/plugins(?:\/index(?:\.js)?)?)$/u;
+  const directEmbed = /^suneditor\/src\/plugins\/modal\/embed(?:\.js)?$/u;
+  if (kind === "create") {
+    bindings.push(
+      ...importedJavascriptSymbols(lines)
+        .filter(
+          (binding) =>
+            binding.moduleSpecifier === "suneditor" &&
+            binding.imported === "create",
+        )
+        .map((binding) => ({
+          line: binding.line,
+          local: binding.local,
+          member: undefined,
+        })),
+    );
+  } else {
+    bindings.push(
+      ...importedJavascriptSymbols(lines)
+        .filter(
+          (binding) =>
+            aggregatePlugin.test(binding.moduleSpecifier) &&
+            binding.imported === "embed",
+        )
+        .map((binding) => ({
+          line: binding.line,
+          local: binding.local,
+          member: undefined,
+        })),
+    );
+  }
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    if (kind === "create") {
+      const receiver =
+        /^\s*import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s+["']suneditor["']/u.exec(
+          code,
+        ) ??
+        /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']suneditor["']\s*\)/u.exec(
+          code,
+        ) ??
+        /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']suneditor["']\s*\)\s*;?\s*$/u.exec(
+          code,
+        );
+      if (receiver?.[1] !== undefined) {
+        bindings.push({
+          line: index + 1,
+          local: receiver[1],
+          member: "create",
+        });
+      }
+      const direct =
+        /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']suneditor["']\s*\)\s*\.\s*create\s*;?\s*$/u.exec(
+          code,
+        ) ??
+        /^\s*(?:const|let|var)\s*\{\s*create(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*\}\s*=\s*require\s*\(\s*["']suneditor["']\s*\)/u.exec(
+          code,
+        );
+      if (direct !== null) {
+        bindings.push({
+          line: index + 1,
+          local: direct[1] ?? "create",
+          member: undefined,
+        });
+      }
+      continue;
+    }
+    const defaultImport =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["'](suneditor\/(?:plugins|src\/plugins(?:\/index(?:\.js)?)?)|suneditor\/src\/plugins\/modal\/embed(?:\.js)?)["']/u.exec(
+        code,
+      );
+    if (defaultImport?.[1] !== undefined && defaultImport[2] !== undefined) {
+      bindings.push({
+        line: index + 1,
+        local: defaultImport[1],
+        member: directEmbed.test(defaultImport[2]) ? undefined : "embed",
+      });
+    }
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["'](suneditor\/(?:plugins|src\/plugins(?:\/index(?:\.js)?)?))["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["'](suneditor\/(?:plugins|src\/plugins(?:\/index(?:\.js)?)?))["']\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["'](suneditor\/(?:plugins|src\/plugins(?:\/index(?:\.js)?)?))["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      bindings.push({ line: index + 1, local: receiver[1], member: "embed" });
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']suneditor\/src\/plugins\/modal\/embed(?:\.js)?["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']suneditor\/(?:plugins|src\/plugins(?:\/index(?:\.js)?)?)["']\s*\)\s*\.\s*embed\s*;?\s*$/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s*\{\s*embed(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*\}\s*=\s*require\s*\(\s*["']suneditor\/(?:plugins|src\/plugins(?:\/index(?:\.js)?)?)["']\s*\)/u.exec(
+        code,
+      );
+    if (direct !== null) {
+      bindings.push({
+        line: index + 1,
+        local: direct[1] ?? "embed",
+        member: undefined,
+      });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.line === binding.line &&
+          candidate.local === binding.local &&
+          candidate.member === binding.member,
+      ) === index,
+  );
+}
+
+function nodeSunEditorBindingUsable(
+  lines: readonly string[],
+  binding: NodeSunEditorBinding,
+  useLine: number,
+  route: ExportedJavascriptFunction,
+): boolean {
+  if (
+    binding.line >= useLine ||
+    route.parameters.includes(binding.local) ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      useLine + 1,
+    )
+  ) {
+    return false;
+  }
+  if (binding.member === undefined) return true;
+  const access = nodeSunEditorBindingPattern(binding);
+  return !javascriptStructuralLines(lines)
+    .slice(binding.line, Math.max(binding.line, useLine - 1))
+    .some((line) =>
+      new RegExp(
+        `\\b${access}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+        "u",
+      ).test(line),
+    );
+}
+
+function nodeSunEditorPluginsContainBinding(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  binding: NodeSunEditorBinding,
+): boolean {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return false;
+  const access = new RegExp(`^${nodeSunEditorBindingPattern(binding)}$`, "u");
+  if (binding.member === "embed" && resolved.value.trim() === binding.local) {
+    return true;
+  }
+  return javascriptObjectEntries(resolved).some(
+    (entry) => entry.key === "embed" && access.test(entry.value.trim()),
+  );
+}
+
+function nodeSunEditorHasEmbedButton(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  depth = 0,
+): boolean {
+  if (depth > 5) return false;
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return false;
+  return javascriptArrayEntries(resolved).some((entry) => {
+    if (/^["']embed["']$/u.test(entry.value.trim())) return true;
+    return nodeSunEditorHasEmbedButton(
+      lines,
+      entry.value,
+      entry.line,
+      depth + 1,
+    );
+  });
+}
+
+function nodeSunEditorRemoteContent(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  route: ExportedJavascriptFunction,
+): NodeSunEditorRemoteContent | undefined {
+  return nodeLogtapeRemoteExpression(lines, expression, line, route.parameters);
+}
+
+function nodeSunEditorEmbedXssRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !file.text.includes("suneditor") ||
+      !file.text.includes("embed")
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "suneditor");
+    if (
+      dependency === undefined ||
+      !nodeSunEditorVersionHasEmbedXss(dependency.version)
+    ) {
+      continue;
+    }
+    const createBindings = nodeSunEditorBindings(file.lines, "create");
+    const embedBindings = nodeSunEditorBindings(file.lines, "embed");
+    const routes = exportedJavascriptFunctions(file.lines);
+    const structural = javascriptStructuralLines(file.lines);
+    for (const createBinding of createBindings) {
+      const createAccess = nodeSunEditorBindingPattern(createBinding);
+      const createCall = new RegExp(`\\b${createAccess}\\s*\\(`, "u");
+      for (
+        let index = createBinding.line;
+        index < structural.length;
+        index += 1
+      ) {
+        const line = index + 1;
+        if (!createCall.test(structural[index] ?? "")) continue;
+        const route = routes.find(
+          (candidate) =>
+            line >= candidate.startLine && line <= candidate.endLine,
+        );
+        if (
+          route === undefined ||
+          !nodeSunEditorBindingUsable(file.lines, createBinding, line, route)
+        ) {
+          continue;
+        }
+        const arguments_ = javascriptCallArgumentsAtLine(
+          file.lines,
+          line,
+          createCall,
+        );
+        const optionsExpression = arguments_?.[1];
+        if (optionsExpression === undefined) continue;
+        const options = resolveJavascriptExpression(
+          file.lines,
+          optionsExpression,
+          line,
+        );
+        if (options === undefined) continue;
+        const optionEntries = javascriptObjectEntries(options);
+        const plugins = optionEntries.find((entry) => entry.key === "plugins");
+        const buttons = optionEntries.find(
+          (entry) => entry.key === "buttonList",
+        );
+        if (plugins === undefined || buttons === undefined) continue;
+        const embedBinding = embedBindings.find(
+          (binding) =>
+            nodeSunEditorBindingUsable(file.lines, binding, line, route) &&
+            nodeSunEditorPluginsContainBinding(
+              file.lines,
+              plugins.value,
+              plugins.line,
+              binding,
+            ),
+        );
+        if (
+          embedBinding === undefined ||
+          !nodeSunEditorHasEmbedButton(file.lines, buttons.value, buttons.line)
+        ) {
+          continue;
+        }
+        let sinkLine = line;
+        let source: NodeSunEditorRemoteContent | undefined;
+        let boundary = "initial-editor-value";
+        const value = optionEntries.find((entry) => entry.key === "value");
+        if (value !== undefined) {
+          source = nodeSunEditorRemoteContent(
+            file.lines,
+            value.value,
+            value.line,
+            route,
+          );
+        }
+        if (source === undefined) {
+          const assignment = new RegExp(
+            `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${createAccess}\\s*\\(`,
+            "u",
+          ).exec(structural[index] ?? "");
+          const editor = assignment?.[1];
+          if (editor !== undefined) {
+            const setContents = new RegExp(
+              `\\b${escapeRegularExpression(editor)}\\s*\\.\\s*setContents\\s*\\(`,
+              "u",
+            );
+            for (
+              let useIndex = index + 1;
+              useIndex < Math.min(structural.length, route.endLine);
+              useIndex += 1
+            ) {
+              const useLine = useIndex + 1;
+              if (!setContents.test(structural[useIndex] ?? "")) continue;
+              if (
+                javascriptIdentifierReassignedBetween(
+                  file.lines,
+                  editor,
+                  line,
+                  useLine + 1,
+                )
+              ) {
+                break;
+              }
+              const setArguments = javascriptCallArgumentsAtLine(
+                file.lines,
+                useLine,
+                setContents,
+              );
+              const candidate = setArguments?.[0];
+              if (candidate === undefined) continue;
+              source = nodeSunEditorRemoteContent(
+                file.lines,
+                candidate,
+                useLine,
+                route,
+              );
+              if (source !== undefined) {
+                sinkLine = useLine;
+                boundary = "setContents";
+                break;
+              }
+            }
+          }
+        }
+        if (source === undefined) continue;
+        const key = `${file.path}\0${source.line}\0${line}\0${sinkLine}`;
+        if (emitted.has(key)) continue;
+        emitted.add(key);
+        const prefix =
+          dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+        const sinkKind = `${prefix}vulnerable-suneditor-embed-external-script-dom-append`;
+        const startLine = Math.max(1, sinkLine - CONTEXT_LINES_BEFORE);
+        const endLine = Math.min(
+          file.lines.length,
+          sinkLine + CONTEXT_LINES_AFTER,
+        );
+        const sourceStart = Math.max(1, source.line - CONTEXT_LINES_BEFORE);
+        records.push({
+          path: file.path,
+          line: sinkLine,
+          categories: [
+            "framework-dataflow:node-suneditor-embed-external-script-xss",
+            `modeled-source:${source.kind}`,
+            `modeled-sink:${sinkKind}`,
+            "broken-control:embed-script-recreated-in-live-dom",
+          ],
+          priority: 127,
+          startLine,
+          endLine,
+          excerpt: sourceExcerpt(file.lines, startLine, endLine),
+          sourceExcerpt: sourceExcerpt(
+            file.lines,
+            sourceStart,
+            Math.min(file.lines.length, sinkLine + CONTEXT_LINES_AFTER),
+          ),
+          frameworkModel: {
+            schemaVersion: "1.2",
+            id: "node-suneditor-embed-external-script-xss",
+            language: "javascript-typescript",
+            scope: "same-file",
+            source: {
+              kind: source.kind,
+              path: file.path,
+              line: source.line,
+            },
+            sink: {
+              kind: sinkKind,
+              path: file.path,
+              line: sinkLine,
+              cweIds: ["CWE-79"],
+            },
+            propagators: [
+              {
+                kind: "remote-stored-editor-content",
+                path: file.path,
+                line: source.line,
+                symbol: `${source.symbol}->${boundary}`,
+              },
+              {
+                kind: "official-suneditor-create-binding",
+                path: file.path,
+                line: createBinding.line,
+                symbol: createBinding.local,
+              },
+              {
+                kind: "enabled-suneditor-embed-plugin",
+                path: file.path,
+                line: plugins.line,
+                symbol: nodeSunEditorBindingPattern(embedBinding),
+              },
+              {
+                kind: "enabled-suneditor-embed-button",
+                path: file.path,
+                line: buttons.line,
+                symbol: "buttonList:embed",
+              },
+              {
+                kind: "suneditor-runtime-dependency",
+                path: dependency.manifestPath,
+                line: dependency.line,
+                symbol: `suneditor@${dependency.version}:${dependency.proof}:unrestricted-embed-script-src`,
               },
             ],
             candidateControls: [],

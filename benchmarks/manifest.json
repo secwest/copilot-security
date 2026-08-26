@@ -5588,6 +5588,45 @@
         "node-logtape-syslog-structured-data-escaped/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-suneditor-embed-external-script-xss",
+      "description": "Remote stored HTML reaches an affected SunEditor 3.1.3 editor with the official Embed plugin and toolbar entry enabled.",
+      "fixture": "fixtures/node-suneditor-embed-external-script-xss",
+      "findingsPaths": [
+        "node-suneditor-embed-external-script-xss/run-1/findings.json",
+        "node-suneditor-embed-external-script-xss/run-2/findings.json",
+        "node-suneditor-embed-external-script-xss/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-suneditor-embed-external-script-xss",
+          "cwe": ["CWE-79"],
+          "locations": [
+            {
+              "path": "src/editor.js",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-suneditor-embed-external-script-blocked",
+      "description": "The source-identical control changes only SunEditor to 3.1.4, which rejects raw embed scripts by default and gates explicitly trusted sources.",
+      "fixture": "fixtures/node-suneditor-embed-external-script-blocked",
+      "findingsPaths": [
+        "node-suneditor-embed-external-script-blocked/run-1/findings.json",
+        "node-suneditor-embed-external-script-blocked/run-2/findings.json",
+        "node-suneditor-embed-external-script-blocked/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

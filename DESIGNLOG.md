@@ -2,6 +2,49 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — SunEditor Embed external-script DOM XSS
+
+**Gap and primary evidence.** The official
+[`GHSA-w93q-cq9w-58p7`](https://github.com/advisories/GHSA-w93q-cq9w-58p7)
+describes high-severity CVE-2026-54606 (CVSS 4.0 8.5, CWE-79): SunEditor through
+3.1.3 accepts raw embed HTML beginning with an iframe or blockquote, recreates a
+later external script with its attacker-controlled `src`, and appends it to the
+live editor DOM. The official
+[`9d43a5e` repair](https://github.com/JiHong88/suneditor/commit/9d43a5e082101d2d6475cba86e0d58d7c2cf6677)
+validates every raw iframe URL and adds a default-empty `scriptSrcWhitelist`;
+3.1.4 therefore drops every script unless the application explicitly trusts
+its source. Authenticated searches of the official CodeQL and Semgrep rule
+repositories found no SunEditor- or advisory-specific coverage.
+
+**Reachability decision.** Require an exact affected runtime dependency or a
+fresh declaration-consistent npm v2/v3 lock; official stable SunEditor create
+and Embed bindings; the Embed constructor keyed as `embed` in the plugin object
+or the complete official aggregate from `suneditor/plugins`; a literal embed
+toolbar entry; an exported entry point; and remote request content in the
+initial `value` or a later `setContents` call on the stable created instance.
+Accept supported named aliases, aggregate receivers, direct modal imports,
+TypeScript import-equals, and CommonJS receivers/direct members/destructuring.
+Fail closed on the array shape that the live 3.x constructor does not register,
+plugin or button absence, unrelated remote options, trusted content, repaired
+or prerelease versions, development-only or wrong packages, unlocked ranges,
+lookalikes, tests/examples, and reassigned bindings, members, or instances.
+The live-package check exposed and corrected the initially assumed array shape
+before commit, preventing an executable-looking but invalid benchmark topology.
+
+**Evidence and safe validation.** The source-identical 3.1.3/3.1.4 pair uses
+exact locks and adds one high/CWE-79 ground-truth finding. Seven focused tests
+and 55 assertions cover the model; the specialized plus canonical lane passes
+25 tests and 2,105 assertions on Windows and native Ubuntu/WSL. The committed
+non-executing witness reports the installed default-deny gate only for 3.1.4.
+For the real differential, a disposable Edge profile loads each exact package
+from a random loopback-only HTTP server and invokes the initialized official
+Embed instance with identical inert iframe-plus-script bytes. Version 3.1.3
+submits, requests the loopback script once, and increments the in-memory
+sentinel once. Version 3.1.4 rejects before append, requests zero scripts, and
+leaves the sentinel at zero. No alert, external script host, navigation,
+persistent write, credential, or real application content is used. Generated
+installs and all temporary browser/capture artifacts are removed afterward.
+
 ## 2026-08-26 — Retryable hosted Linux acceptance
 
 **Failure classification.** The Linux GUI acceptance run for implementation
