@@ -28,6 +28,42 @@ All notable scanner, application, benchmark, and operational changes are recorde
   published 0.19.0 emits one inert sentinel `onerror` attribute, while 0.19.1
   emits none. It never executes the attribute. The canonical corpus advances
   to 125 exploit/control pairs, 250 cases, and 750 repeated scans.
+- Exact implementation checkpoint
+  `06f0bf086733736034beecb40cc0803d0995972b` passes the complete Windows
+  Bun aggregate with 1,714 passes, 25 intentional skips, 12,472 assertions,
+  and two managed-sandbox-only failures across 1,741 tests and 190 files in
+  646.06 seconds. Exact native reruns of those child-Git and private-ACL
+  boundaries pass 2/2 tests and seven assertions. The focused Defuddle,
+  framework-dataflow, framework-model, and canonical lane passes 42 tests and
+  2,090 assertions on both Windows and Ubuntu/WSL. Both hosts reproduce the
+  real 0.19.0 event-attribute output and 0.19.1 rejection without network
+  access. Generated-model drift, formatting, TypeScript, clean build, and the
+  production advisory audit are green.
+- Strict inspection accepts a 259-entry, 1,988,285-byte npm archive with
+  SHA-256
+  `ee7da1d952126f48ca904ff1ebaa4dc02e8d11bb4ea8017e719879c379d74355`;
+  two isolated installs validate the public SDK import, executable CLI, and
+  all 79 bundled plugin files. Windows builds without warnings or errors,
+  passes 7/7 core and 3/3 shared tests plus hidden startup, and publishes a
+  346,796-byte executable with SHA-256
+  `a2f51604757dd0902bf85bb198f00f60cb9d862052ddd5e5bc412edac6d2a689`.
+  Ubuntu/WSL performs locked restores, builds without warnings or errors,
+  passes 7/7 core, 3/3 shared, and 2/2 Linux interface tests plus non-graphical
+  and Xvfb startup, and publishes a 72,568-byte executable with SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- Two compiled inventories of a private tracked-only archive complete in
+  31,714.436 and 15,632.411 ms and produce 256 byte-identical rows, 538,362
+  bytes, and SHA-256
+  `51e79e65326112417c41f24e25766c192dfdf1a6a608d368481c4617f2d9f313`.
+  They retain 189 structured records, 240 fixture rows, and exactly one
+  Defuddle path from request-body source line 4 through the official wrapper
+  and parser to HTML sink line 7 with exact
+  `defuddle@0.19.0:manifest-exact:unsanitized-site-extractor-output`
+  provenance; the 0.19.1 control is absent. All seven exact-checkpoint hosted
+  workflows pass: Node `32948233605`, Windows GUI `32948233653`, Linux GUI
+  `32948233656`, container `32948233728`, Go `32948233597`, Java
+  `32948233723`, and .NET `32948233914`. The repository remains public on
+  default branch `main`, and all generated acceptance artifacts are removed.
 
 - Added `node-plate-media-embed-metadata-xss`, an exact provenance-,
   component-registration-, parser-, provider-gate-, iframe-, and cross-file

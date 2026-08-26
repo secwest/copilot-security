@@ -58,9 +58,51 @@ and zero false positives. Focused tests cover the executable pair, modern lock
 proof, official binding families, three remote-source forms, four output
 boundaries, affected/fixed version and metadata edges, an adversarial matrix of
 incomplete or controlled flows, source identity, and correction-prompt
-discipline. The pair
-advances the canonical corpus to 125 exploit/control pairs, 250 cases, and 750
-repeated scans.
+discipline. The pair advances the canonical corpus to 125 exploit/control
+pairs, 250 cases, and 750 repeated scans.
+
+**Acceptance evidence.** Exact implementation checkpoint
+`06f0bf086733736034beecb40cc0803d0995972b`, authored and committed by
+`Dragos Ruiu <dr@secwest.net>`, exercises all 1,741 Windows Bun cases: 1,714
+pass, 25 intentional platform/environment cases skip, and only two cases fail
+at managed child-Git and private Windows ACL host boundaries. The unchanged
+native reruns pass those 2/2 tests and seven assertions; the aggregate records
+12,472 assertions across 190 files in 646.06 seconds. Windows and native
+Ubuntu/WSL each pass the 42-test, 2,090-assertion Defuddle/framework/canonical
+lane and reproduce the real 0.19.0 event-handler attribute versus the 0.19.1
+rejection without opening a listener or performing a network request.
+Generated-model drift, formatting, TypeScript, clean production build, and
+`pnpm audit --prod --audit-level high` are green.
+
+Strict inspection validates a 259-entry, 1,988,285-byte npm archive with
+SHA-256
+`ee7da1d952126f48ca904ff1ebaa4dc02e8d11bb4ea8017e719879c379d74355`;
+two fresh consumers validate the public SDK import, CLI, and all 79 bundled
+plugin files. Windows builds without warnings or errors, passes 7/7 core and
+3/3 shared tests, survives hidden startup, and publishes a 346,796-byte
+executable with SHA-256
+`a2f51604757dd0902bf85bb198f00f60cb9d862052ddd5e5bc412edac6d2a689`.
+Ubuntu/WSL performs locked restores, builds without warnings or errors, passes
+7/7 core, 3/3 shared, and 2/2 Linux interface tests, and passes non-graphical
+plus X11/Xvfb startup. Its self-contained 72,568-byte executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+
+Two production-build scans of a private tracked-only archive of the exact
+checkpoint complete in 31,714.436 and 15,632.411 ms. They emit 256
+byte-identical rows totaling 538,362 bytes with SHA-256
+`51e79e65326112417c41f24e25766c192dfdf1a6a608d368481c4617f2d9f313`;
+189 rows are structured, 240 are fixture paths, and 16 are not. Exactly one
+Defuddle row survives: request-body source line 4 reaches wrapper call line 6,
+the official parser at `src/extract-article.js:4`, returned `content`, and the
+line-7 HTML response, with CWE-79 and exact
+`defuddle@0.19.0:manifest-exact:unsanitized-site-extractor-output` proof. The
+source-identical 0.19.1 control emits no row. All seven hosted workflow
+families pass at the checkpoint: Node `32948233605`, Windows GUI
+`32948233653`, Linux GUI `32948233656`, container `32948233728`, Go
+`32948233597`, Java `32948233723`, and .NET `32948233914`. GitHub reports the
+repository public on default branch `main`; package, GUI, witness, and
+tracked-archive acceptance artifacts are removed. This closes the Defuddle
+increment, not the standing scanner-effectiveness goal.
 
 ## 2026-08-26 — Bind Plate media metadata trust to a reachable iframe path
 
