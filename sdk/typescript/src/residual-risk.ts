@@ -3946,6 +3946,20 @@ const PICKEM_TERMINAL_INJECTION_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-150", "terminal control-sequence injection"],
 ] as const;
 
+const LOGTAPE_SYSLOG_INJECTION_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["GHSA-8h6h-x5pq-56fq", "CVE-2026-54511", "LogTape syslog"],
+  ["@logtape/syslog", "exact runtime dependency", "affected release"],
+  ["getSyslogSink", "official binding", "includeStructuredData: true"],
+  ["configure", "connected sink", "matching logger category"],
+  ["remote record property", "structured-data value", "structured-data key"],
+  ["C0 control character", "newline", "forged RFC 5424 record"],
+  ["UDP capture", "TCP capture", "inert forged-record marker"],
+  ["1.3.11", "2.0.14", "2.1.5", "repaired control"],
+  ["invalid SD-NAME", "#NNN escaping", "1-32 printable ASCII"],
+  ["includeStructuredData false", "message-only data", "negative control"],
+  ["CWE-93", "CWE-117", "log injection"],
+] as const;
+
 const NX_SELF_HOSTED_CACHE_ARCHIVE_ESCAPE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["GHSA-vp3h-ghgh-jr7g", "CVE-2026-71476", "Nx remote cache"],
   ["NX_SELF_HOSTED_REMOTE_CACHE_SERVER", "self-hosted HTTP cache"],
@@ -4144,6 +4158,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     },
   ],
   [
+    "node-logtape-syslog-structured-data-injection",
+    {
+      validation: LOGTAPE_SYSLOG_INJECTION_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: LOGTAPE_SYSLOG_INJECTION_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
     "node-nx-self-hosted-cache-archive-escape",
     {
       validation:
@@ -4297,6 +4318,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
   records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
   records.push(...nodePickemTerminalInjectionRecords(sourceFiles));
+  records.push(...nodeLogtapeSyslogInjectionRecords(sourceFiles));
   records.push(...nodeNxSelfHostedCacheArchiveEscapeRecords(sourceFiles));
   records.push(...nodeUndiciSocks5CrossOriginRoutingRecords(sourceFiles));
   records.push(...nodeAuthJsConfigurationErrorFailOpenRecords(sourceFiles));
@@ -24664,6 +24686,702 @@ function nodePickemTerminalInjectionRecords(
                 path: dependency.manifestPath,
                 line: dependency.line,
                 symbol: `pickem@${dependency.version}:${dependency.proof}:unsanitized-terminal-display`,
+              },
+            ],
+            candidateControls: [],
+          },
+        });
+        if (records.length >= MAX_FRAMEWORK_MULTI_HOP_RECORDS) return records;
+      }
+    }
+  }
+  return records;
+}
+
+type NodeLogtapeFunction = "configure" | "getLogger" | "getSyslogSink";
+
+interface NodeLogtapeBinding {
+  function: NodeLogtapeFunction;
+  line: number;
+  local: string;
+  receiver: boolean;
+}
+
+interface NodeLogtapeStructuredSink {
+  binding: NodeLogtapeBinding;
+  line: number;
+  variable?: string;
+}
+
+interface NodeLogtapeTopology {
+  configureBinding: NodeLogtapeBinding;
+  configureLine: number;
+  configuredCategory: readonly string[];
+  sink: NodeLogtapeStructuredSink;
+  sinkName: string;
+}
+
+interface NodeLogtapeLogger {
+  binding: NodeLogtapeBinding;
+  category: readonly string[];
+  line: number;
+  local: string;
+  topology: NodeLogtapeTopology;
+}
+
+interface NodeLogtapeRemoteProperty {
+  boundary: "structured-data-key" | "structured-data-value";
+  kind: string;
+  line: number;
+  symbol: string;
+}
+
+function nodeLogtapeVersionHasSyslogInjection(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number);
+  if (major === undefined || minor === undefined || patch === undefined) {
+    return false;
+  }
+  return (
+    major < 1 ||
+    (major === 1 && (minor < 3 || (minor === 3 && patch < 11))) ||
+    (major === 2 && minor === 0 && patch < 14) ||
+    (major === 2 && minor === 1 && patch < 5)
+  );
+}
+
+function nodeLogtapeBindingPattern(binding: NodeLogtapeBinding): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.receiver ? `${local}\\s*\\.\\s*${binding.function}` : local;
+}
+
+function nodeLogtapeBindings(
+  lines: readonly string[],
+  moduleSpecifier: "@logtape/logtape" | "@logtape/syslog",
+  functionName: NodeLogtapeFunction,
+): NodeLogtapeBinding[] {
+  const bindings: NodeLogtapeBinding[] = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === moduleSpecifier &&
+        binding.imported === functionName,
+    )
+    .map((binding) => ({
+      function: functionName,
+      line: binding.line,
+      local: binding.local,
+      receiver: false,
+    }));
+  const escapedModule = escapeRegularExpression(moduleSpecifier);
+  const escapedFunction = escapeRegularExpression(functionName);
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      new RegExp(
+        `^\\s*import\\s+\\*\\s+as\\s+([A-Za-z_$][\\w$]*)\\s+from\\s+["']${escapedModule}["']`,
+        "u",
+      ).exec(code) ??
+      new RegExp(
+        `^\\s*import\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']${escapedModule}["']\\s*\\)`,
+        "u",
+      ).exec(code) ??
+      new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']${escapedModule}["']\\s*\\)\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+    if (receiver?.[1] !== undefined) {
+      bindings.push({
+        function: functionName,
+        line: index + 1,
+        local: receiver[1],
+        receiver: true,
+      });
+    }
+    const direct = new RegExp(
+      `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']${escapedModule}["']\\s*\\)\\s*\\.\\s*${escapedFunction}\\s*;?\\s*$`,
+      "u",
+    ).exec(code);
+    if (direct?.[1] !== undefined) {
+      bindings.push({
+        function: functionName,
+        line: index + 1,
+        local: direct[1],
+        receiver: false,
+      });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.function === binding.function &&
+          candidate.line === binding.line &&
+          candidate.local === binding.local &&
+          candidate.receiver === binding.receiver,
+      ) === index,
+  );
+}
+
+function nodeLogtapeBindingUsable(
+  lines: readonly string[],
+  binding: NodeLogtapeBinding,
+  useLine: number,
+  route?: ExportedJavascriptFunction,
+): boolean {
+  if (
+    binding.line >= useLine ||
+    route?.parameters.includes(binding.local) === true ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      useLine + 1,
+    )
+  ) {
+    return false;
+  }
+  if (!binding.receiver) return true;
+  const access = nodeLogtapeBindingPattern(binding);
+  return !javascriptStructuralLines(lines)
+    .slice(binding.line, Math.max(binding.line, useLine - 1))
+    .some((line) =>
+      new RegExp(
+        `\\b${access}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+        "u",
+      ).test(line),
+    );
+}
+
+function nodeLogtapeLiteralStrings(
+  expression: JavascriptResolvedExpression,
+): string[] | undefined {
+  const array = javascriptCompositePrefix(expression.value, "[", "]");
+  if (
+    array === undefined ||
+    expression.value
+      .slice(expression.value.indexOf(array) + array.length)
+      .trim() !== ""
+  ) {
+    return undefined;
+  }
+  const entries = javascriptDelimitedEntries(array.slice(1, -1));
+  const values: string[] = [];
+  for (const entry of entries) {
+    const literal = /^\s*["']([^"']*)["']\s*$/u.exec(entry.value);
+    if (literal?.[1] === undefined) return undefined;
+    values.push(literal[1]);
+  }
+  return values;
+}
+
+function nodeLogtapeCategory(
+  lines: readonly string[],
+  expression: string | undefined,
+  line: number,
+): readonly string[] | undefined {
+  if (expression === undefined || expression.trim() === "") return [];
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  const literal = /^\s*["']([^"']+)["']\s*$/u.exec(resolved.value);
+  if (literal?.[1] !== undefined) return [literal[1]];
+  return nodeLogtapeLiteralStrings(resolved);
+}
+
+function nodeLogtapeStructuredSinks(
+  lines: readonly string[],
+  bindings: readonly NodeLogtapeBinding[],
+): NodeLogtapeStructuredSink[] {
+  const structural = javascriptStructuralLines(lines);
+  const sinks: NodeLogtapeStructuredSink[] = [];
+  for (const binding of bindings) {
+    const access = nodeLogtapeBindingPattern(binding);
+    const callPattern = new RegExp(`\\b${access}\\s*\\(`, "u");
+    for (let index = binding.line; index < structural.length; index += 1) {
+      const line = index + 1;
+      const statement = structural[index] ?? "";
+      if (!callPattern.test(statement)) continue;
+      if (!nodeLogtapeBindingUsable(lines, binding, line)) continue;
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        line,
+        callPattern,
+      );
+      const options = arguments_?.[0];
+      if (options === undefined) continue;
+      const resolved = resolveJavascriptExpression(lines, options, line);
+      if (
+        resolved === undefined ||
+        javascriptObjectPropertyValue(
+          resolved.value,
+          "includeStructuredData",
+        )?.trim() !== "true"
+      ) {
+        continue;
+      }
+      const assignment = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:\\s*[^=;]+)?\\s*=\\s*(?:await\\s+)?${access}\\s*\\(`,
+        "u",
+      ).exec(statement);
+      sinks.push({
+        binding,
+        line,
+        ...(assignment?.[1] === undefined ? {} : { variable: assignment[1] }),
+      });
+    }
+  }
+  return sinks.filter(
+    (sink, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.line === sink.line && candidate.variable === sink.variable,
+      ) === index,
+  );
+}
+
+function nodeLogtapeSinkForEntry(
+  entry: JavascriptPropertyEntry,
+  sinks: readonly NodeLogtapeStructuredSink[],
+): NodeLogtapeStructuredSink | undefined {
+  const value = entry.value.trim();
+  const variable = sinks.find(
+    (sink) => sink.variable !== undefined && sink.variable === value,
+  );
+  if (variable !== undefined) return variable;
+  const lastLine = entry.line + (entry.value.match(/\n/gu)?.length ?? 0);
+  return sinks.find(
+    (sink) =>
+      sink.line >= entry.line &&
+      sink.line <= lastLine &&
+      new RegExp(
+        `\\b${nodeLogtapeBindingPattern(sink.binding)}\\s*\\(`,
+        "u",
+      ).test(entry.value),
+  );
+}
+
+function nodeLogtapeTopologies(
+  lines: readonly string[],
+  sinks: readonly NodeLogtapeStructuredSink[],
+  configureBindings: readonly NodeLogtapeBinding[],
+): NodeLogtapeTopology[] {
+  const structural = javascriptStructuralLines(lines);
+  const topologies: NodeLogtapeTopology[] = [];
+  for (const binding of configureBindings) {
+    const access = nodeLogtapeBindingPattern(binding);
+    const callPattern = new RegExp(`\\b${access}\\s*\\(`, "u");
+    for (let index = binding.line; index < structural.length; index += 1) {
+      const line = index + 1;
+      if (!callPattern.test(structural[index] ?? "")) continue;
+      if (!nodeLogtapeBindingUsable(lines, binding, line)) continue;
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        line,
+        callPattern,
+      );
+      const configuration = arguments_?.[0];
+      if (configuration === undefined) continue;
+      const resolvedConfiguration = resolveJavascriptExpression(
+        lines,
+        configuration,
+        line,
+      );
+      if (resolvedConfiguration === undefined) continue;
+      const configurationEntries = javascriptObjectEntries(
+        resolvedConfiguration,
+      );
+      const sinksEntry = configurationEntries.find(
+        (entry) => entry.key === "sinks",
+      );
+      const loggersEntry = configurationEntries.find(
+        (entry) => entry.key === "loggers",
+      );
+      if (sinksEntry === undefined || loggersEntry === undefined) continue;
+      const resolvedSinks = resolveJavascriptExpression(
+        lines,
+        sinksEntry.value,
+        sinksEntry.line,
+      );
+      const resolvedLoggers = resolveJavascriptExpression(
+        lines,
+        loggersEntry.value,
+        loggersEntry.line,
+      );
+      if (resolvedSinks === undefined || resolvedLoggers === undefined)
+        continue;
+      const connectedSinks = javascriptObjectEntries(resolvedSinks).flatMap(
+        (entry) => {
+          const sink = nodeLogtapeSinkForEntry(entry, sinks);
+          return sink === undefined ? [] : [{ sink, sinkName: entry.key }];
+        },
+      );
+      if (connectedSinks.length === 0) continue;
+      for (const loggerExpression of javascriptArrayEntries(resolvedLoggers)) {
+        const resolvedLogger = resolveJavascriptExpression(
+          lines,
+          loggerExpression.value,
+          loggerExpression.line,
+        );
+        if (resolvedLogger === undefined) continue;
+        const loggerEntries = javascriptObjectEntries(resolvedLogger);
+        const loggerSinks = loggerEntries.find(
+          (entry) => entry.key === "sinks",
+        );
+        const loggerCategory = loggerEntries.find(
+          (entry) => entry.key === "category",
+        );
+        if (loggerSinks === undefined || loggerCategory === undefined) continue;
+        const resolvedLoggerSinks = resolveJavascriptExpression(
+          lines,
+          loggerSinks.value,
+          loggerSinks.line,
+        );
+        const category = nodeLogtapeCategory(
+          lines,
+          loggerCategory.value,
+          loggerCategory.line,
+        );
+        if (resolvedLoggerSinks === undefined || category === undefined)
+          continue;
+        const sinkNames = nodeLogtapeLiteralStrings(resolvedLoggerSinks);
+        if (sinkNames === undefined) continue;
+        for (const connected of connectedSinks) {
+          if (!sinkNames.includes(connected.sinkName)) continue;
+          topologies.push({
+            configureBinding: binding,
+            configureLine: line,
+            configuredCategory: category,
+            sink: connected.sink,
+            sinkName: connected.sinkName,
+          });
+        }
+      }
+    }
+  }
+  return topologies;
+}
+
+function nodeLogtapeCategoryMatches(
+  configured: readonly string[],
+  logger: readonly string[],
+): boolean {
+  return (
+    configured.length <= logger.length &&
+    configured.every((value, index) => logger[index] === value)
+  );
+}
+
+function nodeLogtapeLoggers(
+  lines: readonly string[],
+  bindings: readonly NodeLogtapeBinding[],
+  topologies: readonly NodeLogtapeTopology[],
+): NodeLogtapeLogger[] {
+  const structural = javascriptStructuralLines(lines);
+  const loggers: NodeLogtapeLogger[] = [];
+  for (const binding of bindings) {
+    const access = nodeLogtapeBindingPattern(binding);
+    const callPattern = new RegExp(`\\b${access}\\s*\\(`, "u");
+    for (let index = binding.line; index < structural.length; index += 1) {
+      const line = index + 1;
+      const statement = structural[index] ?? "";
+      if (!callPattern.test(statement)) continue;
+      if (!nodeLogtapeBindingUsable(lines, binding, line)) continue;
+      const assignment = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:\\s*[^=;]+)?\\s*=\\s*${access}\\s*\\(`,
+        "u",
+      ).exec(statement);
+      if (assignment?.[1] === undefined) continue;
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        line,
+        callPattern,
+      );
+      const category = nodeLogtapeCategory(lines, arguments_?.[0], line);
+      if (category === undefined) continue;
+      for (const topology of topologies) {
+        if (
+          topology.configureLine >= line ||
+          !nodeLogtapeCategoryMatches(topology.configuredCategory, category)
+        ) {
+          continue;
+        }
+        loggers.push({
+          binding,
+          category,
+          line,
+          local: assignment[1],
+          topology,
+        });
+      }
+    }
+  }
+  return loggers;
+}
+
+function nodeLogtapeRemoteExpression(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  routeParameters: readonly string[],
+): Omit<NodeLogtapeRemoteProperty, "boundary"> | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  let value = resolved.value.replace(/\s+/gu, " ").trim();
+  const stringWrapper = /^String\s*\(\s*([\s\S]+)\s*\)$/u.exec(value);
+  if (stringWrapper?.[1] !== undefined) value = stringWrapper[1].trim();
+  const interpolation = /^`\$\{\s*([\s\S]+?)\s*\}`$/u.exec(value);
+  if (interpolation?.[1] !== undefined) value = interpolation[1].trim();
+  const requestMember =
+    /^([A-Za-z_$][\w$]*)\s*\.\s*(body|query|params|headers)(?:\s*\.\s*[A-Za-z_$][\w$]*|\s*\[[^\]]+\])*$/u.exec(
+      value,
+    );
+  if (
+    requestMember?.[1] !== undefined &&
+    requestMember[2] !== undefined &&
+    routeParameters.includes(requestMember[1])
+  ) {
+    return {
+      kind: `remote-request-${requestMember[2]}`,
+      line: resolved.line,
+      symbol: value.replace(/\s+/gu, ""),
+    };
+  }
+  const requestGetter =
+    /^(?:await\s+)?([A-Za-z_$][\w$]*)\s*\.\s*(?:(headers)\s*\.\s*get|get|header|text)\s*\([^)]*\)$/u.exec(
+      value,
+    );
+  if (
+    requestGetter?.[1] !== undefined &&
+    routeParameters.includes(requestGetter[1])
+  ) {
+    return {
+      kind:
+        requestGetter[2] === "headers"
+          ? "remote-request-header"
+          : "remote-request-value",
+      line: resolved.line,
+      symbol: value.replace(/\s+/gu, ""),
+    };
+  }
+  return undefined;
+}
+
+function nodeLogtapeRemoteProperty(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  routeParameters: readonly string[],
+): NodeLogtapeRemoteProperty | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  for (const entry of javascriptObjectEntries(resolved)) {
+    const source = nodeLogtapeRemoteExpression(
+      lines,
+      entry.value,
+      entry.line,
+      routeParameters,
+    );
+    if (source !== undefined) {
+      return { ...source, boundary: "structured-data-value" };
+    }
+  }
+  const object = javascriptCompositePrefix(resolved.value, "{", "}");
+  if (object === undefined) return undefined;
+  for (const entry of javascriptDelimitedEntries(object.slice(1, -1))) {
+    const entryLine =
+      resolved.line +
+      (object.slice(0, entry.offset + 1).match(/\n/gu)?.length ?? 0);
+    const computed = /^\s*\[\s*([\s\S]+?)\s*\]\s*:/u.exec(entry.value);
+    const spread = /^\s*\.\.\.\s*([\s\S]+)$/u.exec(entry.value);
+    const candidate = computed?.[1] ?? spread?.[1];
+    if (candidate === undefined) continue;
+    const source = nodeLogtapeRemoteExpression(
+      lines,
+      candidate,
+      entryLine,
+      routeParameters,
+    );
+    if (source !== undefined) {
+      return { ...source, boundary: "structured-data-key" };
+    }
+  }
+  return undefined;
+}
+
+function nodeLogtapeSyslogInjectionRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !file.text.includes("@logtape/syslog") ||
+      !file.text.includes("includeStructuredData")
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "@logtape/syslog",
+    );
+    if (
+      dependency === undefined ||
+      !nodeLogtapeVersionHasSyslogInjection(dependency.version)
+    ) {
+      continue;
+    }
+    const sinkBindings = nodeLogtapeBindings(
+      file.lines,
+      "@logtape/syslog",
+      "getSyslogSink",
+    );
+    const configureBindings = nodeLogtapeBindings(
+      file.lines,
+      "@logtape/logtape",
+      "configure",
+    );
+    const loggerBindings = nodeLogtapeBindings(
+      file.lines,
+      "@logtape/logtape",
+      "getLogger",
+    );
+    const sinks = nodeLogtapeStructuredSinks(file.lines, sinkBindings);
+    const topologies = nodeLogtapeTopologies(
+      file.lines,
+      sinks,
+      configureBindings,
+    );
+    const loggers = nodeLogtapeLoggers(file.lines, loggerBindings, topologies);
+    if (loggers.length === 0) continue;
+    const structural = javascriptStructuralLines(file.lines);
+    const functions = exportedJavascriptFunctions(file.lines);
+    for (const logger of loggers) {
+      const loggerPattern = escapeRegularExpression(logger.local);
+      const callPattern = new RegExp(
+        `\\b${loggerPattern}\\s*\\.\\s*(?:debug|info|warning|error|fatal|trace)\\s*\\(`,
+        "u",
+      );
+      for (let index = logger.line; index < structural.length; index += 1) {
+        const line = index + 1;
+        if (!callPattern.test(structural[index] ?? "")) continue;
+        const route = functions.find(
+          (candidate) =>
+            line >= candidate.startLine && line <= candidate.endLine,
+        );
+        if (
+          route === undefined ||
+          route.parameters.includes(logger.local) ||
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            logger.local,
+            logger.line,
+            line + 1,
+          )
+        ) {
+          continue;
+        }
+        const arguments_ = javascriptCallArgumentsAtLine(
+          file.lines,
+          line,
+          callPattern,
+        );
+        const properties = arguments_?.[1];
+        if (properties === undefined) continue;
+        const source = nodeLogtapeRemoteProperty(
+          file.lines,
+          properties,
+          line,
+          route.parameters,
+        );
+        if (source === undefined) continue;
+        const key = `${file.path}\0${source.line}\0${logger.topology.sink.line}\0${line}`;
+        if (emitted.has(key)) continue;
+        emitted.add(key);
+        const prefix =
+          dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+        const sinkKind = `${prefix}vulnerable-logtape-syslog-${source.boundary}`;
+        const startLine = Math.max(1, line - CONTEXT_LINES_BEFORE);
+        const endLine = Math.min(file.lines.length, line + CONTEXT_LINES_AFTER);
+        const sourceStart = Math.max(1, source.line - CONTEXT_LINES_BEFORE);
+        records.push({
+          path: file.path,
+          line,
+          categories: [
+            "framework-dataflow:node-logtape-syslog-structured-data-injection",
+            `modeled-source:${source.kind}`,
+            `modeled-sink:${sinkKind}`,
+            "broken-control:unescaped-syslog-structured-data",
+          ],
+          priority: 126,
+          startLine,
+          endLine,
+          excerpt: sourceExcerpt(file.lines, startLine, endLine),
+          sourceExcerpt: sourceExcerpt(
+            file.lines,
+            sourceStart,
+            Math.min(file.lines.length, line + CONTEXT_LINES_AFTER),
+          ),
+          frameworkModel: {
+            schemaVersion: "1.2",
+            id: "node-logtape-syslog-structured-data-injection",
+            language: "javascript-typescript",
+            scope: "same-file",
+            source: {
+              kind: source.kind,
+              path: file.path,
+              line: source.line,
+            },
+            sink: {
+              kind: sinkKind,
+              path: file.path,
+              line,
+              cweIds: ["CWE-93", "CWE-117"],
+            },
+            propagators: [
+              {
+                kind: "remote-log-record-property",
+                path: file.path,
+                line: source.line,
+                symbol: `${source.boundary}:${source.symbol}`,
+              },
+              {
+                kind: "official-logtape-logger-binding",
+                path: file.path,
+                line: logger.binding.line,
+                symbol: logger.binding.local,
+              },
+              {
+                kind: "connected-logtape-syslog-sink",
+                path: file.path,
+                line: logger.topology.configureLine,
+                symbol: `${logger.topology.sinkName}:${logger.category.join(".") || "root"}`,
+              },
+              {
+                kind: "official-logtape-configure-binding",
+                path: file.path,
+                line: logger.topology.configureBinding.line,
+                symbol: logger.topology.configureBinding.local,
+              },
+              {
+                kind: "enabled-logtape-structured-data",
+                path: file.path,
+                line: logger.topology.sink.line,
+                symbol: "includeStructuredData:true",
+              },
+              {
+                kind: "official-logtape-syslog-binding",
+                path: file.path,
+                line: logger.topology.sink.binding.line,
+                symbol: logger.topology.sink.binding.local,
+              },
+              {
+                kind: "logtape-syslog-runtime-dependency",
+                path: dependency.manifestPath,
+                line: dependency.line,
+                symbol: `@logtape/syslog@${dependency.version}:${dependency.proof}:unescaped-structured-data`,
               },
             ],
             candidateControls: [],

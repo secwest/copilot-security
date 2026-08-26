@@ -2,6 +2,55 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — LogTape syslog structured-data injection
+
+**Gap and primary evidence.** The official
+[`GHSA-8h6h-x5pq-56fq`](https://github.com/dahlia/logtape/security/advisories/GHSA-8h6h-x5pq-56fq)
+describes a high-severity log-injection defect in `@logtape/syslog` when
+structured data is enabled. Releases before 1.3.11, 2.0.0 through 2.0.13, and
+2.1.0 through 2.1.4 pass C0 control characters through structured-data values
+and accept invalid SD-NAME keys. The official
+[`7a6e5b9` repair](https://github.com/dahlia/logtape/commit/7a6e5b9ddf7915edfff78fa129bc17c979b2a623)
+replaces C0 bytes with decimal `#NNN` escapes and permits only 1–32 printable
+ASCII name characters excluding space, `=`, `]`, and `"`. The option defaults
+to false. Official CodeQL has a generic medium-precision JavaScript log
+injection query but no LogTape model; authenticated current-source searches of
+`github/codeql` and `semgrep/semgrep-rules` found no package- or advisory-exact
+coverage. An exact topology model can therefore add coverage without turning
+every logger call into a lead.
+
+**Reachability decision.** Add
+`node-logtape-syslog-structured-data-injection` only when the nearest runtime
+manifest or fresh npm v2/v3 lock proves an affected `@logtape/syslog` version.
+Require official stable bindings for `getSyslogSink`, `configure`, and
+`getLogger`; literal `includeStructuredData: true`; the vulnerable sink present
+in the configured sink map; a logger rule that names that sink; prefix-matching
+literal logger categories; and an exported request handler whose body, query,
+parameters, or headers reach the second logger argument as a property value,
+computed name, or spread. Category-prefix matching preserves LogTape's root
+and hierarchical logger semantics. Named aliases, namespace receivers,
+TypeScript import-equals, CommonJS receivers, direct members, and destructuring
+are accepted only while their bindings and logger objects remain stable.
+
+Fail closed on omitted, false, or dynamic structured-data options; unused
+sinks; logger-category mismatches; message-only data; trusted properties;
+JSON-stringified, replaced, or otherwise transformed values; repaired and
+prerelease versions; wrong and development-only packages; lockfile-free
+ranges; local lookalikes; unexported request handlers; and tests/examples. This
+deliberately leaves some inter-file configuration and arbitrary application
+wrapper flows for later expansion rather than weakening the evidence contract.
+
+**Validation contract.** Exercise identical application and input bytes with an
+affected release and its branch-matching repair against a disposable
+loopback-only UDP or TCP receiver. Use one inert forged-record marker and report
+only escaped JSON or byte indexes. The affected capture must retain a newline
+or invalid name; the repair must emit `#010` or omit the invalid key. Record
+transport framing, exact version and dependency proof, configuration topology,
+source and property boundary, captured frame count, repaired comparison,
+disposal, and cleanup. A malformed record proves CWE-93/CWE-117 log injection;
+it does not by itself prove a trusted forged event, alert suppression,
+repudiation, authentication bypass, or code execution.
+
 ## 2026-08-26 — Compose Traefik rewrites with protected sibling routes
 
 **Gap and primary evidence.** The official

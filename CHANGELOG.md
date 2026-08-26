@@ -6,6 +6,25 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-logtape-syslog-structured-data-injection`, an exact
+  production-provenance model for
+  [GHSA-8h6h-x5pq-56fq / CVE-2026-54511](https://github.com/dahlia/logtape/security/advisories/GHSA-8h6h-x5pq-56fq).
+  It requires an affected `@logtape/syslog` release, official stable
+  `getSyslogSink`, `configure`, and `getLogger` bindings, literal
+  `includeStructuredData: true`, a sink connected through the matching logger
+  category, and request-controlled structured-data values or names in the
+  record-properties argument. Exact repaired releases, unproved ranges,
+  development-only or wrong packages, disabled or dynamic configuration,
+  disconnected topologies, message-only data, trusted properties, transformed
+  values, unexported request handlers, and lookalikes remain negative. The
+  first focused regression lane passes six tests and 49 assertions across all
+  reviewed vulnerable branches, repaired boundaries, modern lock provenance,
+  value and key injection, root-category inheritance, and adversarial controls.
+- Added model-specific reviewer requirements for bounded loopback UDP/TCP byte
+  capture, source-identical repaired comparison, escaped output, downstream
+  parser and framing evidence, CWE-93/CWE-117 discipline, and conservative
+  impact claims. Raw control-bearing records must never be printed or sent to a
+  real collector.
 - Extended the Traefik file-provider model from one YAML filename to exact
   YAML or TOML filename and directory configurations. Directory providers bind
   an exact Compose mount and merge routers, middlewares, and services from
