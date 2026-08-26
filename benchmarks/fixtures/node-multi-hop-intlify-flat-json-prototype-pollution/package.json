@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-intlify-flat-json-prototype-pollution",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "vue-i18n": "9.14.2"
+  }
+}

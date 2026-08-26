@@ -727,6 +727,34 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-intlify-flat-json-prototype-pollution",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [
+      /["'](?:vue-i18n|petite-vue-i18n|@intlify\/(?:vue-i18n-core|message-resolver|(?:core|core-base)\/dist\/[^"']+))["']/u,
+    ],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-intlify-flat-json-prototype-write",
+        expression: /\b[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*){0,2}\s*\(/u,
+        cweIds: ["CWE-1321"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-sequelize-oracle-sql-injection",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3824,6 +3852,24 @@ const RHINOSTONE_SWIG_TRAVERSAL_FIELD_EVIDENCE_REQUIREMENTS = [
   ["allowOutsideRoot", "rooted loader", "unconfined loader"],
 ] as const;
 
+const INTLIFY_FLAT_JSON_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["request body", "request field", "remote locale messages"],
+  ["relative-module flow", "wrapper", "configureI18n"],
+  ["official Vue I18n binding", "official Intlify binding", "createI18n"],
+  ["flatJson: true", "flatJson enabled", "flat JSON transformation"],
+  [
+    "messages option",
+    "setLocaleMessage",
+    "mergeLocaleMessage",
+    "handleFlatJson",
+  ],
+  ["vue-i18n 9.14.2", "vue-i18n@9.14.2", "affected release"],
+  ["__proto__", "prototype property", "Object.prototype"],
+  ["bounded witness", "sentinel property", "prototype mutation"],
+  ["9.14.3", "10.0.6", "11.1.2", "unsafe key", "repaired control"],
+  ["CWE-1321", "prototype pollution", "availability impact"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3910,6 +3956,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: RHINOSTONE_SWIG_TRAVERSAL_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: RHINOSTONE_SWIG_TRAVERSAL_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-http-intlify-flat-json-prototype-pollution",
+    {
+      validation: INTLIFY_FLAT_JSON_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: INTLIFY_FLAT_JSON_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -4177,6 +4230,30 @@ interface NodeRhinostoneSwigTemplateSink {
   templateTag: "extends" | "from" | "import" | "include";
   templateVariable: string;
   loaderRoute: "affected-rooted" | "allow-outside-root" | "unconfined";
+}
+
+type NodeIntlifyFlatJsonPackage =
+  | "@intlify/core"
+  | "@intlify/core-base"
+  | "@intlify/message-resolver"
+  | "@intlify/vue-i18n-core"
+  | "petite-vue-i18n"
+  | "vue-i18n";
+
+interface NodeIntlifyFlatJsonSink {
+  sourceExpression: string;
+  sinkLine: number;
+  kind:
+    | "vulnerable-intlify-flat-json-prototype-write"
+    | "lock-resolved-vulnerable-intlify-flat-json-prototype-write";
+  dependency: NodeRuntimeDependency;
+  packageName: NodeIntlifyFlatJsonPackage;
+  operation:
+    | "create-i18n-messages"
+    | "direct-handle-flat-json"
+    | "merge-locale-message"
+    | "set-locale-message";
+  configurationLine: number;
 }
 
 interface NodeSequelizeOracleSink {
@@ -6013,6 +6090,723 @@ function nodeJsonataExpressionSink(
           : "vulnerable-jsonata-expression-sandbox-escape",
       dependency,
     };
+  }
+  return undefined;
+}
+
+const NODE_INTLIFY_CREATE_PACKAGES = [
+  "@intlify/vue-i18n-core",
+  "petite-vue-i18n",
+  "vue-i18n",
+] as const satisfies readonly NodeIntlifyFlatJsonPackage[];
+
+interface NodeIntlifyBindingProtection {
+  local: string;
+  line: number;
+  member?: string;
+}
+
+interface NodeIntlifyCallableBinding {
+  local: string;
+  line: number;
+  packageName: NodeIntlifyFlatJsonPackage;
+  method: "createI18n" | "handleFlatJson";
+  receiverMember?: "createI18n" | "handleFlatJson";
+  protections: NodeIntlifyBindingProtection[];
+}
+
+interface NodeIntlifyInstanceBinding {
+  local: string;
+  line: number;
+  packageName: Exclude<NodeIntlifyFlatJsonPackage, "@intlify/message-resolver">;
+  configurationLine: number;
+  receiverMember?: "global";
+  protections: NodeIntlifyBindingProtection[];
+}
+
+interface NodeIntlifyFlatJsonOptions {
+  flatJsonLine: number;
+  messages?: string;
+  initialMessagesReachTransformer: boolean;
+}
+
+interface NodeIntlifySemver {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease: Array<number | string>;
+}
+
+function nodeIntlifyParseSemver(
+  version: string,
+): NodeIntlifySemver | undefined {
+  if (!nodeExactSemver(version)) return undefined;
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([^+]+))?/u.exec(version);
+  if (match === null) return undefined;
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease:
+      match[4] === undefined
+        ? []
+        : match[4]
+            .split(".")
+            .map((part) =>
+              /^(?:0|[1-9]\d*)$/u.test(part) ? Number(part) : part,
+            ),
+  };
+}
+
+function nodeIntlifyCompareSemver(left: string, right: string): number {
+  const a = nodeIntlifyParseSemver(left);
+  const b = nodeIntlifyParseSemver(right);
+  if (a === undefined || b === undefined) return Number.NaN;
+  for (const key of ["major", "minor", "patch"] as const) {
+    if (a[key] !== b[key]) return a[key] < b[key] ? -1 : 1;
+  }
+  if (a.prerelease.length === 0 || b.prerelease.length === 0) {
+    return a.prerelease.length === b.prerelease.length
+      ? 0
+      : a.prerelease.length === 0
+        ? 1
+        : -1;
+  }
+  const length = Math.max(a.prerelease.length, b.prerelease.length);
+  for (let index = 0; index < length; index += 1) {
+    const av = a.prerelease[index];
+    const bv = b.prerelease[index];
+    if (av === undefined || bv === undefined) return av === undefined ? -1 : 1;
+    if (av === bv) continue;
+    if (typeof av === "number" && typeof bv === "string") return -1;
+    if (typeof av === "string" && typeof bv === "number") return 1;
+    return av < bv ? -1 : 1;
+  }
+  return 0;
+}
+
+function nodeIntlifyVersionInRange(
+  version: string,
+  minimum: string,
+  maximumExclusive: string,
+): boolean {
+  const lower = nodeIntlifyCompareSemver(version, minimum);
+  const upper = nodeIntlifyCompareSemver(version, maximumExclusive);
+  return Number.isFinite(lower) && lower >= 0 && upper < 0;
+}
+
+function nodeIntlifyVersionIsFlatJsonVulnerable(
+  packageName: NodeIntlifyFlatJsonPackage,
+  version: string,
+): boolean {
+  if (
+    packageName === "@intlify/core" ||
+    packageName === "@intlify/core-base" ||
+    packageName === "@intlify/message-resolver"
+  ) {
+    return nodeIntlifyVersionInRange(version, "9.1.0", "9.1.11");
+  }
+  if (packageName === "petite-vue-i18n") {
+    return (
+      nodeIntlifyVersionInRange(version, "10.0.0", "10.0.6") ||
+      nodeIntlifyVersionInRange(version, "11.0.0-beta.0", "11.1.2")
+    );
+  }
+  const minimum9 = packageName === "@intlify/vue-i18n-core" ? "9.2.0" : "9.1.0";
+  return (
+    nodeIntlifyVersionInRange(version, minimum9, "9.14.3") ||
+    nodeIntlifyVersionInRange(version, "10.0.0-alpha.1", "10.0.6") ||
+    nodeIntlifyVersionInRange(version, "11.0.0-beta.0", "11.1.2")
+  );
+}
+
+function nodeIntlifyPackageFromSpecifier(
+  specifier: string,
+): NodeIntlifyFlatJsonPackage | undefined {
+  if (
+    specifier === "@intlify/message-resolver" ||
+    specifier === "@intlify/vue-i18n-core" ||
+    specifier === "petite-vue-i18n" ||
+    specifier === "vue-i18n"
+  ) {
+    return specifier;
+  }
+  const deepBrowser =
+    /^@intlify\/(core|core-base)\/dist\/(?:core|core-base)(?:\.runtime)?\.esm-browser(?:\.prod)?\.js$/u.exec(
+      specifier,
+    );
+  return deepBrowser?.[1] === "core"
+    ? "@intlify/core"
+    : deepBrowser?.[1] === "core-base"
+      ? "@intlify/core-base"
+      : undefined;
+}
+
+function nodeIntlifySpecifierExportsFlatJson(
+  specifier: string,
+  packageName: NodeIntlifyFlatJsonPackage,
+): boolean {
+  return (
+    packageName === "@intlify/message-resolver" ||
+    ((packageName === "@intlify/core" ||
+      packageName === "@intlify/core-base") &&
+      specifier !== packageName)
+  );
+}
+
+function nodeIntlifyBindingPattern(binding: {
+  local: string;
+  receiverMember?: string;
+}): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.receiverMember === undefined
+    ? local
+    : `${local}\\s*\\.\\s*${binding.receiverMember}`;
+}
+
+function nodeIntlifyBindingUsable(
+  lines: readonly string[],
+  protections: readonly NodeIntlifyBindingProtection[],
+  useLine: number,
+): boolean {
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      useLine >= candidate.startLine && useLine <= candidate.endLine,
+  );
+  const structural = javascriptStructuralLines(lines);
+  const code = javascriptCodeLinesWithoutComments(lines);
+  for (const protection of protections) {
+    if (
+      protection.line >= useLine ||
+      wrapper?.parameters.includes(protection.local) === true ||
+      javascriptIdentifierReassignedBetween(
+        lines,
+        protection.local,
+        protection.line,
+        useLine + 1,
+      )
+    ) {
+      return false;
+    }
+    if (protection.member === undefined) continue;
+    const local = escapeRegularExpression(protection.local);
+    const member = escapeRegularExpression(protection.member);
+    const replacement = new RegExp(
+      `\\b${local}\\s*\\.\\s*${member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+      "u",
+    );
+    const define = new RegExp(
+      `\\bObject\\s*\\.\\s*defineProperty\\s*\\(\\s*${local}\\s*,\\s*["']${member}["']`,
+      "u",
+    );
+    if (
+      structural
+        .slice(protection.line, Math.max(protection.line, useLine))
+        .some(
+          (candidate, offset) =>
+            replacement.test(candidate) ||
+            define.test(code[protection.line + offset] ?? ""),
+        )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function nodeIntlifyCallableBindings(
+  lines: readonly string[],
+): NodeIntlifyCallableBinding[] {
+  const bindings: NodeIntlifyCallableBinding[] = importedJavascriptSymbols(
+    lines,
+  ).flatMap((binding) => {
+    const packageName = nodeIntlifyPackageFromSpecifier(
+      binding.moduleSpecifier,
+    );
+    if (packageName === undefined) return [];
+    const create =
+      binding.imported === "createI18n" &&
+      NODE_INTLIFY_CREATE_PACKAGES.includes(
+        packageName as (typeof NODE_INTLIFY_CREATE_PACKAGES)[number],
+      );
+    const direct =
+      binding.imported === "handleFlatJson" &&
+      nodeIntlifySpecifierExportsFlatJson(binding.moduleSpecifier, packageName);
+    if (!create && !direct) return [];
+    return [
+      {
+        local: binding.local,
+        line: binding.line,
+        packageName,
+        method: binding.imported as "createI18n" | "handleFlatJson",
+        protections: [{ local: binding.local, line: binding.line }],
+      },
+    ];
+  });
+  const packageExpression =
+    "(@intlify\\/message-resolver|@intlify\\/vue-i18n-core|@intlify\\/(?:core|core-base)\\/dist\\/(?:core|core-base)(?:\\.runtime)?\\.esm-browser(?:\\.prod)?\\.js|petite-vue-i18n|vue-i18n)";
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      new RegExp(
+        `^\\s*import\\s+\\*\\s+as\\s+([A-Za-z_$][\\w$]*)\\s+from\\s+["']${packageExpression}["']`,
+        "u",
+      ).exec(code) ??
+      new RegExp(
+        `^\\s*import\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']${packageExpression}["']\\s*\\)`,
+        "u",
+      ).exec(code) ??
+      new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']${packageExpression}["']\\s*\\)\\s*;?\\s*$`,
+        "u",
+      ).exec(code);
+    if (receiver?.[1] === undefined || receiver[2] === undefined) continue;
+    const packageName = nodeIntlifyPackageFromSpecifier(receiver[2]);
+    if (packageName === undefined) continue;
+    if (
+      NODE_INTLIFY_CREATE_PACKAGES.includes(
+        packageName as (typeof NODE_INTLIFY_CREATE_PACKAGES)[number],
+      )
+    ) {
+      bindings.push({
+        local: receiver[1],
+        line: index + 1,
+        packageName,
+        method: "createI18n",
+        receiverMember: "createI18n",
+        protections: [
+          { local: receiver[1], line: index + 1 },
+          { local: receiver[1], line: index + 1, member: "createI18n" },
+        ],
+      });
+    }
+    if (nodeIntlifySpecifierExportsFlatJson(receiver[2], packageName)) {
+      bindings.push({
+        local: receiver[1],
+        line: index + 1,
+        packageName,
+        method: "handleFlatJson",
+        receiverMember: "handleFlatJson",
+        protections: [
+          { local: receiver[1], line: index + 1 },
+          { local: receiver[1], line: index + 1, member: "handleFlatJson" },
+        ],
+      });
+    }
+  }
+  const originals = [...bindings];
+  const structural = javascriptStructuralLines(lines);
+  for (let index = 0; index < structural.length; index += 1) {
+    for (const origin of originals) {
+      if (!nodeIntlifyBindingUsable(lines, origin.protections, index + 1)) {
+        continue;
+      }
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${nodeIntlifyBindingPattern(origin)}\\s*;?\\s*$`,
+        "u",
+      ).exec(structural[index] ?? "");
+      if (alias?.[1] === undefined) continue;
+      bindings.push({
+        ...origin,
+        local: alias[1],
+        line: index + 1,
+        receiverMember: undefined,
+        protections: [
+          ...origin.protections,
+          { local: alias[1], line: index + 1 },
+        ],
+      });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.line === binding.line &&
+          candidate.method === binding.method &&
+          candidate.packageName === binding.packageName &&
+          candidate.receiverMember === binding.receiverMember,
+      ) === index,
+  );
+}
+
+function nodeIntlifyCallArguments(
+  lines: readonly string[],
+  line: number,
+  binding: NodeIntlifyCallableBinding,
+): string[] | undefined {
+  if (!nodeIntlifyBindingUsable(lines, binding.protections, line)) {
+    return undefined;
+  }
+  return javascriptCallArgumentsAtLine(
+    lines,
+    line,
+    new RegExp(`\\b${nodeIntlifyBindingPattern(binding)}\\s*\\(`, "u"),
+  );
+}
+
+function nodeIntlifyDirectRequireCall(
+  lines: readonly string[],
+  line: number,
+):
+  | {
+      packageName: NodeIntlifyFlatJsonPackage;
+      method: "createI18n" | "handleFlatJson";
+      arguments: string[];
+    }
+  | undefined {
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  if (wrapper?.parameters.includes("require") === true) return undefined;
+  if (
+    javascriptStructuralLines(lines)
+      .slice(0, line)
+      .some((candidate) =>
+        /\b(?:const|let|var|function|class)\s+require\b|\bimport\s+require\b/u.test(
+          candidate,
+        ),
+      )
+  ) {
+    return undefined;
+  }
+  const callee =
+    /\brequire\s*\(\s*["'](@intlify\/message-resolver|@intlify\/vue-i18n-core|@intlify\/(?:core|core-base)\/dist\/(?:core|core-base)(?:\.runtime)?\.esm-browser(?:\.prod)?\.js|petite-vue-i18n|vue-i18n)["']\s*\)\s*\.\s*(createI18n|handleFlatJson)\s*\(/u;
+  const first = javascriptCodeBeforeComment(lines[line - 1] ?? "");
+  const match = callee.exec(first);
+  if (match?.[1] === undefined || match[2] === undefined) return undefined;
+  const packageName = nodeIntlifyPackageFromSpecifier(match[1]);
+  if (packageName === undefined) return undefined;
+  const method = match[2] as "createI18n" | "handleFlatJson";
+  if (
+    (method === "createI18n" &&
+      !NODE_INTLIFY_CREATE_PACKAGES.includes(
+        packageName as (typeof NODE_INTLIFY_CREATE_PACKAGES)[number],
+      )) ||
+    (method === "handleFlatJson" &&
+      !nodeIntlifySpecifierExportsFlatJson(match[1], packageName))
+  ) {
+    return undefined;
+  }
+  const arguments_ = javascriptRawCallArgumentsAtLine(lines, line, callee);
+  return arguments_ === undefined
+    ? undefined
+    : { packageName, method, arguments: arguments_ };
+}
+
+function nodeIntlifyFlatJsonOptions(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): NodeIntlifyFlatJsonOptions | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  const object = javascriptCompositePrefix(resolved.value, "{", "}");
+  if (object === undefined) return undefined;
+  const rawEntries = javascriptDelimitedEntries(object.slice(1, -1));
+  if (rawEntries.some((entry) => /^\.\.\./u.test(entry.value.trim()))) {
+    return undefined;
+  }
+  const entries = javascriptObjectEntries(resolved);
+  const properties = (key: string) =>
+    entries.filter((entry) => entry.key === key);
+  const flatJson = properties("flatJson");
+  const messages = properties("messages");
+  const resolvers = properties("messageResolver");
+  if (flatJson.length !== 1 || messages.length > 1 || resolvers.length > 1) {
+    return undefined;
+  }
+  const enabled = resolveJavascriptExpression(
+    lines,
+    flatJson[0]!.value,
+    flatJson[0]!.line,
+  );
+  if (enabled?.value.trim() !== "true") return undefined;
+  const resolver = resolvers[0];
+  const resolverValue =
+    resolver === undefined
+      ? undefined
+      : resolveJavascriptExpression(
+          lines,
+          resolver.value,
+          resolver.line,
+        )?.value.trim();
+  const initialMessagesReachTransformer =
+    resolver === undefined ||
+    resolverValue === "null" ||
+    resolverValue === "undefined" ||
+    resolverValue === "void 0";
+  return {
+    flatJsonLine: flatJson[0]!.line,
+    ...(messages[0] === undefined ? {} : { messages: messages[0].value }),
+    initialMessagesReachTransformer,
+  };
+}
+
+function nodeIntlifyInstances(
+  lines: readonly string[],
+  bindings: readonly NodeIntlifyCallableBinding[],
+): NodeIntlifyInstanceBinding[] {
+  const instances: NodeIntlifyInstanceBinding[] = [];
+  const structural = javascriptStructuralLines(lines);
+  for (let index = 0; index < structural.length; index += 1) {
+    for (const binding of bindings) {
+      if (binding.method !== "createI18n") continue;
+      const arguments_ = nodeIntlifyCallArguments(lines, index + 1, binding);
+      if (arguments_ === undefined) continue;
+      const options = nodeIntlifyFlatJsonOptions(
+        lines,
+        arguments_[0] ?? "",
+        index + 1,
+      );
+      if (options === undefined) continue;
+      const declaration = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*${nodeIntlifyBindingPattern(binding)}\\s*\\(`,
+        "u",
+      ).exec(structural[index] ?? "");
+      if (declaration?.[1] === undefined) continue;
+      instances.push({
+        local: declaration[1],
+        line: index + 1,
+        packageName:
+          binding.packageName as NodeIntlifyInstanceBinding["packageName"],
+        configurationLine: options.flatJsonLine,
+        receiverMember: "global",
+        protections: [
+          { local: declaration[1], line: index + 1 },
+          { local: declaration[1], line: index + 1, member: "global" },
+        ],
+      });
+    }
+  }
+  const originals = [...instances];
+  for (let index = 0; index < structural.length; index += 1) {
+    for (const origin of originals) {
+      if (!nodeIntlifyBindingUsable(lines, origin.protections, index + 1)) {
+        continue;
+      }
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapeRegularExpression(origin.local)}\\s*\\.\\s*global\\s*;?\\s*$`,
+        "u",
+      ).exec(structural[index] ?? "");
+      if (alias?.[1] === undefined) continue;
+      instances.push({
+        ...origin,
+        local: alias[1],
+        line: index + 1,
+        receiverMember: undefined,
+        protections: [
+          ...origin.protections,
+          { local: alias[1], line: index + 1 },
+        ],
+      });
+    }
+  }
+  return instances;
+}
+
+function nodeIntlifySinkResult(
+  sourceExpression: string,
+  sinkLine: number,
+  dependency: NodeRuntimeDependency,
+  packageName: NodeIntlifyFlatJsonPackage,
+  operation: NodeIntlifyFlatJsonSink["operation"],
+  configurationLine: number,
+): NodeIntlifyFlatJsonSink {
+  return {
+    sourceExpression,
+    sinkLine,
+    dependency,
+    packageName,
+    operation,
+    configurationLine,
+    kind:
+      dependency.proof === "npm-lockfile"
+        ? "lock-resolved-vulnerable-intlify-flat-json-prototype-write"
+        : "vulnerable-intlify-flat-json-prototype-write",
+  };
+}
+
+function nodeIntlifyFlatJsonSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeIntlifyFlatJsonSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const bindings = nodeIntlifyCallableBindings(lines);
+  const directRequire = nodeIntlifyDirectRequireCall(lines, line);
+  if (directRequire?.method === "handleFlatJson") {
+    const sourceExpression = directRequire.arguments[0]?.trim() ?? "";
+    const dependency = nodeRuntimeDependency(
+      files,
+      path,
+      directRequire.packageName,
+    );
+    if (
+      sourceExpression !== "" &&
+      dependency !== undefined &&
+      nodeIntlifyVersionIsFlatJsonVulnerable(
+        directRequire.packageName,
+        dependency.version,
+      )
+    ) {
+      return nodeIntlifySinkResult(
+        sourceExpression,
+        line,
+        dependency,
+        directRequire.packageName,
+        "direct-handle-flat-json",
+        line,
+      );
+    }
+  }
+  if (directRequire?.method === "createI18n") {
+    const options = nodeIntlifyFlatJsonOptions(
+      lines,
+      directRequire.arguments[0] ?? "",
+      line,
+    );
+    const sourceExpression = options?.messages?.trim() ?? "";
+    const dependency = nodeRuntimeDependency(
+      files,
+      path,
+      directRequire.packageName,
+    );
+    if (
+      options !== undefined &&
+      options.initialMessagesReachTransformer &&
+      sourceExpression !== "" &&
+      dependency !== undefined &&
+      nodeIntlifyVersionIsFlatJsonVulnerable(
+        directRequire.packageName,
+        dependency.version,
+      )
+    ) {
+      return nodeIntlifySinkResult(
+        sourceExpression,
+        line,
+        dependency,
+        directRequire.packageName,
+        "create-i18n-messages",
+        options.flatJsonLine,
+      );
+    }
+  }
+  for (const binding of bindings) {
+    if (binding.method !== "handleFlatJson") continue;
+    const arguments_ = nodeIntlifyCallArguments(lines, line, binding);
+    const sourceExpression = arguments_?.[0]?.trim() ?? "";
+    if (sourceExpression === "") continue;
+    const dependency = nodeRuntimeDependency(files, path, binding.packageName);
+    if (
+      dependency === undefined ||
+      !nodeIntlifyVersionIsFlatJsonVulnerable(
+        binding.packageName,
+        dependency.version,
+      )
+    ) {
+      continue;
+    }
+    return nodeIntlifySinkResult(
+      sourceExpression,
+      line,
+      dependency,
+      binding.packageName,
+      "direct-handle-flat-json",
+      binding.line,
+    );
+  }
+  for (const binding of bindings) {
+    if (binding.method !== "createI18n") continue;
+    const arguments_ = nodeIntlifyCallArguments(lines, line, binding);
+    if (arguments_ === undefined) continue;
+    const options = nodeIntlifyFlatJsonOptions(
+      lines,
+      arguments_[0] ?? "",
+      line,
+    );
+    const sourceExpression = options?.messages?.trim() ?? "";
+    if (
+      options === undefined ||
+      !options.initialMessagesReachTransformer ||
+      sourceExpression === ""
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, path, binding.packageName);
+    if (
+      dependency === undefined ||
+      !nodeIntlifyVersionIsFlatJsonVulnerable(
+        binding.packageName,
+        dependency.version,
+      )
+    ) {
+      continue;
+    }
+    return nodeIntlifySinkResult(
+      sourceExpression,
+      line,
+      dependency,
+      binding.packageName,
+      "create-i18n-messages",
+      options.flatJsonLine,
+    );
+  }
+  for (const instance of nodeIntlifyInstances(lines, bindings)) {
+    if (!nodeIntlifyBindingUsable(lines, instance.protections, line)) continue;
+    for (const operation of [
+      "setLocaleMessage",
+      "mergeLocaleMessage",
+    ] as const) {
+      const receiver = nodeIntlifyBindingPattern(instance);
+      const callee = new RegExp(
+        `\\b${receiver}\\s*\\.\\s*${operation}\\s*\\(`,
+        "u",
+      );
+      const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+      const sourceExpression = arguments_?.[1]?.trim() ?? "";
+      if (sourceExpression === "") continue;
+      const local = escapeRegularExpression(instance.local);
+      const replacedMethod = new RegExp(
+        `\\b${local}${
+          instance.receiverMember === undefined ? "" : "\\s*\\.\\s*global"
+        }\\s*\\.\\s*${operation}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+        "u",
+      );
+      if (
+        javascriptStructuralLines(lines)
+          .slice(instance.line, Math.max(instance.line, line))
+          .some((candidate) => replacedMethod.test(candidate))
+      ) {
+        continue;
+      }
+      const dependency = nodeRuntimeDependency(
+        files,
+        path,
+        instance.packageName,
+      );
+      if (
+        dependency === undefined ||
+        !nodeIntlifyVersionIsFlatJsonVulnerable(
+          instance.packageName,
+          dependency.version,
+        )
+      ) {
+        continue;
+      }
+      return nodeIntlifySinkResult(
+        sourceExpression,
+        line,
+        dependency,
+        instance.packageName,
+        operation === "setLocaleMessage"
+          ? "set-locale-message"
+          : "merge-locale-message",
+        instance.configurationLine,
+      );
+    }
   }
   return undefined;
 }
@@ -16307,6 +17101,7 @@ function frameworkDataflowRecords(
     }
     if (
       (model.id === "node-http-jsonata-expression-rce" ||
+        model.id === "node-http-intlify-flat-json-prototype-pollution" ||
         model.id === "node-http-rhinostone-swig-template-path-traversal" ||
         model.id === "node-http-sequelize-oracle-sql-injection" ||
         model.id === "node-http-liquidjs-template-rce" ||
@@ -16380,6 +17175,8 @@ function frameworkDataflowRecords(
                   model.id === "node-http-js-toml-prototype-pollution" ||
                   model.id === "node-http-jsonpath-plus-code-injection" ||
                   model.id === "node-http-jsonata-expression-rce" ||
+                  model.id ===
+                    "node-http-intlify-flat-json-prototype-pollution" ||
                   model.id ===
                     "node-http-rhinostone-swig-template-path-traversal" ||
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
@@ -16500,6 +17297,10 @@ function frameworkDataflowRecords(
       const nodeRhinostoneSwigTemplate =
         model.id === "node-http-rhinostone-swig-template-path-traversal"
           ? nodeRhinostoneSwigTemplateSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeIntlifyFlatJson =
+        model.id === "node-http-intlify-flat-json-prototype-pollution"
+          ? nodeIntlifyFlatJsonSink(files, path, lines, sink.line)
           : undefined;
       const nodeSequelizeOracle =
         model.id === "node-http-sequelize-oracle-sql-injection"
@@ -16783,6 +17584,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-rhinostone-swig-template-path-traversal" &&
         nodeRhinostoneSwigTemplate === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-intlify-flat-json-prototype-pollution" &&
+        nodeIntlifyFlatJson === undefined
       ) {
         continue;
       }
@@ -17130,6 +17937,7 @@ function frameworkDataflowRecords(
         nodeJsonPathPlus?.sourceExpression ??
         nodeJsonataExpression?.sourceExpression ??
         nodeRhinostoneSwigTemplate?.sourceExpression ??
+        nodeIntlifyFlatJson?.sourceExpression ??
         nodeSequelizeOracle?.sourceExpression ??
         nodeKyselyMysqlDdl?.sourceExpression ??
         nodeUrllibCredential?.sourceExpression ??
@@ -17491,6 +18299,7 @@ function frameworkDataflowRecords(
         nodeCopilotResolution?.input.line ??
         nodeMongooseAggregateResolution?.position.line ??
         nodeJsonataExpression?.sinkLine ??
+        nodeIntlifyFlatJson?.sinkLine ??
         nodeKyselyMysqlDdl?.sinkLine ??
         nodeLiquidJsTemplate?.sinkLine ??
         nodePromptyTemplate?.sinkLine ??
@@ -17529,6 +18338,7 @@ function frameworkDataflowRecords(
         nodeVm2Sandbox?.kind ??
         nodeJsonataExpression?.kind ??
         nodeRhinostoneSwigTemplate?.kind ??
+        nodeIntlifyFlatJson?.kind ??
         nodeSequelizeOracle?.kind ??
         nodeKyselyMysqlDdl?.kind ??
         nodeUrllibCredential?.kind ??
@@ -17667,6 +18477,22 @@ function frameworkDataflowRecords(
                     path: nodeRhinostoneSwigTemplate.templatePath,
                     line: nodeRhinostoneSwigTemplate.templateLine,
                     symbol: `${nodeRhinostoneSwigTemplate.templateTag}:${nodeRhinostoneSwigTemplate.templateVariable}`,
+                  },
+                ]),
+            ...(nodeIntlifyFlatJson === undefined
+              ? []
+              : [
+                  {
+                    kind: "intlify-runtime-dependency",
+                    path: nodeIntlifyFlatJson.dependency.manifestPath,
+                    line: nodeIntlifyFlatJson.dependency.line,
+                    symbol: `${nodeIntlifyFlatJson.packageName}@${nodeIntlifyFlatJson.dependency.version}:${nodeIntlifyFlatJson.dependency.proof}:${nodeIntlifyFlatJson.operation}`,
+                  },
+                  {
+                    kind: "intlify-flat-json-configuration",
+                    path,
+                    line: nodeIntlifyFlatJson.configurationLine,
+                    symbol: "flatJson:true",
                   },
                 ]),
             ...(nodeSequelizeOracle === undefined
@@ -25202,6 +26028,7 @@ function javascriptFrameworkWrapperSummaries(
       }
       if (
         (model.id === "node-http-jsonata-expression-rce" ||
+          model.id === "node-http-intlify-flat-json-prototype-pollution" ||
           model.id === "node-http-rhinostone-swig-template-path-traversal" ||
           model.id === "node-http-sequelize-oracle-sql-injection" ||
           model.id === "node-http-liquidjs-template-rce" ||
@@ -25251,6 +26078,8 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-js-toml-prototype-pollution" ||
                   model.id === "node-http-jsonpath-plus-code-injection" ||
                   model.id === "node-http-jsonata-expression-rce" ||
+                  model.id ===
+                    "node-http-intlify-flat-json-prototype-pollution" ||
                   model.id ===
                     "node-http-rhinostone-swig-template-path-traversal" ||
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
@@ -25350,6 +26179,10 @@ function javascriptFrameworkWrapperSummaries(
                   file.lines,
                   sink.line,
                 )
+              : undefined;
+          const nodeIntlifyFlatJson =
+            model.id === "node-http-intlify-flat-json-prototype-pollution"
+              ? nodeIntlifyFlatJsonSink(files, file.path, file.lines, sink.line)
               : undefined;
           const nodeSequelizeOracle =
             model.id === "node-http-sequelize-oracle-sql-injection"
@@ -25597,6 +26430,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-intlify-flat-json-prototype-pollution" &&
+            nodeIntlifyFlatJson === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-sequelize-oracle-sql-injection" &&
             nodeSequelizeOracle === undefined
           ) {
@@ -25795,6 +26634,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsonPathPlus?.sourceExpression ??
             nodeJsonataExpression?.sourceExpression ??
             nodeRhinostoneSwigTemplate?.sourceExpression ??
+            nodeIntlifyFlatJson?.sourceExpression ??
             nodeSequelizeOracle?.sourceExpression ??
             nodeKyselyMysqlDdl?.sourceExpression ??
             nodeUrllibCredential?.sourceExpression ??
@@ -26021,6 +26861,12 @@ function javascriptFrameworkWrapperSummaries(
                 ...(nodeRhinostoneSwigTemplate === undefined
                   ? {}
                   : { kind: nodeRhinostoneSwigTemplate.kind }),
+                ...(nodeIntlifyFlatJson === undefined
+                  ? {}
+                  : {
+                      kind: nodeIntlifyFlatJson.kind,
+                      line: nodeIntlifyFlatJson.sinkLine,
+                    }),
                 ...(nodeSequelizeOracle === undefined
                   ? {}
                   : { kind: nodeSequelizeOracle.kind }),
@@ -26141,6 +26987,7 @@ function javascriptFrameworkWrapperSummaries(
               ...(nodeVm2Sandbox === undefined &&
               nodeJsonataExpression === undefined &&
               nodeRhinostoneSwigTemplate === undefined &&
+              nodeIntlifyFlatJson === undefined &&
               nodeSequelizeOracle === undefined &&
               nodeKyselyMysqlDdl === undefined &&
               nodeUrllibCredential === undefined &&
@@ -26247,6 +27094,22 @@ function javascriptFrameworkWrapperSummaries(
                               path: nodeRhinostoneSwigTemplate.templatePath,
                               line: nodeRhinostoneSwigTemplate.templateLine,
                               symbol: `${nodeRhinostoneSwigTemplate.templateTag}:${nodeRhinostoneSwigTemplate.templateVariable}`,
+                            },
+                          ]),
+                      ...(nodeIntlifyFlatJson === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "intlify-runtime-dependency",
+                              path: nodeIntlifyFlatJson.dependency.manifestPath,
+                              line: nodeIntlifyFlatJson.dependency.line,
+                              symbol: `${nodeIntlifyFlatJson.packageName}@${nodeIntlifyFlatJson.dependency.version}:${nodeIntlifyFlatJson.dependency.proof}:${nodeIntlifyFlatJson.operation}`,
+                            },
+                            {
+                              kind: "intlify-flat-json-configuration",
+                              path: file.path,
+                              line: nodeIntlifyFlatJson.configurationLine,
+                              symbol: "flatJson:true",
                             },
                           ]),
                       ...(nodeSequelizeOracle === undefined

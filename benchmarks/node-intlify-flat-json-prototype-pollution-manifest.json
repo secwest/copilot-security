@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-intlify-flat-json-prototype-pollution",
+      "description": "An HTTP request body field crosses three relative wrappers into the messages option of an official Vue I18n createI18n call with flatJson enabled and exact affected 9.14.2 production provenance.",
+      "fixture": "fixtures/node-multi-hop-intlify-flat-json-prototype-pollution",
+      "findingsPaths": [
+        "node-multi-hop-intlify-flat-json-prototype-pollution/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-intlify-flat-json-prototype-pollution",
+          "cwe": ["CWE-1321"],
+          "locations": [
+            {
+              "path": "src/i18n.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-repaired-intlify-flat-json-prototype-guard",
+      "description": "The source-identical control changes only Vue I18n to 9.14.3, whose flat-JSON transformer rejects an exact __proto__ path segment before prototype traversal.",
+      "fixture": "fixtures/node-multi-hop-repaired-intlify-flat-json-prototype-guard",
+      "findingsPaths": [
+        "node-multi-hop-repaired-intlify-flat-json-prototype-guard/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

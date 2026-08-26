@@ -6,6 +6,52 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-http-intlify-flat-json-prototype-pollution`, an exact
+  provenance-, binding-, configuration-, operation-, and dataflow-aware
+  CWE-1321 model for
+  [GHSA-p2ph-7g93-hw3m / CVE-2025-27597](https://github.com/intlify/vue-i18n/security/advisories/GHSA-p2ph-7g93-hw3m).
+  It follows HTTP data through relative wrappers into the public
+  `@intlify/message-resolver.handleFlatJson` transformer, the explicit Intlify
+  core browser bundles that export it, official `createI18n({ flatJson: true,
+messages })` initialization, and `setLocaleMessage` or `mergeLocaleMessage`
+  on a stable configured global object.
+- Preserved the advisory's branch-specific ranges for all six package names:
+  the Intlify core/resolver packages from 9.1.0 through 9.1.10; Vue I18n from
+  9.1.0 below 9.14.3, 10.0.0-alpha.1 below 10.0.6, and 11.0.0-beta.0 below
+  11.1.2; Vue I18n core from 9.2.0 across those upper branches; and Petite Vue
+  I18n from 10.0.0 below 10.0.6 and 11.0.0-beta.0 below 11.1.2. Exact
+  production declarations and fresh declaration-consistent npm v2/v3 locks
+  are accepted; repaired or earlier prereleases, dev-only/wrong packages,
+  unresolved ranges, stale/inconsistent/v1 locks, and root core imports that
+  do not export the transformer are negative.
+- Added source-identical Vue I18n 9.14.2/9.14.3 fixtures, a strict specialized
+  manifest, canonical corpus registration, field-local validation guidance,
+  and an adversarial regression matrix. Literal `flatJson: true`, exact remote
+  message/setter position, stable official identity, and runtime provenance
+  are mandatory. False/dynamic flags, spreads, duplicate keys, custom initial
+  resolvers, fixed data, lookalikes, reassignment, replaced members, and
+  tests/examples fail closed. The bounded real-package witness uses one inert
+  unique prototype property in a disposable process and always removes it:
+  9.14.2 creates the inherited value; 9.14.3 throws `unsafe key: __proto__` and
+  leaves the prototype unchanged. The canonical corpus advances to 121
+  exploit/control pairs, 242 cases, and 726 repeated scans.
+
+### Reliability and platform hardening
+
+- Made the Windows scan-local file backend compatible with hardened and
+  sandboxed profile ancestors that permit traversal but deny directory
+  attribute handles. Ancestor locks now request the minimum zero-access Win32
+  metadata handle, retain every openable ancestor without delete sharing, and
+  tolerate `ERROR_ACCESS_DENIED` only above the canonical scan root. The scan
+  root and every accessible descendant remain locked and identity-checked;
+  reparse points, changed roots, non-regular leaves, and unsafe replacements
+  still fail closed.
+- Added a Windows backend regression that asserts the minimal handle access and
+  exercises verified read, atomic replacement, and exact-handle deletion. This
+  also restores immutable-inventory finalization beneath restricted home
+  directory ACLs instead of masking later recovery diagnostics with a generic
+  unreadable-inventory error.
+
 - Added `node-http-rhinostone-swig-template-path-traversal`, an exact
   provenance-, renderer-, loader-configuration-, template-, and locals-flow
   aware CWE-22 model for

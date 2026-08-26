@@ -626,6 +626,28 @@ reassignment, member replacement, and tests/examples remain negative. The
 bounded witness reads only the fixture-local sentinel immediately outside the
 template root: 2.7.0 renders it, while 2.7.2 throws before reading it.
 
+`node-intlify-flat-json-prototype-pollution-manifest.json` measures the
+application-reachable boundary behind
+[GHSA-p2ph-7g93-hw3m / CVE-2025-27597](https://github.com/advisories/GHSA-p2ph-7g93-hw3m).
+The positive carries a request-body message object through three relative
+wrappers into official Vue I18n 9.14.2 `createI18n()` configuration with
+literal `flatJson: true`. The source-identical control changes only Vue I18n to
+9.14.3, which rejects an exact `__proto__` segment before prototype traversal.
+Regressions cover the direct `@intlify/message-resolver` transformer, explicit
+`@intlify/core` and `@intlify/core-base` ESM browser bundles that export it,
+Vue I18n, its core package, and Petite Vue I18n; named, aliased, namespace,
+TypeScript import-equals, CommonJS, direct-require, and stable-alias bindings;
+initial messages and configured locale setters; every reviewed 9.x, 10.x, and
+11.x branch boundary; and exact or declaration-consistent npm v2/v3 production
+proof. Repaired and out-of-range prereleases, root core imports without the
+export, custom initial message resolvers, disabled or dynamic `flatJson`,
+spread or duplicate options, fixed messages, development-only or wrong
+packages, stale/v1 metadata, lookalikes, reassignment, member replacement, and
+tests/examples remain negative. The disposable-process witness uses one inert
+unique property, opens no listener or socket, and deletes the property in
+`finally`: 9.14.2 creates the inherited value, while 9.14.3 throws `unsafe key`
+and leaves `Object.prototype` unchanged.
+
 `node-sequelize-oracle-sql-injection-manifest.json` measures the conjunction
 that dependency and generic raw-SQL scanners cannot establish for
 [GHSA-v8fg-2rw7-q452 / CVE-2026-69240](https://github.com/advisories/GHSA-v8fg-2rw7-q452):

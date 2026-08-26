@@ -412,6 +412,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-repaired-rhinostone-swig-template-root",
       ],
       [
+        "node-multi-hop-intlify-flat-json-prototype-pollution",
+        "node-multi-hop-repaired-intlify-flat-json-prototype-guard",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

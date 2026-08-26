@@ -2,6 +2,112 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Keep Windows scan-local operations usable below restricted profile ancestors
+
+**Observed failure.** The authoritative Windows suite exposed 79 cascading
+scan-finalization failures. Every draft had a valid immutable inventory, but
+the secure Win32 file backend failed before reading it because this host denies
+`CreateFileW` on `C:\Users\dr` even with zero desired access. Descendant
+directories, including the temporary scan root, remained accessible. The
+finalizer converted that low-level access denial into the intentionally generic
+"inventory is missing or unreadable" boundary, which hid each test's actual
+recovery assertion.
+
+**Decision.** Directory handles used only for metadata/path verification and
+rename exclusion request zero access rather than `FILE_READ_ATTRIBUTES`.
+During ancestor locking, retain every handle that can be opened without
+`FILE_SHARE_DELETE`, but tolerate `ERROR_ACCESS_DENIED` only for an ancestor
+strictly above the canonical scan root. Never tolerate it for the scan root or
+any scan-local component. Revalidate the root identity after acquiring the
+available locks, and preserve the existing canonical-path, reparse-point,
+regular-file, atomic-write, and exact-handle deletion checks.
+
+**Why this boundary.** A profile or sandbox may grant traversal into an
+explicitly allowed subtree while refusing a handle to the profile directory
+itself. Treating that parent as a required scan artifact made the scanner
+unusable even though it could securely open and lock the actual scan root.
+Conversely, skipping access denial at or below the scan root would allow the
+backend to continue without proving the object it is protecting; that remains
+forbidden.
+
+**Regression evidence.** A Windows-only low-level test now proves that
+`_open_directory` asks for zero access, then performs a real verified read,
+atomic write, and exact deletion through the backend. The isolated recovery
+suite subsequently passes all 83 tests and 476 assertions. The post-build
+authoritative suite passes 1,687 tests and 12,267 assertions across 186 files,
+with 25 intentional platform/environment skips and zero failures. Windows GUI
+core/shared tests pass 7/7 and 3/3 and hidden startup survives; Ubuntu/WSL
+passes 7/7 core, 3/3 shared, and 2/2 Linux headless checks plus both published
+startup modes.
+
+## 2026-08-25 — Bind Intlify flat-JSON pollution to the transformer lifecycle
+
+**Gap and primary evidence.** Intlify advisory
+[`GHSA-p2ph-7g93-hw3m`](https://github.com/intlify/vue-i18n/security/advisories/GHSA-p2ph-7g93-hw3m),
+assigned CVE-2025-27597, identifies prototype pollution in `handleFlatJson`.
+The affected transformer splits dotted message keys, uses `segment in object`
+while walking the path, and therefore lets an own key such as
+`__proto__.witness` traverse into `Object.prototype`. Upstream repair commit
+[`d21e06a7440eed8ada7f522b22fcf830b98d3a53`](https://github.com/intlify/vue-i18n/commit/d21e06a7440eed8ada7f522b22fcf830b98d3a53)
+rejects an exact `__proto__` segment before traversal and adds regression
+coverage. Current authenticated searches found no advisory- or package-specific
+rule in either `github/codeql` or `semgrep/semgrep-rules`.
+
+**Lifecycle decision.** Add
+`node-http-intlify-flat-json-prototype-pollution`, but do not reduce the
+advisory to dependency membership. Model four source-visible routes: direct
+`@intlify/message-resolver.handleFlatJson`; the explicit `@intlify/core` and
+`@intlify/core-base` ESM browser-bundle subpaths that really export that
+function; remote `messages` passed to official `createI18n` with literal
+`flatJson: true` and no effective custom initial `messageResolver`; and remote
+data passed later to `setLocaleMessage` or `mergeLocaleMessage` on the stable
+global object from a configured instance. The implementation evidence shows
+that a custom resolver suppresses initial flat-message transformation, but
+later setters still invoke `handleFlatJson` when `flatJson` is active. Preserve
+that distinction.
+
+**Package and version boundary.** Retain the reviewed branch intervals rather
+than comparing only major versions. `@intlify/core`, `@intlify/core-base`, and
+`@intlify/message-resolver` are affected from 9.1.0 below 9.1.11. `vue-i18n`
+starts at 9.1.0 and `@intlify/vue-i18n-core` at 9.2.0, with repairs at 9.14.3,
+10.0.6, and 11.1.2 and explicit prerelease lower bounds at 10.0.0-alpha.1 and
+11.0.0-beta.0. `petite-vue-i18n` starts at stable 10.0.0, not its alpha
+prereleases, and shares the 10.0.6 and 11.1.2 repair boundaries. A small
+SemVer-ordering helper keeps numeric versus string prerelease precedence exact.
+Root imports of the old core packages are not accepted as direct sinks because
+their ordinary Node/bundler entry points did not export `handleFlatJson`; only
+the verified browser-bundle deep paths do.
+
+**Identity and false-positive boundary.** Recognize named, aliased, namespace,
+TypeScript import-equals, CommonJS receiver/destructured, direct-require, and
+stable callable/global aliases. Require exact production dependency proof and
+reject a dynamic or false flag, option spread or duplicate key that can change
+precedence, a custom initial resolver, missing or fixed messages, wrong or
+development-only packages, lockfile-free ranges, stale/inconsistent/v1 locks,
+local lookalikes, import/instance reassignment, member replacement, shadowed
+`require`, and tests/examples. Record the dependency/version/proof/operation
+and exact `flatJson` configuration line as first-class propagators.
+
+**Impact boundary and executable pair.** Report CWE-1321 only. The advisory
+establishes a prototype write and at least an availability risk; it does not by
+itself establish code execution, privilege escalation, persistence, or a
+confidentiality/integrity effect. Require a separate reachable property-read
+gadget before raising those consequences. The paired applications are
+source-identical except for exact Vue I18n 9.14.2 versus 9.14.3. A request-body
+message object crosses three relative wrappers into `createI18n`. The witness
+runs in a disposable Node process, opens no listener or socket, creates one
+inert uniquely named property, and deletes it in `finally`. Version 9.14.2
+creates the inherited value; 9.14.3 throws `unsafe key: __proto__` and leaves
+`Object.prototype` unchanged. The scanner emits exactly one multi-hop row for
+the affected fixture and none for the repaired twin. The strict pair advances
+the canonical corpus to 121 pairs, 242 cases, and 726 repeated scans.
+
+**Alternative considered.** The Plate media-embed iframe advisory was also
+reviewed. Its correct application model needs editor-schema context plus the
+serialized `provider`/`sourceUrl` value reaching iframe creation; a package-only
+rule would regress precision. Defer it until those two surfaces can be composed
+rather than shipping a membership alert.
+
 ## 2026-08-25 — Bind Rhinostone Swig traversal to loader root and template locals
 
 **Gap and primary evidence.** The reviewed

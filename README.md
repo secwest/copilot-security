@@ -2122,8 +2122,12 @@ a trusted template's dynamic `include` under a rooted filesystem loader:
 2.7.0 renders a bounded sentinel just outside the root, while source-identical
 2.7.2 rejects the traversal. The model also retains patched-but-unconfined
 loaders and the explicit `allowOutsideRoot` opt-out instead of treating a
-version number as proof of containment. Each of the 240 cases in 120
-exploit/control pairs is scanned three times, producing 720 scans
+version number as proof of containment. The Intlify pair then carries remote
+locale messages through three wrappers into official Vue I18n 9.14.2 with
+`flatJson: true`; its bounded witness creates one inert inherited property,
+while source-identical 9.14.3 rejects the `__proto__` path segment and leaves
+`Object.prototype` unchanged. Each of the 242 cases in 121 exploit/control
+pairs is scanned three times, producing 726 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

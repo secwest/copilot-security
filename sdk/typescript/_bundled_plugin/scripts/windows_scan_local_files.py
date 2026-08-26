@@ -61,6 +61,7 @@ _FILE_ATTRIBUTE_TAG_INFO_CLASS = 9
 
 _FILE_TYPE_DISK = 0x0001
 _FILE_NAME_OPENED = 0x00000008
+_ERROR_ACCESS_DENIED = 5
 _ERROR_FILE_NOT_FOUND = 2
 _ERROR_PATH_NOT_FOUND = 3
 _ERROR_FILE_EXISTS = 80
@@ -368,7 +369,12 @@ def _canonical_scan_directory(scan_dir: Path) -> tuple[Path, tuple[int, int]]:
 def _open_directory(path: Path, *, missing_ok: bool = False) -> _OwnedHandle | None:
     handle = _create_file(
         path,
-        access=_FILE_READ_ATTRIBUTES,
+        # A zero-access metadata handle is sufficient for
+        # GetFileInformationByHandleEx/GetFinalPathNameByHandleW and for
+        # withholding FILE_SHARE_DELETE.  Requesting FILE_READ_ATTRIBUTES here
+        # needlessly fails below scan roots whose ancestors allow traversal but
+        # deny explicit attribute reads (a common hardened home-directory ACL).
+        access=0,
         share=_FILE_SHARE_READ | _FILE_SHARE_WRITE,
         disposition=_OPEN_EXISTING,
         flags=_FILE_FLAG_BACKUP_SEMANTICS | _FILE_FLAG_OPEN_REPARSE_POINT,
@@ -410,7 +416,19 @@ def _locked_parent(
         # fixed in place. Otherwise an attacker could rename an ancestor of the
         # scan root and substitute a different tree at the stored path.
         for directory_path in (*reversed(root_path.parents), root_path):
-            directory_handle = _open_directory(directory_path)
+            try:
+                directory_handle = _open_directory(directory_path)
+            except WindowsScanLocalFileError as exc:
+                # Sandboxed and hardened profiles can permit traversal through
+                # an ancestor while denying even a zero-access directory
+                # handle. Keep every openable ancestor locked, but allow an
+                # inaccessible ancestor above the canonical scan root: this
+                # process cannot obtain a handle that could help it replace
+                # that directory, and the root identity is revalidated after
+                # all descendant locks are acquired.
+                if exc.errno != _ERROR_ACCESS_DENIED or directory_path == root_path:
+                    raise
+                continue
             assert directory_handle is not None
             handles.append(directory_handle)
         current_root = root_path.lstat()
