@@ -6,6 +6,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-deepseek-mcp-http-cross-session-authorization-bypass`, an exact
+  deployment-, transport-, launch-, provenance-, and version-aware CWE-639
+  model for
+  [GHSA-fh3r-g96v-f578 / CVE-2026-55604](https://github.com/arikusi/deepseek-mcp-server/security/advisories/GHSA-fh3r-g96v-f578).
+  It requires affected production `@arikusi/deepseek-mcp-server` 1.4.2 through
+  1.6.x plus literal HTTP selection and an actual top-level dynamic launch or
+  bounded start/serve/server/mcp script. STDIO, static-import ordering, nested
+  or test launchers, overwritten/dynamic transport, arbitrary or echo-only
+  scripts, prereleases, dev-only/wrong packages, unresolved ranges,
+  stale/inconsistent/v1 locks, and 1.7.0 or later fail closed.
+- Added source-identical 1.6.0/1.7.0 fixtures, a strict specialized manifest,
+  canonical corpus registration, field-local validation guidance, and an
+  adversarial regression matrix for JavaScript and POSIX/Windows npm launch
+  forms. Exact declarations and fresh declaration-consistent npm v2/v3 locks
+  are accepted. The canonical corpus advances to 122 exploit/control pairs,
+  244 cases, and 732 repeated scans.
+- Added a bounded real-package differential witness that opens no listener and
+  contacts no API. Two simulated client flows share the 1.6.0 singleton,
+  allowing the second to enumerate one victim key and retrieve one inert
+  message marker. Explicit 1.7.0 stores remain independent even with a
+  colliding caller-selected `session_id`. Both branches clear their state in
+  `finally`.
+
 - Added `node-http-intlify-flat-json-prototype-pollution`, an exact
   provenance-, binding-, configuration-, operation-, and dataflow-aware
   CWE-1321 model for

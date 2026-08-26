@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-deepseek-mcp-http-cross-session-bypass",
+      "description": "A production top-level launcher selects HTTP transport before starting an exact affected DeepSeek MCP server whose process-global caller-keyed session store spans distinct HTTP clients.",
+      "fixture": "fixtures/node-deepseek-mcp-http-cross-session-bypass",
+      "findingsPaths": [
+        "node-deepseek-mcp-http-cross-session-bypass/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-deepseek-mcp-http-cross-session-authorization-bypass",
+          "cwe": ["CWE-639"],
+          "locations": [
+            {
+              "path": "src/launcher.mjs",
+              "startLine": 3,
+              "endLine": 3,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-deepseek-mcp-http-session-isolated",
+      "description": "The source-identical control changes only the production server to 1.7.0, whose HTTP factory injects an independent SessionStore into each MCP session.",
+      "fixture": "fixtures/node-deepseek-mcp-http-session-isolated",
+      "findingsPaths": [
+        "node-deepseek-mcp-http-session-isolated/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

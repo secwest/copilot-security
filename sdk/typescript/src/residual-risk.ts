@@ -3870,6 +3870,19 @@ const INTLIFY_FLAT_JSON_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-1321", "prototype pollution", "availability impact"],
 ] as const;
 
+const DEEPSEEK_MCP_SESSION_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["@arikusi/deepseek-mcp-server", "official DeepSeek MCP server"],
+  ["1.4.2", "1.6.0", "affected release"],
+  ["TRANSPORT=http", "HTTP transport", "streamable HTTP"],
+  ["top-level launcher", "operational npm script", "server launch"],
+  ["two HTTP clients", "separate MCP sessions", "multi-client"],
+  ["caller-controlled session_id", "colliding session ID"],
+  ["process-global SessionStore", "singleton SessionStore"],
+  ["victim conversation", "prior messages", "session enumeration"],
+  ["1.7.0", "per-session SessionStore", "repaired control"],
+  ["CWE-639", "cross-session authorization bypass"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3963,6 +3976,15 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: INTLIFY_FLAT_JSON_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: INTLIFY_FLAT_JSON_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-deepseek-mcp-http-cross-session-authorization-bypass",
+    {
+      validation:
+        DEEPSEEK_MCP_SESSION_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath:
+        DEEPSEEK_MCP_SESSION_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -4082,6 +4104,7 @@ export async function buildResidualRiskInventory(
   records.push(...goPgconnSqlInjectionRecords(sourceFiles));
   records.push(...nodeOpcuaCrossFileServerDosRecords(sourceFiles));
   records.push(...nodeOpcuaCrossFileServerAuthRecords(sourceFiles));
+  records.push(...nodeDeepseekMcpHttpSessionAuthorizationRecords(sourceFiles));
   records.push(...nodeAuthJsConfigurationErrorFailOpenRecords(sourceFiles));
   records.push(...nodeKeystoneNegativeTakeBypassRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
@@ -22000,6 +22023,283 @@ function nodeHasCompleteIpv6TransitionCanonicalization(
       definition,
     );
   return mapped && nat64 && sixToFour && extractsEmbeddedAddress;
+}
+
+interface NodeDeepseekMcpHttpLaunch {
+  dependency: NodeRuntimeDependency;
+  file: SourceFileSnapshot;
+  route: "module-dynamic-import" | "operational-npm-script";
+  sourceLine: number;
+  sinkLine: number;
+}
+
+function nodeDeepseekMcpVersionHasHttpSessionAuthorizationBypass(
+  version: string,
+): boolean {
+  if (version.includes("-")) return false;
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  return major === 1 && (minor > 4 || (minor === 4 && patch >= 2)) && minor < 7;
+}
+
+function nodeDeepseekMcpTransportAssignment(
+  structuralLine: string,
+): "http" | "stdio" | "other" | undefined {
+  const assignment =
+    /\bprocess\s*\.\s*env\s*(?:\.\s*TRANSPORT|\[\s*["']TRANSPORT["']\s*\])\s*=\s*([^;\r\n]+)/u.exec(
+      structuralLine,
+    );
+  if (assignment?.[1] !== undefined) {
+    const value = assignment[1].trim();
+    if (/^["']http["']$/u.test(value)) return "http";
+    if (/^["']stdio["']$/u.test(value)) return "stdio";
+    return "other";
+  }
+  const property = String.raw`process\s*\.\s*env\s*(?:\.\s*TRANSPORT|\[\s*["']TRANSPORT["']\s*\])`;
+  if (
+    new RegExp(
+      String.raw`(?:\bdelete\s+${property}|${property}\s*(?:\+\+|--|(?:\?\?|\|\||&&|[+*/%-])?=)|\bObject\s*\.\s*assign\s*\(\s*process\s*\.\s*env\b|\bReflect\s*\.\s*set\s*\(\s*process\s*\.\s*env\s*,\s*["']TRANSPORT["'])`,
+      "u",
+    ).test(structuralLine)
+  ) {
+    return "other";
+  }
+  return undefined;
+}
+
+function nodeDeepseekMcpDynamicLaunches(
+  files: readonly SourceFileSnapshot[],
+): NodeDeepseekMcpHttpLaunch[] {
+  const launches: NodeDeepseekMcpHttpLaunch[] = [];
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !file.text.includes("@arikusi/deepseek-mcp-server")
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "@arikusi/deepseek-mcp-server",
+    );
+    if (
+      dependency === undefined ||
+      !nodeDeepseekMcpVersionHasHttpSessionAuthorizationBypass(
+        dependency.version,
+      )
+    ) {
+      continue;
+    }
+    const codeLines = javascriptCodeLinesWithoutComments(file.lines);
+    const structuralLines = javascriptStructuralLines(file.lines);
+    for (let index = 0; index < structuralLines.length; index += 1) {
+      const code = codeLines[index] ?? "";
+      if (
+        !/\bimport\s*\(\s*["']@arikusi\/deepseek-mcp-server["']\s*\)/u.test(
+          code,
+        ) ||
+        !javascriptModuleScopeLine(structuralLines, index + 1)
+      ) {
+        continue;
+      }
+      let sourceLine: number | undefined;
+      let transport: "http" | "stdio" | "other" | undefined;
+      for (let prior = 0; prior < index; prior += 1) {
+        const candidate = nodeDeepseekMcpTransportAssignment(
+          codeLines[prior] ?? "",
+        );
+        if (
+          candidate !== undefined &&
+          javascriptModuleScopeLine(structuralLines, prior + 1)
+        ) {
+          transport = candidate;
+          sourceLine = prior + 1;
+        }
+      }
+      if (transport !== "http" || sourceLine === undefined) continue;
+      launches.push({
+        dependency,
+        file,
+        route: "module-dynamic-import",
+        sourceLine,
+        sinkLine: index + 1,
+      });
+    }
+  }
+  return launches;
+}
+
+function nodeDeepseekMcpOperationalScriptCommand(command: string): boolean {
+  const packageInvocation = String.raw`(?:deepseek-mcp-server|npx(?:\s+--yes)?\s+@arikusi/deepseek-mcp-server|npm\s+exec(?:\s+--yes)?\s+(?:--\s+)?@arikusi/deepseek-mcp-server)`;
+  const posix = new RegExp(
+    String.raw`^(?:(?:cross-env(?:-shell)?|env)\s+)?(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:[^\s;&|]+|"[^"]*"|'[^']*'))\s+)*${packageInvocation}(?:\s|$)`,
+    "u",
+  );
+  if (
+    posix.test(command.trim()) &&
+    /(?:^|\s)TRANSPORT=(?:http|["']http["'])(?:\s|$)/u.test(command)
+  ) {
+    return true;
+  }
+  const windows = new RegExp(
+    String.raw`^set\s+(?:"TRANSPORT=http"|TRANSPORT=http)\s*&&\s*(?:call\s+)?${packageInvocation}(?:\s|$)`,
+    "u",
+  );
+  return windows.test(command.trim());
+}
+
+function nodeDeepseekMcpScriptLaunches(
+  files: readonly SourceFileSnapshot[],
+): NodeDeepseekMcpHttpLaunch[] {
+  const launches: NodeDeepseekMcpHttpLaunch[] = [];
+  for (const file of files) {
+    if (
+      posix.basename(file.path) !== "package.json" ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    let root: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(file.text) as unknown;
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        continue;
+      }
+      root = parsed as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    const scripts = root["scripts"];
+    if (
+      typeof scripts !== "object" ||
+      scripts === null ||
+      Array.isArray(scripts)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "@arikusi/deepseek-mcp-server",
+    );
+    if (
+      dependency === undefined ||
+      !nodeDeepseekMcpVersionHasHttpSessionAuthorizationBypass(
+        dependency.version,
+      )
+    ) {
+      continue;
+    }
+    for (const [name, value] of Object.entries(
+      scripts as Record<string, unknown>,
+    ).sort(([left], [right]) => left.localeCompare(right))) {
+      if (
+        typeof value !== "string" ||
+        !/^(?:mcp|serve|server|start)(?::[A-Za-z0-9._-]+)?$/u.test(name) ||
+        !nodeDeepseekMcpOperationalScriptCommand(value)
+      ) {
+        continue;
+      }
+      const serializedName = JSON.stringify(name);
+      const line =
+        file.lines.findIndex(
+          (candidate) =>
+            candidate.includes(serializedName) && candidate.includes(":"),
+        ) + 1;
+      launches.push({
+        dependency,
+        file,
+        route: "operational-npm-script",
+        sourceLine: Math.max(1, line),
+        sinkLine: Math.max(1, line),
+      });
+    }
+  }
+  return launches;
+}
+
+function nodeDeepseekMcpHttpSessionAuthorizationRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const launches = [
+    ...nodeDeepseekMcpDynamicLaunches(files),
+    ...nodeDeepseekMcpScriptLaunches(files),
+  ].filter(
+    (launch, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.file.path === launch.file.path &&
+          candidate.sourceLine === launch.sourceLine &&
+          candidate.sinkLine === launch.sinkLine,
+      ) === index,
+  );
+  return launches.map((launch) => {
+    const sinkStart = Math.max(1, launch.sinkLine - CONTEXT_LINES_BEFORE);
+    const sinkEnd = Math.min(
+      launch.file.lines.length,
+      launch.sinkLine + CONTEXT_LINES_AFTER,
+    );
+    const sourceStart = Math.max(1, launch.sourceLine - 2);
+    const sourceEnd = Math.min(launch.file.lines.length, launch.sourceLine + 2);
+    const prefix =
+      launch.dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+    const sinkKind = `${prefix}vulnerable-deepseek-mcp-process-global-caller-keyed-session-store`;
+    return {
+      path: launch.file.path,
+      line: launch.sinkLine,
+      categories: [
+        "framework-dataflow:node-deepseek-mcp-http-cross-session-authorization-bypass",
+        "modeled-source:unauthenticated-multi-client-http-mcp-session",
+        `modeled-sink:${sinkKind}`,
+      ],
+      priority: 122,
+      startLine: sinkStart,
+      endLine: sinkEnd,
+      excerpt: sourceExcerpt(launch.file.lines, sinkStart, sinkEnd),
+      sourceExcerpt: sourceExcerpt(launch.file.lines, sourceStart, sourceEnd),
+      frameworkModel: {
+        schemaVersion: "1.2",
+        id: "node-deepseek-mcp-http-cross-session-authorization-bypass",
+        language: "javascript-typescript",
+        scope: "same-file",
+        source: {
+          kind: "unauthenticated-multi-client-http-mcp-session",
+          path: launch.file.path,
+          line: launch.sourceLine,
+        },
+        sink: {
+          kind: sinkKind,
+          path: launch.file.path,
+          line: launch.sinkLine,
+          cweIds: ["CWE-639"],
+        },
+        propagators: [
+          {
+            kind: "deepseek-mcp-http-launch-configuration",
+            path: launch.file.path,
+            line: launch.sourceLine,
+            symbol: `${launch.route}:TRANSPORT=http`,
+          },
+          {
+            kind: "deepseek-mcp-runtime-dependency",
+            path: launch.dependency.manifestPath,
+            line: launch.dependency.line,
+            symbol: `@arikusi/deepseek-mcp-server@${launch.dependency.version}:${launch.dependency.proof}:process-global-session-store`,
+          },
+        ],
+        candidateControls: [],
+      },
+    };
+  });
 }
 
 interface NodeAuthJsFactoryBinding {

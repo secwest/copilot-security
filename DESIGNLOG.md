@@ -2,6 +2,70 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Bind DeepSeek MCP session authorization to HTTP launch mode
+
+**Gap and primary evidence.** The reviewed
+[`GHSA-fh3r-g96v-f578`](https://github.com/arikusi/deepseek-mcp-server/security/advisories/GHSA-fh3r-g96v-f578),
+assigned CVE-2026-55604, identifies cross-session data exposure in
+`@arikusi/deepseek-mcp-server` from 1.4.2 below 1.7.0. In HTTP mode the affected
+entry point creates a separate `McpServer` for each transport session, but
+every registered chat and session tool reaches `SessionStore.getInstance()`.
+That process-global map accepts caller-provided `session_id` values; the
+session-management tool can also list, delete, or clear those keys. STDIO is
+not affected because one client owns each server process. Upstream repair
+commit
+[`9fd514292d23d59ca1434b01f019aca6ef4356f9`](https://github.com/arikusi/deepseek-mcp-server/commit/9fd514292d23d59ca1434b01f019aca6ef4356f9)
+removes the singleton API and injects a fresh store into every HTTP
+`serverFactory` invocation. Authenticated current-source searches return no
+exact package match in `github/codeql` or `semgrep/semgrep-rules`.
+
+**Reachability decision.** Add
+`node-deepseek-mcp-http-cross-session-authorization-bypass`, but never emit it
+from dependency membership alone. Accept two source-visible deployment routes.
+A JavaScript/TypeScript launcher must assign literal `http` to
+`process.env.TRANSPORT` at module scope and then dynamically import the exact
+package root at module scope; a static import is rejected because dependency
+evaluation precedes the assignment. Alternatively, an operational
+`start`/`serve`/`server`/`mcp` npm script, with an optional suffix, must both
+set `TRANSPORT=http` and invoke the exact binary through a bounded direct,
+`npx`, or `npm exec` form. POSIX `env`/`cross-env` and Windows `set ... &&`
+forms are explicit. Arbitrary script names, echo/lookalike commands, nested
+launchers, subpath imports, test/example paths, stdio, dynamic transport, and
+later direct deletion or reassignment remain negative.
+
+**Provenance and version boundary.** Require the nearest exact production
+declaration or a fresh declaration-consistent npm lockfile v2/v3 resolution.
+Reject development-only declarations, wrong packages, lockfile-free ranges,
+stale root declarations, inconsistent or v1 locks, and prereleases. Preserve
+the reviewed stable interval exactly: 1.4.1 is outside it, 1.4.2 is the first
+affected release, every stable 1.5.x and 1.6.x release is affected, and 1.7.0
+is the repair. Store the launch route, literal transport proof, package,
+version, proof type, and process-global-state boundary as ordered propagators.
+
+**Impact and validation boundary.** Report CWE-639. The model establishes a
+plausible cross-session authorization path; it does not by itself establish
+public Internet exposure, upstream DeepSeek compromise, host execution,
+persistence, or privilege escalation. Validation must distinguish two HTTP
+clients and transport sessions, record the caller-controlled key, store
+identity, enumerated ID or retrieved marker, cleanup, concurrency, and repaired
+comparison. A disposable witness imports only the real packaged configuration
+and session-store modules. It opens no listener and makes no external request.
+Under 1.6.0 the victim and attacker flows receive the same singleton; the
+attacker enumerates the victim key and reads one inert conversation marker.
+Under 1.7.0 two constructed stores remain distinct and the attacker sees no
+key or message even when both flows choose the same ID. All state is cleared in
+`finally`.
+
+**Regression contract.** The specialized perfect-gate pair requires high
+severity, CWE-639, exact launcher location, validation, attack-path analysis,
+code evidence, stable detection, and zero false positives. Focused regression
+covers both application launch routes, dot/bracket environment syntax,
+POSIX/Windows script forms, every reviewed version boundary, exact and modern
+lock proof, and the negative transport, ordering, scope, identity, script,
+metadata, and test boundaries. The pair advances the canonical corpus to 122
+exploit/control pairs, 244 cases, and 732 repeated scans. This is a new
+multi-tenant MCP authorization capability, not a dependency-alert alias.
+
 ## 2026-08-25 — Keep Windows scan-local operations usable below restricted profile ancestors
 
 **Observed failure.** The authoritative Windows suite exposed 79 cascading

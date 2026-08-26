@@ -2126,8 +2126,13 @@ version number as proof of containment. The Intlify pair then carries remote
 locale messages through three wrappers into official Vue I18n 9.14.2 with
 `flatJson: true`; its bounded witness creates one inert inherited property,
 while source-identical 9.14.3 rejects the `__proto__` path segment and leaves
-`Object.prototype` unchanged. Each of the 242 cases in 121 exploit/control
-pairs is scanned three times, producing 726 scans
+`Object.prototype` unchanged. The DeepSeek MCP pair then makes deployment mode
+part of authorization reachability: a top-level launcher selects HTTP before
+starting exact 1.6.0, whose caller-keyed `SessionStore` is process-global;
+source-identical 1.7.0 gives each HTTP MCP session an independent store. Its
+listener-free witness shows that a simulated second client can enumerate and
+read one inert victim marker only on 1.6.0. Each of the 244 cases in 122
+exploit/control pairs is scanned three times, producing 732 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

@@ -416,6 +416,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-repaired-intlify-flat-json-prototype-guard",
       ],
       [
+        "node-deepseek-mcp-http-cross-session-bypass",
+        "node-deepseek-mcp-http-session-isolated",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

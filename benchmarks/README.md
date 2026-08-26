@@ -74,7 +74,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains 115 vulnerable/control pairs:
+The versioned corpus currently contains 122 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -224,7 +224,7 @@ actually reach the parse call; ordinary `XMLParser` and construction alone
 remain negative. The tarfile pair adds exact uploaded-`fileobj` flow, retained
 `TarFile` receiver identity, runtime-default semantics, and a matched control
 that closes both traversal and decompression-exhaustion paths. Three runs per
-case now produce 690 scans across 115 exploit/control pairs in the complete
+case now produce 732 scans across 122 exploit/control pairs in the complete
 corpus. The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
@@ -647,6 +647,23 @@ tests/examples remain negative. The disposable-process witness uses one inert
 unique property, opens no listener or socket, and deletes the property in
 `finally`: 9.14.2 creates the inherited value, while 9.14.3 throws `unsafe key`
 and leaves `Object.prototype` unchanged.
+
+`node-deepseek-mcp-http-session-authorization-manifest.json` measures the
+HTTP-only cross-session authorization boundary in
+[GHSA-fh3r-g96v-f578 / CVE-2026-55604](https://github.com/arikusi/deepseek-mcp-server/security/advisories/GHSA-fh3r-g96v-f578).
+The positive uses a production top-level launcher that assigns literal
+`TRANSPORT=http` before dynamically starting exact
+`@arikusi/deepseek-mcp-server` 1.6.0. The source-identical control changes only
+the runtime to 1.7.0. Regressions cover top-level dot and bracket environment
+assignment, bounded start/serve/server/mcp script forms for POSIX and Windows,
+the full stable 1.4.2-through-1.6.x interval, exact and declaration-consistent
+npm v2/v3 proof, and fail-closed rejection of stdio, overwritten or dynamic
+transport, nested and static launchers, arbitrary or echo-only scripts,
+subpath lookalikes, development-only packages, prereleases, stale/v1 locks,
+and tests/examples. The real-package witness opens no listener and contacts no
+API: 1.6.0 returns the same singleton to two simulated client flows, exposing
+the victim key and inert message marker, while 1.7.0 returns distinct stores
+that remain empty even when both clients choose the same `session_id`.
 
 `node-sequelize-oracle-sql-injection-manifest.json` measures the conjunction
 that dependency and generic raw-SQL scanners cannot establish for

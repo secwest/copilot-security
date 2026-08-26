@@ -1,0 +1,13 @@
+{
+  "name": "node-deepseek-mcp-http-session-isolated",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/launcher.mjs",
+    "witness": "node test/witness.mjs"
+  },
+  "dependencies": {
+    "@arikusi/deepseek-mcp-server": "1.7.0"
+  }
+}
