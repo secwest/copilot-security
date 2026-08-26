@@ -78,6 +78,42 @@ messages })` initialization, and `setLocaleMessage` or `mergeLocaleMessage`
 ### Validation and distribution
 
 - Exact implementation checkpoint
+  `86a1ece2468cd236a42654587da8af6911bdffc8` passes the authoritative
+  Windows Bun 1.3.14 suite with 1,694 passes, 25 intentional
+  platform/environment skips, zero failures, and 12,309 assertions across 187
+  files and 1,719 total tests in 568.82 seconds. The focused Windows and
+  Ubuntu/WSL model, dataflow, and canonical benchmark lane passes 39 tests and
+  2,010 assertions on each host. Both hosts also reproduce the bounded real
+  1.6.0 cross-session read and the isolated 1.7.0 control.
+- Two compiled inventories of a disposable Git archive of that exact
+  checkpoint complete in 31,511.777 and 33,465.482 ms and are byte-identical
+  at 256 rows, 535,196 bytes, and SHA-256
+  `5307a1046e9db4777a6f898a52979c28849f42d6355ecff0c551b44cfca11f8a`.
+  Structured-first selection retains all 188 framework rows ahead of 68
+  lexical leads; 236 rows are fixture paths and 20 are not. Exactly one
+  DeepSeek MCP row retains HTTP launch configuration at
+  `src/launcher.mjs:1`, the vulnerable process-global store sink at line 3,
+  CWE-639, and exact
+  `@arikusi/deepseek-mcp-server@1.6.0:manifest-exact:process-global-session-store`
+  provenance. The source-identical 1.7.0 control is absent.
+- Generated-model drift, formatting, TypeScript, the production build, and the
+  production advisory audit are green. Two exact-source npm packages are
+  byte-identical at 259 entries and 1,956,583 bytes with SHA-256
+  `5e40673df3b5281ea67bdcfe782a5d71a99b0611b017a5540e63fa38757786ea`;
+  both isolated installs validate the public SDK import, executable CLI, and
+  all 79 bundled plugin files. Windows GUI core/shared tests pass 7/7 and 3/3,
+  its bounded hidden startup survives, and its 346,796-byte executable has
+  SHA-256
+  `6da28a6cc2fe55226e7e371e022cf4b6e15804a7aa70028a53e1dc6703243578`.
+  Ubuntu/WSL passes 7/7 core, 3/3 shared, and 2/2 Linux GUI tests plus both
+  startup modes; its 72,568-byte executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+  All seven exact-source workflow families pass: Node `32930320668`, container
+  `32930320652`, Windows GUI `32930320688`, Linux GUI `32930320666`, Java
+  `32930320663`, .NET `32930320631`, and Go `32930320632`. GitHub reports the
+  repository public on default branch `main`.
+
+- Exact implementation checkpoint
   `68df325d2ada7e688de5031918103c56599b2631` passes the post-build Windows Bun
   1.3.14 suite with 1,687 tests, 12,267 assertions, 25 intentional
   platform/environment skips, and zero failures across 186 files in 648.99

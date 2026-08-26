@@ -66,6 +66,50 @@ metadata, and test boundaries. The pair advances the canonical corpus to 122
 exploit/control pairs, 244 cases, and 732 repeated scans. This is a new
 multi-tenant MCP authorization capability, not a dependency-alert alias.
 
+**Final acceptance evidence.** Exact implementation checkpoint
+`86a1ece2468cd236a42654587da8af6911bdffc8` passes the authoritative Windows
+Bun 1.3.14 suite with 1,694 passes, 25 intentional skips, zero failures, and
+12,309 assertions across 187 files and 1,719 total tests in 568.82 seconds.
+The focused model, framework-dataflow, and canonical benchmark lane passes 39
+tests and 2,010 assertions on both Windows and native Ubuntu/WSL. Both hosts
+reproduce the real-package boundary: 1.6.0 shares the store, exposes the victim
+key, and returns the inert marker; 1.7.0 shares none of those properties.
+Generated-model drift, formatting, TypeScript, the production build, and
+`pnpm audit --prod --audit-level high` are green.
+
+Two independent compiled inventories of an immutable Git archive of that exact
+checkpoint complete in 31,511.777 and 33,465.482 ms. They produce the same 256
+rows and 535,196 bytes at SHA-256
+`5307a1046e9db4777a6f898a52979c28849f42d6355ecff0c551b44cfca11f8a`.
+Structured-first selection retains all 188 framework records ahead of 68
+lexical leads; 236 rows are fixture paths and 20 are not. Exactly one model row
+remains, with source
+`benchmarks/fixtures/node-deepseek-mcp-http-cross-session-bypass/src/launcher.mjs:1`,
+sink line 3, CWE-639, literal `TRANSPORT=http`, module-level dynamic import,
+and exact
+`@arikusi/deepseek-mcp-server@1.6.0:manifest-exact:process-global-session-store`
+provenance. No row refers to the source-identical 1.7.0 control. Because the
+input is the exact tracked archive, protected untracked workspace material is
+outside both reviews.
+
+Two exact-source npm packages are byte-identical at 259 entries and 1,956,583
+bytes with SHA-256
+`5e40673df3b5281ea67bdcfe782a5d71a99b0611b017a5540e63fa38757786ea`.
+Strict inspection and two fresh installs validate the public SDK import,
+executable CLI, and all 79 bundled plugin files. Windows builds the GUI without
+warnings or errors, passes 7/7 core and 3/3 shared tests, survives a bounded
+hidden startup, and publishes a 346,796-byte executable with SHA-256
+`6da28a6cc2fe55226e7e371e022cf4b6e15804a7aa70028a53e1dc6703243578`.
+Ubuntu/WSL completes locked restores, builds without warnings or errors, passes
+7/7 core, 3/3 shared, and 2/2 Linux GUI tests, and passes non-graphical plus
+X11/Xvfb startup; its 72,568-byte executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+All seven hosted workflow families pass from the same source: Node
+`32930320668`, container `32930320652`, Windows GUI `32930320688`, Linux GUI
+`32930320666`, Java `32930320663`, .NET `32930320631`, and Go `32930320632`.
+GitHub reports the repository public on default branch `main`. This completes
+the DeepSeek MCP increment, not the standing scanner-effectiveness goal.
+
 ## 2026-08-25 — Keep Windows scan-local operations usable below restricted profile ancestors
 
 **Observed failure.** The authoritative Windows suite exposed 79 cascading
