@@ -105,6 +105,41 @@ messages })` initialization, and `setLocaleMessage` or `mergeLocaleMessage`
 ### Validation and distribution
 
 - Exact implementation checkpoint
+  `fa70abb387a42a137919710de194c642ce04237a` passes the hosted Windows Bun
+  1.3.14 suite with 1,701 passes, 25 intentional skips, zero failures, and
+  12,357 assertions across 188 files and 1,726 total tests in 469.17 seconds.
+  The managed local aggregate passes 1,699 cases before denying a child Git
+  metadata read and Windows credential-home ACL replacement; exactly those two
+  permission-dependent tests pass with seven assertions under their required
+  host permissions. The focused Windows and Ubuntu/WSL model, dataflow,
+  framework, and canonical benchmark lane passes 41 tests and 2,037 assertions
+  on each host, and both hosts reproduce the deployment-sensitive real-package
+  15.5.15/15.5.16 boundary. Generated-model drift, formatting, TypeScript, the
+  production build, and the high-severity production dependency audit are
+  green.
+- Two compiled inventories of an immutable archive of that checkpoint complete
+  in 30,724.650 and 15,203.680 ms and are byte-identical at 256 rows, 535,547
+  bytes, and SHA-256
+  `259dc29da0cb09589f67c6fcd065cc0ec228daf218e4aef28a5e0ef2bbc344d7`.
+  They retain 187 framework rows ahead of 69 lexical leads, with 238 fixture
+  and 18 non-fixture paths. Exactly one CWE-288 Next.js row joins the line-4
+  visible-path denial to the line-11 data access with exact 15.5.15 provenance;
+  the 15.5.16 control is absent. A previous-archive comparison proves that the
+  apparent one-row structured reduction removes only two late shell examples
+  embedded in a scanner regression test at the unchanged 8 MiB input bound;
+  no production row or model family is displaced.
+- Two exact-source npm packages are byte-identical at 259 entries and 1,991,766
+  bytes with SHA-256
+  `a6a8de2e68daba3f3bc80c65ddc26609300ef5fbebcc11f9d4f3018d36ff055c`;
+  strict inspection and two fresh installs validate the public SDK import,
+  executable CLI, and all 79 bundled plugin files. Windows passes 7/7 core and
+  3/3 shared tests, publishes a 346,796-byte executable, and survives hidden
+  startup. Ubuntu/WSL passes 7/7 core, 3/3 shared, and 2/2 Linux GUI tests,
+  publishes a 72,568-byte executable, and passes both non-graphical and Xvfb
+  window startup. All seven exact-source hosted workflow families pass, and
+  GitHub reports the repository public on default branch `main`.
+
+- Exact implementation checkpoint
   `86a1ece2468cd236a42654587da8af6911bdffc8` passes the authoritative
   Windows Bun 1.3.14 suite with 1,694 passes, 25 intentional
   platform/environment skips, zero failures, and 12,309 assertions across 187

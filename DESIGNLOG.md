@@ -82,6 +82,62 @@ pairs, 246 cases, and 738 repeated scans. This is a new framework authorization
 capability; it does not convert a dependency advisory into an unconditional
 finding.
 
+**Final acceptance evidence.** Exact implementation checkpoint
+`fa70abb387a42a137919710de194c642ce04237a` passes the hosted Windows Bun
+1.3.14 suite with 1,701 passes, 25 intentional skips, zero failures, and
+12,357 assertions across 188 files and 1,726 total tests in 469.17 seconds.
+The managed local aggregate exercises every case with 1,699 passes before its
+sandbox denies a child Git metadata read and Windows credential-home ACL
+replacement; rerunning exactly those two tests with their required host
+permissions passes 2/2 tests and seven assertions. The focused model,
+framework-dataflow, framework-model, and canonical benchmark lane passes 41
+tests and 2,037 assertions on both Windows and native Ubuntu/WSL. Windows and
+Linux independently reproduce the real-package boundary: ordinary standalone
+requests preserve the public route on both versions, while the wrapped route
+template prepares `secret` under 15.5.15 and `[slug]` under 15.5.16. Generated
+model drift, formatting, TypeScript, the clean production build, and
+`pnpm audit --prod --audit-level high` are green.
+
+Two compiled inventories of a tracked-only archive of that exact checkpoint
+complete in 30,724.650 and 15,203.680 ms. They produce byte-identical output:
+256 rows, 535,547 bytes, and SHA-256
+`259dc29da0cb09589f67c6fcd065cc0ec228daf218e4aef28a5e0ef2bbc344d7`.
+Structured-first selection retains 187 framework records ahead of 69 lexical
+leads; 238 rows are fixture paths and 18 are not. Exactly one Next.js row
+survives. It joins the visible-path denial at
+`benchmarks/fixtures/node-nextjs-dynamic-route-param-authorization-bypass/src/middleware.js:4`
+to the line-11 document lookup, reports CWE-288, preserves
+`slug:nxtPslug:secret`, and records exact
+`next@15.5.15:manifest-exact:external-nxtP-route-param-normalization`
+provenance. No row refers to the source-identical 15.5.16 control.
+
+The lower structured count is not an unexamined capacity regression. Scanning
+the preceding exact archive with the current detector reproduces its prior
+188/68 split. Comparing record identities shows that the new model replaces
+two `node-http-command` records embedded in the Shescape regression test after
+the real Next.js lockfiles move that late test source beyond the unchanged 8
+MiB ingestion bound. No production-source record or model family disappears;
+one additional bounded Java witness lexical lead also enters selection. The
+limit remains unchanged rather than being raised to improve a self-scan count.
+
+Two exact-source npm packages are byte-identical at 259 entries and 1,991,766
+bytes with SHA-256
+`a6a8de2e68daba3f3bc80c65ddc26609300ef5fbebcc11f9d4f3018d36ff055c`.
+Strict inspection and two fresh installs validate the public SDK import,
+executable CLI, and all 79 bundled plugin files. Windows builds without
+warnings or errors, passes 7/7 core and 3/3 shared tests, survives a bounded
+hidden startup, and publishes a 346,796-byte executable with SHA-256
+`467f84b26b056894b30b4fcd76a79bc0023fdab5fe96ee86f2a9316df0940fec`.
+Ubuntu/WSL builds without warnings or errors, passes 7/7 core, 3/3 shared, and
+2/2 Linux GUI tests, and passes non-graphical plus X11/Xvfb startup; its
+72,568-byte executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+All seven hosted workflow families pass from the same source: Node
+`32936666211`, container `32936666216`, Windows GUI `32936666223`, Linux GUI
+`32936666224`, Java `32936666244`, .NET `32936666208`, and Go `32936666217`.
+GitHub reports the repository public on default branch `main`. This completes
+the Next.js increment, not the standing scanner-effectiveness goal.
+
 ## 2026-08-25 — Bind DeepSeek MCP session authorization to HTTP launch mode
 
 **Gap and primary evidence.** The reviewed
