@@ -23,6 +23,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
   no crafted backend hit. Both retain direct HTTP 401 and leave no project
   resources. Fixture-specific router, middleware, service, and route names
   avoid collisions with ordinary daemon-wide Docker-provider discovery.
+- Completed final acceptance for exact checkpoint
+  `77d3d6408fac3da1e76f965e22f8d6d5e1ef3ed9`. The full Windows aggregate
+  exercises 1,788 tests across 195 files in 635.34 seconds: 1,761 pass, 25
+  intentionally skip, and only the established managed-host child-Git and
+  private scanner-home ACL cases fail. Their native rerun passes 2/2 with seven
+  assertions; the full aggregate records 12,880 assertions. Windows and native
+  Ubuntu/WSL both pass the 29-test Traefik/canonical lane with 2,132 assertions.
+  All seven hosted workflows pass: Node `32977873933`, container `32977873804`,
+  Windows GUI `32977873796`, Linux GUI `32977873806`, Go `32977873843`, Java
+  `32977873902`, and .NET `32977873957`.
+- Two production-build inventories of a tracked-only archive of that exact
+  checkpoint complete in 31,100.745 and 14,195.887 ms and produce 256
+  byte-identical rows, 546,161 bytes, and SHA-256
+  `b25ee70c4539f8ec075524a51eab2051f5b6df1bba2c71eafe05b373911c36bd`.
+  All 195 structured rows survive ahead of 61 lexical leads; 246 rows are
+  fixture paths and ten are not. Exactly two Traefik positives retain the file
+  and Docker-label affected fixtures, exact source/sink lines, CWE-22, and
+  3.7.6 provenance; both 3.7.7 controls remain absent. The strict 267-entry,
+  2,071,489-byte npm archive has SHA-256
+  `37658bca179eb08db0f9b78dbc425a5404dac6bf72c3f5df7247b17a2ba73170`
+  and passes isolated public import, CLI, and all 79 bundled-plugin checks. The
+  production advisory audit reports no known vulnerabilities. Package and
+  self-scan artifacts were removed after verification.
 - Corrected the Traefik v3 lower bound to the official 3.6.0 introduction.
   Releases 3.0.0 through 3.5.x now remain negative instead of inheriting the
   affected 3.6 branch, and the focused release matrix and reviewer contract

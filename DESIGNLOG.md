@@ -85,6 +85,40 @@ backend hit. Fixture-specific router, middleware, service, and route names
 reduce daemon-wide Docker-provider collision risk. Final Docker queries find no
 matching project container, network, or volume.
 
+**Docker-label closure.** Exact implementation checkpoint
+`77d3d6408fac3da1e76f965e22f8d6d5e1ef3ed9`, authored and committed by
+`Dragos Ruiu <dr@secwest.net>`, passes the complete managed Windows aggregate
+across 1,788 tests and 195 files in 635.34 seconds: 1,761 pass, 25 intentional
+platform/environment skips remain, and the two established child-Git campaign
+binding and private `copilot-security-home` ACL tests are denied only by the
+managed host. Their exact native rerun passes 2/2 tests and seven assertions.
+The aggregate records 12,880 assertions. Windows and native Ubuntu/WSL each
+pass the final 29-test Traefik/canonical lane with 2,132 assertions. Formatting,
+generated-model drift, TypeScript, the clean production build, and the
+production audit pass; the audit reports no known vulnerabilities.
+
+All seven hosted workflows pass at that exact source: Node `32977873933`,
+container `32977873804`, Windows GUI `32977873796`, Linux GUI `32977873806`, Go
+fixtures `32977873843`, Java fixtures `32977873902`, and .NET fixtures
+`32977873957`. Strict inspection and native isolated installation accept the
+267-entry, 2,071,489-byte npm archive, SHA-256
+`37658bca179eb08db0f9b78dbc425a5404dac6bf72c3f5df7247b17a2ba73170`,
+including the public SDK import, executable CLI, and all 79 bundled-plugin
+files.
+
+Two production-build scans of a disposable tracked-only archive of the exact
+checkpoint complete in 31,100.745 and 14,195.887 milliseconds. They emit 256
+byte-identical rows totaling 546,161 bytes with SHA-256
+`b25ee70c4539f8ec075524a51eab2051f5b6df1bba2c71eafe05b373911c36bd`.
+All 195 structured records survive ahead of 61 lexical leads; 246 rows are
+fixture paths and ten are not. The file-provider positive retains
+`dynamic.yml:3` to `dynamic.yml:15`; the Docker-label positive retains
+`compose.yml:21` to `compose.yml:29`. Both carry CWE-22 and exact 3.7.6 image
+provenance, while both source-identical 3.7.7 controls remain absent. The
+package archive, self-scan archive/tree, and Docker project resources were
+removed after verification. This closes the Docker-label increment, not the
+standing scanner-effectiveness goal.
+
 Mount writability is deliberately not a gate: the flaw is in request-path
 normalization, not provider-file mutation. Both short and long Compose bind
 syntax are accepted with read-only, explicit read-write, or default mode.
