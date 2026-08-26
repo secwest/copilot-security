@@ -32,6 +32,43 @@ All notable scanner, application, benchmark, and operational changes are recorde
   inert sentinel outside its per-hash cache directory, while 22.7.7 rejects or
   contains the identical gzip tar. The canonical corpus advances to 127
   exploit/control pairs, 254 cases, and 762 repeated scans.
+- Exact implementation checkpoint
+  `4a77487e86754e5af05e13b93c1f437822b55775` passes the focused Nx,
+  framework, and canonical lane with 43 tests and 2,123 assertions on Windows
+  and 2,122 assertions on Ubuntu/WSL. The complete Windows Bun aggregate records
+  1,731 passes, 25 intentional skips, and 12,638 assertions across 1,758 tests
+  and 192 files in 686.81 seconds; its only two failures are the established
+  managed child-Git and private-Windows-ACL boundaries, whose exact native
+  reruns pass 2/2 tests and seven assertions. Generated-model drift, formatting,
+  TypeScript, the clean production build, and the production advisory audit are
+  green.
+- Strict inspection accepts a 259-entry, 2,030,344-byte npm archive with
+  SHA-256
+  `7017c58d90d60574966260b5e3046e3c79abb1a1f23c9e10468fa42097377cc2`.
+  Fresh Windows and Ubuntu consumers add 67 and 75 packages and validate the
+  public SDK import, executable CLI, and all 79 bundled plugin files. Windows
+  builds without warnings or errors, passes 7/7 core and 3/3 shared tests,
+  survives hidden startup, and publishes a 346,796-byte executable with
+  SHA-256
+  `df65e451da9a243fb9e710fc02b45a75ec11e6c945f936f747dfe76340d44446`.
+  Ubuntu/WSL performs locked restores, builds without warnings or errors,
+  passes 7/7 core, 3/3 shared, and 2/2 Linux UI tests, and passes non-graphical
+  plus real X11/Xvfb startup. Its self-contained 72,568-byte executable has
+  SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- Two production-build inventories of a tracked-only archive of that exact
+  checkpoint complete in 37,719.902 and 18,208.277 ms and produce 256
+  byte-identical rows, 540,451 bytes, and SHA-256
+  `42cced376a319a661e8c306e71d26c9e148d81cc8dfce8194766998c93cf4c12`.
+  All 191 structured rows survive ahead of 65 lexical leads; 241 rows are
+  fixture paths and 15 are not. Exactly one Nx row retains the line-7
+  self-hosted cache configuration, line-10 cache-consuming task, CWE-22/CWE-59,
+  and exact `nx@22.7.6:manifest-exact:unconfined-http-cache-tar-extraction`
+  provenance; the source-identical 22.7.7 control is absent. All seven
+  exact-checkpoint workflows pass: Node `32956856745`, Windows GUI
+  `32956856714`, Linux GUI `32956856565`, container `32956856591`, Go
+  `32956856599`, Java `32956856743`, and .NET `32956856769`. GitHub reports the
+  repository public on default branch `main`.
 - Added `node-pickem-terminal-control-injection`, an exact production-version,
   official-binding, remote-collection, display-projection, and terminal-render
   model for

@@ -68,12 +68,63 @@ proved separately.
 **Regression and benchmark contract.** The specialized gate requires high
 severity, exact line-10 task reachability, CWE-22 and CWE-59, validation,
 attack-path analysis, code evidence, stable detection, and zero false
-positives. Nine focused tests with 74 assertions cover both affected release
+positives. Nine focused tests with 75 assertions cover both affected release
 windows, five task-command forms, modern lock proof, fixed and pre-introduction
 edges, explicit disable controls, four provider families, shared-filesystem CI,
 fixed core with an unpatched provider, source identity, and correction-prompt
 discipline. The pair advances the canonical corpus to 127 exploit/control
 pairs, 254 cases, and 762 repeated scans.
+
+**Full scanner and distribution acceptance.** Exact implementation checkpoint
+`4a77487e86754e5af05e13b93c1f437822b55775`, authored and committed by
+`Dragos Ruiu <dr@secwest.net>`, passes the 43-test Nx/framework/canonical lane
+with 2,123 assertions on Windows and 2,122 on Ubuntu/WSL. The complete Windows
+Bun aggregate records 1,731 passes, 25 intentional platform/environment skips,
+and 12,638 assertions across 1,758 tests and 192 files in 686.81 seconds. Its
+only two failures are the known managed child-Git sandbox and private Windows
+ACL boundaries; their exact native rerun passes 2/2 tests and seven assertions.
+Generated-model drift, repository formatting, TypeScript, the clean production
+build, and the production advisory audit all pass.
+
+Strict inspection accepts a 259-entry, 2,030,344-byte npm archive with SHA-256
+`7017c58d90d60574966260b5e3046e3c79abb1a1f23c9e10468fa42097377cc2`.
+Fresh Windows and Ubuntu consumers add 67 and 75 packages and validate the
+public SDK import, executable CLI, and all 79 bundled plugin files. Windows
+builds without warnings or errors, passes 7/7 core and 3/3 shared tests,
+survives bounded hidden startup, and publishes a 346,796-byte executable with
+SHA-256
+`df65e451da9a243fb9e710fc02b45a75ec11e6c945f936f747dfe76340d44446`.
+Ubuntu/WSL regenerates the platform-specific graph with locked restores, builds
+without warnings or errors, passes 7/7 core, 3/3 shared, and 2/2 Linux UI tests,
+and passes non-graphical plus X11/Xvfb startup. Its self-contained 72,568-byte
+executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+
+**Exact-commit self-review and hosted closure.** Two production-build
+inventories of a tracked-only `git archive` of the exact implementation
+checkpoint complete in 37,719.902 and 18,208.277 ms. They emit 256
+byte-identical rows totaling 540,451 bytes with SHA-256
+`42cced376a319a661e8c306e71d26c9e148d81cc8dfce8194766998c93cf4c12`.
+All 191 structured records survive ahead of 65 lexical leads; 241 rows are
+fixture paths and 15 are not. Exactly one Nx record remains. It binds
+`NX_SELF_HOSTED_REMOTE_CACHE_SERVER` at `.github/workflows/ci.yml:7` to the
+cache-consuming `npx nx run` task at line 10, retains CWE-22 and CWE-59, and
+proves
+`nx@22.7.6:manifest-exact:unconfined-http-cache-tar-extraction` from
+`package.json:9`. The source-identical 22.7.7 control emits no row.
+
+All seven exact-checkpoint workflows pass: [Node `32956856745`](https://github.com/secwest/copilot-security/actions/runs/32956856745),
+[Windows GUI `32956856714`](https://github.com/secwest/copilot-security/actions/runs/32956856714),
+[Linux GUI `32956856565`](https://github.com/secwest/copilot-security/actions/runs/32956856565),
+[container `32956856591`](https://github.com/secwest/copilot-security/actions/runs/32956856591),
+[Go `32956856599`](https://github.com/secwest/copilot-security/actions/runs/32956856599),
+[Java `32956856743`](https://github.com/secwest/copilot-security/actions/runs/32956856743),
+and [.NET `32956856769`](https://github.com/secwest/copilot-security/actions/runs/32956856769).
+GitHub reports the repository public on default branch `main`. The immutable
+archive construction excludes both protected untracked paths by design. Npm,
+GUI, exact-commit tree, and inventory artifacts are removed after recording
+their hashes. This closes the Nx increment, not the standing scanner-effectiveness
+goal.
 
 ## 2026-08-26 — Bind Pickem terminal text to exact remote display fields
 
