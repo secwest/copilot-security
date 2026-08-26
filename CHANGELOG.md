@@ -48,6 +48,23 @@ All notable scanner, application, benchmark, and operational changes are recorde
   the public SDK import, CLI, and all 79 bundled plugin files. Exact-commit
   self-scan and reproducible-package evidence follows after the implementation
   commit.
+- Exact implementation checkpoint
+  `71d194509e4a5d43a77e7ee4cd30e6aff26b82ee` is fully accepted. Two
+  tracked-only archive self-inventories are byte-identical at 256 rows and
+  531,422 bytes with SHA-256
+  `c09a9722dc9baa81df1f6db0629fb41eaa24135e468dbe9be14d6b1d4294d5e5`;
+  186 rows are structured and 70 lexical. Exactly one Swig row retains the
+  source at `src/server.js:4`, sink at `src/renderer.js:9`, CWE-22, six ordered
+  import/call/parameter transitions, exact
+  `@rhinostone/swig@2.7.0:manifest-exact:affected-rooted` proof, and
+  `include:partial` template proof. The 2.7.2 control remains absent. Two
+  exact-source npm packages are byte-identical at 259 entries and 1,960,247
+  bytes with SHA-256
+  `6cb786344d40441f505fd22a23ded9c4cf4fd5e777afd6a16ee537a5fb0a6d49`;
+  isolated inspection again validates the public SDK import, CLI, and all 79
+  bundled plugin files. All seven hosted workflow families pass: Node
+  `32921770724`, Windows GUI `32921770709`, Linux GUI `32921770745`, container
+  `32921770710`, Go `32921770725`, .NET `32921770746`, and Java `32921770777`.
 - Added `node-http-urllib-cross-origin-credential-leak`, an exact
   provenance-, API-, credential-, and redirect-lifecycle-aware CWE-201/CWE-522
   model for

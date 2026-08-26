@@ -66,6 +66,32 @@ validate the public SDK import, CLI, and all 79 bundled plugin files. Exact
 tracked-commit inventory, reproducible-package, and hosted-workflow evidence
 remains required before final acceptance.
 
+**Exact-commit acceptance.** Rebuild implementation checkpoint
+`71d194509e4a5d43a77e7ee4cd30e6aff26b82ee` from a tracked-only `git archive`
+with its frozen dependency lock. Two complete self-inventories take 32,364.833
+ms and 31,156.364 ms and produce byte-identical 531,422-byte output: 256 rows,
+186 structured rows, 70 lexical rows, and SHA-256
+`c09a9722dc9baa81df1f6db0629fb41eaa24135e468dbe9be14d6b1d4294d5e5`.
+Exactly one Swig record survives. It joins `src/server.js:4` to
+`src/renderer.js:9` through six relative-import, call-argument, and wrapper-
+parameter transitions, then retains exact
+`@rhinostone/swig@2.7.0:manifest-exact:affected-rooted` provenance and
+`include:partial` template proof. Its sink is CWE-22; the source-identical
+2.7.2 fixture emits no Swig record.
+
+Two npm packages built from that archive are byte-identical: 259 entries,
+1,960,247 bytes, and SHA-256
+`6cb786344d40441f505fd22a23ded9c4cf4fd5e777afd6a16ee537a5fb0a6d49`.
+Strict isolated inspection again validates the public SDK import, CLI, and all
+79 bundled plugin files. All hosted workflow families pass at the exact
+checkpoint: Node `32921770724`, Windows GUI `32921770709`, Linux GUI
+`32921770745`, container `32921770710`, Go `32921770725`, .NET `32921770746`,
+and Java `32921770777`. The Node workflow's seven jobs cover Windows, macOS,
+and Ubuntu on the supported Node 22, 24, and 26 release lines, including full
+tests, audit, formatting, build, package inspection, runtime smoke, and the six
+bounded workflow witnesses on the primary Ubuntu job. The repository remains
+public on default branch `main`.
+
 ## 2026-08-25 — Bind urllib credential exposure to cross-origin redirect lifecycle
 
 **Gap and authoritative semantics.** urllib
