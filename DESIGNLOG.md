@@ -2,6 +2,76 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — Bind Pickem terminal text to exact remote display fields
+
+**Gap and primary evidence.** The official
+[`GHSA-8qx3-8gm5-9cj2`](https://github.com/calebogden/pickem-oss/security/advisories/GHSA-8qx3-8gm5-9cj2),
+assigned CWE-150 and rated high, covers `pickem` before 1.0.7. Item labels,
+descriptions, groups, names, and related text reached terminal renderers without
+complete control-character neutralization. Stripping ANSI only from an active
+row did not protect inactive rows, summaries, public formatter output, or bare
+C0, C1, and DEL bytes. The
+[`v1.0.7` repair](https://github.com/calebogden/pickem-oss/releases/tag/v1.0.7)
+adds `sanitizeDisplay` at render boundaries while preserving inert SGR styling
+and returned values. Current authenticated source searches found no exact
+Pickem package or advisory model in `github/codeql` or
+`semgrep/semgrep-rules`.
+
+**Reachability decision.** Add `node-pickem-terminal-control-injection`, but do
+not promote dependency membership or an arbitrary picker call to a finding. The
+model requires exported route input or fetched JSON; a map projection from the
+same remote element property into exact `label`, `description`, or `group`;
+an official stable named, aliased, namespace, TypeScript import-equals, or
+CommonJS binding; an actual `pickem` or `pickem.checkbox` call; and exact
+affected production provenance. Ordered propagators preserve the remote
+collection, display-field projection, official binding, terminal render, and
+dependency proof.
+
+**Precision and provenance boundary.** Exact production declarations and fresh
+declaration-consistent npm v2/v3 locks are accepted. Version 1.0.7 or later,
+prereleases, development-only or wrong packages, lockfile-free ranges, stale or
+inconsistent locks, v1 locks, trusted collections, remote data only in `value`,
+JSON-stringified or sanitized display fields, custom formatters without the
+proved default render edge, reassigned collections or bindings, replaced
+members, local lookalikes, and tests/examples are deterministic controls. This
+keeps the model on the vulnerable display boundary rather than treating every
+terminal application as unsafe.
+
+**Validation and impact discipline.** The checked-in differential invokes the
+real published public `createFormatter` without opening a TTY. It carries one
+inert base64 marker through OSC, BEL, DEL, C1, and cursor-control forms, inspects
+the returned string, and prints only escaped JSON booleans. Version 1.0.6 retains
+all five observed classes; source-identical 1.0.7 removes them and preserves the
+selected value. A report must still prove that the modeled picker runs on an
+interactive terminal and establish the terminal emulator's control-sequence
+policy before assigning realized clipboard or UI-spoofing impact. OSC 52 is a
+clipboard-write primitive, not command execution; validation must never contain
+an executable command, and RCE, credential theft, persistence, or host
+compromise require separate evidence.
+
+**Regression and benchmark contract.** The fixture pair changes only `pickem`
+1.0.6 to 1.0.7; application and witness bytes remain identical. Its specialized
+gate requires high severity, CWE-150, exact line-11 picker reachability,
+validation, attack-path analysis, code evidence, stable detection, and zero
+false positives. Focused tests cover the executable pair, modern lock proof,
+official binding families, three source shapes, picker/display variants,
+affected/fixed version and metadata edges, an adversarial matrix of incomplete
+or controlled flows, source identity, and correction-prompt discipline. The
+pair advances the canonical corpus to 126 exploit/control pairs, 252 cases, and
+756 repeated scans.
+
+**Local acceptance evidence.** Windows and native Ubuntu/WSL each pass the
+42-test, 2,106-assertion Pickem/framework/canonical lane and reproduce the exact
+1.0.6 byte retention versus 1.0.7 neutralization without opening a terminal.
+The complete Windows Bun aggregate records 1,722 passes, 25 intentional skips,
+12,552 assertions, and only the two known managed child-Git and private-ACL host
+failures across 1,749 tests and 191 files in 641.79 seconds. Exact native reruns
+pass both host boundaries and seven assertions. Generated-model drift,
+formatting, TypeScript, and a clean production build pass. Package, GUI,
+self-scan, hosted, and final artifact evidence is recorded after the exact
+implementation checkpoint is pushed. This closes only this increment, not the
+standing scanner-effectiveness goal.
+
 ## 2026-08-26 — Bind Defuddle extractor output to an application HTML boundary
 
 **Gap and primary evidence.** The official

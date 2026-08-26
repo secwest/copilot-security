@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "1.0",
+  "name": "pickem terminal control-sequence injection boundary",
+  "description": "Measures exact remote-item-to-terminal display flow for GHSA-8qx3-8gm5-9cj2 while keeping the repaired 1.0.7 package negative.",
+  "thresholds": {
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "locationAccuracy": 1,
+    "severityAccuracy": 1,
+    "validationRate": 1,
+    "attackPathRate": 1,
+    "codeEvidenceRate": 1,
+    "stabilityRate": 1,
+    "maxFalsePositives": 0,
+    "maxFalseNegatives": 0,
+    "maxNondeterministicFindings": 0,
+    "maxLocationMismatch": 0
+  },
+  "cases": [
+    {
+      "id": "node-pickem-terminal-control-injection",
+      "description": "Remote fetched release text reaches an affected pickem 1.0.6 item display field and terminal renderer.",
+      "fixture": "fixtures/node-pickem-terminal-control-injection",
+      "findingsPaths": [
+        "node-pickem-terminal-control-injection/run-1/findings.json",
+        "node-pickem-terminal-control-injection/run-2/findings.json",
+        "node-pickem-terminal-control-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-pickem-terminal-control-injection",
+          "cwe": ["CWE-150"],
+          "locations": [
+            {
+              "path": "src/select-release.js",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-pickem-terminal-control-isolated",
+      "description": "The source-identical control changes only pickem to 1.0.7, whose render-boundary sanitizer removes terminal control bytes.",
+      "fixture": "fixtures/node-pickem-terminal-control-isolated",
+      "findingsPaths": [
+        "node-pickem-terminal-control-isolated/run-1/findings.json",
+        "node-pickem-terminal-control-isolated/run-2/findings.json",
+        "node-pickem-terminal-control-isolated/run-3/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

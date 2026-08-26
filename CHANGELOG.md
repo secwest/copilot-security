@@ -6,6 +6,35 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-pickem-terminal-control-injection`, an exact production-version,
+  official-binding, remote-collection, display-projection, and terminal-render
+  model for
+  [GHSA-8qx3-8gm5-9cj2](https://github.com/calebogden/pickem-oss/security/advisories/GHSA-8qx3-8gm5-9cj2).
+  It reports CWE-150 only when request or fetched JSON is mapped from one remote
+  item into `label`, `description`, or `group` and that collection reaches an
+  official stable `pickem` or `pickem.checkbox` call under exact affected
+  production provenance. Fixed/prerelease versions, package-only presence,
+  development or wrong packages, unproved/stale/inconsistent/v1 locks, trusted
+  arrays, value-only flow, neutralized text, custom formatters, reassignment,
+  local lookalikes, and incomplete topologies fail closed.
+- Added source-identical 1.0.6/1.0.7 fixtures, exact npm locks, a strict
+  specialized manifest, canonical registration, model-specific correction
+  guidance, and adversarial regressions for official ESM, namespace,
+  TypeScript/CommonJS bindings, request/fetch sources, checkbox and display-field
+  variants, version/provenance edges, sanitization, mutation, and topology
+  controls. The public `createFormatter` witness opens no TTY and never prints
+  raw rendered data: 1.0.6 retains OSC, BEL, DEL, C1, and one inert clipboard
+  marker, while 1.0.7 removes all five and preserves the selected value. The
+  canonical corpus advances to 126 exploit/control pairs, 252 cases, and 756
+  repeated scans.
+- The focused Pickem/framework/canonical lane passes 42 tests and 2,106
+  assertions on Windows and native Ubuntu/WSL. The complete Windows Bun
+  aggregate passes 1,722 tests, skips 25 intentional platform/environment cases,
+  and records 12,552 assertions; its only two failures across 1,749 tests and
+  191 files are the known managed child-Git and private-Windows-ACL host
+  boundaries. Exact native reruns pass 2/2 tests and seven assertions. Formatting,
+  generated-model drift, TypeScript, and the clean production build are green.
+
 - Added `node-defuddle-extractor-html-xss`, an exact production-provenance,
   official-binding, relative-wrapper, remote-input, returned-property, and HTML
   execution-boundary model for

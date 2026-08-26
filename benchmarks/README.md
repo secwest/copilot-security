@@ -74,7 +74,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains 125 vulnerable/control pairs:
+The versioned corpus currently contains 126 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -236,8 +236,12 @@ the repaired hook returns no embed. The Defuddle pair then preserves remote
 HTML, an official relative wrapper, and the HTML render boundary while changing
 only 0.19.0 to 0.19.1. Its network-disabled witness reparses one synthetic X
 article and observes one inert event-handler attribute only on the affected
-release. Three runs per case now produce 750 scans across 125 exploit/control
-pairs in the complete corpus. The added
+release. The Pickem pair then maps fetched release text into exact picker display
+fields and changes only `pickem` 1.0.6 to 1.0.7. Its public-formatter witness is
+noninteractive and never prints raw terminal control bytes: the affected package
+retains OSC, BEL, DEL, C1, and an inert clipboard marker, while the repaired
+package removes them and preserves the selected value. Three runs per case now
+produce 756 scans across 126 exploit/control pairs in the complete corpus. The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size

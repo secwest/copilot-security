@@ -2146,8 +2146,12 @@ pair then holds remote request HTML, an official relative parser wrapper, and
 an explicit HTML response constant while changing only `defuddle` 0.19.0 to
 0.19.1. Its network-disabled real-package witness reparses a synthetic X
 article: the affected release emits one inert sentinel `onerror` attribute,
-while the repaired release emits none. Each of the 250 cases in 125
-exploit/control pairs is scanned three times, producing 750 scans
+while the repaired release emits none. The Pickem pair then keeps remote release
+items, display-field projection, and the picker call constant while changing only
+`pickem` 1.0.6 to 1.0.7. Its noninteractive public-formatter witness prints only
+escaped JSON booleans: 1.0.6 retains OSC, BEL, DEL, C1, and an inert clipboard
+marker, while 1.0.7 removes all five and preserves the selected value. Each of
+the 252 cases in 126 exploit/control pairs is scanned three times, producing 756 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

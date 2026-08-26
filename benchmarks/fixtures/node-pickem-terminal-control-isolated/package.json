@@ -1,0 +1,11 @@
+{
+  "name": "copilot-security-benchmark-node-pickem-terminal-control-isolated",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:witness": "node --test witness.test.mjs"
+  },
+  "dependencies": {
+    "pickem": "1.0.7"
+  }
+}

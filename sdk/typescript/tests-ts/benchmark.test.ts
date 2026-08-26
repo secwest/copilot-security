@@ -432,6 +432,10 @@ describe("effectiveness benchmark", () => {
         "node-defuddle-extractor-html-isolated",
       ],
       [
+        "node-pickem-terminal-control-injection",
+        "node-pickem-terminal-control-isolated",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

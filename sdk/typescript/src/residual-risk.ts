@@ -3928,6 +3928,20 @@ const DEFUDDLE_EXTRACTOR_XSS_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-79", "cross-site scripting"],
 ] as const;
 
+const PICKEM_TERMINAL_INJECTION_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["remote item text", "fetched JSON", "request body collection"],
+  ["pickem", "official binding", "pickem.checkbox"],
+  ["pickem 1.0.6", "pickem@1.0.6", "affected release"],
+  ["label", "description", "group", "display field"],
+  ["terminal render", "interactive TTY", "raw output capture"],
+  ["OSC", "BEL", "DEL", "C1", "control sequence"],
+  ["inert clipboard marker", "cursor movement", "UI spoofing"],
+  ["pickem 1.0.7", "sanitizeDisplay", "repaired control"],
+  ["terminal emulator", "OSC 52 policy", "user interaction"],
+  ["clipboard restoration", "containment", "returned value unchanged"],
+  ["CWE-150", "terminal control-sequence injection"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -4055,6 +4069,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
       attackPath: DEFUDDLE_EXTRACTOR_XSS_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
+  [
+    "node-pickem-terminal-control-injection",
+    {
+      validation: PICKEM_TERMINAL_INJECTION_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: PICKEM_TERMINAL_INJECTION_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
 ]);
 
 export async function buildResidualRiskInventory(
@@ -4176,6 +4197,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
   records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
   records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
+  records.push(...nodePickemTerminalInjectionRecords(sourceFiles));
   records.push(...nodeAuthJsConfigurationErrorFailOpenRecords(sourceFiles));
   records.push(...nodeKeystoneNegativeTakeBypassRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
@@ -24107,6 +24129,441 @@ function nodeDefuddleExtractorXssRecords(
                 path: dependency.manifestPath,
                 line: dependency.line,
                 symbol: `defuddle@${dependency.version}:${dependency.proof}:unsanitized-site-extractor-output`,
+              },
+            ],
+            candidateControls: [],
+          },
+        });
+        if (records.length >= MAX_FRAMEWORK_MULTI_HOP_RECORDS) return records;
+      }
+    }
+  }
+  return records;
+}
+
+interface NodePickemBinding {
+  line: number;
+  local: string;
+  member?: "pickem";
+}
+
+interface NodePickemRemoteCollection {
+  kind: string;
+  line: number;
+  symbol: string;
+}
+
+interface NodePickemProjection {
+  field: "description" | "group" | "label";
+  fieldLine: number;
+  property: string;
+  source: NodePickemRemoteCollection;
+}
+
+function nodePickemVersionHasTerminalInjection(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number);
+  if (major === undefined || minor === undefined || patch === undefined)
+    return false;
+  return major === 0 || (major === 1 && minor === 0 && patch < 7);
+}
+
+function nodePickemBindingPattern(binding: NodePickemBinding): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.member === undefined ? local : `${local}\\s*\\.\\s*pickem`;
+}
+
+function nodePickemBindings(lines: readonly string[]): NodePickemBinding[] {
+  const bindings: NodePickemBinding[] = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "pickem" && binding.imported === "pickem",
+    )
+    .map((binding) => ({ line: binding.line, local: binding.local }));
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']pickem["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']pickem["']\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']pickem["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      bindings.push({
+        line: index + 1,
+        local: receiver[1],
+        member: "pickem",
+      });
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']pickem["']\s*\)\s*\.\s*pickem\s*;?\s*$/u.exec(
+        code,
+      );
+    if (direct?.[1] !== undefined) {
+      bindings.push({ line: index + 1, local: direct[1] });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.line === binding.line &&
+          candidate.local === binding.local &&
+          candidate.member === binding.member,
+      ) === index,
+  );
+}
+
+function nodePickemBindingUsable(
+  lines: readonly string[],
+  binding: NodePickemBinding,
+  useLine: number,
+  route: ExportedJavascriptFunction | undefined,
+): boolean {
+  if (
+    binding.line >= useLine ||
+    route?.parameters.includes(binding.local) === true ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      useLine + 1,
+    )
+  ) {
+    return false;
+  }
+  const access = nodePickemBindingPattern(binding);
+  return !javascriptStructuralLines(lines)
+    .slice(binding.line, Math.max(binding.line, useLine - 1))
+    .some((line) =>
+      new RegExp(
+        `\\b${access}(?:\\s*\\.\\s*checkbox)?\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+        "u",
+      ).test(line),
+    );
+}
+
+function nodePickemRemoteCollection(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  routeParameters: readonly string[],
+): NodePickemRemoteCollection | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  const value = resolved.value.replace(/\s+/gu, " ").trim();
+  const requestBody =
+    /^([A-Za-z_$][\w$]*)\s*\.\s*body(?:\s*\.\s*[A-Za-z_$][\w$]*|\s*\[[^\]]+\])+$/u.exec(
+      value,
+    );
+  if (
+    requestBody?.[1] !== undefined &&
+    routeParameters.includes(requestBody[1])
+  ) {
+    return {
+      kind: "remote-request-item-collection",
+      line: resolved.line,
+      symbol: requestBody[0].replace(/\s+/gu, ""),
+    };
+  }
+  if (
+    /^await\s+\(\s*await\s+fetch\s*\([^)]*\)\s*\)\s*\.\s*json\s*\(\s*\)$/u.test(
+      value,
+    )
+  ) {
+    return {
+      kind: "remote-fetched-json-item-collection",
+      line: resolved.line,
+      symbol: "fetch(...).json()",
+    };
+  }
+  const responseJson =
+    /^await\s+([A-Za-z_$][\w$]*)\s*\.\s*json\s*\(\s*\)$/u.exec(value);
+  if (responseJson?.[1] === undefined) return undefined;
+  const response = responseJson[1];
+  const earliest = Math.max(0, resolved.line - 65);
+  const declaration = new RegExp(
+    `^\\s*(?:const|let|var)\\s+${escapeRegularExpression(response)}\\s*=\\s*await\\s+fetch\\s*\\(`,
+    "u",
+  );
+  const relativeLine = javascriptStructuralLines(lines)
+    .slice(earliest, resolved.line - 1)
+    .findLastIndex((candidate) => declaration.test(candidate));
+  if (relativeLine < 0) return undefined;
+  const responseLine = earliest + relativeLine + 1;
+  if (
+    javascriptIdentifierReassignedBetween(
+      lines,
+      response,
+      responseLine,
+      resolved.line + 1,
+    )
+  ) {
+    return undefined;
+  }
+  return {
+    kind: "remote-fetched-json-item-collection",
+    line: responseLine,
+    symbol: `${response}.json()`,
+  };
+}
+
+function nodePickemProjectedProperty(
+  expression: string,
+  element: string,
+): string | undefined {
+  let value = expression.trim();
+  while (value.startsWith("(") && value.endsWith(")")) {
+    const close = matchingCallParenthesis(value, 0);
+    if (close !== value.length - 1) break;
+    value = value.slice(1, -1).trim();
+  }
+  const elementPattern = escapeRegularExpression(element);
+  const direct = new RegExp(
+    `^${elementPattern}\\s*(?:\\.\\s*([A-Za-z_$][\\w$]*)|\\[\\s*["']([^"']+)["']\\s*\\])$`,
+    "u",
+  ).exec(value);
+  if (direct !== null) return direct[1] ?? direct[2];
+  const stringWrapper = new RegExp(
+    `^String\\s*\\(\\s*${elementPattern}\\s*(?:\\.\\s*([A-Za-z_$][\\w$]*)|\\[\\s*["']([^"']+)["']\\s*\\])\\s*\\)$`,
+    "u",
+  ).exec(value);
+  if (stringWrapper !== null) return stringWrapper[1] ?? stringWrapper[2];
+  if (value.startsWith("`") && value.endsWith("`")) {
+    const interpolation = new RegExp(
+      `\\$\\{\\s*${elementPattern}\\s*(?:\\.\\s*([A-Za-z_$][\\w$]*)|\\[\\s*["']([^"']+)["']\\s*\\])\\s*\\}`,
+      "u",
+    ).exec(value);
+    if (interpolation !== null) return interpolation[1] ?? interpolation[2];
+  }
+  return undefined;
+}
+
+function nodePickemProjection(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  routeParameters: readonly string[],
+): NodePickemProjection | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  const map =
+    /^\s*([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*|\s*\[[^\]]+\])*)\s*\.\s*map\s*\(/u.exec(
+      resolved.value,
+    );
+  if (map?.[1] === undefined) return undefined;
+  const open = resolved.value.indexOf("(", map.index + map[0].length - 1);
+  const close = matchingCallParenthesis(resolved.value, open);
+  if (
+    open < 0 ||
+    close < 0 ||
+    resolved.value
+      .slice(close + 1)
+      .trim()
+      .replace(/;$/u, "") !== ""
+  ) {
+    return undefined;
+  }
+  const callbacks = splitJavascriptArguments(
+    resolved.value.slice(open + 1, close),
+  );
+  if (callbacks.length !== 1) return undefined;
+  const callback =
+    /^\s*(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*,\s*[A-Za-z_$][\w$]*)?\s*\)?\s*=>\s*([\s\S]+)$/u.exec(
+      callbacks[0] ?? "",
+    );
+  if (callback?.[1] === undefined || callback[2] === undefined)
+    return undefined;
+  const element = callback[1];
+  let returned = callback[2].trim();
+  while (returned.startsWith("(") && returned.endsWith(")")) {
+    const end = matchingCallParenthesis(returned, 0);
+    if (end !== returned.length - 1) break;
+    returned = returned.slice(1, -1).trim();
+  }
+  if (returned.startsWith("{")) {
+    const explicitReturn =
+      /^\{[\s\S]*?\breturn\s+(\{[\s\S]*\})\s*;?[\s\S]*\}$/u.exec(returned);
+    if (explicitReturn?.[1] !== undefined) returned = explicitReturn[1];
+  }
+  const objectOffset = resolved.value.indexOf(returned, open + 1);
+  const objectLine =
+    resolved.line +
+    (objectOffset < 0
+      ? 0
+      : resolved.value.slice(0, objectOffset).match(/\n/gu)?.length ?? 0);
+  const entries = javascriptObjectEntries({
+    line: objectLine,
+    value: returned,
+  });
+  const source = nodePickemRemoteCollection(
+    lines,
+    map[1],
+    resolved.line,
+    routeParameters,
+  );
+  if (source === undefined) return undefined;
+  for (const field of ["label", "description", "group"] as const) {
+    const entry = entries.find((candidate) => candidate.key === field);
+    if (entry === undefined) continue;
+    const property = nodePickemProjectedProperty(entry.value, element);
+    if (property !== undefined) {
+      return { field, fieldLine: entry.line, property, source };
+    }
+  }
+  return undefined;
+}
+
+function nodePickemTerminalInjectionRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !file.text.includes("pickem")
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "pickem");
+    if (
+      dependency === undefined ||
+      !nodePickemVersionHasTerminalInjection(dependency.version)
+    ) {
+      continue;
+    }
+    const structural = javascriptStructuralLines(file.lines);
+    const functions = exportedJavascriptFunctions(file.lines);
+    for (const binding of nodePickemBindings(file.lines)) {
+      const bindingPattern = nodePickemBindingPattern(binding);
+      const callPattern = new RegExp(
+        `\\b${bindingPattern}(?:\\s*\\.\\s*checkbox)?\\s*\\(`,
+        "u",
+      );
+      for (let index = binding.line; index < structural.length; index += 1) {
+        const line = index + 1;
+        if (!callPattern.test(structural[index] ?? "")) continue;
+        const route = functions.find(
+          (candidate) =>
+            line >= candidate.startLine && line <= candidate.endLine,
+        );
+        if (!nodePickemBindingUsable(file.lines, binding, line, route))
+          continue;
+        const arguments_ = javascriptCallArgumentsAtLine(
+          file.lines,
+          line,
+          callPattern,
+        );
+        if (arguments_ === undefined) continue;
+        const items = arguments_[0];
+        if (items === undefined) continue;
+        const options = arguments_[1];
+        if (options !== undefined) {
+          const resolvedOptions = resolveJavascriptExpression(
+            file.lines,
+            options,
+            line,
+          );
+          if (
+            resolvedOptions !== undefined &&
+            javascriptObjectPropertyValue(resolvedOptions.value, "format") !==
+              undefined
+          ) {
+            continue;
+          }
+        }
+        const projection = nodePickemProjection(
+          file.lines,
+          items,
+          line,
+          route?.parameters ?? [],
+        );
+        if (projection === undefined) continue;
+        const key = `${file.path}\0${projection.source.line}\0${projection.fieldLine}\0${line}`;
+        if (emitted.has(key)) continue;
+        emitted.add(key);
+        const prefix =
+          dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+        const sinkKind = `${prefix}vulnerable-pickem-terminal-item-render`;
+        const startLine = Math.max(1, line - CONTEXT_LINES_BEFORE);
+        const endLine = Math.min(file.lines.length, line + CONTEXT_LINES_AFTER);
+        const sourceStart = Math.max(
+          1,
+          projection.source.line - CONTEXT_LINES_BEFORE,
+        );
+        records.push({
+          path: file.path,
+          line,
+          categories: [
+            "framework-dataflow:node-pickem-terminal-control-injection",
+            `modeled-source:${projection.source.kind}`,
+            `modeled-sink:${sinkKind}`,
+            "broken-control:unsanitized-terminal-item-text",
+          ],
+          priority: 123,
+          startLine,
+          endLine,
+          excerpt: sourceExcerpt(file.lines, startLine, endLine),
+          sourceExcerpt: sourceExcerpt(
+            file.lines,
+            sourceStart,
+            Math.min(file.lines.length, line + CONTEXT_LINES_AFTER),
+          ),
+          frameworkModel: {
+            schemaVersion: "1.2",
+            id: "node-pickem-terminal-control-injection",
+            language: "javascript-typescript",
+            scope: "same-file",
+            source: {
+              kind: projection.source.kind,
+              path: file.path,
+              line: projection.source.line,
+            },
+            sink: {
+              kind: sinkKind,
+              path: file.path,
+              line,
+              cweIds: ["CWE-150"],
+            },
+            propagators: [
+              {
+                kind: "remote-pickem-item-collection",
+                path: file.path,
+                line: projection.source.line,
+                symbol: projection.source.symbol,
+              },
+              {
+                kind: "pickem-display-field-projection",
+                path: file.path,
+                line: projection.fieldLine,
+                symbol: `${projection.field}:${projection.property}`,
+              },
+              {
+                kind: "official-pickem-binding",
+                path: file.path,
+                line: binding.line,
+                symbol: binding.local,
+              },
+              {
+                kind: "pickem-terminal-render",
+                path: file.path,
+                line,
+                symbol: (structural[index] ?? "").includes(".checkbox")
+                  ? "pickem.checkbox"
+                  : "pickem",
+              },
+              {
+                kind: "pickem-runtime-dependency",
+                path: dependency.manifestPath,
+                line: dependency.line,
+                symbol: `pickem@${dependency.version}:${dependency.proof}:unsanitized-terminal-display`,
               },
             ],
             candidateControls: [],
