@@ -72,6 +72,28 @@ indexes, disposes the configured sink, closes the socket, and clears its port
 environment variable. Both generated `node_modules` trees were removed after
 the differential run.
 
+**Local acceptance.** Windows and native Ubuntu/WSL both pass the focused
+LogTape plus canonical benchmark lane's 26 tests and 2,110 assertions. The
+installed-package UDP witness produces the same 167-byte affected and 170-byte
+repaired captures on both operating systems. The full managed Windows Bun
+1.3.14 aggregate runs 1,797 tests across 196 files in 605.62 seconds: 1,770
+pass, 25 intentionally skip, and only the established managed-host child-Git
+and private scanner-home ACL cases fail. Their native rerun passes 2/2 with
+seven assertions; the aggregate records 13,016 assertions.
+
+The local npm archive contains 267 strict entries and 2,085,415 bytes with
+SHA-256
+`3514ea9ebeea6cfc4f958f10a3b504316db6826a114eff26005f4faee96efc17`.
+Archive inspection and two isolated installs validate the public import, CLI,
+and all 79 bundled-plugin files; the production audit is clean. Two exact
+tracked-archive self-scans are byte-identical at 256 rows, 550,439 bytes, and
+SHA-256
+`cf4b095123a4ac87e7789a2b90c027ae8fb738ce1caf848848f36be3b38d12a2`:
+197 structured rows precede 59 lexical leads, with 247 fixture and nine
+non-fixture paths. Only the affected LogTape fixture is retained. Package,
+self-scan, and real-runtime dependency artifacts were removed after
+verification.
+
 ## 2026-08-26 — Compose Traefik rewrites with protected sibling routes
 
 **Gap and primary evidence.** The official

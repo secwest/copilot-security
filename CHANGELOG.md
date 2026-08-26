@@ -36,6 +36,30 @@ All notable scanner, application, benchmark, and operational changes are recorde
   newline at index 98 and no `#010`; 2.1.5 captured 170 bytes with no newline
   and the decimal escape present. Both captured one datagram and retained the
   marker. Generated fixture `node_modules` trees were removed after the run.
+- Completed local acceptance for exact benchmark checkpoint
+  `0d8e41a438c3df941852aaeea17a142f6fd59875`. Windows and native Ubuntu/WSL
+  both pass the 26-test LogTape/canonical lane with 2,110 assertions, and the
+  installed-package UDP differential returns identical 2.1.4/2.1.5 byte facts
+  on both platforms. The full managed Windows Bun 1.3.14 aggregate exercises
+  1,797 tests across 196 files in 605.62 seconds: 1,770 pass, 25 intentional
+  platform skips remain, and only the established child-Git provenance and
+  private `copilot-security-home` ACL cases fail under the managed host. Their
+  exact native rerun passes 2/2 with seven assertions; the aggregate records
+  13,016 assertions.
+- The strict 267-entry, 2,085,415-byte local npm archive has SHA-256
+  `3514ea9ebeea6cfc4f958f10a3b504316db6826a114eff26005f4faee96efc17`
+  and passes archive inspection plus two isolated installation checks of the
+  public import, CLI, and all 79 bundled-plugin files. The production advisory
+  audit reports no known vulnerabilities. Two production-build inventories of
+  a tracked-only archive of the exact checkpoint complete in 23,334.738 and
+  15,607.766 milliseconds and emit 256 byte-identical rows, 550,439 bytes, and
+  SHA-256
+  `cf4b095123a4ac87e7789a2b90c027ae8fb738ce1caf848848f36be3b38d12a2`.
+  All 197 structured rows survive ahead of 59 lexical leads; 247 rows are
+  fixture paths and nine are not. Exactly one LogTape row retains the affected
+  fixture topology while the source-identical 2.1.5 control remains absent.
+  Package, self-scan, and real-runtime dependency artifacts were removed after
+  verification.
 - Extended the Traefik file-provider model from one YAML filename to exact
   YAML or TOML filename and directory configurations. Directory providers bind
   an exact Compose mount and merge routers, middlewares, and services from
