@@ -6,6 +6,26 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added the first `traefik-replacepathregex-auth-bypass` implementation for
+  [GHSA-cxjq-mrr5-89rv](https://github.com/traefik/traefik/security/advisories/GHSA-cxjq-mrr5-89rv).
+  The cross-file configuration model binds an exact affected official Traefik
+  Compose image and mounted file provider to a public `PathPrefix`, the exact
+  separator-free `ReplacePathRegex` traversal shape, and an authenticated
+  sibling router on the same entry point and defined backend. Repaired or
+  prerelease images, mismatched providers/mounts, duplicate or aliased YAML,
+  safe regex/replacement shapes, public authentication, empty protected auth,
+  undefined or different services, and disjoint entry points fail closed.
+- Preserved vulnerable writable-mount coverage: exact short and long Compose
+  bind syntax now accepts read-only, explicit read-write, and default modes,
+  since provider-file writability is not a prerequisite for the routing flaw.
+  Source locations are resolved within the correct YAML service, router, and
+  middleware blocks so decoy keys cannot corrupt finding evidence. Test,
+  example, and vendor configuration trees remain excluded.
+- Added field-local validation and impact rules plus focused release,
+  topology, provenance, YAML-integrity, authentication, and mount regressions.
+  Current CodeQL and Semgrep rule repositories contain no match for either the
+  advisory ID or `ReplacePathRegex`. A source-identical executable benchmark
+  pair and real-binary differential follow this implementation checkpoint.
 - Added `go-echo-static-encoded-separator-auth-bypass` for
   [GHSA-vfp3-v2gw-7wfq / CVE-2026-55677](https://github.com/labstack/echo/security/advisories/GHSA-vfp3-v2gw-7wfq).
   The model requires an official stable Echo instance, a middleware-protected

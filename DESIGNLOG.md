@@ -2,6 +2,51 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — Compose Traefik rewrites with protected sibling routes
+
+**Gap and primary evidence.** The official
+[`GHSA-cxjq-mrr5-89rv`](https://github.com/traefik/traefik/security/advisories/GHSA-cxjq-mrr5-89rv)
+describes a route-level authentication bypass in `ReplacePathRegex`. A public
+`PathPrefix(`/api`)` router using `^/api(.*)` and `/$1` transforms
+`/api../admin` into `/../admin`; affected Traefik forwards that unnormalized
+path, and a normalizing backend resolves it to the protected `/admin` route
+without executing the sibling router's auth middleware. Official commit
+[`3f10dd4`](https://github.com/traefik/traefik/commit/3f10dd4) rejects a replaced
+path that differs from its normalized form. Affected stable branches end at
+2.11.51, 3.6.22, and 3.7.6; repairs are 2.11.52, 3.6.23, and 3.7.7. Authenticated
+current-source searches found neither the advisory nor `ReplacePathRegex` in
+`github/codeql` or `semgrep/semgrep-rules`.
+
+**Initial topology decision.** Do not report an affected image or rewrite
+alone. Bind an exact official Compose image to `--providers.file.filename`, a
+matching non-traversing mounted dynamic file, one public router with exactly
+the advisory rewrite, and a protected sibling using concrete nonempty
+BasicAuth, DigestAuth, or ForwardAuth on the same entry point and defined
+backend service. Reject safe separator-bearing regexes, replacements that
+cannot create the traversal, public auth, empty protected auth, different
+services or entry points, undefined services, unmatched provider mounts,
+prereleases, repaired tags, duplicate YAML keys, and aliases. This begins with
+the common file-provider topology; Docker-label, directory-provider, TOML, and
+orchestrator variants require their own exact binding rules rather than loose
+text matches.
+
+Mount writability is deliberately not a gate: the flaw is in request-path
+normalization, not provider-file mutation. Both short and long Compose bind
+syntax are accepted with read-only, explicit read-write, or default mode.
+Evidence lines are located within parsed service, router, and middleware
+blocks rather than by the first same-named YAML key in a file. Configuration
+under test, example, or vendor trees is excluded without excluding canonical
+benchmark fixtures.
+
+**Checkpoint.** Nine focused groups and 49 assertions cover all official stable
+intervals, rewrite grammar, route composition, auth mechanisms, service and
+entry-point identity, official image provenance, nested short and long mounts,
+writable mount recall, scoped line evidence, path exclusions, duplicate keys,
+aliases, and correction-prompt discipline. The package allowlist includes the
+compiled model. Source-identical fixtures, a safe real-binary loopback witness,
+strict benchmark registration, repository-cap retention, and full acceptance
+follow this deliberately early implementation checkpoint.
+
 ## 2026-08-26 — Bind Echo static decoding to route-level authorization
 
 **Gap and primary evidence.** The official

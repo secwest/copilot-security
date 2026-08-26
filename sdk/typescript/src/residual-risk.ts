@@ -16,6 +16,7 @@ import {
 } from "./github-actions-risk.js";
 import { cloudFormationRiskRecords } from "./cloudformation-risk.js";
 import { kubernetesRiskRecords } from "./kubernetes-risk.js";
+import { traefikReplacePathRegexRecords } from "./traefik-risk.js";
 import { goExecInjectionRecords } from "./go-exec-risk.js";
 import { goHttpSsrfRecords } from "./go-http-risk.js";
 import { goObjectAuthorizationRecords } from "./go-object-authorization-risk.js";
@@ -3984,6 +3985,18 @@ const ECHO_STATIC_SEPARATOR_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-22", "unauthorized static file disclosure"],
 ] as const;
 
+const TRAEFIK_REPLACE_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["GHSA-cxjq-mrr5-89rv", "ReplacePathRegex", "Traefik"],
+  ["PathPrefix", "public router", "unauthenticated route"],
+  ["separator-free capture", "^/api(.*)", "replacement"],
+  ["protected router", "BasicAuth", "ForwardAuth", "DigestAuth"],
+  ["same backend service", "same entry point", "route boundary"],
+  ["compose image", "affected stable version", "file provider"],
+  ["direct request denied", "crafted request reached", "backend normalized"],
+  ["2.11.52", "3.6.23", "3.7.7", "repaired control"],
+  ["CWE-22", "authentication bypass", "protected backend path"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -4141,6 +4154,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
       attackPath: ECHO_STATIC_SEPARATOR_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
+  [
+    "traefik-replacepathregex-auth-bypass",
+    {
+      validation: TRAEFIK_REPLACE_PATH_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: TRAEFIK_REPLACE_PATH_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
 ]);
 
 export async function buildResidualRiskInventory(
@@ -4245,6 +4265,7 @@ export async function buildResidualRiskInventory(
   records.push(...githubActionsArtifactPoisoningRecords(sourceFiles));
   records.push(...githubActionsReusableWorkflowInjectionRecords(sourceFiles));
   records.push(...githubActionsCompositeActionInjectionRecords(sourceFiles));
+  records.push(...traefikReplacePathRegexRecords(sourceFiles));
   records.push(...goExecInjectionRecords(sourceFiles));
   records.push(...goHttpSsrfRecords(sourceFiles));
   records.push(...goPathTraversalRecords(sourceFiles));
