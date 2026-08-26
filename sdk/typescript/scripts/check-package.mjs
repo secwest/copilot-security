@@ -152,6 +152,7 @@ const distFiles = new Set(
     "errors",
     "evidence-quality",
     "github-actions-risk",
+    "go-echo-risk",
     "go-exec-risk",
     "go-gorm-risk",
     "go-http-risk",
