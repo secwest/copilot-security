@@ -70,6 +70,59 @@ reassignment, all required topology edges and controls, source identity, and
 prompt impact discipline. The pair advances the canonical corpus to 124
 exploit/control pairs, 248 cases, and 744 repeated scans.
 
+**Local acceptance evidence.** Exact implementation checkpoint
+`d43c8eae86a1c6bdfbb877549609ae4360b62aa8`, authored and committed by
+`Dragos Ruiu <dr@secwest.net>`, passes the authoritative Windows Bun 1.3.14
+aggregate with 1,706 passes, 25 intentional skips, and 12,397 assertions
+across 189 files and 1,733 tests. The managed aggregate's only two failures
+were a denied child-Git metadata read and a denied Windows credential-home ACL
+replacement. Rerunning exactly those environment-sensitive cases with their
+required host permissions passes 2/2 tests and seven assertions. The focused
+model, framework-dataflow, framework-model, and canonical benchmark lane
+passes 41 tests and 2,052 assertions on both Windows and native Ubuntu/WSL.
+Generated-model drift, formatting, TypeScript, clean build, and production
+audit are green.
+
+Windows and native Ubuntu independently execute the real published
+53.0.1/53.1.4 differential. Both retain the unsafe sentinel only on 53.0.1,
+with `provider=vimeo` and `isVideo=true`; both produce no provider/embed and
+`isVideo=false` on 53.1.4. The package checker validates 259 entries, the
+public SDK import, executable CLI, and all 79 bundled plugin files; a second
+fresh install passes the runtime smoke. The packed package is 2,005,241 bytes
+with SHA-256
+`6e30de2d80a0a04065b741e45cec5cc09c54e51784edc05b4c4a41e1f8a9eb61`.
+The Windows GUI builds with zero warnings/errors and passes 7/7 core plus 3/3
+shared tests. Its framework-dependent single-file executable is 346,796 bytes
+with SHA-256
+`16ab1bad60eb7e7a5318e659ee8b860a1d0de31d7a6c898ebd347466c4b9f8a6`.
+The native Linux GUI builds with zero warnings/errors, passes the same 10
+shared tests plus 2/2 headless interface tests, and passes both non-graphical
+and Xvfb window startup. Its self-contained launcher is 72,568 bytes with
+SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+
+Two compiled inventories of a tracked-only archive of that exact checkpoint
+complete in 32,344.816 and 15,064.246 ms. They produce byte-identical output:
+256 rows, 536,719 bytes, and SHA-256
+`c4356446f8edffec567e8583b26229446edaa2e5dd4e78c58ec099758950b401`.
+Structured-first selection retains 188 framework records; 240 rows are
+fixture paths and 16 are not. Exactly one Plate row survives. It joins the
+fetched document at
+`benchmarks/fixtures/node-plate-media-embed-metadata-xss/src/load-document.jsx:5`
+to the line-9 iframe, reports CWE-79, and records exact
+`@platejs/media@53.0.1:manifest-exact:serialized-provider-url-fast-path`
+provenance. No row refers to the source-identical 53.1.4 control. The archive
+and every temporary package, dependency tree, GUI publish, and witness
+directory were removed after validation.
+
+All seven hosted workflows for the exact checkpoint complete successfully:
+Node, Windows GUI, Linux GUI, container, Go fixtures, Java fixtures, and .NET
+fixtures. The Node workflow passes its complete seven-job matrix on Windows
+Node 22, macOS Node 22, Ubuntu Node 22, both pinned/current Node 24 jobs, and
+both pinned/current Node 26 jobs, including type checks, full regression,
+formatting, clean build, package inspection, runtime smoke, production audit
+on the primary lane, and the Linux-only workflow attack witnesses.
+
 ## 2026-08-25 — Model Next.js dynamic-route authorization as a deployment-sensitive path
 
 **Gap and primary evidence.** The official
