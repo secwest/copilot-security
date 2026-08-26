@@ -32,6 +32,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   in-memory sentinel once; 3.1.4 returns submitted=false, makes zero script
   requests, and leaves the sentinel unset. Generated installs, browser
   profiles, and capture files were removed after verification.
+- Accepted exact SunEditor implementation checkpoint
+  `5049600aac9510971e527ca4dd8007906ce354f1` as a distributable scanner. Its
+  strict npm archive contains 267 entries and 2,090,763 bytes with SHA-256
+  `5053d9d06f0ea2f6cc61975069c0b9b0b134fc91a0957b5bb06af96bc4b07fdf`;
+  isolated installation validates the public import, CLI, and all 79 bundled
+  plugin files, and the high-severity production audit reports no known
+  vulnerabilities. Two production-build inventories of a tracked-only archive
+  complete in 15,040.279 and 15,340.177 milliseconds and are byte-identical at
+  256 rows, 547,663 bytes, and SHA-256
+  `9121aa09e7e2fb91d5fabf35e318f75ddf39bf4e68b8f033807663f7ff2269cf`.
+  All 198 structured rows precede 58 lexical leads. Exactly one SunEditor row
+  retains the affected fixture at `src/editor.js:5`; the source-identical 3.1.4
+  control is absent. Package and self-scan artifacts were removed afterward.
 - Added `node-logtape-syslog-structured-data-injection`, an exact
   production-provenance model for
   [GHSA-8h6h-x5pq-56fq / CVE-2026-54511](https://github.com/dahlia/logtape/security/advisories/GHSA-8h6h-x5pq-56fq).
@@ -640,6 +653,12 @@ messages })` initialization, and `setLocaleMessage` or `mergeLocaleMessage`
 
 ### Reliability and platform hardening
 
+- Added manual dispatch to the Node, Go, .NET, Java, and Windows GUI workflows,
+  completing the recovery surface already present in the container and Linux
+  GUI lanes. Every hosted acceptance family can now be rerun at an exact branch
+  head when a local push credential suppresses workflow creation or GitHub
+  fails before assigning a runner; automatic push and pull-request coverage is
+  unchanged.
 - Added a manual dispatch entry point to the hosted Linux GUI workflow so an
   operator can retry a zero-step GitHub-hosted runner allocation failure
   without changing scanner source or manufacturing an unrelated commit. The

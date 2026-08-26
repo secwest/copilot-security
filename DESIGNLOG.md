@@ -45,6 +45,21 @@ leaves the sentinel at zero. No alert, external script host, navigation,
 persistent write, credential, or real application content is used. Generated
 installs and all temporary browser/capture artifacts are removed afterward.
 
+**Distribution and self-scan acceptance.** At exact implementation checkpoint
+`5049600aac9510971e527ca4dd8007906ce354f1`, the 267-entry npm archive contains
+2,090,763 bytes and has SHA-256
+`5053d9d06f0ea2f6cc61975069c0b9b0b134fc91a0957b5bb06af96bc4b07fdf`.
+Strict inspection and isolated installation validate the public import, CLI,
+and all 79 bundled-plugin files; the high-severity production advisory audit is
+clean. Two production-build scans of a tracked-only archive complete in
+15,040.279 and 15,340.177 milliseconds and produce identical 256-row,
+547,663-byte inventories with SHA-256
+`9121aa09e7e2fb91d5fabf35e318f75ddf39bf4e68b8f033807663f7ff2269cf`.
+They contain 198 structured rows and 58 lexical leads. Exactly one SunEditor
+model row identifies the affected fixture at `src/editor.js:5`; no repaired
+fixture path is retained. The npm archive, extracted exact-commit tree, and
+self-scan data are removed after measurement.
+
 ## 2026-08-26 — Retryable hosted Linux acceptance
 
 **Failure classification.** The Linux GUI acceptance run for implementation
@@ -75,6 +90,15 @@ credential checks in 2m16s. Together with green Node (`32985953331`), Go
 acceptance lanes have executed successfully. The retry-control commit changes
 workflow and documentation only, so it does not alter the accepted LogTape
 model, benchmark fixtures, or product package.
+
+**Complete recovery surface.** The next exact scanner checkpoint again created
+no push-event runs despite active Actions permissions. This is consistent with
+GitHub's event-suppression behavior for the credential used to push, not an
+executed test failure or evidence of an account credit limit. Extend
+`workflow_dispatch` to Node, Go, .NET, Java, and Windows GUI, matching the
+container and Linux GUI controls. All seven acceptance families can now be
+dispatched at one exact branch head without weakening, skipping, or editing any
+product test; their automatic push and pull-request triggers remain intact.
 
 ## 2026-08-26 — LogTape syslog structured-data injection
 
