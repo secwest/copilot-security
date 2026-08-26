@@ -2,6 +2,86 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Model Next.js dynamic-route authorization as a deployment-sensitive path
+
+**Gap and primary evidence.** The official
+[`GHSA-492v-c6pp-mqqv`](https://github.com/vercel/next.js/security/advisories/GHSA-492v-c6pp-mqqv),
+assigned CVE-2026-44574 and CWE-288, rates the issue high at CVSS 8.1. It covers
+stable `next` 15.4.0 below 15.5.16 and 16.0.0 below 16.2.5. Applications are at
+risk when middleware or proxy authorizes the visible pathname, but a later
+dynamic page consumes an internally encoded route parameter derived from an
+external `nxtP<segment>` query key. Upstream repair commit
+[`87080764c96f5416decccd43f4c434545fd5d4e1`](https://github.com/vercel/next.js/commit/87080764c96f5416decccd43f4c434545fd5d4e1)
+marks requests already wrapped by the normal Next server and filters internal
+query keys there; trusted out-of-process routing flows retain normalization.
+Authenticated current-source searches return no exact advisory or `nxtPslug`
+model in `github/codeql` or `semgrep/semgrep-rules`.
+
+**Reachability decision.** Add
+`node-nextjs-dynamic-route-param-authorization-bypass`, but require the
+application topology rather than package membership. A root or `src`
+`middleware.*`/`proxy.*` file must import `next/server`, compare
+`request.nextUrl.pathname` or a direct alias with one concrete protected path,
+and return a 401, 403, or login/sign-in redirect. A configured matcher must
+cover the route. The protected path must map to exactly one dynamic App Router
+page or Pages Router page, and that exact segment must enter a server-side
+`fetch`, query, find, lookup, read, open, retrieve, get, or load call. Route
+groups are transparent. Direct dot/bracket access, awaited params,
+destructuring aliases, multiline calls, pathname aliases, reversed equality,
+and proxy naming are preserved.
+
+**Precision boundary.** Static routes, more than one unresolved dynamic
+segment, display-only params, reassigned aliases, test/example paths, unrelated
+denied paths or matchers, missing official server imports, and conditions
+without a concrete denial remain negative. Any route-local auth, session,
+token, cookie, header, permission, redirect, unauthorized, or forbidden check
+is counterevidence for this middleware-only model. Sensitive-call propagation
+is bounded to the balanced call expression; a nearby route-param reference can
+no longer attach to an earlier helper body. Middleware conditions are anchored
+to their actual `if` line so a four-line context window cannot emit four
+duplicate sources.
+
+**Provenance boundary.** Accept only an exact production declaration or a
+fresh declaration-consistent npm v2/v3 resolution of `next`. Preserve the two
+reviewed stable intervals independently: 15.3.9 and 15.5.16 are negative
+around the first branch; 16.0.0 through 16.2.4 are positive and 16.2.5 is
+negative around the second. Reject prereleases, later branches,
+development-only or lookalike packages, unresolved ranges, stale root lock
+declarations, inconsistent resolutions, and v1 locks. Ordered evidence records
+the visible denied path, `segment:nxtPsegment:value`, exact server data access,
+and package/version/proof boundary.
+
+**Deployment and validation discipline.** The advisory deliberately says
+"affected deployments." Local reproduction confirmed that this qualifier is
+material. Real 15.5.15 and 15.5.16 standalone servers both deny the direct
+secret path and preserve `public` for an ordinary
+`/documents/public?nxtPslug=secret` request because the normal router resolves
+the visible segment before route-module normalization. That counterevidence is
+retained. The same real packages diverge at the exact deployment handoff
+changed by the repair: when a trusted proxy invokes `/documents/[slug]` and
+the request is marked as already wrapped by Next, 15.5.15 prepares `secret`
+from the external internal-key value; 15.5.16 filters it and leaves the route
+placeholder. The static row is therefore a high-priority hypothesis requiring
+deployed-wrapper validation, not proof that every `next start` process is
+exploitable. Validation must record visible path, middleware result, routing
+wrapper and matched template, external key/value, prepared page param, data
+access, response evidence, process lifetime, cleanup, and repaired comparison.
+Impact is limited to the unauthorized content or operation actually shown; do
+not infer account takeover, arbitrary write, privilege escalation, cache
+poisoning, persistence, or deployment-wide exposure.
+
+**Regression and benchmark contract.** The source-identical fixture pair
+changes only `next` 15.5.15 to 15.5.16. Its specialized perfect gate requires
+high severity, CWE-288, exact line-11 server lookup, validation, attack-path
+analysis, code evidence, stable detection, and zero false positives. Focused
+regression covers twelve version edges, middleware/proxy and condition forms,
+App and Pages routing, route groups, aliases and reassignment, local controls,
+matcher/path coupling, exact and modern lock evidence, and prompt impact
+discipline. The pair advances the canonical corpus to 123 exploit/control
+pairs, 246 cases, and 738 repeated scans. This is a new framework authorization
+capability; it does not convert a dependency advisory into an unconditional
+finding.
+
 ## 2026-08-25 — Bind DeepSeek MCP session authorization to HTTP launch mode
 
 **Gap and primary evidence.** The reviewed

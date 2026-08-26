@@ -74,7 +74,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains 122 vulnerable/control pairs:
+The versioned corpus currently contains 123 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -223,9 +223,13 @@ separate constructor default and requires that the exact constructed parser
 actually reach the parse call; ordinary `XMLParser` and construction alone
 remain negative. The tarfile pair adds exact uploaded-`fileobj` flow, retained
 `TarFile` receiver identity, runtime-default semantics, and a matched control
-that closes both traversal and decompression-exhaustion paths. Three runs per
-case now produce 732 scans across 122 exploit/control pairs in the complete
-corpus. The added
+that closes both traversal and decompression-exhaustion paths. The Next.js
+dynamic-route pair then holds a concrete middleware denial, Pages Router SSR
+lookup, and standalone deployment harness constant while changing only
+15.5.15 to 15.5.16. Its real-package differential preserves ordinary-request
+counterevidence and proves the wrapped route-module `nxtPslug` normalization
+boundary changed by the repair. Three runs per case now produce 738 scans
+across 123 exploit/control pairs in the complete corpus. The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size

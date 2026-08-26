@@ -2131,8 +2131,13 @@ part of authorization reachability: a top-level launcher selects HTTP before
 starting exact 1.6.0, whose caller-keyed `SessionStore` is process-global;
 source-identical 1.7.0 gives each HTTP MCP session an independent store. Its
 listener-free witness shows that a simulated second client can enumerate and
-read one inert victim marker only on 1.6.0. Each of the 244 cases in 122
-exploit/control pairs is scanned three times, producing 732 scans
+read one inert victim marker only on 1.6.0. The Next.js pair then binds a
+visible-path middleware denial to one dynamic Pages Router parameter and its
+server-side lookup. Its standalone witness retains the safe ordinary-request
+counterexample, while the real route-module differential shows 15.5.15
+accepting external `nxtPslug=secret` at the wrapped deployment handoff and
+15.5.16 filtering it. Each of the 246 cases in 123 exploit/control pairs is
+scanned three times, producing 738 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

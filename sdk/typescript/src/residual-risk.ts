@@ -3883,6 +3883,23 @@ const DEEPSEEK_MCP_SESSION_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-639", "cross-session authorization bypass"],
 ] as const;
 
+const NEXTJS_DYNAMIC_ROUTE_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["next 15.5.15", "next@15.5.15", "next 16.2.4", "affected release"],
+  ["middleware", "proxy", "visible pathname authorization gate"],
+  ["dynamic route", "[slug]", "route parameter"],
+  [
+    "nxtPslug",
+    "external internal-parameter query",
+    "query parameter injection",
+  ],
+  ["server-side data access", "loadDocument", "dynamic record lookup"],
+  ["direct protected path", "401", "403", "denied request"],
+  ["public visible path", "middleware allowed path", "alternate path"],
+  ["secret parameter value", "protected record", "unauthorized content"],
+  ["15.5.16", "16.2.5", "filtered internal query", "repaired control"],
+  ["CWE-288", "authorization bypass", "alternate path"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3985,6 +4002,15 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
         DEEPSEEK_MCP_SESSION_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath:
         DEEPSEEK_MCP_SESSION_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-nextjs-dynamic-route-param-authorization-bypass",
+    {
+      validation:
+        NEXTJS_DYNAMIC_ROUTE_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath:
+        NEXTJS_DYNAMIC_ROUTE_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -4105,6 +4131,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeOpcuaCrossFileServerDosRecords(sourceFiles));
   records.push(...nodeOpcuaCrossFileServerAuthRecords(sourceFiles));
   records.push(...nodeDeepseekMcpHttpSessionAuthorizationRecords(sourceFiles));
+  records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
   records.push(...nodeAuthJsConfigurationErrorFailOpenRecords(sourceFiles));
   records.push(...nodeKeystoneNegativeTakeBypassRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
@@ -22300,6 +22327,417 @@ function nodeDeepseekMcpHttpSessionAuthorizationRecords(
       },
     };
   });
+}
+
+interface NodeNextJsRouteSegment {
+  kind: "dynamic" | "static";
+  value: string;
+}
+
+interface NodeNextJsDynamicRoute {
+  file: SourceFileSnapshot;
+  parameter: string;
+  segments: NodeNextJsRouteSegment[];
+  sinkLine: number;
+  sinkSymbol: string;
+}
+
+interface NodeNextJsMiddlewareGate {
+  deniedPath: string;
+  file: SourceFileSnapshot;
+  line: number;
+}
+
+function nodeNextJsVersionHasDynamicRouteAuthorizationBypass(
+  version: string,
+): boolean {
+  if (version.includes("-")) return false;
+  const parts = version.split(".").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return false;
+  }
+  const [major, minor, patch] = parts as [number, number, number];
+  if (major === 15) {
+    return minor === 4 || (minor === 5 && patch < 16);
+  }
+  return major === 16 && (minor < 2 || (minor === 2 && patch < 5));
+}
+
+function nodeNextJsRouteSegments(
+  path: string,
+): { parameter: string; segments: NodeNextJsRouteSegment[] } | undefined {
+  const parts = path.replaceAll("\\", "/").split("/");
+  const extension = extname(parts.at(-1) ?? "").toLowerCase();
+  if (!JAVASCRIPT_EXTENSIONS.has(extension)) return undefined;
+  let routeParts: string[] | undefined;
+  const appIndex = parts.lastIndexOf("app");
+  if (appIndex >= 0 && /^page\.(?:[cm]?[jt]sx?)$/u.test(parts.at(-1) ?? "")) {
+    routeParts = parts.slice(appIndex + 1, -1);
+  } else {
+    const pagesIndex = parts.lastIndexOf("pages");
+    if (pagesIndex < 0) return undefined;
+    routeParts = parts.slice(pagesIndex + 1);
+    const filename = routeParts.pop();
+    if (filename === undefined) return undefined;
+    const stem = filename.slice(0, -extension.length);
+    if (stem !== "index") routeParts.push(stem);
+  }
+  routeParts = routeParts.filter(
+    (part) => !/^\(.+\)$/u.test(part) && !part.startsWith("@"),
+  );
+  const segments: NodeNextJsRouteSegment[] = [];
+  const parameters: string[] = [];
+  for (const part of routeParts) {
+    const dynamic =
+      /^\[(?:\.\.\.)?([A-Za-z_$][\w$]*)\]$/u.exec(part) ??
+      /^\[\[\.\.\.([A-Za-z_$][\w$]*)\]\]$/u.exec(part);
+    if (dynamic?.[1] !== undefined) {
+      parameters.push(dynamic[1]);
+      segments.push({ kind: "dynamic", value: dynamic[1] });
+    } else if (part !== "") {
+      segments.push({ kind: "static", value: part });
+    }
+  }
+  if (parameters.length !== 1 || segments.length === 0) return undefined;
+  return { parameter: parameters[0]!, segments };
+}
+
+function nodeNextJsRouteLocalAuthorization(file: SourceFileSnapshot): boolean {
+  return /\b(?:auth|getServerSession|getSession|getToken|requireAuth|authorize|authorized|checkPermission|canAccess|canRead|cookies|headers)\s*(?:\(|\.)|\b(?:redirect|unauthorized|forbidden)\s*\(/iu.test(
+    javascriptCodeLinesWithoutComments(file.lines).join("\n"),
+  );
+}
+
+function nodeNextJsSensitiveRouteParamSink(
+  file: SourceFileSnapshot,
+  parameter: string,
+): { line: number; symbol: string } | undefined {
+  if (nodeNextJsRouteLocalAuthorization(file)) return undefined;
+  const codeLines = javascriptCodeLinesWithoutComments(file.lines);
+  const structuralLines = javascriptStructuralLines(file.lines);
+  const escapedParameter = escapeRegularExpression(parameter);
+  const references = new Map<string, number>([
+    [`params.${parameter}`, 0],
+    [`params?.${parameter}`, 0],
+    [`params["${parameter}"]`, 0],
+    [`params['${parameter}']`, 0],
+    [`(await params).${parameter}`, 0],
+  ]);
+  const destructure = new RegExp(
+    String.raw`\b(?:const|let|var)\s*\{\s*${escapedParameter}(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*\}\s*=\s*(?:await\s+)?params\b`,
+    "u",
+  );
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const match = destructure.exec(codeLines[index] ?? "");
+    if (match !== null) references.set(match[1] ?? parameter, index + 1);
+  }
+  const nestedParameter = new RegExp(
+    String.raw`\bparams\s*:\s*\{[^}]*\b${escapedParameter}(?:\s*:\s*([A-Za-z_$][\w$]*))?\b`,
+    "u",
+  ).exec(codeLines.join("\n"));
+  if (nestedParameter !== null)
+    references.set(nestedParameter[1] ?? parameter, 1);
+  const sensitiveCall =
+    /\b(?:fetch|query|retrieve|lookup|open|read|find|get|load)[A-Za-z0-9_$]*(?:\s*\.\s*(?:findUnique|findFirst|findMany|findOne|get|query|select))?\s*\(|\.\s*(?:findUnique|findFirst|findMany|findOne|query|select)\s*\(/iu;
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const currentLine = structuralLines[index] ?? "";
+    const currentCall = sensitiveCall.exec(currentLine);
+    if (
+      /\b(?:async\s+)?function\s+[A-Za-z_$][\w$]*\s*\(/u.test(currentLine) ||
+      currentCall === null
+    ) {
+      continue;
+    }
+    const callLines: string[] = [];
+    let depth = 0;
+    let started = false;
+    let complete = false;
+    for (
+      let callIndex = index;
+      callIndex < Math.min(structuralLines.length, index + 8);
+      callIndex += 1
+    ) {
+      const line = structuralLines[callIndex] ?? "";
+      callLines.push(codeLines[callIndex] ?? "");
+      const startColumn = callIndex === index ? currentCall.index : 0;
+      for (let column = startColumn; column < line.length; column += 1) {
+        if (line[column] === "(") {
+          depth += 1;
+          started = true;
+        } else if (line[column] === ")" && started) {
+          depth -= 1;
+          if (depth === 0) {
+            complete = true;
+            break;
+          }
+        }
+      }
+      if (complete) break;
+    }
+    if (!complete) continue;
+    const window = callLines.join("\n");
+    const reference = [...references].find(([candidate]) =>
+      candidate.includes(".") || candidate.includes("[")
+        ? window.includes(candidate)
+        : new RegExp(`\\b${escapeRegularExpression(candidate)}\\b`, "u").test(
+            window,
+          ),
+    );
+    if (reference === undefined) continue;
+    if (
+      /^[A-Za-z_$][\w$]*$/u.test(reference[0]) &&
+      javascriptIdentifierReassignedBetween(
+        file.lines,
+        reference[0],
+        reference[1],
+        index + 2,
+      )
+    ) {
+      continue;
+    }
+    const call = sensitiveCall.exec(window)?.[0]?.replace(/\s+/gu, " ").trim();
+    return { line: index + 1, symbol: `${parameter}:${call ?? "data-access"}` };
+  }
+  return undefined;
+}
+
+function nodeNextJsDynamicRoutes(
+  files: readonly SourceFileSnapshot[],
+): NodeNextJsDynamicRoute[] {
+  const routes: NodeNextJsDynamicRoute[] = [];
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const route = nodeNextJsRouteSegments(file.path);
+    if (route === undefined) continue;
+    const sink = nodeNextJsSensitiveRouteParamSink(file, route.parameter);
+    if (sink === undefined) continue;
+    routes.push({
+      file,
+      parameter: route.parameter,
+      segments: route.segments,
+      sinkLine: sink.line,
+      sinkSymbol: sink.symbol,
+    });
+  }
+  return routes;
+}
+
+function nodeNextJsDeniedRouteValue(
+  route: NodeNextJsDynamicRoute,
+  deniedPath: string,
+): string | undefined {
+  if (!deniedPath.startsWith("/") || /[?#]/u.test(deniedPath)) return undefined;
+  const pathSegments = deniedPath.split("/").filter(Boolean);
+  if (pathSegments.length !== route.segments.length) return undefined;
+  let dynamicValue: string | undefined;
+  for (let index = 0; index < route.segments.length; index += 1) {
+    const segment = route.segments[index]!;
+    const value = pathSegments[index]!;
+    if (segment.kind === "static" && segment.value !== value) return undefined;
+    if (segment.kind === "dynamic") dynamicValue = value;
+  }
+  return dynamicValue === "" ? undefined : dynamicValue;
+}
+
+function nodeNextJsMatcherCoversRoute(
+  file: SourceFileSnapshot,
+  route: NodeNextJsDynamicRoute,
+): boolean {
+  const text = javascriptCodeLinesWithoutComments(file.lines).join("\n");
+  const matcherIndex = text.search(/\bmatcher\s*:/u);
+  if (matcherIndex < 0) return true;
+  const matcherText = text.slice(matcherIndex, matcherIndex + 1000);
+  const literals = [...matcherText.matchAll(/["']([^"']+)["']/gu)].map(
+    (match) => match[1] ?? "",
+  );
+  const dynamicIndex = route.segments.findIndex(
+    (segment) => segment.kind === "dynamic",
+  );
+  const staticPrefix =
+    "/" +
+    route.segments
+      .slice(0, dynamicIndex)
+      .map((segment) => segment.value)
+      .join("/");
+  return literals.some(
+    (literal) =>
+      literal === staticPrefix ||
+      literal.startsWith(`${staticPrefix}/`) ||
+      literal.includes(`${staticPrefix}/:`),
+  );
+}
+
+function nodeNextJsMiddlewareGates(
+  files: readonly SourceFileSnapshot[],
+  route: NodeNextJsDynamicRoute,
+): NodeNextJsMiddlewareGate[] {
+  const gates: NodeNextJsMiddlewareGate[] = [];
+  for (const file of files) {
+    const basename = posix.basename(file.path);
+    if (
+      !/^(?:middleware|proxy)\.[cm]?[jt]sx?$/u.test(basename) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !/["']next\/server["']/u.test(file.text) ||
+      !nodeNextJsMatcherCoversRoute(file, route)
+    ) {
+      continue;
+    }
+    const codeLines = javascriptCodeLinesWithoutComments(file.lines);
+    const aliases = new Set<string>();
+    for (const line of codeLines) {
+      const alias =
+        /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[A-Za-z_$][\w$]*\s*\.\s*nextUrl\s*\.\s*pathname\b/u.exec(
+          line,
+        );
+      if (alias?.[1] !== undefined) aliases.add(alias[1]);
+    }
+    const pathname = String.raw`(?:[A-Za-z_$][\w$]*\s*\.\s*nextUrl\s*\.\s*pathname${
+      aliases.size === 0
+        ? ""
+        : `|${[...aliases].map(escapeRegularExpression).join("|")}`
+    })`;
+    const condition = new RegExp(
+      String.raw`\bif\s*\([^)]*(?:${pathname}\s*={2,3}\s*["']([^"']+)["']|["']([^"']+)["']\s*={2,3}\s*${pathname})[^)]*\)`,
+      "u",
+    );
+    for (let index = 0; index < codeLines.length; index += 1) {
+      if (!/\bif\s*\(/u.test(codeLines[index] ?? "")) continue;
+      const conditionWindow = codeLines
+        .slice(index, Math.min(codeLines.length, index + 4))
+        .join(" ");
+      const match = condition.exec(conditionWindow);
+      const deniedPath = match?.[1] ?? match?.[2];
+      if (deniedPath === undefined) continue;
+      const denialWindow = codeLines
+        .slice(index, Math.min(codeLines.length, index + 10))
+        .join("\n");
+      if (
+        !/\breturn\b/u.test(denialWindow) ||
+        !/(?:NextResponse|new\s+Response|Response\s*\.\s*redirect)/u.test(
+          denialWindow,
+        ) ||
+        !/(?:status\s*:\s*(?:401|403)\b|Unauthorized|Forbidden|["']\/(?:login|signin)(?:[/?"']))/iu.test(
+          denialWindow,
+        )
+      ) {
+        continue;
+      }
+      gates.push({ deniedPath, file, line: index + 1 });
+    }
+  }
+  return gates;
+}
+
+function nodeNextJsDynamicRouteAuthorizationRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const route of nodeNextJsDynamicRoutes(files)) {
+    const dependency = nodeRuntimeDependency(files, route.file.path, "next");
+    if (
+      dependency === undefined ||
+      !nodeNextJsVersionHasDynamicRouteAuthorizationBypass(dependency.version)
+    ) {
+      continue;
+    }
+    for (const gate of nodeNextJsMiddlewareGates(files, route)) {
+      const deniedValue = nodeNextJsDeniedRouteValue(route, gate.deniedPath);
+      if (deniedValue === undefined) continue;
+      const gateDependency = nodeRuntimeDependency(
+        files,
+        gate.file.path,
+        "next",
+      );
+      if (
+        gateDependency === undefined ||
+        gateDependency.manifestPath !== dependency.manifestPath ||
+        gateDependency.version !== dependency.version ||
+        gateDependency.proof !== dependency.proof
+      ) {
+        continue;
+      }
+      const key = `${gate.file.path}\0${gate.line}\0${route.file.path}\0${route.sinkLine}`;
+      if (emitted.has(key)) continue;
+      emitted.add(key);
+      const prefix =
+        dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+      const sinkKind = `${prefix}vulnerable-nextjs-dynamic-route-param-data-access`;
+      const startLine = Math.max(1, route.sinkLine - CONTEXT_LINES_BEFORE);
+      const endLine = Math.min(
+        route.file.lines.length,
+        route.sinkLine + CONTEXT_LINES_AFTER,
+      );
+      const sourceStart = Math.max(1, gate.line - 2);
+      const sourceEnd = Math.min(gate.file.lines.length, gate.line + 5);
+      records.push({
+        path: route.file.path,
+        line: route.sinkLine,
+        categories: [
+          "framework-dataflow:node-nextjs-dynamic-route-param-authorization-bypass",
+          "modeled-source:external-next-internal-route-param-query-injection",
+          `modeled-sink:${sinkKind}`,
+          "broken-control:visible-pathname-only-middleware-authorization",
+        ],
+        priority: 126,
+        startLine,
+        endLine,
+        excerpt: sourceExcerpt(route.file.lines, startLine, endLine),
+        sourceExcerpt: sourceExcerpt(gate.file.lines, sourceStart, sourceEnd),
+        frameworkModel: {
+          schemaVersion: "1.2",
+          id: "node-nextjs-dynamic-route-param-authorization-bypass",
+          language: "javascript-typescript",
+          scope: "cross-file",
+          source: {
+            kind: "external-next-internal-route-param-query-injection",
+            path: gate.file.path,
+            line: gate.line,
+          },
+          sink: {
+            kind: sinkKind,
+            path: route.file.path,
+            line: route.sinkLine,
+            cweIds: ["CWE-288"],
+          },
+          propagators: [
+            {
+              kind: "nextjs-visible-pathname-authorization-gate",
+              path: gate.file.path,
+              line: gate.line,
+              symbol: gate.deniedPath,
+            },
+            {
+              kind: "nextjs-dynamic-route-parameter",
+              path: route.file.path,
+              line: 1,
+              symbol: `${route.parameter}:nxtP${route.parameter}:${deniedValue}`,
+            },
+            {
+              kind: "nextjs-server-data-access",
+              path: route.file.path,
+              line: route.sinkLine,
+              symbol: route.sinkSymbol,
+            },
+            {
+              kind: "nextjs-runtime-dependency",
+              path: dependency.manifestPath,
+              line: dependency.line,
+              symbol: `next@${dependency.version}:${dependency.proof}:external-nxtP-route-param-normalization`,
+            },
+          ],
+          candidateControls: [],
+        },
+      });
+      if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) return records;
+    }
+  }
+  return records;
 }
 
 interface NodeAuthJsFactoryBinding {

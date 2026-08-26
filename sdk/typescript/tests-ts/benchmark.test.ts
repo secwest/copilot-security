@@ -420,6 +420,10 @@ describe("effectiveness benchmark", () => {
         "node-deepseek-mcp-http-session-isolated",
       ],
       [
+        "node-nextjs-dynamic-route-param-authorization-bypass",
+        "node-nextjs-dynamic-route-param-isolated",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

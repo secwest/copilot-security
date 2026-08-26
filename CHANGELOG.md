@@ -6,6 +6,33 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-nextjs-dynamic-route-param-authorization-bypass`, an exact
+  route-, gate-, data-access-, provenance-, and version-aware CWE-288 model for
+  [GHSA-492v-c6pp-mqqv / CVE-2026-44574](https://github.com/vercel/next.js/security/advisories/GHSA-492v-c6pp-mqqv).
+  It requires an official middleware or proxy that denies one concrete dynamic
+  path, a covering matcher when configured, exactly one matching App or Pages
+  Router segment, that parameter entering a server-side data operation, no
+  route-local authorization control, and affected production `next` provenance:
+  15.4.0 through 15.5.15 or 16.0.0 through 16.2.4.
+- Added exact App/Pages route parsing, route-group support, direct/bracket and
+  destructured-alias parameter tracking, balanced multiline call attribution,
+  middleware pathname aliases and reversed comparisons, proxy support, and
+  401/403/login denial recognition. Static/multi-parameter/display-only routes,
+  reassigned aliases, local auth/session/cookie/header/permission checks,
+  unrelated matchers or denied paths, missing `next/server`, incomplete denials,
+  prereleases, repaired versions, development-only or wrong packages,
+  lockfile-free ranges, and stale/inconsistent/v1 locks fail closed.
+- Added source-identical 15.5.15/15.5.16 Pages Router fixtures, a strict
+  specialized manifest, canonical corpus registration, field-local validation
+  guidance, and an adversarial regression matrix. The real-package witness
+  builds and starts both standalone servers on disposable loopback ports. It
+  preserves the observed counterevidence that ordinary requests resolve the
+  visible `public` segment first, then exercises the exact wrapped route-module
+  handoff changed by upstream: 15.5.15 prepares `secret` from external
+  `nxtPslug`, while 15.5.16 filters it and retains the route placeholder. The
+  canonical corpus advances to 123 exploit/control pairs, 246 cases, and 738
+  repeated scans.
+
 - Added `node-deepseek-mcp-http-cross-session-authorization-bypass`, an exact
   deployment-, transport-, launch-, provenance-, and version-aware CWE-639
   model for

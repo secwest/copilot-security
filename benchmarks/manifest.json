@@ -5159,6 +5159,45 @@
         "node-deepseek-mcp-http-session-isolated/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-nextjs-dynamic-route-param-authorization-bypass",
+      "description": "Next.js 15.5.15 middleware denies the visible /documents/secret path, but a public dynamic route still consumes the externally supplied nxtPslug internal query parameter during server-side data access.",
+      "fixture": "fixtures/node-nextjs-dynamic-route-param-authorization-bypass",
+      "findingsPaths": [
+        "node-nextjs-dynamic-route-param-authorization-bypass/run-1/findings.json",
+        "node-nextjs-dynamic-route-param-authorization-bypass/run-2/findings.json",
+        "node-nextjs-dynamic-route-param-authorization-bypass/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-nextjs-dynamic-route-param-authorization-bypass",
+          "cwe": ["CWE-288"],
+          "locations": [
+            {
+              "path": "src/pages/documents/[slug].jsx",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-nextjs-dynamic-route-param-isolated",
+      "description": "The source-identical control changes only Next.js to 15.5.16, which removes external nxtP route-parameter normalization at the normal Next-server boundary.",
+      "fixture": "fixtures/node-nextjs-dynamic-route-param-isolated",
+      "findingsPaths": [
+        "node-nextjs-dynamic-route-param-isolated/run-1/findings.json",
+        "node-nextjs-dynamic-route-param-isolated/run-2/findings.json",
+        "node-nextjs-dynamic-route-param-isolated/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }
