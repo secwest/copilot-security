@@ -56,6 +56,41 @@ records no crafted backend hit. The exact temporary extraction directory and
 containers are absent after cleanup. Windows and native Ubuntu/WSL both pass
 the resulting 30-test focused/canonical lane with 2,186 assertions.
 
+**Directory/TOML closure.** Exact benchmark checkpoint
+`3519cd663be19c9acd92c17971e360bf02d35384`, authored and committed by
+`Dragos Ruiu <dr@secwest.net>`, passes the complete managed Windows aggregate
+across 1,789 tests and 195 files in 607.23 seconds: 1,762 pass, 25 intentional
+platform skips remain, and only the established child-Git provenance and
+private `copilot-security-home` ACL tests are denied by the managed host. Their
+exact native rerun passes 2/2 tests and seven assertions. The aggregate records
+12,934 assertions. Windows and native Ubuntu/WSL each pass the 30-test
+Traefik/canonical lane with 2,186 assertions. Generated models, TypeScript, the
+clean production build, and the production audit pass; the audit reports no
+known vulnerabilities.
+
+All seven hosted workflows pass at that exact source: Go `32983317559`, Windows
+GUI `32983317601`, Java `32983317691`, .NET `32983317588`, container
+`32983317608`, Linux GUI `32983317710`, and Node `32983317684`. Strict archive
+inspection and two isolated installations accept the 267-entry,
+2,048,439-byte npm archive, SHA-256
+`5c3473b2338e07b9406b383a1e246d11d2c4f621b1e1ab431bd7d398a1bf6cc3`,
+including the public SDK import, executable CLI, and all 79 bundled-plugin
+files.
+
+Two production-build scans of a disposable tracked-only archive of the exact
+checkpoint complete in 31,692.479 and 15,990.594 milliseconds. They emit 256
+byte-identical rows totaling 548,306 bytes with SHA-256
+`61a67743dbcdbd303f34d9b65595361bd21023791ac47be8e89d25ca36b116dd`.
+All 196 structured records survive ahead of 60 lexical leads; 246 rows are
+fixture paths and ten are not. The new row retains TOML router source
+`dynamic/routers.toml:1`, YAML rewrite sink `dynamic/middlewares.yml:4`, the
+protected sibling at router line 7, the mounted directory, CWE-22, and exact
+3.7.6 image provenance. The prior filename and Docker-label positives also
+remain, while all three 3.7.7 twins are absent. The package archive, self-scan
+archive/tree, extracted real binaries, and Docker extraction containers were
+removed after acceptance. This closes the directory/TOML increment, not the
+standing scanner-effectiveness goal.
+
 **Initial topology decision.** Do not report an affected image or rewrite
 alone. Bind an exact official Compose image to `--providers.file.filename`, a
 matching non-traversing mounted dynamic file, one public router with exactly

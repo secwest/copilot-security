@@ -27,6 +27,31 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `/../admin` to normalized `/admin`, and returned the inert marker with 200;
   3.7.7 kept direct 401, returned 400, and recorded no crafted backend hit.
   Both temporary binaries and extraction containers were removed.
+- Completed acceptance for exact benchmark checkpoint
+  `3519cd663be19c9acd92c17971e360bf02d35384`. The full managed Windows Bun
+  1.3.14 aggregate exercises 1,789 tests across 195 files in 607.23 seconds:
+  1,762 pass, 25 intentional platform skips remain, and only the established
+  child-Git provenance and private `copilot-security-home` ACL cases fail under
+  the managed host. Their exact native rerun passes 2/2 with seven assertions;
+  the aggregate records 12,934 assertions. Windows and native Ubuntu/WSL both
+  pass the 30-test Traefik/canonical lane with 2,186 assertions. All seven
+  hosted workflows pass: Go `32983317559`, Windows GUI `32983317601`, Java
+  `32983317691`, .NET `32983317588`, container `32983317608`, Linux GUI
+  `32983317710`, and Node `32983317684`.
+- The strict 267-entry, 2,048,439-byte npm archive has SHA-256
+  `5c3473b2338e07b9406b383a1e246d11d2c4f621b1e1ab431bd7d398a1bf6cc3`
+  and passes archive inspection plus two isolated installation checks of the
+  public import, CLI, and all 79 bundled-plugin files. The production advisory
+  audit reports no known vulnerabilities. Two production-build inventories of
+  a tracked-only archive of the exact checkpoint complete in 31,692.479 and
+  15,990.594 milliseconds and emit 256 byte-identical rows, 548,306 bytes, and
+  SHA-256
+  `61a67743dbcdbd303f34d9b65595361bd21023791ac47be8e89d25ca36b116dd`.
+  All 196 structured rows survive ahead of 60 lexical leads; 246 rows are
+  fixture paths and ten are not. Exactly three Traefik positives retain the
+  affected filename, Docker-label, and split-directory topologies, while all
+  three source-identical 3.7.7 controls remain absent. Package, self-scan, and
+  real-runtime temporary artifacts were removed after verification.
 - Added a source-identical Docker-provider Traefik exploit/control pair that
   changes only the proxy image from 3.7.6 to 3.7.7. The operational Compose
   topology keeps the proxy entry point loopback-published, the inert backend
