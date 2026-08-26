@@ -240,8 +240,13 @@ release. The Pickem pair then maps fetched release text into exact picker displa
 fields and changes only `pickem` 1.0.6 to 1.0.7. Its public-formatter witness is
 noninteractive and never prints raw terminal control bytes: the affected package
 retains OSC, BEL, DEL, C1, and an inert clipboard marker, while the repaired
-package removes them and preserves the selected value. Three runs per case now
-produce 756 scans across 126 exploit/control pairs in the complete corpus. The added
+package removes them and preserves the selected value. The Nx self-hosted-cache
+pair then preserves its operational CI configuration, task, workspace, and
+loopback-only gzip-tar witness while changing only Nx 22.7.6 to 22.7.7. The
+affected release writes an inert sentinel outside its per-hash cache directory
+but inside the disposable root; the repaired release does not. Three runs per
+case now produce 762 scans across 127 exploit/control pairs in the complete
+corpus. The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size

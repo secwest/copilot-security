@@ -6,6 +6,32 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-nx-self-hosted-cache-archive-escape`, an operational
+  configuration-, task-execution-, provider-, and exact build-dependency model
+  for
+  [GHSA-vp3h-ghgh-jr7g / CVE-2026-71476](https://github.com/nrwl/nx/security/advisories/GHSA-vp3h-ghgh-jr7g).
+  The built-in HTTP surface reports only when a nonempty
+  `NX_SELF_HOSTED_REMOTE_CACHE_SERVER` assignment and a cache-consuming Nx task
+  share an operational file under stable affected Nx 20.8.0 through 22.7.6 or
+  23.0.0 through 23.0.1 provenance. Administrative commands, local cache, Nx
+  Cloud, fixed/prerelease versions, unproved or stale locks, and explicit cache
+  bypasses fail closed.
+- Added coverage for all eight separately versioned `@nx/*-cache` and
+  `@nx/powerpack-*-cache` packages named by the advisory. Provider packages
+  require their matching `nx.json` object; shared-filesystem packages require a
+  CI task path. These remain findings under fixed core Nx because their own
+  extractors are deprecated and unpatched. `nx.json` and bounded `.env` files
+  now participate in source discovery, and Nx build dependencies correctly
+  accept exact dev-dependency or declaration-consistent npm v2/v3 lock proof.
+- Added source-identical Nx 22.7.6/22.7.7 fixtures, exact npm locks, a strict
+  specialized manifest, canonical registration, field-local correction
+  guidance, and adversarial regression coverage for version windows, five task
+  forms, cache-disable controls, provider configuration, shared-filesystem CI,
+  and fixed-core/unpatched-provider coexistence. A loopback-only real-package
+  differential confines every write to a disposable root: 22.7.6 writes one
+  inert sentinel outside its per-hash cache directory, while 22.7.7 rejects or
+  contains the identical gzip tar. The canonical corpus advances to 127
+  exploit/control pairs, 254 cases, and 762 repeated scans.
 - Added `node-pickem-terminal-control-injection`, an exact production-version,
   official-binding, remote-collection, display-projection, and terminal-render
   model for

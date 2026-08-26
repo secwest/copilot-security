@@ -2151,8 +2151,14 @@ items, display-field projection, and the picker call constant while changing onl
 `pickem` 1.0.6 to 1.0.7. Its noninteractive public-formatter witness prints only
 escaped JSON booleans: 1.0.6 retains OSC, BEL, DEL, C1, and an inert clipboard
 marker, while 1.0.7 removes all five and preserves the selected value. Each of
-the 252 cases in 126 exploit/control pairs is scanned three times, producing 756 scans
-that measure both accuracy and model variance.
+the Pickem cases remains byte-matched outside the dependency version. The Nx
+self-hosted-cache pair then preserves one CI activation, cache-consuming task,
+workspace, and bounded loopback gzip-tar witness while changing only Nx 22.7.6
+to 22.7.7. The affected release writes one inert sentinel beyond its per-hash
+cache directory but still inside the disposable root; the repaired release
+contains or rejects identical bytes. Each of the 254 cases in 127
+exploit/control pairs is scanned three times, producing 762 scans that measure
+both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses
 keyword-mode findings that could not reach the modeled loader branch.

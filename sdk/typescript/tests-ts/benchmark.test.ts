@@ -436,6 +436,10 @@ describe("effectiveness benchmark", () => {
         "node-pickem-terminal-control-isolated",
       ],
       [
+        "node-nx-self-hosted-cache-archive-escape",
+        "node-nx-self-hosted-cache-archive-contained",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

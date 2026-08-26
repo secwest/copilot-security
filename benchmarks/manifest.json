@@ -5315,6 +5315,45 @@
         "node-pickem-terminal-control-isolated/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-nx-self-hosted-cache-archive-escape",
+      "description": "An Nx 22.7.6 CI task consumes a self-hosted HTTP cache artifact whose tar entry can escape the per-hash cache directory.",
+      "fixture": "fixtures/node-nx-self-hosted-cache-archive-escape",
+      "findingsPaths": [
+        "node-nx-self-hosted-cache-archive-escape/run-1/findings.json",
+        "node-nx-self-hosted-cache-archive-escape/run-2/findings.json",
+        "node-nx-self-hosted-cache-archive-escape/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-nx-self-hosted-cache-archive-escape",
+          "cwe": ["CWE-22", "CWE-59"],
+          "locations": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "startLine": 10,
+              "endLine": 10,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-nx-self-hosted-cache-archive-contained",
+      "description": "The source-identical control changes only Nx to 22.7.7, whose containment-checked extractor rejects the same parent traversal entry.",
+      "fixture": "fixtures/node-nx-self-hosted-cache-archive-contained",
+      "findingsPaths": [
+        "node-nx-self-hosted-cache-archive-contained/run-1/findings.json",
+        "node-nx-self-hosted-cache-archive-contained/run-2/findings.json",
+        "node-nx-self-hosted-cache-archive-contained/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

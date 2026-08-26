@@ -2,6 +2,79 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — Bind Nx archive risk to a self-hosted cache read path
+
+**Gap and primary evidence.** The official
+[`GHSA-vp3h-ghgh-jr7g / CVE-2026-71476`](https://github.com/nrwl/nx/security/advisories/GHSA-vp3h-ghgh-jr7g),
+assigned CWE-22 and CWE-59 and rated high, covers the built-in self-hosted HTTP
+cache in Nx 20.8.0 through 22.7.6 and 23.0.0 through 23.0.1. A malicious or
+on-path cache could return a gzip tar whose parent, absolute, symlink, or
+hardlink entries escaped the per-hash cache directory. The official
+[`#36116` repair](https://github.com/nrwl/nx/pull/36116) replaces unguarded
+`output_dir.join(entry_path)` plus `Entry::unpack` with containment-checked
+`unpack_in`, restricts restoration to declared task outputs, rejects outputs
+outside the workspace, and refuses writes through workspace symlinks. The
+advisory explicitly excludes default local cache and Nx Cloud.
+Authenticated current-source searches found no advisory identifier or
+`NX_SELF_HOSTED_REMOTE_CACHE_SERVER` match in `github/codeql` or
+`semgrep/semgrep-rules`; this increment therefore adds an application/configuration
+reachability layer rather than duplicating a known exact rule.
+
+**Two surfaces, two remediation rules.** The same advisory names eight
+separately versioned S3, GCS, Azure, and shared-filesystem packages, including
+their Powerpack predecessors. Their published extractors independently derive a
+destination with `relative("outputs", header.name)` and stream files without a
+containment boundary. They are deprecated and unpatched: upgrading core Nx
+hardens the shared restore step but is not a complete provider-package repair.
+The model therefore treats the built-in HTTP and provider-package surfaces
+separately. Core 22.7.7 and 23.0.2 close only the former; the latter recommends
+migration to Nx Cloud or the repaired OpenAPI/HTTP cache.
+
+**Reachability decision.** Add `node-nx-self-hosted-cache-archive-escape`, but
+do not promote a package declaration or remote-cache token alone. The HTTP
+surface requires a nonempty `NX_SELF_HOSTED_REMOTE_CACHE_SERVER` assignment and
+an actual cache-consuming Nx task in the same operational file, plus exact
+affected build-dependency provenance. The provider surface requires an exact
+installed package, the matching `s3`, `gcs`, or `azure` object in `nx.json`, and
+an Nx task; shared-filesystem packages require a CI task because their public
+entry point returns no cache outside CI. Ordered propagators retain cache
+activation, task execution, and dependency proof. Nx is normally a build tool,
+so exact `devDependencies` and fresh declaration-consistent npm v2/v3 locks are
+valid production reachability evidence here.
+
+**Precision controls.** Pre-20.8, 22.7.7+, 23.0.2+, later-major and prerelease
+core versions; provider prereleases; lockfile-free ranges; inconsistent, stale,
+or v1 locks; Nx Cloud; default local cache; empty activation; missing provider
+objects; `localMode`/`ciMode: no-cache`; `NX_SKIP_NX_CACHE=true`;
+`NX_POWERPACK_CACHE_MODE=no-cache`; `--skip-nx-cache`; and graph, migration,
+report, reset, generation, and other administrative commands are deterministic
+negatives. Source discovery now includes `nx.json` and bounded `.env` variants,
+and package metadata discovery can begin at an Nx config or CI workflow rather
+than assuming an application JavaScript file is present.
+
+**Validation and impact discipline.** The checked-in pair changes only Nx
+22.7.6 to 22.7.7. Its witness starts an ephemeral loopback server, observes the
+real cache GET, and returns one handcrafted gzip tar containing a four-byte exit
+code, terminal output, and an inert parent-traversal sentinel. It creates a
+fresh temporary workspace whose cache directory is four levels below the
+temporary root, so the affected write demonstrates escape from the per-hash
+cache while remaining inside disposable storage. Published 22.7.6 writes the
+sentinel; 22.7.7 receives identical bytes but does not. No executable content,
+startup file, hook, credential, persistent location, external listener, or path
+outside the disposable root is used. The report may claim only the demonstrated
+arbitrary-file-write boundary unless an application-specific consequence is
+proved separately.
+
+**Regression and benchmark contract.** The specialized gate requires high
+severity, exact line-10 task reachability, CWE-22 and CWE-59, validation,
+attack-path analysis, code evidence, stable detection, and zero false
+positives. Nine focused tests with 74 assertions cover both affected release
+windows, five task-command forms, modern lock proof, fixed and pre-introduction
+edges, explicit disable controls, four provider families, shared-filesystem CI,
+fixed core with an unpatched provider, source identity, and correction-prompt
+discipline. The pair advances the canonical corpus to 127 exploit/control
+pairs, 254 cases, and 762 repeated scans.
+
 ## 2026-08-26 — Bind Pickem terminal text to exact remote display fields
 
 **Gap and primary evidence.** The official

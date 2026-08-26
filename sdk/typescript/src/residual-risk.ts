@@ -3942,6 +3942,21 @@ const PICKEM_TERMINAL_INJECTION_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-150", "terminal control-sequence injection"],
 ] as const;
 
+const NX_SELF_HOSTED_CACHE_ARCHIVE_ESCAPE_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["GHSA-vp3h-ghgh-jr7g", "CVE-2026-71476", "Nx remote cache"],
+  ["NX_SELF_HOSTED_REMOTE_CACHE_SERVER", "self-hosted HTTP cache"],
+  ["@nx/s3-cache", "@nx/gcs-cache", "@nx/azure-cache", "shared-fs"],
+  ["exact Nx version", "22.7.6", "23.0.1", "affected release"],
+  ["cache-consuming Nx task", "nx run", "nx affected", "nx run-many"],
+  ["malicious cache server", "on-path attacker", "untrusted artifact"],
+  ["parent traversal", "absolute path", "symlink", "hardlink"],
+  ["disposable workspace", "loopback server", "inert sentinel"],
+  ["22.7.7", "23.0.2", "unpack_in", "repaired control"],
+  ["default local cache", "Nx Cloud", "negative control"],
+  ["declared outputs", "workspace confinement", "cache directory"],
+  ["CWE-22", "CWE-59", "arbitrary file write"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -4076,6 +4091,15 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
       attackPath: PICKEM_TERMINAL_INJECTION_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
+  [
+    "node-nx-self-hosted-cache-archive-escape",
+    {
+      validation:
+        NX_SELF_HOSTED_CACHE_ARCHIVE_ESCAPE_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath:
+        NX_SELF_HOSTED_CACHE_ARCHIVE_ESCAPE_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
 ]);
 
 export async function buildResidualRiskInventory(
@@ -4198,6 +4222,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
   records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
   records.push(...nodePickemTerminalInjectionRecords(sourceFiles));
+  records.push(...nodeNxSelfHostedCacheArchiveEscapeRecords(sourceFiles));
   records.push(...nodeAuthJsConfigurationErrorFailOpenRecords(sourceFiles));
   records.push(...nodeKeystoneNegativeTakeBypassRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
@@ -4860,6 +4885,7 @@ function nodePackageLockResolvedVersion(
   manifest: SourceFileSnapshot,
   dependencyName: string,
   declaration: string,
+  sections: readonly string[] = ["dependencies", "optionalDependencies"],
 ): string | undefined {
   const directory = posix.dirname(manifest.path);
   const lockfile = ["npm-shrinkwrap.json", "package-lock.json"]
@@ -4902,20 +4928,18 @@ function nodePackageLockResolvedVersion(
   ) {
     return undefined;
   }
-  const rootDeclarations = ["dependencies", "optionalDependencies"].flatMap(
-    (section) => {
-      const dependencies = (rootPackage as Record<string, unknown>)[section];
-      if (
-        typeof dependencies !== "object" ||
-        dependencies === null ||
-        Array.isArray(dependencies)
-      ) {
-        return [];
-      }
-      const version = (dependencies as Record<string, unknown>)[dependencyName];
-      return typeof version === "string" ? [version] : [];
-    },
-  );
+  const rootDeclarations = sections.flatMap((section) => {
+    const dependencies = (rootPackage as Record<string, unknown>)[section];
+    if (
+      typeof dependencies !== "object" ||
+      dependencies === null ||
+      Array.isArray(dependencies)
+    ) {
+      return [];
+    }
+    const version = (dependencies as Record<string, unknown>)[dependencyName];
+    return typeof version === "string" ? [version] : [];
+  });
   if (
     rootDeclarations.length === 0 ||
     rootDeclarations.some((version) => version !== declaration)
@@ -24576,6 +24600,455 @@ function nodePickemTerminalInjectionRecords(
   return records;
 }
 
+const NODE_NX_SELF_HOSTED_CACHE_PACKAGES = [
+  "@nx/azure-cache",
+  "@nx/gcs-cache",
+  "@nx/powerpack-azure-cache",
+  "@nx/powerpack-gcs-cache",
+  "@nx/powerpack-s3-cache",
+  "@nx/powerpack-shared-fs-cache",
+  "@nx/s3-cache",
+  "@nx/shared-fs-cache",
+] as const;
+
+type NodeNxSelfHostedCachePackage =
+  (typeof NODE_NX_SELF_HOSTED_CACHE_PACKAGES)[number];
+
+interface NodeNxBuildDependency extends NodeRuntimeDependency {
+  packageName: string;
+}
+
+interface NodeNxCacheEvidence {
+  file: SourceFileSnapshot;
+  kind: string;
+  line: number;
+  symbol: string;
+}
+
+function nodeNxBuildDependency(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  dependencyName: string,
+): NodeNxBuildDependency | undefined {
+  const manifests = files
+    .filter(
+      (file) =>
+        posix.basename(file.path) === "package.json" &&
+        pathWithinDirectory(sourcePath, posix.dirname(file.path)),
+    )
+    .sort(
+      (left, right) =>
+        posix.dirname(right.path).length - posix.dirname(left.path).length,
+    );
+  const manifest = manifests[0];
+  if (manifest === undefined) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(manifest.text) as unknown;
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+  const sections = [
+    "dependencies",
+    "optionalDependencies",
+    "devDependencies",
+  ] as const;
+  const root = parsed as Record<string, unknown>;
+  const declarations = sections.flatMap((section) => {
+    const dependencies = root[section];
+    if (
+      typeof dependencies !== "object" ||
+      dependencies === null ||
+      Array.isArray(dependencies)
+    ) {
+      return [];
+    }
+    const value = (dependencies as Record<string, unknown>)[dependencyName];
+    return typeof value === "string" ? [value] : [];
+  });
+  if (
+    declarations.length === 0 ||
+    declarations.some((value) => value !== declarations[0])
+  ) {
+    return undefined;
+  }
+  const declaration = declarations[0]!;
+  const exact = nodeExactSemver(declaration);
+  const version = exact
+    ? declaration
+    : nodeRegistrySemverDeclaration(declaration)
+      ? nodePackageLockResolvedVersion(
+          files,
+          manifest,
+          dependencyName,
+          declaration,
+          sections,
+        )
+      : undefined;
+  if (version === undefined) return undefined;
+  const escaped = escapeRegularExpression(dependencyName);
+  const line =
+    manifest.lines.findIndex((candidate) =>
+      new RegExp(`^[\\s\"]*${escaped}\"\\s*:`, "u").test(candidate),
+    ) + 1;
+  return {
+    packageName: dependencyName,
+    manifestPath: manifest.path,
+    line: Math.max(1, line),
+    version,
+    proof: exact ? "manifest-exact" : "npm-lockfile",
+  };
+}
+
+function nodeNxHttpCacheVersionHasArchiveEscape(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  if (major === 20) return minor > 8 || (minor === 8 && patch >= 0);
+  if (major === 21) return true;
+  if (major === 22) return minor < 7 || (minor === 7 && patch <= 6);
+  return major === 23 && minor === 0 && patch <= 1;
+}
+
+function nodeNxCacheDisabledNear(
+  lines: readonly string[],
+  line: number,
+): boolean {
+  const nearby = lines
+    .slice(Math.max(0, line - 6), Math.min(lines.length, line + 5))
+    .join("\n");
+  return (
+    /--skip[-_]?nx[-_]?cache\b/iu.test(nearby) ||
+    /\bNX_SKIP_NX_CACHE\b\s*(?::|=)\s*["']?(?:1|true)\b/iu.test(nearby) ||
+    /\bNX_POWERPACK_CACHE_MODE\b\s*(?::|=)\s*["']?no-cache\b/iu.test(nearby)
+  );
+}
+
+function nodeNxCacheableTaskInvocations(
+  files: readonly SourceFileSnapshot[],
+): NodeNxCacheEvidence[] {
+  const invocations: NodeNxCacheEvidence[] = [];
+  const administrative = new Set([
+    "add",
+    "connect",
+    "daemon",
+    "exec",
+    "format",
+    "generate",
+    "graph",
+    "import",
+    "init",
+    "list",
+    "migrate",
+    "new",
+    "register",
+    "repair",
+    "report",
+    "reset",
+    "show",
+    "sync",
+    "view-logs",
+  ]);
+  const command =
+    /\b(?:(?:npx|bunx|yarn|pnpm(?:\s+(?:exec|dlx))?|npm\s+exec)\s+)?nx(?:\.cmd)?\s+([A-Za-z][\w:-]*)/iu;
+  for (const file of files) {
+    if (
+      javascriptTestOrExamplePath(file.path) ||
+      posix.basename(file.path) === "package-lock.json" ||
+      posix.basename(file.path) === "npm-shrinkwrap.json" ||
+      !/\bnx(?:\.cmd)?\b/iu.test(file.text)
+    ) {
+      continue;
+    }
+    for (let index = 0; index < file.lines.length; index += 1) {
+      const source = file.lines[index] ?? "";
+      const match = command.exec(source);
+      if (match?.[1] === undefined) continue;
+      const operation = match[1].toLowerCase();
+      if (
+        administrative.has(operation) ||
+        nodeNxCacheDisabledNear(file.lines, index + 1)
+      ) {
+        continue;
+      }
+      invocations.push({
+        file,
+        kind: "nx-cache-consuming-task-execution",
+        line: index + 1,
+        symbol: match[0].replace(/\s+/gu, " ").trim(),
+      });
+    }
+  }
+  return invocations;
+}
+
+function nodeNxHttpCacheActivations(
+  files: readonly SourceFileSnapshot[],
+): NodeNxCacheEvidence[] {
+  const activations: NodeNxCacheEvidence[] = [];
+  for (const file of files) {
+    if (
+      javascriptTestOrExamplePath(file.path) ||
+      !file.text.includes("NX_SELF_HOSTED_REMOTE_CACHE_SERVER")
+    ) {
+      continue;
+    }
+    for (let index = 0; index < file.lines.length; index += 1) {
+      const source = file.lines[index] ?? "";
+      if (/^\s*(?:#|\/\/)/u.test(source)) continue;
+      const assignment =
+        /\bNX_SELF_HOSTED_REMOTE_CACHE_SERVER\b(?:["']?\s*\])?\s*(?::|=)\s*(.+)$/u.exec(
+          source,
+        );
+      const value = assignment?.[1]?.trim().replace(/[,;]\s*$/u, "");
+      if (
+        value === undefined ||
+        value === "" ||
+        /^(?:["']{2}|false|null|undefined)$/iu.test(value)
+      ) {
+        continue;
+      }
+      activations.push({
+        file,
+        kind: "nx-self-hosted-http-cache-configuration",
+        line: index + 1,
+        symbol: "NX_SELF_HOSTED_REMOTE_CACHE_SERVER",
+      });
+    }
+  }
+  return activations;
+}
+
+function nodeNxProviderConfigurationKey(
+  packageName: NodeNxSelfHostedCachePackage,
+): "azure" | "gcs" | "s3" | "shared-fs" {
+  if (packageName.includes("azure")) return "azure";
+  if (packageName.includes("gcs")) return "gcs";
+  if (packageName.includes("s3")) return "s3";
+  return "shared-fs";
+}
+
+function nodeNxCiPath(path: string): boolean {
+  return (
+    path.startsWith(".github/workflows/") ||
+    /(?:^|\/)(?:\.circleci\/config\.yml|\.gitlab-ci\.yml|azure-pipelines\.ya?ml|Jenkinsfile)$/iu.test(
+      path,
+    ) ||
+    path.includes(".buildkite/")
+  );
+}
+
+function nodeNxProviderConfiguration(
+  files: readonly SourceFileSnapshot[],
+  dependency: NodeNxBuildDependency,
+  packageName: NodeNxSelfHostedCachePackage,
+  invocation: NodeNxCacheEvidence,
+): NodeNxCacheEvidence | undefined {
+  const key = nodeNxProviderConfigurationKey(packageName);
+  if (key === "shared-fs") {
+    if (!nodeNxCiPath(invocation.file.path)) return undefined;
+    return {
+      file: invocation.file,
+      kind: "nx-shared-filesystem-cache-ci-activation",
+      line: invocation.line,
+      symbol: `${packageName}:CI`,
+    };
+  }
+  const directory = posix.dirname(dependency.manifestPath);
+  const configPath =
+    directory === "." ? "nx.json" : posix.join(directory, "nx.json");
+  const config = files.find((file) => file.path === configPath);
+  if (config === undefined) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(config.text) as unknown;
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+  const provider = (parsed as Record<string, unknown>)[key];
+  if (
+    typeof provider !== "object" ||
+    provider === null ||
+    Array.isArray(provider)
+  ) {
+    return undefined;
+  }
+  const settings = provider as Record<string, unknown>;
+  const mode = nodeNxCiPath(invocation.file.path)
+    ? settings["ciMode"]
+    : settings["localMode"];
+  if (mode === "no-cache") return undefined;
+  const line =
+    config.lines.findIndex((candidate) =>
+      new RegExp(`^\\s*\"${escapeRegularExpression(key)}\"\\s*:`, "u").test(
+        candidate,
+      ),
+    ) + 1;
+  return {
+    file: config,
+    kind: `nx-${key}-cache-configuration`,
+    line: Math.max(1, line),
+    symbol: `${packageName}:${key}`,
+  };
+}
+
+function nodeNxSelfHostedCacheArchiveEscapeRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  const invocations = nodeNxCacheableTaskInvocations(files);
+  const httpActivations = nodeNxHttpCacheActivations(files);
+  for (const invocation of invocations) {
+    const nx = nodeNxBuildDependency(files, invocation.file.path, "nx");
+    if (
+      nx !== undefined &&
+      nodeNxHttpCacheVersionHasArchiveEscape(nx.version)
+    ) {
+      const activation = httpActivations.find(
+        (candidate) => candidate.file.path === invocation.file.path,
+      );
+      if (activation !== undefined) {
+        const key = `http\0${invocation.file.path}\0${invocation.line}`;
+        if (!emitted.has(key)) {
+          emitted.add(key);
+          records.push(
+            nodeNxSelfHostedCacheArchiveEscapeRecord(
+              invocation,
+              activation,
+              nx,
+              "http",
+            ),
+          );
+        }
+      }
+    }
+    for (const packageName of NODE_NX_SELF_HOSTED_CACHE_PACKAGES) {
+      const dependency = nodeNxBuildDependency(
+        files,
+        invocation.file.path,
+        packageName,
+      );
+      if (
+        dependency === undefined ||
+        !/^\d+\.\d+\.\d+$/u.test(dependency.version)
+      ) {
+        continue;
+      }
+      const activation = nodeNxProviderConfiguration(
+        files,
+        dependency,
+        packageName,
+        invocation,
+      );
+      if (activation === undefined) continue;
+      const key = `${packageName}\0${invocation.file.path}\0${invocation.line}`;
+      if (emitted.has(key)) continue;
+      emitted.add(key);
+      records.push(
+        nodeNxSelfHostedCacheArchiveEscapeRecord(
+          invocation,
+          activation,
+          dependency,
+          nodeNxProviderConfigurationKey(packageName),
+        ),
+      );
+      if (records.length >= MAX_FRAMEWORK_MULTI_HOP_RECORDS) return records;
+    }
+  }
+  return records;
+}
+
+function nodeNxSelfHostedCacheArchiveEscapeRecord(
+  invocation: NodeNxCacheEvidence,
+  activation: NodeNxCacheEvidence,
+  dependency: NodeNxBuildDependency,
+  surface: "azure" | "gcs" | "http" | "s3" | "shared-fs",
+): ResidualRiskRecord {
+  const lockResolved = dependency.proof === "npm-lockfile";
+  const packageLabel = dependency.packageName;
+  const sinkKind = `${lockResolved ? "lock-resolved-" : ""}${surface === "http" ? "vulnerable-nx-http-remote-cache-restore" : "unpatched-nx-provider-cache-restore"}`;
+  const startLine = Math.max(1, invocation.line - CONTEXT_LINES_BEFORE);
+  const endLine = Math.min(
+    invocation.file.lines.length,
+    invocation.line + CONTEXT_LINES_AFTER,
+  );
+  const sourceStart = Math.max(1, activation.line - CONTEXT_LINES_BEFORE);
+  const sourceEnd = Math.min(
+    activation.file.lines.length,
+    activation.line + CONTEXT_LINES_AFTER,
+  );
+  return {
+    path: invocation.file.path,
+    line: invocation.line,
+    categories: [
+      "framework-dataflow:node-nx-self-hosted-cache-archive-escape",
+      `modeled-source:${activation.kind}`,
+      `modeled-sink:${sinkKind}`,
+      "broken-control:unconfined-remote-cache-archive-extraction",
+    ],
+    priority: 126,
+    startLine,
+    endLine,
+    excerpt: sourceExcerpt(invocation.file.lines, startLine, endLine),
+    sourceExcerpt: sourceExcerpt(activation.file.lines, sourceStart, sourceEnd),
+    frameworkModel: {
+      schemaVersion: "1.2",
+      id: "node-nx-self-hosted-cache-archive-escape",
+      language: "javascript-typescript",
+      scope:
+        activation.file.path === invocation.file.path
+          ? "same-file"
+          : "cross-file",
+      source: {
+        kind: activation.kind,
+        path: activation.file.path,
+        line: activation.line,
+      },
+      sink: {
+        kind: sinkKind,
+        path: invocation.file.path,
+        line: invocation.line,
+        cweIds: ["CWE-22", "CWE-59"],
+      },
+      propagators: [
+        {
+          kind: activation.kind,
+          path: activation.file.path,
+          line: activation.line,
+          symbol: activation.symbol,
+        },
+        {
+          kind: invocation.kind,
+          path: invocation.file.path,
+          line: invocation.line,
+          symbol: invocation.symbol,
+        },
+        {
+          kind:
+            surface === "http"
+              ? "nx-runtime-dependency"
+              : "nx-provider-cache-dependency",
+          path: dependency.manifestPath,
+          line: dependency.line,
+          symbol: `${packageLabel}@${dependency.version}:${dependency.proof}:${surface === "http" ? "unconfined-http-cache-tar-extraction" : "unpatched-provider-cache-tar-extraction"}`,
+        },
+      ],
+      candidateControls: [],
+    },
+  };
+}
+
 interface NodeAuthJsFactoryBinding {
   local: string;
   line: number;
@@ -43363,7 +43836,9 @@ async function nearestNodePackageMetadataSnapshots(
   let totalBytes = 0;
   sourceFiles: for (const file of files) {
     if (
-      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      (!JAVASCRIPT_EXTENSIONS.has(file.extension) &&
+        posix.basename(file.path) !== "nx.json" &&
+        !nodeNxCiPath(file.path)) ||
       selected.size >= MAX_NODE_PACKAGE_MANIFESTS
     ) {
       continue;
@@ -43599,6 +44074,7 @@ function isSourcePath(path: string): boolean {
   const baseName = path.replaceAll("\\", "/").split("/").at(-1) ?? "";
   return (
     SOURCE_EXTENSIONS.has(extname(baseName).toLowerCase()) ||
+    /^(?:\.env(?:\.[A-Za-z0-9_-]+)?|nx\.json)$/u.test(baseName) ||
     /^(?:Dockerfile|Gemfile|go\.mod|Jenkinsfile|Makefile|Rakefile)$/u.test(
       baseName,
     )

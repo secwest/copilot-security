@@ -1,0 +1,11 @@
+{
+  "name": "copilot-security-benchmark-node-nx-self-hosted-cache-archive-escape",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:witness": "node --test witness.test.mjs"
+  },
+  "devDependencies": {
+    "nx": "22.7.6"
+  }
+}

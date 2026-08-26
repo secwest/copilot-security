@@ -1,0 +1,10 @@
+name: cache build
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NX_SELF_HOSTED_REMOTE_CACHE_SERVER: http://127.0.0.1:48721
+    steps:
+      - name: Build cached target
+        run: npx nx run app:build
