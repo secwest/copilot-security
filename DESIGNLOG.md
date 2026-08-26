@@ -2,6 +2,74 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — Bind Plate media metadata trust to a reachable iframe path
+
+**Gap and primary evidence.** The official
+[`GHSA-qj6x-xx2h-8hvv`](https://github.com/udecode/plate/security/advisories/GHSA-qj6x-xx2h-8hvv),
+assigned CVE-2026-55596 and CWE-79, rates the issue high at CVSS 8.7 and covers
+stable `@platejs/media` 53.0.0 below 53.1.4. In affected `useMediaState`, a
+serialized media element with existing `provider`, `id`, or `sourceUrl`
+metadata can take a fast path that returns the stored `url` without passing it
+through `parseMediaUrl`. A node can therefore claim a video provider while
+retaining a `javascript:` render URL. Repair commit
+[`6214914ca811adf22d0ad503154494216eed68ba`](https://github.com/udecode/plate/commit/6214914ca811adf22d0ad503154494216eed68ba)
+removes that fast path and always derives embed state from the render URL.
+Authenticated current-source searches found no exact package, hook, or
+advisory model in `github/codeql` or `semgrep/semgrep-rules`.
+
+**Reachability decision.** Add `node-plate-media-embed-metadata-xss`, but do
+not promote package membership to an application finding. A remote serialized
+document must originate at `fetch(...).json()` or an HTTP request body, cross
+a relative import into one exported viewer prop, and enter `Plate` through
+`value` or `initialValue`. That viewer must register the exact imported media
+component through an official `MediaEmbedPlugin.withComponent` binding. The
+component must call the official `useMediaState` with a statically nonempty
+`urlParsers` array, preserve both `embed` and `isVideo`, fail closed or render
+conditionally on the video gate, and send the same `embed.url` to an iframe
+whose literal sandbox is absent or permits scripts. Ordered propagators retain
+the source handoff, editor value, plugin registration, parser configuration,
+iframe sink, and package/version proof.
+
+**Precision and provenance boundary.** Named and aliased ESM imports,
+namespace imports, TypeScript import-equals, CommonJS receivers, and direct
+member requires are accepted only while their identity remains stable. Exact
+production declarations and fresh declaration-consistent npm v2/v3 locks are
+accepted. Fixed or prerelease versions, development-only and wrong packages,
+lockfile-free ranges, stale or inconsistent root declarations, and v1 locks
+remain negative. Missing or empty parsers, absent provider gates, unregistered
+components, non-iframe rendering, another iframe value, a script-blocking
+sandbox, trusted static values, sanitization, reassignment, local lookalikes,
+and test/example paths fail closed. Source component matching is anchored to
+the line that actually starts the JSX tag; mutation checks stop immediately
+before that use. This prevents both an earlier assignment hidden in a bounded
+lookahead window and JSX `prop={value}` syntax being mistaken for reassignment.
+
+**Validation and impact discipline.** The checked-in witness deliberately
+stops below browser execution. It uses the real published hook through React's
+server renderer, replaces only Plate context hooks with deterministic values,
+and observes one inert `javascript:parent.postMessage` sentinel. Windows and
+native Ubuntu both show 53.0.1 retaining that URL with `provider=vimeo` and
+`isVideo=true`; source-identical 53.1.4 produces no embed/provider and
+`isVideo=false`. A report must separately prove that an attacker can persist
+or share the serialized node, that a victim loads it through the modeled
+component, and that a disposable browser actually creates the iframe and
+receives only the bounded marker. It must record CSP, iframe sandbox, browser,
+origin, user interaction, session privilege, cleanup, and the repaired
+comparison. Hook-state divergence supports the hypothesis; it does not by
+itself prove account takeover, credential theft, arbitrary actions,
+persistence, server compromise, or deployment-wide exposure.
+
+**Regression and benchmark contract.** The source-identical fixture pair
+changes only `@platejs/media` 53.0.1 to 53.1.4. Its specialized perfect gate
+requires high severity, CWE-79, the exact line-9 iframe, validation,
+attack-path analysis, code evidence, stable detection, and zero false
+positives. Seven focused tests cover the executable pair, nine version edges,
+modern lock provenance, five official binding families, destructured and
+state hook results, editor initialization forms, request-body flow,
+reassignment, all required topology edges and controls, source identity, and
+prompt impact discipline. The pair advances the canonical corpus to 124
+exploit/control pairs, 248 cases, and 744 repeated scans.
+
 ## 2026-08-25 — Model Next.js dynamic-route authorization as a deployment-sensitive path
 
 **Gap and primary evidence.** The official

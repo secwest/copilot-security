@@ -424,6 +424,10 @@ describe("effectiveness benchmark", () => {
         "node-nextjs-dynamic-route-param-isolated",
       ],
       [
+        "node-plate-media-embed-metadata-xss",
+        "node-plate-media-embed-metadata-isolated",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

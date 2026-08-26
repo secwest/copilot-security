@@ -5198,6 +5198,45 @@
         "node-nextjs-dynamic-route-param-isolated/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-plate-media-embed-metadata-xss",
+      "description": "Plate 53.0.1 renders a fetched serialized document through a registered media component whose useMediaState result reaches an iframe source after trusting attacker-controlled provider metadata.",
+      "fixture": "fixtures/node-plate-media-embed-metadata-xss",
+      "findingsPaths": [
+        "node-plate-media-embed-metadata-xss/run-1/findings.json",
+        "node-plate-media-embed-metadata-xss/run-2/findings.json",
+        "node-plate-media-embed-metadata-xss/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-plate-media-embed-metadata-xss",
+          "cwe": ["CWE-79"],
+          "locations": [
+            {
+              "path": "src/media-embed-node.jsx",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-plate-media-embed-metadata-isolated",
+      "description": "The source-identical control changes only @platejs/media to 53.1.4, which recomputes metadata from the render URL and rejects the javascript protocol.",
+      "fixture": "fixtures/node-plate-media-embed-metadata-isolated",
+      "findingsPaths": [
+        "node-plate-media-embed-metadata-isolated/run-1/findings.json",
+        "node-plate-media-embed-metadata-isolated/run-2/findings.json",
+        "node-plate-media-embed-metadata-isolated/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

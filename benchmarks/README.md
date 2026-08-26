@@ -74,7 +74,7 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains 123 vulnerable/control pairs:
+The versioned corpus currently contains 124 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -228,8 +228,12 @@ dynamic-route pair then holds a concrete middleware denial, Pages Router SSR
 lookup, and standalone deployment harness constant while changing only
 15.5.15 to 15.5.16. Its real-package differential preserves ordinary-request
 counterevidence and proves the wrapped route-module `nxtPslug` normalization
-boundary changed by the repair. Three runs per case now produce 738 scans
-across 123 exploit/control pairs in the complete corpus. The added
+boundary changed by the repair. The Plate media pair then keeps the serialized
+document path, component registration, parser/gate, and iframe sink identical
+while changing only `@platejs/media` 53.0.1 to 53.1.4. On both Windows and
+native Ubuntu, the affected real hook retains the inert `javascript:` URL and
+the repaired hook returns no embed. Three runs per case now produce 744 scans
+across 124 exploit/control pairs in the complete corpus. The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
 client nonce in a process-global object, while 2.168.0 enforces TTL and size

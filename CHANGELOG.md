@@ -6,6 +6,34 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-plate-media-embed-metadata-xss`, an exact provenance-,
+  component-registration-, parser-, provider-gate-, iframe-, and cross-file
+  dataflow-aware CWE-79 model for
+  [GHSA-qj6x-xx2h-8hvv / CVE-2026-55596](https://github.com/udecode/plate/security/advisories/GHSA-qj6x-xx2h-8hvv).
+  It requires fetched JSON or an HTTP request body to reach a `Plate` value or
+  `initialValue` through an exported component prop, an official
+  `MediaEmbedPlugin.withComponent` registration, official `useMediaState` with
+  nonempty URL parsers and an `isVideo` fail-closed gate, the same `embed.url`
+  reaching a script-capable iframe, and exact affected production
+  `@platejs/media` 53.0.0 through 53.1.3 provenance.
+- Added source-identical 53.0.1/53.1.4 fixtures, a strict specialized
+  manifest, canonical corpus registration, field-local correction guidance,
+  and adversarial regressions for version edges, npm v2/v3 provenance,
+  official ESM/TypeScript/CommonJS binding forms, hook-result shapes,
+  `value`/`initialValue`, request-body sources, missing topology edges,
+  script-blocking sandboxes, local lookalikes, reassignment, sanitization, and
+  trusted static values. The source matcher now anchors the component use
+  before testing mutation ranges, so JSX attributes cannot masquerade as
+  JavaScript assignments or let a prior reassignment hide inside lookahead.
+- Added a bounded real-package differential witness that executes no attacker
+  URL, opens no listener, and contacts no external service. On both Windows and
+  native Ubuntu, published 53.0.1 retains the inert `javascript:` URL with
+  `provider=vimeo` and `isVideo=true`; published 53.1.4 returns no embed and
+  `isVideo=false`. Browser-context execution, document write authority, CSP,
+  session privilege, and concrete impact remain mandatory validation evidence.
+  The canonical corpus advances to 124 exploit/control pairs, 248 cases, and
+  744 repeated scans.
+
 - Added `node-nextjs-dynamic-route-param-authorization-bypass`, an exact
   route-, gate-, data-access-, provenance-, and version-aware CWE-288 model for
   [GHSA-492v-c6pp-mqqv / CVE-2026-44574](https://github.com/vercel/next.js/security/advisories/GHSA-492v-c6pp-mqqv).

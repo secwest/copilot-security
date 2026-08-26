@@ -2136,8 +2136,13 @@ visible-path middleware denial to one dynamic Pages Router parameter and its
 server-side lookup. Its standalone witness retains the safe ordinary-request
 counterexample, while the real route-module differential shows 15.5.15
 accepting external `nxtPslug=secret` at the wrapped deployment handoff and
-15.5.16 filtering it. Each of the 246 cases in 123 exploit/control pairs is
-scanned three times, producing 738 scans
+15.5.16 filtering it. The Plate media pair then holds the fetched serialized
+document, exported viewer prop, `Plate` value, registered media component,
+video parser/gate, and iframe renderer constant while changing only
+`@platejs/media` 53.0.1 to 53.1.4. The affected real hook trusts serialized
+provider metadata and retains an inert `javascript:` URL; the repaired hook
+recomputes from the render URL and returns no embed. Each of the 248 cases in
+124 exploit/control pairs is scanned three times, producing 744 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

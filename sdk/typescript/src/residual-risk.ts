@@ -3900,6 +3900,20 @@ const NEXTJS_DYNAMIC_ROUTE_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-288", "authorization bypass", "alternate path"],
 ] as const;
 
+const PLATE_MEDIA_EMBED_XSS_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["stored Plate document", "serialized editor value", "remote document JSON"],
+  ["MediaEmbedPlugin", "media embed component", "withComponent"],
+  ["useMediaState", "urlParsers", "official @platejs/media/react binding"],
+  ["provider", "sourceUrl", "attacker-controlled derived metadata"],
+  ["iframe src", "embed.url", "javascript URL"],
+  ["@platejs/media 53.0.1", "affected 53.x release"],
+  ["victim opens document", "browser render", "user interaction"],
+  ["postMessage sentinel", "bounded browser witness", "iframe execution"],
+  ["53.1.4", "recomputed metadata", "repaired control"],
+  ["iframe sandbox", "Content-Security-Policy", "browser containment"],
+  ["CWE-79", "stored cross-site scripting"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -4011,6 +4025,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
         NEXTJS_DYNAMIC_ROUTE_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath:
         NEXTJS_DYNAMIC_ROUTE_AUTHORIZATION_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-plate-media-embed-metadata-xss",
+    {
+      validation: PLATE_MEDIA_EMBED_XSS_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: PLATE_MEDIA_EMBED_XSS_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -4132,6 +4153,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeOpcuaCrossFileServerAuthRecords(sourceFiles));
   records.push(...nodeDeepseekMcpHttpSessionAuthorizationRecords(sourceFiles));
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
+  records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
   records.push(...nodeAuthJsConfigurationErrorFailOpenRecords(sourceFiles));
   records.push(...nodeKeystoneNegativeTakeBypassRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
@@ -22736,6 +22758,784 @@ function nodeNextJsDynamicRouteAuthorizationRecords(
       });
       if (records.length >= MAX_FRAMEWORK_CROSS_FILE_RECORDS) return records;
     }
+  }
+  return records;
+}
+
+interface NodePlateMediaReactBinding {
+  line: number;
+  local: string;
+  member?: "MediaEmbedPlugin" | "useMediaState";
+}
+
+interface NodePlateExportedComponent {
+  endLine: number;
+  parameters: string;
+  startLine: number;
+  symbol: string;
+}
+
+interface NodePlateMediaIframeSink {
+  component: NodePlateExportedComponent;
+  dependency: NodeRuntimeDependency;
+  file: SourceFileSnapshot;
+  hookLine: number;
+  iframeLine: number;
+  parserSymbol: string;
+}
+
+interface NodePlateMediaRenderer {
+  component: NodePlateExportedComponent;
+  componentImportLine: number;
+  dependency: NodeRuntimeDependency;
+  file: SourceFileSnapshot;
+  mediaComponentSymbol: string;
+  plateLine: number;
+  pluginLine: number;
+  pluginSymbol: string;
+  propName: string;
+  sink: NodePlateMediaIframeSink;
+}
+
+interface NodePlateMediaSource {
+  file: SourceFileSnapshot;
+  line: number;
+  renderer: NodePlateMediaRenderer;
+  rendererImportLine: number;
+  rendererUseLine: number;
+  symbol: string;
+}
+
+function nodePlateMediaVersionHasEmbedMetadataXss(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number);
+  return (
+    major === 53 &&
+    ((minor === 0 && patch !== undefined) ||
+      (minor === 1 && patch !== undefined && patch < 4))
+  );
+}
+
+function nodePlateMediaBindingPattern(
+  binding: NodePlateMediaReactBinding,
+): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.member === undefined
+    ? local
+    : `${local}\\s*\\.\\s*${binding.member}`;
+}
+
+function nodePlateMediaReactBindings(
+  lines: readonly string[],
+  imported: "MediaEmbedPlugin" | "useMediaState",
+): NodePlateMediaReactBinding[] {
+  const bindings: NodePlateMediaReactBinding[] = importedJavascriptSymbols(
+    lines,
+  )
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "@platejs/media/react" &&
+        binding.imported === imported,
+    )
+    .map((binding) => ({ line: binding.line, local: binding.local }));
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']@platejs\/media\/react["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']@platejs\/media\/react["']\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']@platejs\/media\/react["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      bindings.push({ line: index + 1, local: receiver[1], member: imported });
+    }
+    const direct = new RegExp(
+      `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*require\\s*\\(\\s*["']@platejs/media/react["']\\s*\\)\\s*\\.\\s*${imported}\\s*;?\\s*$`,
+      "u",
+    ).exec(code);
+    if (direct?.[1] !== undefined) {
+      bindings.push({ line: index + 1, local: direct[1] });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.line === binding.line &&
+          candidate.local === binding.local &&
+          candidate.member === binding.member,
+      ) === index,
+  );
+}
+
+function nodePlateMediaBindingUsable(
+  lines: readonly string[],
+  binding: NodePlateMediaReactBinding,
+  useLine: number,
+): boolean {
+  if (
+    binding.line >= useLine ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      useLine + 1,
+    )
+  ) {
+    return false;
+  }
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      useLine >= candidate.startLine && useLine <= candidate.endLine,
+  );
+  if (wrapper?.parameters.includes(binding.local) === true) return false;
+  if (binding.member === undefined) return true;
+  const local = escapeRegularExpression(binding.local);
+  const member = escapeRegularExpression(binding.member);
+  const replacement = new RegExp(
+    `\\b${local}\\s*\\.\\s*${member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+    "u",
+  );
+  return !javascriptStructuralLines(lines)
+    .slice(binding.line, Math.max(binding.line, useLine - 1))
+    .some((line) => replacement.test(line));
+}
+
+function nodePlateExportedComponents(
+  file: SourceFileSnapshot,
+): NodePlateExportedComponent[] {
+  const components: NodePlateExportedComponent[] = [];
+  const structural = javascriptStructuralLines(file.lines);
+  const patterns = [
+    /^\s*export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{/u,
+    /^\s*export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>/u,
+    /^\s*export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?([A-Za-z_$][\w$]*)\s*=>/u,
+  ];
+  for (let index = 0; index < structural.length; index += 1) {
+    if (!/^\s*export\b/u.test(structural[index] ?? "")) continue;
+    const declaration = structural
+      .slice(index, Math.min(structural.length, index + 13))
+      .join("\n");
+    const match = patterns
+      .map((pattern) => pattern.exec(declaration))
+      .find((candidate) => candidate !== null);
+    if (match === undefined || match === null) continue;
+    components.push({
+      endLine: javascriptFunctionEndLine(file.lines, index),
+      parameters: match[2] ?? "",
+      startLine: index + 1,
+      symbol: match[1]!,
+    });
+  }
+  return components;
+}
+
+function nodePlateMediaHasUrlParsers(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): { line: number; symbol: string } | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  const object = javascriptCompositePrefix(resolved.value, "{", "}");
+  if (object === undefined) return undefined;
+  const rawEntries = javascriptDelimitedEntries(object.slice(1, -1));
+  if (rawEntries.some((entry) => /^\.\.\./u.test(entry.value.trim()))) {
+    return undefined;
+  }
+  const entries = javascriptObjectEntries(resolved).filter(
+    (entry) => entry.key === "urlParsers",
+  );
+  if (entries.length !== 1) return undefined;
+  const parsers = resolveJavascriptExpression(
+    lines,
+    entries[0]!.value,
+    entries[0]!.line,
+  );
+  if (parsers === undefined) return undefined;
+  const array = javascriptCompositePrefix(parsers.value, "[", "]");
+  if (array === undefined) return undefined;
+  const values = javascriptDelimitedEntries(array.slice(1, -1))
+    .map((entry) => entry.value.trim())
+    .filter(Boolean);
+  if (values.length === 0 || values.some((value) => value.startsWith("..."))) {
+    return undefined;
+  }
+  return { line: entries[0]!.line, symbol: values.join(",") };
+}
+
+function nodePlateMediaIframeAllowsScripts(tag: string): boolean {
+  if (!/\bsandbox\b/iu.test(tag)) return true;
+  return /\bsandbox\s*=\s*(?:["'][^"']*\ballow-scripts\b[^"']*["']|\{\s*["'`][^"'`]*\ballow-scripts\b[^"'`]*["'`]\s*\})/iu.test(
+    tag,
+  );
+}
+
+function nodePlateMediaIframeSinks(
+  files: readonly SourceFileSnapshot[],
+): NodePlateMediaIframeSink[] {
+  const sinks: NodePlateMediaIframeSink[] = [];
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !file.text.includes("@platejs/media/react") ||
+      !/<iframe\b/iu.test(file.text)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "@platejs/media",
+    );
+    if (
+      dependency === undefined ||
+      !nodePlateMediaVersionHasEmbedMetadataXss(dependency.version)
+    ) {
+      continue;
+    }
+    const components = nodePlateExportedComponents(file);
+    const structural = javascriptStructuralLines(file.lines);
+    for (const binding of nodePlateMediaReactBindings(
+      file.lines,
+      "useMediaState",
+    )) {
+      const pattern = nodePlateMediaBindingPattern(binding);
+      for (let index = binding.line; index < structural.length; index += 1) {
+        if (!nodePlateMediaBindingUsable(file.lines, binding, index + 1)) {
+          continue;
+        }
+        const declaration = structural
+          .slice(index, Math.min(structural.length, index + 8))
+          .join("\n");
+        const destructured = new RegExp(
+          `^\\s*(?:const|let|var)\\s*\\{([^}]+)\\}\\s*=\\s*${pattern}\\s*\\(`,
+          "u",
+        ).exec(declaration);
+        const state = new RegExp(
+          `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${pattern}\\s*\\(`,
+          "u",
+        ).exec(declaration);
+        if (destructured === null && state === null) continue;
+        const arguments_ = javascriptCallArgumentsAtLine(
+          file.lines,
+          index + 1,
+          new RegExp(`\\b${pattern}\\s*\\(`, "u"),
+        );
+        const parser = nodePlateMediaHasUrlParsers(
+          file.lines,
+          arguments_?.[0] ?? "",
+          index + 1,
+        );
+        if (parser === undefined) continue;
+        let embedExpression: string;
+        let isVideoExpression: string;
+        if (destructured !== null) {
+          const entries = splitJavascriptArguments(destructured[1] ?? "");
+          const embed = entries
+            .map((entry) =>
+              /^\s*embed(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*$/u.exec(entry),
+            )
+            .find((entry) => entry !== null);
+          const isVideo = entries
+            .map((entry) =>
+              /^\s*isVideo(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*$/u.exec(entry),
+            )
+            .find((entry) => entry !== null);
+          if (embed === undefined || isVideo === undefined) continue;
+          embedExpression = embed[1] ?? "embed";
+          isVideoExpression = isVideo[1] ?? "isVideo";
+        } else {
+          const stateLocal = state?.[1];
+          if (stateLocal === undefined) continue;
+          embedExpression = `${stateLocal}.embed`;
+          isVideoExpression = `${stateLocal}.isVideo`;
+        }
+        const component = components.find(
+          (candidate) =>
+            index + 1 >= candidate.startLine && index + 1 <= candidate.endLine,
+        );
+        if (component === undefined) continue;
+        const embedPattern = escapeRegularExpression(
+          embedExpression,
+        ).replaceAll("\\.", "\\s*\\.\\s*");
+        const videoPattern = escapeRegularExpression(
+          isVideoExpression,
+        ).replaceAll("\\.", "\\s*\\.\\s*");
+        for (
+          let iframeIndex = index;
+          iframeIndex < Math.min(structural.length, component.endLine);
+          iframeIndex += 1
+        ) {
+          if (!/<iframe\b/iu.test(structural[iframeIndex] ?? "")) continue;
+          const tag = structural
+            .slice(iframeIndex, Math.min(component.endLine, iframeIndex + 8))
+            .join(" ");
+          if (
+            !new RegExp(
+              `<iframe\\b[^>]*\\bsrc\\s*=\\s*\\{\\s*${embedPattern}\\s*\\?*\\.\\s*url\\s*\\}`,
+              "iu",
+            ).test(tag) ||
+            !nodePlateMediaIframeAllowsScripts(tag)
+          ) {
+            continue;
+          }
+          const guard = structural.slice(index, iframeIndex + 1).join("\n");
+          const failClosedGuard = new RegExp(
+            `\\bif\\s*\\([^)]*!\\s*${videoPattern}[^)]*\\)[\\s\\S]{0,160}\\breturn\\s+(?:null|false)\\b`,
+            "u",
+          ).test(guard);
+          const conditionalRender = new RegExp(
+            `\\b${videoPattern}\\s*&&[\\s\\S]{0,160}<iframe\\b`,
+            "iu",
+          ).test(tag);
+          if (!failClosedGuard && !conditionalRender) continue;
+          sinks.push({
+            component,
+            dependency,
+            file,
+            hookLine: index + 1,
+            iframeLine: iframeIndex + 1,
+            parserSymbol: parser.symbol,
+          });
+        }
+      }
+    }
+  }
+  return sinks.filter(
+    (sink, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.file.path === sink.file.path &&
+          candidate.iframeLine === sink.iframeLine,
+      ) === index,
+  );
+}
+
+function nodePlateMediaComponentProp(
+  component: NodePlateExportedComponent,
+  valueExpression: string,
+): string | undefined {
+  const value = valueExpression.replace(/\s+/gu, "").trim();
+  const parameters = component.parameters.trim();
+  const object = javascriptCompositePrefix(parameters, "{", "}");
+  if (object !== undefined) {
+    for (const raw of splitJavascriptArguments(object.slice(1, -1))) {
+      const binding =
+        /^\s*([A-Za-z_$][\w$]*)(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*$/u.exec(raw);
+      if (binding !== null && value === (binding[2] ?? binding[1])) {
+        return binding[1];
+      }
+    }
+  }
+  const direct = /^([A-Za-z_$][\w$]*)$/u.exec(parameters);
+  if (direct === null) return undefined;
+  const property = new RegExp(
+    `^${escapeRegularExpression(direct[1]!)}(?:\\?|)\\.([A-Za-z_$][\\w$]*)$`,
+    "u",
+  ).exec(value);
+  return property?.[1];
+}
+
+function nodePlateMediaRenderers(
+  files: readonly SourceFileSnapshot[],
+  sinks: readonly NodePlateMediaIframeSink[],
+): NodePlateMediaRenderer[] {
+  const renderers: NodePlateMediaRenderer[] = [];
+  const knownPaths = new Map(
+    files.map((file) => [modelPathComparisonKey(file.path), file.path]),
+  );
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "@platejs/media",
+    );
+    if (
+      dependency === undefined ||
+      !nodePlateMediaVersionHasEmbedMetadataXss(dependency.version)
+    ) {
+      continue;
+    }
+    const imports = importedJavascriptSymbols(file.lines);
+    const components = nodePlateExportedComponents(file);
+    const structural = javascriptStructuralLines(file.lines);
+    const plateBindings = imports.filter(
+      (binding) =>
+        binding.moduleSpecifier === "platejs/react" &&
+        binding.imported === "Plate",
+    );
+    for (const componentImport of imports) {
+      const importedPath = resolveRelativeModelImport(
+        file.path,
+        componentImport.moduleSpecifier,
+        knownPaths,
+      );
+      const sink = sinks.find(
+        (candidate) =>
+          candidate.file.path === importedPath &&
+          candidate.component.symbol === componentImport.imported &&
+          candidate.dependency.manifestPath === dependency.manifestPath &&
+          candidate.dependency.version === dependency.version &&
+          candidate.dependency.proof === dependency.proof,
+      );
+      if (sink === undefined) continue;
+      for (const plugin of nodePlateMediaReactBindings(
+        file.lines,
+        "MediaEmbedPlugin",
+      )) {
+        const pluginPattern = nodePlateMediaBindingPattern(plugin);
+        for (
+          let pluginIndex = plugin.line;
+          pluginIndex < structural.length;
+          pluginIndex += 1
+        ) {
+          if (
+            !nodePlateMediaBindingUsable(file.lines, plugin, pluginIndex + 1)
+          ) {
+            continue;
+          }
+          const declaration = structural
+            .slice(pluginIndex, Math.min(structural.length, pluginIndex + 13))
+            .join("\n");
+          const pluginConfiguration = new RegExp(
+            `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*\\[[\\s\\S]*?${pluginPattern}\\s*\\.\\s*withComponent\\s*\\(\\s*${escapeRegularExpression(componentImport.local)}\\s*\\)[\\s\\S]*?\\]`,
+            "u",
+          ).exec(declaration);
+          if (pluginConfiguration?.[1] === undefined) continue;
+          const pluginVariable = pluginConfiguration[1];
+          for (const plate of plateBindings) {
+            for (
+              let plateIndex = pluginIndex;
+              plateIndex < structural.length;
+              plateIndex += 1
+            ) {
+              if (!/<[A-Za-z_$][\w$]*\b/u.test(structural[plateIndex] ?? "")) {
+                continue;
+              }
+              if (
+                javascriptIdentifierReassignedBetween(
+                  file.lines,
+                  plate.local,
+                  plate.line,
+                  plateIndex + 1,
+                ) ||
+                javascriptIdentifierReassignedBetween(
+                  file.lines,
+                  pluginVariable,
+                  pluginIndex + 1,
+                  plateIndex + 1,
+                )
+              ) {
+                continue;
+              }
+              const tag = structural
+                .slice(plateIndex, Math.min(structural.length, plateIndex + 13))
+                .join(" ");
+              const plateTag = new RegExp(
+                `<${escapeRegularExpression(plate.local)}\\b[^>]*>`,
+                "u",
+              ).exec(tag)?.[0];
+              if (
+                plateTag === undefined ||
+                !new RegExp(
+                  `\\bplugins\\s*=\\s*\\{\\s*${escapeRegularExpression(pluginVariable)}\\s*\\}`,
+                  "u",
+                ).test(plateTag)
+              ) {
+                continue;
+              }
+              const value = /\b(?:value|initialValue)\s*=\s*\{([^}]+)\}/u.exec(
+                plateTag,
+              )?.[1];
+              if (value === undefined) continue;
+              const component = components.find(
+                (candidate) =>
+                  plateIndex + 1 >= candidate.startLine &&
+                  plateIndex + 1 <= candidate.endLine,
+              );
+              if (component === undefined) continue;
+              const propName = nodePlateMediaComponentProp(component, value);
+              if (propName === undefined) continue;
+              renderers.push({
+                component,
+                componentImportLine: componentImport.line,
+                dependency,
+                file,
+                mediaComponentSymbol: componentImport.local,
+                plateLine: plateIndex + 1,
+                pluginLine: pluginIndex + 1,
+                pluginSymbol: pluginVariable,
+                propName,
+                sink,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+  return renderers.filter(
+    (renderer, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.file.path === renderer.file.path &&
+          candidate.plateLine === renderer.plateLine &&
+          candidate.sink.file.path === renderer.sink.file.path,
+      ) === index,
+  );
+}
+
+function nodePlateMediaRemoteDocuments(
+  file: SourceFileSnapshot,
+): Array<{ line: number; symbol: string }> {
+  const documents: Array<{ line: number; symbol: string }> = [];
+  const responses = new Map<string, number>();
+  const structural = javascriptStructuralLines(file.lines);
+  for (let index = 0; index < structural.length; index += 1) {
+    const line = structural[index] ?? "";
+    const response =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+fetch\s*\(/u.exec(
+        line,
+      );
+    if (response?.[1] !== undefined) responses.set(response[1], index + 1);
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s*\(\s*await\s+fetch\s*\([^)]*\)\s*\)\s*\.\s*json\s*\(/u.exec(
+        line,
+      );
+    if (direct?.[1] !== undefined) {
+      documents.push({ line: index + 1, symbol: direct[1] });
+    }
+    const parsed =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\.\s*json\s*\(/u.exec(
+        line,
+      );
+    if (
+      parsed?.[1] !== undefined &&
+      parsed[2] !== undefined &&
+      responses.has(parsed[2]) &&
+      !javascriptIdentifierReassignedBetween(
+        file.lines,
+        parsed[2],
+        responses.get(parsed[2])!,
+        index + 2,
+      )
+    ) {
+      documents.push({ line: index + 1, symbol: parsed[1] });
+    }
+    const requestBody =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[A-Za-z_$][\w$]*\s*\.\s*body\b/u.exec(
+        line,
+      );
+    if (requestBody?.[1] !== undefined) {
+      documents.push({ line: index + 1, symbol: requestBody[1] });
+    }
+  }
+  return documents;
+}
+
+function nodePlateMediaSources(
+  files: readonly SourceFileSnapshot[],
+  renderers: readonly NodePlateMediaRenderer[],
+): NodePlateMediaSource[] {
+  const sources: NodePlateMediaSource[] = [];
+  const knownPaths = new Map(
+    files.map((file) => [modelPathComparisonKey(file.path), file.path]),
+  );
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "@platejs/media",
+    );
+    if (dependency === undefined) continue;
+    const structural = javascriptStructuralLines(file.lines);
+    for (const imported of importedJavascriptSymbols(file.lines)) {
+      const importedPath = resolveRelativeModelImport(
+        file.path,
+        imported.moduleSpecifier,
+        knownPaths,
+      );
+      const renderer = renderers.find(
+        (candidate) =>
+          candidate.file.path === importedPath &&
+          candidate.component.symbol === imported.imported &&
+          candidate.dependency.manifestPath === dependency.manifestPath &&
+          candidate.dependency.version === dependency.version &&
+          candidate.dependency.proof === dependency.proof,
+      );
+      if (renderer === undefined) continue;
+      for (const document of nodePlateMediaRemoteDocuments(file)) {
+        for (
+          let useIndex = document.line;
+          useIndex < structural.length;
+          useIndex += 1
+        ) {
+          if (
+            !new RegExp(
+              `<${escapeRegularExpression(imported.local)}\\b`,
+              "u",
+            ).test(structural[useIndex] ?? "")
+          ) {
+            continue;
+          }
+          if (
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              document.symbol,
+              document.line,
+              useIndex + 1,
+            ) ||
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              imported.local,
+              imported.line,
+              useIndex + 1,
+            )
+          ) {
+            continue;
+          }
+          const tag = structural
+            .slice(useIndex, Math.min(structural.length, useIndex + 8))
+            .join(" ");
+          if (
+            !new RegExp(
+              `<${escapeRegularExpression(imported.local)}\\b[^>]*\\b${escapeRegularExpression(renderer.propName)}\\s*=\\s*\\{\\s*${escapeRegularExpression(document.symbol)}\\s*\\}`,
+              "u",
+            ).test(tag)
+          ) {
+            continue;
+          }
+          sources.push({
+            file,
+            line: document.line,
+            renderer,
+            rendererImportLine: imported.line,
+            rendererUseLine: useIndex + 1,
+            symbol: document.symbol,
+          });
+        }
+      }
+    }
+  }
+  return sources;
+}
+
+function nodePlateMediaEmbedXssRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const sinks = nodePlateMediaIframeSinks(files);
+  const renderers = nodePlateMediaRenderers(files, sinks);
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  for (const source of nodePlateMediaSources(files, renderers)) {
+    const { renderer } = source;
+    const { sink, dependency } = renderer;
+    const key = `${source.file.path}\0${source.line}\0${sink.file.path}\0${sink.iframeLine}`;
+    if (emitted.has(key)) continue;
+    emitted.add(key);
+    const prefix = dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+    const sinkKind = `${prefix}vulnerable-plate-media-embed-iframe-url`;
+    const startLine = Math.max(1, sink.iframeLine - CONTEXT_LINES_BEFORE);
+    const endLine = Math.min(
+      sink.file.lines.length,
+      sink.iframeLine + CONTEXT_LINES_AFTER,
+    );
+    const sourceStart = Math.max(1, source.line - CONTEXT_LINES_BEFORE);
+    const sourceEnd = Math.min(
+      source.file.lines.length,
+      source.rendererUseLine + CONTEXT_LINES_AFTER,
+    );
+    records.push({
+      path: sink.file.path,
+      line: sink.iframeLine,
+      categories: [
+        "framework-dataflow:node-plate-media-embed-metadata-xss",
+        "modeled-source:remote-serialized-plate-document",
+        `modeled-sink:${sinkKind}`,
+        "broken-control:trusted-serialized-media-provider-metadata",
+      ],
+      priority: 127,
+      startLine,
+      endLine,
+      excerpt: sourceExcerpt(sink.file.lines, startLine, endLine),
+      sourceExcerpt: sourceExcerpt(source.file.lines, sourceStart, sourceEnd),
+      frameworkModel: {
+        schemaVersion: "1.2",
+        id: "node-plate-media-embed-metadata-xss",
+        language: "javascript-typescript",
+        scope: "cross-file-multi-hop-wrapper",
+        source: {
+          kind: "remote-serialized-plate-document",
+          path: source.file.path,
+          line: source.line,
+        },
+        sink: {
+          kind: sinkKind,
+          path: sink.file.path,
+          line: sink.iframeLine,
+          cweIds: ["CWE-79"],
+        },
+        propagators: [
+          {
+            kind: "plate-document-component-prop",
+            path: source.file.path,
+            line: source.rendererUseLine,
+            symbol: `${source.symbol}->${renderer.component.symbol}.${renderer.propName}`,
+          },
+          {
+            kind: "plate-editor-value",
+            path: renderer.file.path,
+            line: renderer.plateLine,
+            symbol: renderer.propName,
+          },
+          {
+            kind: "plate-media-embed-plugin-component",
+            path: renderer.file.path,
+            line: renderer.pluginLine,
+            symbol: `${renderer.pluginSymbol}:${renderer.mediaComponentSymbol}`,
+          },
+          {
+            kind: "plate-media-state-url-parsers",
+            path: sink.file.path,
+            line: sink.hookLine,
+            symbol: sink.parserSymbol,
+          },
+          {
+            kind: "plate-media-iframe-render",
+            path: sink.file.path,
+            line: sink.iframeLine,
+            symbol: "iframe:embed.url",
+          },
+          {
+            kind: "plate-media-runtime-dependency",
+            path: dependency.manifestPath,
+            line: dependency.line,
+            symbol: `@platejs/media@${dependency.version}:${dependency.proof}:serialized-provider-url-fast-path`,
+          },
+        ],
+        candidateControls: [],
+      },
+    });
+    if (records.length >= MAX_FRAMEWORK_MULTI_HOP_RECORDS) return records;
   }
   return records;
 }
