@@ -34,6 +34,33 @@ All notable scanner, application, benchmark, and operational changes are recorde
   191 files are the known managed child-Git and private-Windows-ACL host
   boundaries. Exact native reruns pass 2/2 tests and seven assertions. Formatting,
   generated-model drift, TypeScript, and the clean production build are green.
+- Exact implementation checkpoint
+  `f7699499f72a1aa309592ab75240e9bddd63fc0e` passes the production advisory
+  audit with no known vulnerabilities. Strict inspection accepts a 259-entry,
+  2,021,712-byte npm archive with SHA-256
+  `72f05e72986f68f5df08df6a9851aa65df9b09802829a0f2313012bb194cad37`;
+  fresh Windows and Ubuntu installs add 67 and 75 packages and validate the
+  public SDK import, executable CLI, and all 79 bundled plugin files. Windows
+  builds with zero warnings/errors, passes 7/7 core and 3/3 shared tests,
+  survives hidden startup, and publishes a 346,796-byte executable with SHA-256
+  `34917a868fbdd5f2d95c7f7b33f0152ef35dd0228c7152209c921ff560977411`.
+  Ubuntu/WSL performs locked restores, builds with zero warnings/errors, passes
+  7/7 core, 3/3 shared, and 2/2 Linux UI tests, and passes non-graphical plus
+  real X11/Xvfb startup; its 72,568-byte executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- Two production-build inventories of a tracked-only archive of the exact
+  checkpoint complete in 32,422.082 and 14,790.882 ms and produce 256
+  byte-identical rows, 539,915 bytes, and SHA-256
+  `d151b5be935b949db11cdd5eee0142afc07a370f25317fb9e7aa8807886cc3bf`;
+  240 rows are fixture paths and 16 are not. Exactly one Pickem row survives:
+  fetched JSON line 4 reaches label projection line 7 and picker line 11 with
+  CWE-150, five ordered propagators, and
+  `pickem@1.0.6:manifest-exact:unsanitized-terminal-display` provenance; the
+  source-identical 1.0.7 control is absent. All seven exact-checkpoint workflows
+  pass: Node `32952531990`, Windows GUI `32952531970`, Linux GUI `32952532106`,
+  container `32952532017`, Go `32952531983`, Java `32952531976`, and .NET
+  `32952532023`. GitHub reports the repository public on default branch `main`,
+  and generated package, GUI, witness, and tracked-archive artifacts are removed.
 
 - Added `node-defuddle-extractor-html-xss`, an exact production-provenance,
   official-binding, relative-wrapper, remote-input, returned-property, and HTML

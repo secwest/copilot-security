@@ -67,10 +67,47 @@ The complete Windows Bun aggregate records 1,722 passes, 25 intentional skips,
 12,552 assertions, and only the two known managed child-Git and private-ACL host
 failures across 1,749 tests and 191 files in 641.79 seconds. Exact native reruns
 pass both host boundaries and seven assertions. Generated-model drift,
-formatting, TypeScript, and a clean production build pass. Package, GUI,
-self-scan, hosted, and final artifact evidence is recorded after the exact
-implementation checkpoint is pushed. This closes only this increment, not the
-standing scanner-effectiveness goal.
+formatting, TypeScript, a clean production build, and the production advisory
+audit pass.
+
+**Package and desktop acceptance.** Exact implementation checkpoint
+`f7699499f72a1aa309592ab75240e9bddd63fc0e`, authored and committed by
+`Dragos Ruiu <dr@secwest.net>`, produces a 259-entry, 2,021,712-byte npm archive
+with SHA-256
+`72f05e72986f68f5df08df6a9851aa65df9b09802829a0f2313012bb194cad37`.
+Strict inspection and fresh Windows/Ubuntu consumers validate the public SDK
+import, executable CLI, and all 79 bundled plugin files after adding 67 and 75
+packages. The local archive appropriately lacks registry-added `gitHead`;
+exact hosted checkout evidence binds the commit. Windows builds without warnings
+or errors, passes 7/7 core and 3/3 shared tests, survives hidden startup, and
+publishes a 346,796-byte executable with SHA-256
+`34917a868fbdd5f2d95c7f7b33f0152ef35dd0228c7152209c921ff560977411`.
+Ubuntu/WSL performs locked restores, builds without warnings or errors, passes
+7/7 core, 3/3 shared, and 2/2 Linux interface tests, and passes non-graphical
+plus real X11/Xvfb startup. Its self-contained 72,568-byte executable has
+SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+
+**Self-scan and hosted closure.** Two production-build inventories of a private
+tracked-only `git archive` of the exact checkpoint complete in 32,422.082 and
+14,790.882 ms. They emit 256 byte-identical rows totaling 539,915 bytes with
+SHA-256
+`d151b5be935b949db11cdd5eee0142afc07a370f25317fb9e7aa8807886cc3bf`;
+240 rows are fixture paths and 16 are not. Exactly one Pickem row survives:
+fetched JSON at `src/select-release.js:4` reaches label projection line 7 and
+the line-11 terminal picker with CWE-150, five ordered propagators, and exact
+`pickem@1.0.6:manifest-exact:unsanitized-terminal-display` provenance. The
+source-identical 1.0.7 control emits no specialization. All seven exact-head
+workflows pass: [Node `32952531990`](https://github.com/secwest/copilot-security/actions/runs/32952531990),
+[Windows GUI `32952531970`](https://github.com/secwest/copilot-security/actions/runs/32952531970),
+[Linux GUI `32952532106`](https://github.com/secwest/copilot-security/actions/runs/32952532106),
+[container `32952532017`](https://github.com/secwest/copilot-security/actions/runs/32952532017),
+[Go `32952531983`](https://github.com/secwest/copilot-security/actions/runs/32952531983),
+[Java `32952531976`](https://github.com/secwest/copilot-security/actions/runs/32952531976),
+and [.NET `32952532023`](https://github.com/secwest/copilot-security/actions/runs/32952532023).
+GitHub reports the repository public on default branch `main`; generated npm,
+GUI, witness, and tracked-archive artifacts are removed. This closes only this
+increment, not the standing scanner-effectiveness goal.
 
 ## 2026-08-26 — Bind Defuddle extractor output to an application HTML boundary
 
