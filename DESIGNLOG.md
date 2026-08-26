@@ -2,6 +2,24 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — Retryable hosted Linux acceptance
+
+**Failure classification.** The Linux GUI acceptance run for implementation
+checkpoint `0d8e41a438c3df941852aaeea17a142f6fd59875` was concluded as failed four
+seconds after creation, while its only job remained queued with no assigned
+runner and an empty step list. This is runner allocation failure, not executed
+scanner, package, test, or GUI evidence. Five other hosted lanes completed
+successfully, and the same focused scanner lane and installed-package witness
+passed natively under Ubuntu/WSL.
+
+**Recovery decision.** Preserve automatic `push` and `pull_request` coverage
+and add `workflow_dispatch` to `linux-gui-ci`. The container workflow already
+provides the same recovery surface. Manual dispatch can now obtain fresh
+hosted evidence after an allocation failure without modifying product files or
+creating an evidence-free retry commit. A dispatched job must still execute
+the complete package, core, desktop, headless GUI, publish, and artifact checks;
+the control does not waive or shorten acceptance.
+
 ## 2026-08-26 — LogTape syslog structured-data injection
 
 **Gap and primary evidence.** The official

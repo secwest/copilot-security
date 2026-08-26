@@ -604,6 +604,10 @@ messages })` initialization, and `setLocaleMessage` or `mergeLocaleMessage`
 
 ### Reliability and platform hardening
 
+- Added a manual dispatch entry point to the hosted Linux GUI workflow so an
+  operator can retry a zero-step GitHub-hosted runner allocation failure
+  without changing scanner source or manufacturing an unrelated commit. The
+  ordinary `push` and `pull_request` acceptance triggers remain unchanged.
 - Made the Windows scan-local file backend compatible with hardened and
   sandboxed profile ancestors that permit traversal but deny directory
   attribute handles. Ancestor locks now request the minimum zero-access Win32
