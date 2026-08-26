@@ -31,6 +31,33 @@ the common file-provider topology; Docker-label, directory-provider, TOML, and
 orchestrator variants require their own exact binding rules rather than loose
 text matches.
 
+**Docker-label expansion.** Traefik's official Docker routing reference defines
+`traefik.http.routers.*`, `middlewares.*`, and
+`services.*.loadbalancer.server.port` as case-insensitive container labels, and
+the ReplacePathRegex reference requires Compose to escape `$1` as `$$1`. Add a
+separate exact label parser for sequence and mapping syntax. It requires an
+affected proxy service with `--providers.docker=true` and the canonical Docker
+socket bind, then keeps the complete public rewrite, authenticated sibling,
+shared entry point/service, concrete backend port, and concrete auth definition
+on one enabled application container. If the proxy sets
+`exposedByDefault=false`, that container must say `traefik.enable=true`.
+Duplicate relevant labels, aliases, interpolation, disabled containers,
+cross-provider middleware names, provider constraints, nonlocal endpoints,
+Swarm mode, unproved auth files, invalid ports, incomplete topology, and safe
+replacement shapes fail closed. Directory-provider, TOML, authenticated remote
+endpoint, Swarm, and other orchestrator variants remain separate future
+contracts.
+
+The expanded focused suite passes 11 groups and 97 assertions. Its Docker
+matrix covers sequence and mapping labels, short and long socket binds,
+case-insensitive keys, explicit `@docker` references, both effective Compose
+capture escapes, enablement defaults, every affected-version edge, unresolved
+braced and unbraced interpolation, provider constraints and endpoints, unproved
+auth files, invalid ports, duplicate labels, cross-provider references, and
+repaired controls.
+Together with the canonical benchmark contract, both Windows and native
+Ubuntu/WSL pass 29 tests and 2,103 assertions.
+
 Mount writability is deliberately not a gate: the flaw is in request-path
 normalization, not provider-file mutation. Both short and long Compose bind
 syntax are accepted with read-only, explicit read-write, or default mode.

@@ -82,6 +82,63 @@ function compose(
 `;
 }
 
+function dockerCompose({
+  enable = "true",
+  exposedByDefault = true,
+  mapping = false,
+  replacement = "/$$1",
+  socket = true,
+  version = "3.7.6",
+}: {
+  enable?: string | null;
+  exposedByDefault?: boolean;
+  mapping?: boolean;
+  replacement?: string;
+  socket?: boolean;
+  version?: string;
+} = {}): string {
+  const labels = [
+    ...(enable === null ? [] : [["traefik.enable", enable]]),
+    ["traefik.http.routers.public-api.rule", "PathPrefix(`/api`)"],
+    ["traefik.http.routers.public-api.entrypoints", "web"],
+    ["traefik.http.routers.public-api.middlewares", "rewrite-api"],
+    ["traefik.http.routers.public-api.service", "backend-svc"],
+    ["traefik.http.routers.protected-admin.rule", "PathPrefix(`/admin`)"],
+    ["traefik.http.routers.protected-admin.entrypoints", "web"],
+    ["traefik.http.routers.protected-admin.middlewares", "auth"],
+    ["traefik.http.routers.protected-admin.service", "backend-svc"],
+    [
+      "traefik.http.middlewares.rewrite-api.replacepathregex.regex",
+      "^/api(.*)",
+    ],
+    [
+      "traefik.http.middlewares.rewrite-api.replacepathregex.replacement",
+      replacement,
+    ],
+    [
+      "traefik.http.middlewares.auth.forwardauth.address",
+      "http://auth:4181/verify",
+    ],
+    ["traefik.http.services.backend-svc.loadbalancer.server.port", "3000"],
+  ];
+  const labelLines = labels
+    .map(([key, value]) =>
+      mapping ? `      "${key}": "${value}"` : `      - "${key}=${value}"`,
+    )
+    .join("\n");
+  return `services:
+  proxy:
+    image: traefik:v${version}
+    command:
+      - "--providers.docker=true"
+${exposedByDefault ? "" : '      - "--providers.docker.exposedbydefault=false"\n'}    volumes:
+${socket ? '      - "/var/run/docker.sock:/var/run/docker.sock:ro"\n' : '      - "./dynamic.yml:/dynamic.yml:ro"\n'}  backend:
+    image: example/backend:1
+    labels:
+${labelLines}
+`;
+}
+
 function records(inventory: string): TraefikRecord[] {
   return inventory
     .split("\n")
@@ -343,6 +400,159 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
     ).toHaveLength(0);
   });
 
+  test("models the same authorization bypass through exact Docker provider labels", async () => {
+    const found = await scan(undefined, dockerCompose());
+    expect(found).toHaveLength(1);
+    expect(found[0]?.path).toBe("compose.yml");
+    expect(found[0]?.line).toBe(20);
+    expect(found[0]?.frameworkModel?.source).toEqual({
+      kind: "public-traefik-prefix-router",
+      path: "compose.yml",
+      line: 12,
+      symbol: "public-api",
+    });
+    expect(found[0]?.frameworkModel?.propagators.at(-2)).toEqual({
+      kind: "docker-provider-labeled-service",
+      path: "compose.yml",
+      line: 23,
+      symbol: "backend",
+    });
+    expect(
+      await scan(undefined, dockerCompose({ mapping: true })),
+    ).toHaveLength(1);
+    expect(
+      await scan(
+        undefined,
+        dockerCompose({ mapping: true }).replaceAll("traefik.", "TRAEFIK."),
+      ),
+    ).toHaveLength(1);
+    expect(
+      await scan(
+        undefined,
+        dockerCompose().replace(
+          '      - "/var/run/docker.sock:/var/run/docker.sock:ro"',
+          "      - type: bind\n        source: /var/run/docker.sock\n        target: /var/run/docker.sock\n        read_only: true",
+        ),
+      ),
+    ).toHaveLength(1);
+    expect(
+      await scan(
+        undefined,
+        dockerCompose({ enable: null, exposedByDefault: false }),
+      ),
+    ).toHaveLength(0);
+    expect(
+      await scan(
+        undefined,
+        dockerCompose().replace(
+          "http://auth:4181/verify",
+          "http://$AUTH_HOST:4181/verify",
+        ),
+      ),
+    ).toHaveLength(0);
+    expect(
+      await scan(undefined, dockerCompose({ enable: "${ENABLE}" })),
+    ).toHaveLength(0);
+    expect(
+      await scan(
+        undefined,
+        dockerCompose().replace(
+          '      - "--providers.docker=true"',
+          '      - "--providers.docker=true"\n      - "--providers.docker.constraints=Label(`tier`,`edge`)"',
+        ),
+      ),
+    ).toHaveLength(0);
+    expect(
+      await scan(
+        undefined,
+        dockerCompose().replace(
+          '      - "--providers.docker=true"',
+          '      - "--providers.docker=true"\n      - "--providers.docker.endpoint=tcp://docker:2375"',
+        ),
+      ),
+    ).toHaveLength(0);
+    expect(
+      await scan(
+        undefined,
+        dockerCompose().replace(
+          "traefik.http.middlewares.auth.forwardauth.address=http://auth:4181/verify",
+          "traefik.http.middlewares.auth.basicauth.usersfile=/run/secrets/users",
+        ),
+      ),
+    ).toHaveLength(0);
+    expect(
+      await scan(undefined, dockerCompose({ exposedByDefault: false })),
+    ).toHaveLength(1);
+    expect(
+      await scan(undefined, dockerCompose({ enable: "false" })),
+    ).toHaveLength(0);
+    expect(
+      await scan(undefined, dockerCompose({ socket: false })),
+    ).toHaveLength(0);
+    expect(
+      await scan(undefined, dockerCompose({ replacement: "/api/$$1" })),
+    ).toHaveLength(0);
+    expect(
+      await scan(
+        undefined,
+        dockerCompose().replace(
+          "traefik.http.middlewares.auth.forwardauth.address=http://auth:4181/verify",
+          "traefik.http.middlewares.auth.forwardauth.address=${AUTH_URL}",
+        ),
+      ),
+    ).toHaveLength(0);
+    expect(
+      await scan(
+        undefined,
+        dockerCompose().replace(
+          "traefik.http.routers.public-api.middlewares=rewrite-api",
+          "traefik.http.routers.public-api.middlewares=rewrite-api@docker",
+        ),
+      ),
+    ).toHaveLength(1);
+    expect(
+      await scan(undefined, dockerCompose({ replacement: "/$${1}" })),
+    ).toHaveLength(1);
+    expect(
+      await scan(undefined, dockerCompose({ replacement: "/$1" })),
+    ).toHaveLength(1);
+    expect(
+      await scan(
+        undefined,
+        dockerCompose().replace(
+          "traefik.http.services.backend-svc.loadbalancer.server.port=3000",
+          "traefik.http.services.backend-svc.loadbalancer.server.port=70000",
+        ),
+      ),
+    ).toHaveLength(0);
+    expect(
+      await scan(undefined, dockerCompose({ version: "3.5.4" })),
+    ).toHaveLength(0);
+    expect(
+      await scan(undefined, dockerCompose({ version: "3.7.7" })),
+    ).toHaveLength(0);
+    expect(
+      await scan(
+        undefined,
+        dockerCompose().replace(
+          "traefik.http.routers.public-api.middlewares=rewrite-api",
+          "traefik.http.routers.public-api.middlewares=rewrite-api@file",
+        ),
+      ),
+    ).toHaveLength(0);
+    const duplicateRegex =
+      '      - "traefik.http.middlewares.rewrite-api.replacepathregex.regex=^/api(.*)"';
+    expect(
+      await scan(
+        undefined,
+        dockerCompose().replace(
+          duplicateRegex,
+          `${duplicateRegex}\n${duplicateRegex}`,
+        ),
+      ),
+    ).toHaveLength(0);
+  });
+
   test("resolves a nested mounted configuration without guessing another file", async () => {
     const nestedCompose = compose(
       undefined,
@@ -397,6 +607,9 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
     const prompt = scanQualityGatePrompt("");
     expect(prompt).toContain("traefik-replacepathregex-auth-bypass");
     expect(prompt).toContain("GHSA-cxjq-mrr5-89rv");
+    expect(prompt).toContain("v3.6.0 through 3.6.22");
+    expect(prompt).toContain("Docker provider");
+    expect(prompt).toContain("exposedByDefault");
     expect(prompt).toContain("/api../protected");
     expect(prompt).toContain("loopback-only processes");
     expect(prompt).toContain("Report CWE-22");

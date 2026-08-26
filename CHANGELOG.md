@@ -10,6 +10,17 @@ All notable scanner, application, benchmark, and operational changes are recorde
   Releases 3.0.0 through 3.5.x now remain negative instead of inheriting the
   affected 3.6 branch, and the focused release matrix and reviewer contract
   preserve that false-positive boundary.
+- Extended the Traefik model to Docker-provider Compose labels, the common
+  application-owned configuration surface documented by Traefik. Exact
+  sequence and mapping labels bind one enabled backend container's public and
+  protected routers, middleware references, effective `ReplacePathRegex`,
+  concrete auth, entry point, service, and load-balancer port to an affected
+  proxy with `--providers.docker=true` and the Docker socket mounted. Disabled
+  containers, `exposedByDefault=false` without explicit enablement, provider
+  constraints, remote endpoints, Swarm mode, lookalike enablement,
+  cross-provider middleware references, duplicate or unresolved-interpolation
+  labels, unproved auth files, invalid ports, safe replacements, and repaired
+  releases remain negative.
 - Added the first `traefik-replacepathregex-auth-bypass` implementation for
   [GHSA-cxjq-mrr5-89rv](https://github.com/traefik/traefik/security/advisories/GHSA-cxjq-mrr5-89rv).
   The cross-file configuration model binds an exact affected official Traefik

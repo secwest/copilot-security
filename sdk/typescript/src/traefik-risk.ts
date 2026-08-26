@@ -13,11 +13,23 @@ const AUTH_MIDDLEWARE_KEYS = new Set([
   "forwardAuth",
 ]);
 
-interface TraefikRuntime {
+interface TraefikFileRuntime {
   composePath: string;
   imageLine: number;
   version: string;
   dynamicPath: string;
+}
+
+interface TraefikDockerRuntime {
+  composePath: string;
+  imageLine: number;
+  version: string;
+  exposedByDefault: boolean;
+}
+
+interface ComposeLabel {
+  line: number;
+  value: string;
 }
 
 interface TraefikRouter {
@@ -41,7 +53,7 @@ export interface TraefikReplacePathRegexRecord {
   frameworkModel: {
     schemaVersion: "1.2";
     id: "traefik-replacepathregex-auth-bypass";
-    language: "traefik-yaml";
+    language: "traefik-yaml" | "traefik-compose-labels";
     scope: "cross-file";
     source: { kind: string; path: string; line: number; symbol: string };
     sink: {
@@ -223,8 +235,30 @@ function mountedVolumeSource(
   return relativeVolumePath(volume["source"]);
 }
 
-function composeRuntimes(files: readonly GoHttpSourceFile[]): TraefikRuntime[] {
-  const runtimes: TraefikRuntime[] = [];
+function hasDockerSocketMount(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.some((entry) => {
+    if (typeof entry === "string") {
+      return /^\/var\/run\/docker\.sock:\/var\/run\/docker\.sock(?::(?:ro|rw))?$/u.test(
+        entry.trim(),
+      );
+    }
+    const volume = recordValue(entry);
+    return (
+      volume !== undefined &&
+      (volume["type"] === undefined || volume["type"] === "bind") &&
+      volume["source"] === "/var/run/docker.sock" &&
+      volume["target"] === "/var/run/docker.sock" &&
+      (volume["read_only"] === undefined ||
+        typeof volume["read_only"] === "boolean")
+    );
+  });
+}
+
+function fileRuntimes(
+  files: readonly GoHttpSourceFile[],
+): TraefikFileRuntime[] {
+  const runtimes: TraefikFileRuntime[] = [];
   for (const file of files) {
     if (excludedPath(file.path)) continue;
     const root = yamlRoot(file);
@@ -261,6 +295,69 @@ function composeRuntimes(files: readonly GoHttpSourceFile[]): TraefikRuntime[] {
         imageLine,
         version: imageMatch[1]!,
         dynamicPath,
+      });
+    }
+  }
+  return runtimes;
+}
+
+function dockerRuntimes(
+  files: readonly GoHttpSourceFile[],
+): TraefikDockerRuntime[] {
+  const runtimes: TraefikDockerRuntime[] = [];
+  for (const file of files) {
+    if (excludedPath(file.path)) continue;
+    const root = yamlRoot(file);
+    const services = recordValue(root?.["services"]);
+    if (services === undefined) continue;
+    const servicesLine = keyLine(file.lines, "services");
+    for (const [serviceName, rawService] of Object.entries(services)) {
+      const service = recordValue(rawService);
+      if (service === undefined) continue;
+      const image = service["image"];
+      if (typeof image !== "string") continue;
+      const imageMatch = /^traefik:v?(\d+\.\d+\.\d+)$/u.exec(image);
+      if (imageMatch === null || !affectedVersion(imageMatch[1]!)) continue;
+      const commands = stringOrStringList(service["command"]);
+      const exposureOptions = commands?.filter((command) =>
+        command.startsWith("--providers.docker.exposedbydefault"),
+      );
+      if (
+        commands === undefined ||
+        !commands.some(
+          (command) =>
+            command === "--providers.docker" ||
+            command === "--providers.docker=true",
+        ) ||
+        commands.includes("--providers.docker=false") ||
+        exposureOptions?.some(
+          (command) =>
+            command !== "--providers.docker.exposedbydefault" &&
+            command !== "--providers.docker.exposedbydefault=true" &&
+            command !== "--providers.docker.exposedbydefault=false",
+        ) ||
+        commands.some(
+          (command) =>
+            command.startsWith("--providers.docker.constraints") ||
+            command.startsWith("--providers.docker.swarmmode") ||
+            (command.startsWith("--providers.docker.endpoint") &&
+              command !==
+                "--providers.docker.endpoint=unix:///var/run/docker.sock"),
+        ) ||
+        !hasDockerSocketMount(service["volumes"])
+      ) {
+        continue;
+      }
+      const serviceLine = childKeyLine(file.lines, servicesLine, serviceName);
+      const imageLine = childKeyLine(file.lines, serviceLine, "image");
+      if (imageLine === undefined) continue;
+      runtimes.push({
+        composePath: file.path,
+        imageLine,
+        version: imageMatch[1]!,
+        exposedByDefault: !commands.includes(
+          "--providers.docker.exposedbydefault=false",
+        ),
       });
     }
   }
@@ -362,7 +459,7 @@ function vulnerableRewrite(
 
 function recordsForRuntime(
   file: GoHttpSourceFile,
-  runtime: TraefikRuntime,
+  runtime: TraefikFileRuntime,
 ): TraefikReplacePathRegexRecord[] {
   const root = yamlRoot(file);
   const http = recordValue(root?.["http"]);
@@ -472,17 +569,348 @@ function recordsForRuntime(
   return records;
 }
 
+function labelLine(
+  lines: readonly string[],
+  labelsLine: number | undefined,
+  key: string,
+): number | undefined {
+  if (labelsLine === undefined) return undefined;
+  const parent = lines[labelsLine - 1] ?? "";
+  const parentIndent = /^\s*/u.exec(parent)?.[0].length ?? 0;
+  const escaped = escapeRegularExpression(key);
+  const expression = new RegExp(
+    `^\\s*(?:-\\s*)?(?:"|')?${escaped}(?:=|(?:"|')?\\s*:)`,
+    "iu",
+  );
+  for (let index = labelsLine; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (/^\s*(?:#.*)?$/u.test(line)) continue;
+    const indent = /^\s*/u.exec(line)?.[0].length ?? 0;
+    if (indent <= parentIndent) return undefined;
+    if (expression.test(line)) return index + 1;
+  }
+  return undefined;
+}
+
+function composeLabels(
+  file: GoHttpSourceFile,
+  serviceName: string,
+  service: Record<string, unknown>,
+  servicesLine: number | undefined,
+): Map<string, ComposeLabel> | undefined {
+  const rawLabels = service["labels"];
+  if (!Array.isArray(rawLabels) && recordValue(rawLabels) === undefined) {
+    return undefined;
+  }
+  const serviceLine = childKeyLine(file.lines, servicesLine, serviceName);
+  const labelsLine = childKeyLine(file.lines, serviceLine, "labels");
+  if (labelsLine === undefined) return undefined;
+  const entries: Array<[string, string]> = [];
+  if (Array.isArray(rawLabels)) {
+    for (const raw of rawLabels) {
+      if (typeof raw !== "string") return undefined;
+      const separator = raw.indexOf("=");
+      if (separator < 1) {
+        if (raw.trim().toLowerCase().startsWith("traefik.")) return undefined;
+        continue;
+      }
+      entries.push([raw.slice(0, separator).trim(), raw.slice(separator + 1)]);
+    }
+  } else {
+    for (const [key, raw] of Object.entries(recordValue(rawLabels)!)) {
+      if (
+        typeof raw !== "string" &&
+        typeof raw !== "number" &&
+        typeof raw !== "boolean"
+      ) {
+        if (key.toLowerCase().startsWith("traefik.")) return undefined;
+        continue;
+      }
+      entries.push([key, String(raw)]);
+    }
+  }
+  const labels = new Map<string, ComposeLabel>();
+  for (const [rawKey, value] of entries) {
+    const key = rawKey.toLowerCase();
+    if (!key.startsWith("traefik.")) continue;
+    if (labels.has(key)) return undefined;
+    const line = labelLine(file.lines, labelsLine, rawKey);
+    if (line === undefined) return undefined;
+    labels.set(key, { line, value });
+  }
+  return labels;
+}
+
+function commaList(value: string | undefined): string[] | undefined {
+  if (value === undefined || !concreteLabelValue(value)) return undefined;
+  const entries = value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+  return entries.length === 0 ? undefined : entries;
+}
+
+function dockerResourceName(value: string): string | undefined {
+  if (!concreteLabelValue(value)) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized.endsWith("@docker")) return normalized.slice(0, -7);
+  return normalized.includes("@") || normalized === "" ? undefined : normalized;
+}
+
+function dockerRouters(
+  labels: ReadonlyMap<string, ComposeLabel>,
+): TraefikRouter[] {
+  const names = [...labels.keys()]
+    .map((key) => /^traefik\.http\.routers\.([^.]+)\.rule$/u.exec(key)?.[1])
+    .filter((name): name is string => name !== undefined);
+  const routers: TraefikRouter[] = [];
+  for (const name of names) {
+    const rule = labels.get(`traefik.http.routers.${name}.rule`)?.value;
+    if (!concreteLabelValue(rule)) continue;
+    const prefix = pathPrefix(rule);
+    const service = dockerResourceName(
+      labels.get(`traefik.http.routers.${name}.service`)?.value ?? "",
+    );
+    const middlewares = commaList(
+      labels.get(`traefik.http.routers.${name}.middlewares`)?.value,
+    )?.map(dockerResourceName);
+    const entryPoints = commaList(
+      labels.get(`traefik.http.routers.${name}.entrypoints`)?.value,
+    );
+    const line = labels.get(`traefik.http.routers.${name}.rule`)?.line;
+    if (
+      prefix === undefined ||
+      service === undefined ||
+      middlewares === undefined ||
+      middlewares.some((middleware) => middleware === undefined) ||
+      entryPoints === undefined ||
+      line === undefined
+    ) {
+      continue;
+    }
+    routers.push({
+      name,
+      prefix,
+      service,
+      middlewares: middlewares as string[],
+      entryPoints,
+      line,
+    });
+  }
+  return routers;
+}
+
+function concreteLabelValue(value: string | undefined): boolean {
+  if (value === undefined || value.trim() === "") return false;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] !== "$") continue;
+    const next = value[index + 1];
+    if (next === "$") {
+      index += 1;
+      continue;
+    }
+    if (next === "{" || (next !== undefined && /[A-Za-z_]/u.test(next))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function dockerAuthMiddleware(
+  router: TraefikRouter,
+  labels: ReadonlyMap<string, ComposeLabel>,
+): boolean {
+  return router.middlewares.some((name) => {
+    const prefix = `traefik.http.middlewares.${name}`;
+    const forwardAddress = labels.get(`${prefix}.forwardauth.address`)?.value;
+    if (
+      concreteLabelValue(forwardAddress) &&
+      /^https?:\/\//iu.test(forwardAddress!.trim())
+    ) {
+      return true;
+    }
+    for (const type of ["basicauth", "digestauth"]) {
+      if (concreteLabelValue(labels.get(`${prefix}.${type}.users`)?.value)) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
+function dockerServiceDefined(
+  service: string,
+  labels: ReadonlyMap<string, ComposeLabel>,
+): boolean {
+  const port = labels.get(
+    `traefik.http.services.${service}.loadbalancer.server.port`,
+  )?.value;
+  if (port === undefined || !/^\d+$/u.test(port.trim())) return false;
+  const number = Number(port);
+  return number >= 1 && number <= 65_535;
+}
+
+function dockerRewrite(
+  name: string,
+  prefix: string,
+  labels: ReadonlyMap<string, ComposeLabel>,
+): { line: number; regex: string; replacement: string } | undefined {
+  const base = `traefik.http.middlewares.${name}.replacepathregex`;
+  const regexLabel = labels.get(`${base}.regex`);
+  const replacement = labels.get(`${base}.replacement`)?.value;
+  if (
+    regexLabel?.value !== `^${prefix}(.*)` ||
+    !["/$1", "/$$1", "/$${1}"].includes(replacement ?? "")
+  ) {
+    return undefined;
+  }
+  return { line: regexLabel.line, regex: regexLabel.value, replacement: "/$1" };
+}
+
+function dockerLabelRecords(
+  file: GoHttpSourceFile,
+  runtime: TraefikDockerRuntime,
+): TraefikReplacePathRegexRecord[] {
+  const root = yamlRoot(file);
+  const services = recordValue(root?.["services"]);
+  if (services === undefined) return [];
+  const servicesLine = keyLine(file.lines, "services");
+  const records: TraefikReplacePathRegexRecord[] = [];
+  for (const [composeService, rawService] of Object.entries(services)) {
+    const service = recordValue(rawService);
+    if (service === undefined) continue;
+    const labels = composeLabels(file, composeService, service, servicesLine);
+    if (labels === undefined) continue;
+    const enableLabel = labels.get("traefik.enable");
+    const enable = enableLabel?.value.trim().toLowerCase();
+    if (
+      (enableLabel !== undefined && enable !== "true") ||
+      (!runtime.exposedByDefault && enable !== "true")
+    ) {
+      continue;
+    }
+    const configuredRouters = dockerRouters(labels);
+    for (const publicRouter of configuredRouters) {
+      if (publicRouter.middlewares.length !== 1) continue;
+      const rewriteName = publicRouter.middlewares[0]!;
+      const rewrite = dockerRewrite(rewriteName, publicRouter.prefix, labels);
+      if (
+        rewrite === undefined ||
+        !dockerServiceDefined(publicRouter.service, labels)
+      ) {
+        continue;
+      }
+      const protectedRouter = configuredRouters.find(
+        (candidate) =>
+          candidate.name !== publicRouter.name &&
+          candidate.service === publicRouter.service &&
+          candidate.prefix !== publicRouter.prefix &&
+          sameEntryPoint(candidate, publicRouter) &&
+          dockerAuthMiddleware(candidate, labels),
+      );
+      if (protectedRouter === undefined) continue;
+      const startLine = Math.max(1, rewrite.line - CONTEXT_LINES_BEFORE);
+      const endLine = Math.min(
+        file.lines.length,
+        rewrite.line + CONTEXT_LINES_AFTER,
+      );
+      const sourceStart = Math.max(
+        1,
+        Math.min(publicRouter.line, protectedRouter.line) - 1,
+      );
+      const sourceEnd = Math.min(
+        file.lines.length,
+        Math.max(publicRouter.line, protectedRouter.line) + 3,
+      );
+      records.push({
+        path: file.path,
+        line: rewrite.line,
+        categories: [
+          "framework-dataflow:traefik-replacepathregex-auth-bypass",
+          "modeled-source:public-traefik-prefix-router",
+          "modeled-sink:traefik-replacepathregex-prefix-rewrite",
+        ],
+        priority: 138,
+        startLine,
+        endLine,
+        excerpt: sourceExcerpt(file.lines, startLine, endLine),
+        sourceExcerpt: sourceExcerpt(file.lines, sourceStart, sourceEnd),
+        frameworkModel: {
+          schemaVersion: "1.2",
+          id: "traefik-replacepathregex-auth-bypass",
+          language: "traefik-compose-labels",
+          scope: "cross-file",
+          source: {
+            kind: "public-traefik-prefix-router",
+            path: file.path,
+            line: publicRouter.line,
+            symbol: publicRouter.name,
+          },
+          sink: {
+            kind: "traefik-replacepathregex-prefix-rewrite",
+            path: file.path,
+            line: rewrite.line,
+            symbol: rewriteName,
+            cweIds: ["CWE-22"],
+          },
+          propagators: [
+            {
+              kind: "separator-free-prefix-capture",
+              path: file.path,
+              line: rewrite.line,
+              symbol: `${rewrite.regex} -> ${rewrite.replacement}`,
+            },
+            {
+              kind: "shared-protected-backend",
+              path: file.path,
+              line: protectedRouter.line,
+              symbol: `${protectedRouter.name}:${protectedRouter.prefix}`,
+            },
+            {
+              kind: "docker-provider-labeled-service",
+              path: file.path,
+              line: labels.get(
+                `traefik.http.services.${publicRouter.service}.loadbalancer.server.port`,
+              )!.line,
+              symbol: composeService,
+            },
+            {
+              kind: "affected-traefik-container",
+              path: runtime.composePath,
+              line: runtime.imageLine,
+              symbol: `traefik@${runtime.version}:compose-image-exact:replacepathregex-auth-bypass`,
+            },
+          ],
+          candidateControls: [],
+        },
+      });
+    }
+  }
+  return records;
+}
+
 export function traefikReplacePathRegexRecords(
   files: readonly GoHttpSourceFile[],
 ): TraefikReplacePathRegexRecord[] {
   const byPath = new Map(files.map((file) => [file.path, file]));
   const records: TraefikReplacePathRegexRecord[] = [];
   const emitted = new Set<string>();
-  for (const runtime of composeRuntimes(files)) {
+  for (const runtime of fileRuntimes(files)) {
     const dynamicFile = byPath.get(runtime.dynamicPath);
     if (dynamicFile === undefined || excludedPath(dynamicFile.path)) continue;
     for (const record of recordsForRuntime(dynamicFile, runtime)) {
       const identity = `${record.path}:${record.line}:${runtime.composePath}:${runtime.version}`;
+      if (emitted.has(identity)) continue;
+      emitted.add(identity);
+      records.push(record);
+      if (records.length >= MAX_RECORDS) return records;
+    }
+  }
+  for (const runtime of dockerRuntimes(files)) {
+    const composeFile = byPath.get(runtime.composePath);
+    if (composeFile === undefined) continue;
+    for (const record of dockerLabelRecords(composeFile, runtime)) {
+      const identity = `${record.path}:${record.line}:${runtime.composePath}:${runtime.version}:docker`;
       if (emitted.has(identity)) continue;
       emitted.add(identity);
       records.push(record);
