@@ -4,6 +4,16 @@ This log records consequential implementation decisions, their evidence, and the
 
 ## 2026-08-26 — SunEditor Embed external-script DOM XSS
 
+**Hosted portability correction.** Manual exact-head Node and container runs
+both reached compilation and rejected the new regression file because its two
+package-version assertions used dot access on `Record<string, string>` under
+`noPropertyAccessFromIndexSignature` (`TS4111`). Use bracket access for those
+two assertions. This is a test-source portability correction: model logic,
+fixtures, manifests, runtime evidence, and expected findings are unchanged.
+Windows generated-model verification, type checking, formatting, and the
+25-test/2,105-assertion focused-plus-canonical lane remain green before the
+corrected checkpoint is subjected to clean native-Linux and hosted reruns.
+
 **Gap and primary evidence.** The official
 [`GHSA-w93q-cq9w-58p7`](https://github.com/advisories/GHSA-w93q-cq9w-58p7)
 describes high-severity CVE-2026-54606 (CVSS 4.0 8.5, CWE-79): SunEditor through

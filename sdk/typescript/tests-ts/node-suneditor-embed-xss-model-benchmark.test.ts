@@ -184,8 +184,8 @@ describe("SunEditor Embed external-script XSS model", () => {
     const repairedPackage = JSON.parse(
       await readFile(join(repairedRoot, "package.json"), "utf8"),
     ) as { dependencies: Record<string, string> };
-    expect(affectedPackage.dependencies.suneditor).toBe("3.1.3");
-    expect(repairedPackage.dependencies.suneditor).toBe("3.1.4");
+    expect(affectedPackage.dependencies["suneditor"]).toBe("3.1.3");
+    expect(repairedPackage.dependencies["suneditor"]).toBe("3.1.4");
   });
 
   test("emits exact source, plugin, toolbar, sink, and dependency evidence", async () => {
