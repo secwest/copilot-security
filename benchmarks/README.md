@@ -240,7 +240,12 @@ release. The Pickem pair then maps fetched release text into exact picker displa
 fields and changes only `pickem` 1.0.6 to 1.0.7. Its public-formatter witness is
 noninteractive and never prints raw terminal control bytes: the affected package
 retains OSC, BEL, DEL, C1, and an inert clipboard marker, while the repaired
-package removes them and preserves the selected value. The Nx self-hosted-cache
+package removes them and preserves the selected value. The LogTape pair keeps
+the formatted application, exported request handler, connected category/sink
+topology, loopback UDP witness, and `@logtape/logtape` 2.1.5 core identical
+while changing only `@logtape/syslog` 2.1.4 to 2.1.5. It never prints raw
+control-bearing data: the affected datagram retains the injected newline, while
+the repaired datagram contains `#010` and no newline. The Nx self-hosted-cache
 pair then preserves its operational CI configuration, task, workspace, and
 loopback-only gzip-tar witness while changing only Nx 22.7.6 to 22.7.7. The
 affected release writes an inert sentinel outside its per-hash cache directory
@@ -257,7 +262,7 @@ returns 404. The Traefik pair preserves the file provider, public rewrite,
 authenticated sibling, shared backend, and loopback witness while changing
 only 3.7.6 to 3.7.7. A direct protected request is denied on both builds; only
 the affected build forwards `/api../admin` onto the backend-normalized marker.
-The complete corpus now produces 780 scans across 130 exploit/control pairs.
+The complete corpus now produces 798 scans across 133 exploit/control pairs.
 The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
@@ -271,6 +276,17 @@ changes only `next-auth` 5.0.0-beta.31 to 5.0.0-beta.32. Under a real provider
 configuration error, beta.31 exposes the JSON error body as a truthy
 `request.auth` value and a bare existence gate permits the request; beta.32
 maps the non-successful session response to `null` and the same gate denies it.
+
+`node-logtape-syslog-injection-manifest.json` isolates
+[GHSA-8h6h-x5pq-56fq / CVE-2026-54511](https://github.com/dahlia/logtape/security/advisories/GHSA-8h6h-x5pq-56fq)
+under perfect three-run gates. The positive requires exact production
+provenance, official stable bindings, explicitly enabled structured data, a
+connected sink and matching logger category, a remote record property,
+CWE-93/CWE-117, high severity, substantive evidence, and exact line-23
+location. The source-identical 2.1.5 control must remain empty. Its witness uses
+one inert marker and one disposable loopback UDP receiver, prints only byte
+indexes and booleans, and proves decimal C0 escaping at the real package
+boundary.
 
 `go-echo-static-encoded-separator-manifest.json` isolates the application-level
 [GHSA-vfp3-v2gw-7wfq / CVE-2026-55677](https://github.com/labstack/echo/security/advisories/GHSA-vfp3-v2gw-7wfq)

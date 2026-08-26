@@ -24888,6 +24888,22 @@ function nodeLogtapeCategory(
   return nodeLogtapeLiteralStrings(resolved);
 }
 
+function nodeLogtapeCallArgumentsAtLine(
+  lines: readonly string[],
+  line: number,
+  callee: RegExp,
+): string[] | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 63));
+  const original = javascriptCodeLinesWithoutComments(callLines).join("\n");
+  const structural = javascriptStructuralLines(callLines).join("\n");
+  const match = callee.exec(structural.split("\n", 1)[0] ?? "");
+  if (match === null) return undefined;
+  const open = structural.indexOf("(", match.index);
+  const close = matchingCallParenthesis(structural, open);
+  if (open < 0 || close < 0) return undefined;
+  return splitJavascriptArguments(original.slice(open + 1, close));
+}
+
 function nodeLogtapeStructuredSinks(
   lines: readonly string[],
   bindings: readonly NodeLogtapeBinding[],
@@ -24902,7 +24918,7 @@ function nodeLogtapeStructuredSinks(
       const statement = structural[index] ?? "";
       if (!callPattern.test(statement)) continue;
       if (!nodeLogtapeBindingUsable(lines, binding, line)) continue;
-      const arguments_ = javascriptCallArgumentsAtLine(
+      const arguments_ = nodeLogtapeCallArgumentsAtLine(
         lines,
         line,
         callPattern,
@@ -24974,7 +24990,7 @@ function nodeLogtapeTopologies(
       const line = index + 1;
       if (!callPattern.test(structural[index] ?? "")) continue;
       if (!nodeLogtapeBindingUsable(lines, binding, line)) continue;
-      const arguments_ = javascriptCallArgumentsAtLine(
+      const arguments_ = nodeLogtapeCallArgumentsAtLine(
         lines,
         line,
         callPattern,
@@ -25091,7 +25107,7 @@ function nodeLogtapeLoggers(
         "u",
       ).exec(statement);
       if (assignment?.[1] === undefined) continue;
-      const arguments_ = javascriptCallArgumentsAtLine(
+      const arguments_ = nodeLogtapeCallArgumentsAtLine(
         lines,
         line,
         callPattern,
@@ -25283,7 +25299,7 @@ function nodeLogtapeSyslogInjectionRecords(
         ) {
           continue;
         }
-        const arguments_ = javascriptCallArgumentsAtLine(
+        const arguments_ = nodeLogtapeCallArgumentsAtLine(
           file.lines,
           line,
           callPattern,

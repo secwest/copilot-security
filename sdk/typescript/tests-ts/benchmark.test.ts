@@ -436,6 +436,10 @@ describe("effectiveness benchmark", () => {
         "node-pickem-terminal-control-isolated",
       ],
       [
+        "node-logtape-syslog-structured-data-injection",
+        "node-logtape-syslog-structured-data-escaped",
+      ],
+      [
         "node-nx-self-hosted-cache-archive-escape",
         "node-nx-self-hosted-cache-archive-contained",
       ],

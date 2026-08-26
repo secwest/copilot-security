@@ -5549,6 +5549,45 @@
         "traefik-directory-toml-replacepathregex-repaired/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-logtape-syslog-structured-data-injection",
+      "description": "A remote request property reaches an enabled and connected @logtape/syslog 2.1.4 structured-data value.",
+      "fixture": "fixtures/node-logtape-syslog-structured-data-injection",
+      "findingsPaths": [
+        "node-logtape-syslog-structured-data-injection/run-1/findings.json",
+        "node-logtape-syslog-structured-data-injection/run-2/findings.json",
+        "node-logtape-syslog-structured-data-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-logtape-syslog-structured-data-injection",
+          "cwe": ["CWE-93", "CWE-117"],
+          "locations": [
+            {
+              "path": "src/audit.js",
+              "startLine": 23,
+              "endLine": 23,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-logtape-syslog-structured-data-escaped",
+      "description": "The source-identical control changes only @logtape/syslog to 2.1.5, which decimal-escapes C0 bytes and validates SD-NAME keys.",
+      "fixture": "fixtures/node-logtape-syslog-structured-data-escaped",
+      "findingsPaths": [
+        "node-logtape-syslog-structured-data-escaped/run-1/findings.json",
+        "node-logtape-syslog-structured-data-escaped/run-2/findings.json",
+        "node-logtape-syslog-structured-data-escaped/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

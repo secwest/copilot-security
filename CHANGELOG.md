@@ -17,7 +17,9 @@ All notable scanner, application, benchmark, and operational changes are recorde
   development-only or wrong packages, disabled or dynamic configuration,
   disconnected topologies, message-only data, trusted properties, transformed
   values, unexported request handlers, and lookalikes remain negative. The
-  first focused regression lane passes six tests and 49 assertions across all
+  formatted production configuration can span a bounded 64-line call window
+  without weakening the topology gates. The focused regression lane now passes
+  eight tests and 71 assertions across all
   reviewed vulnerable branches, repaired boundaries, modern lock provenance,
   value and key injection, root-category inheritance, and adversarial controls.
 - Added model-specific reviewer requirements for bounded loopback UDP/TCP byte
@@ -25,6 +27,15 @@ All notable scanner, application, benchmark, and operational changes are recorde
   parser and framing evidence, CWE-93/CWE-117 discipline, and conservative
   impact claims. Raw control-bearing records must never be printed or sent to a
   real collector.
+- Added a strict source-identical 2.1.4/2.1.5 exploit/control pair with exact
+  npm locks, high/CWE-93+CWE-117 ground truth at `src/audit.js:23`, and perfect
+  three-run evidence gates. The corpus advances to 133 pairs, 266 cases, and
+  798 scans. The LogTape and canonical lane passes 26 tests and 2,110
+  assertions. Real installed-package UDP witnesses bind only `127.0.0.1`, emit
+  one inert marker, and report byte indexes: 2.1.4 captured 167 bytes with a
+  newline at index 98 and no `#010`; 2.1.5 captured 170 bytes with no newline
+  and the decimal escape present. Both captured one datagram and retained the
+  marker. Generated fixture `node_modules` trees were removed after the run.
 - Extended the Traefik file-provider model from one YAML filename to exact
   YAML or TOML filename and directory configurations. Directory providers bind
   an exact Compose mount and merge routers, middlewares, and services from

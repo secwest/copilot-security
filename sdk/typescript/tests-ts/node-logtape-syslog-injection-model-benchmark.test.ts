@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { scanQualityGatePrompt } from "../src/copilot-client.js";
 import { buildResidualRiskInventory } from "../src/residual-risk.js";
 
 interface LogtapeRecord {
@@ -31,6 +32,7 @@ interface CaseOptions {
 }
 
 const temporaryPaths: string[] = [];
+const benchmarkRoot = resolve(process.cwd(), "..", "..", "benchmarks");
 
 const defaultSource = `import { configure, getLogger } from "@logtape/logtape";
 import { getSyslogSink } from "@logtape/syslog";
@@ -128,6 +130,93 @@ async function writeCase(
 }
 
 describe("LogTape syslog structured-data injection model", () => {
+  test("keeps a strict affected and repaired executable benchmark pair", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(benchmarkRoot, "node-logtape-syslog-injection-manifest.json"),
+        "utf8",
+      ),
+    ) as {
+      schemaVersion: string;
+      thresholds: Record<string, number>;
+      cases: Array<{
+        id: string;
+        expected: Array<{
+          cwe?: string[];
+          acceptableSeverities?: string[];
+          locations?: Array<{ startLine: number; endLine: number }>;
+        }>;
+      }>;
+    };
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(
+      Object.values(manifest.thresholds).every(
+        (value) => value === 0 || value === 1,
+      ),
+    ).toBe(true);
+    expect(manifest.cases.map(({ id }) => id)).toEqual([
+      "node-logtape-syslog-structured-data-injection",
+      "node-logtape-syslog-structured-data-escaped",
+    ]);
+    expect(manifest.cases[0]?.expected[0]).toMatchObject({
+      cwe: ["CWE-93", "CWE-117"],
+      acceptableSeverities: ["high"],
+      locations: [{ startLine: 23, endLine: 23 }],
+    });
+    expect(manifest.cases[1]?.expected).toEqual([]);
+
+    const affectedRoot = join(
+      benchmarkRoot,
+      "fixtures",
+      "node-logtape-syslog-structured-data-injection",
+    );
+    const repairedRoot = join(
+      benchmarkRoot,
+      "fixtures",
+      "node-logtape-syslog-structured-data-escaped",
+    );
+    const affected = logtapeRecords(
+      await buildResidualRiskInventory(affectedRoot),
+    );
+    const repaired = logtapeRecords(
+      await buildResidualRiskInventory(repairedRoot),
+    );
+    expect(affected).toHaveLength(1);
+    expect(repaired).toEqual([]);
+    expect(affected[0]).toMatchObject({
+      path: "src/audit.js",
+      line: 23,
+      frameworkModel: {
+        id: "node-logtape-syslog-structured-data-injection",
+        source: { kind: "remote-request-body", line: 23 },
+        sink: {
+          kind: "vulnerable-logtape-syslog-structured-data-value",
+          line: 23,
+          cweIds: ["CWE-93", "CWE-117"],
+        },
+      },
+    });
+    for (const path of [
+      join("src", "audit.js"),
+      "witness.test.mjs",
+      "README.md",
+    ]) {
+      expect(await readFile(join(affectedRoot, path), "utf8"), path).toBe(
+        await readFile(join(repairedRoot, path), "utf8"),
+      );
+    }
+    const affectedPackage = JSON.parse(
+      await readFile(join(affectedRoot, "package.json"), "utf8"),
+    ) as { dependencies: Record<string, string> };
+    const repairedPackage = JSON.parse(
+      await readFile(join(repairedRoot, "package.json"), "utf8"),
+    ) as { dependencies: Record<string, string> };
+    expect(affectedPackage.dependencies["@logtape/logtape"]).toBe("2.1.5");
+    expect(repairedPackage.dependencies["@logtape/logtape"]).toBe("2.1.5");
+    expect(affectedPackage.dependencies["@logtape/syslog"]).toBe("2.1.4");
+    expect(repairedPackage.dependencies["@logtape/syslog"]).toBe("2.1.5");
+  });
+
   test("requires the affected dependency and complete connected topology", async () => {
     const repository = await temporaryRepository("topology");
     await writeCase(repository, "affected");
@@ -450,5 +539,16 @@ export function auditRequest(request) {
         id,
       ).toEqual([]);
     }
+  });
+
+  test("requires byte-safe validation and conservative impact claims", () => {
+    const prompt = scanQualityGatePrompt("");
+    expect(prompt).toContain("node-logtape-syslog-structured-data-injection");
+    expect(prompt).toContain("GHSA-8h6h-x5pq-56fq");
+    expect(prompt).toContain("before 1.3.11");
+    expect(prompt).toContain("disposable loopback UDP or TCP receiver");
+    expect(prompt).toContain("Print only escaped JSON or byte indexes");
+    expect(prompt).toContain("CWE-93 and CWE-117");
+    expect(prompt).toContain("never target a real log collector");
   });
 });

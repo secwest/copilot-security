@@ -51,6 +51,27 @@ disposal, and cleanup. A malformed record proves CWE-93/CWE-117 log injection;
 it does not by itself prove a trusted forged event, alert suppression,
 repudiation, authentication bypass, or code execution.
 
+**Formatted-source and benchmark evidence.** Ordinary Prettier output expands
+the sink and logger configuration beyond the generic 13-line call window. Use
+a model-local 64-line bounded call reader so the scanner accepts normal
+production formatting while leaving unrelated models and their performance
+budgets unchanged. Add a strict pair with identical application, witness, and
+README bytes. Both fixtures use peer-compatible `@logtape/logtape` 2.1.5; the
+only dependency difference is `@logtape/syslog` 2.1.4 versus 2.1.5. The
+specialized and canonical manifests require one high CWE-93/CWE-117 finding at
+the exact record-properties call and no repaired finding. The combined lane
+passes 26 tests and 2,110 assertions; the focused model accounts for eight
+tests and 71 assertions.
+
+The real installed 2.1.4 package sent one 167-byte UDP datagram to
+`127.0.0.1`; the injected newline remained at byte 98, `#010` was absent, and
+the inert marker remained. With identical source and input, 2.1.5 sent one
+170-byte datagram, contained no newline, included `#010`, and retained the
+marker. The witness suppresses LogTape's meta logger, reports only booleans and
+indexes, disposes the configured sink, closes the socket, and clears its port
+environment variable. Both generated `node_modules` trees were removed after
+the differential run.
+
 ## 2026-08-26 — Compose Traefik rewrites with protected sibling routes
 
 **Gap and primary evidence.** The official

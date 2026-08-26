@@ -1,0 +1,12 @@
+{
+  "name": "copilot-security-benchmark-node-logtape-syslog",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:witness": "node --test witness.test.mjs"
+  },
+  "dependencies": {
+    "@logtape/logtape": "2.1.5",
+    "@logtape/syslog": "2.1.5"
+  }
+}
