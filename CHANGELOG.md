@@ -6,6 +6,27 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `go-echo-static-encoded-separator-auth-bypass` for
+  [GHSA-vfp3-v2gw-7wfq / CVE-2026-55677](https://github.com/labstack/echo/security/advisories/GHSA-vfp3-v2gw-7wfq).
+  The model requires an official stable Echo instance, a middleware-protected
+  non-root group with an active wildcard GET route, a root `Static` or
+  `StaticFS` handler on the same instance, an actual server start, stable
+  instance/group bindings, and nearest exact non-replaced affected `go.mod`
+  provenance. It covers the unpatched legacy module through 3.3.10, v4 before
+  4.15.3, and v5 before 5.2.0. Dependency membership, repaired/prerelease or
+  replaced versions, local lookalikes, incomplete/non-GET/non-wildcard route
+  policy, non-root static mounts, separate or reassigned instances, missing
+  activation, and tests/examples fail closed.
+- Added source-identical Echo 4.15.2/4.15.3 fixtures, complete Go sums, a strict
+  specialized manifest, canonical registration, field-local correction
+  guidance, and adversarial regressions for v3/v4/v5 boundaries, aliased
+  imports, both static APIs, inline and `Use` middleware, nearest modules,
+  mutation, replacement, and incomplete topology controls. The real-package
+  witness uses `httptest` and one inert marker inside a test-owned temporary
+  static root: a direct request is denied on both builds, 4.15.2 returns the
+  marker for the encoded-separator request, and 4.15.3 returns 404. The
+  canonical corpus advances to 129 exploit/control pairs, 258 cases, and 774
+  repeated scans.
 - Added `node-undici-socks5-cross-origin-routing` for
   [GHSA-hm92-r4w5-c3mj / CVE-2026-6734](https://github.com/nodejs/undici/security/advisories/GHSA-hm92-r4w5-c3mj).
   The model requires one official stable `Socks5ProxyAgent`, a request-controlled

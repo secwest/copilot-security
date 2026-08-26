@@ -2,6 +2,62 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — Bind Echo static decoding to route-level authorization
+
+**Gap and primary evidence.** The official
+[`GHSA-vfp3-v2gw-7wfq / CVE-2026-55677`](https://github.com/labstack/echo/security/advisories/GHSA-vfp3-v2gw-7wfq)
+rates this path-boundary defect high and assigns CWE-22. Affected Echo routers
+match the request's raw encoded path, so `/admin%2Fsecret.txt` does not enter an
+`/admin/*` route protected by middleware. The broader static handler then calls
+`url.PathUnescape`, turns `%2F` into `/`, and resolves `admin/secret.txt` below
+its filesystem root without executing the route policy. The v4 surface also
+treated `%5C` as a separator on Windows. Official v5 commit
+[`8d1ae9d`](https://github.com/labstack/echo/commit/8d1ae9d3360a71672418856d58753af25f2c3986)
+and v4 backport
+[`c3fa2a2`](https://github.com/labstack/echo/commit/c3fa2a27ff92b2b8db360de614f999ef1da24725)
+reject encoded separators before unescaping. Echo 4.15.3 and 5.2.0 contain the
+repair; the legacy module through 3.3.10 remains unpatched. Authenticated
+current-source searches found neither the advisory nor `StaticFS` coverage in
+`github/codeql` or `semgrep/semgrep-rules`.
+
+**Application-topology decision.** Do not report Echo membership, an affected
+version, a protected group, or static serving alone. Require one stable official
+instance returned by `echo.New`, a non-root group assigned from that instance,
+real middleware supplied inline or through `Group.Use`, an active wildcard GET
+route on that group, a root-mounted `Static` or `StaticFS` handler on the same
+instance, and an operational server start after registration. Require the
+nearest exact non-replaced `go.mod` declaration in an affected stable release.
+Reject non-wildcard or non-GET policy because it does not prove that the static
+GET namespace was intended to share the authorization boundary. Reject
+repaired/prerelease versions, local lookalikes, module replacements, non-root
+static mounts, separate or reassigned instances/groups, missing activation,
+and tests/examples. This deliberately trades speculative breadth for a concrete
+route/static disagreement.
+
+**Validation and impact discipline.** Source-identical fixtures change only
+Echo 4.15.2 to 4.15.3 and retain complete module sums. Their witness creates a
+fresh temporary root containing one inert `admin/marker.txt`, builds the exact
+protected-group and broad-static topology, and invokes it through `httptest`
+without opening a listener. A direct request reaches middleware and receives
+403 on both releases. The encoded request receives 200 and the marker on 4.15.2
+but 404 with no marker on 4.15.3. No external connection or real secret is used,
+and the test framework removes the root. A finding may claim only unauthorized
+static-file disclosure until the repository proves that a real protected file
+exists beneath the broad static root and that an unauthenticated requester can
+reach it. Encoded-path disclosure is not arbitrary filesystem traversal, file
+write, authentication takeover, credential theft, or code execution.
+
+**Benchmark contract.** The specialized pair requires high severity, exact
+`src/main.go:24` location, CWE-22, validation, attack-path analysis, code
+evidence, stability, and zero false positives. Focused regressions cover the
+source-identical pair, all three advisory module lines, fixed and prerelease
+edges, aliases, `Static`/`StaticFS`, inline/`Use` middleware, exact nearest
+module proof, module replacement, missing wildcard GET policy, non-root mounts,
+separate or missing server activation, mutation, local lookalikes, and excluded
+paths. The pair advances the canonical corpus to 129 exploit/control pairs, 258
+cases, and 774 repeated scans. Full scanner, package, desktop, Linux/WSL,
+self-scan, and hosted acceptance follow the implementation checkpoint.
+
 ## 2026-08-26 — Bind Undici SOCKS5 pool identity to request origin
 
 **Gap and primary evidence.** The official

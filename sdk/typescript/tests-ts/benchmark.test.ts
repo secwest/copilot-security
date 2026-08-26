@@ -444,6 +444,10 @@ describe("effectiveness benchmark", () => {
         "node-undici-socks5-per-origin-pools",
       ],
       [
+        "go-echo-static-encoded-separator-bypass",
+        "go-echo-static-encoded-separator-repaired",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

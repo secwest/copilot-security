@@ -20,6 +20,7 @@ import { goExecInjectionRecords } from "./go-exec-risk.js";
 import { goHttpSsrfRecords } from "./go-http-risk.js";
 import { goObjectAuthorizationRecords } from "./go-object-authorization-risk.js";
 import { goPathTraversalRecords } from "./go-path-risk.js";
+import { goEchoEncodedSeparatorRecords } from "./go-echo-risk.js";
 import { goTemplateInjectionRecords } from "./go-template-risk.js";
 import { goGormSqlInjectionRecords } from "./go-gorm-risk.js";
 import { goPgconnSqlInjectionRecords } from "./go-pgconn-risk.js";
@@ -102,6 +103,7 @@ const SOURCE_EXTENSIONS = new Set([
   ".lua",
   ".m",
   ".mjs",
+  ".mod",
   ".mm",
   ".php",
   ".pl",
@@ -3965,6 +3967,23 @@ const UNDICI_SOCKS5_CROSS_ORIGIN_FIELD_EVIDENCE_REQUIREMENTS = [
   ["undici@", "affected runtime dependency"],
 ] as const;
 
+const ECHO_STATIC_SEPARATOR_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["GHSA-vfp3-v2gw-7wfq", "CVE-2026-55677", "Echo static handler"],
+  [
+    "middleware-protected prefix",
+    "wildcard GET route",
+    "authorization boundary",
+  ],
+  ["Static", "StaticFS", "root-mounted static handler"],
+  ["%2F", "%5C", "encoded path separator"],
+  ["Echo 4.15.2", "Echo 5.1", "affected release"],
+  ["go.mod", "exact module version", "official Echo import"],
+  ["same Echo instance", "server start", "operational topology"],
+  ["direct request denied", "encoded request disclosed", "inert marker"],
+  ["Echo 4.15.3", "Echo 5.2.0", "repaired control"],
+  ["CWE-22", "unauthorized static file disclosure"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -4115,6 +4134,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
       attackPath: UNDICI_SOCKS5_CROSS_ORIGIN_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
+  [
+    "go-echo-static-encoded-separator-auth-bypass",
+    {
+      validation: ECHO_STATIC_SEPARATOR_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: ECHO_STATIC_SEPARATOR_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
 ]);
 
 export async function buildResidualRiskInventory(
@@ -4222,6 +4248,7 @@ export async function buildResidualRiskInventory(
   records.push(...goExecInjectionRecords(sourceFiles));
   records.push(...goHttpSsrfRecords(sourceFiles));
   records.push(...goPathTraversalRecords(sourceFiles));
+  records.push(...goEchoEncodedSeparatorRecords(sourceFiles));
   records.push(...goTemplateInjectionRecords(sourceFiles));
   records.push(...goObjectAuthorizationRecords(sourceFiles));
   records.push(...goGormSqlInjectionRecords(sourceFiles));

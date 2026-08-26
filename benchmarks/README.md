@@ -249,7 +249,12 @@ case are also applied to the Undici SOCKS5 pair, which keeps a remote first
 origin, later credentialed origin, shared agent, and bounded loopback witness
 constant while changing only 7.27.2 to 7.28.0. The affected build routes both
 requests to the first origin; the repaired build creates one pool per origin.
-The complete corpus now produces 768 scans across 128 exploit/control pairs.
+The Echo pair then preserves an operational middleware-protected wildcard
+route, root static handler, and inert `httptest` marker while changing only
+Echo 4.15.2 to 4.15.3. A direct request is denied on both builds; the encoded
+separator discloses the marker only on the affected build, while the repair
+returns 404. The complete corpus now produces 774 scans across 129
+exploit/control pairs.
 The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
@@ -263,6 +268,18 @@ changes only `next-auth` 5.0.0-beta.31 to 5.0.0-beta.32. Under a real provider
 configuration error, beta.31 exposes the JSON error body as a truthy
 `request.auth` value and a bare existence gate permits the request; beta.32
 maps the non-successful session response to `null` and the same gate denies it.
+
+`go-echo-static-encoded-separator-manifest.json` isolates the application-level
+[GHSA-vfp3-v2gw-7wfq / CVE-2026-55677](https://github.com/labstack/echo/security/advisories/GHSA-vfp3-v2gw-7wfq)
+topology under perfect gates. The positive must retain the official Echo
+instance, middleware-protected non-root group, wildcard GET route, root
+`Static`/`StaticFS` handler, operational server start, exact affected `go.mod`
+proof, CWE-22, validation, attack-path analysis, code evidence, high severity,
+and exact line-24 location. The source-identical control changes only 4.15.2 to
+4.15.3 and must remain empty. Its real-package witness uses no listener or real
+secret: `httptest` requests an inert marker inside a test-owned temporary root,
+proves the direct route is denied on both builds, and distinguishes affected
+200 disclosure from repaired 404 rejection.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all

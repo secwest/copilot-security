@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Echo encoded static-separator authorization boundary",
+  "description": "Measures the reachable GHSA-vfp3-v2gw-7wfq route/static decoding disagreement while keeping the source-identical Echo 4.15.3 repair negative.",
+  "thresholds": {
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "locationAccuracy": 1,
+    "severityAccuracy": 1,
+    "validationRate": 1,
+    "attackPathRate": 1,
+    "codeEvidenceRate": 1,
+    "stabilityRate": 1,
+    "maxFalsePositives": 0,
+    "maxFalseNegatives": 0,
+    "maxNondeterministicFindings": 0,
+    "maxLocationMismatch": 0
+  },
+  "cases": [
+    {
+      "id": "go-echo-static-encoded-separator-bypass",
+      "description": "An Echo 4.15.2 server protects an admin wildcard route with middleware but serves a broader static root on the same instance.",
+      "fixture": "fixtures/go-echo-static-encoded-separator-bypass",
+      "findingsPaths": [
+        "go-echo-static-encoded-separator-bypass/run-1/findings.json",
+        "go-echo-static-encoded-separator-bypass/run-2/findings.json",
+        "go-echo-static-encoded-separator-bypass/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "go-echo-static-encoded-separator-auth-bypass",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/main.go",
+              "startLine": 24,
+              "endLine": 24,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "go-echo-static-encoded-separator-repaired",
+      "description": "The source-identical control changes only Echo to 4.15.3, whose static handler rejects encoded path separators before unescaping.",
+      "fixture": "fixtures/go-echo-static-encoded-separator-repaired",
+      "findingsPaths": [
+        "go-echo-static-encoded-separator-repaired/run-1/findings.json",
+        "go-echo-static-encoded-separator-repaired/run-2/findings.json",
+        "go-echo-static-encoded-separator-repaired/run-3/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}
