@@ -58,6 +58,80 @@ paths. The pair advances the canonical corpus to 129 exploit/control pairs, 258
 cases, and 774 repeated scans. Full scanner, package, desktop, Linux/WSL,
 self-scan, and hosted acceptance follow the implementation checkpoint.
 
+**Scanner and witness acceptance.** Exact implementation checkpoint
+`1057897153ed177de0175a5f2cb41dd076c40dfa`, authored and committed by
+`Dragos Ruiu <dr@secwest.net>`, passes the 28-test Echo/canonical lane with
+2,035 assertions and the wider Windows Go/canonical lane with 393 passes, one
+intentional POSIX-only skip, 4,864 assertions, and zero failures. Native
+Ubuntu/WSL passes all 394 tests and 4,865 assertions. On both hosts the exact
+real-package witness denies the direct request, returns status 200 and the
+inert marker through `%2F` on Echo 4.15.2, and returns 404 without the marker on
+4.15.3. The complete Windows Bun 1.3.14 aggregate exercises 1,777 tests across
+194 files in 610.86 seconds: 1,750 pass, 25 intentionally skip, and the two
+known managed-host-only private-ACL and child-Git boundaries fail. Their exact
+native rerun passes 2/2 tests and seven assertions. Generated-model drift,
+formatting, TypeScript, the clean production build, and the production advisory
+audit all pass; the audit reports no known vulnerabilities.
+
+**Distribution and desktop acceptance.** The first hosted Linux GUI and
+container runs correctly rejected `dist/go-echo-risk.js` because the strict npm
+archive allowlist had not yet admitted the newly compiled module. Correction
+checkpoint `f8e5f3032d91c05422e3f2694c8b318c7553368a`, also authored and committed
+by `Dragos Ruiu <dr@secwest.net>`, adds that module family and no scanner logic.
+Strict inspection accepts both fresh 263-entry archives. The 2,050,032-byte
+Windows archive has SHA-256
+`672896d2b34f679eae733554c40f13d17f4fefd17960a613bab277cf41eb1056`;
+its fresh consumers add 67 packages and validate the public SDK import,
+executable CLI, and all 79 bundled plugin files. The same-size POSIX archive has
+SHA-256
+`3273e52e1d3db8c9ebd38f995a0da6e8c65a1c508ff1126750fa71ff46995028`;
+fresh Ubuntu consumers add 75 packages and validate the same surface.
+
+Windows builds with zero warnings or errors, passes 7/7 scanner-core and 3/3
+shared-desktop tests, survives the bounded hidden startup check, and publishes
+a 346,796-byte executable with SHA-256
+`16f88fa65bf662c4913ee86fd7bd0a9bc9ac6de7aaea5c905456a81237288efa`.
+Ubuntu/WSL performs locked restores, builds with zero warnings or errors,
+passes 7/7 core, 3/3 shared, and 2/2 Linux UI tests, then passes both
+non-graphical and real X11/Xvfb startup. Its self-contained 72,568-byte
+executable has SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+
+**Exact-commit self-review and hosted closure.** Two production-build
+inventories of a tracked-only repository-root `git archive` of `f8e5f30`
+complete in 34,299.505 and 14,017.348 ms. They emit 256 byte-identical rows
+totaling 542,341 bytes with SHA-256
+`a5ba009dc3b44e86dc724611fa5cce7ac974cdfce5a0b0405d4d6faf9bebcb4e`.
+All 193 structured records survive ahead of 63 lexical leads; 244 rows are
+fixture paths and 12 are not. Exactly one Echo record remains. It binds the
+protected group at
+`benchmarks/fixtures/go-echo-static-encoded-separator-bypass/src/main.go:22`
+to the root static handler at line 24, retains CWE-22 plus the exact instance,
+middleware, wildcard route, operational server, and dependency transitions,
+and proves
+`github.com/labstack/echo/v4@v4.15.2:go-mod-exact:encoded-separator-static-auth-bypass`
+from `go.mod:5`. The source-identical 4.15.3 control emits no row. A first
+measurement accidentally invoked `git archive` from `sdk/typescript`; fixture
+presence validation rejected that subtree-only result, and none of its metrics
+are accepted.
+
+All seven workflow families pass at exact correction head: Node
+[`32965717227`](https://github.com/secwest/copilot-security/actions/runs/32965717227),
+container
+[`32965717285`](https://github.com/secwest/copilot-security/actions/runs/32965717285),
+Windows GUI
+[`32965717195`](https://github.com/secwest/copilot-security/actions/runs/32965717195),
+Linux GUI
+[`32965717212`](https://github.com/secwest/copilot-security/actions/runs/32965717212),
+Go fixtures
+[`32965717233`](https://github.com/secwest/copilot-security/actions/runs/32965717233),
+.NET fixtures
+[`32965717181`](https://github.com/secwest/copilot-security/actions/runs/32965717181),
+and Java fixtures
+[`32965717184`](https://github.com/secwest/copilot-security/actions/runs/32965717184).
+GitHub reports the repository public on default branch `main`. This closes the
+Echo increment, not the standing scanner-effectiveness goal.
+
 ## 2026-08-26 — Bind Undici SOCKS5 pool identity to request origin
 
 **Gap and primary evidence.** The official

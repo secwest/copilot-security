@@ -27,6 +27,23 @@ All notable scanner, application, benchmark, and operational changes are recorde
   marker for the encoded-separator request, and 4.15.3 returns 404. The
   canonical corpus advances to 129 exploit/control pairs, 258 cases, and 774
   repeated scans.
+- Closed full acceptance at implementation checkpoint `1057897` and package
+  correction `f8e5f30`. The complete Windows aggregate exercised 1,777 tests:
+  1,750 passed, 25 intentionally skipped, and only the two known managed-host
+  ACL/child-process boundaries failed; their exact native rerun passed 2/2.
+  The final Go/canonical lane passed 393 tests plus one platform skip on Windows
+  and 394/394 on Ubuntu/WSL. Both hosts reproduced affected 200 marker
+  disclosure and repaired 404 rejection. Two exact-head repository inventories
+  are byte-identical at 256 rows and retain exactly one affected Echo row while
+  excluding the repaired twin.
+- Added the compiled `go-echo-risk` artifacts to strict npm package inspection
+  after the first hosted Linux/container builds correctly rejected the new
+  unlisted module. Fresh 263-entry Windows and POSIX archives now pass strict
+  inspection and installed-consumer smoke. Windows and Linux GUIs pass their
+  complete local build, test, publish, and startup matrices, and all seven
+  exact-head hosted workflow families pass. Generated-model drift, formatting,
+  TypeScript, production build, and the high-severity production audit are
+  clean.
 - Added `node-undici-socks5-cross-origin-routing` for
   [GHSA-hm92-r4w5-c3mj / CVE-2026-6734](https://github.com/nodejs/undici/security/advisories/GHSA-hm92-r4w5-c3mj).
   The model requires one official stable `Socks5ProxyAgent`, a request-controlled
