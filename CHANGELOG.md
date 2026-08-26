@@ -60,6 +60,27 @@ All notable scanner, application, benchmark, and operational changes are recorde
   pre-commit package checker validates the public import, CLI, and all 79
   bundled plugin files in a 259-entry, 1,952,415-byte tarball with SHA-256
   `6b409d913cbfc103ea78c4fb2ea20cf92be9ae2b97e572c8d4d8afeac6c09b31`.
+- Independently rebuilt exact commit
+  `300d045f3dd45345d74332bb48328e009e66af12` from `git archive`. Two full
+  inventory passes are byte-identical: 256 rows and 532,009 bytes at SHA-256
+  `bb2ca991eceb8a45558e24f08952104406a024df2de03e98f19ba3ef0a767171`,
+  with 188 structured and 68 lexical rows. Exactly one urllib finding joins
+  the benchmark request source to the affected 4.9.0 request through ten
+  provenance/flow records; the 4.9.1 control remains absent.
+- Two exact-commit package builds are byte-identical at 259 entries,
+  1,951,255 bytes, and SHA-256
+  `e56350e9e002164a58d6f5b0e2b5987f78774b855c3b632b8d37bee3d19fb470`;
+  the isolated checker again validates the import, CLI, and 79 plugin files.
+  The exact-commit tar differs from the Windows-checkout pre-commit tar only
+  in CRLF/LF representation across 28 bundled text files: all 28 become equal
+  after newline normalization, and the remaining 231 entries are byte-equal.
+- All seven push workflows succeed for exact implementation commit `300d045`:
+  `node-ci` 32917519608, `windows-gui-ci` 32917519603,
+  `linux-gui-ci` 32917519605, `container-ci` 32917519803,
+  `dotnet-fixture-ci` 32917519645, `java-fixture-ci` 32917519653, and
+  `go-fixture-ci` 32917519711. The Node workflow covers its seven-job
+  Windows/macOS/Ubuntu and Node 22/24/26 matrix through tests, formatting,
+  build, package inspection, and runtime smoke tests.
 - Added `node-http-kysely-mysql-ddl-sql-injection`, an exact provenance-,
   dialect-, argument-, and lifecycle-aware CWE-89 model for
   [GHSA-8cpq-38p9-67gx / CVE-2026-33468](https://github.com/kysely-org/kysely/security/advisories/GHSA-8cpq-38p9-67gx).

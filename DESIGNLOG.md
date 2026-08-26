@@ -97,6 +97,33 @@ from the 259-entry, 1,952,415-byte tarball. Its pre-commit SHA-256 is
 `6b409d913cbfc103ea78c4fb2ea20cf92be9ae2b97e572c8d4d8afeac6c09b31`;
 reproduce it from the exact commit before recording final acceptance.
 
+**Exact-commit acceptance.** Build commit
+`300d045f3dd45345d74332bb48328e009e66af12` from a tracked-only `git archive`
+with its frozen dependency lock. Two repository inventory passes take
+37,077.526 ms and 16,404.948 ms and produce identical 532,009-byte output:
+256 rows, 188 structured rows, 68 lexical rows, and SHA-256
+`bb2ca991eceb8a45558e24f08952104406a024df2de03e98f19ba3ef0a767171`.
+The exact urllib row is a cross-file multi-hop source at `src/server.js:4` to
+the `src/storage.js:4` request sink, with CWE-201/CWE-522 and ten flow or
+dependency records; the repaired fixture has no row.
+
+Two packages produced from that archive are byte-identical: 259 entries,
+1,951,255 bytes, and SHA-256
+`e56350e9e002164a58d6f5b0e2b5987f78774b855c3b632b8d37bee3d19fb470`.
+The strict isolated package check again validates the public import, CLI, and
+79 bundled plugin files. The earlier Windows-checkout package is semantically
+identical but not byte-identical: all 28 differing text entries compare equal
+after CRLF/LF normalization, while the other 231 entries are byte-equal. Use
+the tracked-only archive hash as the reproducible exact-commit artifact.
+
+All hosted push workflows for `300d045` conclude successfully: `node-ci`
+32917519608, `windows-gui-ci` 32917519603, `linux-gui-ci` 32917519605,
+`container-ci` 32917519803, `dotnet-fixture-ci` 32917519645,
+`java-fixture-ci` 32917519653, and `go-fixture-ci` 32917519711. The Node run's
+seven jobs cover Windows, macOS, and Ubuntu across the supported Node 22, 24,
+and 26 lines, including full tests, formatting, build, pack/inspection, and
+runtime smoke checks.
+
 ## 2026-08-25 — Bind Kysely MySQL DDL findings to immediate values and compilation
 
 **Gap and authoritative semantics.** Kysely
