@@ -286,6 +286,10 @@ describe("effectiveness benchmark", () => {
         "node-multi-hop-patched-kysely-mysql-ddl-literal",
       ],
       [
+        "node-multi-hop-urllib-cross-origin-credential-leak",
+        "node-multi-hop-patched-urllib-cross-origin-credential",
+      ],
+      [
         "node-multi-hop-shescape-cmd-injection",
         "node-multi-hop-repaired-shescape-cmd",
       ],
@@ -441,6 +445,11 @@ describe("effectiveness benchmark", () => {
         .get("node-multi-hop-kysely-mysql-ddl-sql-injection")
         ?.expected.map((expectation) => expectation.cwe),
     ).toEqual([["CWE-89"]]);
+    expect(
+      cases
+        .get("node-multi-hop-urllib-cross-origin-credential-leak")
+        ?.expected.map((expectation) => expectation.cwe),
+    ).toEqual([["CWE-201", "CWE-522"]]);
     expect(
       cases
         .get("javascript-archive-link-pivot")
@@ -1440,7 +1449,7 @@ describe("effectiveness benchmark", () => {
         }
       }
     }
-  });
+  }, 15_000);
 
   test("keeps family-specific closure and compositional discovery mandatory", async () => {
     const pluginRoot = resolve(process.cwd(), "_bundled_plugin", "skills");

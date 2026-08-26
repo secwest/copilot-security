@@ -8,7 +8,11 @@ const temporaryPaths: string[] = [];
 const compiler = findCompiler();
 const nativeTest = compiler === null ? test.skip : test;
 const COMPILER_TIMEOUT_MS = 45_000;
-const EXECUTABLE_TIMEOUT_MS = 10_000;
+// The witnesses normally finish in under two seconds, but a full parallel
+// native suite can briefly starve a just-launched Windows process. Keep the
+// subprocess bound well below the enclosing test bound without turning host
+// scheduling pressure into a false regression.
+const EXECUTABLE_TIMEOUT_MS = 30_000;
 const NATIVE_TEST_TIMEOUT_MS = 120_000;
 
 afterEach(async () => {

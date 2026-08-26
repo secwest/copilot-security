@@ -1,0 +1,11 @@
+{
+  "name": "node-multi-hop-urllib-cross-origin-credential-leak",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "urllib": "4.9.0"
+  }
+}

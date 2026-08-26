@@ -586,6 +586,27 @@ code, and repaired or prerelease versions remain negative. The bounded witness
 returns only `process.version`: 2.2.0 recovers the host `Function` constructor,
 whereas 2.2.1 rejects the same expression with `T1006`.
 
+`node-urllib-cross-origin-credential-leak-manifest.json` measures the exact
+application lifecycle behind
+[GHSA-hq3h-g68c-hp78 / CVE-2026-55553](https://github.com/advisories/GHSA-hq3h-g68c-hp78),
+not merely an affected urllib dependency. The positive carries an inbound
+authorization value through three relative-import wrappers into a standard
+credential header on an official urllib 4.9.0 request. Redirects remain
+enabled at their default ten-hop limit. The source-identical control changes
+only urllib to 4.9.1, which follows the redirect but removes the credential
+before crossing the origin boundary. Regressions cover named and aliased,
+default, namespace, TypeScript import-equals, CommonJS receiver/destructured,
+and direct-require `request`/`curl` forms; `Authorization`, `Cookie`,
+`Proxy-Authorization`, `auth`, and `digestAuth`; both affected release lines;
+and fresh declaration-consistent npm v2/v3 locks. Repaired and prerelease
+versions, development-only or wrong packages, unresolved/stale/v1 metadata,
+fixed credentials, custom auth-like headers, local lookalikes, reassignment,
+member replacement, and 3.x/4.x calls that disable redirects or stream remain
+negative. The 2.x regression deliberately retains `maxRedirects: 0` because
+that implementation replaces zero with its default ten. The shared witness
+uses two ephemeral loopback listeners and an inert bounded token: 4.9.0 sends
+the token to the second origin, while 4.9.1 reaches it without the header.
+
 `node-sequelize-oracle-sql-injection-manifest.json` measures the conjunction
 that dependency and generic raw-SQL scanners cannot establish for
 [GHSA-v8fg-2rw7-q452 / CVE-2026-69240](https://github.com/advisories/GHSA-v8fg-2rw7-q452):

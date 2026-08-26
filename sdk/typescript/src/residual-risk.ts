@@ -746,6 +746,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "node-http-urllib-cross-origin-credential-leak",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/["']urllib["']/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-urllib-cross-origin-credential-forwarding",
+        expression: /\.\s*(?:request|curl)\s*\(|\b[A-Za-z_$][\w$]*\s*\(/u,
+        cweIds: ["CWE-201", "CWE-522"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "node-http-liquidjs-template-rce",
     language: "javascript-typescript",
     extensions: JAVASCRIPT_EXTENSIONS,
@@ -3739,6 +3765,18 @@ const KYSELY_MYSQL_DDL_FIELD_EVIDENCE_REQUIREMENTS = [
   ["kysely 0.28.14", "repaired MySQL compiler", "patched control"],
 ] as const;
 
+const URLLIB_CREDENTIAL_LEAK_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["authorization", "cookie", "proxy-authorization", "auth", "digestAuth"],
+  ["relative-module flow", "wrapper", "requestPartner"],
+  ["official urllib binding", "urllib.request", "urllib.curl"],
+  ["redirects enabled", "default 10 redirects", "maxRedirects"],
+  ["different origin", "cross-origin", "origin boundary"],
+  ["urllib 4.9.0", "urllib@4.9.0", "urllib 2.44.0"],
+  ["credential received", "captured header", "receiver header"],
+  ["urllib 4.9.1", "urllib 2.44.1", "patched control"],
+  ["CWE-201", "CWE-522", "credential exposure"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3811,6 +3849,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: KYSELY_MYSQL_DDL_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: KYSELY_MYSQL_DDL_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-http-urllib-cross-origin-credential-leak",
+    {
+      validation: URLLIB_CREDENTIAL_LEAK_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: URLLIB_CREDENTIAL_LEAK_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -4085,6 +4130,21 @@ interface NodeKyselyMysqlDdlSink {
   dependency: NodeRuntimeDependency;
   dialectLine: number;
   execution: "compile" | "execute";
+}
+
+interface NodeUrllibCredentialSink {
+  sourceExpression: string;
+  kind:
+    | "vulnerable-urllib-cross-origin-credential-forwarding"
+    | "lock-resolved-vulnerable-urllib-cross-origin-credential-forwarding";
+  dependency: NodeRuntimeDependency;
+  credential:
+    | "authorization"
+    | "cookie"
+    | "proxy-authorization"
+    | "auth"
+    | "digestAuth";
+  operation: "request" | "curl";
 }
 
 interface NodeLiquidJsTemplateSink {
@@ -6513,6 +6573,433 @@ function nodeKyselyMysqlDdlSink(
         execution,
       };
     }
+  }
+  return undefined;
+}
+
+interface NodeUrllibCallBinding {
+  expression: string;
+  local: string;
+  line: number;
+  member?: "request" | "curl";
+  operation: "request" | "curl";
+  defaultArgs?: {
+    expression: string;
+    line: number;
+  };
+}
+
+interface NodeUrllibClassBinding {
+  expression: string;
+  local: string;
+  line: number;
+  member?: "HttpClient" | "HttpClient2";
+}
+
+function nodeUrllibVersionIsCredentialLeakVulnerable(version: string): boolean {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  if (major < 2) return true;
+  if (major === 2) return minor < 44 || (minor === 44 && patch === 0);
+  if (major === 3) return true;
+  return major === 4 && (minor < 9 || (minor === 9 && patch === 0));
+}
+
+function nodeUrllibCallBindings(
+  lines: readonly string[],
+): NodeUrllibCallBinding[] {
+  const bindings: NodeUrllibCallBinding[] = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "urllib" &&
+        (binding.imported === "request" || binding.imported === "curl"),
+    )
+    .map((binding) => ({
+      expression: escapeRegularExpression(binding.local),
+      local: binding.local,
+      line: binding.line,
+      operation: binding.imported as "request" | "curl",
+    }));
+  const classBindings: NodeUrllibClassBinding[] = importedJavascriptSymbols(
+    lines,
+  )
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "urllib" &&
+        (binding.imported === "HttpClient" ||
+          binding.imported === "HttpClient2"),
+    )
+    .map((binding) => ({
+      expression: escapeRegularExpression(binding.local),
+      local: binding.local,
+      line: binding.line,
+    }));
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  for (let index = 0; index < codeLines.length; index += 1) {
+    const code = codeLines[index] ?? "";
+    const receiver =
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']urllib["']/u.exec(code) ??
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']urllib["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']urllib["']\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']urllib["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] === undefined) continue;
+    for (const operation of ["request", "curl"] as const) {
+      bindings.push({
+        expression: `${escapeRegularExpression(receiver[1])}\\s*\\.\\s*${operation}`,
+        local: receiver[1],
+        line: index + 1,
+        member: operation,
+        operation,
+      });
+    }
+    for (const member of ["HttpClient", "HttpClient2"] as const) {
+      classBindings.push({
+        expression: `${escapeRegularExpression(receiver[1])}\\s*\\.\\s*${member}`,
+        local: receiver[1],
+        line: index + 1,
+        member,
+      });
+    }
+  }
+  const structuralLines = javascriptStructuralLines(lines);
+  const wrappers = exportedJavascriptFunctions(lines);
+  for (const classBinding of classBindings) {
+    for (
+      let index = classBinding.line;
+      index < structuralLines.length;
+      index += 1
+    ) {
+      const declaration = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*new\\s+${classBinding.expression}\\s*\\(`,
+        "u",
+      ).exec(structuralLines[index] ?? "");
+      if (declaration?.[1] === undefined) continue;
+      const declarationLine = index + 1;
+      const wrapper = wrappers.find(
+        (candidate) =>
+          declarationLine >= candidate.startLine &&
+          declarationLine <= candidate.endLine,
+      );
+      const classLocal = escapeRegularExpression(classBinding.local);
+      if (
+        wrapper?.parameters.includes(classBinding.local) === true ||
+        javascriptIdentifierReassignedBetween(
+          lines,
+          classBinding.local,
+          classBinding.line,
+          declarationLine + 1,
+        ) ||
+        (classBinding.member !== undefined &&
+          structuralLines
+            .slice(classBinding.line, declarationLine)
+            .some((candidate) =>
+              new RegExp(
+                `\\b${classLocal}\\s*\\.\\s*${classBinding.member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+                "u",
+              ).test(candidate),
+            ))
+      ) {
+        continue;
+      }
+      for (const operation of ["request", "curl"] as const) {
+        const constructorArguments = javascriptCallArgumentsAtLine(
+          lines,
+          declarationLine,
+          new RegExp(`\\bnew\\s+${classBinding.expression}\\s*\\(`, "u"),
+        );
+        const clientOptionsExpression = constructorArguments?.[0]?.trim() ?? "";
+        const clientOptions =
+          clientOptionsExpression === ""
+            ? undefined
+            : resolveJavascriptExpression(
+                lines,
+                clientOptionsExpression,
+                declarationLine,
+              );
+        const defaultArgsExpression =
+          clientOptions === undefined
+            ? undefined
+            : javascriptObjectPropertyValue(
+                clientOptions.value,
+                "defaultArgs",
+              )?.trim();
+        bindings.push({
+          expression: `${escapeRegularExpression(declaration[1])}\\s*\\.\\s*${operation}`,
+          local: declaration[1],
+          line: declarationLine,
+          member: operation,
+          operation,
+          ...(defaultArgsExpression === undefined ||
+          defaultArgsExpression === ""
+            ? {}
+            : {
+                defaultArgs: {
+                  expression: defaultArgsExpression,
+                  line: clientOptions!.line,
+                },
+              }),
+        });
+      }
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.expression === binding.expression &&
+          candidate.line === binding.line &&
+          candidate.operation === binding.operation,
+      ) === index,
+  );
+}
+
+function nodeUrllibBindingUsable(
+  lines: readonly string[],
+  binding: NodeUrllibCallBinding,
+  useLine: number,
+): boolean {
+  if (
+    binding.line >= useLine ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      useLine + 1,
+    )
+  ) {
+    return false;
+  }
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      useLine >= candidate.startLine && useLine <= candidate.endLine,
+  );
+  if (wrapper?.parameters.includes(binding.local) === true) return false;
+  if (binding.member === undefined) return true;
+  const local = escapeRegularExpression(binding.local);
+  return !javascriptStructuralLines(lines)
+    .slice(binding.line, useLine)
+    .some((candidate) =>
+      new RegExp(
+        `\\b${local}\\s*\\.\\s*${binding.member}\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+        "u",
+      ).test(candidate),
+    );
+}
+
+function nodeUrllibCredentialHeader(
+  value: string,
+):
+  | { credential: NodeUrllibCredentialSink["credential"]; expression: string }
+  | undefined {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return undefined;
+  for (const entry of splitJavascriptArguments(trimmed.slice(1, -1))) {
+    const match =
+      /^\s*(?:["'](authorization|cookie|proxy-authorization)["']|(authorization|cookie))\s*:\s*([\s\S]+)$/iu.exec(
+        entry,
+      );
+    const credential = (match?.[1] ?? match?.[2])?.toLowerCase() as
+      | "authorization"
+      | "cookie"
+      | "proxy-authorization"
+      | undefined;
+    const expression = match?.[3]?.trim() ?? "";
+    if (credential !== undefined && expression !== "") {
+      return { credential, expression };
+    }
+  }
+  return undefined;
+}
+
+function nodeUrllibCredentialFromOptions(
+  lines: readonly string[],
+  optionsExpression: string | undefined,
+  line: number,
+  major: number,
+  defaultArgs?: NodeUrllibCallBinding["defaultArgs"],
+):
+  | { credential: NodeUrllibCredentialSink["credential"]; expression: string }
+  | undefined {
+  const options =
+    optionsExpression === undefined
+      ? undefined
+      : resolveJavascriptExpression(lines, optionsExpression, line);
+  const defaults =
+    defaultArgs === undefined
+      ? undefined
+      : resolveJavascriptExpression(
+          lines,
+          defaultArgs.expression,
+          defaultArgs.line,
+        );
+  const isObject = (value: string | undefined): value is string =>
+    value?.trim().startsWith("{") === true && value.trim().endsWith("}");
+  if (
+    (options !== undefined && !isObject(options.value)) ||
+    (defaults !== undefined && !isObject(defaults.value)) ||
+    (options === undefined && defaults === undefined)
+  ) {
+    return undefined;
+  }
+  const optionValue = options?.value.trim();
+  const defaultValue = defaults?.value.trim();
+  const property = (
+    name: string,
+    includeDefault = true,
+  ): string | undefined => {
+    const requestValue =
+      optionValue === undefined
+        ? undefined
+        : javascriptObjectPropertyValue(optionValue, name)?.trim();
+    if (requestValue !== undefined) return requestValue;
+    return includeDefault && defaultValue !== undefined
+      ? javascriptObjectPropertyValue(defaultValue, name)?.trim()
+      : undefined;
+  };
+  if (major >= 3) {
+    if (property("followRedirect") === "false") {
+      return undefined;
+    }
+  }
+  const maxRedirects = property("maxRedirects");
+  if (maxRedirects !== undefined) {
+    const numeric = /^[+-]?\d+(?:\.\d+)?$/u.test(maxRedirects)
+      ? Number(maxRedirects)
+      : undefined;
+    const quotedNumeric = /^["'][+-]?\d+(?:\.\d+)?["']$/u.test(maxRedirects)
+      ? Number(maxRedirects.slice(1, -1))
+      : undefined;
+    if (numeric !== undefined) {
+      if ((major >= 3 && numeric <= 0) || (major < 3 && numeric < 0)) {
+        return undefined;
+      }
+    } else if (quotedNumeric !== undefined) {
+      if (quotedNumeric <= 0) return undefined;
+    } else if (/^(?:null|undefined)$/u.test(maxRedirects)) {
+      // Both maintained branches replace a nullish value with the default ten.
+    } else if (maxRedirects === "false") {
+      if (major >= 3) return undefined;
+      // The 2.x `value || 10` default replaces false with ten.
+    } else {
+      return undefined;
+    }
+  }
+  if (major >= 3) {
+    const dataType = property("dataType");
+    const writeStream = property("writeStream");
+    const stream = property("stream");
+    const isTruthyStreamOption = (expression: string | undefined): boolean =>
+      expression !== undefined &&
+      !/^(?:false|null|undefined|[+-]?0+(?:\.0+)?|["']{2})$/u.test(expression);
+    if (
+      /^["']stream["']$/u.test(dataType ?? "") ||
+      isTruthyStreamOption(writeStream) ||
+      isTruthyStreamOption(stream)
+    ) {
+      return undefined;
+    }
+  }
+  for (const credential of ["auth", "digestAuth"] as const) {
+    const expression = property(credential) ?? "";
+    if (
+      expression !== "" &&
+      !/^(?:false|null|undefined|[+-]?0+(?:\.0+)?|["']{2})$/u.test(expression)
+    ) {
+      return { credential, expression };
+    }
+  }
+  // urllib 2 merges HttpClient.defaultArgs before entering the request path.
+  // urllib 3/4 only read original per-call headers, while auth/digestAuth and
+  // redirect controls still inherit from defaultArgs.
+  const headersExpression = property("headers", major < 3) ?? "";
+  if (headersExpression === "") return undefined;
+  const headers = resolveJavascriptExpression(
+    lines,
+    headersExpression,
+    options?.line ?? defaults!.line,
+  );
+  return headers === undefined
+    ? undefined
+    : nodeUrllibCredentialHeader(headers.value);
+}
+
+function nodeUrllibCredentialSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeUrllibCredentialSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const dependency = nodeRuntimeDependency(files, path, "urllib");
+  if (
+    dependency === undefined ||
+    !nodeUrllibVersionIsCredentialLeakVulnerable(dependency.version)
+  ) {
+    return undefined;
+  }
+  const major = Number(dependency.version.split(".", 1)[0]);
+  const candidates: Array<{
+    callee: RegExp;
+    operation: "request" | "curl";
+    raw: boolean;
+    usable: boolean;
+    defaultArgs?: NodeUrllibCallBinding["defaultArgs"];
+  }> = nodeUrllibCallBindings(lines).map((binding) => ({
+    callee: new RegExp(`\\b${binding.expression}\\s*\\(`, "u"),
+    operation: binding.operation,
+    raw: false,
+    usable: nodeUrllibBindingUsable(lines, binding, line),
+    defaultArgs: binding.defaultArgs,
+  }));
+  for (const operation of ["request", "curl"] as const) {
+    candidates.push({
+      callee: new RegExp(
+        `\\brequire\\s*\\(\\s*["']urllib["']\\s*\\)\\s*\\.\\s*${operation}\\s*\\(`,
+        "u",
+      ),
+      operation,
+      raw: true,
+      usable: true,
+    });
+  }
+  for (const candidate of candidates) {
+    if (!candidate.usable) continue;
+    const arguments_ = candidate.raw
+      ? javascriptRawCallArgumentsAtLine(lines, line, candidate.callee)
+      : javascriptCallArgumentsAtLine(lines, line, candidate.callee);
+    if (arguments_ === undefined) continue;
+    const optionsExpression = arguments_?.[1]?.trim() ?? "";
+    if (optionsExpression === "" && candidate.defaultArgs === undefined)
+      continue;
+    const credential = nodeUrllibCredentialFromOptions(
+      lines,
+      optionsExpression === "" ? undefined : optionsExpression,
+      line,
+      major,
+      candidate.defaultArgs,
+    );
+    if (credential === undefined) continue;
+    return {
+      sourceExpression: credential.expression,
+      kind:
+        dependency.proof === "npm-lockfile"
+          ? "lock-resolved-vulnerable-urllib-cross-origin-credential-forwarding"
+          : "vulnerable-urllib-cross-origin-credential-forwarding",
+      dependency,
+      credential: credential.credential,
+      operation: candidate.operation,
+    };
   }
   return undefined;
 }
@@ -15333,6 +15820,8 @@ function frameworkDataflowRecords(
                   model.id === "node-http-jsonata-expression-rce" ||
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
                   model.id === "node-http-kysely-mysql-ddl-sql-injection" ||
+                  model.id ===
+                    "node-http-urllib-cross-origin-credential-leak" ||
                   model.id === "node-http-liquidjs-template-rce" ||
                   model.id === "node-http-prompty-nunjucks-template-rce" ||
                   model.id === "node-http-shescape-cmd-injection" ||
@@ -15451,6 +15940,10 @@ function frameworkDataflowRecords(
       const nodeKyselyMysqlDdl =
         model.id === "node-http-kysely-mysql-ddl-sql-injection"
           ? nodeKyselyMysqlDdlSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeUrllibCredential =
+        model.id === "node-http-urllib-cross-origin-credential-leak"
+          ? nodeUrllibCredentialSink(files, path, lines, sink.line)
           : undefined;
       const nodeLiquidJsTemplate =
         model.id === "node-http-liquidjs-template-rce"
@@ -15728,6 +16221,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-kysely-mysql-ddl-sql-injection" &&
         nodeKyselyMysqlDdl === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-urllib-cross-origin-credential-leak" &&
+        nodeUrllibCredential === undefined
       ) {
         continue;
       }
@@ -16058,6 +16557,7 @@ function frameworkDataflowRecords(
         nodeJsonataExpression?.sourceExpression ??
         nodeSequelizeOracle?.sourceExpression ??
         nodeKyselyMysqlDdl?.sourceExpression ??
+        nodeUrllibCredential?.sourceExpression ??
         nodeLiquidJsTemplate?.sourceExpression ??
         nodePromptyTemplate?.sourceExpression ??
         nodeShescapeCommand?.sourceExpression ??
@@ -16455,6 +16955,7 @@ function frameworkDataflowRecords(
         nodeJsonataExpression?.kind ??
         nodeSequelizeOracle?.kind ??
         nodeKyselyMysqlDdl?.kind ??
+        nodeUrllibCredential?.kind ??
         nodeLiquidJsTemplate?.kind ??
         nodePromptyTemplate?.kind ??
         nodeShescapeCommand?.kind ??
@@ -16606,6 +17107,16 @@ function frameworkDataflowRecords(
                     path,
                     line: nodeKyselyMysqlDdl.dialectLine,
                     symbol: "MysqlDialect",
+                  },
+                ]),
+            ...(nodeUrllibCredential === undefined
+              ? []
+              : [
+                  {
+                    kind: "urllib-runtime-dependency",
+                    path: nodeUrllibCredential.dependency.manifestPath,
+                    line: nodeUrllibCredential.dependency.line,
+                    symbol: `urllib@${nodeUrllibCredential.dependency.version}:${nodeUrllibCredential.dependency.proof}:cross-origin-${nodeUrllibCredential.credential}-forwarding:${nodeUrllibCredential.operation}`,
                   },
                 ]),
             ...(nodeNodemailerRaw === undefined
@@ -24149,6 +24660,8 @@ function javascriptFrameworkWrapperSummaries(
                   model.id === "node-http-jsonata-expression-rce" ||
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
                   model.id === "node-http-kysely-mysql-ddl-sql-injection" ||
+                  model.id ===
+                    "node-http-urllib-cross-origin-credential-leak" ||
                   model.id === "node-http-liquidjs-template-rce" ||
                   model.id === "node-http-prompty-nunjucks-template-rce" ||
                   model.id === "node-http-shescape-cmd-injection" ||
@@ -24241,6 +24754,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeKyselyMysqlDdl =
             model.id === "node-http-kysely-mysql-ddl-sql-injection"
               ? nodeKyselyMysqlDdlSink(files, file.path, file.lines, sink.line)
+              : undefined;
+          const nodeUrllibCredential =
+            model.id === "node-http-urllib-cross-origin-credential-leak"
+              ? nodeUrllibCredentialSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
               : undefined;
           const nodeLiquidJsTemplate =
             model.id === "node-http-liquidjs-template-rce"
@@ -24477,6 +24999,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-urllib-cross-origin-credential-leak" &&
+            nodeUrllibCredential === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-liquidjs-template-rce" &&
             nodeLiquidJsTemplate === undefined
           ) {
@@ -24658,6 +25186,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsonataExpression?.sourceExpression ??
             nodeSequelizeOracle?.sourceExpression ??
             nodeKyselyMysqlDdl?.sourceExpression ??
+            nodeUrllibCredential?.sourceExpression ??
             nodeLiquidJsTemplate?.sourceExpression ??
             nodePromptyTemplate?.sourceExpression ??
             nodeShescapeCommand?.sourceExpression ??
@@ -24887,6 +25416,9 @@ function javascriptFrameworkWrapperSummaries(
                       kind: nodeKyselyMysqlDdl.kind,
                       line: nodeKyselyMysqlDdl.sinkLine,
                     }),
+                ...(nodeUrllibCredential === undefined
+                  ? {}
+                  : { kind: nodeUrllibCredential.kind }),
                 ...(nodeLiquidJsTemplate === undefined
                   ? {}
                   : {
@@ -24996,6 +25528,7 @@ function javascriptFrameworkWrapperSummaries(
               nodeJsonataExpression === undefined &&
               nodeSequelizeOracle === undefined &&
               nodeKyselyMysqlDdl === undefined &&
+              nodeUrllibCredential === undefined &&
               nodeLiquidJsTemplate === undefined &&
               nodePromptyTemplate === undefined &&
               nodeShescapeCommand === undefined &&
@@ -25114,6 +25647,17 @@ function javascriptFrameworkWrapperSummaries(
                               path: file.path,
                               line: nodeKyselyMysqlDdl.dialectLine,
                               symbol: "MysqlDialect",
+                            },
+                          ]),
+                      ...(nodeUrllibCredential === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "urllib-runtime-dependency",
+                              path: nodeUrllibCredential.dependency
+                                .manifestPath,
+                              line: nodeUrllibCredential.dependency.line,
+                              symbol: `urllib@${nodeUrllibCredential.dependency.version}:${nodeUrllibCredential.dependency.proof}:cross-origin-${nodeUrllibCredential.credential}-forwarding:${nodeUrllibCredential.operation}`,
                             },
                           ]),
                       ...(nodeNodemailerRaw === undefined

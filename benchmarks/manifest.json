@@ -5003,6 +5003,45 @@
         "node-multi-hop-patched-kysely-mysql-ddl-literal/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-multi-hop-urllib-cross-origin-credential-leak",
+      "description": "An inbound authorization value crosses three relative wrappers into an official urllib 4.9.0 request. Default redirect handling forwards the standard credential header across an origin boundary.",
+      "fixture": "fixtures/node-multi-hop-urllib-cross-origin-credential-leak",
+      "findingsPaths": [
+        "node-multi-hop-urllib-cross-origin-credential-leak/run-1/findings.json",
+        "node-multi-hop-urllib-cross-origin-credential-leak/run-2/findings.json",
+        "node-multi-hop-urllib-cross-origin-credential-leak/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-urllib-cross-origin-credential-forwarding",
+          "cwe": ["CWE-201", "CWE-522"],
+          "locations": [
+            {
+              "path": "src/storage.js",
+              "startLine": 4,
+              "endLine": 4,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-patched-urllib-cross-origin-credential",
+      "description": "The source-identical control changes only urllib to 4.9.1, which strips standard credential-bearing headers before a cross-origin redirect.",
+      "fixture": "fixtures/node-multi-hop-patched-urllib-cross-origin-credential",
+      "findingsPaths": [
+        "node-multi-hop-patched-urllib-cross-origin-credential/run-1/findings.json",
+        "node-multi-hop-patched-urllib-cross-origin-credential/run-2/findings.json",
+        "node-multi-hop-patched-urllib-cross-origin-credential/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

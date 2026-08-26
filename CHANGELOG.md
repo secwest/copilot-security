@@ -6,6 +6,60 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-http-urllib-cross-origin-credential-leak`, an exact
+  provenance-, API-, credential-, and redirect-lifecycle-aware CWE-201/CWE-522
+  model for
+  [GHSA-hq3h-g68c-hp78 / CVE-2026-55553](https://github.com/node-modules/urllib/security/advisories/GHSA-hq3h-g68c-hp78).
+  It follows inbound credential data across relative wrappers into official
+  named, aliased, default, namespace, TypeScript import-equals, CommonJS,
+  direct-require, and `HttpClient` `request`/`curl` surfaces. Findings require
+  exact affected production provenance through urllib 2.44.0 or from 3.0.0
+  through 4.9.0, a standard `Authorization`, `Cookie`,
+  `Proxy-Authorization`, `auth`, or `digestAuth` field, and redirect behavior
+  that remains enabled.
+- Extended official `HttpClient`/`HttpClient2` coverage through constructor
+  `defaultArgs`, including aliases and separately declared client/default
+  objects. The model follows inherited `auth` and `digestAuth`, models per-call
+  override precedence for credentials and redirect/stream controls, and also
+  follows inherited standard headers on urllib 2.x. It deliberately does not
+  treat 3.x/4.x `defaultArgs.headers` as transmitted because those branches
+  build request headers from the original per-call options, while inherited
+  auth fields are applied after the options merge.
+- Preserved branch-specific runtime semantics instead of treating every
+  redirect option alike. On 3.x/4.x, `followRedirect: false`, nonpositive
+  static limits, and active request/response streaming suppress the row; false
+  or null stream options and nullish redirect limits preserve the default
+  path. On 2.x, numeric zero and false are replaced by the default ten and
+  remain vulnerable, while a negative or quoted-zero limit disables the
+  redirect. Dynamic limits fail closed. Versions 2.44.1 and 4.9.1, prereleases,
+  custom auth-like headers, fixed credentials, local lookalikes, reassignment,
+  member replacement, wrong or development-only packages, unresolved ranges,
+  inconsistent/v1 locks, tests, and examples remain negative.
+- Added source-identical four-file urllib 4.9.0/4.9.1 fixtures, a perfect-gate
+  specialized manifest, canonical corpus registration, strict field-evidence
+  requirements, and reviewer guidance that separates demonstrated credential
+  disclosure from SSRF, code execution, or privilege claims. Two ephemeral
+  loopback listeners prove on both Windows and Ubuntu/WSL that 4.9.0 forwards
+  the inert authorization token across the origin boundary and 4.9.1 follows
+  the same redirect without it. The focused native gate passes 24 tests and
+  1,904 assertions; Ubuntu/WSL passes the same 24 tests and 1,904 assertions,
+  including constructor-default inheritance and override cases.
+  The corpus advances to 119 exploit/control pairs, 238 cases, and 714 repeated
+  scans. Current authenticated source searches found no advisory-specific
+  rule in `github/codeql` or `semgrep/semgrep-rules`; their `urllib` matches are
+  Python models rather than this Node package lifecycle.
+- Raised the bounded temporal-memory native witness timeout from 10 to 30
+  seconds after a loaded full-suite Windows run terminated the otherwise
+  passing executable at 10.6 seconds. The enclosing test remains capped at 120
+  seconds; isolated witnesses still finish in roughly two seconds, so hangs
+  remain fail-closed while scheduler pressure no longer creates a false
+  regression.
+- Final native Windows acceptance passes 1,670 tests with 25 platform skips,
+  zero failures, and 12,182 assertions across 183 files in 593.24 seconds.
+  The production dependency audit reports no known vulnerabilities. The final
+  pre-commit package checker validates the public import, CLI, and all 79
+  bundled plugin files in a 259-entry, 1,952,415-byte tarball with SHA-256
+  `6b409d913cbfc103ea78c4fb2ea20cf92be9ae2b97e572c8d4d8afeac6c09b31`.
 - Added `node-http-kysely-mysql-ddl-sql-injection`, an exact provenance-,
   dialect-, argument-, and lifecycle-aware CWE-89 model for
   [GHSA-8cpq-38p9-67gx / CVE-2026-33468](https://github.com/kysely-org/kysely/security/advisories/GHSA-8cpq-38p9-67gx).

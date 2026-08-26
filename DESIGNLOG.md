@@ -2,6 +2,101 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Bind urllib credential exposure to cross-origin redirect lifecycle
+
+**Gap and authoritative semantics.** urllib
+[`GHSA-hq3h-g68c-hp78`](https://github.com/node-modules/urllib/security/advisories/GHSA-hq3h-g68c-hp78),
+assigned CVE-2026-55553 and CWE-200/CWE-201/CWE-522, covers releases through
+2.44.0 and 3.0.0 through 4.9.0. The affected request implementation follows up
+to ten redirects by default and recursively reuses caller options when the
+next URL has a different origin. That preserves `Authorization`, `Cookie`,
+`Proxy-Authorization`, `auth`, and `digestAuth` beyond their intended trust
+boundary. Versions 2.44.1 and 4.9.1 clone the options and remove those standard
+credentials before the cross-origin request. The repair deliberately does not
+define custom `x-api-key`, `x-auth-token`, or `x-access-token` headers as
+fixed. Authenticated searches of current `github/codeql` and
+`semgrep/semgrep-rules` found no advisory-specific Node rule; their urllib
+matches refer to Python standard-library models.
+
+**Decision and lifecycle boundary.** Add
+`node-http-urllib-cross-origin-credential-leak`. Require a remote credential
+source, exact relative-wrapper flow into a repaired standard credential field,
+an official root or `HttpClient` `request`/`curl` capability, redirects that
+remain enabled, and exact affected production provenance. Anchor the row at the
+outbound request call. Cover named/aliased ESM, default and namespace
+receivers, TypeScript import-equals, CommonJS receivers and destructures,
+direct require members, plus official `HttpClient` and `HttpClient2`
+instances. Preserve the advisory's CWE-201/CWE-522 disclosure boundary rather
+than relabeling the condition as SSRF or arbitrary header injection.
+
+Official clients require a second merge boundary. urllib 2.x merges
+`defaultArgs` into each request before entering the shared request path, so
+inherited headers, `auth`, `digestAuth`, redirect limits, and stream controls
+are effective. urllib 3.x/4.x spread `defaultArgs` into the computed arguments,
+but populate the outbound header map only from the original per-call
+`options.headers`; inherited `auth` and `digestAuth` are nevertheless applied
+after that merge. Track the constructor's exact official class binding and
+resolved `defaultArgs`, apply per-call property precedence, accept inherited
+standard headers only on 2.x, and fail closed on unresolved option objects.
+This also explains why the 4.9.1 repair explicitly assigns undefined auth
+fields on a cross-origin redirect: omission would let constructor defaults be
+reapplied.
+
+**Version-specific controls.** The two maintained branches do not interpret
+redirect options identically. Version 3/4 uses `maxRedirects ?? 10` and
+disables on `followRedirect === false`; version 2 uses `maxRedirects || 10`, so
+numeric zero or false unexpectedly restore ten redirects. Negative values
+disable both branches, and quoted zero remains truthy until the comparison and
+therefore disables both. Nullish values restore the default. Static positive
+limits remain eligible and dynamic limits fail closed. Version 3/4 streaming
+request or response modes force the limit to zero, but explicitly false, null,
+undefined, zero, or empty stream options do not. These boundaries are encoded
+and directly regressed rather than guessed from option names.
+
+**Identity, provenance, and false-positive boundary.** Accept exact stable
+runtime declarations or fresh declaration-consistent npm v2/v3 locks through
+2.44.0 and from 3.0.0 through 4.9.0. Reject 2.44.1/4.9.1 and later,
+prereleases, ranges without a safe modern lock, stale/v1 metadata,
+development-only or wrong packages, fixed credential literals, custom
+auth-like headers, disabled redirects, active streams, local lookalikes,
+shadowing, reassignment, replaced root or class members, tests, and examples.
+Requiring application credential flow improves on dependency-only alerts and
+prevents an affected but inert package from becoming a finding.
+
+**Executable pair and current evidence.** Source-identical four-file fixtures
+change only urllib 4.9.0 to 4.9.1. Their shared witness starts two ephemeral
+loopback listeners, sends an inert bounded authorization value to the first,
+and records only whether the second origin receives it. Windows and Ubuntu/WSL
+both show forwarding on 4.9.0 and removal on 4.9.1. The specialized manifest,
+canonical pair, official binding/client matrix, both release lines, modern-lock
+proof, redirect/stream semantics, mutation and identity negatives, and strict
+review prompt pass 24 focused tests and 1,904 assertions on Windows. The
+Ubuntu/WSL gate passes the same 24 tests and 1,904 assertions, including
+inherited client credentials, request overrides, and branch-specific default
+controls; an initial combined
+cold-mount run exceeded Bun's five-second default only in the corpus-wide file
+integrity test, so that inherently I/O-heavy test now has an explicit
+15-second bound. The canonical corpus advances to 119 pairs, 238 cases, and
+714 repeated scans.
+
+**Regression reliability.** The first final full-suite run passed 1,669 tests
+and every urllib check but terminated the unrelated temporal-memory witness at
+its 10-second subprocess bound while the machine was loaded. The same witness
+immediately passed alone in 1.7 seconds. Increase only that executable bound to
+30 seconds, still beneath the enclosing 120-second test cap, and require a new
+clean full-suite run before accepting this increment.
+
+The replacement authoritative Windows run passes 1,670 tests with 25
+platform-specific skips, zero failures, and 12,182 assertions across 183 files
+in 593.24 seconds. This supersedes both the earlier pre-`defaultArgs` result
+and the discarded load-sensitive run.
+
+The production audit reports no known vulnerabilities. A fresh isolated
+package check validates the public import, CLI, and all 79 bundled plugin files
+from the 259-entry, 1,952,415-byte tarball. Its pre-commit SHA-256 is
+`6b409d913cbfc103ea78c4fb2ea20cf92be9ae2b97e572c8d4d8afeac6c09b31`;
+reproduce it from the exact commit before recording final acceptance.
+
 ## 2026-08-25 — Bind Kysely MySQL DDL findings to immediate values and compilation
 
 **Gap and authoritative semantics.** Kysely
