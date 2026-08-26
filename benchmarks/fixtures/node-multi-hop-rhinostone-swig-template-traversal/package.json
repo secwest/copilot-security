@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-rhinostone-swig-template-traversal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "@rhinostone/swig": "2.7.0"
+  }
+}

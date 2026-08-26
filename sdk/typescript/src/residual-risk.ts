@@ -77,6 +77,7 @@ const SOURCE_EXTENSIONS = new Set([
   ".cs",
   ".csproj",
   ".dart",
+  ".django",
   ".ex",
   ".exs",
   ".erl",
@@ -87,10 +88,14 @@ const SOURCE_EXTENSIONS = new Set([
   ".groovy",
   ".gvy",
   ".h",
+  ".html",
   ".hpp",
   ".hrl",
   ".java",
+  ".j2",
   ".js",
+  ".jinja",
+  ".jinja2",
   ".jsx",
   ".kt",
   ".kts",
@@ -113,7 +118,10 @@ const SOURCE_EXTENSIONS = new Set([
   ".sql",
   ".svelte",
   ".swift",
+  ".swig",
   ".tf",
+  ".tpl",
+  ".twig",
   ".ts",
   ".tsx",
   ".vb",
@@ -688,6 +696,32 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         expression:
           /(?:\b[A-Za-z_$][\w$]*(?:\s*\.\s*default)?|\brequire\s*\(\s*["']jsonata["']\s*\))\s*\(/u,
         cweIds: ["CWE-94"],
+      },
+    ],
+    controls: [],
+  },
+  {
+    id: "node-http-rhinostone-swig-template-path-traversal",
+    language: "javascript-typescript",
+    extensions: JAVASCRIPT_EXTENSIONS,
+    activation: [/["']@rhinostone\/swig(?:-(?:django|jinja2|twig))?["']/u],
+    sources: [
+      {
+        kind: "http-request-field",
+        expression:
+          /\b(?:req|request)\.(?:body|cookies|files|headers|params|query)\b|\bctx\.(?:headers|params|query|request\.body)\b/iu,
+      },
+      {
+        kind: "next-url-search-parameter",
+        expression:
+          /\b(?:searchParams|nextUrl\.searchParams)\.(?:get|getAll)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "vulnerable-rhinostone-swig-template-path-resolution",
+        expression: /\.\s*renderFile\s*\(/u,
+        cweIds: ["CWE-22"],
       },
     ],
     controls: [],
@@ -3777,6 +3811,19 @@ const URLLIB_CREDENTIAL_LEAK_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-201", "CWE-522", "credential exposure"],
 ] as const;
 
+const RHINOSTONE_SWIG_TRAVERSAL_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["request.query", "HTTP request field", "remote partial"],
+  ["relative-module flow", "wrapper", "renderPage"],
+  ["official @rhinostone/swig", "Rhinostone Swig binding"],
+  ["filesystem loader", "loaders.fs", "loader root"],
+  ["renderFile", "renderer sink"],
+  ["dynamic include", "dynamic extends", "dynamic import", "template variable"],
+  ["@rhinostone/swig 2.7.0", "@rhinostone/swig@2.7.0"],
+  ["outside root", "resolved path", "bounded sentinel"],
+  ["2.7.2", "repaired control", "resolves outside the loader root"],
+  ["allowOutsideRoot", "rooted loader", "unconfined loader"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -3856,6 +3903,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: URLLIB_CREDENTIAL_LEAK_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: URLLIB_CREDENTIAL_LEAK_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-http-rhinostone-swig-template-path-traversal",
+    {
+      validation: RHINOSTONE_SWIG_TRAVERSAL_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: RHINOSTONE_SWIG_TRAVERSAL_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -4103,6 +4157,26 @@ interface NodeJsonataExpressionSink {
     | "vulnerable-jsonata-expression-sandbox-escape"
     | "lock-resolved-vulnerable-jsonata-expression-sandbox-escape";
   dependency: NodeRuntimeDependency;
+}
+
+interface NodeRhinostoneSwigTemplateSink {
+  sourceExpression: string;
+  kind:
+    | "vulnerable-rhinostone-swig-template-path-resolution"
+    | "lock-resolved-vulnerable-rhinostone-swig-template-path-resolution"
+    | "unconfined-rhinostone-swig-template-path-resolution"
+    | "allow-outside-root-rhinostone-swig-template-path-resolution";
+  dependency: NodeRuntimeDependency;
+  packageName:
+    | "@rhinostone/swig"
+    | "@rhinostone/swig-django"
+    | "@rhinostone/swig-jinja2"
+    | "@rhinostone/swig-twig";
+  templatePath: string;
+  templateLine: number;
+  templateTag: "extends" | "from" | "import" | "include";
+  templateVariable: string;
+  loaderRoute: "affected-rooted" | "allow-outside-root" | "unconfined";
 }
 
 interface NodeSequelizeOracleSink {
@@ -5938,6 +6012,493 @@ function nodeJsonataExpressionSink(
           ? "lock-resolved-vulnerable-jsonata-expression-sandbox-escape"
           : "vulnerable-jsonata-expression-sandbox-escape",
       dependency,
+    };
+  }
+  return undefined;
+}
+
+const NODE_RHINOSTONE_SWIG_PACKAGES = [
+  "@rhinostone/swig",
+  "@rhinostone/swig-django",
+  "@rhinostone/swig-jinja2",
+  "@rhinostone/swig-twig",
+] as const;
+
+type NodeRhinostoneSwigPackage = (typeof NODE_RHINOSTONE_SWIG_PACKAGES)[number];
+
+interface NodeRhinostoneSwigModuleBinding {
+  local: string;
+  line: number;
+  packageName: NodeRhinostoneSwigPackage;
+}
+
+interface NodeRhinostoneSwigInstanceBinding {
+  local: string;
+  line: number;
+  module: NodeRhinostoneSwigModuleBinding;
+  basepath?: string;
+  allowOutsideRoot: boolean;
+  defaultInstance: boolean;
+}
+
+function nodeRhinostoneSwigVersionIsTraversalVulnerable(
+  version: string,
+): boolean {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return (
+    major < 2 || (major === 2 && (minor < 7 || (minor === 7 && patch < 1)))
+  );
+}
+
+function nodeRhinostoneSwigStaticString(value: string): string | undefined {
+  const match = /^(["'])([^"'\r\n]*)\1$/u.exec(value.trim());
+  if (match?.[2] === undefined || match[2].includes("\\")) return undefined;
+  return match[2];
+}
+
+function nodeRhinostoneSwigStaticPath(
+  lines: readonly string[],
+  sourcePath: string,
+  expression: string,
+  line: number,
+): string | undefined {
+  const resolved =
+    resolveJavascriptExpression(lines, expression, line)?.value ?? expression;
+  const literal = nodeRhinostoneSwigStaticString(resolved);
+  if (literal !== undefined) return literal;
+  const call =
+    /^(?:(?:path|posix)\s*\.\s*)?(?:join|resolve)\s*\(([\s\S]*)\)$/u.exec(
+      resolved.trim(),
+    );
+  if (call?.[1] === undefined) return undefined;
+  const segments: string[] = [];
+  for (const argument of splitJavascriptArguments(call[1])) {
+    const value = argument.trim();
+    if (value === "__dirname") {
+      segments.push(posix.dirname(sourcePath));
+      continue;
+    }
+    if (/^process\s*\.\s*cwd\s*\(\s*\)$/u.test(value)) {
+      continue;
+    }
+    const segment = nodeRhinostoneSwigStaticString(value);
+    if (segment === undefined) return undefined;
+    segments.push(segment);
+  }
+  return segments.length === 0
+    ? undefined
+    : posix.normalize(posix.join(...segments));
+}
+
+function nodeRhinostoneSwigModuleBindings(
+  lines: readonly string[],
+): NodeRhinostoneSwigModuleBinding[] {
+  const bindings: NodeRhinostoneSwigModuleBinding[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["'](@rhinostone\/swig(?:-(?:django|jinja2|twig))?)["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["'](@rhinostone\/swig(?:-(?:django|jinja2|twig))?)["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["'](@rhinostone\/swig(?:-(?:django|jinja2|twig))?)["']\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["'](@rhinostone\/swig(?:-(?:django|jinja2|twig))?)["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (
+      receiver?.[1] !== undefined &&
+      NODE_RHINOSTONE_SWIG_PACKAGES.includes(
+        receiver[2] as NodeRhinostoneSwigPackage,
+      )
+    ) {
+      bindings.push({
+        local: receiver[1],
+        line: index + 1,
+        packageName: receiver[2] as NodeRhinostoneSwigPackage,
+      });
+    }
+  }
+  const originals = [...bindings];
+  const structural = javascriptStructuralLines(lines);
+  for (let index = 0; index < structural.length; index += 1) {
+    for (const origin of originals) {
+      if (origin.line >= index + 1) continue;
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapeRegularExpression(origin.local)}\\s*;?\\s*$`,
+        "u",
+      ).exec(structural[index] ?? "");
+      if (alias?.[1] !== undefined) {
+        bindings.push({ ...origin, local: alias[1], line: index + 1 });
+      }
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.local === binding.local &&
+          candidate.line === binding.line &&
+          candidate.packageName === binding.packageName,
+      ) === index,
+  );
+}
+
+function nodeRhinostoneSwigModuleUsable(
+  lines: readonly string[],
+  binding: NodeRhinostoneSwigModuleBinding,
+  useLine: number,
+): boolean {
+  if (
+    binding.line >= useLine ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      useLine + 1,
+    )
+  ) {
+    return false;
+  }
+  const local = escapeRegularExpression(binding.local);
+  const replace = new RegExp(
+    `\\b${local}\\s*\\.\\s*(?:Swig|Django|Jinja2|Twig|loaders|renderFile|setDefaults)\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+    "u",
+  );
+  return !javascriptStructuralLines(lines)
+    .slice(binding.line, Math.max(binding.line, useLine))
+    .some((candidate) => replace.test(candidate));
+}
+
+function nodeRhinostoneSwigConstructorName(
+  packageName: NodeRhinostoneSwigPackage,
+): "Django" | "Jinja2" | "Swig" | "Twig" {
+  if (packageName === "@rhinostone/swig-django") return "Django";
+  if (packageName === "@rhinostone/swig-jinja2") return "Jinja2";
+  if (packageName === "@rhinostone/swig-twig") return "Twig";
+  return "Swig";
+}
+
+function nodeRhinostoneSwigLoaderConfiguration(
+  lines: readonly string[],
+  sourcePath: string,
+  line: number,
+  module: NodeRhinostoneSwigModuleBinding,
+  optionsExpression: string,
+): { basepath?: string; allowOutsideRoot: boolean } | undefined {
+  const resolvedOptions = resolveJavascriptExpression(
+    lines,
+    optionsExpression,
+    line,
+  );
+  if (resolvedOptions === undefined) return undefined;
+  const loaderExpression = javascriptObjectPropertyValue(
+    resolvedOptions.value,
+    "loader",
+  );
+  if (loaderExpression === undefined) {
+    return { allowOutsideRoot: false };
+  }
+  const resolvedLoader = resolveJavascriptExpression(
+    lines,
+    loaderExpression,
+    resolvedOptions.line,
+  );
+  if (resolvedLoader === undefined) return undefined;
+  const local = escapeRegularExpression(module.local);
+  const callee = new RegExp(
+    `\\b${local}\\s*\\.\\s*loaders\\s*\\.\\s*fs\\s*\\(`,
+    "u",
+  );
+  const arguments_ = javascriptCallArgumentsAtLine(
+    resolvedLoader.value.split(/\r?\n/u),
+    1,
+    callee,
+  );
+  if (arguments_ === undefined) return undefined;
+  const basepathExpression = arguments_[0]?.trim();
+  const basepath =
+    basepathExpression === undefined || basepathExpression === ""
+      ? undefined
+      : nodeRhinostoneSwigStaticPath(
+          lines,
+          sourcePath,
+          basepathExpression,
+          line,
+        );
+  if (
+    basepathExpression !== undefined &&
+    basepathExpression !== "" &&
+    basepath === undefined
+  ) {
+    return undefined;
+  }
+  const allowOutsideRoot = arguments_[2]?.trim() === "true";
+  return { basepath: basepath === "" ? undefined : basepath, allowOutsideRoot };
+}
+
+function nodeRhinostoneSwigInstanceBindings(
+  sourcePath: string,
+  lines: readonly string[],
+  modules: readonly NodeRhinostoneSwigModuleBinding[],
+): NodeRhinostoneSwigInstanceBinding[] {
+  const bindings: NodeRhinostoneSwigInstanceBinding[] = modules.map(
+    (module) => ({
+      local: module.local,
+      line: module.line,
+      module,
+      allowOutsideRoot: false,
+      defaultInstance: true,
+    }),
+  );
+  const structural = javascriptStructuralLines(lines);
+  for (let index = 0; index < structural.length; index += 1) {
+    for (const module of modules) {
+      if (!nodeRhinostoneSwigModuleUsable(lines, module, index + 1)) continue;
+      const constructor = nodeRhinostoneSwigConstructorName(module.packageName);
+      const callee = new RegExp(
+        `\\bnew\\s+${escapeRegularExpression(module.local)}\\s*\\.\\s*${constructor}\\s*\\(`,
+        "u",
+      );
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        index + 1,
+        callee,
+      );
+      if (arguments_ === undefined) continue;
+      const window = structural
+        .slice(Math.max(0, index - 1), index + 1)
+        .join("\n");
+      const declaration = new RegExp(
+        `(?:^|\\n|[;{])\\s*(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)(?:\\s*:[^=;]+)?\\s*=\\s*new\\s+${escapeRegularExpression(module.local)}\\s*\\.\\s*${constructor}\\s*\\(`,
+        "u",
+      ).exec(window);
+      if (declaration?.[1] === undefined) continue;
+      const configuration = nodeRhinostoneSwigLoaderConfiguration(
+        lines,
+        sourcePath,
+        index + 1,
+        module,
+        arguments_[0] ?? "{}",
+      );
+      if (configuration === undefined) continue;
+      bindings.push({
+        local: declaration[1],
+        line: index + 1,
+        module,
+        defaultInstance: false,
+        ...configuration,
+      });
+    }
+  }
+  for (let index = 0; index < structural.length; index += 1) {
+    for (const module of modules) {
+      if (!nodeRhinostoneSwigModuleUsable(lines, module, index + 1)) continue;
+      const callee = new RegExp(
+        `\\b${escapeRegularExpression(module.local)}\\s*\\.\\s*setDefaults\\s*\\(`,
+        "u",
+      );
+      const arguments_ = javascriptCallArgumentsAtLine(
+        lines,
+        index + 1,
+        callee,
+      );
+      if (arguments_ === undefined) continue;
+      const configuration = nodeRhinostoneSwigLoaderConfiguration(
+        lines,
+        sourcePath,
+        index + 1,
+        module,
+        arguments_[0] ?? "{}",
+      );
+      if (configuration === undefined) continue;
+      bindings.push({
+        local: module.local,
+        line: index + 1,
+        module,
+        defaultInstance: true,
+        ...configuration,
+      });
+    }
+  }
+  const originals = [...bindings];
+  for (let index = 0; index < structural.length; index += 1) {
+    for (const origin of originals) {
+      if (
+        origin.line >= index + 1 ||
+        !nodeRhinostoneSwigInstanceUsable(lines, origin, index + 1)
+      ) {
+        continue;
+      }
+      const alias = new RegExp(
+        `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${escapeRegularExpression(origin.local)}\\s*;?\\s*$`,
+        "u",
+      ).exec(structural[index] ?? "");
+      if (alias?.[1] !== undefined) {
+        bindings.push({ ...origin, local: alias[1], line: index + 1 });
+      }
+    }
+  }
+  return bindings;
+}
+
+function nodeRhinostoneSwigInstanceUsable(
+  lines: readonly string[],
+  binding: NodeRhinostoneSwigInstanceBinding,
+  useLine: number,
+): boolean {
+  if (
+    binding.line >= useLine ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      useLine + 1,
+    ) ||
+    !nodeRhinostoneSwigModuleUsable(lines, binding.module, useLine)
+  ) {
+    return false;
+  }
+  const local = escapeRegularExpression(binding.local);
+  const replace = new RegExp(
+    `\\b${local}\\s*\\.\\s*renderFile\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+    "u",
+  );
+  const intervening = javascriptStructuralLines(lines).slice(
+    binding.line,
+    Math.max(binding.line, useLine),
+  );
+  if (intervening.some((candidate) => replace.test(candidate))) return false;
+  if (binding.defaultInstance) {
+    const module = escapeRegularExpression(binding.module.local);
+    const reconfigured = new RegExp(
+      `\\b${module}\\s*\\.\\s*setDefaults\\s*\\(`,
+      "u",
+    );
+    if (intervening.some((candidate) => reconfigured.test(candidate))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function nodeRhinostoneSwigTemplatePath(
+  dependency: NodeRuntimeDependency,
+  basepath: string | undefined,
+  filename: string,
+): string | undefined {
+  const root = posix.dirname(dependency.manifestPath);
+  const candidate = posix.normalize(
+    posix.join(root === "." ? "" : root, basepath ?? "", filename),
+  );
+  return isContainedRelativePath(candidate) ? candidate : undefined;
+}
+
+function nodeRhinostoneSwigDynamicTemplateVariable(
+  template: SourceFileSnapshot,
+):
+  | {
+      line: number;
+      tag: NodeRhinostoneSwigTemplateSink["templateTag"];
+      variable: string;
+    }
+  | undefined {
+  const expression =
+    /\{%\s*(extends|from|import|include)\s+([A-Za-z_$][\w$]*)\b[^%]*%\}/gu;
+  const match = expression.exec(template.text);
+  if (match?.[1] === undefined || match[2] === undefined) return undefined;
+  return {
+    line: 1 + (template.text.slice(0, match.index).match(/\n/gu)?.length ?? 0),
+    tag: match[1] as NodeRhinostoneSwigTemplateSink["templateTag"],
+    variable: match[2],
+  };
+}
+
+function nodeRhinostoneSwigTemplateSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): NodeRhinostoneSwigTemplateSink | undefined {
+  if (javascriptTestOrExamplePath(path)) return undefined;
+  const modules = nodeRhinostoneSwigModuleBindings(lines);
+  const instances = nodeRhinostoneSwigInstanceBindings(path, lines, modules);
+  for (const instance of instances) {
+    if (!nodeRhinostoneSwigInstanceUsable(lines, instance, line)) continue;
+    const dependency = nodeRuntimeDependency(
+      files,
+      path,
+      instance.module.packageName,
+    );
+    if (dependency === undefined) continue;
+    const affected = nodeRhinostoneSwigVersionIsTraversalVulnerable(
+      dependency.version,
+    );
+    const loaderRoute: NodeRhinostoneSwigTemplateSink["loaderRoute"] =
+      instance.basepath === undefined
+        ? "unconfined"
+        : instance.allowOutsideRoot
+          ? "allow-outside-root"
+          : "affected-rooted";
+    if (!affected && loaderRoute === "affected-rooted") continue;
+    const callee = new RegExp(
+      `\\b${escapeRegularExpression(instance.local)}\\s*\\.\\s*renderFile\\s*\\(`,
+      "u",
+    );
+    const arguments_ = javascriptCallArgumentsAtLine(lines, line, callee);
+    const filenameExpression = arguments_?.[0] ?? "";
+    const filename = nodeRhinostoneSwigStaticString(
+      resolveJavascriptExpression(lines, filenameExpression, line)?.value ??
+        filenameExpression,
+    );
+    if (filename === undefined) continue;
+    const templatePath = nodeRhinostoneSwigTemplatePath(
+      dependency,
+      instance.basepath,
+      filename,
+    );
+    if (templatePath === undefined) continue;
+    const template = files.find((file) => file.path === templatePath);
+    if (template === undefined) continue;
+    const dynamic = nodeRhinostoneSwigDynamicTemplateVariable(template);
+    if (dynamic === undefined) continue;
+    const locals = resolveJavascriptExpression(
+      lines,
+      arguments_?.[1] ?? "",
+      line,
+    );
+    if (locals === undefined) continue;
+    const sourceExpression = javascriptObjectEntries(locals).find(
+      (entry) => entry.key === dynamic.variable,
+    )?.value;
+    if (sourceExpression === undefined) continue;
+    const kind: NodeRhinostoneSwigTemplateSink["kind"] =
+      loaderRoute === "unconfined"
+        ? "unconfined-rhinostone-swig-template-path-resolution"
+        : loaderRoute === "allow-outside-root"
+          ? "allow-outside-root-rhinostone-swig-template-path-resolution"
+          : dependency.proof === "npm-lockfile"
+            ? "lock-resolved-vulnerable-rhinostone-swig-template-path-resolution"
+            : "vulnerable-rhinostone-swig-template-path-resolution";
+    return {
+      sourceExpression,
+      kind,
+      dependency,
+      packageName: instance.module.packageName,
+      templatePath,
+      templateLine: dynamic.line,
+      templateTag: dynamic.tag,
+      templateVariable: dynamic.variable,
+      loaderRoute,
     };
   }
   return undefined;
@@ -15746,6 +16307,7 @@ function frameworkDataflowRecords(
     }
     if (
       (model.id === "node-http-jsonata-expression-rce" ||
+        model.id === "node-http-rhinostone-swig-template-path-traversal" ||
         model.id === "node-http-sequelize-oracle-sql-injection" ||
         model.id === "node-http-liquidjs-template-rce" ||
         model.id === "node-http-prompty-nunjucks-template-rce" ||
@@ -15818,6 +16380,8 @@ function frameworkDataflowRecords(
                   model.id === "node-http-js-toml-prototype-pollution" ||
                   model.id === "node-http-jsonpath-plus-code-injection" ||
                   model.id === "node-http-jsonata-expression-rce" ||
+                  model.id ===
+                    "node-http-rhinostone-swig-template-path-traversal" ||
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
                   model.id === "node-http-kysely-mysql-ddl-sql-injection" ||
                   model.id ===
@@ -15932,6 +16496,10 @@ function frameworkDataflowRecords(
       const nodeJsonataExpression =
         model.id === "node-http-jsonata-expression-rce"
           ? nodeJsonataExpressionSink(files, path, lines, sink.line)
+          : undefined;
+      const nodeRhinostoneSwigTemplate =
+        model.id === "node-http-rhinostone-swig-template-path-traversal"
+          ? nodeRhinostoneSwigTemplateSink(files, path, lines, sink.line)
           : undefined;
       const nodeSequelizeOracle =
         model.id === "node-http-sequelize-oracle-sql-injection"
@@ -16209,6 +16777,12 @@ function frameworkDataflowRecords(
       if (
         model.id === "node-http-jsonata-expression-rce" &&
         nodeJsonataExpression === undefined
+      ) {
+        continue;
+      }
+      if (
+        model.id === "node-http-rhinostone-swig-template-path-traversal" &&
+        nodeRhinostoneSwigTemplate === undefined
       ) {
         continue;
       }
@@ -16555,6 +17129,7 @@ function frameworkDataflowRecords(
         nodeJsToml?.sourceExpression ??
         nodeJsonPathPlus?.sourceExpression ??
         nodeJsonataExpression?.sourceExpression ??
+        nodeRhinostoneSwigTemplate?.sourceExpression ??
         nodeSequelizeOracle?.sourceExpression ??
         nodeKyselyMysqlDdl?.sourceExpression ??
         nodeUrllibCredential?.sourceExpression ??
@@ -16953,6 +17528,7 @@ function frameworkDataflowRecords(
         nodeFastifyStatic?.kind ??
         nodeVm2Sandbox?.kind ??
         nodeJsonataExpression?.kind ??
+        nodeRhinostoneSwigTemplate?.kind ??
         nodeSequelizeOracle?.kind ??
         nodeKyselyMysqlDdl?.kind ??
         nodeUrllibCredential?.kind ??
@@ -17075,6 +17651,22 @@ function frameworkDataflowRecords(
                     path: nodeJsonataExpression.dependency.manifestPath,
                     line: nodeJsonataExpression.dependency.line,
                     symbol: `jsonata@${nodeJsonataExpression.dependency.version}:${nodeJsonataExpression.dependency.proof}:expression-sandbox-escape`,
+                  },
+                ]),
+            ...(nodeRhinostoneSwigTemplate === undefined
+              ? []
+              : [
+                  {
+                    kind: "rhinostone-swig-runtime-dependency",
+                    path: nodeRhinostoneSwigTemplate.dependency.manifestPath,
+                    line: nodeRhinostoneSwigTemplate.dependency.line,
+                    symbol: `${nodeRhinostoneSwigTemplate.packageName}@${nodeRhinostoneSwigTemplate.dependency.version}:${nodeRhinostoneSwigTemplate.dependency.proof}:${nodeRhinostoneSwigTemplate.loaderRoute}`,
+                  },
+                  {
+                    kind: "rhinostone-swig-dynamic-template-path",
+                    path: nodeRhinostoneSwigTemplate.templatePath,
+                    line: nodeRhinostoneSwigTemplate.templateLine,
+                    symbol: `${nodeRhinostoneSwigTemplate.templateTag}:${nodeRhinostoneSwigTemplate.templateVariable}`,
                   },
                 ]),
             ...(nodeSequelizeOracle === undefined
@@ -24610,6 +25202,7 @@ function javascriptFrameworkWrapperSummaries(
       }
       if (
         (model.id === "node-http-jsonata-expression-rce" ||
+          model.id === "node-http-rhinostone-swig-template-path-traversal" ||
           model.id === "node-http-sequelize-oracle-sql-injection" ||
           model.id === "node-http-liquidjs-template-rce" ||
           model.id === "node-http-prompty-nunjucks-template-rce" ||
@@ -24658,6 +25251,8 @@ function javascriptFrameworkWrapperSummaries(
                 model.id === "node-http-js-toml-prototype-pollution" ||
                   model.id === "node-http-jsonpath-plus-code-injection" ||
                   model.id === "node-http-jsonata-expression-rce" ||
+                  model.id ===
+                    "node-http-rhinostone-swig-template-path-traversal" ||
                   model.id === "node-http-sequelize-oracle-sql-injection" ||
                   model.id === "node-http-kysely-mysql-ddl-sql-injection" ||
                   model.id ===
@@ -24741,6 +25336,15 @@ function javascriptFrameworkWrapperSummaries(
           const nodeJsonataExpression =
             model.id === "node-http-jsonata-expression-rce"
               ? nodeJsonataExpressionSink(
+                  files,
+                  file.path,
+                  file.lines,
+                  sink.line,
+                )
+              : undefined;
+          const nodeRhinostoneSwigTemplate =
+            model.id === "node-http-rhinostone-swig-template-path-traversal"
+              ? nodeRhinostoneSwigTemplateSink(
                   files,
                   file.path,
                   file.lines,
@@ -24987,6 +25591,12 @@ function javascriptFrameworkWrapperSummaries(
             continue;
           }
           if (
+            model.id === "node-http-rhinostone-swig-template-path-traversal" &&
+            nodeRhinostoneSwigTemplate === undefined
+          ) {
+            continue;
+          }
+          if (
             model.id === "node-http-sequelize-oracle-sql-injection" &&
             nodeSequelizeOracle === undefined
           ) {
@@ -25184,6 +25794,7 @@ function javascriptFrameworkWrapperSummaries(
             nodeJsToml?.sourceExpression ??
             nodeJsonPathPlus?.sourceExpression ??
             nodeJsonataExpression?.sourceExpression ??
+            nodeRhinostoneSwigTemplate?.sourceExpression ??
             nodeSequelizeOracle?.sourceExpression ??
             nodeKyselyMysqlDdl?.sourceExpression ??
             nodeUrllibCredential?.sourceExpression ??
@@ -25407,6 +26018,9 @@ function javascriptFrameworkWrapperSummaries(
                       kind: nodeJsonataExpression.kind,
                       line: nodeJsonataExpression.sinkLine,
                     }),
+                ...(nodeRhinostoneSwigTemplate === undefined
+                  ? {}
+                  : { kind: nodeRhinostoneSwigTemplate.kind }),
                 ...(nodeSequelizeOracle === undefined
                   ? {}
                   : { kind: nodeSequelizeOracle.kind }),
@@ -25526,6 +26140,7 @@ function javascriptFrameworkWrapperSummaries(
               controls: wrapperControls.slice(0, 8),
               ...(nodeVm2Sandbox === undefined &&
               nodeJsonataExpression === undefined &&
+              nodeRhinostoneSwigTemplate === undefined &&
               nodeSequelizeOracle === undefined &&
               nodeKyselyMysqlDdl === undefined &&
               nodeUrllibCredential === undefined &&
@@ -25615,6 +26230,23 @@ function javascriptFrameworkWrapperSummaries(
                                 .manifestPath,
                               line: nodeJsonataExpression.dependency.line,
                               symbol: `jsonata@${nodeJsonataExpression.dependency.version}:${nodeJsonataExpression.dependency.proof}:expression-sandbox-escape`,
+                            },
+                          ]),
+                      ...(nodeRhinostoneSwigTemplate === undefined
+                        ? []
+                        : [
+                            {
+                              kind: "rhinostone-swig-runtime-dependency",
+                              path: nodeRhinostoneSwigTemplate.dependency
+                                .manifestPath,
+                              line: nodeRhinostoneSwigTemplate.dependency.line,
+                              symbol: `${nodeRhinostoneSwigTemplate.packageName}@${nodeRhinostoneSwigTemplate.dependency.version}:${nodeRhinostoneSwigTemplate.dependency.proof}:${nodeRhinostoneSwigTemplate.loaderRoute}`,
+                            },
+                            {
+                              kind: "rhinostone-swig-dynamic-template-path",
+                              path: nodeRhinostoneSwigTemplate.templatePath,
+                              line: nodeRhinostoneSwigTemplate.templateLine,
+                              symbol: `${nodeRhinostoneSwigTemplate.templateTag}:${nodeRhinostoneSwigTemplate.templateVariable}`,
                             },
                           ]),
                       ...(nodeSequelizeOracle === undefined

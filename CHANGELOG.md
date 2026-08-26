@@ -6,6 +6,48 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-http-rhinostone-swig-template-path-traversal`, an exact
+  provenance-, renderer-, loader-configuration-, template-, and locals-flow
+  aware CWE-22 model for
+  [GHSA-2mf3-mr2r-r4vf](https://github.com/gina-io/swig/security/advisories/GHSA-2mf3-mr2r-r4vf).
+  It follows HTTP data across relative wrappers into the exact unquoted
+  variable used by `include`, `extends`, `import`, or `from` in the referenced
+  trusted template, and requires that template to be rendered through an
+  official Rhinostone Swig family `renderFile` surface with exact production
+  dependency proof.
+- Modeled the loader boundary instead of treating the repaired package version
+  as sufficient evidence. A rooted loader remains eligible below 2.7.1; a
+  loader without a configured root remains reviewable on repaired releases
+  because the containment check has no root to enforce; and the documented
+  `allowOutsideRoot` third argument remains reviewable because it explicitly
+  restores outside-root resolution. A rooted 2.7.1+ default is negative. The
+  model covers the Swig, Django, Jinja2, and Twig frontends; constructor and
+  default instances; default, namespace, TypeScript import-equals, CommonJS,
+  receiver-alias, and engine-alias forms; same-file and multi-hop flows; and
+  template discovery for HTML and Twig files.
+- Added source-identical `@rhinostone/swig` 2.7.0/2.7.2 fixtures, a strict
+  specialized manifest, canonical corpus registration, model-specific field
+  evidence, and review guidance. The bounded Windows witness reads only a
+  fixture sentinel immediately outside the configured template root: 2.7.0
+  renders it and 2.7.2 rejects the identical target. Literal or mismatched
+  template targets, trusted locals, repaired rooted defaults, wrong or
+  development-only packages, unresolved ranges, local lookalikes,
+  reassignment, member replacement, and tests/examples remain negative.
+  Current authenticated searches find no advisory or package-specific rule in
+  `github/codeql` or `semgrep/semgrep-rules`. The canonical corpus advances to
+  120 exploit/control pairs, 240 cases, and 720 repeated scans.
+- Final Swig acceptance passes 1,678 native Windows tests with 25
+  platform-specific skips, zero failures, and 12,216 assertions across 184
+  files in 583.64 seconds. The post-hardening Ubuntu/WSL gate passes 26 focused
+  tests and 1,919 assertions; its real-package witnesses reproduce the bounded
+  outside-root read on 2.7.0 and the repaired rejection on 2.7.2. Formatting,
+  generated-model/type consistency, and the production dependency audit are
+  clean. A fresh 259-entry, 1,961,337-byte package at SHA-256
+  `edd82139ae04e01c2568d3f04a3a4fc8261d1da8b90c771367bb3a3057baaa18`
+  passes structural inspection and two isolated installed-runtime checks of
+  the public SDK import, CLI, and all 79 bundled plugin files. Exact-commit
+  self-scan and reproducible-package evidence follows after the implementation
+  commit.
 - Added `node-http-urllib-cross-origin-credential-leak`, an exact
   provenance-, API-, credential-, and redirect-lifecycle-aware CWE-201/CWE-522
   model for

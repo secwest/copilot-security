@@ -2,6 +2,70 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-25 — Bind Rhinostone Swig traversal to loader root and template locals
+
+**Gap and primary evidence.** The reviewed
+[`GHSA-2mf3-mr2r-r4vf`](https://github.com/gina-io/swig/security/advisories/GHSA-2mf3-mr2r-r4vf)
+covers the maintained Rhinostone fork's Swig, shared core, Django, Jinja2, and
+Twig packages below 2.7.1. A trusted template can use a runtime local as its
+`include`, `extends`, or `import` target; the affected filesystem loader passed
+that value through `path.resolve` without confining it to the configured
+`basepath`. Upstream commit `381bdc305e0b10e45368d56324328b9b4f7017fc`
+adds a normalized root-prefix check and an explicit third-argument
+`allowOutsideRoot` opt-out. Release 2.7.2 retains the repair while correcting
+2.7.1's relative-basepath regression. Current authenticated searches of
+`github/codeql` and `semgrep/semgrep-rules` find neither the GHSA nor the
+Rhinostone package names.
+
+**Configuration-sensitive decision.** Add
+`node-http-rhinostone-swig-template-path-traversal`, but do not reduce it to an
+affected-version alert. Require an official family module, a configured
+constructor or default instance, `renderFile`, a statically resolved template,
+an unquoted dynamic path variable in that template, remote data mapped to the
+same locals key, and exact production provenance. A rooted loader below 2.7.1
+is the advisory route. A repaired loader with no configured root still lacks a
+containment boundary, so it remains a separate unconfined route. A repaired
+loader whose third `loaders.fs` argument is literal `true` remains a separate
+intentional-opt-out route. Only a repaired release with a nonempty root and no
+opt-out suppresses the finding. This distinction prevents both a version-only
+false positive and a patched-version false negative.
+
+**Identity and false-positive boundary.** Recognize stable default and
+namespace imports, TypeScript import-equals, CommonJS receivers, one-hop module
+aliases, official `Swig`/`Django`/`Jinja2`/`Twig` constructors, default
+`setDefaults` instances, and engine aliases. Reject fixed template literals,
+locals whose key does not match the dynamic tag variable, trusted values,
+compile-only code, wrong and development-only packages, lockfile-free ranges,
+local lookalikes, repaired rooted defaults, reassigned modules or instances,
+replaced loader/render members, and tests/examples. Preserve the template path
+and tag as a first-class propagator beside exact package provenance so review
+can reconstruct the boundary without guessing from JavaScript alone.
+
+**Executable pair and acceptance evidence.** The paired four-file applications
+are source-identical except for exact `@rhinostone/swig` 2.7.0 versus 2.7.2.
+An Express query value crosses two exported relative wrappers into the
+`partial` local of `src/views/page.html`, whose dynamic include selects only a
+bounded fixture sentinel at `src/secret.txt`. On Windows, 2.7.0 renders the
+sentinel and 2.7.2 throws `resolves outside the loader root`; neither witness
+opens a listener, invokes a shell, or writes a file. The scanner emits exactly
+one cross-file multi-hop row for 2.7.0, with the request source, renderer sink,
+package proof, and template-tag proof, and emits none for 2.7.2. The
+post-hardening focused gate passes 26 tests and 1,919 assertions on both
+Windows and Ubuntu/WSL. Real-package witnesses on both platforms reproduce the
+bounded 2.7.0 read and the 2.7.2 rejection. The strict pair advances the
+canonical corpus to 120 pairs, 240 cases, and 720 repeated scans.
+
+The authoritative Windows regression passes 1,678 tests with 25
+platform-specific skips, zero failures, and 12,216 assertions across 184 files
+in 583.64 seconds. Formatting, generated-model/type consistency, and the
+production dependency audit are clean. A fresh pre-commit package contains
+259 entries and 1,961,337 bytes at SHA-256
+`edd82139ae04e01c2568d3f04a3a4fc8261d1da8b90c771367bb3a3057baaa18`.
+Both strict package inspection and the independent installed-package smoke
+validate the public SDK import, CLI, and all 79 bundled plugin files. Exact
+tracked-commit inventory, reproducible-package, and hosted-workflow evidence
+remains required before final acceptance.
+
 ## 2026-08-25 — Bind urllib credential exposure to cross-origin redirect lifecycle
 
 **Gap and authoritative semantics.** urllib

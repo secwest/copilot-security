@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-multi-hop-rhinostone-swig-template-traversal",
+      "description": "An Express query-string partial crosses three relative-import boundaries into a trusted Swig template's dynamic include under an exact vulnerable @rhinostone/swig 2.7.0 runtime and an explicitly rooted filesystem loader.",
+      "fixture": "fixtures/node-multi-hop-rhinostone-swig-template-traversal",
+      "findingsPaths": [
+        "node-multi-hop-rhinostone-swig-template-traversal/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-vulnerable-rhinostone-swig-template-path-traversal",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/renderer.js",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-multi-hop-repaired-rhinostone-swig-template-root",
+      "description": "The source-identical control changes only @rhinostone/swig to 2.7.2, which retains the 2.7.1 loader-root confinement repair without its relative-basepath regression.",
+      "fixture": "fixtures/node-multi-hop-repaired-rhinostone-swig-template-root",
+      "findingsPaths": [
+        "node-multi-hop-repaired-rhinostone-swig-template-root/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

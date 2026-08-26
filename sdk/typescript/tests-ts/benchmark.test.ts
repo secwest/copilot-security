@@ -408,6 +408,10 @@ describe("effectiveness benchmark", () => {
         "cloudformation-specific-admin-role",
       ],
       [
+        "node-multi-hop-rhinostone-swig-template-traversal",
+        "node-multi-hop-repaired-rhinostone-swig-template-root",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

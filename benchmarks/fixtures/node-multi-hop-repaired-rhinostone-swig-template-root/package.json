@@ -1,0 +1,12 @@
+{
+  "name": "node-multi-hop-repaired-rhinostone-swig-template-root",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  },
+  "dependencies": {
+    "@rhinostone/swig": "2.7.2"
+  }
+}

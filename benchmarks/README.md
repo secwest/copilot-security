@@ -607,6 +607,25 @@ that implementation replaces zero with its default ten. The shared witness
 uses two ephemeral loopback listeners and an inert bounded token: 4.9.0 sends
 the token to the second origin, while 4.9.1 reaches it without the header.
 
+`node-rhinostone-swig-template-traversal-manifest.json` measures the complete
+application boundary behind
+[GHSA-2mf3-mr2r-r4vf](https://github.com/advisories/GHSA-2mf3-mr2r-r4vf).
+The positive carries an Express query value through three relative-import
+wrappers into the `partial` local of a trusted template. Its dynamic `include`
+is rendered by an official `@rhinostone/swig` 2.7.0 instance whose filesystem
+loader has an explicit root. The source-identical control changes only the
+runtime to 2.7.2, which rejects the same outside-root target. Regressions cover
+the Swig, Django, Jinja2, and Twig frontends; default, namespace, TypeScript
+import-equals, CommonJS, receiver-alias, engine-alias, constructor, and default
+instance forms; `include`, `extends`, `import`, and `from`; exact production
+proof; the affected rooted route; patched but unconfined loaders; and the
+documented `allowOutsideRoot` opt-out. Literal or mismatched template targets,
+trusted locals, repaired rooted defaults, compile-only flows, wrong or
+development-only packages, unresolved versions, local lookalikes,
+reassignment, member replacement, and tests/examples remain negative. The
+bounded witness reads only the fixture-local sentinel immediately outside the
+template root: 2.7.0 renders it, while 2.7.2 throws before reading it.
+
 `node-sequelize-oracle-sql-injection-manifest.json` measures the conjunction
 that dependency and generic raw-SQL scanners cannot establish for
 [GHSA-v8fg-2rw7-q452 / CVE-2026-69240](https://github.com/advisories/GHSA-v8fg-2rw7-q452):

@@ -2114,8 +2114,16 @@ then holds the HTTP source, three wrappers, `MysqlDialect`, create-index DDL,
 remote `where` value, and compilation constant while changing only 0.28.13 to
 0.28.14. The affected compiler doubles quotes without first escaping the
 MySQL backslash; the repaired compiler escapes the backslash first. Its
-compile-only witness never opens a database. Each of the 236 cases in 118
-exploit/control pairs is scanned three times, producing 708 scans
+compile-only witness never opens a database. The urllib pair carries an
+inbound standard credential through the same wrapper depth into a redirected
+request: 4.9.0 forwards it across origins, while 4.9.1 follows the redirect
+without that credential. The Rhinostone Swig pair then maps a remote local to
+a trusted template's dynamic `include` under a rooted filesystem loader:
+2.7.0 renders a bounded sentinel just outside the root, while source-identical
+2.7.2 rejects the traversal. The model also retains patched-but-unconfined
+loaders and the explicit `allowOutsideRoot` opt-out instead of treating a
+version number as proof of containment. Each of the 240 cases in 120
+exploit/control pairs is scanned three times, producing 720 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses
