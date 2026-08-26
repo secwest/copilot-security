@@ -218,9 +218,11 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
     expect(dockerAffectedCompose.replace("3.7.6", "3.7.7")).toBe(
       dockerRepairedCompose,
     );
-    expect(
-      await readFile(join(dockerAffectedRoot, "src/backend.mjs"), "utf8"),
-    ).toBe(await readFile(join(dockerRepairedRoot, "src/backend.mjs"), "utf8"));
+    for (const path of ["src/backend.mjs", "src/witness.mjs"]) {
+      expect(await readFile(join(dockerAffectedRoot, path), "utf8")).toBe(
+        await readFile(join(dockerRepairedRoot, path), "utf8"),
+      );
+    }
 
     const affected = records(await buildResidualRiskInventory(affectedRoot));
     expect(affected).toHaveLength(1);
@@ -645,7 +647,7 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
     ).toHaveLength(0);
   });
 
-  test("requires a real loopback differential and bounded impact", () => {
+  test("requires a real loopback differential and bounded impact", async () => {
     const prompt = scanQualityGatePrompt("");
     expect(prompt).toContain("traefik-replacepathregex-auth-bypass");
     expect(prompt).toContain("GHSA-cxjq-mrr5-89rv");
@@ -656,5 +658,28 @@ describe("Traefik ReplacePathRegex authorization-bypass model", () => {
     expect(prompt).toContain("loopback-only processes");
     expect(prompt).toContain("Report CWE-22");
     expect(prompt).toContain("never use a real credential");
+    const dockerFixture = join(
+      benchmarkRoot,
+      "fixtures",
+      "traefik-docker-label-replacepathregex-auth-bypass",
+    );
+    const dockerWitness = await readFile(
+      join(dockerFixture, "src/witness.mjs"),
+      "utf8",
+    );
+    const dockerFixtureCompose = await readFile(
+      join(dockerFixture, "compose.yml"),
+      "utf8",
+    );
+    expect(dockerWitness).toContain("randomBytes(4)");
+    expect(dockerWitness).toContain("TRAEFIK_BENCHMARK_PORT");
+    expect(dockerWitness).toContain(
+      '["down", "--volumes", "--remove-orphans"]',
+    );
+    expect(dockerWitness).toContain("finally");
+    expect(dockerFixtureCompose).toContain(
+      "127.0.0.1:${TRAEFIK_BENCHMARK_PORT:-18080}:8080",
+    );
+    expect(dockerFixtureCompose).not.toContain("0.0.0.0:");
   });
 });

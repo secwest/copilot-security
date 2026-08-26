@@ -14,6 +14,15 @@ All notable scanner, application, benchmark, and operational changes are recorde
   port. Its strict specialized and canonical expectations require one
   `compose.yml:29` high/CWE-22 finding on the affected fixture and none on the
   repaired fixture. The corpus advances to 131 pairs, 262 cases, and 786 scans.
+  A source-identical real-Compose witness now selects a unique project and
+  ephemeral loopback port, verifies the exact in-container release, waits for
+  both the auth boundary and backend, records bounded backend paths, and tears
+  down containers, networks, and volumes even after failure. WSL Docker 29.1.3
+  reproduces the 3.7.6 raw `/../cps-benchmark-admin` to normalized
+  `/cps-benchmark-admin` marker hit with HTTP 200; 3.7.7 returns HTTP 400 with
+  no crafted backend hit. Both retain direct HTTP 401 and leave no project
+  resources. Fixture-specific router, middleware, service, and route names
+  avoid collisions with ordinary daemon-wide Docker-provider discovery.
 - Corrected the Traefik v3 lower bound to the official 3.6.0 introduction.
   Releases 3.0.0 through 3.5.x now remain negative instead of inheriting the
   affected 3.6 branch, and the focused release matrix and reviewer contract

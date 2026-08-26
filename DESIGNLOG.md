@@ -67,8 +67,23 @@ service and entry point, inline BasicAuth, a concrete port, and the official
 Compose escape for `${1}`. The specialized and canonical manifests require one
 high/CWE-22 record at `compose.yml:29` and an empty repaired control, under the
 same three-run evidence gates. Canonical registration advances the corpus to
-131 pairs, 262 cases, and 786 scans. The expanded Windows lane passes 29 tests
-and 2,125 assertions, as does the native Ubuntu/WSL lane.
+131 pairs, 262 cases, and 786 scans. With witness invariants, the expanded
+Windows lane passes 29 tests and 2,132 assertions, as does the native
+Ubuntu/WSL lane.
+
+The source-identical witness runs each pair under a random Compose project and
+ephemeral loopback port, verifies the actual in-container version, waits for a
+normal backend route as well as direct auth denial, and inspects bounded backend
+logs for the crafted path. A `finally` teardown removes containers, the project
+network, and volumes even when validation fails; shared image cache layers are
+not destructively removed. On WSL Docker 29.1.3 and Compose 2.40.3, Traefik
+3.7.6 denies the direct namespaced admin route with 401, forwards the crafted
+request as raw `/../cps-benchmark-admin`, reaches normalized
+`/cps-benchmark-admin`, and returns the inert marker with 200. Traefik 3.7.7
+keeps direct 401, rejects the crafted path with 400, and records no crafted
+backend hit. Fixture-specific router, middleware, service, and route names
+reduce daemon-wide Docker-provider collision risk. Final Docker queries find no
+matching project container, network, or volume.
 
 Mount writability is deliberately not a gate: the flaw is in request-path
 normalization, not provider-file mutation. Both short and long Compose bind

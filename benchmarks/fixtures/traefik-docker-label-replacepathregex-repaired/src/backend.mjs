@@ -5,7 +5,8 @@ const marker = "inert-traefik-docker-label-route-boundary";
 createServer((request, response) => {
   const rawPath = request.url ?? "";
   const normalizedPath = new URL(rawPath, "http://backend.invalid").pathname;
-  if (normalizedPath === "/admin") {
+  console.log(JSON.stringify({ normalizedPath, rawPath }));
+  if (normalizedPath === "/cps-benchmark-admin") {
     response.writeHead(200, { "content-type": "text/plain" });
     response.end(marker);
     return;
