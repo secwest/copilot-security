@@ -39,6 +39,31 @@ All notable scanner, application, benchmark, and operational changes are recorde
   for 3.7.7. Ten focused tests pass with 65 assertions; the canonical corpus
   advances to 130 exploit/control pairs and 780 scans, with its 18 structural
   tests and 2,006 assertions passing.
+- Completed Traefik acceptance at exact checkpoint
+  `37e949288322d714a2f1c5996516e262ea424de8`. The full managed Windows Bun
+  1.3.14 run exercises all 1,787 tests across 195 files: 1,760 pass, 25
+  intentional skips remain, and only the two established Git/Windows-ACL host
+  boundaries fail inside the managed sandbox; their native rerun passes 2/2
+  tests and 7 assertions. The aggregate records 12,819 assertions in 625.64
+  seconds. Native Ubuntu/WSL passes the focused Traefik and canonical lane with
+  28 tests and 2,071 assertions. Generated models, TypeScript, the production
+  build, formatting, the installed-package contract, and the production
+  advisory audit are clean.
+- Two compiled scans of a disposable exact-commit archive take 31,972.627 and
+  15,297.327 milliseconds and produce 256 byte-identical rows, 543,066 bytes,
+  and SHA-256
+  `8b3ad02982368129ff324101a1976f24c4e1b9e91a76b8bfe86b9fe03d006b12`.
+  All 194 structured records survive ahead of 62 lexical leads, with 246
+  fixture and 10 non-fixture rows. Exactly one Traefik row retains public source
+  `dynamic.yml:3`, rewrite sink `dynamic.yml:15`, protected sibling line 8,
+  affected Compose image line 3, CWE-22, and exact 3.7.6 provenance; the 3.7.7
+  twin is absent. The 267-entry, 2,061,495-byte npm archive has SHA-256
+  `b58928e692468872693a4a1189b3cf96d23ac746e9a3bcb523243facdcc3f8bb`
+  and validates the public import, CLI, and all 79 bundled plugin files. All
+  seven exact-head workflows pass: Node `32970804925`, Go `32970804800`,
+  Windows GUI `32970804831`, .NET `32970804875`, Java `32970804789`, container
+  `32970804784`, and Linux GUI `32970804824`. Disposable exact-commit scan data,
+  package archives, and real-binary caches are removed after acceptance.
 - Added `go-echo-static-encoded-separator-auth-bypass` for
   [GHSA-vfp3-v2gw-7wfq / CVE-2026-55677](https://github.com/labstack/echo/security/advisories/GHSA-vfp3-v2gw-7wfq).
   The model requires an official stable Echo instance, a middleware-protected

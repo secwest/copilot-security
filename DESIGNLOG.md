@@ -71,6 +71,34 @@ crafted request, and produced no backend hit. Both processes and temporary
 provider files were removed after their runs; the downloaded release cache was
 removed after recording the checksum and differential.
 
+**Acceptance evidence.** Exact checkpoint
+`37e949288322d714a2f1c5996516e262ea424de8` passes all seven hosted workflow
+families: Node `32970804925`, Go `32970804800`, Windows GUI `32970804831`, .NET
+`32970804875`, Java `32970804789`, container `32970804784`, and Linux GUI
+`32970804824`. The managed Windows aggregate exercises 1,787 tests across 195
+files in 625.64 seconds: 1,760 pass, 25 intentional platform/environment skips
+remain, and the established Git campaign-binding and private Windows
+credential-home ACL tests are denied only by the managed host boundary. Their
+authorized native rerun passes 2/2 tests and 7 assertions. The full aggregate
+records 12,819 assertions, and native Ubuntu/WSL passes the 28-test focused
+Traefik/canonical lane with 2,071 assertions. Formatting, generated-model drift,
+TypeScript, the production build, and the production advisory audit are clean.
+
+Two compiled inventories of a disposable exact-commit archive take 31,972.627
+and 15,297.327 milliseconds and produce 256 byte-identical rows, 543,066 bytes,
+and SHA-256
+`8b3ad02982368129ff324101a1976f24c4e1b9e91a76b8bfe86b9fe03d006b12`.
+The cap retains all 194 structured records before 62 lexical leads; 246 rows are
+fixtures and 10 are non-fixture paths. Exactly one Traefik record retains source
+`dynamic.yml:3`, sink `dynamic.yml:15`, protected sibling line 8, image line 3,
+CWE-22, and exact 3.7.6 provenance, while the 3.7.7 twin remains absent. Strict
+inspection and isolated installation validate the 267-entry, 2,061,495-byte
+npm archive, SHA-256
+`b58928e692468872693a4a1189b3cf96d23ac746e9a3bcb523243facdcc3f8bb`,
+including the public import, executable CLI, and all 79 bundled plugin files.
+The disposable archive, inventories, package tarball, and release binaries are
+removed after the evidence is recorded.
+
 ## 2026-08-26 — Bind Echo static decoding to route-level authorization
 
 **Gap and primary evidence.** The official
