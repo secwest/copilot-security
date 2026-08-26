@@ -29,6 +29,27 @@ All notable scanner, application, benchmark, and operational changes are recorde
   and none to the argument-controlled endpoint. No Contentful host, real token,
   or real space is used; certificate, key, trust, export, and error-log
   artifacts are removed after each run.
+- Accepted exact Contentful implementation checkpoint
+  `fdf1873453ba317d8f6e1ddb0f41d17773153e71` on Windows and tracked-only native
+  Ubuntu/WSL. Both platforms pass generated-model verification, TypeScript,
+  formatting, and the 25-test focused-plus-canonical lane with 2,097
+  assertions; Ubuntu also reproduces both real installed-package witnesses.
+  The strict 267-entry, 2,095,517-byte npm archive has SHA-256
+  `4b81e35b7d17b88c71bc407bba9180ab672d7e84c842d81fb3ebc9730127bc2a`;
+  inspection and isolated installation validate the public import, CLI, and all
+  79 bundled plugin files, and the high-severity production audit is clean. Two
+  production-build scans of a tracked-only archive complete in 24,570.383 and
+  15,538.839 milliseconds and are byte-identical at 256 rows, 548,353 bytes,
+  and SHA-256
+  `3a45e0b0c93cedd82b01b5fe4d881124d31639c43f9cc769e0af3069eb86e9b7`.
+  All 199 structured rows precede 57 lexical leads. Exactly one Contentful row
+  retains the affected fixture at `src/launcher.mjs:1`; the source-identical
+  repaired control is absent. Package, self-scan, WSL dependency, certificate,
+  trust, export, and error-log artifacts were removed afterward. All seven
+  hosted families pass that exact SHA: Node `32998739818` with all seven
+  Windows, macOS, and Linux matrix jobs; Go `32998742451`; .NET `32998745587`;
+  Java `32998748789`; Windows GUI `32998751947`; Linux GUI `32998754593`; and
+  container `32998757081`.
 - Corrected the SunEditor regression corpus's package-version assertions to
   use index-signature-safe access. The Node and container hosted lanes exposed
   `TS4111` under the pinned Linux TypeScript toolchain even though the scanner

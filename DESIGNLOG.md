@@ -43,6 +43,31 @@ request and zero attacker requests. A deliberate 401 stops the export. The
 witness uses no real Contentful credential, host, or space and removes its
 certificate, key, trust state, export directory, and generated error log.
 
+**Cross-platform, distribution, and self-scan acceptance.** Exact implementation
+checkpoint `fdf1873453ba317d8f6e1ddb0f41d17773153e71` passes generated-model
+verification, TypeScript, formatting, and the 25-test/2,097-assertion
+Contentful-plus-canonical lane on Windows and a clean tracked-only native
+Ubuntu/WSL install. Ubuntu independently reproduces the installed 0.4.1/0.4.5
+shape and 1.7.15/1.7.19 TLS routing differentials. Strict inspection of the
+267-entry, 2,095,517-byte npm archive with SHA-256
+`4b81e35b7d17b88c71bc407bba9180ab672d7e84c842d81fb3ebc9730127bc2a`
+and isolated installation validate the public import, CLI, and all 79 bundled
+plugin files; the production high-severity audit finds no known vulnerability.
+Two production-build inventories of a tracked-only archive complete in
+24,570.383 and 15,538.839 milliseconds and produce the same 256-row,
+548,353-byte output with SHA-256
+`3a45e0b0c93cedd82b01b5fe4d881124d31639c43f9cc769e0af3069eb86e9b7`.
+The ordering retains 199 structured records ahead of 57 lexical leads. Exactly
+one Contentful row names the affected fixture at `src/launcher.mjs:1`; the
+repaired twin is absent. Every package, archive, dependency, certificate,
+trust, export, error-log, and self-scan artifact is removed after measurement.
+All seven hosted acceptance families pass the same exact implementation SHA:
+Node `32998739818` with seven of seven Windows, macOS, and Linux matrix jobs; Go
+`32998742451`; .NET `32998745587`; Java `32998748789`; Windows GUI
+`32998751947`; Linux GUI `32998754593`; and container `32998757081`. These are
+executed scanner, package, fixture, desktop, and container checks, not merely
+runner allocation evidence.
+
 ## 2026-08-26 — SunEditor Embed external-script DOM XSS
 
 **Hosted portability correction.** Manual exact-head Node and container runs
