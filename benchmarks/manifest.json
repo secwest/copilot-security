@@ -5627,6 +5627,45 @@
         "node-suneditor-embed-external-script-blocked/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-contentful-mcp-management-token-host-redirect",
+      "description": "An operational exact affected Contentful MCP server exposes migration tools whose LLM-controlled network options can redirect CMA requests carrying the operator's management token.",
+      "fixture": "fixtures/node-contentful-mcp-management-token-host-redirect",
+      "findingsPaths": [
+        "node-contentful-mcp-management-token-host-redirect/run-1/findings.json",
+        "node-contentful-mcp-management-token-host-redirect/run-2/findings.json",
+        "node-contentful-mcp-management-token-host-redirect/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-contentful-mcp-management-token-host-redirect",
+          "cwe": ["CWE-918", "CWE-441"],
+          "locations": [
+            {
+              "path": "src/launcher.mjs",
+              "startLine": 1,
+              "endLine": 1,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-contentful-mcp-management-token-host-pinned",
+      "description": "The source-identical control changes only the Contentful MCP server to 1.7.19, which strips LLM-controlled CMA network options and pins the management host from operator configuration.",
+      "fixture": "fixtures/node-contentful-mcp-management-token-host-pinned",
+      "findingsPaths": [
+        "node-contentful-mcp-management-token-host-pinned/run-1/findings.json",
+        "node-contentful-mcp-management-token-host-pinned/run-2/findings.json",
+        "node-contentful-mcp-management-token-host-pinned/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

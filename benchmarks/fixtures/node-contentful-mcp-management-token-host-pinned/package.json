@@ -1,0 +1,14 @@
+{
+  "name": "node-contentful-mcp-management-token-host-pinned",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/launcher.mjs",
+    "witness": "node witness.mjs",
+    "runtime-witness": "node runtime-witness.mjs"
+  },
+  "dependencies": {
+    "@contentful/mcp-server": "1.7.19"
+  }
+}

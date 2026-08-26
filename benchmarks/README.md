@@ -262,7 +262,7 @@ returns 404. The Traefik pair preserves the file provider, public rewrite,
 authenticated sibling, shared backend, and loopback witness while changing
 only 3.7.6 to 3.7.7. A direct protected request is denied on both builds; only
 the affected build forwards `/api../admin` onto the backend-normalized marker.
-The complete corpus now produces 798 scans across 133 exploit/control pairs.
+The complete corpus now produces 810 scans across 135 exploit/control pairs.
 The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
@@ -287,6 +287,22 @@ location. The source-identical 2.1.5 control must remain empty. Its witness uses
 one inert marker and one disposable loopback UDP receiver, prints only byte
 indexes and booleans, and proves decimal C0 escaping at the real package
 boundary.
+
+`node-contentful-mcp-management-token-host-redirect-manifest.json` isolates
+[GHSA-2xhg-73j7-rrgx / CVE-2026-53957](https://github.com/contentful/contentful-mcp-server/security/advisories/GHSA-2xhg-73j7-rrgx)
+under perfect gates. The positive requires an operational root-package launch,
+exact affected production provenance, CWE-918/CWE-441, validation, attack-path
+analysis, code evidence, high severity, and exact line-1 location. The
+source-identical control changes only `@contentful/mcp-server` 1.7.15 to 1.7.19
+and must remain empty. The non-network witness loads the real installed job-tool
+shapes with a fake token: affected tools 0.4.1 admit `host`, `proxy`,
+`rawProxy`, `headers`, and `config` for both export and import, while repaired
+0.4.5 admits none. The stronger witness uses two random loopback TLS endpoints
+and child-process-only trust. Affected code routes the fake Bearer token only to
+the argument-controlled endpoint; repaired code routes it only to the
+operator-configured endpoint. It never contacts Contentful or uses a real token
+or space, and removes its certificate, key, trust state, export directory, and
+generated error log.
 
 `go-echo-static-encoded-separator-manifest.json` isolates the application-level
 [GHSA-vfp3-v2gw-7wfq / CVE-2026-55677](https://github.com/labstack/echo/security/advisories/GHSA-vfp3-v2gw-7wfq)

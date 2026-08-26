@@ -4335,6 +4335,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeOpcuaCrossFileServerDosRecords(sourceFiles));
   records.push(...nodeOpcuaCrossFileServerAuthRecords(sourceFiles));
   records.push(...nodeDeepseekMcpHttpSessionAuthorizationRecords(sourceFiles));
+  records.push(...nodeContentfulMcpManagementTokenLeakRecords(sourceFiles));
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
   records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
   records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
@@ -22531,6 +22532,233 @@ function nodeDeepseekMcpHttpSessionAuthorizationRecords(
             path: launch.dependency.manifestPath,
             line: launch.dependency.line,
             symbol: `@arikusi/deepseek-mcp-server@${launch.dependency.version}:${launch.dependency.proof}:process-global-session-store`,
+          },
+        ],
+        candidateControls: [],
+      },
+    };
+  });
+}
+
+interface NodeContentfulMcpLaunch {
+  dependency: NodeRuntimeDependency;
+  file: SourceFileSnapshot;
+  line: number;
+  route: "module-import" | "operational-npm-script";
+}
+
+function nodeContentfulMcpVersionLeaksManagementToken(
+  version: string,
+): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return (
+    major < 1 || (major === 1 && (minor < 7 || (minor === 7 && patch < 19)))
+  );
+}
+
+function nodeContentfulMcpOperationalScriptCommand(command: string): boolean {
+  const invocation = String.raw`(?:contentful-mcp-server|npx(?:\s+--yes)?\s+@contentful/mcp-server|npm\s+exec(?:\s+--yes)?\s+(?:--\s+)?@contentful/mcp-server)`;
+  const posix = new RegExp(
+    String.raw`^(?:(?:cross-env(?:-shell)?|env)\s+)?(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:[^\s;&|]+|"[^"]*"|'[^']*'))\s+)*${invocation}(?:\s|$)`,
+    "u",
+  );
+  if (posix.test(command.trim())) return true;
+  return new RegExp(
+    String.raw`^set\s+(?:"[A-Za-z_][A-Za-z0-9_]*=[^"]*"|[A-Za-z_][A-Za-z0-9_]*=[^&|]*)\s*&&\s*(?:call\s+)?${invocation}(?:\s|$)`,
+    "u",
+  ).test(command.trim());
+}
+
+function nodeContentfulMcpModuleLaunches(
+  files: readonly SourceFileSnapshot[],
+): NodeContentfulMcpLaunch[] {
+  const launches: NodeContentfulMcpLaunch[] = [];
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !file.text.includes("@contentful/mcp-server")
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "@contentful/mcp-server",
+    );
+    if (
+      dependency === undefined ||
+      !nodeContentfulMcpVersionLeaksManagementToken(dependency.version)
+    ) {
+      continue;
+    }
+    const codeLines = javascriptCodeLinesWithoutComments(file.lines);
+    const structuralLines = javascriptStructuralLines(file.lines);
+    for (let index = 0; index < codeLines.length; index += 1) {
+      const code = codeLines[index] ?? "";
+      if (
+        !javascriptModuleScopeLine(structuralLines, index + 1) ||
+        !(
+          /^\s*import\s*["']@contentful\/mcp-server["']\s*;?\s*$/u.test(code) ||
+          /\b(?:await\s+)?import\s*\(\s*["']@contentful\/mcp-server["']\s*\)/u.test(
+            code,
+          )
+        )
+      ) {
+        continue;
+      }
+      launches.push({
+        dependency,
+        file,
+        line: index + 1,
+        route: "module-import",
+      });
+    }
+  }
+  return launches;
+}
+
+function nodeContentfulMcpScriptLaunches(
+  files: readonly SourceFileSnapshot[],
+): NodeContentfulMcpLaunch[] {
+  const launches: NodeContentfulMcpLaunch[] = [];
+  for (const file of files) {
+    if (
+      posix.basename(file.path) !== "package.json" ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    let root: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(file.text) as unknown;
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        continue;
+      }
+      root = parsed as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    const scripts = root["scripts"];
+    if (
+      typeof scripts !== "object" ||
+      scripts === null ||
+      Array.isArray(scripts)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(
+      files,
+      file.path,
+      "@contentful/mcp-server",
+    );
+    if (
+      dependency === undefined ||
+      !nodeContentfulMcpVersionLeaksManagementToken(dependency.version)
+    ) {
+      continue;
+    }
+    for (const [name, value] of Object.entries(
+      scripts as Record<string, unknown>,
+    ).sort(([left], [right]) => left.localeCompare(right))) {
+      if (
+        typeof value !== "string" ||
+        !/^(?:mcp|serve|server|start)(?::[A-Za-z0-9._-]+)?$/u.test(name) ||
+        !nodeContentfulMcpOperationalScriptCommand(value)
+      ) {
+        continue;
+      }
+      const serializedName = JSON.stringify(name);
+      const line =
+        file.lines.findIndex(
+          (candidate) =>
+            candidate.includes(serializedName) && candidate.includes(":"),
+        ) + 1;
+      launches.push({
+        dependency,
+        file,
+        line: Math.max(1, line),
+        route: "operational-npm-script",
+      });
+    }
+  }
+  return launches;
+}
+
+function nodeContentfulMcpManagementTokenLeakRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const launches = [
+    ...nodeContentfulMcpModuleLaunches(files),
+    ...nodeContentfulMcpScriptLaunches(files),
+  ].filter(
+    (launch, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.file.path === launch.file.path &&
+          candidate.line === launch.line,
+      ) === index,
+  );
+  return launches.map((launch) => {
+    const startLine = Math.max(1, launch.line - CONTEXT_LINES_BEFORE);
+    const endLine = Math.min(
+      launch.file.lines.length,
+      launch.line + CONTEXT_LINES_AFTER,
+    );
+    const prefix =
+      launch.dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+    const sinkKind = `${prefix}vulnerable-contentful-mcp-management-token-authorized-request`;
+    return {
+      path: launch.file.path,
+      line: launch.line,
+      categories: [
+        "framework-dataflow:node-contentful-mcp-management-token-host-redirect",
+        "modeled-source:llm-controlled-contentful-migration-network-options",
+        `modeled-sink:${sinkKind}`,
+        "broken-control:mcp-tool-network-destination-not-pinned",
+      ],
+      priority: 124,
+      startLine,
+      endLine,
+      excerpt: sourceExcerpt(launch.file.lines, startLine, endLine),
+      frameworkModel: {
+        schemaVersion: "1.2",
+        id: "node-contentful-mcp-management-token-host-redirect",
+        language: "javascript-typescript",
+        scope: "same-file",
+        source: {
+          kind: "llm-controlled-contentful-migration-network-options",
+          path: launch.file.path,
+          line: launch.line,
+        },
+        sink: {
+          kind: sinkKind,
+          path: launch.file.path,
+          line: launch.line,
+          cweIds: ["CWE-918", "CWE-441"],
+        },
+        propagators: [
+          {
+            kind: "contentful-mcp-operational-launch",
+            path: launch.file.path,
+            line: launch.line,
+            symbol: launch.route,
+          },
+          {
+            kind: "contentful-mcp-runtime-dependency",
+            path: launch.dependency.manifestPath,
+            line: launch.dependency.line,
+            symbol: `@contentful/mcp-server@${launch.dependency.version}:${launch.dependency.proof}:unpinned-migration-cma-host`,
           },
         ],
         candidateControls: [],

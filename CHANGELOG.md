@@ -6,6 +6,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-contentful-mcp-management-token-host-redirect`, an exact
+  operational model for
+  [GHSA-2xhg-73j7-rrgx / CVE-2026-53957](https://github.com/contentful/contentful-mcp-server/security/advisories/GHSA-2xhg-73j7-rrgx).
+  It requires a top-level official root-package import or bounded operational
+  npm script plus exact affected production provenance for
+  `@contentful/mcp-server` before 1.7.19. Dependency membership, subpath or
+  nested imports, arbitrary scripts, echo/lookalike commands, repaired or
+  prerelease versions, development-only packages, unlocked ranges, stale or
+  inconsistent modern locks, and npm v1 locks fail closed. Seven focused tests
+  cover the version boundary, module and script launch families, exact evidence,
+  modern lock proof, adversarial negatives, and field-local review guidance.
+- Added a source-identical Contentful 1.7.15/1.7.19 benchmark pair with exact
+  npm v3 locks, high/CWE-918+CWE-441 ground truth at `src/launcher.mjs:1`, and
+  perfect three-run gates. The corpus advances to 135 pairs, 270 cases, and 810
+  scans. Real installed input-shape witnesses report that server/tools
+  1.7.15/0.4.1 admit `host`, `proxy`, `rawProxy`, `headers`, and `config` for
+  both migration tools, while 1.7.19/0.4.5 admit none. An identical two-endpoint
+  TLS witness uses a fake token and child-process-only trust: affected code
+  sends one authorized request to the argument-controlled endpoint and none to
+  the configured endpoint; repaired code sends one to the configured endpoint
+  and none to the argument-controlled endpoint. No Contentful host, real token,
+  or real space is used; certificate, key, trust, export, and error-log
+  artifacts are removed after each run.
 - Corrected the SunEditor regression corpus's package-version assertions to
   use index-signature-safe access. The Node and container hosted lanes exposed
   `TS4111` under the pinned Linux TypeScript toolchain even though the scanner

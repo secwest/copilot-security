@@ -2,6 +2,47 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — Contentful MCP management-token host redirect
+
+**Gap and primary evidence.** The official
+[`GHSA-2xhg-73j7-rrgx`](https://github.com/contentful/contentful-mcp-server/security/advisories/GHSA-2xhg-73j7-rrgx)
+describes high-severity CVE-2026-53957 (CVSS 3.1 7.7, CWE-918): affected
+`export_space` and `import_space` tools spread LLM-controlled management-network
+options beside the server's CMA personal access token, and the downstream SDK
+uses the selected host while attaching that token as a Bearer header. The
+official
+[`fa7477e` repair](https://github.com/contentful/contentful-mcp-server/commit/fa7477ee48515f4248bc91a025eab0ca83423fe0)
+removes `host`, `proxy`, `rawProxy`, `headers`, and `config` from both tool
+schemas and pins the CMA host from operator configuration after the argument
+spread. The migration tools are disabled initially but the always-registered
+workflow handler can enable them, making launch topology and the two-step tool
+path material reachability conditions.
+
+**Reachability decision.** Model only an actually launched affected
+`@contentful/mcp-server`: a top-level side-effect/dynamic root-package import or
+a start/serve/server/mcp npm script that directly invokes the official binary,
+plus an exact production declaration or fresh declaration-consistent npm v2/v3
+lock. Do not alert on package membership alone. Reject subpaths, nested or bound
+imports, arbitrary scripts, echo/lookalikes, test/example paths, development
+dependencies, prereleases, 1.7.19+, unlocked ranges, stale/inconsistent locks,
+and npm v1 evidence. A retained row is a high-priority review lead, not proof
+that a deployment has a token or permits the enable/export sequence. The
+reviewer must prove a non-placeholder management token and client or prompt
+injection reachability before claiming disclosure or persistent CMA access.
+
+**Executable evidence and containment.** The source-identical pair changes only
+the exact server graph from 1.7.15/tools 0.4.1 to 1.7.19/tools 0.4.5. Loading the
+real job-tool shapes with a fake token and invoking no handler shows all five
+management-network fields on both affected migration tools and none on either
+repaired tool. A stronger identical witness creates operator and attacker TLS
+servers on random `127.0.0.1` ports, trusts its one-run certificate only through
+the child process, and invokes the real export handler with a fake token. The
+affected build sends zero operator requests and one attacker request with the
+exact fake Bearer value; the repaired build sends one authorized operator
+request and zero attacker requests. A deliberate 401 stops the export. The
+witness uses no real Contentful credential, host, or space and removes its
+certificate, key, trust state, export directory, and generated error log.
+
 ## 2026-08-26 — SunEditor Embed external-script DOM XSS
 
 **Hosted portability correction.** Manual exact-head Node and container runs

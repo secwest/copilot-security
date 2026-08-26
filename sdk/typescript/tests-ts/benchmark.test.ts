@@ -444,6 +444,10 @@ describe("effectiveness benchmark", () => {
         "node-suneditor-embed-external-script-blocked",
       ],
       [
+        "node-contentful-mcp-management-token-host-redirect",
+        "node-contentful-mcp-management-token-host-pinned",
+      ],
+      [
         "node-nx-self-hosted-cache-archive-escape",
         "node-nx-self-hosted-cache-archive-contained",
       ],
