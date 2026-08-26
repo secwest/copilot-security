@@ -448,6 +448,10 @@ describe("effectiveness benchmark", () => {
         "go-echo-static-encoded-separator-repaired",
       ],
       [
+        "traefik-replacepathregex-auth-bypass",
+        "traefik-replacepathregex-repaired",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

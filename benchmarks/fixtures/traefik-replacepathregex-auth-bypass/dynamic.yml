@@ -1,0 +1,25 @@
+http:
+  routers:
+    public-api:
+      rule: "PathPrefix(`/api`)"
+      entryPoints: [web]
+      middlewares: [rewrite-api]
+      service: backend-svc
+    protected-admin:
+      rule: "PathPrefix(`/admin`)"
+      entryPoints: [web]
+      middlewares: [auth]
+      service: backend-svc
+  middlewares:
+    rewrite-api:
+      replacePathRegex:
+        regex: "^/api(.*)"
+        replacement: "/$1"
+    auth:
+      basicAuth:
+        users: ['benchmark:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/']
+  services:
+    backend-svc:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:18081"

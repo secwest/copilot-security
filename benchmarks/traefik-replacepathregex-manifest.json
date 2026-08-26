@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Traefik ReplacePathRegex authorization boundary",
+  "description": "Measures the reachable GHSA-cxjq-mrr5-89rv rewrite traversal while keeping the source-identical Traefik 3.7.7 repair negative.",
+  "thresholds": {
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "locationAccuracy": 1,
+    "severityAccuracy": 1,
+    "validationRate": 1,
+    "attackPathRate": 1,
+    "codeEvidenceRate": 1,
+    "stabilityRate": 1,
+    "maxFalsePositives": 0,
+    "maxFalseNegatives": 0,
+    "maxNondeterministicFindings": 0,
+    "maxLocationMismatch": 0
+  },
+  "cases": [
+    {
+      "id": "traefik-replacepathregex-auth-bypass",
+      "description": "Traefik 3.7.6 rewrites a public separator-free prefix onto the authenticated sibling's shared backend path.",
+      "fixture": "fixtures/traefik-replacepathregex-auth-bypass",
+      "findingsPaths": [
+        "traefik-replacepathregex-auth-bypass/run-1/findings.json",
+        "traefik-replacepathregex-auth-bypass/run-2/findings.json",
+        "traefik-replacepathregex-auth-bypass/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "traefik-replacepathregex-auth-bypass",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "dynamic.yml",
+              "startLine": 15,
+              "endLine": 15,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "traefik-replacepathregex-repaired",
+      "description": "The source-identical control changes only Traefik to 3.7.7, which rejects the non-normalized replacement before proxying.",
+      "fixture": "fixtures/traefik-replacepathregex-repaired",
+      "findingsPaths": [
+        "traefik-replacepathregex-repaired/run-1/findings.json",
+        "traefik-replacepathregex-repaired/run-2/findings.json",
+        "traefik-replacepathregex-repaired/run-3/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

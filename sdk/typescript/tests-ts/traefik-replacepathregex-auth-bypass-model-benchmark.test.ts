@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { buildResidualRiskInventory } from "../src/residual-risk.js";
 import { scanQualityGatePrompt } from "../src/copilot-client.js";
@@ -23,6 +23,7 @@ interface TraefikRecord {
 }
 
 const temporaryPaths: string[] = [];
+const benchmarkRoot = resolve(process.cwd(), "..", "..", "benchmarks");
 
 afterEach(async () => {
   await Promise.all(
@@ -114,6 +115,63 @@ async function scan(
 }
 
 describe("Traefik ReplacePathRegex authorization-bypass model", () => {
+  test("keeps the real affected and repaired fixtures source-identical and under perfect gates", async () => {
+    const affectedRoot = join(
+      benchmarkRoot,
+      "fixtures",
+      "traefik-replacepathregex-auth-bypass",
+    );
+    const repairedRoot = join(
+      benchmarkRoot,
+      "fixtures",
+      "traefik-replacepathregex-repaired",
+    );
+    const affectedCompose = await readFile(
+      join(affectedRoot, "compose.yml"),
+      "utf8",
+    );
+    const repairedCompose = await readFile(
+      join(repairedRoot, "compose.yml"),
+      "utf8",
+    );
+    expect(affectedCompose.replace("3.7.6", "3.7.7")).toBe(repairedCompose);
+    for (const path of ["dynamic.yml", "src/witness.mjs"]) {
+      expect(await readFile(join(affectedRoot, path), "utf8")).toBe(
+        await readFile(join(repairedRoot, path), "utf8"),
+      );
+    }
+
+    const affected = records(await buildResidualRiskInventory(affectedRoot));
+    expect(affected).toHaveLength(1);
+    expect(
+      records(await buildResidualRiskInventory(repairedRoot)),
+    ).toHaveLength(0);
+    expect(affected[0]?.path).toBe("dynamic.yml");
+    expect(affected[0]?.line).toBe(15);
+    expect(affected[0]?.frameworkModel?.source.line).toBe(3);
+    expect(affected[0]?.frameworkModel?.propagators.at(-1)?.line).toBe(3);
+
+    const manifest = JSON.parse(
+      await readFile(
+        join(benchmarkRoot, "traefik-replacepathregex-manifest.json"),
+        "utf8",
+      ),
+    ) as {
+      thresholds: Record<string, number>;
+      cases: Array<{ id: string; expected: unknown[] }>;
+    };
+    expect(manifest.cases.map(({ id }) => id)).toEqual([
+      "traefik-replacepathregex-auth-bypass",
+      "traefik-replacepathregex-repaired",
+    ]);
+    expect(manifest.cases[0]?.expected).toHaveLength(1);
+    expect(manifest.cases[1]?.expected).toEqual([]);
+    expect(manifest.thresholds["precision"]).toBe(1);
+    expect(manifest.thresholds["recall"]).toBe(1);
+    expect(manifest.thresholds["maxFalsePositives"]).toBe(0);
+    expect(manifest.thresholds["maxFalseNegatives"]).toBe(0);
+  });
+
   test("binds the public rewrite to an authenticated sibling on the same backend", async () => {
     const found = await scan();
     expect(found).toHaveLength(1);

@@ -253,8 +253,11 @@ The Echo pair then preserves an operational middleware-protected wildcard
 route, root static handler, and inert `httptest` marker while changing only
 Echo 4.15.2 to 4.15.3. A direct request is denied on both builds; the encoded
 separator discloses the marker only on the affected build, while the repair
-returns 404. The complete corpus now produces 774 scans across 129
-exploit/control pairs.
+returns 404. The Traefik pair preserves the file provider, public rewrite,
+authenticated sibling, shared backend, and loopback witness while changing
+only 3.7.6 to 3.7.7. A direct protected request is denied on both builds; only
+the affected build forwards `/api../admin` onto the backend-normalized marker.
+The complete corpus now produces 780 scans across 130 exploit/control pairs.
 The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
@@ -280,6 +283,18 @@ and exact line-24 location. The source-identical control changes only 4.15.2 to
 secret: `httptest` requests an inert marker inside a test-owned temporary root,
 proves the direct route is denied on both builds, and distinguishes affected
 200 disclosure from repaired 404 rejection.
+
+`traefik-replacepathregex-manifest.json` isolates the
+[GHSA-cxjq-mrr5-89rv](https://github.com/traefik/traefik/security/advisories/GHSA-cxjq-mrr5-89rv)
+route boundary under perfect three-run gates. The positive must retain the
+exact official affected image, file-provider mount, public separator-free
+rewrite, authenticated sibling, shared service and entry point, CWE-22,
+validation, attack-path analysis, code evidence, high severity, and exact
+`dynamic.yml:15` location. The control changes only 3.7.6 to 3.7.7 and must
+remain empty. The source-identical witness requires exact official binaries,
+binds Traefik and the inert backend only to ephemeral loopback ports, proves
+the direct route is denied, and distinguishes vulnerable marker forwarding
+from repaired rejection without a real credential or external service.
 
 `node-mongoose-nosql-manifest.json` isolates the Mongoose selector boundary
 under perfect single-run gates. The positive must retain the HTTP source, all

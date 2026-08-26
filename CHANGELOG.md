@@ -26,6 +26,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   Current CodeQL and Semgrep rule repositories contain no match for either the
   advisory ID or `ReplacePathRegex`. A source-identical executable benchmark
   pair and real-binary differential follow this implementation checkpoint.
+- Added the source-identical Traefik 3.7.6/3.7.7 exploit/control pair, strict
+  three-run specialized manifest, canonical registration, fixture integrity
+  checks, and a dependency-free loopback witness. The affected official binary
+  denied direct `/admin`, forwarded crafted `/api../admin` as `/../admin`, and
+  reached the inert backend marker at normalized `/admin` with HTTP 200. The
+  repaired binary denied the direct route and returned HTTP 400 with no backend
+  hit. Official checksum manifests matched SHA-256
+  `3bf0555714961fe01d8e07c3899788fe6564da75374db5775ea9ad7d18b71a5d`
+  for 3.7.6 and
+  `5c8ff19144683f862c04e8ac01893e8cd94a3519d3d9ca3e6fbd0a7de73261ba`
+  for 3.7.7. Ten focused tests pass with 65 assertions; the canonical corpus
+  advances to 130 exploit/control pairs and 780 scans, with its 18 structural
+  tests and 2,006 assertions passing.
 - Added `go-echo-static-encoded-separator-auth-bypass` for
   [GHSA-vfp3-v2gw-7wfq / CVE-2026-55677](https://github.com/labstack/echo/security/advisories/GHSA-vfp3-v2gw-7wfq).
   The model requires an official stable Echo instance, a middleware-protected

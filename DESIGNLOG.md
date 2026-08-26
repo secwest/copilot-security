@@ -47,6 +47,30 @@ compiled model. Source-identical fixtures, a safe real-binary loopback witness,
 strict benchmark registration, repository-cap retention, and full acceptance
 follow this deliberately early implementation checkpoint.
 
+**Benchmark and executable evidence.** The paired fixtures preserve identical
+`dynamic.yml` and `src/witness.mjs` bytes and change only the Compose image from
+3.7.6 to 3.7.7. The positive emits exactly `dynamic.yml:15`; the repaired pair
+is empty. A specialized three-run manifest requires perfect precision, recall,
+F1, location, severity, validation, attack-path, code-evidence, and stability
+rates with zero false positives, false negatives, nondeterministic findings, or
+location mismatches. Canonical registration advances the corpus to 130 pairs
+and 780 scans. Ten focused tests pass with 65 assertions, and the canonical
+manifest's 18 tests pass with 2,006 assertions.
+
+The witness reads the committed dynamic configuration, substitutes only an
+ephemeral backend port in a newly created temporary directory, and starts that
+backend plus the exact Traefik binary on `127.0.0.1`. It uses an inert marker,
+no authentication credential, and no external endpoint. Official Linux-amd64
+release archives matched their published checksums: 3.7.6 SHA-256
+`3bf0555714961fe01d8e07c3899788fe6564da75374db5775ea9ad7d18b71a5d`
+and 3.7.7 SHA-256
+`5c8ff19144683f862c04e8ac01893e8cd94a3519d3d9ca3e6fbd0a7de73261ba`.
+The 3.7.6 run denied direct `/admin`, forwarded `/api../admin` to the backend as
+raw `/../admin`, reached normalized `/admin`, and returned the marker with HTTP 200. The 3.7.7 run denied direct `/admin`, returned HTTP 400 for the identical
+crafted request, and produced no backend hit. Both processes and temporary
+provider files were removed after their runs; the downloaded release cache was
+removed after recording the checksum and differential.
+
 ## 2026-08-26 — Bind Echo static decoding to route-level authorization
 
 **Gap and primary evidence.** The official
