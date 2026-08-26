@@ -428,6 +428,10 @@ describe("effectiveness benchmark", () => {
         "node-plate-media-embed-metadata-isolated",
       ],
       [
+        "node-defuddle-extractor-html-xss",
+        "node-defuddle-extractor-html-isolated",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

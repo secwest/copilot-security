@@ -2141,8 +2141,13 @@ document, exported viewer prop, `Plate` value, registered media component,
 video parser/gate, and iframe renderer constant while changing only
 `@platejs/media` 53.0.1 to 53.1.4. The affected real hook trusts serialized
 provider metadata and retains an inert `javascript:` URL; the repaired hook
-recomputes from the render URL and returns no embed. Each of the 248 cases in
-124 exploit/control pairs is scanned three times, producing 744 scans
+recomputes from the render URL and returns no embed. The Defuddle extractor
+pair then holds remote request HTML, an official relative parser wrapper, and
+an explicit HTML response constant while changing only `defuddle` 0.19.0 to
+0.19.1. Its network-disabled real-package witness reparses a synthetic X
+article: the affected release emits one inert sentinel `onerror` attribute,
+while the repaired release emits none. Each of the 250 cases in 125
+exploit/control pairs is scanned three times, producing 750 scans
 that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

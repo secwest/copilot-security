@@ -5237,6 +5237,45 @@
         "node-plate-media-embed-metadata-isolated/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-defuddle-extractor-html-xss",
+      "description": "Defuddle 0.19.0 parses remote request HTML through an official relative wrapper and serves unsanitized site-extractor content as HTML.",
+      "fixture": "fixtures/node-defuddle-extractor-html-xss",
+      "findingsPaths": [
+        "node-defuddle-extractor-html-xss/run-1/findings.json",
+        "node-defuddle-extractor-html-xss/run-2/findings.json",
+        "node-defuddle-extractor-html-xss/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-defuddle-extractor-html-xss",
+          "cwe": ["CWE-79"],
+          "locations": [
+            {
+              "path": "src/server.js",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 0
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "node-defuddle-extractor-html-isolated",
+      "description": "The source-identical control changes only Defuddle to 0.19.1, which escapes extractor sinks and sanitizes every site-extractor response.",
+      "fixture": "fixtures/node-defuddle-extractor-html-isolated",
+      "findingsPaths": [
+        "node-defuddle-extractor-html-isolated/run-1/findings.json",
+        "node-defuddle-extractor-html-isolated/run-2/findings.json",
+        "node-defuddle-extractor-html-isolated/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

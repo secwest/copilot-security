@@ -2,6 +2,66 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — Bind Defuddle extractor output to an application HTML boundary
+
+**Gap and primary evidence.** The official
+[`GHSA-jg4p-g6xj-4qmf`](https://github.com/kepano/defuddle/security/advisories/GHSA-jg4p-g6xj-4qmf),
+assigned CVE-2026-61824 and CWE-79, rates this issue high and covers Defuddle
+through 0.19.0. Site extractors copied attacker-controlled values such as an X
+header-image `alt` or `src` into HTML template strings. Their output then
+passed through `buildExtractorResponse`, which resolved URLs but bypassed the
+main DOM sanitizer. Repair commit
+[`baf2eaef61d334ef595b28c89e5c5e89e52daf7f`](https://github.com/kepano/defuddle/commit/baf2eaef61d334ef595b28c89e5c5e89e52daf7f)
+both escapes the confirmed X, Substack, and YouTube interpolation sinks and
+routes every extractor response through `_stripUnsafeElements`. Authenticated
+current-source searches found no Defuddle, advisory, or CVE match in
+`github/codeql` or `semgrep/semgrep-rules`.
+
+**Reachability decision.** Add `node-defuddle-extractor-html-xss`, but do not
+promote dependency membership or parsing alone to an application finding. The
+model requires remote request-body, `Request.text()`, or fetched-response HTML;
+an official stable `Defuddle` binding from `defuddle/node`; an exported relative
+wrapper whose exact HTML parameter reaches argument zero and whose response is
+returned unmodified; and the same response's `content` at an explicit
+`text/html`, DOM `innerHTML`, React `dangerouslySetInnerHTML`, or Web `Response`
+HTML boundary. Ordered propagators preserve source, wrapper call, parser input,
+extractor response, application sink, and exact production package proof.
+
+**Precision and provenance boundary.** Named and aliased ESM imports,
+namespace receivers, TypeScript import-equals, CommonJS receivers, and direct
+member bindings are accepted only while the binding and member remain stable.
+Exact production declarations and fresh declaration-consistent npm v2/v3
+locks are accepted. Patched or prerelease versions, development-only or wrong
+packages, lockfile-free ranges, stale or inconsistent locks, v1 locks, trusted
+literals, JSON/plain-text output, wrong result properties, sanitized or
+reassigned input/output, local lookalikes, non-exported wrappers, and
+test/example paths are deterministic controls. This narrower boundary avoids
+confusing a parser advisory with exploitable downstream rendering.
+
+**Validation and impact discipline.** The checked-in differential executes the
+real published package with asynchronous extractors disabled, so it opens no
+listener and performs no network request. It supplies a synthetic X article
+whose header-image `alt` contains an inert marker after a quote, reparses the
+returned content, and inspects attribute names without firing an event.
+Defuddle 0.19.0 produces one marker-bearing `onerror`; source-identical 0.19.1
+produces none. A report must still establish the modeled application boundary,
+CSP, session privilege, and concrete browser or consumer effect before
+escalating impact. Attribute creation proves the output-neutralization defect;
+it does not prove account takeover, credential theft, arbitrary actions,
+persistence, server compromise, or deployment-wide exposure.
+
+**Regression and benchmark contract.** The fixture pair changes only Defuddle
+0.19.0 to 0.19.1; `linkedom`, application source, and witness bytes remain
+identical. Its specialized gate requires high severity, CWE-79, exact line-7
+HTML output, validation, attack-path analysis, code evidence, stable detection,
+and zero false positives. Focused tests cover the executable pair, modern lock
+proof, official binding families, three remote-source forms, four output
+boundaries, affected/fixed version and metadata edges, an adversarial matrix of
+incomplete or controlled flows, source identity, and correction-prompt
+discipline. The pair
+advances the canonical corpus to 125 exploit/control pairs, 250 cases, and 750
+repeated scans.
+
 ## 2026-08-26 — Bind Plate media metadata trust to a reachable iframe path
 
 **Gap and primary evidence.** The official

@@ -6,6 +6,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `node-defuddle-extractor-html-xss`, an exact production-provenance,
+  official-binding, relative-wrapper, remote-input, returned-property, and HTML
+  execution-boundary model for
+  [GHSA-jg4p-g6xj-4qmf / CVE-2026-61824](https://github.com/kepano/defuddle/security/advisories/GHSA-jg4p-g6xj-4qmf).
+  It reports CWE-79 only when request or fetched HTML reaches argument zero of
+  the official `defuddle/node` `Defuddle` API through an exported relative
+  wrapper and that exact response's `content` reaches an explicit HTML
+  response, DOM `innerHTML`, React `dangerouslySetInnerHTML`, or Web `Response`
+  boundary. Patched/prerelease versions, package-only presence, development or
+  wrong packages, unproved/stale/inconsistent/v1 locks, trusted literals,
+  non-HTML output, sanitization, reassignment, local lookalikes, and incomplete
+  wrappers fail closed.
+- Added source-identical 0.19.0/0.19.1 fixtures, exact npm locks, a strict
+  specialized manifest, canonical registration, model-specific correction
+  guidance, and adversarial regressions across official ESM, namespace,
+  TypeScript/CommonJS-compatible bindings, request/fetch sources, four render
+  boundaries, modern lock provenance, and an adversarial matrix of missing or
+  controlled topologies.
+  A network-disabled real-package witness reparses a synthetic X article:
+  published 0.19.0 emits one inert sentinel `onerror` attribute, while 0.19.1
+  emits none. It never executes the attribute. The canonical corpus advances
+  to 125 exploit/control pairs, 250 cases, and 750 repeated scans.
+
 - Added `node-plate-media-embed-metadata-xss`, an exact provenance-,
   component-registration-, parser-, provider-gate-, iframe-, and cross-file
   dataflow-aware CWE-79 model for

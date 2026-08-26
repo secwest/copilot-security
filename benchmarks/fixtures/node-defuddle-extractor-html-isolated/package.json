@@ -1,0 +1,13 @@
+{
+  "name": "node-defuddle-extractor-html-isolated",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "bun test witness.test.mjs"
+  },
+  "dependencies": {
+    "defuddle": "0.19.1",
+    "linkedom": "0.18.12"
+  }
+}

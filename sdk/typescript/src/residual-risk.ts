@@ -3914,6 +3914,20 @@ const PLATE_MEDIA_EMBED_XSS_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-79", "stored cross-site scripting"],
 ] as const;
 
+const DEFUDDLE_EXTRACTOR_XSS_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["remote HTML", "request body", "Request.text", "fetch response text"],
+  ["defuddle/node", "official Defuddle binding", "relative parser wrapper"],
+  ["Defuddle 0.19.0", "defuddle@0.19.0", "affected release"],
+  ["site extractor", "X article", "extractor type"],
+  ["DefuddleResponse.content", "returned content", "unmodified response"],
+  ["text/html", "innerHTML", "dangerouslySetInnerHTML", "HTML boundary"],
+  ["synthetic X article", "header-image alt", "inert sentinel"],
+  ["event-handler attribute", "onerror attribute", "reparsed output"],
+  ["Defuddle 0.19.1", "central sanitizer", "repaired control"],
+  ["CSP", "session privilege", "user interaction", "containment"],
+  ["CWE-79", "cross-site scripting"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -4032,6 +4046,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: PLATE_MEDIA_EMBED_XSS_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: PLATE_MEDIA_EMBED_XSS_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-defuddle-extractor-html-xss",
+    {
+      validation: DEFUDDLE_EXTRACTOR_XSS_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: DEFUDDLE_EXTRACTOR_XSS_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
@@ -4154,6 +4175,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeDeepseekMcpHttpSessionAuthorizationRecords(sourceFiles));
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
   records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
+  records.push(...nodeDefuddleExtractorXssRecords(sourceFiles));
   records.push(...nodeAuthJsConfigurationErrorFailOpenRecords(sourceFiles));
   records.push(...nodeKeystoneNegativeTakeBypassRecords(sourceFiles));
   records.push(...frameworkCrossFileDataflowRecords(sourceFiles));
@@ -23536,6 +23558,563 @@ function nodePlateMediaEmbedXssRecords(
       },
     });
     if (records.length >= MAX_FRAMEWORK_MULTI_HOP_RECORDS) return records;
+  }
+  return records;
+}
+
+interface NodeDefuddleBinding {
+  line: number;
+  local: string;
+  member?: "Defuddle";
+}
+
+interface NodeDefuddleParserWrapper {
+  bindingLine: number;
+  callLine: number;
+  dependency: NodeRuntimeDependency;
+  file: SourceFileSnapshot;
+  function: ExportedJavascriptFunction;
+  htmlParameterIndex: number;
+  returnLine: number;
+}
+
+interface NodeDefuddleRemoteHtmlSource {
+  kind: string;
+  line: number;
+  symbol: string;
+}
+
+interface NodeDefuddleHtmlSink {
+  kind: string;
+  line: number;
+}
+
+function nodeDefuddleVersionHasExtractorXss(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version);
+  if (match === null) return false;
+  const [major, minor, patch] = match.slice(1).map(Number);
+  return (
+    major === 0 &&
+    minor !== undefined &&
+    patch !== undefined &&
+    (minor < 19 || (minor === 19 && patch === 0))
+  );
+}
+
+function nodeDefuddleBindingPattern(binding: NodeDefuddleBinding): string {
+  const local = escapeRegularExpression(binding.local);
+  return binding.member === undefined ? local : `${local}\\s*\\.\\s*Defuddle`;
+}
+
+function nodeDefuddleBindings(lines: readonly string[]): NodeDefuddleBinding[] {
+  const bindings: NodeDefuddleBinding[] = importedJavascriptSymbols(lines)
+    .filter(
+      (binding) =>
+        binding.moduleSpecifier === "defuddle/node" &&
+        binding.imported === "Defuddle",
+    )
+    .map((binding) => ({ line: binding.line, local: binding.local }));
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = javascriptCodeBeforeComment(lines[index] ?? "");
+    const receiver =
+      /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']defuddle\/node["']/u.exec(
+        code,
+      ) ??
+      /^\s*import\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']defuddle\/node["']\s*\)/u.exec(
+        code,
+      ) ??
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']defuddle\/node["']\s*\)\s*;?\s*$/u.exec(
+        code,
+      );
+    if (receiver?.[1] !== undefined) {
+      bindings.push({
+        line: index + 1,
+        local: receiver[1],
+        member: "Defuddle",
+      });
+    }
+    const direct =
+      /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["']defuddle\/node["']\s*\)\s*\.\s*Defuddle\s*;?\s*$/u.exec(
+        code,
+      );
+    if (direct?.[1] !== undefined) {
+      bindings.push({ line: index + 1, local: direct[1] });
+    }
+  }
+  return bindings.filter(
+    (binding, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.line === binding.line &&
+          candidate.local === binding.local &&
+          candidate.member === binding.member,
+      ) === index,
+  );
+}
+
+function nodeDefuddleBindingUsable(
+  lines: readonly string[],
+  binding: NodeDefuddleBinding,
+  useLine: number,
+): boolean {
+  if (
+    binding.line >= useLine ||
+    javascriptIdentifierReassignedBetween(
+      lines,
+      binding.local,
+      binding.line,
+      useLine + 1,
+    )
+  ) {
+    return false;
+  }
+  const wrapper = exportedJavascriptFunctions(lines).find(
+    (candidate) =>
+      useLine >= candidate.startLine && useLine <= candidate.endLine,
+  );
+  if (wrapper?.parameters.includes(binding.local) === true) return false;
+  if (binding.member === undefined) return true;
+  const local = escapeRegularExpression(binding.local);
+  return !javascriptStructuralLines(lines)
+    .slice(binding.line, Math.max(binding.line, useLine - 1))
+    .some((line) =>
+      new RegExp(
+        `\\b${local}\\s*\\.\\s*Defuddle\\s*(?:[+\\-*/%&|^?]?=(?!=|>)|\\+\\+|--)`,
+        "u",
+      ).test(line),
+    );
+}
+
+function nodeDefuddleParserWrappers(
+  files: readonly SourceFileSnapshot[],
+): NodeDefuddleParserWrapper[] {
+  const wrappers: NodeDefuddleParserWrapper[] = [];
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !file.text.includes("defuddle/node")
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "defuddle");
+    if (
+      dependency === undefined ||
+      !nodeDefuddleVersionHasExtractorXss(dependency.version)
+    ) {
+      continue;
+    }
+    const structural = javascriptStructuralLines(file.lines);
+    const functions = exportedJavascriptFunctions(file.lines);
+    for (const binding of nodeDefuddleBindings(file.lines)) {
+      const bindingPattern = nodeDefuddleBindingPattern(binding);
+      for (let index = binding.line; index < structural.length; index += 1) {
+        const line = index + 1;
+        const wrapper = functions.find(
+          (candidate) =>
+            line >= candidate.startLine && line <= candidate.endLine,
+        );
+        if (
+          wrapper === undefined ||
+          !nodeDefuddleBindingUsable(file.lines, binding, line)
+        ) {
+          continue;
+        }
+        const callPattern = new RegExp(`\\b${bindingPattern}\\s*\\(`, "u");
+        if (!callPattern.test(structural[index] ?? "")) continue;
+        const arguments_ = javascriptCallArgumentsAtLine(
+          file.lines,
+          line,
+          callPattern,
+        );
+        const htmlArgument = arguments_?.[0]?.trim();
+        if (htmlArgument === undefined) continue;
+        const htmlParameterIndex = wrapper.parameters.indexOf(htmlArgument);
+        if (htmlParameterIndex < 0) continue;
+        const statement = structural
+          .slice(index, Math.min(structural.length, index + 8))
+          .join("\n");
+        const directReturn = new RegExp(
+          `^\\s*return\\s+(?:await\\s+)?${bindingPattern}\\s*\\(`,
+          "u",
+        ).test(statement);
+        let returnLine = line;
+        if (!directReturn) {
+          const assignment = new RegExp(
+            `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(?:await\\s+)?${bindingPattern}\\s*\\(`,
+            "u",
+          ).exec(statement);
+          const result = assignment?.[1];
+          if (result === undefined) continue;
+          const returnPattern = new RegExp(
+            `^\\s*return\\s+${escapeRegularExpression(result)}\\s*;?\\s*$`,
+            "u",
+          );
+          const foundReturn = structural.findIndex(
+            (candidate, candidateIndex) =>
+              candidateIndex >= index &&
+              candidateIndex < wrapper.endLine &&
+              returnPattern.test(candidate),
+          );
+          if (
+            foundReturn < 0 ||
+            javascriptIdentifierReassignedBetween(
+              file.lines,
+              result,
+              line,
+              foundReturn + 2,
+            )
+          ) {
+            continue;
+          }
+          returnLine = foundReturn + 1;
+        }
+        wrappers.push({
+          bindingLine: binding.line,
+          callLine: line,
+          dependency,
+          file,
+          function: wrapper,
+          htmlParameterIndex,
+          returnLine,
+        });
+      }
+    }
+  }
+  return wrappers.filter(
+    (wrapper, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.file.path === wrapper.file.path &&
+          candidate.function.symbol === wrapper.function.symbol &&
+          candidate.callLine === wrapper.callLine,
+      ) === index,
+  );
+}
+
+function nodeDefuddleRemoteHtml(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  routeParameters: readonly string[],
+): NodeDefuddleRemoteHtmlSource | undefined {
+  const resolved = resolveJavascriptExpression(lines, expression, line);
+  if (resolved === undefined) return undefined;
+  const value = resolved.value.replace(/\s+/gu, " ").trim();
+  const requestBody =
+    /^([A-Za-z_$][\w$]*)\s*\.\s*body(?:\s*\.\s*[A-Za-z_$][\w$]*|\s*\[[^\]]+\])?$/u.exec(
+      value,
+    );
+  if (
+    requestBody?.[1] !== undefined &&
+    routeParameters.includes(requestBody[1])
+  ) {
+    return {
+      kind: "remote-request-html-body",
+      line: resolved.line,
+      symbol: requestBody[0].replace(/\s+/gu, ""),
+    };
+  }
+  const requestText =
+    /^(?:await\s+)?([A-Za-z_$][\w$]*)\s*\.\s*text\s*\(\s*\)$/u.exec(value);
+  if (
+    requestText?.[1] !== undefined &&
+    routeParameters.includes(requestText[1])
+  ) {
+    return {
+      kind: "remote-request-html-text",
+      line: resolved.line,
+      symbol: requestText[0].replace(/\s+/gu, ""),
+    };
+  }
+  if (
+    /^await\s+\(\s*await\s+fetch\s*\([^)]*\)\s*\)\s*\.\s*text\s*\(\s*\)$/u.test(
+      value,
+    )
+  ) {
+    return {
+      kind: "remote-fetched-html-text",
+      line: resolved.line,
+      symbol: "fetch(...).text()",
+    };
+  }
+  const responseText =
+    /^await\s+([A-Za-z_$][\w$]*)\s*\.\s*text\s*\(\s*\)$/u.exec(value);
+  if (responseText?.[1] === undefined) return undefined;
+  const response = responseText[1];
+  const earliest = Math.max(0, resolved.line - 65);
+  const responseDeclaration = new RegExp(
+    `^\\s*(?:const|let|var)\\s+${escapeRegularExpression(response)}\\s*=\\s*await\\s+fetch\\s*\\(`,
+    "u",
+  );
+  const responseLine = javascriptStructuralLines(lines)
+    .slice(earliest, resolved.line - 1)
+    .findLastIndex((candidate) => responseDeclaration.test(candidate));
+  if (responseLine < 0) return undefined;
+  const absoluteResponseLine = earliest + responseLine + 1;
+  if (
+    javascriptIdentifierReassignedBetween(
+      lines,
+      response,
+      absoluteResponseLine,
+      resolved.line + 1,
+    )
+  ) {
+    return undefined;
+  }
+  return {
+    kind: "remote-fetched-html-text",
+    line: absoluteResponseLine,
+    symbol: `${response}.text()`,
+  };
+}
+
+function nodeDefuddleHtmlSink(
+  lines: readonly string[],
+  result: string,
+  callLine: number,
+  endLine: number,
+): NodeDefuddleHtmlSink | undefined {
+  const structural = javascriptStructuralLines(lines);
+  const resultPattern = escapeRegularExpression(result);
+  const contentPattern = `${resultPattern}\\s*\\?*\\.\\s*content`;
+  for (
+    let index = callLine;
+    index < Math.min(structural.length, endLine);
+    index += 1
+  ) {
+    if (
+      javascriptIdentifierReassignedBetween(lines, result, callLine, index + 2)
+    ) {
+      return undefined;
+    }
+    const window = structural
+      .slice(Math.max(callLine - 1, index - 4), Math.min(endLine, index + 8))
+      .join(" ");
+    const originalWindow = javascriptCodeLinesWithoutComments(
+      lines.slice(
+        Math.max(callLine - 1, index - 4),
+        Math.min(endLine, index + 8),
+      ),
+    ).join(" ");
+    const current = structural[index] ?? "";
+    const declaresHtml =
+      /\.\s*(?:type|contentType)\s*\(\s*["'](?:text\/)?html["']\s*\)/iu.test(
+        originalWindow,
+      ) ||
+      /setHeader\s*\(\s*["']content-type["']\s*,\s*["']text\/html(?:;[^"']*)?["']\s*\)/iu.test(
+        originalWindow,
+      );
+    const sendsContent = new RegExp(
+      `\\.\\s*(?:send|end)\\s*\\(\\s*${contentPattern}\\s*\\)`,
+      "u",
+    ).test(window);
+    const htmlResponse = declaresHtml && sendsContent;
+    if (htmlResponse) {
+      return { kind: "html-response-defuddle-content", line: index + 1 };
+    }
+    if (
+      new RegExp(`\\.\\s*innerHTML\\s*=\\s*${contentPattern}\\b`, "u").test(
+        current,
+      )
+    ) {
+      return { kind: "dom-innerhtml-defuddle-content", line: index + 1 };
+    }
+    if (
+      new RegExp(
+        `dangerouslySetInnerHTML\\s*=\\s*\\{\\s*\\{\\s*__html\\s*:\\s*${contentPattern}\\s*[,}]`,
+        "u",
+      ).test(window)
+    ) {
+      return { kind: "react-raw-html-defuddle-content", line: index + 1 };
+    }
+    if (
+      new RegExp(
+        `new\\s+Response\\s*\\(\\s*${contentPattern}\\s*,[\\s\\S]{0,320}(?:content-type|Content-Type)["']?\\s*[:=,][\\s\\S]{0,80}text\\/html`,
+        "iu",
+      ).test(originalWindow)
+    ) {
+      return { kind: "web-response-defuddle-content", line: index + 1 };
+    }
+  }
+  return undefined;
+}
+
+function nodeDefuddleExtractorXssRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const wrappers = nodeDefuddleParserWrappers(files);
+  const records: ResidualRiskRecord[] = [];
+  const emitted = new Set<string>();
+  const knownPaths = new Map(
+    files.map((file) => [modelPathComparisonKey(file.path), file.path]),
+  );
+  for (const file of files) {
+    if (
+      !JAVASCRIPT_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path)
+    ) {
+      continue;
+    }
+    const dependency = nodeRuntimeDependency(files, file.path, "defuddle");
+    if (
+      dependency === undefined ||
+      !nodeDefuddleVersionHasExtractorXss(dependency.version)
+    ) {
+      continue;
+    }
+    const structural = javascriptStructuralLines(file.lines);
+    const functions = exportedJavascriptFunctions(file.lines);
+    for (const imported of importedJavascriptSymbols(file.lines)) {
+      const importedPath = resolveRelativeModelImport(
+        file.path,
+        imported.moduleSpecifier,
+        knownPaths,
+      );
+      const wrapper = wrappers.find(
+        (candidate) =>
+          candidate.file.path === importedPath &&
+          candidate.function.symbol === imported.imported &&
+          candidate.dependency.manifestPath === dependency.manifestPath &&
+          candidate.dependency.version === dependency.version &&
+          candidate.dependency.proof === dependency.proof,
+      );
+      if (wrapper === undefined) continue;
+      for (let index = imported.line; index < structural.length; index += 1) {
+        const line = index + 1;
+        const route = functions.find(
+          (candidate) =>
+            line >= candidate.startLine && line <= candidate.endLine,
+        );
+        if (
+          route === undefined ||
+          javascriptIdentifierReassignedBetween(
+            file.lines,
+            imported.local,
+            imported.line,
+            line + 1,
+          )
+        ) {
+          continue;
+        }
+        const declaration = new RegExp(
+          `^\\s*(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(?:await\\s+)?${escapeRegularExpression(imported.local)}\\s*\\(`,
+          "u",
+        ).exec(
+          structural
+            .slice(index, Math.min(structural.length, index + 8))
+            .join("\n"),
+        );
+        const result = declaration?.[1];
+        if (result === undefined) continue;
+        const arguments_ = javascriptCallArgumentsAtLine(
+          file.lines,
+          line,
+          new RegExp(
+            `\\b${escapeRegularExpression(imported.local)}\\s*\\(`,
+            "u",
+          ),
+        );
+        const htmlArgument = arguments_?.[wrapper.htmlParameterIndex];
+        if (htmlArgument === undefined) continue;
+        const source = nodeDefuddleRemoteHtml(
+          file.lines,
+          htmlArgument,
+          line,
+          route.parameters,
+        );
+        if (source === undefined) continue;
+        const sink = nodeDefuddleHtmlSink(
+          file.lines,
+          result,
+          line,
+          route.endLine,
+        );
+        if (sink === undefined) continue;
+        const key = `${file.path}\0${source.line}\0${wrapper.file.path}\0${wrapper.callLine}\0${sink.line}`;
+        if (emitted.has(key)) continue;
+        emitted.add(key);
+        const prefix =
+          dependency.proof === "npm-lockfile" ? "lock-resolved-" : "";
+        const sinkKind = `${prefix}vulnerable-defuddle-extractor-html-render`;
+        const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
+        const endLine = Math.min(
+          file.lines.length,
+          sink.line + CONTEXT_LINES_AFTER,
+        );
+        const sourceStart = Math.max(1, source.line - CONTEXT_LINES_BEFORE);
+        const sourceEnd = Math.min(
+          file.lines.length,
+          line + CONTEXT_LINES_AFTER,
+        );
+        records.push({
+          path: file.path,
+          line: sink.line,
+          categories: [
+            "framework-dataflow:node-defuddle-extractor-html-xss",
+            `modeled-source:${source.kind}`,
+            `modeled-sink:${sinkKind}`,
+            "broken-control:unsanitized-site-extractor-html-output",
+          ],
+          priority: 127,
+          startLine,
+          endLine,
+          excerpt: sourceExcerpt(file.lines, startLine, endLine),
+          sourceExcerpt: sourceExcerpt(file.lines, sourceStart, sourceEnd),
+          frameworkModel: {
+            schemaVersion: "1.2",
+            id: "node-defuddle-extractor-html-xss",
+            language: "javascript-typescript",
+            scope: "cross-file-multi-hop-wrapper",
+            source: {
+              kind: source.kind,
+              path: file.path,
+              line: source.line,
+            },
+            sink: {
+              kind: sinkKind,
+              path: file.path,
+              line: sink.line,
+              cweIds: ["CWE-79"],
+            },
+            propagators: [
+              {
+                kind: "relative-defuddle-parser-wrapper-call",
+                path: file.path,
+                line,
+                symbol: `${imported.local}:${wrapper.function.symbol}`,
+              },
+              {
+                kind: "defuddle-node-html-input",
+                path: wrapper.file.path,
+                line: wrapper.callLine,
+                symbol: wrapper.function.parameters[wrapper.htmlParameterIndex],
+              },
+              {
+                kind: "defuddle-site-extractor-response",
+                path: wrapper.file.path,
+                line: wrapper.returnLine,
+                symbol: "DefuddleResponse.content",
+              },
+              {
+                kind: sink.kind,
+                path: file.path,
+                line: sink.line,
+                symbol: `${result}.content`,
+              },
+              {
+                kind: "defuddle-runtime-dependency",
+                path: dependency.manifestPath,
+                line: dependency.line,
+                symbol: `defuddle@${dependency.version}:${dependency.proof}:unsanitized-site-extractor-output`,
+              },
+            ],
+            candidateControls: [],
+          },
+        });
+        if (records.length >= MAX_FRAMEWORK_MULTI_HOP_RECORDS) return records;
+      }
+    }
   }
   return records;
 }
