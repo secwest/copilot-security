@@ -11,8 +11,17 @@ package-version assertions used dot access on `Record<string, string>` under
 two assertions. This is a test-source portability correction: model logic,
 fixtures, manifests, runtime evidence, and expected findings are unchanged.
 Windows generated-model verification, type checking, formatting, and the
-25-test/2,105-assertion focused-plus-canonical lane remain green before the
-corrected checkpoint is subjected to clean native-Linux and hosted reruns.
+25-test/2,105-assertion focused-plus-canonical lane remain green. Exact
+corrected checkpoint `bcf25476583d7e05e1c21e8d42a3ba3452bfe524` then passes
+a tracked-only native Ubuntu/WSL install using the declared pnpm 11.9.0 and Bun
+1.3.14, generated-model verification, TypeScript, formatting, and the same
+focused-plus-canonical lane. Its disposable archive and dependency tree are
+removed afterward. All seven hosted families independently pass that exact
+SHA: Node `32994131557` with all seven Windows, macOS, and Linux Node matrix
+jobs; Go `32994135095`; .NET `32994138312`; Java `32994141457`; Windows GUI
+`32994144407`; Linux GUI `32994147806`; and container `32994150866`. This
+failure-to-fix chain proves that manual dispatch obtains real hosted capacity,
+catches platform-specific defects, and does not mask scanner regressions.
 
 **Gap and primary evidence.** The official
 [`GHSA-w93q-cq9w-58p7`](https://github.com/advisories/GHSA-w93q-cq9w-58p7)

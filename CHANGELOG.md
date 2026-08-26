@@ -10,7 +10,15 @@ All notable scanner, application, benchmark, and operational changes are recorde
   use index-signature-safe access. The Node and container hosted lanes exposed
   `TS4111` under the pinned Linux TypeScript toolchain even though the scanner
   model, benchmark execution, and Windows checks passed. The correction is
-  test-only and preserves all 2,105 focused-plus-canonical assertions.
+  test-only and preserves all 2,105 focused-plus-canonical assertions. Exact
+  checkpoint `bcf25476583d7e05e1c21e8d42a3ba3452bfe524` passes a clean
+  tracked-only Ubuntu/WSL install, generated-model verification, typecheck,
+  formatting, and the 25-test focused-plus-canonical lane. All seven hosted
+  families also pass on that SHA: Node `32994131557` (7/7 Windows, macOS, and
+  Linux matrix jobs), Go `32994135095`, .NET `32994138312`, Java `32994141457`,
+  Windows GUI `32994144407`, Linux GUI `32994147806`, and container
+  `32994150866`. The disposable WSL archive and native dependency tree were
+  removed after verification.
 - Added `node-suneditor-embed-external-script-xss`, an exact production model
   for
   [GHSA-w93q-cq9w-58p7 / CVE-2026-54606](https://github.com/advisories/GHSA-w93q-cq9w-58p7).
