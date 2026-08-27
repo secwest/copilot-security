@@ -49,6 +49,37 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `5c2dd192a075eeeac064e2fea72db5343cce2079061e966051bfa41494aaf85e`.
   The reproducible archive and extraction directories were removed after
   validation.
+- Verified deterministic self-scan behavior against an isolated tracked-only
+  archive of implementation revision
+  `643d1e4e053d5ee67d47c30e6bf7a286fd017d52`. Two inventories are
+  byte-identical at 256 rows and 553,241 bytes with SHA-256
+  `e6c77ef922a7f91cc6276b884ba905eba745e05090e9241dcd277a2f303ef7c2`
+  and contain zero Kotlin command-injection rows. Rooting the same scanner at
+  the archived live-list exploit and control fixtures produces exactly one
+  and zero Kotlin rows respectively. The exact temporary archive, extraction,
+  and self-scan tree were removed after verification.
+- Ran a provenance-bound deep/xhigh Copilot campaign against the new live-list
+  pair with stored credentials, six bounded available attempts, a 30-minute
+  process-tree deadline, and no artificial credit ceiling. Campaign
+  `94002c15d327e5511343633dce81bc80fb18af7560909838ac066100a39cdfc5`
+  binds revision `643d1e4e053d5ee67d47c30e6bf7a286fd017d52` and completed both
+  cases on attempt one. The positive completed in 234,429 ms with one critical
+  finding, complete coverage, and three host-reanchored code excerpts; the
+  clear/rebuild argv control completed in 301,021 ms with zero findings and
+  complete coverage. Completion, precision, recall, F1, case and negative-case
+  pass, stability, validation, attack-path, code-evidence, and severity rates
+  are all 1.0 with zero false positives or false negatives. Retained logs
+  contain no quota, credit, classifier, authentication, transport, reconnect,
+  timeout, or retry marker. Sealed results remain outside the repository at
+  `C:\security-benchmarks\copilot-security-kotlin-live-list-643d1e4`.
+- All eleven hosted workflow families pass at exact implementation revision
+  `643d1e4e053d5ee67d47c30e6bf7a286fd017d52`: Node `33114303879`,
+  container `33114303826`, Kotlin `33114303657`, Java `33114303877`,
+  .NET `33114303742`, Go `33114303971`, Rust `33114303815`, Ruby
+  `33114303843`, PHP `33114303792`, Windows GUI `33114303887`, and Linux
+  GUI `33114303678`. The Node matrix passes Node 22/24/26 on Ubuntu plus
+  macOS and Windows, including the complete regression suite, type checking,
+  formatting, production build, package inspection, and runtime smoke tests.
 - Extended `kotlin-ktor-command-injection` through two previously unmodeled
   Kotlin/JDK boundaries: typed Ktor Resources handlers and mutable
   `ProcessBuilder.command(...)` state. Exact `io.ktor.server.resources` route

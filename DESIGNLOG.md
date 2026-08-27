@@ -76,6 +76,37 @@ Strict package inspection and two isolated installs on each platform validate
 the public API, CLI, and all 79 bundled plugin files. The reproducible archive
 and exact extraction directories were removed after acceptance.
 
+**Self-scan and live-model acceptance.** An isolated tracked-only archive of
+revision `643d1e4e053d5ee67d47c30e6bf7a286fd017d52` produces byte-identical
+inventories across two runs: 256 rows, 553,241 bytes, and SHA-256
+`e6c77ef922a7f91cc6276b884ba905eba745e05090e9241dcd277a2f303ef7c2`.
+No Kotlin command-injection record originates from scanner production or test
+code. The archived positive and control fixtures, scanned independently at
+their own roots, produce exactly one and zero Kotlin records. The disposable
+archive and extraction tree were removed after verification.
+
+Sealed campaign
+`94002c15d327e5511343633dce81bc80fb18af7560909838ac066100a39cdfc5`
+binds that revision, the six-case focused manifest, both selected fixture
+digests, scanner and package bytes, deep mode, xhigh effort, and stored Copilot
+authentication. With six fresh attempts available, both selected cases
+completed on attempt one: the positive took 234,429 ms and produced one
+critical finding with complete coverage after three host code-evidence
+reanchors; the safe clear/rebuild control took 301,021 ms and produced no
+finding with complete coverage. Every strict effectiveness and evidence gate
+is 1.0, with zero false positives and zero false negatives. The receipts and
+logs record no timeout, quota, credit, classifier, authentication, transport,
+reconnect, or retry event. The durable campaign remains outside the repository
+at `C:\security-benchmarks\copilot-security-kotlin-live-list-643d1e4`.
+
+All eleven hosted workflow families pass the exact implementation revision:
+Node `33114303879`, container `33114303826`, Kotlin `33114303657`, Java
+`33114303877`, .NET `33114303742`, Go `33114303971`, Rust `33114303815`,
+Ruby `33114303843`, PHP `33114303792`, Windows GUI `33114303887`, and Linux
+GUI `33114303678`. This includes the complete Node 22/24/26 Ubuntu matrix,
+macOS and Windows, all six compiled Ktor fixtures, both GUI platforms, package
+inspection, and runtime smoke tests.
+
 ## 2026-08-27 — Follow Ktor typed resources into the effective process command
 
 **Why this closes a real false negative.** The first Kotlin lane recognized
