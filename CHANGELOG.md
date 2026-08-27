@@ -103,6 +103,20 @@ All notable scanner, application, benchmark, and operational changes are recorde
   behavior. The authoritative post-remediation Windows suite passes 1,808 tests
   and 13,305 assertions across 201 files in 590.41 seconds, with 27 intentional
   platform/integration skips and zero failures.
+- The post-remediation tracked-only self-scan of exact runtime checkpoint
+  `0c8acb9549b19b076e1cccb75533440c8e372274` produced a complete 494-of-494
+  coverage draft with no deferrals and no surviving findings, but correctly
+  exited nonzero instead of publishing clearance when host finalization failed.
+  The model had omitted the host-owned `sealedAt` field but included two
+  placeholder `scan.artifacts` rows. Finalization incorrectly treated any
+  artifact array as proof of an existing seal, then rejected the absent seal
+  timestamp. Sealed-state detection now requires the host-owned timestamp;
+  unsealed model artifact rows are discarded and rebuilt from the final bytes,
+  while manifests that actually carry a seal remain subject to strict digest
+  validation. A live-shape regression proves placeholder zero digests are
+  replaced, `sealedAt` equals the workbench completion, and the derived report
+  is sealed. The full Windows recovery file passes 84 tests and 481 assertions;
+  the isolated native Ubuntu regression also passes.
 - Added `python-chainlit-mcp-stdio-command-injection`, an exact Python model
   for
   [GHSA-w3fx-mc44-mf6j / CVE-2026-45018](https://github.com/advisories/GHSA-w3fx-mc44-mf6j).

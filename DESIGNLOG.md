@@ -75,6 +75,29 @@ authoritative post-remediation Windows suite remains green at 1,808 passes, 27
 intentional skips, 13,305 assertions, and zero failures across 201 files in
 590.41 seconds.
 
+**Host seal ownership.** The first post-remediation tracked-snapshot self-scan
+of exact runtime checkpoint `0c8acb9549b19b076e1cccb75533440c8e372274`
+closed all 494 immutable inventory paths, retained no deferral, and produced no
+surviving finding. Persistence nevertheless exited nonzero and kept partial
+output because the model wrote placeholder `scan.artifacts` rows with zero
+digests while omitting `sealedAt`. The finalizer had classified either a seal
+timestamp or an artifact array as proof of a previously sealed manifest. That
+gave model-controlled structural metadata authority to select the strict sealed
+validation path before the host could replace its placeholders.
+
+Make `sealedAt` the sole sealed-state discriminator. It is the host-owned
+commit point: when absent, remove any draft artifact metadata and regenerate
+paths and digests from final bytes; when present, retain the strict existing-seal
+validation path so tampering cannot be normalized away. Apply the same boundary
+to optional draft normalization: an artifact array without `sealedAt` must not
+block safe removal of malformed model-authored optional fields. The regression
+replays the two zero-digest rows observed live and requires a completed scan,
+`sealedAt == completedAt`, non-placeholder digests, and the host-generated
+report in the final artifact set. The complete Windows recovery file passes all
+84 tests and 481 assertions, and the isolated native Ubuntu case passes. Repeat
+the exact tracked-only self-scan after this fix; the earlier complete draft is
+evidence of coverage but is not accepted as a successful scan.
+
 ## 2026-08-26 — Bounded fresh-session coverage closure
 
 **Observed failure mode.** The exact Chainlit implementation self-scan produced

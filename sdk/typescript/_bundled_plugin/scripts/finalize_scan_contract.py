@@ -2614,7 +2614,6 @@ def _normalize_standalone_manifest_draft(
             and "threatModel" in existing_scan
             and not isinstance(existing_scan.get("threatModel"), dict)
             and existing_scan.get("sealedAt") is None
-            and not isinstance(existing_scan.get("artifacts"), list)
         ):
             # The detailed threat model is already a sealed scan-local artifact.
             # Copilot sometimes writes that artifact path into the optional
@@ -5017,9 +5016,12 @@ def _prepare_scan_finalization(
         manifest, completion_binding
     )
     scan = _require_dict(manifest, "scan", "manifest")
-    was_sealed = scan.get("sealedAt") is not None or isinstance(
-        scan.get("artifacts"), list
-    )
+    # Only the host-owned seal timestamp proves that a manifest is sealed.
+    # Model-authored drafts sometimes include placeholder artifact rows even
+    # though the draft contract explicitly reserves them for finalization.
+    # Treating those rows as a seal trusts model-controlled digests and can
+    # strand an otherwise complete scan before the host can rebuild them.
+    was_sealed = scan.get("sealedAt") is not None
     if not was_sealed:
         scan.pop("artifacts", None)
         _populate_unsealed_manifest_envelope(manifest, scan, completion_binding)

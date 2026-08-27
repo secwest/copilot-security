@@ -1048,6 +1048,57 @@ describe("malformed scan artifact recovery", () => {
     );
   });
 
+  test("replaces model-authored placeholder artifacts when the host seal is absent", async () => {
+    const fixture = await startDraftScan();
+    const path = join(fixture.scanDir, "scan-manifest.json");
+    const manifest = await readJson<{
+      scan: {
+        artifacts?: Array<{
+          mediaType: string;
+          path: string;
+          sha256: string;
+        }>;
+        completedAt: string;
+        sealedAt?: string;
+      };
+    }>(path);
+    const placeholderDigest = "0".repeat(64);
+    manifest.scan.artifacts = [
+      {
+        path: "findings.json",
+        sha256: placeholderDigest,
+        mediaType: "application/json",
+      },
+      {
+        path: "coverage.json",
+        sha256: placeholderDigest,
+        mediaType: "application/json",
+      },
+    ];
+    delete manifest.scan.sealedAt;
+    await writeJson(path, manifest);
+
+    const completed = await completeScan(fixture);
+    const sealed = await readJson<{
+      scan: {
+        artifacts: Array<{ path: string; sha256: string }>;
+        completedAt: string;
+        sealedAt: string;
+      };
+    }>(path);
+
+    expect(completed.progress.status).toBe("complete");
+    expect(sealed.scan.sealedAt).toBe(sealed.scan.completedAt);
+    expect(sealed.scan.artifacts.map((artifact) => artifact.path)).toEqual(
+      expect.arrayContaining(["coverage.json", "findings.json", "report.md"]),
+    );
+    expect(
+      sealed.scan.artifacts.every(
+        (artifact) => artifact.sha256 !== placeholderDigest,
+      ),
+    ).toBe(true);
+  });
+
   test("drops a malformed optional threat-model summary from an unsealed draft", async () => {
     const fixture = await startDraftScan();
     const path = join(fixture.scanDir, "scan-manifest.json");
