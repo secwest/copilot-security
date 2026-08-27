@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "completionRate": 1,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "casePassRate": 1,
+    "negativeControlPassRate": 1,
+    "stableDetectionRate": 1,
+    "validationCoverage": 1,
+    "attackPathCoverage": 1,
+    "codeEvidenceCoverage": 1,
+    "severityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "ruby-rails-open3-shell-injection",
+      "fixture": "fixtures/ruby-rails-open3-shell-injection",
+      "expected": [
+        {
+          "title": "Rails parameter reaches an Open3 shell command string",
+          "cwe": ["CWE-78", "CWE-88"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/app/controllers/diagnostics_controller.rb",
+          "line": 6,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["params[:target]", "Rails parameter", "request parameter"],
+            ["interpolated", "embedded", "command string"],
+            ["Open3.capture2e", "capture2e"],
+            ["shell", "metacharacter"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["params[:target]", "Rails parameter", "request parameter"],
+            ["command", "shell grammar"],
+            ["process", "Open3"],
+            ["output", "response", "rendered"]
+          ],
+          "forbiddenText": [
+            "Open3 always bypasses the shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ruby-rails-open3-argv-command",
+      "fixture": "fixtures/ruby-rails-open3-argv-command",
+      "expected": []
+    }
+  ]
+}

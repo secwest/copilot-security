@@ -2,6 +2,83 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Add native Rails command-injection discovery and executable benchmark
+
+**Why Ruby is the next coverage lane.** The canonical corpus held 140
+vulnerable/control pairs and 280 cases but no Ruby fixture or Ruby-specific host
+model. Generic command keywords are insufficient because Ruby's command/data
+boundary depends on both API shape and argument shape. Ruby documents that a
+single command string containing shell syntax can be passed through a shell,
+whereas an executable plus separate arguments invokes the program without
+shell expansion. Open3 exposes the same command conventions, and Rails defines
+`params` as incoming query/body/path request data. CodeQL's high-precision Ruby
+command-line-injection query independently uses Rails parameters reaching
+`system` as its canonical source/sink example. References: [Ruby
+Process][ruby-process], [Ruby Open3][ruby-open3], [Ruby Shellwords][ruby-shellwords],
+[Rails Action Controller parameters][rails-parameters], and [CodeQL Ruby
+command-line injection][codeql-ruby-command].
+
+**Parser, identity, and scope boundary.** Add a standalone bounded Ruby lexer
+instead of applying a language-agnostic expression. It understands comments,
+quoted strings, interpolation, backticks, `%q`, `%Q`, `%x`, symbols, variables,
+balanced delimiters, CR/LF/CRLF line accounting, and both parenthesized and
+ordinary parentheses-free calls. Analysis is limited to methods of an exact
+`ActionController::Base` subclass or a conventional
+`app/controllers/*_controller.rb` subclass of `ApplicationController`.
+Recognize bare Kernel `system`, `exec`, and `spawn` only when no local method
+shadows the name; accept explicit Kernel and Process receivers, IO `popen`, and
+Open3 capture/popen methods only after an exact same-file `require "open3"`.
+Reject test/spec/fixture paths, non-Ruby files, unbalanced blocks or delimiters,
+and ambiguous lookalikes. Cap nesting at 128, tokens at 131,072, records at 64,
+propagator/control histories at 16/8, and excerpt lines at 2,048 Unicode
+characters.
+
+**Source, flow, sink, and control boundary.** Accept indexed Rails `params`,
+literal-key `require`, `expect`, `fetch`, and `dig`, plus indexed request query,
+body, and path parameter maps. Track method-local assignment, reassignment,
+interpolation, `+`, `+=`, and `<<`. Exact integer/float conversion closes this
+command-grammar path. Report a tainted one-string Kernel/Process/IO/Open3
+command, tainted executable selection, backtick or `%x` command, and the command
+argument of explicit `sh`/`bash`/`dash`/`ksh`/`zsh -c`, `cmd /c` or `/k`, and
+PowerShell/pwsh `-c` or `-Command`. Do not report a fixed executable with the
+tainted value only in a separate argument. `Shellwords.escape` and
+`shellescape` remain candidate evidence, not automatic suppression: their
+correctness depends on a Bourne-compatible shell, exact one-argument placement,
+surrounding quoting, and absence of later grammar-restoring transformations.
+
+**Validation and measured behavior.** A host row proves candidate request-to-
+command grammar or executable-selection flow. It does not prove route
+deployment, public reachability, process execution, effective shell, command
+resolution, persistence, privilege escalation, credential access, arbitrary
+filesystem access, or complete host compromise. The correction turn must
+establish OS and shell selection, exact command shape, environment, working
+directory, executable resolution, process privilege and containment,
+output/error handling, timeout/resource behavior, and the least concrete effect
+before calibrating CWE-78/CWE-88 severity. The benchmark twins keep the Rails
+source, Open3 capture API, response, and status topology fixed. Native Ruby
+3.2.3 parses both applications and witnesses; a harmless environment marker is
+expanded only by the one-string positive and remains literal in the argv
+control. A pinned-checkout, read-only hosted Ruby workflow repeats the exact
+outcomes. Twelve focused tests pass 104 assertions over Rails source forms,
+Kernel/Process/IO/Open3 identities, explicit shells, backticks and `%x`,
+parentheses-free calls, reassignment, numerical conversion, shadowing,
+Shellwords evidence, LF/CRLF provenance, malformed input, amplification caps,
+and correction guidance. The pair advances the corpus to 141 pairs, 282 cases,
+and 846 repeated scans. Native Ubuntu passes the 97-test, 3,291-assertion
+focused/canonical/residual lane. The authoritative Windows suite passes all
+1,856 tests and 13,657 assertions across 206 files in 532.57 seconds, with 27
+intentional skips. Format, generated models, TypeScript, build, and production
+audit are clean. A 283-entry, 2,186,440-byte package with SHA-256
+`f242c4b1e88acf39ae2c0e3ace255b7053085afb5e87b89f59c3900eca75733d`
+passes strict archive inspection and two isolated 67-package consumers,
+including the public API, CLI, and all 79 plugin files, then is removed.
+
+[ruby-process]: https://docs.ruby-lang.org/en/3.4/Process.html
+[ruby-open3]: https://docs.ruby-lang.org/en/3.4/Open3.html
+[ruby-shellwords]: https://docs.ruby-lang.org/en/3.4/Shellwords.html
+[rails-parameters]: https://guides.rubyonrails.org/action_controller_overview.html
+[codeql-ruby-command]: https://codeql.github.com/codeql-query-help/ruby/rb-command-line-injection/
+
 ## 2026-08-27 — Add PHP PDO/MySQLi SQL-command dataflow and executable benchmark
 
 **Why PHP is the next marginal coverage gain.** The exact pushed corpus held

@@ -1,0 +1,52 @@
+name: ruby-fixture-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  rails-command-fixtures:
+    name: Rails command-injection fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install Ruby
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y ruby
+          ruby --version
+
+      - name: Parse Ruby fixtures and witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -c benchmarks/fixtures/ruby-rails-open3-shell-injection/src/app/controllers/diagnostics_controller.rb
+          ruby -c benchmarks/fixtures/ruby-rails-open3-shell-injection/witness.rb
+          ruby -c benchmarks/fixtures/ruby-rails-open3-argv-command/src/app/controllers/diagnostics_controller.rb
+          ruby -c benchmarks/fixtures/ruby-rails-open3-argv-command/witness.rb
+
+      - name: Prove shell grammar and argument-data behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          vulnerable="$(ruby benchmarks/fixtures/ruby-rails-open3-shell-injection/witness.rb)"
+          control="$(ruby benchmarks/fixtures/ruby-rails-open3-argv-command/witness.rb)"
+          test "$vulnerable" = "shell_expanded_marker=1"
+          test "$control" = "shell_expanded_marker=0"

@@ -182,6 +182,7 @@ const distFiles = new Set(
     "targets",
     "terraform-risk",
     "php-sql-risk",
+    "ruby-command-risk",
     "traefik-risk",
     "trusted-executable",
     "version",

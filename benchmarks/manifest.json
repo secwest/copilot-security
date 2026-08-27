@@ -4849,6 +4849,45 @@
       "expected": []
     },
     {
+      "id": "ruby-rails-open3-shell-injection",
+      "description": "A Rails request parameter is interpolated into the one-string Open3 command form, allowing shell metacharacters to alter command grammar.",
+      "fixture": "fixtures/ruby-rails-open3-shell-injection",
+      "findingsPaths": [
+        "ruby-rails-open3-shell-injection/run-1/findings.json",
+        "ruby-rails-open3-shell-injection/run-2/findings.json",
+        "ruby-rails-open3-shell-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "ruby-rails-open3-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/app/controllers/diagnostics_controller.rb",
+              "startLine": 6,
+              "endLine": 6,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "ruby-rails-open3-argv-command",
+      "description": "The topology-identical control keeps Rails and Open3 but uses a fixed executable and passes request data only as a separate argument.",
+      "fixture": "fixtures/ruby-rails-open3-argv-command",
+      "findingsPaths": [
+        "ruby-rails-open3-argv-command/run-1/findings.json",
+        "ruby-rails-open3-argv-command/run-2/findings.json",
+        "ruby-rails-open3-argv-command/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-hydra-unsafe-instantiate",
       "description": "A remote Flask JSON configuration crosses an exact relative wrapper into hydra.utils.instantiate under hydra-core 1.3.3, allowing attacker-selected callable lookup and invocation.",
       "fixture": "fixtures/python-hydra-unsafe-instantiate",

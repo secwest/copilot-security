@@ -160,7 +160,31 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-php-sql
 ```
 
-The versioned corpus currently contains 140 vulnerable/control pairs:
+## Ruby on Rails command-injection benchmark
+
+`ruby-rails-command-injection-manifest.json` adds the canonical corpus's first
+Ruby pair. Both fixtures retain the same Rails parameter source, Open3 process
+API, captured output, status handling, and rendered response. The positive
+interpolates the request value into Open3's one-string command form; the control
+uses a fixed executable and format with the request value only as a separate
+argument. Their native witnesses use an environment marker to demonstrate
+shell expansion without filesystem, network, credential, persistence, or
+privilege effects.
+
+Deterministic regression additionally covers Kernel, Process, IO, and Open3
+call shapes; POSIX, CMD, and PowerShell command-string flags; backticks and
+`%x`; Rails parameter variants; assignment and interpolation flow; fixed argv,
+numeric conversion, method shadowing, reassignment, test/non-controller
+exclusion, Shellwords control evidence, CRLF provenance, and lexer resource
+bounds. Run the focused model benchmark with:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/ruby-rails-command-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-ruby-command
+```
+
+The versioned corpus currently contains 141 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

@@ -33,6 +33,7 @@ import { goSquirrelSqlInjectionRecords } from "./go-squirrel-risk.js";
 import { sourceDisplayControlRiskRecords } from "./source-display-control-risk.js";
 import { terraformRiskRecords } from "./terraform-risk.js";
 import { phpSqlInjectionRecords } from "./php-sql-risk.js";
+import { rubyCommandInjectionRecords } from "./ruby-command-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -4409,6 +4410,7 @@ export async function buildResidualRiskInventory(
       ...kubernetesRiskRecords(file.path, file.lines, file.text),
       ...terraformRiskRecords(file.path, file.lines, file.text),
       ...phpSqlInjectionRecords(file.path, file.lines, file.text),
+      ...rubyCommandInjectionRecords(file.path, file.lines, file.text),
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
       ...githubActionsSelfHostedPrRecords(file.path, file.lines, file.text),
       ...githubActionsWorkflowInjectionRecords(

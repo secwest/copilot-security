@@ -6,6 +6,44 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added the canonical corpus's first Ruby model,
+  `ruby-rails-command-injection`. A bounded Ruby-aware lexer and Rails
+  controller-method dataflow pass follows `params` and request parameter maps
+  through local assignment, interpolation, and concatenation into Kernel,
+  Process, IO, and required Open3 process APIs, including ordinary Ruby
+  parentheses-free calls, backticks, `%x`, and explicit POSIX, CMD, and
+  PowerShell command-string forms. It distinguishes one-string shell grammar
+  and attacker-selected executables from a fixed executable whose untrusted
+  value remains a separate argument.
+- Kept the host signal deliberately narrower than a keyword match. Open3
+  requires an exact same-file `require`, Rails scope requires an exact
+  controller inheritance and method, locally shadowed core methods are
+  rejected, and test, non-Ruby, malformed, disconnected, reassigned, fixed,
+  and numerically normalized flows remain negative. `Shellwords.escape` and
+  `shellescape` are retained as Bourne-shell-specific candidate controls for
+  contextual validation rather than treated as universal suppression. The
+  pass caps nesting at 128, tokens at 131,072, records at 64, and each excerpt
+  line at 2,048 Unicode characters.
+- Added a strict Rails/Open3 exploit-control pair and focused perfect-gate
+  manifest, advancing the full corpus to 141 pairs, 282 cases, and 846 repeated
+  scan positions. The pair keeps the Rails parameter source, Open3 API, output
+  capture, status handling, and rendered response fixed; only the positive
+  embeds data in a one-string command, while the control uses fixed executable
+  and argv boundaries. Native Ruby 3.2.3 parses all four source/witness files
+  and produces `shell_expanded_marker=1` versus
+  `shell_expanded_marker=0` without file, network, credential, persistence, or
+  privilege effects. A new read-only `ruby-fixture-ci` workflow repeats that
+  boundary on hosted Ubuntu. Focused Windows tests pass 12 cases and 104
+  assertions; the adjacent native Ubuntu canonical/residual lane passes 97
+  tests and 3,291 assertions. The authoritative Windows suite passes 1,856
+  tests and 13,657 assertions across 206 files in 532.57 seconds, with 27
+  intentional platform/integration skips and zero failures. Formatting,
+  generated-model drift, TypeScript, production build, and the high-severity
+  production dependency audit are clean. A fresh 283-entry, 2,186,440-byte npm
+  archive with SHA-256
+  `f242c4b1e88acf39ae2c0e3ace255b7053085afb5e87b89f59c3900eca75733d`
+  passes strict inspection and two isolated installs, including the public API,
+  CLI, and all 79 bundled plugin files; the disposable archive is removed.
 - Added the canonical corpus's first PHP model,
   `php-pdo-mysqli-sql-injection`. A bounded PHP-aware lexer and same-scope
   dataflow pass follows `$_GET`, `$_POST`, `$_REQUEST`, `$_COOKIE`, selected
