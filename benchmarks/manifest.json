@@ -6000,6 +6000,71 @@
         "kotlin-ktor-argv-command/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-shell-command-injection",
+      "description": "A typed Ktor Resource path value reaches a shell command installed by ProcessBuilder.command after a safe constructor command, proving the effective mutable state is dangerous at start.",
+      "fixture": "fixtures/kotlin-ktor-resource-shell-command-injection",
+      "findingsPaths": [
+        "kotlin-ktor-resource-shell-command-injection/run-1/findings.json",
+        "kotlin-ktor-resource-shell-command-injection/run-2/findings.json",
+        "kotlin-ktor-resource-shell-command-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "kotlin-ktor-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/main/kotlin/example/Diagnostics.kt",
+              "startLine": 21,
+              "endLine": 21,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["typed resource", "@Resource", "DiagnosticResource"],
+            ["commandLine", "interpolation", "formatted"],
+            [
+              "ProcessBuilder.command",
+              "command replacement",
+              "builder.command"
+            ],
+            ["sh -c", "shell", "-c"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["commandLine", "command string", "shell grammar"],
+            [
+              "builder.command",
+              "command replacement",
+              "ProcessBuilder.command"
+            ],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-argv-command",
+      "description": "The topology-matched control begins with shell-like constructor state but replaces it before start with a fixed printf command and one untrusted ordinary argument.",
+      "fixture": "fixtures/kotlin-ktor-resource-argv-command",
+      "findingsPaths": [
+        "kotlin-ktor-resource-argv-command/run-1/findings.json",
+        "kotlin-ktor-resource-argv-command/run-2/findings.json",
+        "kotlin-ktor-resource-argv-command/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

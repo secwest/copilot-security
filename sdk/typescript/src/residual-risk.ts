@@ -4140,16 +4140,22 @@ const RUST_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
 ] as const;
 
 const KOTLIN_KTOR_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
-  ["call.request.queryParameters", "Ktor query", "request query"],
+  [
+    "call.request.queryParameters",
+    "Ktor query",
+    "request query",
+    "typed resource",
+    "@Resource",
+  ],
   ["commandLine", "interpolation", "formatted"],
   ["ProcessBuilder", "java.lang.ProcessBuilder"],
   ["sh -c", "shell", "-c"],
 ] as const;
 
 const KOTLIN_KTOR_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
-  ["target", "query value", "request value"],
+  ["target", "query value", "request value", "resource value"],
   ["commandLine", "command string", "shell grammar"],
-  ["ProcessBuilder", "process", "start"],
+  ["ProcessBuilder", "process", "start", "startPipeline"],
   ["stdout", "response", "respondText"],
 ] as const;
 

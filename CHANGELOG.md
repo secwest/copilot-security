@@ -6,6 +6,32 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended `kotlin-ktor-command-injection` through two previously unmodeled
+  Kotlin/JDK boundaries: typed Ktor Resources handlers and mutable
+  `ProcessBuilder.command(...)` state. Exact `io.ktor.server.resources` route
+  imports plus an exact imported, aliased, or fully qualified
+  `io.ktor.resources.Resource` annotation seed the explicit or implicit typed
+  handler parameter. The same-file flow then follows resource properties into
+  the effective command after vararg or fixed-collection replacement. Named
+  builders now close through `startPipeline(...)` as well as `start()`.
+- Preserved effective-state and command/data false-positive barriers. A safe
+  constructor later replaced with attacker-influenced shell grammar is
+  reportable; an unsafe-looking constructor later replaced with a fixed
+  ordinary executable and distinct untrusted argv is not. Local annotations,
+  unannotated handler types, wrong Resources imports, inert builders, and
+  non-executed replacement remain hard negatives. Reviewer guidance and
+  field-local evidence gates now require the typed resource property, command
+  replacement, and actual execution method when those edges are present.
+- Added a second topology-matched Ktor exploit/control pair and expanded the
+  perfect-gate Kotlin manifest to four cases. Both real applications compile
+  with Kotlin 2.2.20, Ktor 3.5.2, the serialization compiler plugin, and Java
+  21 under Ubuntu. Their native tests prove that the effective shell command
+  expands only an inert environment marker while the effective `printf` argv
+  command does not. Focused Windows regressions pass 16 tests and 140
+  assertions, including exact identities, multiline handler parameters,
+  vararg/list replacements, state reversal, and `startPipeline`. Generated
+  Maven targets were removed. The canonical corpus now contains 144 pairs,
+  288 cases, and 864 repeated scan positions.
 - Added the canonical corpus's first native Kotlin/Ktor model,
   `kotlin-ktor-command-injection`. A bounded Kotlin lexer and route-lambda
   dataflow pass follows exact Ktor query, path, header, query-string, and body

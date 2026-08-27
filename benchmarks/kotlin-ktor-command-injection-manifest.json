@@ -54,6 +54,54 @@
       "id": "kotlin-ktor-argv-command",
       "fixture": "fixtures/kotlin-ktor-argv-command",
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-shell-command-injection",
+      "fixture": "fixtures/kotlin-ktor-resource-shell-command-injection",
+      "expected": [
+        {
+          "title": "Ktor typed resource reaches a replaced shell command string",
+          "cwe": ["CWE-78", "CWE-88"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/main/kotlin/example/Diagnostics.kt",
+          "line": 21,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["typed resource", "@Resource", "DiagnosticResource"],
+            ["commandLine", "interpolation", "formatted"],
+            [
+              "ProcessBuilder.command",
+              "command replacement",
+              "builder.command"
+            ],
+            ["sh -c", "shell", "-c"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["commandLine", "command string", "shell grammar"],
+            [
+              "builder.command",
+              "command replacement",
+              "ProcessBuilder.command"
+            ],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-argv-command",
+      "fixture": "fixtures/kotlin-ktor-resource-argv-command",
+      "expected": []
     }
   ]
 }

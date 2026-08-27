@@ -34,6 +34,8 @@ const benchmarkRoot = resolve(process.cwd(), "..", "..", "benchmarks");
 const caseIds = [
   "kotlin-ktor-shell-command-injection",
   "kotlin-ktor-argv-command",
+  "kotlin-ktor-resource-shell-command-injection",
+  "kotlin-ktor-resource-argv-command",
 ] as const;
 const handlerPath = "src/main/kotlin/example/Diagnostics.kt";
 
@@ -109,6 +111,13 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
     ).toHaveLength(4);
     expect(benchmark.cases[0]?.expected[0]?.forbiddenText).toHaveLength(4);
     expect(benchmark.cases[1]?.expected).toEqual([]);
+    expect(benchmark.cases[2]?.expected[0]).toMatchObject({
+      cwe: ["CWE-78", "CWE-88"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(benchmark.cases[3]?.expected).toEqual([]);
   });
 
   test("preserves exact Ktor source, interpolation, ProcessBuilder, and start", async () => {
@@ -246,6 +255,12 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
       "kotlin-ktor-shell-command-injection/pom.xml verify",
     );
     expect(workflow).toContain("kotlin-ktor-argv-command/pom.xml verify");
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-shell-command-injection/pom.xml verify",
+    );
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-argv-command/pom.xml verify",
+    );
   });
 
   test("recognizes exact Ktor query, path, header, query-string, and body sources", () => {
@@ -308,6 +323,169 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
             .start()`),
     );
     expect(chained).toHaveLength(1);
+  });
+
+  test("recognizes typed Resources handlers and effective command replacement", async () => {
+    const vulnerable = await fixtureRecords(caseIds[2]);
+    const safe = await fixtureRecords(caseIds[3]);
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]).toMatchObject({
+      path: handlerPath,
+      line: 21,
+      frameworkModel: {
+        source: {
+          kind: "ktor-typed-resource",
+          line: 16,
+          symbol: "input:DiagnosticResource",
+        },
+        sink: {
+          kind: "kotlin-process-shell-command",
+          symbol: "java.lang.ProcessBuilder;method=start;argument=3",
+        },
+      },
+    });
+    expect(
+      vulnerable[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "kotlin-local-assignment",
+      "kotlin-string-interpolation",
+      "kotlin-local-assignment",
+    ]);
+    expect(safe).toEqual([]);
+
+    const vulnerableSource = await readFile(
+      join(benchmarkRoot, "fixtures", caseIds[2], handlerPath),
+      "utf8",
+    );
+    const safeSource = await readFile(
+      join(benchmarkRoot, "fixtures", caseIds[3], handlerPath),
+      "utf8",
+    );
+    for (const source of [vulnerableSource, safeSource]) {
+      expect(source).toContain("@Resource");
+      expect(source).toContain("get<DiagnosticResource> { input ->");
+      expect(source).toContain('ProcessBuilder("printf", "%s", "fixed")');
+      expect(source).toContain("builder.command");
+      expect(source).toContain("builder.start()");
+      expect(source).toContain("call.respondText(stdout)");
+    }
+  });
+
+  test("tracks vararg and list command replacement through start and startPipeline", () => {
+    const resource = (body: string, annotation = "Resource"): string =>
+      `package example
+import io.ktor.resources.Resource
+import io.ktor.server.resources.get
+import io.ktor.server.routing.routing
+import java.lang.ProcessBuilder
+
+@${annotation}("/diagnostics/{target}")
+data class DiagnosticResource(val target: String)
+
+fun routes() = routing {
+    get<DiagnosticResource> { input ->
+${body}
+    }
+}
+`;
+    const replaced = records(
+      resource(`        val value = input.target
+        val builder = ProcessBuilder("printf", "%s", "fixed")
+        builder.command("sh", "-c", value)
+        builder.start()`),
+    );
+    expect(replaced).toHaveLength(1);
+    expect(replaced[0]?.frameworkModel.source.kind).toBe("ktor-typed-resource");
+
+    const listed = records(
+      resource(`        val value = input.target
+        ProcessBuilder("printf", "%s", "fixed")
+            .command(listOf("pwsh", "-Command", value))
+            .start()`),
+    );
+    expect(listed).toHaveLength(1);
+
+    const pipeline = records(
+      resource(`        val value = input.target
+        val builder = ProcessBuilder("fixed")
+        builder.command(listOf("sh", "-c", value))
+        ProcessBuilder.startPipeline(listOf(builder))`),
+    );
+    expect(pipeline).toHaveLength(1);
+    expect(pipeline[0]?.frameworkModel.sink.symbol).toBe(
+      "java.lang.ProcessBuilder;method=startPipeline;argument=3",
+    );
+
+    const safe = records(
+      resource(`        val value = input.target
+        val builder = ProcessBuilder("sh", "-c", value)
+        builder.command("printf", "%s", value)
+        builder.start()`),
+    );
+    expect(safe).toEqual([]);
+  });
+
+  test("requires exact Resources identities and an annotated handler type", () => {
+    const source = `package example
+import io.ktor.resources.Resource as HttpResource
+import io.ktor.server.resources.get
+import io.ktor.server.routing.routing
+import java.lang.ProcessBuilder
+
+@HttpResource("/diagnostics/{target}")
+data class DiagnosticResource(val target: String)
+
+fun routes() = routing {
+    get<DiagnosticResource> { input ->
+        ProcessBuilder("sh", "-c", input.target).start()
+    }
+}
+`;
+    expect(records(source)).toHaveLength(1);
+    expect(
+      records(source.replace("{ input ->", "{\n        input ->")),
+    ).toHaveLength(1);
+    expect(records(source.replace("@HttpResource", "@LocalResource"))).toEqual(
+      [],
+    );
+    expect(
+      records(
+        source.replace(
+          "io.ktor.server.resources.get",
+          "local.server.resources.get",
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  test("keeps mutable-command witnesses harmless and paired", async () => {
+    const vulnerable = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        caseIds[2],
+        "src/test/kotlin/example/ResourceShellCommandWitnessTest.kt",
+      ),
+      "utf8",
+    );
+    const safe = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        caseIds[3],
+        "src/test/kotlin/example/ResourceArgvCommandWitnessTest.kt",
+      ),
+      "utf8",
+    );
+    for (const witness of [vulnerable, safe]) {
+      expect(witness).toContain("KOTLIN_RESOURCE_COMMAND_MARKER");
+      expect(witness).toContain("builder.command");
+      expect(witness).toContain("builder.start()");
+      expect(witness).not.toContain("java.io.File");
+      expect(witness).not.toContain("java.net");
+    }
+    expect(vulnerable).toContain('builder.command("sh", "-c", payload)');
+    expect(safe).toContain('builder.command("printf", "%s", payload)');
   });
 
   test("recognizes shell, interpreter, batch, and executable-selection boundaries", () => {

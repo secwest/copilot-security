@@ -2,6 +2,52 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Follow Ktor typed resources into the effective process command
+
+**Why this closes a real false negative.** The first Kotlin lane recognized
+untyped route lambdas and constructor-time `ProcessBuilder` arguments. Ktor's
+Resources plugin instead passes a deserialized `@Resource` instance to a typed
+`get<T>` or other method handler. The JDK also permits a builder's complete
+command to be replaced after construction and permits multiple configured
+builders to execute through `startPipeline`. Constructor-only analysis can
+therefore miss an attacker-controlled effective command, while reporting a
+dangerous-looking constructor that is replaced with safe argv would be the
+opposite error. References: [Ktor type-safe routing][ktor-resources], [Ktor
+typed `get` API][ktor-resource-get], and [JDK ProcessBuilder][jdk-process-builder].
+
+**Typed-source identity boundary.** A resource source requires an exact
+`io.ktor.server.resources` method or wildcard import, an exact imported,
+aliased, or fully qualified `io.ktor.resources.Resource` annotation, and a
+simple annotated class used as the handler's generic type. The lexer binds the
+handler's explicit first lambda parameter, including a formatter-style line
+break before `->`, or Kotlin's implicit `it`. An unannotated type, local
+annotation, wrong route package, or generic route without the Resources import
+does not seed dataflow. This is narrower than treating every generic Ktor
+handler object as attacker controlled.
+
+**Effective mutable state and execution boundary.** A recognized builder keeps
+its current ordered command. Each exact receiver `command(...)` replaces that
+state; varargs and literal `listOf`, `mutableListOf`, or `arrayOf` construction
+use the same argument-position model as the constructor. A replacement in a
+direct fluent chain is applied before `start()`. A named builder passed to the
+exact imported or fully qualified static `startPipeline(...)` is also an
+execution closure. Risk is evaluated only on the last modeled effective
+command: executable selection and explicit shell/interpreter grammar remain
+reportable, while request data in ordinary argv for a fixed program remains a
+hard negative. Mutable-list getter edits, collection aliases, builder aliases,
+inline pipeline builders, and cross-function state are intentionally deferred
+until they can be paired with exact identity and low-noise tests.
+
+**Paired evidence.** The positive application constructs a fixed `printf`
+builder, replaces it with `sh -c` containing `input.target`, and starts it. The
+control retains the same typed resource, assignments, mutable builder, output,
+and response, but its last replacement selects fixed `printf` with the value
+in a separate argv slot. Kotlin 2.2.20 and the serialization compiler plugin
+compile both Ktor 3.5.2 applications on Java 21 under Ubuntu. Harmless native
+tests demonstrate marker expansion only in the shell case. The focused model
+passes 16 tests and 140 assertions, and the perfect-gate corpus advances to 144
+pairs, 288 cases, and 864 scan positions.
+
 ## 2026-08-27 — Analyze Ktor process launches as Kotlin, not Java-shaped text
 
 **Why this is a beyond-parity lane.** The source inventory already admitted
@@ -82,6 +128,8 @@ sinks only with exact identity and paired native evidence; it should not widen
 this model into process-keyword co-occurrence.
 
 [ktor-requests]: https://ktor.io/docs/server-requests.html
+[ktor-resources]: https://ktor.io/docs/server-resources.html
+[ktor-resource-get]: https://api.ktor.io/ktor-server-resources/io.ktor.server.resources/get.html
 [kotlin-java-interop]: https://kotlinlang.org/docs/java-interop.html
 [jdk-process-builder]: https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/ProcessBuilder.html
 [codeql-jvm-command]: https://codeql.github.com/codeql-query-help/java/java-command-line-injection/

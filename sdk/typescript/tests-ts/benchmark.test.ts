@@ -434,6 +434,10 @@ describe("effectiveness benchmark", () => {
       ["rust-axum-shell-command-injection", "rust-axum-argv-command"],
       ["kotlin-ktor-shell-command-injection", "kotlin-ktor-argv-command"],
       [
+        "kotlin-ktor-resource-shell-command-injection",
+        "kotlin-ktor-resource-argv-command",
+      ],
+      [
         "node-multi-hop-rhinostone-swig-template-traversal",
         "node-multi-hop-repaired-rhinostone-swig-template-root",
       ],

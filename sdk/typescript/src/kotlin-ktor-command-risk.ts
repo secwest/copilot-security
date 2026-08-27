@@ -26,7 +26,8 @@ interface KotlinSource {
     | "ktor-path-parameter"
     | "ktor-query-parameter"
     | "ktor-query-string"
-    | "ktor-request-body";
+    | "ktor-request-body"
+    | "ktor-typed-resource";
   line: number;
   symbol: string;
 }
@@ -54,6 +55,11 @@ interface ProcessArgument {
 interface ProcessBuilderState {
   arguments: ProcessArgument[];
   constructorLine: number;
+}
+
+interface KotlinRouteScope {
+  body: KotlinToken[];
+  resourceSource?: KotlinSource;
 }
 
 type KotlinProcessSinkKind =
@@ -417,14 +423,49 @@ function statementTokens(tokens: readonly KotlinToken[]): KotlinToken[][] {
   return statements;
 }
 
-function routeScopes(tokens: readonly KotlinToken[]): KotlinToken[][] {
-  const scopes: KotlinToken[][] = [];
+function routeScopes(
+  tokens: readonly KotlinToken[],
+  typedResourceTypes: ReadonlySet<string>,
+  hasTypedResourceRoutes: boolean,
+): KotlinRouteScope[] {
+  const scopes: KotlinRouteScope[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
     if (token?.kind !== "identifier" || !ROUTE_METHODS.has(token.value))
       continue;
     if (tokens[index - 1]?.value === ".") continue;
     let braceIndex = index + 1;
+    while (tokens[braceIndex]?.kind === "newline") braceIndex += 1;
+    let resourceType: string | undefined;
+    if (hasTypedResourceRoutes && tokens[braceIndex]?.value === "<") {
+      let depth = 0;
+      let closeIndex: number | undefined;
+      for (
+        let cursor = braceIndex;
+        cursor < Math.min(tokens.length, braceIndex + 32);
+        cursor += 1
+      ) {
+        if (tokens[cursor]?.value === "<") depth += 1;
+        if (tokens[cursor]?.value === ">") depth -= 1;
+        if (depth === 0) {
+          closeIndex = cursor;
+          break;
+        }
+      }
+      if (closeIndex === undefined) continue;
+      const declaredType = compact(tokens.slice(braceIndex + 1, closeIndex));
+      const simpleType = declaredType.split(".").at(-1);
+      if (
+        simpleType === undefined ||
+        !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(simpleType) ||
+        !typedResourceTypes.has(simpleType)
+      ) {
+        continue;
+      }
+      resourceType = simpleType;
+      braceIndex = closeIndex + 1;
+      while (tokens[braceIndex]?.kind === "newline") braceIndex += 1;
+    }
     if (tokens[braceIndex]?.value === "(") {
       const close = matchingDelimiter(tokens, braceIndex);
       if (close === undefined) continue;
@@ -434,9 +475,70 @@ function routeScopes(tokens: readonly KotlinToken[]): KotlinToken[][] {
     if (tokens[braceIndex]?.value !== "{") continue;
     const close = matchingDelimiter(tokens, braceIndex);
     if (close === undefined) continue;
-    scopes.push(tokens.slice(braceIndex + 1, close));
+    let bodyStart = braceIndex + 1;
+    let parameter: KotlinToken | undefined;
+    if (resourceType !== undefined) {
+      let prefixStart = bodyStart;
+      while (tokens[prefixStart]?.kind === "newline") prefixStart += 1;
+      const prefixLimit = Math.min(close, prefixStart + 16);
+      for (let cursor = prefixStart; cursor < prefixLimit; cursor += 1) {
+        if (tokens[cursor]?.kind === "newline") break;
+        if (tokens[cursor]?.value !== "->") continue;
+        parameter = tokens
+          .slice(prefixStart, cursor)
+          .find(({ kind }) => kind === "identifier");
+        if (parameter === undefined) break;
+        bodyStart = cursor + 1;
+        break;
+      }
+      parameter ??= {
+        kind: "identifier",
+        value: "it",
+        line: token.line,
+        column: token.column,
+        references: [],
+      };
+    }
+    scopes.push({
+      body: tokens.slice(bodyStart, close),
+      resourceSource:
+        resourceType === undefined || parameter === undefined
+          ? undefined
+          : {
+              kind: "ktor-typed-resource",
+              line: parameter.line,
+              symbol: `${parameter.value}:${resourceType}`,
+            },
+    });
   }
   return scopes;
+}
+
+function regexpEscape(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function typedResourceClassNames(text: string): Set<string> {
+  const annotations = new Set<string>();
+  for (const match of text.matchAll(
+    /^\s*import\s+io\.ktor\.resources\.Resource(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?\s*$/gmu,
+  )) {
+    annotations.add(match[1] ?? "Resource");
+  }
+  if (/\bio\.ktor\.resources\.Resource\b/u.test(text))
+    annotations.add("io.ktor.resources.Resource");
+  const types = new Set<string>();
+  for (const annotation of annotations) {
+    const expression = new RegExp(
+      `@${regexpEscape(annotation)}\\b(?:\\s*\\([^)]*\\))?\\s*(?:(?:public|internal|private|protected|data|value|sealed)\\s+)*class\\s+([A-Za-z_][A-Za-z0-9_]*)\\b`,
+      "gu",
+    );
+    for (const match of text.matchAll(expression)) {
+      const name = match[1];
+      if (name !== undefined) types.add(name);
+    }
+  }
+  return types;
 }
 
 function sourceFromExpression(
@@ -586,6 +688,58 @@ function assignment(
   return { name: name.value, expression: [...statement.slice(index + 1)] };
 }
 
+function processArguments(
+  tokens: readonly KotlinToken[],
+  fallbackLine: number,
+): ProcessArgument[] | undefined {
+  let arguments_ = splitArguments(tokens);
+  if (arguments_.length === 1) {
+    const only = arguments_[0] ?? [];
+    if (
+      new Set(["arrayOf", "listOf", "mutableListOf"]).has(
+        only[0]?.value ?? "",
+      ) &&
+      only[1]?.value === "("
+    ) {
+      const collectionClose = matchingDelimiter(only, 1);
+      if (collectionClose === only.length - 1)
+        arguments_ = splitArguments(only.slice(2, collectionClose));
+    }
+  }
+  if (arguments_.length === 0) return undefined;
+  return arguments_.map((argument) => ({
+    tokens: argument,
+    line: argument[0]?.line ?? fallbackLine,
+  }));
+}
+
+function commandReplacement(
+  tokens: readonly KotlinToken[],
+  receiver?: string,
+): ProcessArgument[] | undefined {
+  let replacement: ProcessArgument[] | undefined;
+  for (let index = 0; index < tokens.length - 3; index += 1) {
+    const methodIndex = receiver === undefined ? index + 1 : index + 2;
+    if (
+      (receiver === undefined
+        ? tokens[index]?.value === "."
+        : tokens[index]?.value === receiver &&
+          tokens[index + 1]?.value === ".") &&
+      tokens[methodIndex]?.value === "command" &&
+      tokens[methodIndex + 1]?.value === "("
+    ) {
+      const close = matchingDelimiter(tokens, methodIndex + 1);
+      if (close === undefined) continue;
+      const arguments_ = processArguments(
+        tokens.slice(methodIndex + 2, close),
+        tokens[methodIndex]?.line ?? 1,
+      );
+      if (arguments_ !== undefined) replacement = arguments_;
+    }
+  }
+  return replacement;
+}
+
 function processConstructor(
   tokens: readonly KotlinToken[],
   aliases: ReadonlySet<string>,
@@ -606,27 +760,14 @@ function processConstructor(
     if (openIndex === undefined) continue;
     const close = matchingDelimiter(tokens, openIndex);
     if (close === undefined) return undefined;
-    let arguments_ = splitArguments(tokens.slice(openIndex + 1, close));
-    if (arguments_.length === 1) {
-      const only = arguments_[0] ?? [];
-      if (
-        new Set(["arrayOf", "listOf", "mutableListOf"]).has(
-          only[0]?.value ?? "",
-        ) &&
-        only[1]?.value === "("
-      ) {
-        const collectionClose = matchingDelimiter(only, 1);
-        if (collectionClose === only.length - 1)
-          arguments_ = splitArguments(only.slice(2, collectionClose));
-      }
-    }
-    if (arguments_.length === 0) return undefined;
+    const initial = processArguments(
+      tokens.slice(openIndex + 1, close),
+      tokens[index]?.line ?? 1,
+    );
+    if (initial === undefined) return undefined;
     return {
       constructorLine: tokens[index]?.line ?? 1,
-      arguments: arguments_.map((argument) => ({
-        tokens: argument,
-        line: argument[0]?.line ?? tokens[index]?.line ?? 1,
-      })),
+      arguments: commandReplacement(tokens.slice(close + 1)) ?? initial,
     };
   }
   return undefined;
@@ -644,6 +785,38 @@ function startLine(
       tokens[index + 3]?.value === "("
     ) {
       return tokens[index + 2]?.line;
+    }
+  }
+  return undefined;
+}
+
+function pipelineStartLine(
+  tokens: readonly KotlinToken[],
+  builder: string,
+  aliases: ReadonlySet<string>,
+): number | undefined {
+  for (let index = 0; index < tokens.length - 2; index += 1) {
+    if (
+      tokens[index]?.value !== "startPipeline" ||
+      tokens[index + 1]?.value !== "("
+    ) {
+      continue;
+    }
+    const aliasReceiver =
+      tokens[index - 1]?.value === "." &&
+      aliases.has(tokens[index - 2]?.value ?? "");
+    const qualifiedReceiver =
+      compact(tokens.slice(Math.max(0, index - 6), index)) ===
+      "java.lang.ProcessBuilder.";
+    if (!aliasReceiver && !qualifiedReceiver) continue;
+    const close = matchingDelimiter(tokens, index + 1);
+    if (close === undefined) continue;
+    if (
+      tokens
+        .slice(index + 2, close)
+        .some((token) => token.kind === "identifier" && token.value === builder)
+    ) {
+      return tokens[index]?.line;
     }
   }
   return undefined;
@@ -782,6 +955,7 @@ function recordForRisk(
   lines: readonly string[],
   executionLine: number,
   risk: KotlinRisk,
+  executionMethod = "start",
 ): KotlinKtorCommandInjectionRecord {
   const startLine_ = Math.max(1, executionLine - CONTEXT_LINES_BEFORE);
   const endLine = Math.min(lines.length, executionLine + CONTEXT_LINES_AFTER);
@@ -815,7 +989,7 @@ function recordForRisk(
         kind: risk.kind,
         path,
         line: executionLine,
-        symbol: `java.lang.ProcessBuilder;method=start;argument=${risk.argumentIndex}`,
+        symbol: `java.lang.ProcessBuilder;method=${executionMethod};argument=${risk.argumentIndex}`,
         cweIds: ["CWE-78", "CWE-88"],
       },
       propagators: risk.taint.propagators.map((propagator) => ({
@@ -836,13 +1010,15 @@ export function kotlinKtorCommandInjectionRecords(
   text: string,
 ): KotlinKtorCommandInjectionRecord[] {
   if (!productionKotlinPath(path)) return [];
-  if (
-    !/^\s*import\s+io\.ktor\.server\.routing\.(?:\*|delete|get|head|options|patch|post|put)\s*$/mu.test(
+  const hasRoutingRoutes =
+    /^\s*import\s+io\.ktor\.server\.routing\.(?:\*|delete|get|head|options|patch|post|put)\s*$/mu.test(
       text,
-    )
-  ) {
-    return [];
-  }
+    );
+  const hasTypedResourceRoutes =
+    /^\s*import\s+io\.ktor\.server\.resources\.(?:\*|delete|get|head|options|patch|post|put)\s*$/mu.test(
+      text,
+    );
+  if (!hasRoutingRoutes && !hasTypedResourceRoutes) return [];
   const aliases = new Set<string>();
   for (const match of text.matchAll(
     /^\s*import\s+java\.lang\.ProcessBuilder(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?\s*$/gmu,
@@ -863,11 +1039,23 @@ export function kotlinKtorCommandInjectionRecords(
   const tokens = kotlinTokens(text);
   if (tokens === undefined) return [];
   const records: KotlinKtorCommandInjectionRecord[] = [];
-  for (const scope of routeScopes(tokens)) {
+  const resourceTypes = typedResourceClassNames(text);
+  for (const scope of routeScopes(
+    tokens,
+    resourceTypes,
+    hasTypedResourceRoutes,
+  )) {
     const taints = new Map<string, KotlinTaint>();
+    if (scope.resourceSource !== undefined) {
+      taints.set(scope.resourceSource.symbol.split(":", 1)[0] ?? "it", {
+        source: scope.resourceSource,
+        propagators: [],
+        controls: [],
+      });
+    }
     const literals = new Map<string, string>();
     const builders = new Map<string, ProcessBuilderState>();
-    for (const statement of statementTokens(scope)) {
+    for (const statement of statementTokens(scope.body)) {
       const assigned = assignment(statement);
       const constructor = processConstructor(statement, aliases);
       const directStart =
@@ -905,11 +1093,27 @@ export function kotlinKtorCommandInjectionRecords(
         else literals.set(assigned.name, literal);
       }
       for (const [name, state] of builders) {
+        const replacement = commandReplacement(statement, name);
+        if (replacement !== undefined) {
+          state.arguments = replacement;
+          builders.set(name, state);
+        }
         const line = startLine(statement, name);
-        if (line === undefined) continue;
-        const risk = processRisk(state, taints, literals);
-        if (risk !== undefined)
-          records.push(recordForRisk(path, lines, line, risk));
+        const pipelineLine = pipelineStartLine(statement, name, aliases);
+        if (line !== undefined || pipelineLine !== undefined) {
+          const risk = processRisk(state, taints, literals);
+          if (risk !== undefined) {
+            records.push(
+              recordForRisk(
+                path,
+                lines,
+                line ?? pipelineLine ?? state.constructorLine,
+                risk,
+                line === undefined ? "startPipeline" : "start",
+              ),
+            );
+          }
+        }
       }
       if (records.length >= MAX_RECORDS) return records;
     }
