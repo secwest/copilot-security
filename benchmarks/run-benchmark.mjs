@@ -33,6 +33,7 @@ import {
   writeBenchmarkTextAtomic,
 } from "../sdk/typescript/dist/benchmark-campaign.js";
 import { createBestEffortWriter } from "./best-effort-output.mjs";
+import { rejectGitControlPath } from "./fixture-security.mjs";
 import {
   benchmarkFindingsPaths,
   buildBenchmarkSelection,
@@ -427,6 +428,10 @@ async function runTask(task, worker) {
         errorOnExist: true,
         force: false,
       });
+      await rejectGitControlPath(
+        repository,
+        `Benchmark fixture ${benchmarkCase.id}`,
+      );
       initializeFixtureRepository(repository, {
         hooksDirectory,
         globalConfigPath: join(gitGuardDirectory, "empty-global-config"),

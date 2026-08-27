@@ -1877,7 +1877,7 @@ describe("malformed scan artifact recovery", () => {
     ]);
   });
 
-  test("closes reviewed documentation and metadata instead of deferring coverage", async () => {
+  test("does not treat free-text documentation notes as review closure", async () => {
     const fixture = await startDraftScan();
     const coveragePath = join(fixture.scanDir, "coverage.json");
     const coverage = await readJson<{
@@ -1930,16 +1930,16 @@ describe("malformed scan artifact recovery", () => {
     }>(coveragePath);
 
     expect(scan.progress.status).toBe("complete");
-    expect(recovered.completeness).toBe("complete");
-    expect(recovered.deferred).toEqual([]);
+    expect(recovered.completeness).toBe("partial");
+    expect(recovered.deferred).toHaveLength(2);
     expect(recovered.surfaces.slice(1)).toEqual([
       expect.objectContaining({
         label: "README.md",
-        disposition: "no_issue_found",
+        disposition: "needs_follow_up",
       }),
       expect.objectContaining({
         label: "package.json",
-        disposition: "no_issue_found",
+        disposition: "needs_follow_up",
       }),
     ]);
   });

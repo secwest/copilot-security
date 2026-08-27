@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBestEffortWriter } from "../../../benchmarks/best-effort-output.mjs";
+import { rejectGitControlPath } from "../../../benchmarks/fixture-security.mjs";
 import { acquireBenchmarkRunnerLock } from "../src/benchmark-campaign.js";
 
 const temporaryPaths: string[] = [];
@@ -191,6 +192,97 @@ describe("benchmark runner interruption recovery", () => {
     expect(campaign.selection.fixtureSha256ByCase["seed-case"]).toMatch(
       /^[0-9a-f]{64}$/,
     );
+  });
+
+  test("rejects fixture Git controls before initialization and retains a copied-tree guard", async () => {
+    const root = await temporaryDirectory("benchmark-fixture-git-control-");
+    const corpus = join(root, "corpus");
+    const fixture = join(corpus, "fixture");
+    const customManifest = join(corpus, "manifest.json");
+    const results = join(root, "results");
+    const scanner = join(root, "scanner");
+    const scannerMarker = join(root, "scanner-invoked.txt");
+    const filterMarker = join(root, "filter-invoked.txt");
+    const scannerCli = join(scanner, "bin", "fixture-scanner.mjs");
+    await mkdir(join(fixture, ".git"), { recursive: true });
+    await writeFile(join(fixture, "source.js"), "export const safe = true;\n");
+    await writeFile(join(fixture, ".gitattributes"), "source.js filter=x\n");
+    await writeFile(
+      join(fixture, ".git", "config"),
+      [
+        "[core]",
+        "\trepositoryformatversion = 0",
+        '[filter "x"]',
+        `\tclean = node -e \"require('fs').writeFileSync('${filterMarker.replaceAll("\\", "\\\\")}', 'unexpected')\"`,
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      customManifest,
+      `${JSON.stringify({
+        schemaVersion: "1.0",
+        thresholds: {},
+        cases: [
+          {
+            id: "git-control-case",
+            description: "fixture Git controls are forbidden",
+            fixture: "fixture",
+            findingsPaths: ["git-control-case/run-1/findings.json"],
+            expected: [],
+          },
+        ],
+      })}\n`,
+    );
+    for (const directory of ["bin", "dist", "_bundled_plugin"]) {
+      await mkdir(join(scanner, directory), { recursive: true });
+    }
+    await writeFile(
+      join(scanner, "package.json"),
+      '{"name":"benchmark-git-control-fixture","type":"module"}\n',
+    );
+    await writeFile(
+      scannerCli,
+      [
+        'import { writeFileSync } from "node:fs";',
+        `writeFileSync(${JSON.stringify(scannerMarker)}, "unexpected\\n", "utf8");`,
+        "process.exit(1);",
+        "",
+      ].join("\n"),
+    );
+
+    await expect(
+      rejectGitControlPath(fixture, "Copied benchmark fixture"),
+    ).rejects.toThrow("must not contain a pre-existing .git control path");
+
+    const result = runNode([
+      runner,
+      "--results-dir",
+      results,
+      "--manifest",
+      customManifest,
+      "--runs",
+      "1",
+      "--selection-only",
+      "--scanner-cli",
+      scannerCli,
+      "--scanner-label",
+      "git-control-fixture",
+      "--auth",
+      "github",
+      "--mode",
+      "standard",
+      "--max-attempts",
+      "1",
+      "--scan-timeout-ms",
+      "60000",
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "Benchmark fixture must not contain Git repository metadata",
+    );
+    expect(await readFile(scannerMarker, "utf8").catch(() => null)).toBeNull();
+    expect(await readFile(filterMarker, "utf8").catch(() => null)).toBeNull();
   });
 
   test("finalizes failed receipts without launching another scanner attempt", async () => {

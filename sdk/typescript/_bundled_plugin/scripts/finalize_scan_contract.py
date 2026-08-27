@@ -4029,21 +4029,6 @@ def _normalize_standalone_coverage_draft(
     }, True
 
 
-def _standalone_notes_close_review(notes: Any) -> bool:
-    if not isinstance(notes, str):
-        return False
-    token = notes.strip().lower()
-    return any(
-        phrase in token
-        for phrase in (
-            "documentation reviewed",
-            "no code paths to validate",
-            "repository metadata",
-            "used readme to confirm",
-        )
-    )
-
-
 def _reconcile_standalone_coverage_with_findings(
     coverage: dict[str, Any],
     findings: dict[str, Any],
@@ -4056,7 +4041,6 @@ def _reconcile_standalone_coverage_with_findings(
         if isinstance(location, dict) and isinstance(location.get("path"), str)
     }
     reported_surface_ids: set[str] = set()
-    closed_surface_ids: set[str] = set()
     for surface in coverage.get("surfaces", []):
         if not isinstance(surface, dict):
             continue
@@ -4066,21 +4050,13 @@ def _reconcile_standalone_coverage_with_findings(
             surface_id = surface.get("id")
             if isinstance(surface_id, str):
                 reported_surface_ids.add(surface_id)
-        elif (
-            surface.get("disposition") == "needs_follow_up"
-            and _standalone_notes_close_review(surface.get("notes"))
-        ):
-            surface["disposition"] = "no_issue_found"
-            surface_id = surface.get("id")
-            if isinstance(surface_id, str):
-                closed_surface_ids.add(surface_id)
         elif not finding_paths and surface.get("disposition") == "reported":
             # Compact drafts sometimes promote rejected observations into
             # findings and mirror them into coverage. Once filtered, those
             # reviewed surfaces carry no reportable issue.
             surface["disposition"] = "no_issue_found"
     deferred = coverage.get("deferred")
-    reconciled_surface_ids = reported_surface_ids | closed_surface_ids
+    reconciled_surface_ids = reported_surface_ids
     if isinstance(deferred, list) and reconciled_surface_ids:
         retained = []
         for row in deferred:

@@ -64,6 +64,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
   bypass same-session correction and fresh-session closure. Focused Windows
   and native Ubuntu runs each pass 111 tests with one intentional platform
   skip, 1,287 assertions, and no failures after this change.
+- A second uncapped stored-credential self-scan of exact corrected checkpoint
+  `bd80e6ae3cf26b012fa1c25d4cc8f690e9e9cab5` reaches complete 493-of-493
+  inventory closure and reports two high-severity self-findings after 33 minutes
+  19 seconds. It processes 26,798,043 input tokens (23,198,529 cached) and
+  253,328 output tokens with no allowance, authentication, transport, or
+  classifier failure. The first draft covered only 240 paths while claiming
+  complete; same-session host correction expanded it to all 493, repaired both
+  finding evidence sets, and produced a successful complete scan. No fresh
+  session was necessary, so live evidence complements—but does not replace—the
+  deterministic multi-session scheduler benchmark.
+- Confirmed and fixed the self-scan's coverage-contract finding. Standalone
+  compact-draft recovery no longer turns `needs_follow_up` documentation or
+  metadata surfaces into `no_issue_found` by matching free-text notes such as
+  “documentation reviewed.” Those rows and their path-bound deferrals now stay
+  partial until an evidence-producing scan correction closes them. Explicit
+  canonical outcomes remain recoverable, and finding-backed surfaces may still
+  reconcile to `reported`.
+- Re-audited the self-scan's benchmark-fixture Git-filter finding. The report
+  missed an existing earlier control: fixture hashing already rejects any
+  `.git` repository metadata before copy, so the stated direct pull-request
+  attack path was not reachable. Added a second post-copy `.git` control-path
+  rejection immediately before repository initialization to close mutation
+  between hashing and copying and to preserve defense in depth. The regression
+  uses an inert marker configuration and proves that neither a fixture filter
+  nor the scanner runs. The clean Windows remediation lane passes 197 tests,
+  one intentional skip, and 1,777 assertions. Native Ubuntu passes 191 tests,
+  one intentional launcher skip, and 1,738 assertions, with its copied-tree
+  guard case passing separately; the combined nested-runner file exceeds its
+  pre-existing 25-second child timeout on `/mnt/c`, so it is not counted as a
+  scanner failure.
 - Added `python-chainlit-mcp-stdio-command-injection`, an exact Python model
   for
   [GHSA-w3fx-mc44-mf6j / CVE-2026-45018](https://github.com/advisories/GHSA-w3fx-mc44-mf6j).

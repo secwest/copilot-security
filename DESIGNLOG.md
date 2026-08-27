@@ -2,6 +2,64 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Complete self-scan and self-finding hardening
+
+**Measured effectiveness.** Exact checkpoint
+`bd80e6ae3cf26b012fa1c25d4cc8f690e9e9cab5` was scanned from a tracked-only
+archive with stored Copilot credentials, `xhigh` effort, no AI-credit cap, and
+five total sessions available. The model initially wrote a 240-surface coverage
+document while claiming complete against the immutable 493-path inventory.
+Host correction rejected that claim, expanded coverage to all 493 paths with
+no deferrals, and repaired the source excerpts and endpoint roles for two
+findings. The scan exits successfully with complete coverage after 33 minutes
+19 seconds, 26,798,043 input tokens, 23,198,529 cached tokens, and 253,328
+output tokens. It encounters no allowance, authentication, transport, or
+classifier error. Same-session correction closed the gaps, so no fresh session
+was spent; deterministic scheduler tests remain the evidence for the
+multi-session branch.
+
+**Free-text coverage finding confirmed.** The standalone finalizer accepted
+compact recovery documents, defaulted unrecognized rows to `needs_follow_up`,
+and later promoted documentation/metadata rows to `no_issue_found` by searching
+model-authored notes for phrases such as “documentation reviewed.” It could
+then remove the matching deferral and mark the document complete without a
+receipt or host view. The SDK scan path's direct-view reconciliation mitigated
+ordinary live completion, but deterministic recovery is a separate trust
+boundary and must not manufacture evidence. Remove note-phrase closure
+entirely. Explicit compact outcomes still normalize, and a surface tied to a
+surviving finding can still reconcile to `reported`; otherwise
+`needs_follow_up`, its path-bound deferral, and partial completeness survive.
+
+**Fixture Git-filter finding narrowed and hardened.** The self-scan correctly
+identified that `git add -A` can invoke repository-local filter drivers, but it
+missed `sha256Directory()`'s earlier fail-closed rule: benchmark fixture hashing
+rejects `.git` metadata before a fixture is copied. A contributor cannot reach
+the reported direct path with a static malicious fixture, so the high-severity
+reachability claim was overstated. There is still a smaller mutation window
+when an externally supplied manifest directory changes after hashing. Add an
+independent post-copy, no-follow `.git` control-path check immediately before
+`git init`; this makes repository initialization safe even if the fixture tree
+changes between selection hashing and copy. Keep `.gitattributes` available for
+legitimate language/tool fixtures, because without a copied local Git config it
+cannot define an executable filter driver on its own under the already
+sanitized global/system Git environment.
+
+**Regression state.** A bounded non-executing test fixture contains a local Git
+filter command whose only possible effect would be writing a temporary marker.
+The existing hasher rejects the initial `.git` tree; the new pure copied-tree
+guard rejects the same shape independently; neither marker nor scanner is
+created. The finalizer regression proves that free-text documentation notes
+remain `needs_follow_up`, retain two deferrals, and keep coverage partial. The
+clean native Windows remediation/closure lane passes 197 tests and 1,777
+assertions with one intentional symlink skip. Native Ubuntu passes the
+finalizer, inventory, and scheduler lane at 191 tests and 1,738 assertions with
+one intentional Windows-launcher skip, and independently passes the copied-tree
+guard case. Running the entire nested benchmark-runner recovery file on `/mnt/c`
+is not a valid aggregate signal: two pre-existing nested Node invocations exceed
+that test's fixed 25-second child timeout and return no status. The isolated
+guard itself completes in 9.95 seconds. Full-suite, package, hosted, and a
+post-remediation self-scan are recorded in the following acceptance checkpoint.
+
 ## 2026-08-26 — Bounded fresh-session coverage closure
 
 **Observed failure mode.** The exact Chainlit implementation self-scan produced
