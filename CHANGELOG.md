@@ -63,6 +63,13 @@ All notable scanner, application, benchmark, and operational changes are recorde
   string. The scanner and all semantic assertions passed on every host. The
   test now normalizes only line endings before checking the two exact pins,
   preserving the byte-for-byte source-pair comparison and version boundary.
+  All seven hosted families pass test-portability closure checkpoint
+  `d24142c96782196901c952749939d59ea8771a7b`: Node `33038252883` with all
+  seven Windows, macOS, and Linux jobs; Go `33038252834`; Java `33038252930`;
+  .NET `33038252899`; container `33038252889`; Windows GUI `33038252893`;
+  and Linux GUI `33038252864`. The exact-commit archive and snapshot, package,
+  two self-scan reports, and isolated package consumer were removed after
+  acceptance.
 - Added `node-contentful-mcp-management-token-host-redirect`, an exact
   operational model for
   [GHSA-2xhg-73j7-rrgx / CVE-2026-53957](https://github.com/contentful/contentful-mcp-server/security/advisories/GHSA-2xhg-73j7-rrgx).

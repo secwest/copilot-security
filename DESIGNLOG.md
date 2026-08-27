@@ -86,7 +86,13 @@ materialized `requirements.txt` with CRLF, while the strict expected strings
 used LF. Both scanner outputs and every semantic model assertion passed. The
 test now canonicalizes CRLF to LF only for the two exact-pin assertions; it
 continues to compare every source, witness, documentation, and runtime file
-byte-for-byte across the exploit/control pair.
+byte-for-byte across the exploit/control pair. Exact closure checkpoint
+`d24142c96782196901c952749939d59ea8771a7b` passes all seven hosted workflow
+families: Node `33038252883` with all seven Windows, macOS, and Linux matrix
+jobs; Go `33038252834`; Java `33038252930`; .NET `33038252899`; container
+`33038252889`; Windows GUI `33038252893`; and Linux GUI `33038252864`. The
+tracked-only archive and snapshot, npm package, two self-scan reports, and
+isolated consumer are removed after acceptance.
 
 ## 2026-08-26 — Contentful MCP management-token host redirect
 
