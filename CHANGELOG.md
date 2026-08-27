@@ -30,11 +30,46 @@ All notable scanner, application, benchmark, and operational changes are recorde
   284 cases, and 852 repeated scan positions. Native Rust 1.75.0 under Ubuntu
   compiles both standard-library witnesses and produces
   `shell_expanded_marker=1` versus `shell_expanded_marker=0`; the temporary
-  binaries and directory were removed. Focused Windows regression passes 14
-  tests and 108 assertions. The Ubuntu Rust/canonical/residual lane passes 99
-  tests and 3,306 assertions with no skips or failures. TypeScript checking and
-  the production build are clean; broader acceptance evidence follows after
-  the complete regression, package, self-scan, and hosted gates.
+  binaries and directory were removed.
+- Added deterministic Rust finding-field closure to the host quality gate after
+  live scans showed that correct detection alone did not reliably preserve the
+  exact extractor, `format!` propagation, `Command::new` builder, shell
+  boundary, and stdout-to-response edge in both validation and attack-path
+  fields. Incomplete Rust findings now emit exact field-local missing groups
+  and must pass bounded correction before sealing. A paired regression proves
+  that an otherwise substantive finding is rejected until every required
+  source-backed group is present. Focused Windows regression passes 15 tests
+  and 115 assertions; the final native Ubuntu Rust/host-gate/residual lane
+  passes 82 tests and 1,175 assertions with no skips or failures.
+- Ran a provenance-bound deep Copilot benchmark against both Rust cases with
+  xhigh effort, stored native credentials, six available fresh attempts, and
+  no artificial credit ceiling. Final campaign
+  `3c275b1c275ae2ebadcca6b1c9e0aa570a947f454e6f47eade708e2bb8e1439c`
+  binds revision `addf52248d521145961701f2be11949f7d36c49a` and completed both
+  scans on attempt one. The shell case produced exactly one high finding with
+  complete coverage; the argv control produced none. Every perfect gate
+  passed: completion, precision, recall, F1, case and negative-control pass
+  rates, stable detection, validation, attack path, code evidence, severity
+  accuracy, and zero false positives. Sealed results remain outside the
+  repository at
+  `C:\security-benchmarks\copilot-security-rust-command-addf522`.
+- Final Rust acceptance passes 1,871 Windows tests and 13,783 assertions across
+  207 files in 559.43 seconds, with 27 intentional platform/integration skips
+  and zero failures. A tracked-files-only self-scan is byte-identical across
+  two passes (256 rows, 554,097 bytes, SHA-256
+  `a64907b710fc86454600e253388d601a55f0750a183dd165e4f72d978ff66bc5`),
+  produces no Rust row from production or test trees, and produces exactly one
+  vulnerable and zero safe rows when the archived fixtures are scanned at
+  their own roots. Formatting, TypeScript checking, the production build, and
+  the high-severity production dependency audit are clean. A fresh 287-entry,
+  2,182,889-byte npm archive (11,394,287 bytes unpacked) with SHA-256
+  `eee303bef16649a24cbec1fda027a427a9d5bcb298dd034b366e7a694ac31590`
+  passes strict inspection and an isolated 67-package install, including the
+  public API, CLI, and all 79 bundled plugin files. All ten hosted workflows
+  pass at the exact revision: the Node 22/24/26 Ubuntu matrix, macOS, Windows,
+  Rust, Ruby, PHP, Go, Java, .NET, container, and both GUI platforms.
+  Disposable package and tracked-archive self-scan artifacts were removed;
+  provenance-bound live benchmark campaigns were intentionally retained.
 - Added the canonical corpus's first Ruby model,
   `ruby-rails-command-injection`. A bounded Ruby-aware lexer and Rails
   controller-method dataflow pass follows `params` and request parameter maps

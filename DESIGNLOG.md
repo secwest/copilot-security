@@ -79,6 +79,62 @@ temporary directory is removed. The focused Windows lane passes 14 tests and
 142 pairs, 284 cases, and 852 repeated scans. A pinned-checkout, read-only
 hosted workflow independently formats, compiles, and runs both witnesses.
 
+**Do not rely on prompt wording for field-local evidence closure.** Three live
+campaigns consistently found the vulnerable case, kept the argv control clean,
+and achieved 1.0 precision, recall, F1, validation, attack-path, code-evidence,
+and severity rates, but failed the stricter case gate because otherwise strong
+findings placed exact facts in `summary` or `codeEvidence` while omitting them
+from `validation` or `attackPath`. The omitted groups varied between runs:
+`format!`/`command_line`, the concrete query value, `Command::new`, and the
+stdout-to-response edge. More explicit correction prose improved one run but
+did not remove this nondeterminism.
+
+Add `rust-web-command-injection` to the host's model-specific finding
+requirements instead. Match a finding to the immutable native row by its
+recorded sink location, then require the extractor/query source,
+`format!`/assignment, `std::process::Command` builder, shell grammar, named
+request value, process boundary, and returned response effect independently in
+the validation and attack-path objects. Missing groups enter the trusted
+finding-quality inventory and trigger bounded correction; text in a title,
+summary, code-evidence item, or the other field cannot close the gap. This is a
+quality constraint, not host-authored vulnerability synthesis: the model must
+still reopen the source, validate the candidate, produce grounded evidence, and
+may remove it as unsupported. A regression constructs an otherwise complete,
+repository-grounded finding, proves both model-specific gap reasons and exact
+missing groups, adds every required field-local fact, and then proves the host
+inventory closes.
+
+**Final measured acceptance.** Campaign
+`3c275b1c275ae2ebadcca6b1c9e0aa570a947f454e6f47eade708e2bb8e1439c`
+binds revision `addf52248d521145961701f2be11949f7d36c49a`, the focused manifest
+and fixture bytes, runner, comparison policy, CLI, and package digests. With
+xhigh deep scanning, stored Copilot credentials, no credit ceiling, two
+workers, and six available fresh attempts, both cases complete on attempt one.
+The positive yields one high finding with complete coverage in 2m49s; the safe
+control yields zero findings with complete coverage in 3m04s. All perfect gates
+pass, including the field-local semantic groups, with one true positive, zero
+false positives, and zero false negatives. Results remain at
+`C:\security-benchmarks\copilot-security-rust-command-addf522`; the failed
+pre-gate campaigns remain separately retained as regression-design evidence.
+
+The final elevated Windows suite passes 1,871 tests and 13,783 assertions
+across 207 files in 559.43 seconds, with 27 intentional skips and no failures.
+Native Ubuntu passes all 82 focused host-gate and residual tests with 1,175
+assertions. Two tracked-archive self-inventories are byte-identical: 256 rows,
+554,097 bytes, SHA-256
+`a64907b710fc86454600e253388d601a55f0750a183dd165e4f72d978ff66bc5`.
+The whole repository emits no Rust false positive; direct archived fixture
+roots emit one vulnerable and zero safe rows. The production audit reports no
+known vulnerabilities. A 287-entry package is 2,182,889 bytes compressed and
+11,394,287 unpacked, has SHA-256
+`eee303bef16649a24cbec1fda027a427a9d5bcb298dd034b366e7a694ac31590`,
+and passes strict archive inspection plus an isolated 67-package installed API,
+CLI, and 79-file plugin smoke. Every hosted workflow at the revision passes,
+including Node on Ubuntu 22/24/26, macOS and Windows, the Rust witness, all
+existing language fixtures, container packaging, and Windows/Linux GUIs.
+Disposable package and tracked-archive self-scan artifacts are removed after
+verification; the sealed live campaigns are retained as measurement evidence.
+
 [rust-command]: https://doc.rust-lang.org/std/process/struct.Command.html
 [rust-windows-arguments]: https://doc.rust-lang.org/std/process/index.html#windows-argument-splitting
 [codeql-rust-queries]: https://codeql.github.com/codeql-query-help/rust/
