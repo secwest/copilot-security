@@ -70,6 +70,43 @@ successfully: Node `33121285236`, container `33121285223`, Kotlin
 Rust `33121285226`, Ruby `33121285313`, PHP `33121285283`, Windows GUI
 `33121285222`, and Linux GUI `33121285243`.
 
+**Live evidence exposed a field-local gap.** Deep/xhigh campaign
+`0a4c8f61351c4e0f4ea6ac64b61b9e279c82c6347800891985129da9e6f84307`
+ran both helper pairs with stored GitHub authentication, two workers, six
+available fresh attempts, a 30-minute process-tree deadline, and no artificial
+credit ceiling. All four scans completed on attempt one with status 0, complete
+coverage, and no classifier, quota, rate-limit, authentication, or timeout
+failure. Factory exploit/control results were one critical finding in 10m11s
+and zero in 3m23s; command-helper exploit/control results were one high finding
+in 6m23s and zero in 5m59s. Precision, recall, F1, stability, substantive
+validation, substantive attack path, code evidence, severity, and negative-case
+metrics were all 1.0.
+
+The aggregate nevertheless and correctly failed at 0.75 case pass rate. The
+factory finding's code evidence included the exact `diagnosticProcess`
+definition and call, but validation did not name the helper and attack-path
+dataflow rewrote the real `diagnosticProcess(commandLine).start()` boundary as
+a nonexistent direct `ProcessBuilder(...).start()` expression. This is not a
+vocabulary-only failure: an interprocedural finding must preserve the
+interprocedural edge in the fields that claim to validate and explain it.
+
+**Variant-aware quality closure.** Model-specific sink records now carry extra
+field requirements derived from exact helper propagators. A builder-factory row
+requires the recorded symbol or `builder factory`/`factory helper` directly in
+validation and the recorded symbol or an exact helper phrase directly in the
+attack path. A command-helper row receives the equivalent mutator requirements.
+Generic `ProcessBuilder`, shell, or process-start prose cannot satisfy these
+variant groups. `Ktor resource` and `shell program` are retained as precise
+semantic equivalents for source binding and shell-language evidence; they do
+not substitute for the helper edge. Applying the new gate to the untouched
+sealed factory finding produces exactly two gaps, both naming
+`diagnosticProcess`. A paired regression proves the same behavior for
+`configureProcess`, then proves that placing the exact symbol in each field
+closes the inventory. Focused Kotlin/canonical regression now passes 42 tests
+and 2,468 assertions. The original campaign remains immutable outside the
+repository at
+`C:\security-benchmarks\copilot-security-kotlin-helpers-4792c82`.
+
 ## 2026-08-27 — Model exact ProcessBuilder pipeline lists
 
 **Why named-builder search was insufficient.** The JDK specifies that

@@ -6027,7 +6027,12 @@
           "requireAttackPath": true,
           "requireCodeEvidence": true,
           "requiredValidationTextAnyOf": [
-            ["typed resource", "@Resource", "DiagnosticResource"],
+            [
+              "typed resource",
+              "Ktor resource",
+              "@Resource",
+              "DiagnosticResource"
+            ],
             ["commandLine", "interpolation", "formatted"],
             [
               "ProcessBuilder.command",
@@ -6092,7 +6097,12 @@
           "requireAttackPath": true,
           "requireCodeEvidence": true,
           "requiredValidationTextAnyOf": [
-            ["typed resource", "@Resource", "DiagnosticResource"],
+            [
+              "typed resource",
+              "Ktor resource",
+              "@Resource",
+              "DiagnosticResource"
+            ],
             ["commandLine", "interpolation", "formatted"],
             ["liveCommand", "command list", "builder.command"],
             ["sh -c", "shell", "-c"]
@@ -6149,7 +6159,12 @@
           "requireAttackPath": true,
           "requireCodeEvidence": true,
           "requiredValidationTextAnyOf": [
-            ["typed resource", "@Resource", "DiagnosticResource"],
+            [
+              "typed resource",
+              "Ktor resource",
+              "@Resource",
+              "DiagnosticResource"
+            ],
             ["commandLine", "interpolation", "formatted"],
             [
               "inline ProcessBuilder",
@@ -6211,7 +6226,12 @@
           "requireAttackPath": true,
           "requireCodeEvidence": true,
           "requiredValidationTextAnyOf": [
-            ["typed resource", "@Resource", "DiagnosticResource"],
+            [
+              "typed resource",
+              "Ktor resource",
+              "@Resource",
+              "DiagnosticResource"
+            ],
             ["commandLine", "interpolation", "formatted"],
             ["diagnosticProcess", "builder factory", "factory helper"],
             ["ProcessBuilder", "sh -c", "shell"]
@@ -6219,7 +6239,7 @@
           "requiredAttackPathTextAnyOf": [
             ["input.target", "resource value", "target"],
             ["diagnosticProcess", "factory", "helper call"],
-            ["sh -c", "shell grammar", "command string"],
+            ["sh -c", "shell grammar", "shell program", "command string"],
             ["stdout", "response", "respondText"]
           ],
           "forbiddenText": [
@@ -6268,7 +6288,12 @@
           "requireAttackPath": true,
           "requireCodeEvidence": true,
           "requiredValidationTextAnyOf": [
-            ["typed resource", "@Resource", "DiagnosticResource"],
+            [
+              "typed resource",
+              "Ktor resource",
+              "@Resource",
+              "DiagnosticResource"
+            ],
             ["commandLine", "interpolation", "formatted"],
             ["configureProcess", "command helper", "mutator helper"],
             ["builder.command", "command replacement", "sh -c"]

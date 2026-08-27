@@ -4144,6 +4144,7 @@ const KOTLIN_KTOR_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
     "call.request.queryParameters",
     "Ktor query",
     "request query",
+    "Ktor resource",
     "typed resource",
     "@Resource",
   ],
@@ -45684,6 +45685,8 @@ export async function buildFindingQualityGapInventory(
 interface ModelSpecificSinkLocation {
   frameworkModelId: string;
   location: EvidenceLocation;
+  additionalValidationRequirements: string[][];
+  additionalAttackPathRequirements: string[][];
 }
 
 interface ModelSpecificFindingClosureGaps {
@@ -45718,15 +45721,76 @@ function modelSpecificSinkLocations(
     ) {
       continue;
     }
+    const helperRequirements =
+      frameworkModelId === "kotlin-ktor-command-injection"
+        ? kotlinProcessHelperEvidenceRequirements(frameworkModel)
+        : { validation: [], attackPath: [] };
     locations.push({
       frameworkModelId,
       location: {
         path: sink["path"],
         startLine: Number(sink["line"]),
       },
+      additionalValidationRequirements: helperRequirements.validation.map(
+        (group) => [...group],
+      ),
+      additionalAttackPathRequirements: helperRequirements.attackPath.map(
+        (group) => [...group],
+      ),
     });
   }
   return locations;
+}
+
+function kotlinProcessHelperEvidenceRequirements(
+  frameworkModel: Record<string, unknown>,
+): ModelSpecificFindingRequirements {
+  const validation: string[][] = [];
+  const attackPath: string[][] = [];
+  const seenKinds = new Set<string>();
+  const propagators = Array.isArray(frameworkModel["propagators"])
+    ? frameworkModel["propagators"]
+    : [];
+  for (const propagator of propagators) {
+    if (!isRecord(propagator) || typeof propagator["kind"] !== "string") {
+      continue;
+    }
+    const kind = propagator["kind"];
+    if (seenKinds.has(kind)) continue;
+    const symbol =
+      typeof propagator["symbol"] === "string" &&
+      /^[A-Za-z_][A-Za-z0-9_]*$/u.test(propagator["symbol"])
+        ? propagator["symbol"]
+        : undefined;
+    if (kind === "kotlin-process-builder-factory") {
+      validation.push([
+        ...(symbol === undefined ? [] : [symbol]),
+        "builder factory",
+        "factory helper",
+      ]);
+      attackPath.push([
+        ...(symbol === undefined ? [] : [symbol]),
+        "builder factory",
+        "factory helper",
+        "helper call",
+      ]);
+      seenKinds.add(kind);
+    } else if (kind === "kotlin-process-command-helper") {
+      validation.push([
+        ...(symbol === undefined ? [] : [symbol]),
+        "command helper",
+        "mutator helper",
+      ]);
+      attackPath.push([
+        ...(symbol === undefined ? [] : [symbol]),
+        "command helper",
+        "mutator helper",
+        "helper call",
+      ]);
+      seenKinds.add(kind);
+    }
+  }
+  return { validation, attackPath };
 }
 
 function modelSpecificFindingClosureGaps(
@@ -45758,11 +45822,17 @@ function modelSpecificFindingClosureGaps(
     frameworkModelId: modeledSink.frameworkModelId,
     missingValidationTextAnyOf: missingRequiredTextGroups(
       finding["validation"],
-      requirements.validation,
+      [
+        ...requirements.validation,
+        ...modeledSink.additionalValidationRequirements,
+      ],
     ),
     missingAttackPathTextAnyOf: missingRequiredTextGroups(
       finding["attackPath"],
-      requirements.attackPath,
+      [
+        ...requirements.attackPath,
+        ...modeledSink.additionalAttackPathRequirements,
+      ],
     ),
   };
 }

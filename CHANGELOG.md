@@ -41,6 +41,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
   Windows-launcher skip and no failure. Formatting, generated-model drift,
   TypeScript checking, the production build, and the production advisory audit
   are clean; the audit reports no known vulnerabilities.
+- Ran deep/xhigh four-case Copilot campaign
+  `0a4c8f61351c4e0f4ea6ac64b61b9e279c82c6347800891985129da9e6f84307`
+  against both new helper pairs with stored GitHub authentication, two bounded
+  workers, six available fresh attempts, a 30-minute process-tree deadline, and
+  no artificial credit ceiling. Every case completed on attempt one with status
+  0, complete coverage, no timeout, and no classifier, quota, rate-limit, or
+  authentication failure. The factory exploit produced one critical finding in
+  10m11s, its argv control produced none in 3m23s, the command-helper exploit
+  produced one high finding in 6m23s, and its argv control produced none in
+  5m59s. Precision, recall, F1, stability, validation, attack-path,
+  code-evidence, severity, and negative-case metrics were all 1.0.
+- Refused to count the first campaign as a complete pass because its factory
+  finding flattened `diagnosticProcess(commandLine).start()` into a nonexistent
+  direct constructor/start expression. Validation and attack-path fields omitted
+  the same-file factory edge even though code evidence contained it, leaving
+  case pass rate at 0.75. Finding-quality closure now derives extra field-local
+  groups from `kotlin-process-builder-factory` and
+  `kotlin-process-command-helper` propagators and includes the exact helper
+  symbol. The untouched sealed finding is consequently diagnosed with precise
+  `diagnosticProcess` validation and attack-path gaps. `Ktor resource` and
+  `shell program` are accepted as exact semantic equivalents where the finding
+  already proved those concepts. Focused regression now passes 42 tests and
+  2,468 assertions.
 - Closed hosted verification of prior acceptance revision
   `754f12f549dfa36b221b5e1df4451fe964493011`: Node `33121285236`,
   container `33121285223`, Kotlin `33121285286`, Java `33121285279`, .NET

@@ -1388,4 +1388,198 @@ fun routes() = routing {
       await rm(scanDirectory, { recursive: true, force: true });
     }
   });
+
+  test("requires helper-specific validation and attack-path closure", async () => {
+    const helpers = [
+      {
+        caseId: caseIds[8],
+        commandLine: 20,
+        helperStart: 13,
+        helperEnd: 14,
+        helperCode:
+          'private fun diagnosticProcess(commandLine: String): ProcessBuilder =\n    ProcessBuilder("sh", "-c", commandLine)',
+        helperSymbol: "diagnosticProcess",
+        validationAlternatives: [
+          "diagnosticProcess",
+          "builder factory",
+          "factory helper",
+        ],
+        attackPathAlternatives: [
+          "diagnosticProcess",
+          "builder factory",
+          "factory helper",
+          "helper call",
+        ],
+        sinkLine: 21,
+        sinkCode: "val process = diagnosticProcess(commandLine).start()",
+      },
+      {
+        caseId: caseIds[10],
+        commandLine: 21,
+        helperStart: 13,
+        helperEnd: 14,
+        helperCode:
+          'private fun configureProcess(builder: ProcessBuilder, commandLine: String) {\n    builder.command("sh", "-c", commandLine)\n}',
+        helperSymbol: "configureProcess",
+        validationAlternatives: [
+          "configureProcess",
+          "command helper",
+          "mutator helper",
+        ],
+        attackPathAlternatives: [
+          "configureProcess",
+          "command helper",
+          "mutator helper",
+          "helper call",
+        ],
+        sinkLine: 24,
+        sinkCode: "val process = builder.start()",
+      },
+    ] as const;
+
+    for (const helper of helpers) {
+      const repository = join(benchmarkRoot, "fixtures", helper.caseId);
+      const scanDirectory = await mkdtemp(
+        join(tmpdir(), "copilot-security-kotlin-helper-quality-"),
+      );
+      try {
+        const finding = {
+          findingId: `occ_${helper.helperSymbol}_quality`,
+          taxonomy: { cwe: ["CWE-78", "CWE-88"] },
+          locations: [
+            {
+              path: handlerPath,
+              startLine: 10,
+              endLine: 11,
+              role: "source",
+            },
+            {
+              path: handlerPath,
+              startLine: helper.sinkLine,
+              endLine: helper.sinkLine,
+              role: "sink",
+            },
+          ],
+          codeEvidence: [
+            {
+              id: "typed-resource-source",
+              path: handlerPath,
+              startLine: 10,
+              endLine: 11,
+              role: "source",
+              code: '@Resource("/diagnostics/{target}")\ndata class DiagnosticResource(val target: String)',
+              explanation: "The typed route value contains remote input.",
+            },
+            {
+              id: "command-line",
+              path: handlerPath,
+              startLine: helper.commandLine,
+              endLine: helper.commandLine,
+              role: "propagator",
+              code: 'val commandLine = "printf diagnostic; ${input.target}"',
+              explanation: "The request value enters shell program text.",
+            },
+            {
+              id: "helper-definition",
+              path: handlerPath,
+              startLine: helper.helperStart,
+              endLine: helper.helperEnd,
+              role: "propagator",
+              code: helper.helperCode,
+              explanation: "A same-file helper configures the process.",
+            },
+            {
+              id: "process-start",
+              path: handlerPath,
+              startLine: helper.sinkLine,
+              endLine: helper.sinkLine,
+              role: "sink",
+              code: helper.sinkCode,
+              explanation: "The configured process starts.",
+            },
+          ],
+          validation: {
+            method: "static_source_trace",
+            summary:
+              "Ktor resource binding places input.target in commandLine, and ProcessBuilder executes the shell program through sh -c.",
+            exploitWitness:
+              "A bounded inert marker checks shell interpretation.",
+            negativeControl:
+              "A fixed executable with the same value in ordinary argv does not interpret it.",
+            evidence: [
+              "typed-resource-source",
+              "command-line",
+              "helper-definition",
+              "process-start",
+            ],
+            counterEvidence:
+              "An argument array is not a barrier when sh receives -c.",
+            remainingUncertainty: "Deployment reachability remains unknown.",
+          },
+          attackPath: {
+            summary:
+              "The target resource value enters commandLine as a command string; ProcessBuilder start executes the shell program and stdout reaches respondText in the response.",
+            dataflow: {
+              source: "The target resource value.",
+              sink: "ProcessBuilder start with commandLine.",
+              outcome: "The shell program executes.",
+            },
+            reachability: {
+              attacker: "A remote HTTP caller.",
+              entrypoint: "The typed diagnostics route.",
+              outcome: "A child process starts and its stdout is returned.",
+            },
+            brokenControls: ["No command/data separation"],
+            evidenceRefs: [
+              "typed-resource-source",
+              "command-line",
+              "helper-definition",
+              "process-start",
+            ],
+          },
+        };
+        await writeFile(
+          join(scanDirectory, "findings.json"),
+          JSON.stringify({ findings: [finding] }),
+        );
+        const residualRiskInventory =
+          await buildResidualRiskInventory(repository);
+        const incomplete = await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          residualRiskInventory,
+        );
+        const gap = incomplete
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))[1];
+        expect(gap).toMatchObject({
+          findingId: `occ_${helper.helperSymbol}_quality`,
+          frameworkModelId: "kotlin-ktor-command-injection",
+          reasons: [
+            "missing_model_specific_validation_evidence",
+            "missing_model_specific_attack_path_evidence",
+          ],
+          missingValidationTextAnyOf: [helper.validationAlternatives],
+          missingAttackPathTextAnyOf: [helper.attackPathAlternatives],
+        });
+
+        finding.validation.summary += ` The ${helper.helperSymbol} helper preserves the exact interprocedural boundary.`;
+        finding.attackPath.summary += ` The helper call to ${helper.helperSymbol} precedes the recorded process start.`;
+        await writeFile(
+          join(scanDirectory, "findings.json"),
+          JSON.stringify({ findings: [finding] }),
+        );
+        expect(
+          await buildFindingQualityGapInventory(
+            scanDirectory,
+            repository,
+            residualRiskInventory,
+          ),
+        ).toBe("");
+      } finally {
+        await rm(scanDirectory, { recursive: true, force: true });
+      }
+    }
+  });
 });
