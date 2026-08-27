@@ -32,6 +32,43 @@ All notable scanner, application, benchmark, and operational changes are recorde
   vararg/list replacements, state reversal, and `startPipeline`. Generated
   Maven targets were removed. The canonical corpus now contains 144 pairs,
   288 cases, and 864 repeated scan positions.
+- Ran the complete acceptance matrix at revision
+  `8fc33386ede7767f35af67544d3db3dbc8231709`. The authoritative native
+  Windows suite passes 1,887 tests and 13,945 assertions across 208 files in
+  473.78 seconds, with 27 intentional platform/integration skips and zero
+  failures. The focused Ubuntu host/inventory/package lane passes 84 tests and
+  2,514 assertions with one Windows-launcher skip; the 34-test, 2,300-assertion
+  Kotlin plus canonical benchmark lane is identical on Windows and Ubuntu.
+  Both Maven applications and native witnesses pass on Ubuntu. All eleven
+  hosted workflows pass, including Kotlin, Windows GUI, and Linux GUI; the
+  Kotlin run is
+  `https://github.com/secwest/copilot-security/actions/runs/33104335972`.
+- Verified release and self-scan provenance. Formatting, generated-model
+  drift, TypeScript checking, the production build, and the high-severity
+  production dependency audit are clean. An Ubuntu-produced 291-entry npm
+  archive is 2,204,931 bytes packed and 11,508,231 bytes unpacked, has SHA-256
+  `73cad7125423e94450b6a1538d2171fcf9fe80ac8c8986e8e75d1c6f038c5d84`,
+  retains the POSIX executable launcher mode, and passes strict Windows and
+  Linux inspection plus isolated 67-package Windows and 75-package Linux
+  installs, public API, CLI, and all 79 bundled plugin files. A tracked-only
+  self-scan is byte-identical twice at 256 rows and 554,239 bytes with SHA-256
+  `d3c8bb8b0a90794e3f39cc400e925fb1d122587d2d81cb2b2f540cd76ed34722`;
+  scanner and test trees emit no Kotlin row, while separately rooted new
+  positive/control fixtures emit exactly one and zero. Disposable Maven,
+  package, extraction, and self-scan artifacts were removed.
+- Ran a new provenance-bound deep/xhigh Copilot campaign against the typed
+  resource pair with stored credentials, six bounded available attempts, a
+  30-minute process-tree deadline, and no artificial credit ceiling. Campaign
+  `d722ae8729b6a839b18de2baaaed94f2ca8bfbe77722d9907b17af5078853d0d`
+  completed both cases on attempt one. The positive completed in 654,249 ms
+  with one critical finding, complete coverage, and two host-reanchored code
+  excerpts; the control completed in 613,247 ms with zero findings and
+  complete coverage. Completion, precision, recall, F1, case and negative-case
+  pass, stability, validation, attack-path, code-evidence, and severity rates
+  are all 1.0 with zero false positives or false negatives. No quota, credit,
+  classifier, authentication, transport, reconnect, or retry event occurred.
+  Sealed results remain outside the repository at
+  `C:\security-benchmarks\copilot-security-kotlin-resource-8fc3338`.
 - Added the canonical corpus's first native Kotlin/Ktor model,
   `kotlin-ktor-command-injection`. A bounded Kotlin lexer and route-lambda
   dataflow pass follows exact Ktor query, path, header, query-string, and body

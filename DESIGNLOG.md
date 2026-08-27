@@ -48,6 +48,42 @@ tests demonstrate marker expansion only in the shell case. The focused model
 passes 16 tests and 140 assertions, and the perfect-gate corpus advances to 144
 pairs, 288 cases, and 864 scan positions.
 
+The final revision is `8fc33386ede7767f35af67544d3db3dbc8231709`.
+The complete native Windows regression passes 1,887 tests and 13,945
+assertions across 208 files with 27 intentional skips and no failures; the
+focused Ubuntu host/inventory/package lane passes 84 tests and 2,514
+assertions with one Windows-only skip. All eleven hosted workflows pass at the
+exact revision, including both GUI platforms and the expanded
+[Kotlin fixture run][typed-resource-kotlin-run]. A tracked-only self-scan is
+byte-identical twice at 256 rows and 554,239 bytes with SHA-256
+`d3c8bb8b0a90794e3f39cc400e925fb1d122587d2d81cb2b2f540cd76ed34722`,
+emits no Kotlin row from scanner or test trees, and emits one versus zero when
+the new fixtures are rooted independently.
+
+Release inspection also exposed an operating-system provenance distinction:
+an archive produced by Windows cannot retain the Git executable bit in its tar
+header, although npm's Linux installer correctly created and executed the
+published command shim. The authoritative Ubuntu-produced archive retains
+`-rwxr-xr-x`, passes the strict inspector and an isolated install on both
+Windows and Linux, contains 291 entries and 11,508,231 unpacked bytes, and has
+SHA-256
+`73cad7125423e94450b6a1538d2171fcf9fe80ac8c8986e8e75d1c6f038c5d84`.
+This preserves the stronger release rule without falsely treating a successful
+installed Windows-origin package as a broken Linux product.
+
+Live campaign
+`d722ae8729b6a839b18de2baaaed94f2ca8bfbe77722d9907b17af5078853d0d`
+binds the exact revision, expanded focused manifest, scanner bytes, fixture
+digests, deep mode, xhigh effort, and stored Copilot authentication. Both
+cases completed on attempt one with six bounded attempts available and no
+artificial credit ceiling. The positive produced one critical true positive
+with complete evidence coverage after two host excerpt reanchors; the
+effective-argv control produced zero findings with complete coverage. Every
+effectiveness and evidence metric is 1.0, false positives and false negatives
+are zero, and there was no quota, credit, classifier, authentication,
+transport, reconnect, or retry signal. The sealed campaign remains at
+`C:\security-benchmarks\copilot-security-kotlin-resource-8fc3338`.
+
 ## 2026-08-27 — Analyze Ktor process launches as Kotlin, not Java-shaped text
 
 **Why this is a beyond-parity lane.** The source inventory already admitted
@@ -130,6 +166,7 @@ this model into process-keyword co-occurrence.
 [ktor-requests]: https://ktor.io/docs/server-requests.html
 [ktor-resources]: https://ktor.io/docs/server-resources.html
 [ktor-resource-get]: https://api.ktor.io/ktor-server-resources/io.ktor.server.resources/get.html
+[typed-resource-kotlin-run]: https://github.com/secwest/copilot-security/actions/runs/33104335972
 [kotlin-java-interop]: https://kotlinlang.org/docs/java-interop.html
 [jdk-process-builder]: https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/ProcessBuilder.html
 [codeql-jvm-command]: https://codeql.github.com/codeql-query-help/java/java-command-line-injection/
