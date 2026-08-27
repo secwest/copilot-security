@@ -455,6 +455,12 @@ async fn handler(Path(input): Path<String>) {
       "Rust passes ordinary arg and args values literally",
     );
     expect(prompt).toContain("Windows .bat/.cmd consumers");
+    expect(prompt).toContain(
+      "explicitly restate the concrete extractor binding and request field or expression",
+    );
+    expect(prompt).toContain(
+      "explicitly carry that same named query, path, form, or JSON request value",
+    );
     expect(prompt).toContain("bounded harmless marker");
   });
 });
