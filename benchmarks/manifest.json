@@ -5943,6 +5943,63 @@
         "javascript-bidi-natural-language-control/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-shell-command-injection",
+      "description": "A Ktor query value is interpolated into the command-string position after sh -c and reaches ProcessBuilder.start, allowing shell metacharacters to alter command grammar.",
+      "fixture": "fixtures/kotlin-ktor-shell-command-injection",
+      "findingsPaths": [
+        "kotlin-ktor-shell-command-injection/run-1/findings.json",
+        "kotlin-ktor-shell-command-injection/run-2/findings.json",
+        "kotlin-ktor-shell-command-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "kotlin-ktor-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/main/kotlin/example/Diagnostics.kt",
+              "startLine": 14,
+              "endLine": 14,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["call.request.queryParameters", "Ktor query", "request query"],
+            ["commandLine", "interpolation", "formatted"],
+            ["ProcessBuilder", "java.lang.ProcessBuilder"],
+            ["sh -c", "shell", "-c"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["target", "query value", "request value"],
+            ["commandLine", "command string", "shell grammar"],
+            ["ProcessBuilder", "process", "start"],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-argv-command",
+      "description": "The topology-matched control keeps Ktor and ProcessBuilder.start but selects a fixed executable and passes request data only as one literal operating-system argument.",
+      "fixture": "fixtures/kotlin-ktor-argv-command",
+      "findingsPaths": [
+        "kotlin-ktor-argv-command/run-1/findings.json",
+        "kotlin-ktor-argv-command/run-2/findings.json",
+        "kotlin-ktor-argv-command/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

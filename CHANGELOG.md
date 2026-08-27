@@ -6,6 +6,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added the canonical corpus's first native Kotlin/Ktor model,
+  `kotlin-ktor-command-injection`. A bounded Kotlin lexer and route-lambda
+  dataflow pass follows exact Ktor query, path, header, query-string, and body
+  sources through local assignment, string interpolation, and concatenation
+  into an exact imported or fully qualified `java.lang.ProcessBuilder`. It
+  requires `start()` on the same non-reassigned builder and supports imported
+  aliases, literal program/flag variables, vararg and `listOf`/`arrayOf`
+  constructors, and multiline builder chains.
+- Preserved the JVM command/data boundary to reduce command-injection false
+  positives. Attacker-selected executables, POSIX shell `-c`, CMD `/c` or `/k`,
+  PowerShell/pwsh command strings, interpreter code flags, and Windows batch
+  consumers are retained. A fixed ordinary executable with request data only
+  in a distinct operating-system argument is a hard negative. Inert builders,
+  builder reassignment, numeric normalization, tests/examples/fixtures, local
+  lookalikes, missing Ktor identity, malformed source, and excessive token or
+  nesting volume fail closed. Validation expressions remain candidate controls
+  until dominance and command-language correctness are proved.
+- Added a topology-matched Ktor exploit/control pair, perfect-gate focused
+  manifest, exact host finding-field requirements, and read-only hosted Kotlin
+  workflow. Both applications compile with Kotlin 2.2.20 and Ktor 3.5.2 on
+  Java 21 in Ubuntu; the positive native test expands only an inert environment
+  marker through `sh -c`, while the control passes the same marker spelling to
+  `printf` as literal argv and does not expand it. The generated Maven targets
+  were removed. The canonical corpus now contains 143 pairs, 286 cases, and
+  858 repeated scan positions. The focused model and canonical benchmark pass
+  30 tests and 2,247 assertions; the broader prompt, residual-inventory,
+  packaging-provenance, and timeout lane passes 107 tests and 3,329 assertions
+  with one intentional platform skip and no failures. Benchmark source
+  anchoring now accepts bounded conventional nested layouts such as
+  `src/main/kotlin` instead of requiring a file directly under `src`.
 - Added the canonical corpus's first Rust model,
   `rust-web-command-injection`. A bounded Rust lexer and same-function dataflow
   pass follows exact Axum and Actix Web Query, Path, Form, and Json extractors

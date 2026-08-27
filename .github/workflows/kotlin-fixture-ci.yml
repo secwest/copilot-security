@@ -1,0 +1,43 @@
+name: kotlin-fixture-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ktor-command-fixtures:
+    name: Ktor command-injection fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: microsoft
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: |
+            benchmarks/fixtures/kotlin-ktor-shell-command-injection/pom.xml
+            benchmarks/fixtures/kotlin-ktor-argv-command/pom.xml
+
+      - name: Compile Ktor applications and run native Kotlin witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-shell-command-injection/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-argv-command/pom.xml verify

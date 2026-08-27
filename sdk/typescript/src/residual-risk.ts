@@ -35,6 +35,7 @@ import { terraformRiskRecords } from "./terraform-risk.js";
 import { phpSqlInjectionRecords } from "./php-sql-risk.js";
 import { rubyCommandInjectionRecords } from "./ruby-command-risk.js";
 import { rustCommandInjectionRecords } from "./rust-command-risk.js";
+import { kotlinKtorCommandInjectionRecords } from "./kotlin-ktor-command-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -4138,6 +4139,20 @@ const RUST_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
   ["stdout", "response", "returned"],
 ] as const;
 
+const KOTLIN_KTOR_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["call.request.queryParameters", "Ktor query", "request query"],
+  ["commandLine", "interpolation", "formatted"],
+  ["ProcessBuilder", "java.lang.ProcessBuilder"],
+  ["sh -c", "shell", "-c"],
+] as const;
+
+const KOTLIN_KTOR_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["target", "query value", "request value"],
+  ["commandLine", "command string", "shell grammar"],
+  ["ProcessBuilder", "process", "start"],
+  ["stdout", "response", "respondText"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -4337,6 +4352,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
       attackPath: RUST_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
+  [
+    "kotlin-ktor-command-injection",
+    {
+      validation: KOTLIN_KTOR_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: KOTLIN_KTOR_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
 ]);
 
 export async function buildResidualRiskInventory(
@@ -4434,6 +4456,7 @@ export async function buildResidualRiskInventory(
       ...phpSqlInjectionRecords(file.path, file.lines, file.text),
       ...rubyCommandInjectionRecords(file.path, file.lines, file.text),
       ...rustCommandInjectionRecords(file.path, file.lines, file.text),
+      ...kotlinKtorCommandInjectionRecords(file.path, file.lines, file.text),
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
       ...githubActionsSelfHostedPrRecords(file.path, file.lines, file.text),
       ...githubActionsWorkflowInjectionRecords(

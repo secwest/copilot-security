@@ -21,6 +21,24 @@ import {
 
 const roots: string[] = [];
 
+async function containsFixtureSourceFile(
+  directory: string,
+  depth = 0,
+): Promise<boolean> {
+  if (depth > 8) return false;
+  const entries = await readdir(directory, { withFileTypes: true });
+  if (entries.some((entry) => entry.isFile())) return true;
+  for (const entry of entries) {
+    if (
+      entry.isDirectory() &&
+      (await containsFixtureSourceFile(join(directory, entry.name), depth + 1))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 afterEach(async () => {
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
@@ -414,6 +432,7 @@ describe("effectiveness benchmark", () => {
       ["php-pdo-tainted-prepared-sql-injection", "php-pdo-parameterized-query"],
       ["ruby-rails-open3-shell-injection", "ruby-rails-open3-argv-command"],
       ["rust-axum-shell-command-injection", "rust-axum-argv-command"],
+      ["kotlin-ktor-shell-command-injection", "kotlin-ktor-argv-command"],
       [
         "node-multi-hop-rhinostone-swig-template-traversal",
         "node-multi-hop-repaired-rhinostone-swig-template-root",
@@ -1512,11 +1531,9 @@ describe("effectiveness benchmark", () => {
       expect(
         (await readFile(join(fixtureRoot, "README.md"), "utf8")).trim().length,
       ).toBeGreaterThan(0);
-      expect(
-        (await readdir(join(fixtureRoot, "src"), { withFileTypes: true })).some(
-          (entry) => entry.isFile(),
-        ),
-      ).toBe(true);
+      expect(await containsFixtureSourceFile(join(fixtureRoot, "src"))).toBe(
+        true,
+      );
       for (const expectation of benchmarkCase.expected) {
         for (const location of expectation.locations) {
           const source = await readFile(

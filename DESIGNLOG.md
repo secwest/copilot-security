@@ -2,6 +2,71 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Analyze Ktor process launches as Kotlin, not Java-shaped text
+
+**Why this is a beyond-parity lane.** The source inventory already admitted
+`.kt` and `.kts`, and several generic framework declarations used the label
+`java-kotlin`, but the 284-case canonical corpus contained no Kotlin source.
+Ktor documents that `call.parameters`, `call.request.queryParameters`, request
+headers, `queryString()`, and `receive()` expose request data in route handlers.
+Kotlin's Java interoperability makes `java.lang.ProcessBuilder` directly
+available, and the JDK documents that only `start()` launches the configured
+program and arguments. CodeQL's Java/Kotlin command-line query likewise treats
+uncontrolled data at process execution as CWE-78/CWE-88. References:
+[Ktor request handling][ktor-requests], [Kotlin Java interoperability]
+[kotlin-java-interop], [JDK ProcessBuilder][jdk-process-builder], and [CodeQL
+Java/Kotlin command-line injection][codeql-jvm-command].
+
+**Identity and scope boundary.** Add a standalone bounded Kotlin lexer rather
+than extending the Spring-oriented regex model. It removes line and nested
+block comments, handles escaped and triple-quoted strings plus Kotlin
+interpolation, validates balanced delimiters, preserves LF/CRLF line
+provenance, and caps tokens at 131,072, nesting at 128, output at 64 records,
+and excerpt lines at 2,048 characters. A candidate needs an exact Ktor routing
+import, a `get`/`post`/`put`/`patch`/`delete`/`head`/`options` lambda, and an
+explicit or fully qualified `java.lang.ProcessBuilder` identity. Test,
+example, generated, fixture, and build paths; local type aliases/lookalikes;
+unbalanced input; and unsupported identities fail closed. Keeping source and
+sink in the same route lambda prevents local names in another function from
+manufacturing a flow.
+
+**Command boundary.** Follow exact `call` sources through straight-line local
+assignment, interpolation, concatenation, literal program/flag aliases, vararg
+or fixed collection constructors, and named builders. Require actual
+`start()` and discard a builder when its variable is reassigned. The first
+command-list element is executable selection. Later request-derived elements
+are not shell injection for a fixed ordinary executable because
+`ProcessBuilder` supplies a program-and-argument list; retain only explicit
+POSIX shell `-c`, CMD `/c` or `/k`, PowerShell/pwsh command flags, interpreter
+code flags, and Windows batch consumers where a command language is restored.
+Concrete numeric conversion closes string-command flow. Regex or membership
+checks are recorded only as candidate controls because a pattern can be
+incorrect, target the wrong value, or fail to dominate the launch.
+
+**Evidence and verification.** The paired applications share Ktor request
+extraction, process launch, output reading, and `respondText`; only the process
+grammar differs. Maven compiles both against pinned Kotlin 2.2.20 and Ktor
+3.5.2 on Java 21. Native Ubuntu tests show an inert environment marker expands
+through `sh -c` and remains literal through `printf` argv. The host records the
+exact source, propagators, ProcessBuilder argument position, and start line,
+then refuses to seal a finding whose validation or attack path omits those
+field-local facts. It explicitly does not infer route installation, deployment
+reachability, successful exploitation, privilege, persistence, credential
+access, or complete compromise. The canonical benchmark's source check now
+walks a bounded eight-level tree so conventional `src/main/kotlin` remains
+source-anchored without inventing a dummy file directly under `src`.
+
+**Consequence.** The canonical corpus advances to 143 paired families and 286
+cases while preserving a zero-false-positive gate for the literal-argv
+control. Future Kotlin work should add cross-function summaries or other Ktor
+sinks only with exact identity and paired native evidence; it should not widen
+this model into process-keyword co-occurrence.
+
+[ktor-requests]: https://ktor.io/docs/server-requests.html
+[kotlin-java-interop]: https://kotlinlang.org/docs/java-interop.html
+[jdk-process-builder]: https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/ProcessBuilder.html
+[codeql-jvm-command]: https://codeql.github.com/codeql-query-help/java/java-command-line-injection/
+
 ## 2026-08-27 — Add native Rust web-to-process command analysis
 
 **Why this is a beyond-parity lane.** The canonical corpus held 141 paired
