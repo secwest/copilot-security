@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { scanQualityGatePrompt } from "../src/copilot-client.js";
-import { buildResidualRiskInventory } from "../src/residual-risk.js";
+import {
+  buildFindingQualityGapInventory,
+  buildResidualRiskInventory,
+} from "../src/residual-risk.js";
 import {
   rustCommandInjectionRecords,
   type RustCommandInjectionRecord,
@@ -465,5 +469,152 @@ async fn handler(Path(input): Path<String>) {
       "command stdout or stderr is returned in the HTTP response",
     );
     expect(prompt).toContain("bounded harmless marker");
+  });
+
+  test("forces incomplete Rust evidence fields through host-audited correction", async () => {
+    const repository = join(benchmarkRoot, "fixtures", caseIds[0]);
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-rust-quality-"),
+    );
+    try {
+      const finding = {
+        findingId: "occ_rust_quality",
+        taxonomy: { cwe: ["CWE-78", "CWE-88"] },
+        locations: [
+          {
+            path: handlerPath,
+            startLine: 6,
+            endLine: 8,
+            role: "source",
+          },
+          {
+            path: handlerPath,
+            startLine: 12,
+            endLine: 15,
+            role: "sink",
+          },
+        ],
+        codeEvidence: [
+          {
+            id: "rust-source",
+            path: handlerPath,
+            startLine: 5,
+            endLine: 8,
+            role: "source",
+            code: [
+              "#[derive(Deserialize)]",
+              "pub struct DiagnosticQuery {",
+              "    target: String,",
+              "}",
+            ].join("\n"),
+            explanation:
+              "The endpoint binds an externally controlled diagnostic field.",
+          },
+          {
+            id: "rust-sink",
+            path: handlerPath,
+            startLine: 12,
+            endLine: 15,
+            role: "sink",
+            code: [
+              '    let output = Command::new("sh")',
+              '        .arg("-c")',
+              "        .arg(command_line)",
+              "        .output()",
+            ].join("\n"),
+            explanation:
+              "The externally influenced value reaches an executed process boundary.",
+          },
+        ],
+        validation: {
+          method: "static_source_trace",
+          summary:
+            "Repository source establishes an externally controlled value reaching execution.",
+          exploitWitness:
+            "A bounded inert marker demonstrates the dangerous interpretation boundary.",
+          negativeControl:
+            "A separate data-only invocation provides the non-executing comparison.",
+          evidence: ["rust-source", "rust-sink"],
+          counterEvidence:
+            "No dominating source-backed control was established for this path.",
+          remainingUncertainty:
+            "Deployment routing and operating-system process privileges remain unknown.",
+        },
+        attackPath: {
+          summary:
+            "An external caller controls a value that reaches a dangerous execution boundary.",
+          dataflow: {
+            source: "The remote endpoint supplies an untrusted field.",
+            sink: "The field reaches the recorded execution boundary.",
+            outcome:
+              "The child execution can affect service-process integrity.",
+          },
+          reachability: {
+            attacker: "An unauthenticated remote network caller.",
+            entrypoint: "The diagnostics HTTP handler.",
+            outcome: "A child process can execute in the service context.",
+          },
+          brokenControls: ["No exact command and data separation"],
+          evidenceRefs: ["rust-source", "rust-sink"],
+        },
+      };
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const residualRiskInventory =
+        await buildResidualRiskInventory(repository);
+
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        residualRiskInventory,
+      );
+      const rows = incomplete.split("\n").map((line) => JSON.parse(line));
+      expect(rows[1]).toMatchObject({
+        findingId: "occ_rust_quality",
+        frameworkModelId: "rust-web-command-injection",
+        reasons: [
+          "missing_model_specific_validation_evidence",
+          "missing_model_specific_attack_path_evidence",
+        ],
+      });
+      expect(rows[1]?.missingValidationTextAnyOf).toContainEqual([
+        "format!",
+        "command_line",
+        "formatted",
+      ]);
+      expect(rows[1]?.missingAttackPathTextAnyOf).toContainEqual([
+        "stdout",
+        "response",
+        "returned",
+      ]);
+
+      finding.validation.summary = [
+        "The Axum Query request query binds input.target.",
+        "format! assigns the formatted value to command_line.",
+        "std::process::Command and Command::new execute it through sh -c shell grammar.",
+      ].join(" ");
+      finding.attackPath.summary = [
+        "The input.target request value is the query value.",
+        "format! places it in a command string with shell grammar.",
+        "Command starts the sh process.",
+        "The command stdout is returned in the HTTP response.",
+      ].join(" ");
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+
+      expect(
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          residualRiskInventory,
+        ),
+      ).toBe("");
+    } finally {
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
   });
 });

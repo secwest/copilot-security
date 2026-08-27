@@ -4124,6 +4124,20 @@ const TRAEFIK_REPLACE_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-22", "authentication bypass", "protected backend path"],
 ] as const;
 
+const RUST_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Query", "Axum query", "request query"],
+  ["format!", "command_line", "formatted"],
+  ["Command::new", "std::process::Command"],
+  ["sh -c", "shell", "-c"],
+] as const;
+
+const RUST_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["input.target", "query value", "request value"],
+  ["format!", "command string", "shell grammar"],
+  ["sh", "process", "Command"],
+  ["stdout", "response", "returned"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -4314,6 +4328,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: TRAEFIK_REPLACE_PATH_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: TRAEFIK_REPLACE_PATH_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "rust-web-command-injection",
+    {
+      validation: RUST_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: RUST_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
 ]);
