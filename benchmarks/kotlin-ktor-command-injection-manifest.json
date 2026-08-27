@@ -231,7 +231,13 @@
           "requiredAttackPathTextAnyOf": [
             ["input.target", "resource value", "target"],
             ["diagnosticProcess", "factory", "helper call"],
-            ["sh -c", "shell grammar", "shell program", "command string"],
+            [
+              "sh -c",
+              "shell grammar",
+              "shell program",
+              "child shell",
+              "command string"
+            ],
             ["stdout", "response", "respondText"]
           ],
           "forbiddenText": [

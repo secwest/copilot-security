@@ -63,7 +63,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `diagnosticProcess` validation and attack-path gaps. `Ktor resource` and
   `shell program` are accepted as exact semantic equivalents where the finding
   already proved those concepts. Focused regression now passes 42 tests and
-  2,468 assertions.
+  2,469 assertions.
+- Ran provenance-bound correction campaign
+  `f2f8412e138516e64936f7980662be6a649feedfdd050f1573e4729e3c18bfe3`
+  against the factory exploit at quality-gate revision
+  `2684694f9b7ee193d33f503f6a002b833e167ec1`. The scan completed on attempt
+  one with status 0, no timeout, complete coverage, and one high finding in
+  6m32s. Validation now explicitly names the typed Ktor resource,
+  `commandLine`, `diagnosticProcess` builder factory, `ProcessBuilder`, and
+  `sh -c`; the attack path preserves the resource value, factory call, exact
+  constructor arguments, process start, and returned stdout. Its initial
+  evaluation missed only the exact phrase `child shell`, despite using that
+  phrase to describe the command-language boundary. Adding that narrow synonym
+  and re-evaluating the untouched sealed bytes accepts the case with every
+  metric at 1.0 and no missing validation or attack-path group. Both immutable
+  campaigns remain outside the repository as positive and negative acceptance
+  evidence.
+- Completed final combined native acceptance after the helper-aware quality and
+  evaluator corrections. Windows passes 1,895 tests and 14,114 assertions
+  across 208 files in 494.37 seconds, with 27 intentional
+  platform/integration skips and no failures. Ubuntu/WSL passes 155 tests and
+  3,736 assertions across the focused Kotlin, canonical corpus,
+  residual-inventory, Copilot transport, and package-provenance lanes, with one
+  Windows-launcher skip and no failure.
 - Closed hosted verification of prior acceptance revision
   `754f12f549dfa36b221b5e1df4451fe964493011`: Node `33121285236`,
   container `33121285223`, Kotlin `33121285286`, Java `33121285279`, .NET

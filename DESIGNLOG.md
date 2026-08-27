@@ -103,9 +103,36 @@ sealed factory finding produces exactly two gaps, both naming
 `diagnosticProcess`. A paired regression proves the same behavior for
 `configureProcess`, then proves that placing the exact symbol in each field
 closes the inventory. Focused Kotlin/canonical regression now passes 42 tests
-and 2,468 assertions. The original campaign remains immutable outside the
+and 2,469 assertions. The original campaign remains immutable outside the
 repository at
 `C:\security-benchmarks\copilot-security-kotlin-helpers-4792c82`.
+
+**Correction campaign.** Campaign
+`f2f8412e138516e64936f7980662be6a649feedfdd050f1573e4729e3c18bfe3`
+binds quality-gate revision `2684694f9b7ee193d33f503f6a002b833e167ec1`
+and the factory fixture under the same comparison policy. It completed on
+attempt one with status 0, no timeout, complete coverage, and one high finding
+in 6m32s. The repaired validation explicitly names the typed Ktor resource,
+`commandLine`, `diagnosticProcess` builder factory, exact `ProcessBuilder`
+arguments, and `sh -c`. Its attack path preserves the resource property,
+factory call, constructor, process start, and returned stdout instead of
+flattening the helper boundary.
+
+The first evaluation of that sealed finding missed only its phrase `child
+shell`; it already named `ProcessBuilder("sh", "-c", commandLine)`, arbitrary
+command execution, and the shell-free control. `child shell` is therefore a
+narrow exact synonym for the existing `sh -c`/`shell grammar`/`shell program`
+group, not a reduction in required semantics. Direct evaluation with a
+temporary corrected manifest copy accepts the untouched finding with every
+metric at 1.0 and no missing content group. The temporary copy was removed;
+the immutable campaign remains at
+`C:\security-benchmarks\copilot-security-kotlin-factory-closure-2684694`.
+
+Final combined native acceptance passes 1,895 tests and 14,114 assertions
+across 208 files in 494.37 seconds on Windows, with 27 intentional
+platform/integration skips and no failures. Ubuntu passes 155 tests and 3,736
+assertions across the focused Kotlin/corpus/residual/transport/package lane,
+with one Windows-launcher skip and no failure.
 
 ## 2026-08-27 — Model exact ProcessBuilder pipeline lists
 

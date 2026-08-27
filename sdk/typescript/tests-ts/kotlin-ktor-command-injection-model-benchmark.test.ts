@@ -149,6 +149,9 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
       requireAttackPath: true,
       requireCodeEvidence: true,
     });
+    expect(
+      benchmark.cases[8]?.expected[0]?.requiredAttackPathTextAnyOf?.[2],
+    ).toContain("child shell");
     expect(benchmark.cases[9]?.expected).toEqual([]);
     expect(benchmark.cases[10]?.expected[0]).toMatchObject({
       cwe: ["CWE-78", "CWE-88"],
