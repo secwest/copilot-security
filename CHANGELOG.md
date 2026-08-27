@@ -6,6 +6,33 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-asyncssh-scp-download-path-traversal`, an exact Python model for
+  [GHSA-2wxc-x7rj-hg8f / CVE-2026-54591](https://github.com/ronf/asyncssh/security/advisories/GHSA-2wxc-x7rj-hg8f).
+  It requires a live non-shadowed official `asyncssh.scp` binding, a proven
+  remote-to-local download using a remote source tuple or literal host-path,
+  a literal local string or `Path` destination, and one nearest exact stable
+  production `asyncssh<=2.23.0` pin. Uploads, remote destinations,
+  local-to-local calls, ranges, missing or duplicate pins, prereleases,
+  repaired 2.23.1+, local shadows, replaced bindings or members,
+  wrapper-parameter shadows, star expansion, test/example code, package-only
+  repositories, and text lookalikes fail closed. Structured evidence records
+  the binding, exact dependency, source direction, destination, server-owned
+  SCP `C`/`D` filename fields, and `_parse_cd_args -> posixpath.join ->
+  _recv_file open(wb)` write chain. Eight focused tests exercise 42 assertions
+  with one intentional Windows symlink skip.
+- Added a source-identical AsyncSSH 2.23.0/2.23.1 benchmark pair with
+  Python 3.12.3 runtime evidence, high/CWE-22 ground truth at
+  `src/downloader.py:9`, field-local validation and attack-path requirements,
+  and perfect three-run canonical gates. The corpus advances to 136 pairs, 272
+  cases, and 816 scans. A real-package Ubuntu witness starts an in-process SSH
+  server on a random loopback port and confines the requested child plus escaped
+  marker to one automatically removed temporary root. Version 2.23.0 writes the
+  inert marker through `C ../escaped-marker.txt`; version 2.23.1 raises
+  `SFTPBadMessage: Invalid filename` and writes nothing outside the requested
+  child. No home, startup, SSH configuration, authorization, executable,
+  credential, or persistent path is used. The reviewer contract preserves the
+  repair's residual limitation—SCP can still overwrite server-selected names
+  inside the destination—and recommends SFTP.
 - Added `node-contentful-mcp-management-token-host-redirect`, an exact
   operational model for
   [GHSA-2xhg-73j7-rrgx / CVE-2026-53957](https://github.com/contentful/contentful-mcp-server/security/advisories/GHSA-2xhg-73j7-rrgx).

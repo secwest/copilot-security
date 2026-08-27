@@ -2103,7 +2103,17 @@ datamodel-code-generator pair holds a remote JSON Schema, relative
 and `runpy.run_path` execution constant while changing only 0.63.0 to 0.64.0:
 the affected release renders a newline-bearing `x-python-import` value into a
 module-scope statement, while the repaired release rejects it before writing
-the module. The Prompty pair carries a remote template through three relative
+the module. The AsyncSSH pair then holds an official remote-source tuple SCP
+download, local `Path` destination, Python 3.12.3 runtime, loopback server, and
+temporary-root marker constant while changing only 2.23.0 to 2.23.1. The
+affected client accepts a server-controlled `C ../escaped-marker.txt` filename
+and writes outside the requested child but inside the disposable root; the
+repaired client raises `Invalid filename` and creates no escaped file. The
+scanner requires the exact download direction and stable production pin, and
+does not treat uploads, remote destinations, local calls, package presence, or
+test/example code as findings. The repair does not make SCP a complete trust
+boundary because a server can still select overwrite targets inside the
+destination; prefer SFTP. The Prompty pair carries a remote template through three relative
 wrappers into the official TypeScript `NunjucksRenderer`: exact
 `@prompty/core` 2.0.0-beta.4 permits `range.constructor` traversal and returns
 only the witness process's Node version, while source-identical 2.0.0-beta.5

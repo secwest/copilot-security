@@ -262,7 +262,7 @@ returns 404. The Traefik pair preserves the file provider, public rewrite,
 authenticated sibling, shared backend, and loopback witness while changing
 only 3.7.6 to 3.7.7. A direct protected request is denied on both builds; only
 the affected build forwards `/api../admin` onto the backend-normalized marker.
-The complete corpus now produces 810 scans across 135 exploit/control pairs.
+The complete corpus now produces 816 scans across 136 exploit/control pairs.
 The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
@@ -303,6 +303,23 @@ the argument-controlled endpoint; repaired code routes it only to the
 operator-configured endpoint. It never contacts Contentful or uses a real token
 or space, and removes its certificate, key, trust state, export directory, and
 generated error log.
+
+`python-asyncssh-scp-download-path-traversal-manifest.json` isolates
+[GHSA-2wxc-x7rj-hg8f / CVE-2026-54591](https://github.com/ronf/asyncssh/security/advisories/GHSA-2wxc-x7rj-hg8f)
+under perfect gates. The positive requires a live official `asyncssh.scp`
+binding, a remote source tuple or host-path source, a proven local destination,
+an exact affected production pin, CWE-22, validation, attack-path analysis,
+code evidence, high severity, and the exact call location. The source-identical
+control changes only AsyncSSH 2.23.0 to 2.23.1 and must remain empty. Its
+real-package witness starts an in-process SSH server on a random loopback port,
+sends one inert marker through a `C ../escaped-marker.txt` response, and keeps
+both the requested child and escaped file inside one automatically removed
+temporary root. Version 2.23.0 writes outside the requested child; 2.23.1
+raises `Invalid filename` and creates no escaped file. The witness never uses a
+home, startup, SSH configuration, authorization, executable, credential, or
+persistent path. The benchmark records the repair's residual limitation as
+well: SCP can still overwrite server-selected names inside the destination, so
+SFTP remains the preferred protocol.
 
 `go-echo-static-encoded-separator-manifest.json` isolates the application-level
 [GHSA-vfp3-v2gw-7wfq / CVE-2026-55677](https://github.com/labstack/echo/security/advisories/GHSA-vfp3-v2gw-7wfq)

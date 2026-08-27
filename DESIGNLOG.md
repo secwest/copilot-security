@@ -2,6 +2,61 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — AsyncSSH SCP server-filename path traversal
+
+**Gap and primary evidence.** The official
+[`GHSA-2wxc-x7rj-hg8f`](https://github.com/ronf/asyncssh/security/advisories/GHSA-2wxc-x7rj-hg8f)
+describes high-severity CVE-2026-54591 (CVSS 3.1 8.1, CWE-22): AsyncSSH through
+2.23.0 accepts filenames selected by a malicious SCP server, joins them to the
+client's requested destination, and opens the resulting local path for writing.
+The official
+[`d730803` repair](https://github.com/ronf/asyncssh/commit/d730803b8e4e94c20c7580d90f94d1e05f9f58de)
+rejects names containing slash, backslash, or exactly `..`. Its commit message
+also states the important residual boundary: even repaired SCP can overwrite
+server-selected files inside the destination, and applications should prefer
+SFTP. Generic Python filesystem taint does not cover this vulnerability because
+the application supplies a trusted destination; the attacker-controlled path
+component arrives later in the SCP protocol.
+
+**Reachability decision.** Represent the malicious server's `C` file and `D`
+directory filename fields as an intrinsic source at an exact official SCP
+download call. Require a live `import asyncssh` or `from asyncssh import scp`
+binding, including stable aliases, and prove that the source is a remote tuple
+or literal host-path while the destination is a local literal or `Path`.
+Require one nearest exact stable production `requirements.txt` pin at or below
+2.23.0. This deliberately covers fixed-server batch jobs without inventing an
+HTTP request source. Reject uploads, remote destinations, local-only calls,
+dynamic destination roles, package membership without a call, ranges,
+ambiguous pins, prereleases, 2.23.1+, repository-local shadows, reassignment,
+parameter shadowing, star expansion, tests, examples, and text lookalikes. The
+result records the official binding, direction, local root, pin, `scp -f`
+protocol source, and `_parse_cd_args -> posixpath.join -> _recv_file open(wb)`
+chain as independently reviewable evidence.
+
+**Impact and review boundary.** Report CWE-22 and a bounded arbitrary local
+file write at high severity only after reopening the exact topology. Do not
+promote the result to execution or persistence merely because the advisory
+lists startup and SSH files; require a concrete escaped target and a proven
+consumer or execution trigger. Host review must distinguish the deployed
+version, SSH server and host-key trust boundary, call reachability, destination
+type, process filesystem privileges, overwrite behavior, and containment. A
+2.23.1 pin closes the traversal model but does not make untrusted SCP filenames
+safe inside the target directory.
+
+**Executable evidence and containment.** The paired fixtures change only
+`asyncssh==2.23.0` to `asyncssh==2.23.1`; application, documentation, runtime
+record, and witness source are byte-identical. On Ubuntu Python 3.12.3, the
+witness loads each real package into an isolated temporary dependency tree,
+starts an in-process SSH server on a random `127.0.0.1` port, and asks the client
+to download into `temporary-root/requested`. The server sends one fixed inert
+marker as `C ../escaped-marker.txt`. Version 2.23.0 creates
+`temporary-root/escaped-marker.txt`; 2.23.1 raises
+`SFTPBadMessage: Invalid filename` and creates no escaped file. Both the
+requested child and escaped path remain inside one `TemporaryDirectory`, and
+the witness never addresses a home, startup, SSH configuration, authorization,
+executable, credential, or persistent location. The isolated package trees are
+removed after the differential.
+
 ## 2026-08-26 — Contentful MCP management-token host redirect
 
 **Gap and primary evidence.** The official

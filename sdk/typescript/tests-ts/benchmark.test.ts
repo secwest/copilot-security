@@ -448,6 +448,10 @@ describe("effectiveness benchmark", () => {
         "node-contentful-mcp-management-token-host-pinned",
       ],
       [
+        "python-asyncssh-scp-download-path-traversal",
+        "python-asyncssh-scp-repaired-control",
+      ],
+      [
         "node-nx-self-hosted-cache-archive-escape",
         "node-nx-self-hosted-cache-archive-contained",
       ],

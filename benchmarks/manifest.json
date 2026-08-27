@@ -5666,6 +5666,45 @@
         "node-contentful-mcp-management-token-host-pinned/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "python-asyncssh-scp-download-path-traversal",
+      "description": "An exact AsyncSSH 2.23.0 production call downloads from a remote SCP source tuple into a local directory where a malicious server controls the protocol filename used by the affected local write path.",
+      "fixture": "fixtures/python-asyncssh-scp-download-path-traversal",
+      "findingsPaths": [
+        "python-asyncssh-scp-download-path-traversal/run-1/findings.json",
+        "python-asyncssh-scp-download-path-traversal/run-2/findings.json",
+        "python-asyncssh-scp-download-path-traversal/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-asyncssh-scp-server-filename-traversal",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/downloader.py",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-asyncssh-scp-repaired-control",
+      "description": "The source-identical control changes only AsyncSSH to 2.23.1, which rejects the traversal filename before creating an outside-target file.",
+      "fixture": "fixtures/python-asyncssh-scp-repaired-control",
+      "findingsPaths": [
+        "python-asyncssh-scp-repaired-control/run-1/findings.json",
+        "python-asyncssh-scp-repaired-control/run-2/findings.json",
+        "python-asyncssh-scp-repaired-control/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

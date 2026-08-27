@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-asyncssh-scp-download-path-traversal",
+      "description": "An exact AsyncSSH 2.23.0 production call downloads from a remote SCP source tuple into a local directory where a malicious server controls the protocol filename used by the affected local write path.",
+      "fixture": "fixtures/python-asyncssh-scp-download-path-traversal",
+      "findingsPaths": [
+        "python-asyncssh-scp-download-path-traversal/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-asyncssh-scp-server-filename-traversal",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "src/downloader.py",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["GHSA-2wxc-x7rj-hg8f", "CVE-2026-54591"],
+            ["asyncssh.scp", "official AsyncSSH SCP binding"],
+            [
+              "remote source tuple",
+              "SSHClientConnection source",
+              "remote SCP source"
+            ],
+            ["local destination", "download directory", "destination root"],
+            ["asyncssh 2.23.0", "asyncssh==2.23.0"],
+            [
+              "scp -f",
+              "C filename",
+              "D directory",
+              "server-controlled filename"
+            ],
+            ["_parse_cd_args", "unsanitized filename"],
+            ["posixpath.join", "_recv_file", "open wb", "local file write"],
+            ["temporary directory", "outside target", "escaped marker"],
+            ["Python 3.12.3"],
+            ["asyncssh 2.23.1", "Invalid filename", "repaired control"],
+            [
+              "SFTP",
+              "within the target directory",
+              "residual SCP overwrite risk"
+            ]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["GHSA-2wxc-x7rj-hg8f", "CVE-2026-54591"],
+            ["asyncssh.scp", "official AsyncSSH SCP binding"],
+            [
+              "remote source tuple",
+              "SSHClientConnection source",
+              "remote SCP source"
+            ],
+            ["local destination", "download directory", "destination root"],
+            ["asyncssh 2.23.0", "asyncssh==2.23.0"],
+            [
+              "scp -f",
+              "C filename",
+              "D directory",
+              "server-controlled filename"
+            ],
+            ["_parse_cd_args", "unsanitized filename"],
+            ["posixpath.join", "_recv_file", "open wb", "local file write"],
+            ["temporary directory", "outside target", "escaped marker"],
+            ["Python 3.12.3"],
+            ["asyncssh 2.23.1", "Invalid filename", "repaired control"],
+            [
+              "SFTP",
+              "within the target directory",
+              "residual SCP overwrite risk"
+            ]
+          ],
+          "forbiddenText": [
+            "every AsyncSSH installation is exploitable",
+            "AsyncSSH 2.23.1 prevents every SCP overwrite",
+            "the marker proves code execution",
+            "the fixture writes a startup or authorization file"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-asyncssh-scp-repaired-control",
+      "description": "The source-identical control changes only AsyncSSH to 2.23.1, which rejects the traversal filename before creating an outside-target file.",
+      "fixture": "fixtures/python-asyncssh-scp-repaired-control",
+      "findingsPaths": [
+        "python-asyncssh-scp-repaired-control/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

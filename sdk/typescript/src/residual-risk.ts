@@ -2407,6 +2407,28 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-asyncssh-scp-download-path-traversal",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+asyncssh(?:\s+as\s+[A-Za-z_]\w*)?\b|\bfrom\s+asyncssh\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "malicious-scp-server-protocol-filename",
+        expression: /\b[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)?\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "asyncssh-scp-download-local-file-write",
+        expression: /\b[A-Za-z_]\w*(?:\s*\.\s*scp)?\s*\(/u,
+        cweIds: ["CWE-22"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-sympy-unsafe-parse-expr",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3499,6 +3521,7 @@ function isPythonTypedSinkModel(modelId: string): boolean {
     modelId === "python-web-tarfile-unsafe-extraction" ||
     modelId === "python-web-hydra-unsafe-instantiate" ||
     modelId === "python-web-statemachine-unsafe-scxml-eval" ||
+    modelId === "python-asyncssh-scp-download-path-traversal" ||
     modelId === "python-web-datamodel-codegen-import-injection" ||
     modelId === "python-web-sympy-unsafe-parse-expr"
   );
@@ -3780,6 +3803,21 @@ const STATEMACHINE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["__import__", "6 * 7", "arithmetic sentinel", "42"],
   ["Python 3.12.3"],
   ["python-statemachine 3.2.0", "restricted evaluator", "InvalidDefinition"],
+] as const;
+
+const ASYNCSSH_SCP_TRAVERSAL_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["GHSA-2wxc-x7rj-hg8f", "CVE-2026-54591"],
+  ["asyncssh.scp", "official AsyncSSH SCP binding"],
+  ["remote source tuple", "SSHClientConnection source", "remote SCP source"],
+  ["local destination", "download directory", "destination root"],
+  ["asyncssh 2.23.0", "asyncssh==2.23.0"],
+  ["scp -f", "C filename", "D directory", "server-controlled filename"],
+  ["_parse_cd_args", "unsanitized filename"],
+  ["posixpath.join", "_recv_file", "open wb", "local file write"],
+  ["temporary directory", "outside target", "escaped marker"],
+  ["Python 3.12.3"],
+  ["asyncssh 2.23.1", "Invalid filename", "repaired control"],
+  ["SFTP", "within the target directory", "residual SCP overwrite risk"],
 ] as const;
 
 const DATAMODEL_CODEGEN_FIELD_EVIDENCE_REQUIREMENTS = [
@@ -4088,6 +4126,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: STATEMACHINE_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: STATEMACHINE_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-asyncssh-scp-download-path-traversal",
+    {
+      validation: ASYNCSSH_SCP_TRAVERSAL_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: ASYNCSSH_SCP_TRAVERSAL_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -17486,15 +17531,18 @@ function frameworkDataflowRecords(
                     : model.id === "python-web-statemachine-unsafe-scxml-eval"
                       ? pythonStatemachineCandidateLines(lines, 64)
                       : model.id ===
-                          "python-web-datamodel-codegen-import-injection"
-                        ? pythonDatamodelCodegenCandidateLines(lines, 64)
-                        : model.id === "python-web-sympy-unsafe-parse-expr"
-                          ? pythonSympyCandidateLines(lines, 64)
-                          : matchingPythonModelLines(
-                              lines,
-                              model.sinks,
-                              isPythonTypedSinkModel(model.id) ? 64 : 8,
-                            )
+                          "python-asyncssh-scp-download-path-traversal"
+                        ? pythonAsyncSshScpCandidateLines(lines, 64)
+                        : model.id ===
+                            "python-web-datamodel-codegen-import-injection"
+                          ? pythonDatamodelCodegenCandidateLines(lines, 64)
+                          : model.id === "python-web-sympy-unsafe-parse-expr"
+                            ? pythonSympyCandidateLines(lines, 64)
+                            : matchingPythonModelLines(
+                                lines,
+                                model.sinks,
+                                isPythonTypedSinkModel(model.id) ? 64 : 8,
+                              )
             : extension === ".java" || extension === ".cs"
               ? matchingJavaModelLines(lines, model.sinks, 8)
               : matchingModelLines(lines, model.sinks, 8);
@@ -17754,22 +17802,30 @@ function frameworkDataflowRecords(
                                 sink.line,
                               )
                             : model.id ===
-                                "python-web-datamodel-codegen-import-injection"
-                              ? pythonDatamodelCodegenImportInjectionSink(
+                                "python-asyncssh-scp-download-path-traversal"
+                              ? pythonAsyncSshScpDownloadSink(
                                   files,
                                   path,
                                   lines,
                                   sink.line,
                                 )
                               : model.id ===
-                                  "python-web-sympy-unsafe-parse-expr"
-                                ? pythonSympyUnsafeParseExprSink(
+                                  "python-web-datamodel-codegen-import-injection"
+                                ? pythonDatamodelCodegenImportInjectionSink(
                                     files,
                                     path,
                                     lines,
                                     sink.line,
                                   )
-                                : undefined;
+                                : model.id ===
+                                    "python-web-sympy-unsafe-parse-expr"
+                                  ? pythonSympyUnsafeParseExprSink(
+                                      files,
+                                      path,
+                                      lines,
+                                      sink.line,
+                                    )
+                                  : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -18632,7 +18688,10 @@ function frameworkDataflowRecords(
             (control) => `candidate-control:${control.kind}`,
           ),
         ],
-        priority: 116,
+        priority:
+          model.id === "python-asyncssh-scp-download-path-traversal"
+            ? 124
+            : 116,
         startLine,
         endLine,
         excerpt: sourceExcerpt(lines, startLine, endLine),
@@ -34301,6 +34360,316 @@ function pythonPackageVersionAtLeast(
     if (values[index]! < floor[index]!) return false;
   }
   return true;
+}
+
+interface PythonAsyncSshScpBinding extends PythonMemberBinding {
+  originLine?: number;
+}
+
+interface PythonAsyncSshRemoteSource {
+  expression: string;
+  line: number;
+  route: "connection-tuple" | "host-path";
+}
+
+interface PythonAsyncSshLocalDestination {
+  expression: string;
+  line: number;
+}
+
+function pythonAsyncSshBindingExpression(
+  binding: PythonAsyncSshScpBinding,
+): string {
+  return binding.memberPath === ""
+    ? binding.local
+    : `${binding.local}.${binding.memberPath}`;
+}
+
+function pythonAsyncSshScpBindings(
+  lines: readonly string[],
+): PythonAsyncSshScpBinding[] {
+  const bindings: PythonAsyncSshScpBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const moduleImport =
+      /^\s*import\s+asyncssh(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(structural);
+    if (moduleImport !== null) {
+      bindings.push({
+        imported: "asyncssh.scp",
+        local: moduleImport[1] ?? "asyncssh",
+        memberPath: "scp",
+        operation: "scp",
+        line: index + 1,
+      });
+      continue;
+    }
+    const fromImport = /^\s*from\s+asyncssh\s+import\s+(.+?)\s*$/u.exec(
+      structural,
+    );
+    if (fromImport?.[1] === undefined) continue;
+    const importedText = pythonCollectedImport(
+      structuralLines,
+      index,
+      fromImport[1],
+    );
+    if (importedText === undefined) continue;
+    for (const rawBinding of splitPythonArguments(importedText)) {
+      const parsed = /^scp(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding.trim(),
+      );
+      if (parsed === null) continue;
+      bindings.push({
+        imported: "asyncssh.scp",
+        local: parsed[1] ?? "scp",
+        memberPath: "",
+        operation: "scp",
+        line: index + 1,
+      });
+    }
+  }
+
+  const importedBindings = [...bindings];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    if (/^\s/u.test(structural)) continue;
+    for (const binding of importedBindings) {
+      if (
+        binding.line >= index + 1 ||
+        !pythonMemberBindingIsLive(lines, binding, index + 1, undefined)
+      ) {
+        continue;
+      }
+      const source = pythonAsyncSshBindingExpression(binding)
+        .split(".")
+        .map(escapeRegularExpression)
+        .join("\\s*\\.\\s*");
+      const alias = new RegExp(
+        `^\\s*([A-Za-z_]\\w*)\\s*(?::[^=]+)?=\\s*${source}\\s*$`,
+        "u",
+      ).exec(structural)?.[1];
+      if (alias === undefined || alias === binding.local) continue;
+      bindings.push({
+        imported: binding.imported,
+        local: alias,
+        memberPath: "",
+        operation: "scp",
+        line: index + 1,
+        originLine: binding.originLine ?? binding.line,
+      });
+    }
+  }
+  return bindings;
+}
+
+function pythonLiteralStringValue(expression: string): string | undefined {
+  const match = /^(?:[rRuUbB]{0,2})(["'])([\s\S]*)\1$/u.exec(expression.trim());
+  return match?.[2];
+}
+
+function pythonAsyncSshRemoteSource(
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+): PythonAsyncSshRemoteSource | undefined {
+  const origin = resolvePythonExpressionOrigin(lines, expression, beforeLine);
+  if (origin === undefined) return undefined;
+  const value = origin.expression.trim();
+  const literal = pythonLiteralStringValue(value);
+  if (literal !== undefined) {
+    const colon = literal.indexOf(":");
+    if (colon <= 0 || /^[A-Za-z]:/u.test(literal)) return undefined;
+    return { expression: value, line: origin.line, route: "host-path" };
+  }
+  if (
+    !value.startsWith("(") ||
+    matchingCallParenthesis(value, 0) !== value.length - 1
+  ) {
+    return undefined;
+  }
+  const tuple = splitPythonArguments(value.slice(1, -1));
+  if (
+    tuple.length !== 2 ||
+    tuple.some(
+      (entry) => entry.trim() === "" || entry.trim().startsWith("*"),
+    ) ||
+    /^(?:None|False|0(?:\.0+)?|["']["'])$/u.test(tuple[0]!.trim())
+  ) {
+    return undefined;
+  }
+  return { expression: value, line: origin.line, route: "connection-tuple" };
+}
+
+function pythonAsyncSshLocalDestination(
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+): PythonAsyncSshLocalDestination | undefined {
+  const origin = resolvePythonExpressionOrigin(lines, expression, beforeLine);
+  if (origin === undefined) return undefined;
+  const value = origin.expression.trim();
+  const literal = pythonLiteralStringValue(value);
+  if (literal !== undefined) {
+    const colon = literal.indexOf(":");
+    if (colon >= 0) return undefined;
+    return { expression: value, line: origin.line };
+  }
+  const pathCall =
+    /^(?:pathlib\s*\.\s*)?(?:Path|PurePath)\s*\(([\s\S]*)\)$/u.exec(value);
+  if (pathCall?.[1] === undefined) return undefined;
+  const arguments_ = splitPythonArguments(pathCall[1]);
+  if (
+    arguments_.length > 1 ||
+    arguments_.some((argument) => argument.trim().startsWith("*"))
+  ) {
+    return undefined;
+  }
+  if (arguments_.length === 1) {
+    const path = pythonLiteralStringValue(arguments_[0]!);
+    if (path === undefined) return undefined;
+  }
+  return { expression: value, line: origin.line };
+}
+
+function pythonAsyncSshScpCandidateLines(
+  lines: readonly string[],
+  limit: number,
+): Array<{ kind: string; line: number }> {
+  const bindings = pythonAsyncSshScpBindings(lines);
+  const structuralLines = pythonStructuralLines(lines);
+  const matches: Array<{ kind: string; line: number }> = [];
+  for (
+    let index = 0;
+    index < structuralLines.length && matches.length < limit;
+    index += 1
+  ) {
+    const line = index + 1;
+    const wrapper = exportedPythonFunctions(lines).find(
+      (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+    );
+    if (
+      bindings.some(
+        (binding) =>
+          pythonMemberBindingIsLive(lines, binding, line, wrapper) &&
+          pythonMemberBindingCallee(binding).test(structuralLines[index] ?? ""),
+      )
+    ) {
+      matches.push({ kind: "asyncssh-scp-download-local-file-write", line });
+    }
+  }
+  return matches;
+}
+
+function pythonAsyncSshScpDownloadSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  if (
+    javascriptTestOrExamplePath(sourcePath) ||
+    pythonLocalModuleCouldShadow(files, sourcePath, "asyncssh")
+  ) {
+    return undefined;
+  }
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  for (const binding of pythonAsyncSshScpBindings(lines)) {
+    if (!pythonMemberBindingIsLive(lines, binding, line, wrapper)) continue;
+    const callee = pythonMemberBindingCallee(binding);
+    if (!callee.test(pythonStructuralLines(lines)[line - 1] ?? "")) continue;
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(lines, line, callee);
+    if (
+      arguments_ === undefined ||
+      arguments_.some((argument) => argument.trim().startsWith("*"))
+    ) {
+      continue;
+    }
+    const positional = pythonPositionalArguments(arguments_);
+    const sourceKeyword = pythonKeywordArgument(arguments_, "srcpaths");
+    const destinationKeyword = pythonKeywordArgument(arguments_, "dstpath");
+    if (
+      positional.length > 2 ||
+      (sourceKeyword !== undefined && positional.length > 0) ||
+      (destinationKeyword !== undefined && positional.length > 1)
+    ) {
+      continue;
+    }
+    const sourceExpression = sourceKeyword ?? positional[0];
+    const destinationExpression = destinationKeyword ?? positional[1];
+    if (sourceExpression === undefined || destinationExpression === undefined) {
+      continue;
+    }
+    const remote = pythonAsyncSshRemoteSource(lines, sourceExpression, line);
+    const destination = pythonAsyncSshLocalDestination(
+      lines,
+      destinationExpression,
+      line,
+    );
+    if (remote === undefined || destination === undefined) continue;
+    const pinned = pythonPinnedRequirement(files, sourcePath, "asyncssh");
+    if (
+      pinned === undefined ||
+      !/^\d+\.\d+\.\d+$/u.test(pinned.version) ||
+      !pythonPackageVersionAtMost(pinned.version, [2, 23, 0])
+    ) {
+      continue;
+    }
+    return {
+      sourceExpression: "asyncssh.scp(",
+      kind: "asyncssh-affected-scp-download-path-traversal",
+      propagators: [
+        {
+          kind: "asyncssh-scp-binding",
+          path: sourcePath,
+          line: binding.originLine ?? binding.line,
+          symbol: `${binding.imported} as ${pythonAsyncSshBindingExpression(binding)}`,
+        },
+        ...(binding.originLine === undefined
+          ? []
+          : [
+              {
+                kind: "asyncssh-scp-callable-alias",
+                path: sourcePath,
+                line: binding.line,
+                symbol: binding.local,
+              },
+            ]),
+        {
+          kind: "asyncssh-runtime-dependency",
+          path: pinned.path,
+          line: pinned.line,
+          symbol: `asyncssh@${pinned.version}:requirements-exact`,
+        },
+        {
+          kind: "asyncssh-remote-scp-source",
+          path: sourcePath,
+          line: remote.line,
+          symbol: `${remote.route}:${remote.expression}`,
+        },
+        {
+          kind: "asyncssh-local-download-destination",
+          path: sourcePath,
+          line: destination.line,
+          symbol: destination.expression,
+        },
+        {
+          kind: "intrinsic-scp-server-filename-control",
+          path: sourcePath,
+          line,
+          symbol: "scp -f -> C/D filename fields",
+        },
+        {
+          kind: "intrinsic-asyncssh-traversal-write",
+          path: sourcePath,
+          line,
+          symbol: "_parse_cd_args -> posixpath.join -> _recv_file open(wb)",
+        },
+      ],
+    };
+  }
+  return undefined;
 }
 
 interface PythonPyyamlBindingContext {
