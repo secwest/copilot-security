@@ -2,6 +2,59 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Sealed self-scan and finding-driven hardening
+
+**Live acceptance.** Scan exact tracked-only checkpoint
+`f175c68ca707bc97a397654856b23ff85d91f307` with stored Copilot credentials,
+`xhigh` effort, no cost or AI-credit cap, and five total sessions available.
+The scan completes in 20 minutes 24 seconds after 8,139,483 input tokens,
+7,116,839 cached tokens, and 131,192 output tokens. It closes all 495 immutable
+inventory surfaces with no deferral and reports two high-severity findings. No
+allowance, authentication, transport, or classifier error occurs. Host
+finalization completes: `sealedAt` is byte-for-byte equal to the workbench
+completion timestamp, five artifacts are digest-bound, and the generated report
+is present. This is the required live proof for the preceding seal-ownership
+change. The earlier 494-surface complete draft remains a failed partial run
+because it never reached this host commit point.
+
+**Privileged installer finding.** The report identifies a real missing
+invariant but overstates the package-author threat: an attacker who can replace
+`install.sh` already has arbitrary code execution when the operator invokes it
+with `sudo`. The distinct boundary is the ordinary user-owned extracted tree.
+A local process can replace a validated executable with a symlink before the
+root copy and `chmod`; `-x` and `-d` follow links, GNU `cp -R` preserves the
+link, and the later privileged operation follows the copied endpoint. Freeze
+the entire extraction before validation into a `0700` root-owned staging tree,
+using archive-style copy semantics without preserving user ownership. Reject
+special files and elevated/world-writable modes. pnpm dependencies legitimately
+contain symlinks, so a blanket ban would make every release uninstallable;
+permit only relative links below staged scanner `node_modules`, require their
+ultimate targets to exist, and prove every resolution remains inside staging.
+
+The installation transaction uses a root-only lock, prepares regular metadata
+files beside their final destinations, rejects link-shaped destinations, moves
+an existing application into the private staging tree, atomically moves the new
+application into place, and rolls the previous application back on any later
+failure. The cleanup path removes a lock only when this process acquired it.
+The installed script fixes `PATH` before invoking system tools. CI tests the
+actual release archive twice: a copy whose application executable points to
+`/etc/passwd` must fail without changing that file's digest, then the unmodified
+archive must install and pass the GUI smoke contract. ShellCheck 0.9.0 and
+Ubuntu's native POSIX parser accept the script.
+
+**Synthetic secret false positive.** The second report originates from the
+host generic-entropy candidate for the exact fixture literal
+`signing-key-material`. The model itself records that the path is a benchmark,
+the entropy is only medium, the bytes were not validated against a provider,
+and the surrounding code models signing-key exposure. Promoting that metadata
+to a high finding adds no evidence and harms precision. Add a separate anchored
+semantic-placeholder expression: it matches only complete values such as
+`signing-key-material`, `api-key-material`, or `token-material`; it does not
+suppress a larger arbitrary token merely because part of it resembles a label.
+Make the observed literal a negative corpus case and retain the existing
+high-entropy positive cases. Focused secret tests and the perfect precision and
+recall gate pass 7 tests and 58 assertions; strict TypeScript also passes.
+
 ## 2026-08-27 — Complete self-scan and self-finding hardening
 
 **Measured effectiveness.** Exact checkpoint

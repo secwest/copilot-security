@@ -377,6 +377,10 @@ describe("local secret candidates", () => {
       'token="example-placeholder-token"\n',
     );
     await writeFile(
+      join(repository, "semantic-placeholder.env"),
+      'signing_key="signing-key-material"\n',
+    );
+    await writeFile(
       join(repository, "environment-reference.env"),
       [
         'token="COPILOT_GITHUB_TOKEN"',

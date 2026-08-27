@@ -6,6 +6,40 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- A fresh uncapped stored-credential self-scan of exact checkpoint
+  `f175c68ca707bc97a397654856b23ff85d91f307` now seals successfully after
+  20 minutes 24 seconds with complete 495-of-495 inventory coverage, zero
+  deferrals, and two high-severity findings. It processes 8,139,483 input
+  tokens (7,116,839 cached) and 131,192 output tokens with no allowance,
+  authentication, transport, or classifier failure. The manifest is completed,
+  `sealedAt` exactly equals the workbench `completedAt`, five artifacts are
+  digest-bound, and the deterministic report exists. This live-validates the
+  host-seal ownership fix; the preceding complete-but-unsealed output remains
+  correctly classified as a failed partial run.
+- Confirmed and narrowed the self-scan's privileged Linux installer finding.
+  The relevant attacker is a local process able to mutate a user-owned
+  extracted archive during a `sudo` installation, not a malicious package
+  author who already controls `install.sh`. The installer now uses a fixed
+  trusted tool path, serializes installation, freezes the extraction into a
+  private root-owned staging tree without preserving user ownership, rejects
+  special files, strips elevated/world-writable mode bits, and permits only
+  existing relative package-manager links that resolve inside the staged
+  scanner `node_modules`. It prepares launcher and desktop assets as regular
+  temporary files, rejects link-shaped destinations, atomically swaps the
+  application directory, and restores the previous application on failure.
+  Linux CI now injects an `/etc/passwd` link pivot into the unpacked release,
+  requires rejection with the target digest unchanged, installs the unmodified
+  archive, and runs the installed GUI smoke test. ShellCheck and native Ubuntu
+  POSIX syntax validation are clean.
+- Rejected the other self-scan finding as a demonstrated scanner false
+  positive. The reported benchmark value was the exact synthetic literal
+  `signing-key-material`; the model promoted redacted generic-entropy metadata
+  despite recording benchmark context, medium entropy, and no external
+  validity proof. Generic secret discovery now excludes only an anchored set of
+  complete semantic placeholder literals such as `signing-key-material`, while
+  retaining arbitrary high-entropy values. The placeholder is a committed
+  negative benchmark case. Focused secret discovery and its perfect-gate corpus
+  pass 7 tests and 58 assertions, and strict TypeScript remains green.
 - Added bounded automatic fresh-session coverage closure. When the trusted host
   still proves missing direct file reviews or finding-quality gaps after a
   session's correction turns, the scanner now spends the remaining shared

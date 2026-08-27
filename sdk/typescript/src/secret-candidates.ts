@@ -186,6 +186,9 @@ const GENERIC_ASSIGNMENT =
 const PLACEHOLDER_EXPRESSION =
   /(?:attacker|benchmark|changeme|dummy|example|fake|fixture|must[-_]?(?:never|not)|not[-_]?a[-_]?secret|placeholder|redacted|sample|should[-_]?not|synthetic|test(?:ing)?|victim|your[-_]|xxx)/iu;
 
+const SEMANTIC_PLACEHOLDER_EXPRESSION =
+  /^(?:api[-_]?key|encryption[-_]?key|private[-_]?key|secret|signing[-_]?key|token)[-_]?material$/iu;
+
 // Quoted configuration often names the environment variable that supplies a
 // credential. Requiring a multi-segment constant and a credential-specific
 // suffix keeps this narrower than a general all-caps allowlist.
@@ -1077,6 +1080,7 @@ function candidateRecordsForText(
     const end = index + secret.length;
     if (
       PLACEHOLDER_EXPRESSION.test(secret) ||
+      SEMANTIC_PLACEHOLDER_EXPRESSION.test(secret) ||
       ENVIRONMENT_CREDENTIAL_REFERENCE.test(secret) ||
       /^\$\{[^}\r\n]+\}$/u.test(secret) ||
       shannonEntropy(secret) < 3.5 ||

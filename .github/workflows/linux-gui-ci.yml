@@ -110,6 +110,24 @@ jobs:
           tar -C artifacts/package -czf artifacts/copilot-security-linux-x64.tar.gz .
           sha256sum artifacts/copilot-security-linux-x64.tar.gz
 
+      - name: Test privileged installer and reject link pivots
+        run: |
+          mkdir -p artifacts/install-test artifacts/unsafe-install-test
+          tar -xzf artifacts/copilot-security-linux-x64.tar.gz -C artifacts/install-test
+          cp -a artifacts/install-test/. artifacts/unsafe-install-test/
+          rm artifacts/unsafe-install-test/app/CopilotSecurity
+          ln -s /etc/passwd artifacts/unsafe-install-test/app/CopilotSecurity
+          passwd_digest=$(sha256sum /etc/passwd)
+          if sudo artifacts/unsafe-install-test/install.sh; then
+            echo "Unsafe package link unexpectedly passed installer validation" >&2
+            exit 1
+          fi
+          test "$(sha256sum /etc/passwd)" = "$passwd_digest"
+          sudo artifacts/install-test/install.sh
+          test -x /opt/copilot-security/CopilotSecurity
+          test -x /opt/copilot-security/scanner/bin/copilot-security.mjs
+          /usr/local/bin/copilot-security-gui --smoke-test
+
       - name: Retain Linux package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

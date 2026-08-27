@@ -81,7 +81,14 @@ sudo ./install.sh
 copilot-security-gui
 ```
 
-The installer checks for a complete executable payload before changing system paths. It installs the application below `/opt/copilot-security`, the launcher below `/usr/local/bin`, and freedesktop metadata below `/usr/share`.
+The installer first freezes the extracted package into a private, root-owned
+staging directory. It rejects special files and every symbolic link except
+relative, existing package-manager links confined to the scanner's staged
+`node_modules`; prepares the launcher and desktop assets as regular temporary
+files; serializes concurrent installers; and atomically swaps the application
+directory with rollback on failure. It installs the application below
+`/opt/copilot-security`, the launcher below `/usr/local/bin`, and freedesktop
+metadata below `/usr/share`.
 
 ## Failure and recovery behavior
 
