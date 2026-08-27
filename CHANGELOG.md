@@ -6,6 +6,44 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added the canonical corpus's first PHP model,
+  `php-pdo-mysqli-sql-injection`. A bounded PHP-aware lexer and same-scope
+  dataflow pass follows `$_GET`, `$_POST`, `$_REQUEST`, `$_COOKIE`, selected
+  attacker-controlled `$_SERVER` keys, and `filter_input` through assignments,
+  interpolation, concatenation, formatting, and heredoc into typed PDO or
+  MySQLi execution. It covers direct object and procedural query APIs plus the
+  subtle case where tainted SQL is prepared and only later executed; inert
+  preparation, untyped lookalikes, and parameter data remain negative.
+- Modeled command/data separation instead of treating every `prepare` call as
+  safe. Fixed placeholder templates with request values supplied only as
+  execute-time parameters, validated numeric/boolean scalars, fixed literal
+  selections, reassignments, fixed queries, disconnected scopes, non-code
+  HTML/comments/strings, and non-attacker server variables stay negative.
+  Database-specific escaping is retained as validation evidence because its
+  correctness depends on the exact connection, character set, and SQL lexical
+  context. The pass recognizes PHP attributes and `.phtml`, bounds nesting at
+  128, tokens at 131,072, records at 64, and each excerpt line at 2,048 Unicode
+  characters.
+- Added a strict PDO exploit/control pair and focused perfect-gate manifest,
+  advancing the full corpus to 140 pairs, 280 cases, and 840 repeated scan
+  positions. Both fixtures keep the same source, PDO receiver, preparation,
+  execution, and result topology; the positive interpolates before preparation
+  while the control supplies the same bytes only as placeholder data. Native
+  PHP 8.3.6 parses all four source/witness files. Their in-memory SQLite
+  witnesses return `injected_rows=2` and `parameterized_rows=0` respectively.
+  A new least-privilege `php-fixture-ci` workflow makes this executable boundary
+  a hosted regression. Focused Windows tests pass 14 cases and 95 assertions;
+  the adjacent canonical and residual-risk lane passes 98 tests and 3,270
+  assertions with one intentional Windows symlink skip, while native Ubuntu
+  passes all 99 tests and 3,271 assertions. The authoritative Windows suite
+  passes 1,844 tests and 13,541 assertions across 205 files in 543.04 seconds,
+  with 27 intentional platform/integration skips and zero failures. Formatting,
+  generated-model drift, TypeScript, the production build, and the high-severity
+  production dependency audit are clean. A fresh 279-entry, 2,166,042-byte npm
+  archive with SHA-256
+  `cedd951b0e76ffae697c06264ed95216c2e7aa56b9f8a4104b24f2200c9a9255`
+  passes strict inspection and two isolated installs, including the public API,
+  CLI, and all 79 bundled plugin files; the disposable archive is removed.
 - Added the scanner's first native Terraform model,
   `terraform-aws-public-admin-ingress`. A bounded fail-closed HCL lexer and
   structural parser recognizes literal `aws_security_group` inline ingress,

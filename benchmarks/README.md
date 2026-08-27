@@ -137,7 +137,30 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-terraform-admin-ingress
 ```
 
-The versioned corpus currently contains 139 vulnerable/control pairs:
+## PHP PDO and MySQLi SQL-injection benchmark
+
+`php-pdo-sql-injection-manifest.json` adds the canonical corpus's first PHP
+pair. Both fixtures retain the same HTTP source, typed PDO receiver, query
+preparation, execution, and returned-row path. The positive interpolates the
+request value before `prepare`; the control uses a fixed placeholder and passes
+the value only through `execute` parameter data. The focused perfect gate
+requires the report to distinguish tainted SQL grammar from parameter data and
+to validate route deployment, receiver identity, driver behavior, database
+privileges, affected rows, returned data, and concrete impact.
+
+Deterministic regression also covers direct PDO execution, object and
+procedural MySQLi, `filter_input`, concatenation, interpolation, formatting,
+heredoc, typed receiver and scope identity, inert preparation, reassignment,
+fixed scalar and literal selection, manual escaping evidence, malformed input,
+and bounded hostile nesting/token volume. Run it with:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/php-pdo-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-php-sql
+```
+
+The versioned corpus currently contains 140 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -325,7 +348,7 @@ returns 404. The Traefik pair preserves the file provider, public rewrite,
 authenticated sibling, shared backend, and loopback witness while changing
 only 3.7.6 to 3.7.7. A direct protected request is denied on both builds; only
 the affected build forwards `/api../admin` onto the backend-normalized marker.
-The complete corpus now produces 834 scans across 139 exploit/control pairs.
+The complete corpus now produces 840 scans across 140 exploit/control pairs.
 The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty

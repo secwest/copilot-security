@@ -411,6 +411,7 @@ describe("effectiveness benchmark", () => {
         "terraform-aws-public-admin-ingress",
         "terraform-aws-restricted-admin-ingress",
       ],
+      ["php-pdo-tainted-prepared-sql-injection", "php-pdo-parameterized-query"],
       [
         "node-multi-hop-rhinostone-swig-template-traversal",
         "node-multi-hop-repaired-rhinostone-swig-template-root",

@@ -2,6 +2,85 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Add PHP PDO/MySQLi SQL-command dataflow and executable benchmark
+
+**Why PHP is the next marginal coverage gain.** The exact pushed corpus held
+278 cases: 132 Node, 82 JavaScript, 42 Python, six C, six Traefik, four
+Kubernetes, and two each for CloudFormation, Terraform, and Go. The host could
+inventory `.php` files only through generic lexical signals; it had no typed
+PHP source-to-sink model or canonical PHP pair. Adding another AWS rule would
+deepen a new IaC lane, but adding PHP tests an absent language and a distinct
+runtime grammar. Semgrep likewise describes high-confidence injection coverage
+in terms of curated sources, sinks, propagators, and sanitizers, and its public
+rule repository includes PHP as a supported language. References: [PHP
+prepared statements][php-prepared], [`PDO::prepare`][pdo-prepare], [MySQLi
+prepared statements][mysqli-prepared], [`mysqli::multi_query` security
+warning][mysqli-multi-query], and [Semgrep high-accuracy rules][semgrep-pro].
+
+**Parser and identity boundary.** Add a standalone bounded lexer rather than a
+PHP keyword expression. It reads only PHP-tagged regions, removes line and
+block comments, treats single-quoted strings and nowdocs as literals, preserves
+variable references in double-quoted strings and heredocs, supports PHP 8
+attributes, and balances PHP delimiters. It partitions named functions,
+closures, and methods so a source in one scope cannot taint a same-named value
+in another; abstract declarations end at their semicolon rather than consuming
+the next body. Receiver identity requires a literal `new PDO`, `new mysqli`,
+`mysqli_connect`, or exact PDO/MySQLi type declaration. A local `query` or
+`prepare` lookalike is not accepted. Function-scope discovery is linear, and
+the pass caps nesting at 128, tokens at 131,072, emitted records at 64, and
+excerpt lines at 2,048 Unicode characters.
+
+**Source, propagation, and sink boundary.** Accept indexed `$_GET`, `$_POST`,
+`$_REQUEST`, and `$_COOKIE` input, `filter_input` HTTP channels, and only the
+header, request-target, path, query-string, or PHP-auth keys of `$_SERVER`.
+Follow ordinary assignment, `.=` construction, string concatenation,
+interpolation, `sprintf`/`vsprintf`, and heredoc interpolation. Exact PDO
+`query`/`exec`, MySQLi `query`/`real_query`/`multi_query`/`execute_query`, their
+procedural forms, or tainted `prepare` followed by object/procedural `execute`
+are execution sinks. A tainted `prepare` without execution is inert. A fixed
+template with values supplied only as execute parameters is not query grammar;
+this matches PHP's explicit instruction to bind user input rather than include
+it in the query. Numeric, float, boolean, and fixed literal selection close
+this grammar path. Generic escaping does not; database escaping is retained as
+a candidate control whose connection, character set, and lexical context the
+model must validate.
+
+**Validation and measured behavior.** The candidate proves source-level
+control of executed SQL text, not route deployment, database reachability,
+driver acceptance, successful exploitation, authorization bypass, selected or
+modified rows, returned secrets, write authority, or complete compromise. The
+correction turn must establish each transition, the actual PDO/MySQLi receiver,
+driver and SQL mode, connected database identity, least privileges, transaction
+outcome, tenant scope, returned data, and concrete effect before calibrating
+CWE-89 severity. The paired fixtures keep the HTTP source, typed PDO receiver,
+prepare/execute sequence, and fetch topology fixed. Only the vulnerable query
+interpolates before preparation; the control uses a placeholder and supplies
+the same bytes as parameter data. Native PHP 8.3.6 parses all source and
+witness files. In-memory SQLite execution returns both seeded rows on the
+positive and zero rows on the control. A pinned-checkout, read-only hosted PHP
+workflow repeats those exact outcomes. Fourteen focused tests pass 95
+assertions over PDO/MySQLi object and procedural forms, direct and prepared
+execution, `filter_input`, selected server keys, heredoc, formatting, compound
+concatenation, safe parameters and scalar normalization, scope and receiver
+identity, escaping evidence, malformed input, and adversarial resource bounds.
+The strict pair advances the full corpus to 140 pairs and 840 repeated scans.
+The adjacent Windows canonical/residual lane passes 98 tests and 3,270
+assertions with one intentional symlink skip; native Ubuntu passes all 99 tests
+and 3,271 assertions and executes both PHP 8.3.6 SQLite witnesses. The complete
+Windows suite passes 1,844 tests and 13,541 assertions across 205 files in
+543.04 seconds, with 27 intentional environment skips and no failure. Format,
+generated-model drift, types, build, and the high-severity production audit are
+clean. A disposable 279-entry, 2,166,042-byte archive with SHA-256
+`cedd951b0e76ffae697c06264ed95216c2e7aa56b9f8a4104b24f2200c9a9255`
+passes strict package inspection and two isolated consumer installs, including
+the public API, executable CLI, and all 79 bundled plugin files, then is removed.
+
+[php-prepared]: https://www.php.net/manual/en/pdo.prepared-statements.php
+[pdo-prepare]: https://www.php.net/manual/en/pdo.prepare.php
+[mysqli-prepared]: https://www.php.net/manual/en/mysqli.quickstart.prepared-statements.php
+[mysqli-multi-query]: https://www.php.net/manual/en/mysqli.multi-query.php
+[semgrep-pro]: https://semgrep.dev/products/semgrep-code/pro-rules/
+
 ## 2026-08-27 — Add precise Terraform public administration ingress discovery
 
 **Why this is the next coverage lane.** The effectiveness corpus had 138

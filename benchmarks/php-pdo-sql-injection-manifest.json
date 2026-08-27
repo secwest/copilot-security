@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "completionRate": 1,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "casePassRate": 1,
+    "negativeControlPassRate": 1,
+    "stableDetectionRate": 1,
+    "validationCoverage": 1,
+    "attackPathCoverage": 1,
+    "codeEvidenceCoverage": 1,
+    "severityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "php-pdo-tainted-prepared-sql-injection",
+      "fixture": "fixtures/php-pdo-tainted-prepared-sql-injection",
+      "expected": [
+        {
+          "title": "PHP embeds HTTP input in SQL before PDO preparation",
+          "cwe": ["CWE-89"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/search.php",
+          "line": 10,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["$_GET", "HTTP query", "request query"],
+            ["interpolated", "embedded", "SQL grammar"],
+            ["prepare", "prepared statement"],
+            ["execute", "executed"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["$_GET", "HTTP query", "request query"],
+            ["SQL", "query grammar"],
+            ["database", "PDO"],
+            ["returned", "records", "rows", "data"]
+          ],
+          "forbiddenText": [
+            "preparation makes the interpolated query safe",
+            "proves the database is publicly reachable",
+            "the entire database is compromised",
+            "all database records are exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "php-pdo-parameterized-query",
+      "fixture": "fixtures/php-pdo-parameterized-query",
+      "expected": []
+    }
+  ]
+}

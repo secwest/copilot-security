@@ -32,6 +32,7 @@ import { goSqlxSqlInjectionRecords } from "./go-sqlx-risk.js";
 import { goSquirrelSqlInjectionRecords } from "./go-squirrel-risk.js";
 import { sourceDisplayControlRiskRecords } from "./source-display-control-risk.js";
 import { terraformRiskRecords } from "./terraform-risk.js";
+import { phpSqlInjectionRecords } from "./php-sql-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -112,6 +113,7 @@ const SOURCE_EXTENSIONS = new Set([
   ".php",
   ".pl",
   ".pm",
+  ".phtml",
   ".props",
   ".ps1",
   ".py",
@@ -4406,6 +4408,7 @@ export async function buildResidualRiskInventory(
       ...cloudFormationRiskRecords(file.path, file.lines, file.text),
       ...kubernetesRiskRecords(file.path, file.lines, file.text),
       ...terraformRiskRecords(file.path, file.lines, file.text),
+      ...phpSqlInjectionRecords(file.path, file.lines, file.text),
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
       ...githubActionsSelfHostedPrRecords(file.path, file.lines, file.text),
       ...githubActionsWorkflowInjectionRecords(

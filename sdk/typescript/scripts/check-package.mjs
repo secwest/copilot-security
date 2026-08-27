@@ -181,6 +181,7 @@ const distFiles = new Set(
     "source-display-control-risk",
     "targets",
     "terraform-risk",
+    "php-sql-risk",
     "traefik-risk",
     "trusted-executable",
     "version",

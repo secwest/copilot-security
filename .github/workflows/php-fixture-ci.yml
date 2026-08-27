@@ -1,0 +1,53 @@
+name: php-fixture-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pdo-sql-fixtures:
+    name: PDO SQL-injection fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install PHP CLI and PDO SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y php-cli php-sqlite3
+          php --version
+          php -r 'if (!extension_loaded("pdo_sqlite")) { fwrite(STDERR, "pdo_sqlite is unavailable\n"); exit(1); }'
+
+      - name: Parse PHP fixtures and witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l benchmarks/fixtures/php-pdo-tainted-prepared-sql-injection/src/search.php
+          php -l benchmarks/fixtures/php-pdo-tainted-prepared-sql-injection/witness.php
+          php -l benchmarks/fixtures/php-pdo-parameterized-query/src/search.php
+          php -l benchmarks/fixtures/php-pdo-parameterized-query/witness.php
+
+      - name: Prove tainted grammar and parameter-data behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          vulnerable="$(php benchmarks/fixtures/php-pdo-tainted-prepared-sql-injection/witness.php)"
+          control="$(php benchmarks/fixtures/php-pdo-parameterized-query/witness.php)"
+          test "$vulnerable" = "injected_rows=2"
+          test "$control" = "parameterized_rows=0"

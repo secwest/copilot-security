@@ -4810,6 +4810,45 @@
       "expected": []
     },
     {
+      "id": "php-pdo-tainted-prepared-sql-injection",
+      "description": "An HTTP query value is interpolated into SQL command grammar before PDO preparation and the resulting statement is executed.",
+      "fixture": "fixtures/php-pdo-tainted-prepared-sql-injection",
+      "findingsPaths": [
+        "php-pdo-tainted-prepared-sql-injection/run-1/findings.json",
+        "php-pdo-tainted-prepared-sql-injection/run-2/findings.json",
+        "php-pdo-tainted-prepared-sql-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "php-pdo-http-query-sql-injection",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "src/search.php",
+              "startLine": 10,
+              "endLine": 10,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "php-pdo-parameterized-query",
+      "description": "The topology-identical control keeps PDO preparation and execution but passes HTTP input only as placeholder parameter data.",
+      "fixture": "fixtures/php-pdo-parameterized-query",
+      "findingsPaths": [
+        "php-pdo-parameterized-query/run-1/findings.json",
+        "php-pdo-parameterized-query/run-2/findings.json",
+        "php-pdo-parameterized-query/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-hydra-unsafe-instantiate",
       "description": "A remote Flask JSON configuration crosses an exact relative wrapper into hydra.utils.instantiate under hydra-core 1.3.3, allowing attacker-selected callable lookup and invocation.",
       "fixture": "fixtures/python-hydra-unsafe-instantiate",
