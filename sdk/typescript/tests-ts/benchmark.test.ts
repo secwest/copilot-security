@@ -452,6 +452,10 @@ describe("effectiveness benchmark", () => {
         "python-asyncssh-scp-repaired-control",
       ],
       [
+        "python-chainlit-mcp-stdio-command-injection",
+        "python-chainlit-mcp-stdio-repaired-control",
+      ],
+      [
         "node-nx-self-hosted-cache-archive-escape",
         "node-nx-self-hosted-cache-archive-contained",
       ],

@@ -2113,7 +2113,19 @@ scanner requires the exact download direction and stable production pin, and
 does not treat uploads, remote destinations, local calls, package presence, or
 test/example code as findings. The repair does not make SCP a complete trust
 boundary because a server can still select overwrite targets inside the
-destination; prefer SFTP. The Prompty pair carries a remote template through three relative
+destination; prefer SFTP. The Chainlit pair then preserves an official
+application import, MCP-enabled legacy stdio configuration, Python 3.12.3
+runtime, and a non-executing validator witness while changing only 2.11.1 to
+2.12.0. The affected release accepts a client `fullCommand`, validates only the
+executable basename after `shlex.split`, and returns unchecked arguments to the
+stdio process path. The repaired release removes the validator and rejects the
+legacy client-command request. Detection requires exact affected production
+provenance and a command-capable stdio policy; disabled, malformed, ambiguous,
+shadowed, repaired, test-only, and package-only candidates fail closed. The
+review gate keeps deployment, authentication, route reachability, privileges,
+containment, executable semantics, and resource limits explicit rather than
+turning the package primitive into an unsupported active-compromise claim. The
+Prompty pair carries a remote template through three relative
 wrappers into the official TypeScript `NunjucksRenderer`: exact
 `@prompty/core` 2.0.0-beta.4 permits `range.constructor` traversal and returns
 only the witness process's Node version, while source-identical 2.0.0-beta.5

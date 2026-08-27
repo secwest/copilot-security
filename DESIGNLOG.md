@@ -2,6 +2,87 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — Chainlit MCP stdio client-command injection
+
+**Gap and primary evidence.** GitHub's reviewed
+[`GHSA-w3fx-mc44-mf6j`](https://github.com/advisories/GHSA-w3fx-mc44-mf6j)
+describes critical CVE-2026-45018 (CVSS 3.1 9.8, CWE-78): stable Chainlit
+2.4.0 through 2.11.1 accepts a client-controlled `fullCommand` on `POST /mcp`
+when MCP and legacy stdio are enabled. `validate_mcp_command()` uses
+`shlex.split`, checks only the executable basename against
+`allowed_executables`, and returns unchecked arguments to
+`StdioServerParameters` and `stdio_client`; an omitted allowlist permits every
+executable. The official
+[`0565fd0` repair](https://github.com/Chainlit/chainlit/commit/0565fd0eccb915fce159929598b053ed79f6e0c9)
+removes client command strings architecturally: developers declare stdio
+servers under `[[features.mcp.servers]]` and clients select a server by name.
+It also makes the legacy configuration abort startup rather than silently
+preserving an unsafe boundary. Authenticated GitHub code searches on this date
+return zero `chainlit` references in the public `github/codeql`,
+`semgrep/semgrep-rules`, and `PyCQA/bandit` repositories. That is a scoped
+coverage observation, not a claim about private or commercial rules. General
+MCP command-injection checks do not prove this framework-specific route,
+configuration, version, validation, and spawn chain.
+
+**Reachability decision.** Require an exact top-level `import chainlit` or
+`from chainlit import ...` in non-test Python application code, reject a
+repository-local `chainlit.py` or package shadow, and bind it to the nearest
+single exact stable production `requirements.txt` pin. The modeled stable
+interval is 2.4.0 through 2.11.1; prereleases, ranges, missing or duplicate
+pins, earlier releases, and 2.12.0+ fail closed. Parse the nearest
+`.chainlit/config.toml` semantically rather than matching text. MCP must be
+explicitly enabled, stdio must not be explicitly disabled, and
+`allowed_executables` must either be absent or contain a reviewed
+command-capable shell, runtime, or package runner. Empty lists, Git-only or
+otherwise non-command-capable lists, malformed or ambiguous TOML, symlinked
+configuration or dependency evidence, indented imports, tests, examples, and
+text lookalikes are rejected. The emitted cross-file model records seven
+independently reviewable propagators: application import, exact dependency,
+MCP enablement, stdio command capability, intrinsic client request command,
+executable-only validation, and intrinsic process spawn.
+
+**Impact and review boundary.** The advisory establishes an unauthenticated
+remote command-execution primitive for reachable affected deployments, but a
+repository import and configuration do not establish deployment or network
+exposure. Host review must separately confirm the effective installed version
+and config, route and proxy reachability, authentication callback and session
+policy, allowlist, executable semantics, process privilege and containment,
+resource limits, and a concrete command-controlled effect. Report CWE-78 and
+critical severity for the exact modeled primitive while preserving those
+runtime uncertainties; do not claim that every Chainlit installation is
+exploitable, that the bounded witness launched a process, or that 2.12.0
+eliminates every stdio-process risk. The repair removes the client-controlled
+command boundary, but developer-configured processes can still carry excessive
+privilege and concurrent MCP sessions can still create availability pressure.
+
+**Executable evidence and containment.** The paired fixtures change only
+`chainlit==2.11.1` to `chainlit==2.12.0`; application, configuration,
+documentation, runtime record, and witness source are byte-identical. Under
+Ubuntu Python 3.12.3, exact packages are installed into two isolated `/tmp`
+trees. The 2.11.1 branch calls only the pure validator with fixed inert text and
+records executable `npx`, arguments `--yes` and
+`copilot-security-bounded-marker`, and `executed:false`. It never calls a
+subprocess, shell, stdio client, filesystem writer, network client, credential
+API, or executable. The 2.12.0 branch proves the validator is absent and the
+legacy `clientType=stdio` plus `fullCommand` shape raises Pydantic
+`ValidationError`, again with `executed:false`. Importing Chainlit generated a
+default root `.chainlit` tree as a package side effect; that exact untracked
+tree and both verified witness package directories were removed after the
+evidence was recorded.
+
+**Regression state.** The focused Windows suite passes seven tests and 43
+assertions with one intentional platform symlink skip; native Ubuntu passes all
+eight tests and 45 assertions, including symlinked `requirements.txt` and
+`.chainlit/config.toml` rejection. The combined focused and canonical registry
+lane passes 25 tests/2,126 assertions on Windows and 26 tests/2,128 assertions
+on Ubuntu. The authoritative native Windows suite passes 1,800 tests and 13,242
+assertions with 27 intentional platform/integration skips, zero failures, and
+200 files in 537.83 seconds. Generated-model drift, formatting, TypeScript, the
+clean production build, and the high-severity production dependency audit are
+green. The canonical corpus now contains 137 exploit/control pairs, 274 cases,
+and 822 scheduled scans. Self-scan, package, desktop, and hosted exact-head
+acceptance remain to be recorded at the implementation checkpoint.
+
 ## 2026-08-26 — AsyncSSH SCP server-filename path traversal
 
 **Gap and primary evidence.** The official

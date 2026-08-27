@@ -1,0 +1,132 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-chainlit-mcp-stdio-command-injection",
+      "description": "An official Chainlit 2.11.1 application enables MCP and legacy stdio with command-capable executables, exposing the affected client-selected fullCommand path.",
+      "fixture": "fixtures/python-chainlit-mcp-stdio-command-injection",
+      "findingsPaths": [
+        "python-chainlit-mcp-stdio-command-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-chainlit-mcp-stdio-command-injection",
+          "cwe": ["CWE-78"],
+          "locations": [
+            {
+              "path": "src/app.py",
+              "startLine": 1,
+              "endLine": 1,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["GHSA-w3fx-mc44-mf6j", "CVE-2026-45018"],
+            [
+              "official Chainlit application",
+              "import chainlit",
+              "Chainlit launch"
+            ],
+            [
+              ".chainlit/config.toml",
+              "features.mcp.enabled = true",
+              "MCP enabled"
+            ],
+            ["features.mcp.stdio", "stdio enabled", "stdio transport"],
+            ["allowed_executables", "npx", "uvx", "allow every executable"],
+            ["chainlit 2.11.1", "chainlit==2.11.1", "affected release"],
+            ["POST /mcp", "fullCommand", "client-controlled command"],
+            [
+              "validate_mcp_command",
+              "shlex.split",
+              "executable-only allowlist"
+            ],
+            ["StdioServerParameters", "stdio_client", "subprocess spawn"],
+            [
+              "authentication callback",
+              "anonymous session",
+              "network reachability"
+            ],
+            ["Python 3.12.3", "non-executing witness", "parsed argv"],
+            ["chainlit 2.12.0", "client command removed", "repaired control"],
+            [
+              "configured stdio process",
+              "concurrent MCP sessions",
+              "residual risk"
+            ],
+            ["CWE-78", "OS command injection", "command argument injection"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["GHSA-w3fx-mc44-mf6j", "CVE-2026-45018"],
+            [
+              "official Chainlit application",
+              "import chainlit",
+              "Chainlit launch"
+            ],
+            [
+              ".chainlit/config.toml",
+              "features.mcp.enabled = true",
+              "MCP enabled"
+            ],
+            ["features.mcp.stdio", "stdio enabled", "stdio transport"],
+            ["allowed_executables", "npx", "uvx", "allow every executable"],
+            ["chainlit 2.11.1", "chainlit==2.11.1", "affected release"],
+            ["POST /mcp", "fullCommand", "client-controlled command"],
+            [
+              "validate_mcp_command",
+              "shlex.split",
+              "executable-only allowlist"
+            ],
+            ["StdioServerParameters", "stdio_client", "subprocess spawn"],
+            [
+              "authentication callback",
+              "anonymous session",
+              "network reachability"
+            ],
+            ["Python 3.12.3", "non-executing witness", "parsed argv"],
+            ["chainlit 2.12.0", "client command removed", "repaired control"],
+            [
+              "configured stdio process",
+              "concurrent MCP sessions",
+              "residual risk"
+            ],
+            ["CWE-78", "OS command injection", "command argument injection"]
+          ],
+          "forbiddenText": [
+            "every Chainlit installation is exploitable",
+            "the witness executed npx",
+            "Chainlit 2.12.0 prevents every stdio process risk",
+            "the application is anonymously internet reachable"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-chainlit-mcp-stdio-repaired-control",
+      "description": "The source-identical control changes only Chainlit to 2.12.0, which removes client-selected stdio commands and rejects the legacy request shape.",
+      "fixture": "fixtures/python-chainlit-mcp-stdio-repaired-control",
+      "findingsPaths": [
+        "python-chainlit-mcp-stdio-repaired-control/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

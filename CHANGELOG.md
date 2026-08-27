@@ -6,6 +6,38 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added `python-chainlit-mcp-stdio-command-injection`, an exact Python model
+  for
+  [GHSA-w3fx-mc44-mf6j / CVE-2026-45018](https://github.com/advisories/GHSA-w3fx-mc44-mf6j).
+  It requires a non-shadowed top-level official Chainlit application import,
+  one nearest exact stable production `chainlit` pin from 2.4.0 through
+  2.11.1, and one nearest parsed `.chainlit/config.toml` with MCP enabled and
+  legacy stdio not disabled. The stdio policy must omit
+  `allowed_executables`—which the affected validator interpreted as allow
+  all—or contain a reviewed command-capable shell, runtime, or package runner.
+  Ranges, missing or duplicate pins, prereleases, repaired 2.12.0+, malformed
+  TOML, disabled MCP or stdio, empty or non-command-capable allowlists, local
+  shadows, indented imports, tests, examples, package-only repositories, and
+  text lookalikes fail closed. Structured evidence records the application,
+  exact dependency, configuration, client-controlled `POST /mcp`
+  `fullCommand`, `shlex.split` executable-only check, and
+  `StdioServerParameters -> stdio_client` spawn chain. Eight focused tests
+  exercise 43 assertions on Windows and 45 on Ubuntu, including fail-closed
+  dependency and configuration symlinks.
+- Added a source-identical Chainlit 2.11.1/2.12.0 benchmark pair with Python
+  3.12.3 runtime evidence, critical/CWE-78 ground truth at `src/app.py:1`,
+  fourteen field-local validation and attack-path evidence groups, four
+  explicit overclaim guards, and perfect three-run canonical gates. The corpus
+  advances to 137 pairs, 274 cases, and 822 scans. A real-package Ubuntu
+  witness invokes only the affected release's pure validator with fixed inert
+  text and records `npx` plus its arguments with `executed:false`; it never
+  passes the result to a process, shell, stdio, filesystem, network, or
+  credential API. The 2.12.0 control proves that the validator is absent and
+  the legacy `stdio`/`fullCommand` request raises `ValidationError`, also with
+  `executed:false`. Review guidance separates the advisory's package primitive
+  from deployment, authentication, session, proxy, privilege, containment,
+  executable-semantics, and resource-limit evidence, and preserves residual
+  risk from developer-configured stdio processes and concurrent sessions.
 - Added `python-asyncssh-scp-download-path-traversal`, an exact Python model for
   [GHSA-2wxc-x7rj-hg8f / CVE-2026-54591](https://github.com/ronf/asyncssh/security/advisories/GHSA-2wxc-x7rj-hg8f).
   It requires a live non-shadowed official `asyncssh.scp` binding, a proven

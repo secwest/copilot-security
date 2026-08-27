@@ -262,7 +262,7 @@ returns 404. The Traefik pair preserves the file provider, public rewrite,
 authenticated sibling, shared backend, and loopback witness while changing
 only 3.7.6 to 3.7.7. A direct protected request is denied on both builds; only
 the affected build forwards `/api../admin` onto the backend-normalized marker.
-The complete corpus now produces 816 scans across 136 exploit/control pairs.
+The complete corpus now produces 822 scans across 137 exploit/control pairs.
 The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
@@ -320,6 +320,24 @@ home, startup, SSH configuration, authorization, executable, credential, or
 persistent path. The benchmark records the repair's residual limitation as
 well: SCP can still overwrite server-selected names inside the destination, so
 SFTP remains the preferred protocol.
+
+`python-chainlit-mcp-stdio-command-injection-manifest.json` isolates
+[GHSA-w3fx-mc44-mf6j / CVE-2026-45018](https://github.com/advisories/GHSA-w3fx-mc44-mf6j)
+under perfect gates. The positive requires a non-shadowed top-level official
+Chainlit application import, an exact stable 2.4.0–2.11.1 production pin,
+parsed MCP-enabled `.chainlit/config.toml`, legacy stdio capability, CWE-78,
+validation, attack-path analysis, code evidence, critical severity, and exact
+line-1 location. The source-identical control changes only Chainlit 2.11.1 to
+2.12.0 and must remain empty. Fourteen evidence groups are required separately
+in validation and attack path, covering the advisory, application,
+configuration, executable policy, affected pin, client request, validator,
+spawn chain, reachability uncertainty, non-executing witness, repaired release,
+residual process risk, and taxonomy. Its Ubuntu Python 3.12.3 witness calls only
+the affected pure validator with fixed inert text and records parsed argv with
+`executed:false`; no returned value reaches a process API. The repaired package
+has no validator and rejects legacy `stdio`/`fullCommand` request fields with
+`ValidationError`. Both isolated package trees are removed after the
+differential.
 
 `go-echo-static-encoded-separator-manifest.json` isolates the application-level
 [GHSA-vfp3-v2gw-7wfq / CVE-2026-55677](https://github.com/labstack/echo/security/advisories/GHSA-vfp3-v2gw-7wfq)

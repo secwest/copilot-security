@@ -1,5 +1,6 @@
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { extname, isAbsolute, join, posix, relative, resolve } from "node:path";
+import { parse as parseToml } from "smol-toml";
 import {
   isSubstantiveAttackPath,
   isSubstantiveCodeEvidence,
@@ -3820,6 +3821,23 @@ const ASYNCSSH_SCP_TRAVERSAL_FIELD_EVIDENCE_REQUIREMENTS = [
   ["SFTP", "within the target directory", "residual SCP overwrite risk"],
 ] as const;
 
+const CHAINLIT_MCP_STDIO_COMMAND_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["GHSA-w3fx-mc44-mf6j", "CVE-2026-45018"],
+  ["official Chainlit application", "import chainlit", "Chainlit launch"],
+  [".chainlit/config.toml", "features.mcp.enabled = true", "MCP enabled"],
+  ["features.mcp.stdio", "stdio enabled", "stdio transport"],
+  ["allowed_executables", "npx", "uvx", "allow every executable"],
+  ["chainlit 2.11.1", "chainlit==2.11.1", "affected release"],
+  ["POST /mcp", "fullCommand", "client-controlled command"],
+  ["validate_mcp_command", "shlex.split", "executable-only allowlist"],
+  ["StdioServerParameters", "stdio_client", "subprocess spawn"],
+  ["authentication callback", "anonymous session", "network reachability"],
+  ["Python 3.12.3", "non-executing witness", "parsed argv"],
+  ["chainlit 2.12.0", "client command removed", "repaired control"],
+  ["configured stdio process", "concurrent MCP sessions", "residual risk"],
+  ["CWE-78", "OS command injection", "command argument injection"],
+] as const;
+
 const DATAMODEL_CODEGEN_FIELD_EVIDENCE_REQUIREMENTS = [
   ["schema upload", "request.get_json", "request JSON Schema"],
   ["compile_and_load", "wrapper"],
@@ -4136,6 +4154,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     },
   ],
   [
+    "python-chainlit-mcp-stdio-command-injection",
+    {
+      validation: CHAINLIT_MCP_STDIO_COMMAND_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: CHAINLIT_MCP_STDIO_COMMAND_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
     "python-web-datamodel-codegen-import-injection",
     {
       validation: DATAMODEL_CODEGEN_FIELD_EVIDENCE_REQUIREMENTS,
@@ -4380,6 +4405,7 @@ export async function buildResidualRiskInventory(
   records.push(...nodeOpcuaCrossFileServerDosRecords(sourceFiles));
   records.push(...nodeOpcuaCrossFileServerAuthRecords(sourceFiles));
   records.push(...nodeDeepseekMcpHttpSessionAuthorizationRecords(sourceFiles));
+  records.push(...pythonChainlitMcpStdioCommandInjectionRecords(sourceFiles));
   records.push(...nodeContentfulMcpManagementTokenLeakRecords(sourceFiles));
   records.push(...nodeNextJsDynamicRouteAuthorizationRecords(sourceFiles));
   records.push(...nodePlateMediaEmbedXssRecords(sourceFiles));
@@ -22597,6 +22623,323 @@ function nodeDeepseekMcpHttpSessionAuthorizationRecords(
       },
     };
   });
+}
+
+interface PythonChainlitApplicationImport {
+  file: SourceFileSnapshot;
+  line: number;
+  symbol: string;
+}
+
+interface PythonChainlitMcpConfig {
+  file: SourceFileSnapshot;
+  enabledLine: number;
+  stdioLine: number;
+  allowedLine: number;
+  executablePolicy: string;
+}
+
+const PYTHON_CHAINLIT_COMMAND_CAPABLE_EXECUTABLES = new Set([
+  "bash",
+  "bun",
+  "cmd",
+  "deno",
+  "node",
+  "npm",
+  "npx",
+  "pnpm",
+  "powershell",
+  "pwsh",
+  "python",
+  "python3",
+  "sh",
+  "uv",
+  "uvx",
+  "yarn",
+]);
+
+function pythonChainlitVersionHasMcpStdioCommandInjection(
+  version: string,
+): boolean {
+  if (!/^\d+\.\d+\.\d+$/u.test(version)) return false;
+  return (
+    pythonPackageVersionAtLeast(version, [2, 4, 0]) &&
+    pythonPackageVersionAtMost(version, [2, 11, 1])
+  );
+}
+
+function tomlTableKeyLine(
+  file: SourceFileSnapshot,
+  table: string,
+  key: string,
+): number | undefined {
+  const normalizedTable = table.replaceAll(/\s+/gu, "").toLowerCase();
+  const normalizedKey = key.toLowerCase();
+  let activeTable = "";
+  let tableLine: number | undefined;
+  for (let index = 0; index < file.lines.length; index += 1) {
+    const line = file.lines[index] ?? "";
+    const header = /^\s*\[\s*([^\]]+?)\s*\]\s*(?:#.*)?$/u.exec(line);
+    if (header?.[1] !== undefined) {
+      activeTable = header[1].replaceAll(/\s+/gu, "").toLowerCase();
+      if (activeTable === normalizedTable) tableLine = index + 1;
+      continue;
+    }
+    const direct = new RegExp(
+      `^\\s*${escapeRegularExpression(table)}\\s*\\.\\s*${escapeRegularExpression(key)}\\s*=`,
+      "iu",
+    );
+    if (direct.test(line)) return index + 1;
+    if (
+      activeTable === normalizedTable &&
+      new RegExp(
+        `^\\s*${escapeRegularExpression(normalizedKey)}\\s*=`,
+        "iu",
+      ).test(line)
+    ) {
+      return index + 1;
+    }
+  }
+  return tableLine;
+}
+
+function pythonChainlitMcpConfig(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+): PythonChainlitMcpConfig | undefined {
+  let directory = posix.dirname(sourcePath.replaceAll("\\", "/"));
+  while (true) {
+    const prefix = directory === "." ? "" : `${directory}/`;
+    const configPath = `${prefix}.chainlit/config.toml`.toLowerCase();
+    const candidates = files.filter(
+      (file) => file.path.replaceAll("\\", "/").toLowerCase() === configPath,
+    );
+    if (candidates.length > 0) {
+      if (candidates.length !== 1) return undefined;
+      const file = candidates[0]!;
+      let parsed: unknown;
+      try {
+        parsed = parseToml(file.text);
+      } catch {
+        return undefined;
+      }
+      if (!isRecord(parsed)) return undefined;
+      const features = parsed["features"];
+      if (!isRecord(features)) return undefined;
+      const mcp = features["mcp"];
+      if (!isRecord(mcp) || mcp["enabled"] !== true) return undefined;
+      const stdio = mcp["stdio"];
+      if (stdio !== undefined && !isRecord(stdio)) return undefined;
+      if (isRecord(stdio) && stdio["enabled"] === false) return undefined;
+      if (
+        isRecord(stdio) &&
+        stdio["enabled"] !== undefined &&
+        typeof stdio["enabled"] !== "boolean"
+      ) {
+        return undefined;
+      }
+      const allowed = isRecord(stdio)
+        ? stdio["allowed_executables"]
+        : undefined;
+      let executablePolicy: string;
+      if (allowed === undefined) {
+        executablePolicy =
+          "allowed_executables omitted: all executables allowed";
+      } else {
+        if (
+          !Array.isArray(allowed) ||
+          allowed.length === 0 ||
+          allowed.some((entry) => typeof entry !== "string")
+        ) {
+          return undefined;
+        }
+        const commandCapable = allowed
+          .map((entry) => entry.toLowerCase())
+          .filter((entry) =>
+            PYTHON_CHAINLIT_COMMAND_CAPABLE_EXECUTABLES.has(entry),
+          );
+        if (commandCapable.length === 0) return undefined;
+        executablePolicy = `command-capable allowlist: ${commandCapable.join(",")}`;
+      }
+      const enabledLine = tomlTableKeyLine(file, "features.mcp", "enabled");
+      const stdioLine =
+        tomlTableKeyLine(file, "features.mcp.stdio", "enabled") ?? enabledLine;
+      const allowedLine =
+        tomlTableKeyLine(file, "features.mcp.stdio", "allowed_executables") ??
+        stdioLine;
+      if (
+        enabledLine === undefined ||
+        stdioLine === undefined ||
+        allowedLine === undefined
+      ) {
+        return undefined;
+      }
+      return {
+        file,
+        enabledLine,
+        stdioLine,
+        allowedLine,
+        executablePolicy,
+      };
+    }
+    if (directory === ".") break;
+    const parent = posix.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  return undefined;
+}
+
+function pythonChainlitApplicationImports(
+  files: readonly SourceFileSnapshot[],
+): PythonChainlitApplicationImport[] {
+  const imports: PythonChainlitApplicationImport[] = [];
+  for (const file of files) {
+    if (
+      !PYTHON_EXTENSIONS.has(file.extension) ||
+      javascriptTestOrExamplePath(file.path) ||
+      !file.text.includes("chainlit") ||
+      pythonLocalModuleCouldShadow(files, file.path, "chainlit")
+    ) {
+      continue;
+    }
+    const structuralLines = pythonStructuralLines(file.lines);
+    for (let index = 0; index < structuralLines.length; index += 1) {
+      const structural = structuralLines[index] ?? "";
+      if (/^\s/u.test(structural)) continue;
+      const moduleImport =
+        /^import\s+chainlit(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(structural);
+      if (moduleImport !== null) {
+        imports.push({
+          file,
+          line: index + 1,
+          symbol: `import chainlit as ${moduleImport[1] ?? "chainlit"}`,
+        });
+        break;
+      }
+      const fromImport = /^from\s+chainlit\s+import\s+(.+?)\s*$/u.exec(
+        structural,
+      );
+      if (fromImport?.[1] !== undefined && fromImport[1] !== "*") {
+        imports.push({
+          file,
+          line: index + 1,
+          symbol: `from chainlit import ${fromImport[1]}`,
+        });
+        break;
+      }
+    }
+  }
+  return imports;
+}
+
+function pythonChainlitMcpStdioCommandInjectionRecords(
+  files: readonly SourceFileSnapshot[],
+): ResidualRiskRecord[] {
+  const records: ResidualRiskRecord[] = [];
+  for (const application of pythonChainlitApplicationImports(files)) {
+    const dependency = pythonPinnedRequirement(
+      files,
+      application.file.path,
+      "chainlit",
+    );
+    if (
+      dependency === undefined ||
+      !pythonChainlitVersionHasMcpStdioCommandInjection(dependency.version)
+    ) {
+      continue;
+    }
+    const config = pythonChainlitMcpConfig(files, application.file.path);
+    if (config === undefined) continue;
+    const startLine = Math.max(1, application.line - CONTEXT_LINES_BEFORE);
+    const endLine = Math.min(
+      application.file.lines.length,
+      application.line + CONTEXT_LINES_AFTER,
+    );
+    const sourceStart = Math.max(1, config.enabledLine - 2);
+    const sourceEnd = Math.min(
+      config.file.lines.length,
+      config.allowedLine + 2,
+    );
+    records.push({
+      path: application.file.path,
+      line: application.line,
+      categories: [
+        "framework-dataflow:python-chainlit-mcp-stdio-command-injection",
+        "modeled-source:remote-chainlit-mcp-fullcommand-request",
+        "modeled-sink:chainlit-affected-mcp-stdio-client-command-spawn",
+        "broken-control:chainlit-mcp-executable-only-allowlist",
+      ],
+      priority: 126,
+      startLine,
+      endLine,
+      excerpt: sourceExcerpt(application.file.lines, startLine, endLine),
+      sourceExcerpt: sourceExcerpt(config.file.lines, sourceStart, sourceEnd),
+      frameworkModel: {
+        schemaVersion: "1.2",
+        id: "python-chainlit-mcp-stdio-command-injection",
+        language: "python",
+        scope: "cross-file",
+        source: {
+          kind: "remote-chainlit-mcp-fullcommand-request",
+          path: config.file.path,
+          line: config.enabledLine,
+        },
+        sink: {
+          kind: "chainlit-affected-mcp-stdio-client-command-spawn",
+          path: application.file.path,
+          line: application.line,
+          cweIds: ["CWE-78"],
+        },
+        propagators: [
+          {
+            kind: "chainlit-application-import",
+            path: application.file.path,
+            line: application.line,
+            symbol: application.symbol,
+          },
+          {
+            kind: "chainlit-runtime-dependency",
+            path: dependency.path,
+            line: dependency.line,
+            symbol: `chainlit@${dependency.version}:requirements-exact:mcp-fullcommand`,
+          },
+          {
+            kind: "chainlit-mcp-enabled-configuration",
+            path: config.file.path,
+            line: config.enabledLine,
+            symbol: "features.mcp.enabled=true",
+          },
+          {
+            kind: "chainlit-mcp-stdio-command-capability",
+            path: config.file.path,
+            line: config.allowedLine,
+            symbol: config.executablePolicy,
+          },
+          {
+            kind: "intrinsic-chainlit-mcp-request-command-source",
+            path: config.file.path,
+            line: config.stdioLine,
+            symbol: "POST /mcp clientType=stdio fullCommand",
+          },
+          {
+            kind: "intrinsic-chainlit-executable-only-validation",
+            path: config.file.path,
+            line: config.allowedLine,
+            symbol: "shlex.split -> allowed executable; arguments unchecked",
+          },
+          {
+            kind: "intrinsic-chainlit-stdio-process-spawn",
+            path: application.file.path,
+            line: application.line,
+            symbol: "StdioServerParameters -> stdio_client",
+          },
+        ],
+        candidateControls: [],
+      },
+    });
+  }
+  return records;
 }
 
 interface NodeContentfulMcpLaunch {

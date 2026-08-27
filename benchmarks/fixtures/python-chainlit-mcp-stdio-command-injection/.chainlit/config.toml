@@ -1,0 +1,6 @@
+[features.mcp]
+enabled = true
+
+[features.mcp.stdio]
+enabled = true
+allowed_executables = ["npx", "uvx"]
