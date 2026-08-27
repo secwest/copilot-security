@@ -461,6 +461,9 @@ async fn handler(Path(input): Path<String>) {
     expect(prompt).toContain(
       "explicitly carry that same named query, path, form, or JSON request value",
     );
+    expect(prompt).toContain(
+      "command stdout or stderr is returned in the HTTP response",
+    );
     expect(prompt).toContain("bounded harmless marker");
   });
 });
