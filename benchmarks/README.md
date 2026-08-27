@@ -184,7 +184,33 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-ruby-command
 ```
 
-The versioned corpus currently contains 141 vulnerable/control pairs:
+## Rust Axum and Actix Web command-injection benchmark
+
+`rust-axum-command-injection-manifest.json` adds the canonical corpus's first
+Rust pair. Both fixtures retain the Axum query extractor,
+`std::process::Command` builder, captured output, and returned response. The
+positive formats request data into the command-string position after `sh -c`;
+the control selects a fixed executable and passes the same data only as a
+literal argument. Their standard-library witnesses expand a fixed inert
+environment marker only in the shell case and perform no filesystem, network,
+credential, persistence, or privilege operation.
+
+Deterministic regression additionally covers Axum Query, Path, Form, and Json
+extractors; Actix Web extractors; direct, grouped, module, fully qualified, and
+aliased imports; tuple bindings; local assignments and `format!`; chained and
+mutable process builders; `arg` and `args`; POSIX, CMD, PowerShell, interpreter,
+Windows batch, `raw_arg`, and executable-selection boundaries; fixed argv,
+numeric normalization, reassignment, inert construction, local lookalikes,
+escape/control evidence, LF/CRLF provenance, malformed source, and lexer
+resource bounds. Run the focused model benchmark with:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/rust-axum-command-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-rust-command
+```
+
+The versioned corpus currently contains 142 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

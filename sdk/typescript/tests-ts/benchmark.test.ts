@@ -413,6 +413,7 @@ describe("effectiveness benchmark", () => {
       ],
       ["php-pdo-tainted-prepared-sql-injection", "php-pdo-parameterized-query"],
       ["ruby-rails-open3-shell-injection", "ruby-rails-open3-argv-command"],
+      ["rust-axum-shell-command-injection", "rust-axum-argv-command"],
       [
         "node-multi-hop-rhinostone-swig-template-traversal",
         "node-multi-hop-repaired-rhinostone-swig-template-root",

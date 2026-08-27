@@ -6,6 +6,35 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added the canonical corpus's first Rust model,
+  `rust-web-command-injection`. A bounded Rust lexer and same-function dataflow
+  pass follows exact Axum and Actix Web Query, Path, Form, and Json extractors
+  through tuple bindings, local assignment, `format!`, concatenation, and
+  escape candidates into exact `std::process::Command` builders. It requires
+  actual `output`, `status`, `spawn`, or imported Unix `exec` dispatch on the
+  same non-reassigned builder and supports direct, grouped, module-qualified,
+  fully qualified, and aliased standard-library imports.
+- Modeled Rust's documented command/data boundary instead of reporting every
+  process argument. Attacker-selected executables, POSIX shell `-c`, CMD `/c`
+  or `/k`, PowerShell/pwsh command strings, interpreter code flags, Windows
+  batch consumers, and exact Windows `raw_arg` are retained; a fixed ordinary
+  executable whose request value stays in a separate `arg`/`args` element is a
+  hard negative. Literal shell and flag variables are resolved. Inert
+  construction, fixed commands, numeric normalization, builder reassignment,
+  test/example/fixture paths, local lookalikes, malformed source, and excessive
+  token or nesting volume fail closed. Regexes, literal matches, deadlines, and
+  shell-escape calls remain contextual candidate controls rather than automatic
+  suppression.
+- Added a strict Axum exploit/control pair, perfect-gate focused manifest, and
+  read-only hosted Rust workflow, advancing the canonical corpus to 142 pairs,
+  284 cases, and 852 repeated scan positions. Native Rust 1.75.0 under Ubuntu
+  compiles both standard-library witnesses and produces
+  `shell_expanded_marker=1` versus `shell_expanded_marker=0`; the temporary
+  binaries and directory were removed. Focused Windows regression passes 14
+  tests and 108 assertions. The Ubuntu Rust/canonical/residual lane passes 99
+  tests and 3,306 assertions with no skips or failures. TypeScript checking and
+  the production build are clean; broader acceptance evidence follows after
+  the complete regression, package, self-scan, and hosted gates.
 - Added the canonical corpus's first Ruby model,
   `ruby-rails-command-injection`. A bounded Ruby-aware lexer and Rails
   controller-method dataflow pass follows `params` and request parameter maps

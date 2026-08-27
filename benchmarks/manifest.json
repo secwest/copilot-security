@@ -4888,6 +4888,45 @@
       "expected": []
     },
     {
+      "id": "rust-axum-shell-command-injection",
+      "description": "An Axum query value is formatted into the command-string position after sh -c, allowing shell metacharacters to alter command grammar.",
+      "fixture": "fixtures/rust-axum-shell-command-injection",
+      "findingsPaths": [
+        "rust-axum-shell-command-injection/run-1/findings.json",
+        "rust-axum-shell-command-injection/run-2/findings.json",
+        "rust-axum-shell-command-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "rust-axum-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/handlers/diagnostics.rs",
+              "startLine": 15,
+              "endLine": 15,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "rust-axum-argv-command",
+      "description": "The topology-matched control keeps Axum and std::process::Command but selects a fixed executable and passes request data only as a literal argument.",
+      "fixture": "fixtures/rust-axum-argv-command",
+      "findingsPaths": [
+        "rust-axum-argv-command/run-1/findings.json",
+        "rust-axum-argv-command/run-2/findings.json",
+        "rust-axum-argv-command/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-hydra-unsafe-instantiate",
       "description": "A remote Flask JSON configuration crosses an exact relative wrapper into hydra.utils.instantiate under hydra-core 1.3.3, allowing attacker-selected callable lookup and invocation.",
       "fixture": "fixtures/python-hydra-unsafe-instantiate",

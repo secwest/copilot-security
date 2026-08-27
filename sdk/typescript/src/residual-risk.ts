@@ -34,6 +34,7 @@ import { sourceDisplayControlRiskRecords } from "./source-display-control-risk.j
 import { terraformRiskRecords } from "./terraform-risk.js";
 import { phpSqlInjectionRecords } from "./php-sql-risk.js";
 import { rubyCommandInjectionRecords } from "./ruby-command-risk.js";
+import { rustCommandInjectionRecords } from "./rust-command-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -4411,6 +4412,7 @@ export async function buildResidualRiskInventory(
       ...terraformRiskRecords(file.path, file.lines, file.text),
       ...phpSqlInjectionRecords(file.path, file.lines, file.text),
       ...rubyCommandInjectionRecords(file.path, file.lines, file.text),
+      ...rustCommandInjectionRecords(file.path, file.lines, file.text),
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
       ...githubActionsSelfHostedPrRecords(file.path, file.lines, file.text),
       ...githubActionsWorkflowInjectionRecords(

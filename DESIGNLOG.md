@@ -2,6 +2,94 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Add native Rust web-to-process command analysis
+
+**Why this is a beyond-parity lane.** The canonical corpus held 141 paired
+families and 282 cases, admitted `.rs` files to repository review, but had no
+Rust fixture or Rust-specific host model. GitHub's current CodeQL Rust suite
+documents SQL injection, path injection, SSRF, XSS, logging, TLS, allocation,
+cryptography, and unsafe-memory queries, but does not list a Rust command-line
+injection query. Its library-model extension contract does identify arguments
+to `std::process::Command` as command-injection sinks. That is useful scanner
+design evidence, but too broad for a low-noise verdict: Rust's standard library
+states that `arg` and `args` normally pass literal arguments without a shell.
+The standard library separately warns that `cmd.exe` and batch files use
+nonstandard Windows decoding and that `raw_arg` bypasses standard escaping.
+References: [Rust Command][rust-command], [Rust Windows argument
+splitting][rust-windows-arguments], [CodeQL Rust queries][codeql-rust-queries],
+and [CodeQL Rust library models][codeql-rust-models].
+
+**Source and identity boundary.** Add a standalone bounded Rust lexer rather
+than matching process keywords. It skips line and nested block comments,
+recognizes ordinary, byte, character, and raw strings, keeps lifetimes distinct
+from character literals, validates balanced delimiters, preserves LF/CRLF line
+provenance, and caps tokens at 131,072, nesting at 128, output at 64 records,
+propagator/control history at 16/8, and excerpt lines at 2,048 characters.
+Recognize direct, grouped, fully qualified, module-qualified, and aliased
+`std::process::Command` identities, plus platform `CommandExt` only for its
+matching `exec` or `raw_arg` surface. Reject tests, examples, fixture paths,
+non-Rust files, unbalanced source, local lookalikes, and unsupported identity.
+
+Treat exact Axum and Actix Web Query, Path, Form, and Json extractor parameters
+as request sources. Both frameworks document these types as request extractors:
+Axum Query deserializes the query string, Path decodes path captures, and Form
+reads a query or request body; Actix Web exposes the corresponding typed query,
+path, form, and JSON payload types. Track simple and tuple-destructured bindings
+so `Path((tenant, command))` does not silently lose the second source. References:
+[Axum Query][axum-query], [Axum Path][axum-path], [Axum Form][axum-form],
+[Actix Web Query][actix-query], [Actix Web Path][actix-path], and [Actix Web
+request extractors][actix-extractors].
+
+**Flow and execution boundary.** Follow extractor values through sequential
+local assignment, reassignment, `format!`, concatenation, string conversions,
+and shell-escape calls. Preserve fixed string values used indirectly as the
+program or code flag. Track chained constructors and named mutable builders,
+including `arg` and literal `args` arrays, and require `output`, `status`,
+`spawn`, or exact imported Unix `CommandExt::exec`; construction, pipe setup,
+or a builder overwritten before execution is not a sink. Numeric parsing into
+a concrete Rust integer or float closes the string-command flow. Regex, match,
+deadline, and escape operations are candidate controls whose dominance and
+effective semantics remain for correction-time validation.
+
+Report attacker control of the `Command::new` program, the command string after
+a fixed POSIX shell `-c`, CMD `/c` or `/k`, PowerShell/pwsh `-Command`, or an
+interpreter code flag, a tainted Windows batch argument, and a tainted exact
+Windows `raw_arg`. Do not report a fixed ordinary executable with taint only in
+a distinct argument. This deliberately improves on treating every process
+argument as command grammar while retaining Rust's documented exceptional
+consumers. The row is a same-file candidate, not proof that a handler is
+registered, reachable, executed, or deployed, nor proof of process privilege,
+filesystem or credential access, persistence, escalation, or host compromise.
+Correction must establish route registration, OS and decoder, program/flag
+shape, PATH resolution, environment/current directory/inherited handles,
+process privilege and containment, timeout/resource behavior, and the least
+concrete effect before calibrating CWE-78/CWE-88 severity.
+
+**Executable benchmark and preliminary evidence.** The paired Axum fixtures
+keep the Query source, process builder, captured output, and returned response.
+The positive puts formatted request data after `sh -c`; the control selects
+`printf` and passes the request value after a fixed `%s` argument. Standard-
+library witnesses expand only the fixed `RUST_COMMAND_MARKER` in the positive
+and never touch files, networks, credentials, persistence, or privileges.
+Ubuntu Rust 1.75.0 compiles both witnesses and returns
+`shell_expanded_marker=1` versus `shell_expanded_marker=0`; their bounded
+temporary directory is removed. The focused Windows lane passes 14 tests and
+108 assertions. The Ubuntu Rust/canonical/residual lane passes 99 tests and
+3,306 assertions with no skips or failures. The pair advances the corpus to
+142 pairs, 284 cases, and 852 repeated scans. A pinned-checkout, read-only
+hosted workflow independently formats, compiles, and runs both witnesses.
+
+[rust-command]: https://doc.rust-lang.org/std/process/struct.Command.html
+[rust-windows-arguments]: https://doc.rust-lang.org/std/process/index.html#windows-argument-splitting
+[codeql-rust-queries]: https://codeql.github.com/codeql-query-help/rust/
+[codeql-rust-models]: https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-rust/
+[axum-query]: https://docs.rs/axum/latest/axum/extract/struct.Query.html
+[axum-path]: https://docs.rs/axum/latest/axum/extract/struct.Path.html
+[axum-form]: https://docs.rs/axum/latest/axum/struct.Form.html
+[actix-query]: https://docs.rs/actix-web/latest/actix_web/web/struct.Query.html
+[actix-path]: https://docs.rs/actix-web/latest/actix_web/web/struct.Path.html
+[actix-extractors]: https://docs.rs/actix-web/latest/actix_web/web/index.html
+
 ## 2026-08-27 — Add native Rails command-injection discovery and executable benchmark
 
 **Why Ruby is the next coverage lane.** The canonical corpus held 140
