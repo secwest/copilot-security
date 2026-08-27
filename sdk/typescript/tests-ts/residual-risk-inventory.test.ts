@@ -2012,6 +2012,7 @@ describe("residual risk inventory", () => {
       join(scanDirectory, "coverage.json"),
       JSON.stringify({
         mode: "scoped_path",
+        completeness: "partial",
         surfaces: [
           { label: "src/reviewed.py", disposition: "no_issue_found" },
           { label: "src/claimed.py", disposition: "no_issue_found" },
@@ -2023,7 +2024,40 @@ describe("residual risk inventory", () => {
       new Set(["src/reviewed.py", "src/claimed.py"]),
       "scoped_path",
     );
-    expect(JSON.parse(closed)).toMatchObject({
+    const unresolvedCompleteness = closed
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(unresolvedCompleteness[0]).toMatchObject({
+      coveredPathCount: 2,
+      gapCount: 1,
+    });
+    expect(unresolvedCompleteness[1]).toEqual({
+      path: "coverage.completeness",
+      reason: "unresolved_coverage_completeness",
+      expectedCompleteness: "complete",
+      actualCompleteness: "partial",
+    });
+    expect(scanClosureRepairPrompt(closed, "")).toContain(
+      "Never preserve partial or unknown as an unexplained label",
+    );
+
+    await writeFile(
+      join(scanDirectory, "coverage.json"),
+      JSON.stringify({
+        mode: "scoped_path",
+        completeness: "complete",
+        surfaces: [
+          { label: "src/reviewed.py", disposition: "no_issue_found" },
+          { label: "src/claimed.py", disposition: "no_issue_found" },
+        ],
+      }),
+    );
+    const complete = await buildCoverageGapInventory(
+      scanDirectory,
+      new Set(["src/reviewed.py", "src/claimed.py"]),
+      "scoped_path",
+    );
+    expect(JSON.parse(complete)).toMatchObject({
       coveredPathCount: 2,
       gapCount: 0,
     });

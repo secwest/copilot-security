@@ -54,7 +54,7 @@ sessions and must terminate with `ScanClosureIncompleteError`, a partial result,
 and no false completeness. These synthetic cases test orchestration at the
 observed scale without being presented as new scanner measurements.
 
-**Regression state before live acceptance.** Focused native Windows and Ubuntu
+**Regression and first live feedback.** Focused native Windows and Ubuntu
 runs each execute 150 tests: 149 pass, one intentional platform-specific case
 skips, and none fail. They cover closure success and exhaustion, transport
 inside closure, nonretryable error causes, event sanitization and
@@ -66,6 +66,31 @@ and the high-severity production dependency audit are clean. Exact-commit
 package, hosted-CI, and real tracked-snapshot self-scan results are recorded in
 the subsequent acceptance entry so measured closure is not conflated with the
 synthetic scheduler gate.
+
+The first live run against exact implementation checkpoint
+`cae1cf927d3320a43ed016f013e76263dfe9098f` did not exercise a fresh session,
+but it found a more precise structural gap. Copilot closed all 493 immutable
+inventory paths as `no_issue_found`, retained no deferred item, and left no
+path or finding-quality gap for the scheduler, yet serialized
+`completeness: partial`. The deterministic finalizer correctly refused to turn
+that into clearance. The scan exited nonzero after 23 minutes 59 seconds with
+13,389,405 input tokens, 11,296,056 cached tokens, 171,630 output tokens, zero
+findings, and no allowance or classifier failure. This is materially better
+file closure than the preceding 17-of-491 run, but an unexplained scan-wide
+label is still not an acceptable terminal state.
+
+The host now emits `unresolved_coverage_completeness` only when every other
+coverage condition is closed: all inventory paths have one canonical closed
+surface, required direct views succeeded, coverage mode matches, no disposition
+conflict remains, and `deferred` is empty. The repair instruction must either
+set `completeness` to `complete` or add a concrete path-bound deferred item for
+a plausible reportable defect. It does not auto-promote the model's draft and
+does not erase a legitimate deferral. Persistence therefore reaches
+`ScanClosureIncompleteError` and the bounded fresh-session scheduler instead
+of silently completing as partial. The added focused boundary passes 111 tests
+and 1,287 assertions on both native Windows and Ubuntu, with one intentional
+platform skip and no failures; strict TypeScript and the production build are
+also green.
 
 ## 2026-08-26 — Chainlit MCP stdio client-command injection
 

@@ -49,6 +49,21 @@ All notable scanner, application, benchmark, and operational changes are recorde
   platform/integration skips and zero failures. Formatting, generated-model
   drift, TypeScript, the production build, Windows and Linux focused behavior,
   and the high-severity production dependency audit are green.
+- The first exact-checkpoint live acceptance run exposed a second closure edge:
+  Copilot produced one closed `no_issue_found` surface for all 493 immutable
+  inventory paths, no deferred items, and no host path or finding-quality gap,
+  but retained an unexplained `completeness: partial` label. The run therefore
+  remained safely non-clearing after 23 minutes 59 seconds and 13,389,405 input
+  tokens (11,296,056 cached) plus 171,630 output tokens; it encountered no
+  credit-limit or classifier refusal. Added
+  `unresolved_coverage_completeness` to the deterministic closure inventory.
+  It is emitted only when all other path, direct-view, mode, disposition, and
+  deferred-work gaps are closed but the draft still says partial or unknown.
+  Correction must then set `complete` or add a concrete path-bound deferred
+  item for a plausible reportable defect; an unexplained label can no longer
+  bypass same-session correction and fresh-session closure. Focused Windows
+  and native Ubuntu runs each pass 111 tests with one intentional platform
+  skip, 1,287 assertions, and no failures after this change.
 - Added `python-chainlit-mcp-stdio-command-injection`, an exact Python model
   for
   [GHSA-w3fx-mc44-mf6j / CVE-2026-45018](https://github.com/advisories/GHSA-w3fx-mc44-mf6j).

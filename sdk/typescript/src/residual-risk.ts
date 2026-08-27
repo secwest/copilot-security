@@ -3660,6 +3660,7 @@ interface CoverageGapRecord {
     | "missing_coverage_surface"
     | "missing_direct_file_review"
     | "invalid_coverage_mode"
+    | "unresolved_coverage_completeness"
     | "needs_follow_up"
     | "deferred_coverage_item"
     | "invalid_coverage_disposition"
@@ -3668,6 +3669,8 @@ interface CoverageGapRecord {
   directFileReviewObserved?: boolean;
   expectedMode?: string;
   actualMode?: unknown;
+  expectedCompleteness?: "complete";
+  actualCompleteness?: unknown;
 }
 
 type FindingQualityGapReason =
@@ -45382,6 +45385,18 @@ export async function buildCoverageGapInventory(
       actualMode: coverage.mode,
     });
   }
+  if (
+    gaps.length === 0 &&
+    coverage.completeness !== undefined &&
+    coverage.completeness !== "complete"
+  ) {
+    gaps.push({
+      path: "coverage.completeness",
+      reason: "unresolved_coverage_completeness",
+      expectedCompleteness: "complete",
+      actualCompleteness: coverage.completeness,
+    });
+  }
 
   const selected = gaps.sort(compareCoverageGaps).slice(0, MAX_COVERAGE_GAPS);
   return [
@@ -46342,9 +46357,16 @@ function parseCoverageSurfaces(coverageBytes: Buffer | null): {
   surfaces: CoverageSurfaceDraft[];
   deferredCount: number;
   mode: unknown;
+  completeness: unknown;
 } {
   if (coverageBytes === null) {
-    return { readable: false, surfaces: [], deferredCount: 0, mode: undefined };
+    return {
+      readable: false,
+      surfaces: [],
+      deferredCount: 0,
+      mode: undefined,
+      completeness: undefined,
+    };
   }
   try {
     const coverage = JSON.parse(
@@ -46360,6 +46382,7 @@ function parseCoverageSurfaces(coverageBytes: Buffer | null): {
         surfaces: [],
         deferredCount: 0,
         mode: undefined,
+        completeness: undefined,
       };
     }
     const deferred = (coverage as { deferred?: unknown }).deferred;
@@ -46371,9 +46394,16 @@ function parseCoverageSurfaces(coverageBytes: Buffer | null): {
       ),
       deferredCount: Array.isArray(deferred) ? deferred.length : 0,
       mode: (coverage as { mode?: unknown }).mode,
+      completeness: (coverage as { completeness?: unknown }).completeness,
     };
   } catch {
-    return { readable: false, surfaces: [], deferredCount: 0, mode: undefined };
+    return {
+      readable: false,
+      surfaces: [],
+      deferredCount: 0,
+      mode: undefined,
+      completeness: undefined,
+    };
   }
 }
 
@@ -46385,10 +46415,11 @@ function compareCoverageGaps(
     missing_coverage_surface: 0,
     missing_direct_file_review: 1,
     invalid_coverage_mode: 2,
-    needs_follow_up: 3,
-    deferred_coverage_item: 4,
-    invalid_coverage_disposition: 5,
-    conflicting_coverage_surfaces: 6,
+    unresolved_coverage_completeness: 3,
+    needs_follow_up: 4,
+    deferred_coverage_item: 5,
+    invalid_coverage_disposition: 6,
+    conflicting_coverage_surfaces: 7,
   } as const;
   return (
     priority[left.reason] - priority[right.reason] ||
