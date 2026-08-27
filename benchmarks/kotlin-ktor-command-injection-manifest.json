@@ -102,6 +102,46 @@
       "id": "kotlin-ktor-resource-argv-command",
       "fixture": "fixtures/kotlin-ktor-resource-argv-command",
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-live-command-list-injection",
+      "fixture": "fixtures/kotlin-ktor-resource-live-command-list-injection",
+      "expected": [
+        {
+          "title": "Ktor typed resource mutates a live ProcessBuilder shell command list",
+          "cwe": ["CWE-78", "CWE-88"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/main/kotlin/example/Diagnostics.kt",
+          "line": 23,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["typed resource", "@Resource", "DiagnosticResource"],
+            ["commandLine", "interpolation", "formatted"],
+            ["liveCommand", "command list", "builder.command"],
+            ["sh -c", "shell", "-c"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["liveCommand.set", "command list mutation", "set(2"],
+            ["processBuilder", "builder alias", "ProcessBuilder"],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-live-command-list-argv",
+      "fixture": "fixtures/kotlin-ktor-resource-live-command-list-argv",
+      "expected": []
     }
   ]
 }

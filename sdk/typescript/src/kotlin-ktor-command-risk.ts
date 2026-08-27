@@ -34,7 +34,9 @@ interface KotlinSource {
 
 interface KotlinPropagator {
   kind:
+    | "kotlin-command-list-mutation"
     | "kotlin-local-assignment"
+    | "kotlin-process-command-replacement"
     | "kotlin-string-concatenation"
     | "kotlin-string-interpolation";
   line: number;
@@ -50,11 +52,25 @@ interface KotlinTaint {
 interface ProcessArgument {
   tokens: KotlinToken[];
   line: number;
+  mutationLine?: number;
 }
 
 interface ProcessBuilderState {
   arguments: ProcessArgument[];
+  commandSetLine?: number;
   constructorLine: number;
+}
+
+interface CommandReplacement {
+  arguments: ProcessArgument[];
+  line: number;
+}
+
+interface CommandListMutation {
+  argument?: ProcessArgument;
+  index?: number;
+  kind: "append" | "clear" | "insert" | "remove" | "set";
+  line: number;
 }
 
 interface KotlinRouteScope {
@@ -691,12 +707,17 @@ function assignment(
 function processArguments(
   tokens: readonly KotlinToken[],
   fallbackLine: number,
+  commandLists?: ReadonlyMap<string, ProcessArgument[]>,
 ): ProcessArgument[] | undefined {
   let arguments_ = splitArguments(tokens);
   if (arguments_.length === 1) {
     const only = arguments_[0] ?? [];
+    if (only.length === 1 && only[0]?.kind === "identifier") {
+      const referenced = commandLists?.get(only[0].value);
+      if (referenced !== undefined) return referenced;
+    }
     if (
-      new Set(["arrayOf", "listOf", "mutableListOf"]).has(
+      new Set(["arrayListOf", "arrayOf", "listOf", "mutableListOf"]).has(
         only[0]?.value ?? "",
       ) &&
       only[1]?.value === "("
@@ -716,8 +737,9 @@ function processArguments(
 function commandReplacement(
   tokens: readonly KotlinToken[],
   receiver?: string,
-): ProcessArgument[] | undefined {
-  let replacement: ProcessArgument[] | undefined;
+  commandLists?: ReadonlyMap<string, ProcessArgument[]>,
+): CommandReplacement | undefined {
+  let replacement: CommandReplacement | undefined;
   for (let index = 0; index < tokens.length - 3; index += 1) {
     const methodIndex = receiver === undefined ? index + 1 : index + 2;
     if (
@@ -733,16 +755,226 @@ function commandReplacement(
       const arguments_ = processArguments(
         tokens.slice(methodIndex + 2, close),
         tokens[methodIndex]?.line ?? 1,
+        commandLists,
       );
-      if (arguments_ !== undefined) replacement = arguments_;
+      if (arguments_ !== undefined) {
+        replacement = {
+          arguments: arguments_,
+          line: tokens[methodIndex]?.line ?? 1,
+        };
+      }
     }
   }
   return replacement;
 }
 
+function meaningfulTokens(tokens: readonly KotlinToken[]): KotlinToken[] {
+  return tokens.filter(({ kind }) => kind !== "newline");
+}
+
+function commandListExpression(
+  tokens: readonly KotlinToken[],
+  builders: ReadonlyMap<string, ProcessBuilderState>,
+  commandLists: ReadonlyMap<string, ProcessArgument[]>,
+): ProcessArgument[] | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  if (meaningful.length === 1 && meaningful[0]?.kind === "identifier") {
+    return commandLists.get(meaningful[0].value);
+  }
+  if (
+    meaningful.length === 5 &&
+    meaningful[0]?.kind === "identifier" &&
+    meaningful[1]?.value === "." &&
+    meaningful[2]?.value === "command" &&
+    meaningful[3]?.value === "(" &&
+    meaningful[4]?.value === ")"
+  ) {
+    return builders.get(meaningful[0].value)?.arguments;
+  }
+  if (
+    new Set(["arrayListOf", "arrayOf", "listOf", "mutableListOf"]).has(
+      meaningful[0]?.value ?? "",
+    ) &&
+    meaningful[1]?.value === "(" &&
+    matchingDelimiter(meaningful, 1) === meaningful.length - 1
+  ) {
+    return processArguments(meaningful, meaningful[0]?.line ?? 1, commandLists);
+  }
+  return undefined;
+}
+
+function builderExpression(
+  tokens: readonly KotlinToken[],
+  builders: ReadonlyMap<string, ProcessBuilderState>,
+): ProcessBuilderState | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  if (meaningful.length !== 1 || meaningful[0]?.kind !== "identifier")
+    return undefined;
+  return builders.get(meaningful[0].value);
+}
+
+function commandIndex(tokens: readonly KotlinToken[]): number | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  if (meaningful.length !== 1 || meaningful[0]?.kind !== "number")
+    return undefined;
+  const normalized = meaningful[0].value.replaceAll("_", "");
+  if (!/^(?:0|[1-9][0-9]*)$/u.test(normalized)) return undefined;
+  const index = Number(normalized);
+  return Number.isSafeInteger(index) && index <= MAX_KOTLIN_TOKENS
+    ? index
+    : undefined;
+}
+
+function mutatedArgument(
+  tokens: readonly KotlinToken[],
+  mutationLine: number,
+): ProcessArgument | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  if (meaningful.length === 0) return undefined;
+  return {
+    tokens: meaningful,
+    line: meaningful[0]?.line ?? mutationLine,
+    mutationLine,
+  };
+}
+
+function mutationAfterPrefix(
+  tokens: readonly KotlinToken[],
+  prefixLength: number,
+): CommandListMutation | undefined {
+  const suffix = tokens.slice(prefixLength);
+  if (suffix[0]?.value === "[") {
+    const close = matchingDelimiter(suffix, 0);
+    if (
+      close === undefined ||
+      suffix[close + 1]?.value !== "=" ||
+      suffix[close + 2] === undefined
+    ) {
+      return undefined;
+    }
+    const index = commandIndex(suffix.slice(1, close));
+    const mutationLine = suffix[close + 1]?.line ?? suffix[0]?.line ?? 1;
+    const argument = mutatedArgument(suffix.slice(close + 2), mutationLine);
+    return index === undefined || argument === undefined
+      ? undefined
+      : { argument, index, kind: "set", line: mutationLine };
+  }
+  if (
+    suffix[0]?.value !== "." ||
+    suffix[1]?.kind !== "identifier" ||
+    suffix[2]?.value !== "("
+  ) {
+    return undefined;
+  }
+  const close = matchingDelimiter(suffix, 2);
+  if (close === undefined || close !== suffix.length - 1) return undefined;
+  const method = suffix[1].value;
+  const arguments_ = splitArguments(suffix.slice(3, close));
+  const mutationLine = suffix[1].line;
+  if (method === "clear" && arguments_.length === 0)
+    return { kind: "clear", line: mutationLine };
+  if (method === "removeAt" && arguments_.length === 1) {
+    const index = commandIndex(arguments_[0] ?? []);
+    return index === undefined
+      ? undefined
+      : { index, kind: "remove", line: mutationLine };
+  }
+  if (method === "set" && arguments_.length === 2) {
+    const index = commandIndex(arguments_[0] ?? []);
+    const argument = mutatedArgument(arguments_[1] ?? [], mutationLine);
+    return index === undefined || argument === undefined
+      ? undefined
+      : { argument, index, kind: "set", line: mutationLine };
+  }
+  if (method === "add" && arguments_.length === 1) {
+    const argument = mutatedArgument(arguments_[0] ?? [], mutationLine);
+    return argument === undefined
+      ? undefined
+      : { argument, kind: "append", line: mutationLine };
+  }
+  if (method === "add" && arguments_.length === 2) {
+    const index = commandIndex(arguments_[0] ?? []);
+    const argument = mutatedArgument(arguments_[1] ?? [], mutationLine);
+    return index === undefined || argument === undefined
+      ? undefined
+      : { argument, index, kind: "insert", line: mutationLine };
+  }
+  return undefined;
+}
+
+function commandListMutation(
+  tokens: readonly KotlinToken[],
+  receiver: string,
+): CommandListMutation | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  if (meaningful[0]?.value !== receiver) return undefined;
+  return mutationAfterPrefix(meaningful, 1);
+}
+
+function builderCommandListMutation(
+  tokens: readonly KotlinToken[],
+  receiver: string,
+): CommandListMutation | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  if (
+    meaningful[0]?.value !== receiver ||
+    meaningful[1]?.value !== "." ||
+    meaningful[2]?.value !== "command" ||
+    meaningful[3]?.value !== "(" ||
+    meaningful[4]?.value !== ")"
+  ) {
+    return undefined;
+  }
+  return mutationAfterPrefix(meaningful, 5);
+}
+
+function applyCommandListMutation(
+  arguments_: ProcessArgument[],
+  mutation: CommandListMutation,
+): boolean {
+  if (mutation.kind === "clear") {
+    arguments_.splice(0, arguments_.length);
+    return true;
+  }
+  if (mutation.kind === "append" && mutation.argument !== undefined) {
+    arguments_.push(mutation.argument);
+    return true;
+  }
+  if (
+    mutation.kind === "insert" &&
+    mutation.argument !== undefined &&
+    mutation.index !== undefined &&
+    mutation.index <= arguments_.length
+  ) {
+    arguments_.splice(mutation.index, 0, mutation.argument);
+    for (const argument of arguments_) argument.mutationLine = mutation.line;
+    return true;
+  }
+  if (
+    mutation.kind === "remove" &&
+    mutation.index !== undefined &&
+    mutation.index < arguments_.length
+  ) {
+    arguments_.splice(mutation.index, 1);
+    for (const argument of arguments_) argument.mutationLine = mutation.line;
+    return true;
+  }
+  if (
+    mutation.kind === "set" &&
+    mutation.argument !== undefined &&
+    mutation.index !== undefined &&
+    mutation.index < arguments_.length
+  ) {
+    arguments_[mutation.index] = mutation.argument;
+    return true;
+  }
+  return false;
+}
+
 function processConstructor(
   tokens: readonly KotlinToken[],
   aliases: ReadonlySet<string>,
+  commandLists: ReadonlyMap<string, ProcessArgument[]>,
 ): ProcessBuilderState | undefined {
   for (let index = 0; index < tokens.length; index += 1) {
     let openIndex: number | undefined;
@@ -763,11 +995,20 @@ function processConstructor(
     const initial = processArguments(
       tokens.slice(openIndex + 1, close),
       tokens[index]?.line ?? 1,
+      commandLists,
     );
     if (initial === undefined) return undefined;
+    const replacement = commandReplacement(
+      tokens.slice(close + 1),
+      undefined,
+      commandLists,
+    );
     return {
       constructorLine: tokens[index]?.line ?? 1,
-      arguments: commandReplacement(tokens.slice(close + 1)) ?? initial,
+      arguments: replacement?.arguments ?? initial,
+      ...(replacement === undefined
+        ? {}
+        : { commandSetLine: replacement.line }),
     };
   }
   return undefined;
@@ -848,10 +1089,27 @@ function processRisk(
   taints: ReadonlyMap<string, KotlinTaint>,
   literals: ReadonlyMap<string, string>,
 ): KotlinRisk | undefined {
-  const programTaint = expressionTaint(
-    state.arguments[0]?.tokens ?? [],
-    taints,
-  );
+  const argumentTaint = (
+    argument: ProcessArgument | undefined,
+  ): KotlinTaint | undefined => {
+    const taint = expressionTaint(argument?.tokens ?? [], taints);
+    if (taint === undefined) return undefined;
+    const propagators = [...taint.propagators];
+    if (state.commandSetLine !== undefined) {
+      propagators.push({
+        kind: "kotlin-process-command-replacement",
+        line: state.commandSetLine,
+      });
+    }
+    if (argument?.mutationLine !== undefined) {
+      propagators.push({
+        kind: "kotlin-command-list-mutation",
+        line: argument.mutationLine,
+      });
+    }
+    return { ...taint, propagators };
+  };
+  const programTaint = argumentTaint(state.arguments[0]);
   if (programTaint !== undefined) {
     return {
       kind: "kotlin-process-executable-selection",
@@ -865,8 +1123,8 @@ function processRisk(
   const literalsByIndex = state.arguments.map(({ tokens }) =>
     literalArgument(tokens, literals),
   );
-  const taintsByIndex = state.arguments.map(({ tokens }) =>
-    expressionTaint(tokens, taints),
+  const taintsByIndex = state.arguments.map((argument) =>
+    argumentTaint(argument),
   );
   const commandAfter = (
     flags: ReadonlySet<string>,
@@ -1055,9 +1313,11 @@ export function kotlinKtorCommandInjectionRecords(
     }
     const literals = new Map<string, string>();
     const builders = new Map<string, ProcessBuilderState>();
+    const commandLists = new Map<string, ProcessArgument[]>();
+    let routeAborted = false;
     for (const statement of statementTokens(scope.body)) {
       const assigned = assignment(statement);
-      const constructor = processConstructor(statement, aliases);
+      const constructor = processConstructor(statement, aliases, commandLists);
       const directStart =
         constructor === undefined ? undefined : startLine(statement);
       if (constructor !== undefined && directStart !== undefined) {
@@ -1065,38 +1325,70 @@ export function kotlinKtorCommandInjectionRecords(
         if (risk !== undefined)
           records.push(recordForRisk(path, lines, directStart, risk));
       }
-      if (assigned !== undefined && constructor !== undefined) {
-        if (directStart === undefined) builders.set(assigned.name, constructor);
-        else builders.delete(assigned.name);
-        taints.delete(assigned.name);
-        literals.delete(assigned.name);
-      } else if (assigned !== undefined) {
-        builders.delete(assigned.name);
-        const taint = expressionTaint(assigned.expression, taints);
-        if (taint === undefined) taints.delete(assigned.name);
-        else {
-          taints.set(assigned.name, {
-            source: taint.source,
-            propagators: [
-              ...taint.propagators,
-              {
-                kind: "kotlin-local-assignment",
-                line: statement[0]?.line ?? taint.source.line,
-                symbol: assigned.name,
-              },
-            ],
-            controls: [...taint.controls],
-          });
+      if (assigned !== undefined) {
+        const referencedBuilder =
+          constructor === undefined
+            ? builderExpression(assigned.expression, builders)
+            : undefined;
+        const referencedCommandList =
+          constructor === undefined && referencedBuilder === undefined
+            ? commandListExpression(assigned.expression, builders, commandLists)
+            : undefined;
+        if (constructor !== undefined && directStart === undefined) {
+          builders.set(assigned.name, constructor);
+        } else if (referencedBuilder !== undefined) {
+          builders.set(assigned.name, referencedBuilder);
+        } else {
+          builders.delete(assigned.name);
         }
-        const literal = literalArgument(assigned.expression, literals);
-        if (literal === undefined) literals.delete(assigned.name);
-        else literals.set(assigned.name, literal);
+        if (referencedCommandList === undefined) {
+          commandLists.delete(assigned.name);
+        } else {
+          commandLists.set(assigned.name, referencedCommandList);
+        }
+        if (
+          constructor !== undefined ||
+          referencedBuilder !== undefined ||
+          referencedCommandList !== undefined
+        ) {
+          taints.delete(assigned.name);
+          literals.delete(assigned.name);
+        } else {
+          const taint = expressionTaint(assigned.expression, taints);
+          if (taint === undefined) taints.delete(assigned.name);
+          else {
+            taints.set(assigned.name, {
+              source: taint.source,
+              propagators: [
+                ...taint.propagators,
+                {
+                  kind: "kotlin-local-assignment",
+                  line: statement[0]?.line ?? taint.source.line,
+                  symbol: assigned.name,
+                },
+              ],
+              controls: [...taint.controls],
+            });
+          }
+          const literal = literalArgument(assigned.expression, literals);
+          if (literal === undefined) literals.delete(assigned.name);
+          else literals.set(assigned.name, literal);
+        }
       }
       for (const [name, state] of builders) {
-        const replacement = commandReplacement(statement, name);
+        const replacement = commandReplacement(statement, name, commandLists);
         if (replacement !== undefined) {
-          state.arguments = replacement;
+          state.arguments = replacement.arguments;
+          state.commandSetLine = replacement.line;
           builders.set(name, state);
+        }
+        const mutation = builderCommandListMutation(statement, name);
+        if (
+          mutation !== undefined &&
+          !applyCommandListMutation(state.arguments, mutation)
+        ) {
+          routeAborted = true;
+          break;
         }
         const line = startLine(statement, name);
         const pipelineLine = pipelineStartLine(statement, name, aliases);
@@ -1115,6 +1407,18 @@ export function kotlinKtorCommandInjectionRecords(
           }
         }
       }
+      if (routeAborted) break;
+      for (const [name, arguments_] of commandLists) {
+        const mutation = commandListMutation(statement, name);
+        if (
+          mutation !== undefined &&
+          !applyCommandListMutation(arguments_, mutation)
+        ) {
+          routeAborted = true;
+          break;
+        }
+      }
+      if (routeAborted) break;
       if (records.length >= MAX_RECORDS) return records;
     }
   }

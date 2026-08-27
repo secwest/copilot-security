@@ -438,6 +438,10 @@ describe("effectiveness benchmark", () => {
         "kotlin-ktor-resource-argv-command",
       ],
       [
+        "kotlin-ktor-resource-live-command-list-injection",
+        "kotlin-ktor-resource-live-command-list-argv",
+      ],
+      [
         "node-multi-hop-rhinostone-swig-template-traversal",
         "node-multi-hop-repaired-rhinostone-swig-template-root",
       ],

@@ -36,6 +36,8 @@ const caseIds = [
   "kotlin-ktor-argv-command",
   "kotlin-ktor-resource-shell-command-injection",
   "kotlin-ktor-resource-argv-command",
+  "kotlin-ktor-resource-live-command-list-injection",
+  "kotlin-ktor-resource-live-command-list-argv",
 ] as const;
 const handlerPath = "src/main/kotlin/example/Diagnostics.kt";
 
@@ -118,6 +120,13 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
       requireCodeEvidence: true,
     });
     expect(benchmark.cases[3]?.expected).toEqual([]);
+    expect(benchmark.cases[4]?.expected[0]).toMatchObject({
+      cwe: ["CWE-78", "CWE-88"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(benchmark.cases[5]?.expected).toEqual([]);
   });
 
   test("preserves exact Ktor source, interpolation, ProcessBuilder, and start", async () => {
@@ -261,6 +270,12 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
     expect(workflow).toContain(
       "kotlin-ktor-resource-argv-command/pom.xml verify",
     );
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-live-command-list-injection/pom.xml verify",
+    );
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-live-command-list-argv/pom.xml verify",
+    );
   });
 
   test("recognizes exact Ktor query, path, header, query-string, and body sources", () => {
@@ -350,6 +365,7 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
       "kotlin-local-assignment",
       "kotlin-string-interpolation",
       "kotlin-local-assignment",
+      "kotlin-process-command-replacement",
     ]);
     expect(safe).toEqual([]);
 
@@ -425,6 +441,177 @@ ${body}
     expect(safe).toEqual([]);
   });
 
+  test("tracks live command-list mutation, retained views, and builder aliases", () => {
+    const resource = (body: string): string =>
+      `package example
+import io.ktor.resources.Resource
+import io.ktor.server.resources.get
+import io.ktor.server.routing.routing
+import java.lang.ProcessBuilder
+
+@Resource("/diagnostics/{target}")
+data class DiagnosticResource(val target: String)
+
+fun routes() = routing {
+    get<DiagnosticResource> { input ->
+${body}
+    }
+}
+`;
+
+    const directIndex = records(
+      resource(`        val value = input.target
+        val builder = ProcessBuilder("sh", "-c", "fixed")
+        builder.command()[2] = value
+        builder.start()`),
+    );
+    expect(directIndex).toHaveLength(1);
+    expect(
+      directIndex[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toContain("kotlin-command-list-mutation");
+
+    const retainedView = records(
+      resource(`        val value = input.target
+        val builder = ProcessBuilder("sh", "-c", "fixed")
+        val command = builder.command()
+        command.set(2, value)
+        builder.start()`),
+    );
+    expect(retainedView).toHaveLength(1);
+
+    const constructorAlias = records(
+      resource(`        val value = input.target
+        val command = mutableListOf("sh", "-c", "fixed")
+        val builder = ProcessBuilder(command)
+        command[2] = value
+        builder.start()`),
+    );
+    expect(constructorAlias).toHaveLength(1);
+
+    const setterAndBuilderAliases = records(
+      resource(`        val value = input.target
+        val command = arrayListOf("sh", "-c", "fixed")
+        val builder = ProcessBuilder("printf", "%s", "fixed")
+        builder.command(command)
+        val process = builder
+        command.set(2, value)
+        process.start()`),
+    );
+    expect(setterAndBuilderAliases).toHaveLength(1);
+    expect(
+      setterAndBuilderAliases[0]?.frameworkModel.propagators.map(
+        ({ kind }) => kind,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "kotlin-process-command-replacement",
+        "kotlin-command-list-mutation",
+      ]),
+    );
+
+    const rebuilt = records(
+      resource(`        val value = input.target
+        val builder = ProcessBuilder("printf", "%s", "fixed")
+        val command = builder.command()
+        command.clear()
+        command.add("sh")
+        command.add("-c")
+        command.add(value)
+        ProcessBuilder.startPipeline(listOf(builder))`),
+    );
+    expect(rebuilt).toHaveLength(1);
+    expect(rebuilt[0]?.frameworkModel.sink.symbol).toBe(
+      "java.lang.ProcessBuilder;method=startPipeline;argument=3",
+    );
+
+    const inserted = records(
+      resource(`        val value = input.target
+        val command = arrayListOf("sh", "fixed")
+        val builder = ProcessBuilder(command)
+        command.add(1, "-c")
+        command.add(2, value)
+        builder.start()`),
+    );
+    expect(inserted).toHaveLength(1);
+
+    const shifted = records(
+      resource(`        val value = input.target
+        val command = arrayListOf("printf", "sh", "-c", value)
+        val builder = ProcessBuilder(command)
+        command.removeAt(0)
+        builder.start()`),
+    );
+    expect(shifted).toHaveLength(1);
+    expect(
+      shifted[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toContain("kotlin-command-list-mutation");
+
+    const executable = records(
+      resource(`        val value = input.target
+        val builder = ProcessBuilder("printf", "%s", "fixed")
+        builder.command()[0] = value
+        builder.start()`),
+    );
+    expect(executable).toHaveLength(1);
+    expect(executable[0]?.frameworkModel.sink.kind).toBe(
+      "kotlin-process-executable-selection",
+    );
+  });
+
+  test("models command-list detachment, overwrites, bounds, and argv controls", () => {
+    const bodies = [
+      `        val value = input.target
+        val builder = ProcessBuilder("printf", "%s", "fixed")
+        builder.command()[2] = value
+        builder.start()`,
+      `        val value = input.target
+        val builder = ProcessBuilder("sh", "-c", "fixed")
+        builder.command()[2] = value
+        builder.command()[2] = "fixed"
+        builder.start()`,
+      `        val value = input.target
+        val builder = ProcessBuilder("sh", "-c", "fixed")
+        val detached = builder.command()
+        builder.command("printf", "%s", "fixed")
+        detached[0] = value
+        builder.start()`,
+      `        val value = input.target
+        val builder = ProcessBuilder("sh", "-c", "fixed")
+        builder.command()[20] = value
+        builder.start()`,
+      `        val value = input.target
+        val builder = ProcessBuilder("sh", "-c", value)
+        builder.command()[20] = "fixed"
+        builder.start()`,
+      `        val value = input.target
+        val builder = ProcessBuilder("sh", "-c", value)
+        val command = builder.command()
+        command.clear()
+        command.add("printf")
+        command.add("%s")
+        command.add(value)
+        builder.start()`,
+    ];
+    for (const body of bodies) {
+      const source = `package example
+import io.ktor.resources.Resource
+import io.ktor.server.resources.get
+import io.ktor.server.routing.routing
+import java.lang.ProcessBuilder
+
+@Resource("/diagnostics/{target}")
+data class DiagnosticResource(val target: String)
+
+fun routes() = routing {
+    get<DiagnosticResource> { input ->
+${body}
+    }
+}
+`;
+      expect(records(source)).toEqual([]);
+    }
+  });
+
   test("requires exact Resources identities and an annotated handler type", () => {
     const source = `package example
 import io.ktor.resources.Resource as HttpResource
@@ -486,6 +673,61 @@ fun routes() = routing {
     }
     expect(vulnerable).toContain('builder.command("sh", "-c", payload)');
     expect(safe).toContain('builder.command("printf", "%s", payload)');
+  });
+
+  test("keeps live-list fixtures executable, paired, and precisely modeled", async () => {
+    const vulnerableRecords = await fixtureRecords(caseIds[4]);
+    const safeRecords = await fixtureRecords(caseIds[5]);
+    expect(vulnerableRecords).toHaveLength(1);
+    expect(vulnerableRecords[0]).toMatchObject({
+      line: 23,
+      frameworkModel: {
+        source: { kind: "ktor-typed-resource" },
+        sink: {
+          kind: "kotlin-process-shell-command",
+          symbol: "java.lang.ProcessBuilder;method=start;argument=3",
+        },
+      },
+    });
+    expect(
+      vulnerableRecords[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual(
+      expect.arrayContaining([
+        "kotlin-string-interpolation",
+        "kotlin-local-assignment",
+        "kotlin-command-list-mutation",
+      ]),
+    );
+    expect(safeRecords).toEqual([]);
+
+    const vulnerable = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        caseIds[4],
+        "src/test/kotlin/example/LiveCommandListInjectionWitnessTest.kt",
+      ),
+      "utf8",
+    );
+    const safe = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        caseIds[5],
+        "src/test/kotlin/example/LiveCommandListArgvWitnessTest.kt",
+      ),
+      "utf8",
+    );
+    for (const witness of [vulnerable, safe]) {
+      expect(witness).toContain("KOTLIN_LIVE_COMMAND_MARKER");
+      expect(witness).toContain("builder.command()");
+      expect(witness).toContain("val processBuilder = builder");
+      expect(witness).not.toContain("java.io.File");
+      expect(witness).not.toContain("java.net");
+    }
+    expect(vulnerable).toContain("liveCommand.set(2, payload)");
+    expect(safe).toContain("liveCommand.clear()");
+    expect(safe).toContain('liveCommand.add("printf")');
   });
 
   test("recognizes shell, interpreter, batch, and executable-selection boundaries", () => {
@@ -603,6 +845,9 @@ fun routes() = routing {
     const prompt = scanQualityGatePrompt(inventory);
     expect(prompt).toContain("For kotlin-ktor-command-injection rows");
     expect(prompt).toContain("Ordinary later elements are distinct");
+    expect(prompt).toContain("live list returned by command()");
+    expect(prompt).toContain("clear/rebuild order");
+    expect(prompt).toContain("proven builder alias");
     expect(prompt).toContain("same route lambda");
     expect(prompt).toContain("bounded harmless environment-marker witness");
   });

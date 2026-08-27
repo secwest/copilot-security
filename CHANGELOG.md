@@ -6,6 +6,49 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended `kotlin-ktor-command-injection` through the JDK's live command-list
+  boundary. The model now preserves shared list identity when a collection is
+  passed to `ProcessBuilder(List)` or `command(List)`, follows the mutable view
+  returned by `command()`, and follows exact builder and list aliases. Ordered
+  indexed writes, `set`, append/indexed `add`, `removeAt`, and `clear` now
+  update the effective command seen by `start()` and `startPipeline()`.
+  Replacing the builder command detaches older list views, deterministic
+  out-of-bounds mutations terminate the straight-line route before execution,
+  and later overwrites or clear/rebuild sequences can remove an earlier risk.
+- Added explicit `kotlin-process-command-replacement` and
+  `kotlin-command-list-mutation` attack-path propagators plus reviewer guidance
+  for shared identity, mutation order, detachment, builder aliases, and hard
+  ordinary-argv counterevidence. Regression-first tests reproduced both the
+  former false negative for a live-list write and the former false positive
+  after a safe clear/rebuild. The focused Kotlin and canonical lane now passes
+  37 tests and 2,354 assertions. The perfect-gate Kotlin manifest expands to
+  six cases, and the canonical corpus to 145 exploit/control pairs, 290 cases,
+  and 870 repeated scan positions.
+- Added buildable Ktor 3.5.2/Kotlin 2.2.20/Java 21 live-list exploit and control
+  applications. The positive uses constructor list sharing, a retained
+  `command()` view, `set`, and a builder alias to install shell grammar. The
+  topology-matched control starts with attacker-influenced shell state but
+  clears and rebuilds the same live list as fixed `printf` argv. Both native
+  Ubuntu witnesses pass using only an inert environment marker, their generated
+  Maven targets were removed, and hosted Kotlin CI now compiles and executes
+  all six Ktor fixtures.
+- Completed native, cross-platform, and package acceptance. The authoritative
+  Windows suite passes 1,890 tests and 13,999 assertions across 208 files in
+  474.61 seconds, with 27 intentional platform/integration skips and zero
+  failures. One unrelated native format-string witness failed once in the first
+  complete run, then passed alone and in five consecutive stress runs before
+  the all-green authoritative rerun. Native Ubuntu passes the 150-test,
+  3,621-assertion focused scanner/model/orchestration/package lane with one
+  Windows-only skip. Formatting, generated models, TypeScript, the clean build,
+  and the high-severity production audit are clean.
+- Validated an Ubuntu-produced 291-entry npm archive through strict inspection
+  and two isolated installs on each of Linux and Windows. Every install proves
+  the public API, executable CLI, and all 79 bundled plugin files. The archive
+  is 2,239,222 bytes packed and 11,538,669 bytes unpacked, preserves the
+  `-rwxr-xr-x` launcher, and has SHA-256
+  `5c2dd192a075eeeac064e2fea72db5343cce2079061e966051bfa41494aaf85e`.
+  The reproducible archive and extraction directories were removed after
+  validation.
 - Extended `kotlin-ktor-command-injection` through two previously unmodeled
   Kotlin/JDK boundaries: typed Ktor Resources handlers and mutable
   `ProcessBuilder.command(...)` state. Exact `io.ktor.server.resources` route

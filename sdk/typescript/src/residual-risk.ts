@@ -4148,14 +4148,26 @@ const KOTLIN_KTOR_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
     "@Resource",
   ],
   ["commandLine", "interpolation", "formatted"],
-  ["ProcessBuilder", "java.lang.ProcessBuilder"],
+  [
+    "ProcessBuilder",
+    "java.lang.ProcessBuilder",
+    "live command list",
+    "command list mutation",
+  ],
   ["sh -c", "shell", "-c"],
 ] as const;
 
 const KOTLIN_KTOR_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
   ["target", "query value", "request value", "resource value"],
   ["commandLine", "command string", "shell grammar"],
-  ["ProcessBuilder", "process", "start", "startPipeline"],
+  [
+    "ProcessBuilder",
+    "process",
+    "start",
+    "startPipeline",
+    "builder alias",
+    "liveCommand",
+  ],
   ["stdout", "response", "respondText"],
 ] as const;
 

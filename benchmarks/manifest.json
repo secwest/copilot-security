@@ -6065,6 +6065,63 @@
         "kotlin-ktor-resource-argv-command/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-live-command-list-injection",
+      "description": "A typed Ktor Resource value mutates the live command list returned by ProcessBuilder.command, then reaches shell grammar through a retained builder alias at start.",
+      "fixture": "fixtures/kotlin-ktor-resource-live-command-list-injection",
+      "findingsPaths": [
+        "kotlin-ktor-resource-live-command-list-injection/run-1/findings.json",
+        "kotlin-ktor-resource-live-command-list-injection/run-2/findings.json",
+        "kotlin-ktor-resource-live-command-list-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "kotlin-ktor-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/main/kotlin/example/Diagnostics.kt",
+              "startLine": 23,
+              "endLine": 23,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["typed resource", "@Resource", "DiagnosticResource"],
+            ["commandLine", "interpolation", "formatted"],
+            ["liveCommand", "command list", "builder.command"],
+            ["sh -c", "shell", "-c"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["liveCommand.set", "command list mutation", "set(2"],
+            ["processBuilder", "builder alias", "ProcessBuilder"],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-live-command-list-argv",
+      "description": "The topology-matched control clears a dangerous-looking live command list and rebuilds it as fixed printf argv before the retained builder alias starts it.",
+      "fixture": "fixtures/kotlin-ktor-resource-live-command-list-argv",
+      "findingsPaths": [
+        "kotlin-ktor-resource-live-command-list-argv/run-1/findings.json",
+        "kotlin-ktor-resource-live-command-list-argv/run-2/findings.json",
+        "kotlin-ktor-resource-live-command-list-argv/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

@@ -2,6 +2,80 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Preserve ProcessBuilder live command-list identity
+
+**Why replacement-only state is incomplete.** Oracle documents three related
+no-copy boundaries: the `ProcessBuilder(List)` constructor retains the supplied
+list, `command(List)` retains its supplied list, and the zero-argument
+`command()` getter returns the builder's actual list. Mutating any retained view
+therefore changes a later process launch. The prior Kotlin model understood a
+complete `command(...)` replacement but missed an indexed or method-based edit
+through the getter or an external collection. It also retained an obsolete
+dangerous constructor after the live list had been cleared and rebuilt safely.
+Both errors concern object identity and mutation order, not a larger keyword
+set. Reference: [JDK ProcessBuilder][jdk-process-builder].
+
+**Shared state model.** Each route scope now maintains builder identities and
+command-list identities separately. A literal `arrayListOf`, `mutableListOf`,
+`listOf`, or existing list variable passed to a recognized constructor or
+setter supplies the builder's effective argument array. A value assigned from
+`builder.command()` shares that same array; list-to-list and builder-to-builder
+assignments retain the same object. A later `command(...)` points the builder at
+the replacement array while an earlier getter view remains detached, matching
+the JDK contract. Reassigning one variable does not rewrite another proven
+alias.
+
+**Ordered mutation and reachability boundary.** Constant non-negative indices
+support Kotlin indexed assignment plus exact `set`, append and indexed `add`,
+`removeAt`, and `clear`. Set and append replace or create one argument; insert
+and remove re-anchor every shifted argument; clear removes all prior state.
+Risk is evaluated only when the resulting builder reaches exact `start()` or
+`startPipeline()`. A definitely out-of-bounds modeled operation terminates the
+straight-line route because the JDK/Kotlin list operation throws before the
+later launch. Dynamic indices, caught exceptional control flow, arbitrary
+collection methods, and cross-function mutation remain outside this bounded
+same-file model rather than being guessed.
+
+**Evidence and false-positive controls.** Taint installed by a complete setter
+records `kotlin-process-command-replacement`; taint installed or repositioned
+through the list records `kotlin-command-list-mutation`. Direct executable-slot
+selection, shell/interpreter command slots created with `set` or `add`, and a
+tainted argument shifted into the command slot by `removeAt` are positive.
+Overwriting the tainted slot, mutating a detached old view, an out-of-bounds
+write that prevents execution, and clearing a shell command before rebuilding
+fixed `printf` plus one untrusted ordinary argument are hard negatives.
+
+**Paired executable evidence.** The positive Ktor application supplies an
+`arrayListOf` to the constructor, retains the getter view, replaces the `sh -c`
+command position with an interpolated typed-resource value, aliases the builder,
+and starts it. The control retains the same source, constructor, getter,
+mutation, alias, output, and response topology, but clears the live list and
+rebuilds fixed `printf` argv. Kotlin 2.2.20 and Ktor 3.5.2 compile both on Java
+21 under Ubuntu; their harmless native witnesses prove marker interpretation
+only in the shell case. Focused model and canonical tests pass 37 tests and
+2,354 assertions. The perfect-gate Kotlin manifest contains six cases, and the
+canonical corpus contains 145 pairs, 290 cases, and 870 scan positions.
+
+**Native and distribution acceptance.** The authoritative Windows suite passes
+1,890 tests and 13,999 assertions across 208 files in 474.61 seconds, with 27
+intentional skips and no failures. An unrelated C format-string witness failed
+once in the first full run, passed immediately in isolation, passed five
+consecutive stress repetitions, and passed in the complete authoritative
+rerun; no retry was added to mask compiler or witness failures. Native Ubuntu
+passes the 150-test, 3,621-assertion Kotlin/canonical/residual/Copilot/package
+lane with one Windows-launcher skip. Formatting, generated-model drift,
+TypeScript, a clean production build, and the production advisory audit are
+clean. Both new Maven applications and their inert marker witnesses pass under
+Ubuntu before their generated targets are removed.
+
+The authoritative Ubuntu-produced npm archive contains 291 entries, occupies
+2,239,222 packed and 11,538,669 unpacked bytes, retains `-rwxr-xr-x` on the
+launcher, and has SHA-256
+`5c2dd192a075eeeac064e2fea72db5343cce2079061e966051bfa41494aaf85e`.
+Strict package inspection and two isolated installs on each platform validate
+the public API, CLI, and all 79 bundled plugin files. The reproducible archive
+and exact extraction directories were removed after acceptance.
+
 ## 2026-08-27 — Follow Ktor typed resources into the effective process command
 
 **Why this closes a real false negative.** The first Kotlin lane recognized
