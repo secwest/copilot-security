@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "completionRate": 1,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "casePassRate": 1,
+    "negativeControlPassRate": 1,
+    "stableDetectionRate": 1,
+    "validationCoverage": 1,
+    "attackPathCoverage": 1,
+    "codeEvidenceCoverage": 1,
+    "severityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "terraform-aws-public-admin-ingress",
+      "fixture": "fixtures/terraform-aws-public-admin-ingress",
+      "expected": [
+        {
+          "title": "Terraform exposes an AWS administration port to the public internet",
+          "cwe": ["CWE-284", "CWE-668"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/security-group.tf",
+          "line": 10,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["0.0.0.0/0", "complete IPv4 internet", "unrestricted IPv4"],
+            ["port 22", "SSH"],
+            ["if deployed", "deployed unchanged", "rendered plan"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["0.0.0.0/0", "complete IPv4 internet", "unrestricted IPv4"],
+            ["port 22", "SSH"],
+            ["attached", "associated", "network interface", "instance"]
+          ],
+          "forbiddenText": [
+            "proves that an EC2 instance is publicly reachable",
+            "anonymous administrative access",
+            "authentication is bypassed",
+            "the instance is compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "terraform-aws-restricted-admin-ingress",
+      "fixture": "fixtures/terraform-aws-restricted-admin-ingress",
+      "expected": []
+    }
+  ]
+}

@@ -180,6 +180,7 @@ const distFiles = new Set(
     "secret-candidates",
     "source-display-control-risk",
     "targets",
+    "terraform-risk",
     "traefik-risk",
     "trusted-executable",
     "version",

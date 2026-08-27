@@ -6,6 +6,37 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added the scanner's first native Terraform model,
+  `terraform-aws-public-admin-ingress`. A bounded fail-closed HCL lexer and
+  structural parser recognizes literal `aws_security_group` inline ingress,
+  legacy `aws_security_group_rule`, and current
+  `aws_vpc_security_group_ingress_rule` resources only when `0.0.0.0/0` or
+  `::/0` reaches SSH port 22 or RDP port 3389 under TCP, UDP, or the exact AWS
+  all-protocol sentinel. It preserves resource, rule shape, CIDR, protocol,
+  port range, and line provenance while leaving module expansion, deployment,
+  attachment, routing, listening services, authentication, and realized impact
+  to explicit validation.
+- Kept the Terraform lane narrower and more evidence-oriented than a generic
+  public-ingress linter. Private CIDRs, public non-administration ports, egress,
+  computed or interpolated values, dynamic blocks, malformed HCL, duplicate
+  attributes, lookalike resources, protocol-shape errors, comments, strings,
+  and heredocs stay negative. The modern standalone rule's omitted ports for
+  protocol `-1` are distinguished from the legacy and inline `0/0` form.
+  Token count and parse depth are bounded against hostile configuration files.
+- Added a topology-identical public/restricted Terraform benchmark pair to a
+  focused perfect-gate manifest and the full 139-pair corpus. Windows and native
+  Ubuntu focused tests each pass 9 cases and 50 assertions, including all three
+  provider resource shapes, IPv4 and IPv6, range and all-protocol semantics,
+  exact provenance, prompt guidance, negative controls, trailing commas,
+  heredoc isolation, and adversarial token/depth limits. The authoritative
+  Windows suite passes 1,830 tests and 13,435 assertions across 204 files in
+  522.54 seconds, with 27 intentional platform/integration skips and zero
+  failures. Formatting, generated-model drift, TypeScript, the production
+  build, and the high-severity production dependency audit are clean. A fresh
+  275-entry, 2,141,550-byte npm archive with SHA-256
+  `03ee8831d9168a1504c767cf083dfc1a6cdc1acefc655fb38a2d67f2d64f74ec`
+  passes strict inspection and two isolated installs, including the public API,
+  CLI, and all 79 bundled plugin files; temporary package artifacts are removed.
 - Added a bounded deterministic source-display-control pass based on Unicode's
   source-code handling guidance and GCC's bidirectional-character diagnostics.
   It emits exact code-point, line, column, pairing, context-hint, and

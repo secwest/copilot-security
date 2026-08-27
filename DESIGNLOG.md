@@ -2,6 +2,76 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Add precise Terraform public administration ingress discovery
+
+**Why this is the next coverage lane.** The effectiveness corpus had 138
+positive/control pairs but remained heavily concentrated in JavaScript/Node
+and Python. Infrastructure-specific host models covered Kubernetes and
+CloudFormation, with no Terraform model. AWS Security Hub controls EC2.13,
+EC2.14, EC2.53, and EC2.54 explicitly reject `0.0.0.0/0` or `::/0` ingress to
+ports 22 and 3389 and rate the configuration high severity. Trivy's documented
+`aws-ec2-no-public-ingress-sgr` example confirms that mature IaC scanners join
+Terraform resource type, ingress direction, port, and public CIDR, but its
+general public-ingress policy is intentionally broader than this scanner's
+remote-administration attack surface. References: [AWS Security Hub EC2
+controls][aws-ec2-controls], [Terraform `aws_security_group`][tf-sg],
+[Terraform current ingress-rule resource][tf-vpc-sg-ingress], and [Trivy
+Terraform configuration scanning][trivy-terraform].
+
+**Parser and identity boundary.** Add a small bounded HCL lexer rather than a
+keyword expression. It removes line and block comments, treats quoted strings
+as literal only when they contain no template interpolation, skips heredoc
+bodies as dynamic data, preserves logical lines, balances lists, objects,
+calls, and blocks, and fails closed on malformed tokens. Resource recognition
+requires exactly two static labels. Accept only `aws_security_group` inline
+`ingress` blocks or literal object lists, `aws_security_group_rule` with exact
+literal `type = "ingress"`, and
+`aws_vpc_security_group_ingress_rule`. Reject dynamic blocks, lookalike
+resource names, duplicate attributes, egress resources, and non-`.tf` files.
+Cap token volume at 131,072 and structural recursion at 128 levels so a hostile
+repository cannot turn deterministic discovery into unbounded parser work.
+
+**Provider-shape and risk boundary.** Require a static public IPv4 or IPv6
+source and a literal port interval containing 22 or 3389 under TCP/6, UDP/17,
+or protocol `-1`. HashiCorp's current provider documentation makes a material
+shape distinction: inline and legacy `-1` rules require `from_port = 0` and
+`to_port = 0`, while the current standalone ingress resource requires both
+ports to be omitted because `-1` denotes every port. Preserve that distinction
+instead of normalizing unlike declarations. A private source, another public
+port, computed protocol/CIDR/port, malformed range, unsupported protocol, or
+wrong `-1` form is unresolved or negative rather than guessed. The model row
+uses CWE-284 and CWE-668, exact resource and rule-shape provenance, source CIDR
+and line, protocol/range/admin-port sink and line, and base64-framed excerpts.
+
+**Validation boundary and benchmark.** Static Terraform proves a declared
+authorization if rendered, deployed, and attached; it does not prove a public
+address, route, permissive network ACL, listening SSH/RDP service, weak
+authentication, or host compromise. Correction guidance requires each of
+those transitions to be stated independently and forbids upgrading absent
+runtime evidence into compromise. A topology-identical pair changes only
+`0.0.0.0/0` to `10.0.0.0/8`. Its focused manifest requires perfect precision,
+recall, stability, severity, location, substantive validation, attack path,
+and code evidence, with explicit text gates for deployment and attachment.
+The full corpus now contains 139 pairs. Windows and native Ubuntu focused
+regression each pass 9 cases and 50 assertions across inline, legacy, current,
+IPv4, IPv6, port-range, all-protocol, comment/heredoc isolation, trailing-comma,
+malformed/dynamic, and adversarial token/depth cases. The authoritative Windows
+suite passes 1,830 tests and 13,435 assertions across 204 files in 522.54
+seconds, with 27 intentional platform/integration skips and no failure.
+Formatting, strict generated-model drift, TypeScript, the production build,
+and the high-severity production dependency audit are clean. The package
+contract includes the new compiled module; a fresh 275-entry, 2,141,550-byte
+archive with SHA-256
+`03ee8831d9168a1504c767cf083dfc1a6cdc1acefc655fb38a2d67f2d64f74ec`
+passes strict archive inspection and two isolated consumer installations,
+including the public API, CLI, and all 79 bundled plugin files. The package
+archive and isolated installations are removed after acceptance.
+
+[aws-ec2-controls]: https://docs.aws.amazon.com/securityhub/latest/userguide/ec2-controls.html
+[tf-sg]: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group.html
+[tf-vpc-sg-ingress]: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule
+[trivy-terraform]: https://github.com/aquasecurity/trivy/blob/main/docs/guide/scanner/misconfiguration/config/config.md
+
 ## 2026-08-27 — Add bounded Trojan Source discovery and a paired benchmark
 
 **Why this belongs in the host pass.** Unicode Technical Standard #55 explains

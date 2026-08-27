@@ -408,6 +408,10 @@ describe("effectiveness benchmark", () => {
         "cloudformation-specific-admin-role",
       ],
       [
+        "terraform-aws-public-admin-ingress",
+        "terraform-aws-restricted-admin-ingress",
+      ],
+      [
         "node-multi-hop-rhinostone-swig-template-traversal",
         "node-multi-hop-repaired-rhinostone-swig-template-root",
       ],

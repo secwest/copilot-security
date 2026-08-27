@@ -31,6 +31,7 @@ import { goSqlInjectionRecords } from "./go-sql-risk.js";
 import { goSqlxSqlInjectionRecords } from "./go-sqlx-risk.js";
 import { goSquirrelSqlInjectionRecords } from "./go-squirrel-risk.js";
 import { sourceDisplayControlRiskRecords } from "./source-display-control-risk.js";
+import { terraformRiskRecords } from "./terraform-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -4404,6 +4405,7 @@ export async function buildResidualRiskInventory(
       ...frameworkDataflowRecords(file.path, file.lines, sourceFiles),
       ...cloudFormationRiskRecords(file.path, file.lines, file.text),
       ...kubernetesRiskRecords(file.path, file.lines, file.text),
+      ...terraformRiskRecords(file.path, file.lines, file.text),
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
       ...githubActionsSelfHostedPrRecords(file.path, file.lines, file.text),
       ...githubActionsWorkflowInjectionRecords(

@@ -113,7 +113,31 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-source-bidi
 ```
 
-The versioned corpus currently contains 138 vulnerable/control pairs:
+## Terraform public administration ingress benchmark
+
+`terraform-aws-public-admin-ingress-manifest.json` isolates literal AWS
+security-group authorization from deployment and host exploitability. The
+positive fixture admits `0.0.0.0/0` to TCP port 22; the topology-identical
+control changes only the source to `10.0.0.0/8`. The focused gate requires
+perfect three-run precision, recall, stability, location, severity, validation,
+attack-path, and code-evidence scores. Validation must distinguish the source
+declaration from rendered-plan selection, apply state, security-group
+attachment, network reachability, a listening service, authentication, and
+concrete impact.
+
+Deterministic regression separately covers inline, legacy, and current AWS
+provider resource shapes, IPv4 and IPv6 public sources, literal port ranges,
+provider-specific all-protocol syntax, malformed and computed controls,
+comments, heredocs, and parser resource bounds. Run the focused model benchmark
+with:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/terraform-aws-public-admin-ingress-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-terraform-admin-ingress
+```
+
+The versioned corpus currently contains 139 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
@@ -301,7 +325,7 @@ returns 404. The Traefik pair preserves the file provider, public rewrite,
 authenticated sibling, shared backend, and loopback witness while changing
 only 3.7.6 to 3.7.7. A direct protected request is denied on both builds; only
 the affected build forwards `/api../admin` onto the backend-normalized marker.
-The complete corpus now produces 822 scans across 137 exploit/control pairs.
+The complete corpus now produces 834 scans across 139 exploit/control pairs.
 The added
 industrial-protocol pair starts the same official
 `OPCUAServer` surface on both sides: 2.165.0 retains every unique nonempty
