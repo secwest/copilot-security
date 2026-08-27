@@ -7,6 +7,7 @@ import {
   readFile,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1097,6 +1098,50 @@ describe("malformed scan artifact recovery", () => {
         (artifact) => artifact.sha256 !== placeholderDigest,
       ),
     ).toBe(true);
+  });
+
+  test("removes model-authored root lookalikes before publishing the host seal", async () => {
+    const fixture = await startDraftScan();
+    const repairedFindings = join(fixture.scanDir, "findings-repaired.json");
+    const alternateReport = join(fixture.scanDir, "report-final.md");
+    const alternateLink = join(fixture.scanDir, "findings-final.json");
+    await writeJson(repairedFindings, {
+      documentType: "copilot-security.findings",
+      schemaVersion: "1.0",
+      scanId: fixture.scanId,
+      findings: [{ title: "Unvalidated model draft" }],
+    });
+    await writeFile(alternateReport, "# Unsealed alternate report\n");
+    if (process.platform !== "win32") {
+      await symlink(
+        join(fixture.repository, "src", "extract.py"),
+        alternateLink,
+      );
+    }
+
+    const completed = await completeScan(fixture);
+
+    expect(completed.progress.status).toBe("complete");
+    await expect(readFile(repairedFindings, "utf8")).rejects.toThrow();
+    await expect(readFile(alternateReport, "utf8")).rejects.toThrow();
+    if (process.platform !== "win32") {
+      await expect(readFile(alternateLink, "utf8")).rejects.toThrow();
+      expect(
+        await readFile(join(fixture.repository, "src", "extract.py"), "utf8"),
+      ).toBe("# fixture\n");
+    }
+    const manifest = await readJson<{
+      scan: { artifacts: Array<{ path: string }>; sealedAt: string };
+    }>(join(fixture.scanDir, "scan-manifest.json"));
+    expect(manifest.scan.sealedAt).toBeString();
+    expect(manifest.scan.artifacts.map((artifact) => artifact.path)).toEqual(
+      expect.arrayContaining(["coverage.json", "findings.json", "report.md"]),
+    );
+    expect(
+      manifest.scan.artifacts.some((artifact) =>
+        artifact.path.includes("repaired"),
+      ),
+    ).toBeFalse();
   });
 
   test("drops a malformed optional threat-model summary from an unsealed draft", async () => {

@@ -37,10 +37,17 @@ const KNOWN_SINCE_DATE = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
+// Unicode bidi controls can visually reorder otherwise sanitized terminal
+// text, while the Unicode line and paragraph separators can create an
+// attacker-controlled display boundary without using an ASCII control byte.
+const UNICODE_TERMINAL_CONTROL_RE =
+  /[\u061C\u200E\u200F\u2028-\u202E\u2066-\u2069]+/g;
+
 function clean(value: unknown): string {
   return String(value)
     .replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "")
-    .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ");
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ")
+    .replace(UNICODE_TERMINAL_CONTROL_RE, " ");
 }
 
 function findingSeverity(finding: JsonObject): string {

@@ -6,6 +6,44 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- A fresh tracked-only self-scan of exact remediation checkpoint
+  `8e991945847ef77b3958341222c2a6481dabe072` now closes all 494 immutable
+  inventory surfaces with zero deferrals and zero findings, confirming that
+  both the privileged-installer defect and synthetic benchmark-secret false
+  positive are gone. The uncapped stored-credential run uses `xhigh` effort
+  and completes in 88 minutes 17 seconds after 37,395,246 input tokens
+  (32,209,213 cached) and 674,409 output tokens. Its first draft transport ends
+  at 61 minutes 24 seconds; bounded recovery starts fresh session 2 of 5 and
+  completes without an allowance, authentication, classifier, or additional
+  transport failure. Scan `3ef8adc8-85f4-4461-8f29-7ec57b97fff9` is completed
+  and host-sealed at the same exact timestamp, all three canonical artifact
+  hashes independently reproduce, and the deterministic report exists.
+- Followed up a low-severity hardening lead that quality correction correctly
+  excluded from the canonical vulnerability set because it lacked a concrete
+  adverse effect. Scan-history terminal rendering removed ANSI plus C0/C1
+  controls but retained Unicode bidirectional embeddings, overrides, isolates,
+  marks, and Unicode line separators in operator-visible repository, finding,
+  path, and reason fields. The shared renderer now replaces those display
+  controls before wrapping, coloring, or alignment, preventing visual
+  reordering and injected line boundaries without stripping ordinary Unicode.
+- Host finalization now removes model-authored top-level regular files and
+  symlinks that resemble alternate results before it publishes the canonical
+  seal. The live recovery session left an unsealed `findings-repaired.json`
+  beside the authoritative zero-finding result; although neither the manifest
+  nor report referenced it, its shape was plausibly authoritative. Cleanup is
+  confined to the private unsealed scan root, preserves the four canonical
+  files and every artifact/export/finding directory, unlinks rather than
+  follows links, and fails before sealing on an unsafe entry or cleanup race.
+  Revalidation of an already sealed scan does not remove later user sidecars.
+  Focused Windows tests pass 92 cases and 544 assertions; native Ubuntu proves
+  both bidi neutralization and external-target-preserving symlink cleanup. The
+  final authoritative Windows suite passes 1,811 tests and 13,321 assertions
+  across 201 files in 536.16 seconds, with 27 intentional platform/integration
+  skips and zero failures. The high-severity production dependency audit finds
+  no known vulnerability. An isolated 267-entry npm archive installs cleanly
+  and passes its public import, CLI, and 79-file bundled-plugin contract; the
+  2,114,267-byte tarball has SHA-256
+  `694ac990778bd0805589a4909ea3fec204558e05987b7c870b819d89f50d034e`.
 - A fresh uncapped stored-credential self-scan of exact checkpoint
   `f175c68ca707bc97a397654856b23ff85d91f307` now seals successfully after
   20 minutes 24 seconds with complete 495-of-495 inventory coverage, zero

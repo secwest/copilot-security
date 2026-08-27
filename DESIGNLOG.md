@@ -2,6 +2,73 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Recover a long self-scan and publish only canonical operator output
+
+**Remediation acceptance.** Scan a 3,331-file tracked-only archive of exact
+checkpoint `8e991945847ef77b3958341222c2a6481dabe072` with stored Copilot
+credentials, `xhigh` effort, no cost or AI-credit cap, and five shared session
+attempts. The first draft transport ends after 61 minutes 24 seconds. The
+scanner does not accept its partial state or hang indefinitely: it starts a
+fresh host-audited correction session as attempt 2 of 5 and finishes after 88
+minutes 17 seconds. The complete run processes 37,395,246 input tokens,
+including 32,209,213 cached, and 674,409 output tokens. No allowance,
+authentication, classifier, or second transport failure occurs. This is live
+evidence that the bounded retry policy survives a model turn at the one-hour
+boundary without converting aggressive recovery into an unbounded loop.
+
+Scan `3ef8adc8-85f4-4461-8f29-7ec57b97fff9` closes all 494 immutable inventory
+surfaces with no deferred work and no surviving finding. The two findings from
+the preceding checkpoint are absent from both canonical findings and report:
+the Linux archive link-pivot path is hardened, and the exact
+`signing-key-material` benchmark placeholder no longer enters generic secret
+discovery. `sealedAt` and `completedAt` are byte-identical
+(`2026-08-27T10:25:30.167109Z`). Independent SHA-256 recomputation matches the
+manifest's `findings.json`, `coverage.json`, and `report.md` records. All seven
+hosted workflows for the checkpoint pass; Linux CI specifically executes the
+privileged malicious-archive rejection and clean installed-GUI smoke test. The
+authoritative native Windows suite passes 1,809 tests and 13,311 assertions
+across 201 files with 27 intentional platform/integration skips before the
+follow-up hardenings below.
+
+**Unicode operator boundary.** The correction session considered, then
+correctly excluded from the canonical vulnerability set, a low-severity
+defense-in-depth candidate in scan-history rendering. The candidate still
+identified a valid hardening gap: `clean()` removed CSI escape sequences and
+C0/C1 control bytes but left Unicode bidirectional marks, embeddings,
+overrides, and isolates. Those characters can visually reorder attacker-
+influenced finding titles, paths, reasons, or repository labels even though the
+underlying output bytes remain unchanged. Unicode line and paragraph
+separators can similarly create an unexpected display boundary. Replace only
+U+061C, U+200E/F, U+2028-202E, and U+2066-2069 with a space before wrapping,
+alignment, or scanner-owned ANSI styling. Do not strip ordinary Unicode,
+joiners, or homoglyphs under a falsely broad notion of sanitization. Windows
+and native Ubuntu regressions prove all selected controls are absent while the
+logical title and path remain readable.
+
+**Canonical root boundary.** The model wrote its rejected candidate to an
+alternate top-level `findings-repaired.json`; finalization correctly ignored
+and did not seal it, but left it beside the canonical zero-finding document.
+An operator or automation that selects files by a loose name pattern could
+mistake such a sidecar for authoritative output. Immediately before writing
+the host-owned seal, enumerate only the already private scan root and remove
+unexpected top-level regular files or symlinks. Preserve
+`scan-manifest.json`, `findings.json`, `coverage.json`, `report.md`, and all
+directories carrying receipts, derived writeups, or exports. Use the existing
+scan-local unlink boundary so links are never followed; an unsupported special
+file, replacement race, or cleanup error aborts before the seal is published.
+Do not run this cleanup when revalidating an already sealed scan, because a user
+may have added a later sidecar deliberately. Windows proves regular lookalikes
+are absent before completion; Ubuntu proves an unexpected link is unlinked and
+its external target remains byte-identical. Focused Windows renderer and
+recovery coverage passes 92 tests and 544 assertions. The final authoritative
+Windows suite passes 1,811 tests and 13,321 assertions across 201 files in
+536.16 seconds, with 27 intentional platform/integration skips and no failure.
+The high-severity production dependency audit reports no known vulnerability.
+A fresh isolated npm package contains 267 entries, installs cleanly, and passes
+its public import, CLI, and all 79 bundled-plugin file checks. Its 2,114,267
+bytes hash to
+`694ac990778bd0805589a4909ea3fec204558e05987b7c870b819d89f50d034e`.
+
 ## 2026-08-27 — Sealed self-scan and finding-driven hardening
 
 **Live acceptance.** Scan exact tracked-only checkpoint

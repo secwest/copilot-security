@@ -154,6 +154,33 @@ describe("scan history renderer", () => {
     }
   });
 
+  test("neutralizes Unicode display controls in operator-visible fields", () => {
+    const bidiControls =
+      "\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069";
+    const output = renderScanHistory(
+      {
+        targetPath: `/demo/${bidiControls}repository`,
+        scanId: "scan-1",
+        progress: { status: "complete" },
+        findings: [
+          {
+            severity: "HIGH",
+            title: `Missing${bidiControls} ownership\u2028check`,
+            path: `routes/${bidiControls}login.ts\u2029:7`,
+          },
+        ],
+      },
+      "show",
+      { color: false },
+    );
+
+    expect(output).not.toMatch(
+      /[\u061C\u200E\u200F\u2028-\u202E\u2066-\u2069]/,
+    );
+    expect(output).toContain("Missing ownership check");
+    expect(output).toContain("routes/ login.ts :7");
+  });
+
   test("keeps repositories visible at narrow and wide terminal widths", () => {
     const scans = [
       {

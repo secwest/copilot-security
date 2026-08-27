@@ -90,6 +90,9 @@ CONTRACT_DOCUMENT_MAX_BYTES = {
     "findings.json": 128 * 1024 * 1024,
     "coverage.json": 32 * 1024 * 1024,
 }
+CANONICAL_SCAN_ROOT_FILES = frozenset(
+    {"scan-manifest.json", "findings.json", "coverage.json", "report.md"}
+)
 SCHEMA_DOCUMENT_MAX_BYTES = 4 * 1024 * 1024
 JSON_DOCUMENT_READ_CHUNK_SIZE = 64 * 1024
 MAX_JSON_DEPTH = 256
@@ -798,6 +801,38 @@ def _remove_scan_local_file_if_exists(scan_dir: Path, relative_path: str) -> Non
             os.close(parent_fd)
         if root_fd is not None:
             os.close(root_fd)
+
+
+def _remove_unrecognized_scan_root_files(scan_dir: Path) -> None:
+    """Remove model-created root-file lookalikes before publishing the seal."""
+
+    scan_dir = _require_scan_directory(scan_dir)
+    allowed = {
+        name.casefold() if _is_windows() else name for name in CANONICAL_SCAN_ROOT_FILES
+    }
+    try:
+        entries = list(scan_dir.iterdir())
+    except OSError as exc:
+        raise ContractError(f"scan directory: could not enumerate root files: {exc}") from exc
+    for entry in entries:
+        name = entry.name
+        comparable = name.casefold() if _is_windows() else name
+        if comparable in allowed:
+            continue
+        relative_path = _require_safe_relative_path(name, "scan-root cleanup path")
+        if PurePosixPath(relative_path).parts != (name,):
+            raise ContractError("scan-root cleanup path: expected one root filename")
+        try:
+            metadata = entry.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise ContractError(f"{name}: could not inspect unexpected root entry: {exc}") from exc
+        if stat.S_ISDIR(metadata.st_mode):
+            continue
+        if not (stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode)):
+            raise ContractError(f"{name}: unexpected scan-root entry is not a regular file")
+        _remove_scan_local_file_if_exists(scan_dir, relative_path)
 
 
 def _write_scan_local_json(scan_dir: Path, relative_path: str, payload: Any) -> None:
@@ -5195,6 +5230,7 @@ def _write_prepared_scan_finalization(
     _write_scan_local_json(scan_dir, "coverage.json", coverage)
     write_scan_local_bytes(scan_dir, "report.md", report_markdown_bytes)
     _remove_scan_local_file_if_exists(scan_dir, "report.html")
+    _remove_unrecognized_scan_root_files(scan_dir)
     _write_scan_local_json(scan_dir, "scan-manifest.json", manifest)
     _validate_existing_seal(scan_dir, scan)
     _write_sarif_projection_if_possible(scan_dir, source_root, schema_dir)
