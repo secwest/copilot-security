@@ -55,6 +55,10 @@ function asyncSshRecords(inventory: string): FrameworkRecord[] {
     );
 }
 
+function normalizeLineEndings(text: string): string {
+  return text.replaceAll("\r\n", "\n");
+}
+
 async function writeRepository(
   files: Readonly<Record<string, string>>,
   requirements: string | null = "asyncssh==2.23.0\n",
@@ -165,25 +169,29 @@ describe("Python AsyncSSH SCP download traversal model", () => {
       );
     }
     expect(
-      await readFile(
-        join(
-          benchmarkRoot,
-          "fixtures",
-          "python-asyncssh-scp-download-path-traversal",
-          "requirements.txt",
+      normalizeLineEndings(
+        await readFile(
+          join(
+            benchmarkRoot,
+            "fixtures",
+            "python-asyncssh-scp-download-path-traversal",
+            "requirements.txt",
+          ),
+          "utf8",
         ),
-        "utf8",
       ),
     ).toBe("asyncssh==2.23.0\n");
     expect(
-      await readFile(
-        join(
-          benchmarkRoot,
-          "fixtures",
-          "python-asyncssh-scp-repaired-control",
-          "requirements.txt",
+      normalizeLineEndings(
+        await readFile(
+          join(
+            benchmarkRoot,
+            "fixtures",
+            "python-asyncssh-scp-repaired-control",
+            "requirements.txt",
+          ),
+          "utf8",
         ),
-        "utf8",
       ),
     ).toBe("asyncssh==2.23.1\n");
   });

@@ -57,6 +57,37 @@ the witness never addresses a home, startup, SSH configuration, authorization,
 executable, credential, or persistent location. The isolated package trees are
 removed after the differential.
 
+**Final scanner and package acceptance.** Exact implementation checkpoint
+`45895c7b94f2f09d7a766c13d81a235c31064ee8` passes the authoritative native
+Windows suite with 1,793 tests, 13,188 assertions, 26 intentional skips, and no
+failures across 199 files in 557.97 seconds. The focused model,
+residual-inventory, and canonical gates pass 73 tests/1,098 assertions on
+Windows with two intentional skips and all 75 tests/1,100 assertions on native
+Ubuntu/WSL. Generated output, formatting, TypeScript, the clean production
+build, and the production high-severity advisory audit are green. Two compiled
+inventories of a tracked-only exact-commit archive take 32,110.134 and
+14,371.002 milliseconds and produce 256 byte-identical rows, 550,240 bytes, and
+SHA-256 `d960e3a488baf8e066500137072d2b907dced49cb82feaadcd3994dc74551e13`.
+They retain 200 structured framework rows and 56 lexical leads; 249 rows are
+fixture paths and seven are non-fixture paths. Exactly one AsyncSSH row retains
+`src/downloader.py:9`, the six required propagators, and the CWE-22 sink, while
+the 2.23.1 twin is absent. Strict inspection validates 267 entries in a
+2,103,015-byte archive with SHA-256
+`04baad81c6082c339a4728f281c0550bb56b9e63b5957991448506f4462cff7c`.
+One fresh Windows consumer adds 67 packages and validates the public SDK
+import, executable CLI, and all 79 bundled plugin files. A deliberately enabled
+release-only `gitHead` assertion rejects the local archive because local
+`pnpm pack` does not invent npm registry publication metadata; hosted
+exact-head checkout remains the provenance authority. The ordinary package
+contract passes after the isolated consumer is allowed to use the native npm
+cache. The first exact-head Node matrix passed all six non-Windows jobs but
+found one Windows fixture-test portability defect: the hosted Git checkout
+materialized `requirements.txt` with CRLF, while the strict expected strings
+used LF. Both scanner outputs and every semantic model assertion passed. The
+test now canonicalizes CRLF to LF only for the two exact-pin assertions; it
+continues to compare every source, witness, documentation, and runtime file
+byte-for-byte across the exploit/control pair.
+
 ## 2026-08-26 — Contentful MCP management-token host redirect
 
 **Gap and primary evidence.** The official

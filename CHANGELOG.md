@@ -17,9 +17,10 @@ All notable scanner, application, benchmark, and operational changes are recorde
   wrapper-parameter shadows, star expansion, test/example code, package-only
   repositories, and text lookalikes fail closed. Structured evidence records
   the binding, exact dependency, source direction, destination, server-owned
-  SCP `C`/`D` filename fields, and `_parse_cd_args -> posixpath.join ->
-  _recv_file open(wb)` write chain. Eight focused tests exercise 42 assertions
-  with one intentional Windows symlink skip.
+  SCP `C`/`D` filename fields, and the internal write chain from
+  `_parse_cd_args` through `posixpath.join` to `_recv_file`/`open(wb)`. Eight
+  focused tests exercise 42 assertions with one intentional Windows symlink
+  skip.
 - Added a source-identical AsyncSSH 2.23.0/2.23.1 benchmark pair with
   Python 3.12.3 runtime evidence, high/CWE-22 ground truth at
   `src/downloader.py:9`, field-local validation and attack-path requirements,
@@ -33,6 +34,35 @@ All notable scanner, application, benchmark, and operational changes are recorde
   credential, or persistent path is used. The reviewer contract preserves the
   repair's residual limitation—SCP can still overwrite server-selected names
   inside the destination—and recommends SFTP.
+- Accepted exact AsyncSSH implementation checkpoint
+  `45895c7b94f2f09d7a766c13d81a235c31064ee8`. The authoritative native
+  Windows suite passes 1,793 tests and 13,188 assertions across 199 files in
+  557.97 seconds, with 26 intentional platform/environment skips and no
+  failures. The focused model, residual-risk, and canonical lanes pass 73
+  tests and 1,098 assertions on Windows with two intentional skips and all 75
+  tests and 1,100 assertions on native Ubuntu/WSL. Generated-model drift,
+  formatting, TypeScript, the clean production build, and the high-severity
+  production audit are green. Two production-build inventories of a
+  tracked-only exact-commit archive complete in 32,110.134 and 14,371.002
+  milliseconds and are byte-identical at 256 rows, 550,240 bytes, and SHA-256
+  `d960e3a488baf8e066500137072d2b907dced49cb82feaadcd3994dc74551e13`;
+  200 rows carry structured framework evidence, 56 are lexical leads, and 249
+  are fixture paths. Exactly one AsyncSSH row retains the affected fixture at
+  `src/downloader.py:9`, all six binding/version/direction/destination/protocol/
+  write-chain propagators, and CWE-22; the source-identical 2.23.1 control is
+  absent. Strict inspection validates a 267-entry, 2,103,015-byte npm archive
+  with SHA-256
+  `04baad81c6082c339a4728f281c0550bb56b9e63b5957991448506f4462cff7c`;
+  a fresh isolated install adds 67 packages and validates the public import,
+  executable CLI, and all 79 bundled plugin files. A release-only `gitHead`
+  assertion correctly rejects the local pack because npm registry provenance
+  is not synthesized locally; the unchanged local contract passes after a
+  native rerun is allowed to use npm's user cache. The first exact-head hosted
+  Node matrix exposed one Windows-only fixture assertion: GitHub's checkout
+  materialized `requirements.txt` with CRLF while the test compared an LF
+  string. The scanner and all semantic assertions passed on every host. The
+  test now normalizes only line endings before checking the two exact pins,
+  preserving the byte-for-byte source-pair comparison and version boundary.
 - Added `node-contentful-mcp-management-token-host-redirect`, an exact
   operational model for
   [GHSA-2xhg-73j7-rrgx / CVE-2026-53957](https://github.com/contentful/contentful-mcp-server/security/advisories/GHSA-2xhg-73j7-rrgx).
