@@ -17,7 +17,7 @@ jobs:
   test:
     name: ${{ matrix.os }} / node-${{ matrix.node == '22.13.0' && '22' || matrix.node }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

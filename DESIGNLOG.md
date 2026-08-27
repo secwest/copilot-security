@@ -96,6 +96,18 @@ validation, attack-path, code-evidence, and severity-accuracy rates. Sealed
 results remain outside the repository at
 `C:\security-benchmarks\copilot-security-ruby-command-450ac020`.
 
+**Bound slow Windows package consumers without making them flaky.** A later
+documentation-only hosted run passed all 1,856 tests, format, build, and pack,
+then npm reported 75 packages added at the exact 180-second package-smoke
+deadline. The child was terminated before its post-install validation could
+run; the identical preceding commit and two local isolated consumers passed.
+This is a bounded timing failure, not package-content evidence. Raise only the
+Windows child deadline to 300 seconds and keep the parent process deadline
+exactly 30 seconds higher. Linux and macOS remain at 120/150 seconds. Raise the
+whole Node job from 20 to 30 minutes because Windows performs strict inspection
+and a second independent smoke install after its full suite. Regression tests
+pin all platform-specific child and parent bounds.
+
 [ruby-process]: https://docs.ruby-lang.org/en/3.4/Process.html
 [ruby-open3]: https://docs.ruby-lang.org/en/3.4/Open3.html
 [ruby-shellwords]: https://docs.ruby-lang.org/en/3.4/Shellwords.html

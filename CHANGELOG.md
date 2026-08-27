@@ -58,6 +58,13 @@ All notable scanner, application, benchmark, and operational changes are recorde
   validation, attack-path and code-evidence coverage, severity accuracy, and
   zero false positives. The sealed external results are retained under
   `C:\security-benchmarks\copilot-security-ruby-command-450ac020`.
+- Hardened Windows package verification after a later documentation-only hosted
+  run installed all 75 isolated-consumer packages at the exact 180-second child
+  deadline and was then terminated. Windows package smoke commands now retain a
+  hard but less timing-sensitive five-minute deadline, the parent remains
+  bounded 30 seconds later, and the Node job budget is 30 minutes so strict
+  inspection and the independent smoke install can both finish on a cold or
+  slow registry path. Linux and macOS retain their two-minute child deadline.
 - Added the canonical corpus's first PHP model,
   `php-pdo-mysqli-sql-injection`. A bounded PHP-aware lexer and same-scope
   dataflow pass follows `$_GET`, `$_POST`, `$_REQUEST`, `$_COOKIE`, selected
