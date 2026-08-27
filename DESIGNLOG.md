@@ -64,13 +64,16 @@ post-remediation self-scan are recorded in the following acceptance checkpoint.
 standalone ESM helper so tests can exercise the trust-boundary check without
 starting the benchmark runner. Its neighboring declaration was initially
 omitted. Windows' local strict check did not expose that omission, while the
-hosted Linux Node lane correctly rejected the untyped `.mjs` import and the
-container lane inherited the same failure. Follow the existing benchmark-helper
-convention by adding `fixture-security.d.mts`; both native Windows and Ubuntu
-WSL strict TypeScript checks now pass. This is a declaration-only portability
-fix and does not weaken or alter the runtime rejection. The authoritative
-post-remediation Windows suite remains green at 1,808 passes, 27 intentional
-skips, 13,305 assertions, and zero failures across 201 files in 590.41 seconds.
+hosted Linux Node lane correctly rejected the untyped `.mjs` import. The
+container's deliberately narrow package stage also copied only the older helper,
+so it lacked both the new implementation and its type. Follow the existing
+benchmark-helper convention by adding `fixture-security.d.mts`, and extend the
+Dockerfile's explicit copy list with both fixture-security files. Native Windows
+and Ubuntu WSL strict TypeScript checks now pass. These are build-input and type
+portability fixes and do not weaken or alter the runtime rejection. The
+authoritative post-remediation Windows suite remains green at 1,808 passes, 27
+intentional skips, 13,305 assertions, and zero failures across 201 files in
+590.41 seconds.
 
 ## 2026-08-26 — Bounded fresh-session coverage closure
 

@@ -11,7 +11,9 @@ RUN corepack enable \
     && pnpm install --frozen-lockfile
 
 COPY sdk/typescript/ ./
-COPY benchmarks/best-effort-output.mjs benchmarks/best-effort-output.d.mts /build/benchmarks/
+COPY benchmarks/best-effort-output.mjs benchmarks/best-effort-output.d.mts \
+     benchmarks/fixture-security.mjs benchmarks/fixture-security.d.mts \
+     /build/benchmarks/
 
 RUN pnpm run types \
     && pnpm run build \

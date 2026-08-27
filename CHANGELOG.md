@@ -95,13 +95,14 @@ All notable scanner, application, benchmark, and operational changes are recorde
   pre-existing 25-second child timeout on `/mnt/c`, so it is not counted as a
   scanner failure.
 - Added the missing strict-TypeScript declaration for the standalone
-  `fixture-security.mjs` benchmark helper. Native Windows and Ubuntu WSL now
-  both resolve the post-copy control-path guard under `moduleResolution:
-bundler`; this closes the Linux Node/container CI portability failure without
-  changing benchmark runtime behavior. The authoritative post-remediation
-  Windows suite passes 1,808 tests and 13,305 assertions across 201 files in
-  590.41 seconds, with 27 intentional platform/integration skips and zero
-  failures.
+  `fixture-security.mjs` benchmark helper and included both the implementation
+  and declaration in the container package stage's explicit benchmark-helper
+  copy list. Native Windows and Ubuntu WSL now both resolve the post-copy
+  control-path guard under `moduleResolution: bundler`; this closes the Linux
+  Node and container CI portability failures without changing benchmark runtime
+  behavior. The authoritative post-remediation Windows suite passes 1,808 tests
+  and 13,305 assertions across 201 files in 590.41 seconds, with 27 intentional
+  platform/integration skips and zero failures.
 - Added `python-chainlit-mcp-stdio-command-injection`, an exact Python model
   for
   [GHSA-w3fx-mc44-mf6j / CVE-2026-45018](https://github.com/advisories/GHSA-w3fx-mc44-mf6j).
