@@ -40,6 +40,10 @@ const caseIds = [
   "kotlin-ktor-resource-live-command-list-argv",
   "kotlin-ktor-resource-inline-pipeline-injection",
   "kotlin-ktor-resource-inline-pipeline-argv",
+  "kotlin-ktor-resource-builder-factory-injection",
+  "kotlin-ktor-resource-builder-factory-argv",
+  "kotlin-ktor-resource-command-helper-injection",
+  "kotlin-ktor-resource-command-helper-argv",
 ] as const;
 const handlerPath = "src/main/kotlin/example/Diagnostics.kt";
 
@@ -139,6 +143,20 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
       benchmark.cases[6]?.expected[0]?.requiredValidationTextAnyOf?.[2],
     ).toContain("inline pipeline");
     expect(benchmark.cases[7]?.expected).toEqual([]);
+    expect(benchmark.cases[8]?.expected[0]).toMatchObject({
+      cwe: ["CWE-78", "CWE-88"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(benchmark.cases[9]?.expected).toEqual([]);
+    expect(benchmark.cases[10]?.expected[0]).toMatchObject({
+      cwe: ["CWE-78", "CWE-88"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(benchmark.cases[11]?.expected).toEqual([]);
   });
 
   test("preserves exact Ktor source, interpolation, ProcessBuilder, and start", async () => {
@@ -293,6 +311,18 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
     );
     expect(workflow).toContain(
       "kotlin-ktor-resource-inline-pipeline-argv/pom.xml verify",
+    );
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-builder-factory-injection/pom.xml verify",
+    );
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-builder-factory-argv/pom.xml verify",
+    );
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-command-helper-injection/pom.xml verify",
+    );
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-command-helper-argv/pom.xml verify",
     );
   });
 
@@ -570,6 +600,135 @@ ${body}
     ];
     for (const control of controls)
       expect(records(resource(control))).toEqual([]);
+  });
+
+  test("summarizes exact same-file ProcessBuilder factories and command helpers", () => {
+    const resource = (helpers: string, body: string): string =>
+      `package example
+import io.ktor.resources.Resource
+import io.ktor.server.resources.get
+import io.ktor.server.routing.routing
+import java.lang.ProcessBuilder
+
+@Resource("/diagnostics/{target}")
+data class DiagnosticResource(val target: String)
+
+${helpers}
+
+fun routes() = routing {
+    get<DiagnosticResource> { input ->
+${body}
+    }
+}
+`;
+
+    const expressionFactory = records(
+      resource(
+        `private fun shell(command: String): ProcessBuilder =
+    ProcessBuilder("sh", "-c", command)`,
+        `        val builder = shell(input.target)
+        builder.start()`,
+      ),
+    );
+    expect(expressionFactory).toHaveLength(1);
+    expect(
+      expressionFactory[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual(
+      expect.arrayContaining([
+        "kotlin-process-builder-factory",
+        "kotlin-process-helper-call",
+      ]),
+    );
+
+    const blockFactory = records(
+      resource(
+        `private fun shell(command: String): java.lang.ProcessBuilder {
+    return java.lang.ProcessBuilder("sh", "-c", "printf fixed; $command")
+}`,
+        `        shell(input.target).start()`,
+      ),
+    );
+    expect(blockFactory).toHaveLength(1);
+
+    const commandHelper = records(
+      resource(
+        `private fun configure(builder: ProcessBuilder, command: String) {
+    builder.command("sh", "-c", command)
+}`,
+        `        val builder = ProcessBuilder("printf", "%s", "fixed")
+        configure(builder, input.target)
+        builder.start()`,
+      ),
+    );
+    expect(commandHelper).toHaveLength(1);
+    expect(
+      commandHelper[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual(
+      expect.arrayContaining([
+        "kotlin-process-command-helper",
+        "kotlin-process-helper-call",
+        "kotlin-process-command-replacement",
+      ]),
+    );
+
+    const safeFactory = records(
+      resource(
+        `private fun output(value: String): ProcessBuilder =
+    ProcessBuilder("printf", "%s", value)`,
+        `        val builder = output(input.target)
+        builder.start()`,
+      ),
+    );
+    expect(safeFactory).toEqual([]);
+
+    const safeReplacementAfterFactory = records(
+      resource(
+        `private fun shell(command: String): ProcessBuilder =
+    ProcessBuilder("sh", "-c", command)`,
+        `        val builder = shell(input.target)
+        builder.command("printf", "%s", input.target)
+        builder.start()`,
+      ),
+    );
+    expect(safeReplacementAfterFactory).toEqual([]);
+
+    const safeCommandHelper = records(
+      resource(
+        `private fun configure(builder: ProcessBuilder, value: String) {
+    builder.command("printf", "%s", value)
+}`,
+        `        val builder = ProcessBuilder("sh", "-c", input.target)
+        configure(builder, input.target)
+        builder.start()`,
+      ),
+    );
+    expect(safeCommandHelper).toEqual([]);
+
+    const ambiguousOverload = records(
+      resource(
+        `private fun shell(command: String): ProcessBuilder =
+    ProcessBuilder("sh", "-c", command)
+
+private fun shell(command: CharSequence): ProcessBuilder =
+    ProcessBuilder("sh", "-c", command.toString())`,
+        `        val builder = shell(input.target)
+        builder.start()`,
+      ),
+    );
+    expect(ambiguousOverload).toEqual([]);
+
+    const nontrivialMutator = records(
+      resource(
+        `private fun configure(builder: ProcessBuilder, command: String) {
+    val selected = command
+    builder.command("sh", "-c", selected)
+}`,
+        `        val builder = ProcessBuilder("printf", "%s", "fixed")
+        configure(builder, input.target)
+        builder.start()`,
+      ),
+    );
+    expect(nontrivialMutator).toEqual([]);
   });
 
   test("tracks live command-list mutation, retained views, and builder aliases", () => {
@@ -907,6 +1066,99 @@ fun routes() = routing {
     }
     expect(vulnerable).toContain('ProcessBuilder("sh", "-c", commandLine)');
     expect(safe).toContain('ProcessBuilder("printf", "%s", argument)');
+  });
+
+  test("keeps helper fixtures executable, paired, and precisely modeled", async () => {
+    const factoryRecords = await fixtureRecords(caseIds[8]);
+    const factoryControl = await fixtureRecords(caseIds[9]);
+    expect(factoryRecords).toHaveLength(1);
+    expect(factoryRecords[0]).toMatchObject({
+      line: 21,
+      frameworkModel: {
+        source: { kind: "ktor-typed-resource" },
+        sink: {
+          kind: "kotlin-process-shell-command",
+          symbol: "java.lang.ProcessBuilder;method=start;argument=3",
+        },
+      },
+    });
+    expect(
+      factoryRecords[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual(
+      expect.arrayContaining([
+        "kotlin-process-builder-factory",
+        "kotlin-process-helper-call",
+      ]),
+    );
+    expect(factoryControl).toEqual([]);
+
+    const helperRecords = await fixtureRecords(caseIds[10]);
+    const helperControl = await fixtureRecords(caseIds[11]);
+    expect(helperRecords).toHaveLength(1);
+    expect(helperRecords[0]).toMatchObject({
+      line: 24,
+      frameworkModel: {
+        source: { kind: "ktor-typed-resource" },
+        sink: {
+          kind: "kotlin-process-shell-command",
+          symbol: "java.lang.ProcessBuilder;method=start;argument=3",
+        },
+      },
+    });
+    expect(
+      helperRecords[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual(
+      expect.arrayContaining([
+        "kotlin-process-command-helper",
+        "kotlin-process-helper-call",
+      ]),
+    );
+    expect(helperControl).toEqual([]);
+
+    const witnesses = [
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          caseIds[8],
+          "src/test/kotlin/example/BuilderFactoryInjectionWitnessTest.kt",
+        ),
+        "utf8",
+      ),
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          caseIds[9],
+          "src/test/kotlin/example/BuilderFactoryArgvWitnessTest.kt",
+        ),
+        "utf8",
+      ),
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          caseIds[10],
+          "src/test/kotlin/example/CommandHelperInjectionWitnessTest.kt",
+        ),
+        "utf8",
+      ),
+      await readFile(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          caseIds[11],
+          "src/test/kotlin/example/CommandHelperArgvWitnessTest.kt",
+        ),
+        "utf8",
+      ),
+    ];
+    for (const witness of witnesses) {
+      expect(witness).toContain("ProcessBuilder");
+      expect(witness).toContain("process.waitFor()");
+      expect(witness).not.toContain("java.io.File");
+      expect(witness).not.toContain("java.net");
+    }
   });
 
   test("recognizes shell, interpreter, batch, and executable-selection boundaries", () => {

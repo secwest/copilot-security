@@ -2,6 +2,74 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Summarize exact same-file ProcessBuilder helpers
+
+**Why a helper boundary matters.** Kotlin applications commonly keep process
+construction or configuration in a small local function. A route can therefore
+pass typed-resource data to a `ProcessBuilder` factory or to a command mutator
+and launch the returned/configured builder without placing the constructor,
+shell, and `start()` in one function. The prior straight-line model correctly
+stopped at the unresolved call, but consequently missed this ordinary local
+indirection. Kotlin permits top-level functions and expression bodies, while
+the JDK defines `ProcessBuilder.command(...)` as replacement of the builder's
+effective command. References: [Kotlin functions][kotlin-functions] and [JDK
+ProcessBuilder][jdk-process-builder].
+
+**Bounded factory summary.** A factory summary exists only for a uniquely named
+top-level same-file function with an explicit exact imported, aliased, or fully
+qualified `ProcessBuilder` return type. Its body must be either one expression
+or one block `return`, and that expression must be one exact constructor with
+at most one exact fluent `command(...)` replacement. A call must use the exact
+positional arity; template parameters are substituted with the caller's
+expressions before normal command-state and taint analysis. A direct
+`factory(...).start()` and a retained returned builder consequently share the
+same command semantics as an in-route constructor.
+
+**Bounded mutator summary.** A command helper must be a uniquely named top-level
+same-file function with exactly one explicitly typed `ProcessBuilder` parameter,
+an explicit or implicit `Unit` result, and a block containing exactly one
+`builder.command(...)` statement. Applying it replaces the target builder's
+live command at that program point. A fixed replacement can eliminate earlier
+risk; a later direct replacement eliminates obsolete helper provenance. The
+summary adds `kotlin-process-command-helper` and the call site adds
+`kotlin-process-helper-call`; a factory similarly records
+`kotlin-process-builder-factory`.
+
+**Precision boundary.** Overloads make a name ambiguous and disable its
+summary. Named/default arguments, wrong arity, member and extension dispatch,
+callbacks, local functions, dynamic call targets, multiple returns, branches,
+loops, multiple statements, and other effects remain unresolved. These are not
+approximated because the host has no Kotlin compiler database and cannot prove
+which body, receiver, or argument mapping executes. The scanner can broaden
+this boundary later only with exact dispatch/type evidence and paired negative
+controls.
+
+**Executable and regression evidence.** Two typed-resource exploit/control
+pairs preserve the route, request source, helper topology, execution, output,
+and response. Their only security distinction is attacker-derived `sh -c`
+command language versus fixed `printf` with the same shell-looking value in
+ordinary argv. All four Ktor 3.5.2/Kotlin 2.2.20 applications compile on Java
+21 under Ubuntu; each harmless fixed-string witness launches one short-lived
+process and passes without network, file, credential, or persistence effects.
+Focused Kotlin/canonical regression passes 41 tests and 2,464 assertions,
+including safe helper replacement, safe later direct replacement, ambiguous
+overload refusal, and complex-mutator refusal. The Kotlin manifest now has 12
+cases; the canonical corpus has 148 pairs, 296 cases, and 888 scan positions.
+
+**Native and cross-platform acceptance.** After rebuilding the runtime, the
+authoritative Windows suite passes 1,894 tests and 14,109 assertions across 208
+files in 498.84 seconds, with 27 intentional platform/integration skips and no
+failures. Ubuntu passes 154 tests and 3,731 assertions across the focused
+Kotlin/corpus/residual/transport/package lane, with one Windows-launcher skip.
+Generated-model drift, formatting, TypeScript, the production build, and the
+production advisory audit are clean; the audit reports no known
+vulnerabilities. All eleven hosted workflow families also completed the prior
+acceptance revision `754f12f549dfa36b221b5e1df4451fe964493011`
+successfully: Node `33121285236`, container `33121285223`, Kotlin
+`33121285286`, Java `33121285279`, .NET `33121285315`, Go `33121285230`,
+Rust `33121285226`, Ruby `33121285313`, PHP `33121285283`, Windows GUI
+`33121285222`, and Linux GUI `33121285243`.
+
 ## 2026-08-27 — Model exact ProcessBuilder pipeline lists
 
 **Why named-builder search was insufficient.** The JDK specifies that
@@ -372,6 +440,7 @@ this model into process-keyword co-occurrence.
 [ktor-resources]: https://ktor.io/docs/server-resources.html
 [ktor-resource-get]: https://api.ktor.io/ktor-server-resources/io.ktor.server.resources/get.html
 [typed-resource-kotlin-run]: https://github.com/secwest/copilot-security/actions/runs/33104335972
+[kotlin-functions]: https://kotlinlang.org/docs/functions.html
 [kotlin-java-interop]: https://kotlinlang.org/docs/java-interop.html
 [jdk-process-builder]: https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/ProcessBuilder.html
 [codeql-jvm-command]: https://codeql.github.com/codeql-query-help/java/java-command-line-injection/

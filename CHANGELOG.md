@@ -6,6 +6,47 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended `kotlin-ktor-command-injection` across two bounded same-file helper
+  boundaries. A uniquely named top-level factory with an explicit exact
+  `ProcessBuilder` return type may now contribute a direct constructor and
+  optional fluent `command(...)` to a later `start()`. A uniquely named
+  top-level mutator with exactly one typed `ProcessBuilder` parameter and one
+  `builder.command(...)` statement may replace the live command before launch.
+  Caller arguments are substituted positionally into the helper command, so
+  request taint, literal argv, shell/interpreter placement, and safe later
+  replacement retain their existing meaning. New
+  `kotlin-process-builder-factory`, `kotlin-process-command-helper`, and
+  `kotlin-process-helper-call` propagators make the interprocedural edge
+  explicit in deterministic findings and reviewer evidence.
+- Kept helper inference deliberately fail-closed. Overloaded names,
+  named/default-argument calls, wrong arity, member or extension dispatch,
+  callbacks, dynamic resolution, multiple returns, side effects, and
+  nontrivial bodies do not produce summaries. A safe helper replacement can
+  remove an earlier dangerous command, while a later direct safe `command(...)`
+  replacement clears obsolete helper provenance. This adds useful
+  interprocedural reach without turning an unresolved Kotlin call into a sink.
+- Added topology-matched typed-resource factory and command-mutator
+  exploit/control pairs. The four Ktor 3.5.2/Kotlin 2.2.20 applications compile
+  on Java 21 under Ubuntu and their fixed-string witnesses each pass with one
+  short-lived process, no network, file, credential, or persistence effect.
+  The specialized Kotlin manifest now has 12 cases and the canonical corpus has
+  148 pairs, 296 cases, and 888 repeated scan positions. Focused Kotlin plus
+  canonical regression passes 41 tests and 2,464 assertions with no failure.
+- Completed rebuilt native and cross-platform acceptance for the helper-summary
+  increment. The authoritative Windows suite passes 1,894 tests and 14,109
+  assertions across 208 files in 498.84 seconds, with 27 intentional
+  platform/integration skips and no failures. Ubuntu/WSL passes 154 tests and
+  3,731 assertions across the focused Kotlin, canonical corpus,
+  residual-inventory, Copilot transport, and package-provenance lanes, with one
+  Windows-launcher skip and no failure. Formatting, generated-model drift,
+  TypeScript checking, the production build, and the production advisory audit
+  are clean; the audit reports no known vulnerabilities.
+- Closed hosted verification of prior acceptance revision
+  `754f12f549dfa36b221b5e1df4451fe964493011`: Node `33121285236`,
+  container `33121285223`, Kotlin `33121285286`, Java `33121285279`, .NET
+  `33121285315`, Go `33121285230`, Rust `33121285226`, Ruby `33121285313`,
+  PHP `33121285283`, Windows GUI `33121285222`, and Linux GUI `33121285243`
+  all completed successfully.
 - Extended `kotlin-ktor-command-injection` through exact
   `ProcessBuilder.startPipeline(List<ProcessBuilder>)` assembly. Inline builders
   inside `listOf`, `mutableListOf`, and `arrayListOf`, retained builder-list

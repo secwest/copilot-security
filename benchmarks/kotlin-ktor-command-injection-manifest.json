@@ -187,6 +187,86 @@
       "id": "kotlin-ktor-resource-inline-pipeline-argv",
       "fixture": "fixtures/kotlin-ktor-resource-inline-pipeline-argv",
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-builder-factory-injection",
+      "fixture": "fixtures/kotlin-ktor-resource-builder-factory-injection",
+      "expected": [
+        {
+          "title": "Ktor typed resource reaches a ProcessBuilder factory shell command",
+          "cwe": ["CWE-78", "CWE-88"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/main/kotlin/example/Diagnostics.kt",
+          "line": 21,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["typed resource", "@Resource", "DiagnosticResource"],
+            ["commandLine", "interpolation", "formatted"],
+            ["diagnosticProcess", "builder factory", "factory helper"],
+            ["ProcessBuilder", "sh -c", "shell"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["diagnosticProcess", "factory", "helper call"],
+            ["sh -c", "shell grammar", "command string"],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-builder-factory-argv",
+      "fixture": "fixtures/kotlin-ktor-resource-builder-factory-argv",
+      "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-command-helper-injection",
+      "fixture": "fixtures/kotlin-ktor-resource-command-helper-injection",
+      "expected": [
+        {
+          "title": "Ktor typed resource reaches a ProcessBuilder command helper",
+          "cwe": ["CWE-78", "CWE-88"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/main/kotlin/example/Diagnostics.kt",
+          "line": 24,
+          "lineTolerance": 3,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["typed resource", "@Resource", "DiagnosticResource"],
+            ["commandLine", "interpolation", "formatted"],
+            ["configureProcess", "command helper", "mutator helper"],
+            ["builder.command", "command replacement", "sh -c"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["configureProcess", "helper call", "command helper"],
+            ["builder.command", "sh -c", "shell grammar"],
+            ["builder.start", "stdout", "respondText"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-command-helper-argv",
+      "fixture": "fixtures/kotlin-ktor-resource-command-helper-argv",
+      "expected": []
     }
   ]
 }

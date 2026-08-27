@@ -4156,6 +4156,10 @@ const KOTLIN_KTOR_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
     "inline pipeline",
     "pipeline list",
     "pipeline list mutation",
+    "builder factory",
+    "factory helper",
+    "command helper",
+    "mutator helper",
   ],
   ["sh -c", "shell", "-c"],
 ] as const;
@@ -4172,6 +4176,10 @@ const KOTLIN_KTOR_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
     "liveCommand",
     "listOf",
     "pipeline assembly",
+    "builder factory",
+    "factory helper",
+    "command helper",
+    "helper call",
   ],
   ["stdout", "response", "respondText"],
 ] as const;

@@ -36,6 +36,9 @@ interface KotlinPropagator {
   kind:
     | "kotlin-command-list-mutation"
     | "kotlin-local-assignment"
+    | "kotlin-process-builder-factory"
+    | "kotlin-process-command-helper"
+    | "kotlin-process-helper-call"
     | "kotlin-process-pipeline-assembly"
     | "kotlin-process-pipeline-list-mutation"
     | "kotlin-process-command-replacement"
@@ -55,12 +58,47 @@ interface ProcessArgument {
   tokens: KotlinToken[];
   line: number;
   mutationLine?: number;
+  resolvedTaint?: KotlinTaint;
 }
 
 interface ProcessBuilderState {
   arguments: ProcessArgument[];
   commandSetLine?: number;
+  commandHelperPropagators?: KotlinPropagator[];
   constructorLine: number;
+  factoryPropagators?: KotlinPropagator[];
+}
+
+interface KotlinFunctionParameter {
+  name: string;
+  type: KotlinToken[];
+}
+
+interface KotlinTopLevelFunction {
+  body: KotlinToken[];
+  bodyKind: "block" | "expression";
+  line: number;
+  name: string;
+  parameters: KotlinFunctionParameter[];
+  returnType?: KotlinToken[];
+}
+
+interface ProcessBuilderFactorySummary {
+  name: string;
+  parameters: string[];
+  state: ProcessBuilderState;
+}
+
+interface ProcessCommandHelperSummary {
+  builderParameterIndex: number;
+  name: string;
+  parameters: string[];
+  replacement: CommandReplacement;
+}
+
+interface KotlinProcessHelperSummaries {
+  commandHelpers: ReadonlyMap<string, ProcessCommandHelperSummary>;
+  factories: ReadonlyMap<string, ProcessBuilderFactorySummary>;
 }
 
 interface ProcessPipelineInvocation {
@@ -451,6 +489,122 @@ function statementTokens(tokens: readonly KotlinToken[]): KotlinToken[][] {
   }
   if (current.length > 0) statements.push(current);
   return statements;
+}
+
+function topLevelFunctions(
+  tokens: readonly KotlinToken[],
+): KotlinTopLevelFunction[] {
+  const functions: KotlinTopLevelFunction[] = [];
+  let braceDepth = 0;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token?.value === "{") braceDepth += 1;
+    if (token?.value === "}") braceDepth -= 1;
+    if (braceDepth !== 0 || token?.value !== "fun") continue;
+
+    let cursor = index + 1;
+    while (tokens[cursor]?.kind === "newline") cursor += 1;
+    const name = tokens[cursor];
+    if (name?.kind !== "identifier" || tokens[cursor + 1]?.value !== "(")
+      continue;
+    const parameterClose = matchingDelimiter(tokens, cursor + 1);
+    if (parameterClose === undefined) continue;
+    const parameters: KotlinFunctionParameter[] = [];
+    let validParameters = true;
+    for (const parameterTokens of splitArguments(
+      tokens.slice(cursor + 2, parameterClose),
+    )) {
+      const meaningful = meaningfulTokens(parameterTokens);
+      const colon = meaningful.findIndex(({ value }) => value === ":");
+      if (
+        colon !== 1 ||
+        meaningful[0]?.kind !== "identifier" ||
+        meaningful.slice(colon + 1).length === 0 ||
+        meaningful.some(({ value }) => value === "=")
+      ) {
+        validParameters = false;
+        break;
+      }
+      parameters.push({
+        name: meaningful[0].value,
+        type: meaningful.slice(colon + 1),
+      });
+    }
+    if (!validParameters) continue;
+
+    cursor = parameterClose + 1;
+    while (tokens[cursor]?.kind === "newline") cursor += 1;
+    let returnType: KotlinToken[] | undefined;
+    if (tokens[cursor]?.value === ":") {
+      const start = cursor + 1;
+      cursor = start;
+      while (
+        cursor < tokens.length &&
+        !new Set(["=", "{"]).has(tokens[cursor]?.value ?? "")
+      ) {
+        cursor += 1;
+      }
+      returnType = meaningfulTokens(tokens.slice(start, cursor));
+      if (returnType.length === 0) continue;
+    }
+    while (tokens[cursor]?.kind === "newline") cursor += 1;
+    if (tokens[cursor]?.value === "{") {
+      const bodyClose = matchingDelimiter(tokens, cursor);
+      if (bodyClose === undefined) continue;
+      functions.push({
+        body: [...tokens.slice(cursor + 1, bodyClose)],
+        bodyKind: "block",
+        line: token.line,
+        name: name.value,
+        parameters,
+        ...(returnType === undefined ? {} : { returnType }),
+      });
+      index = bodyClose;
+      continue;
+    }
+    if (tokens[cursor]?.value !== "=") continue;
+    const body: KotlinToken[] = [];
+    let expressionDepth = 0;
+    for (cursor += 1; cursor < tokens.length; cursor += 1) {
+      const current = tokens[cursor];
+      if (current === undefined) break;
+      if (["(", "["].includes(current.value)) expressionDepth += 1;
+      if ([")", "]"].includes(current.value)) expressionDepth -= 1;
+      const next = tokens
+        .slice(cursor + 1)
+        .find(({ kind }) => kind !== "newline");
+      const continuedChain =
+        current.kind === "newline" &&
+        (new Set([".", "?."]).has(next?.value ?? "") ||
+          new Set([".", "?."]).has(body.at(-1)?.value ?? ""));
+      if (
+        expressionDepth === 0 &&
+        (current.value === ";" ||
+          (current.kind === "newline" &&
+            body.some(({ kind }) => kind !== "newline") &&
+            !continuedChain))
+      ) {
+        break;
+      }
+      if (current.value === "{") {
+        body.length = 0;
+        break;
+      }
+      body.push(current);
+    }
+    const expression = meaningfulTokens(body);
+    if (expression.length === 0) continue;
+    functions.push({
+      body: expression,
+      bodyKind: "expression",
+      line: token.line,
+      name: name.value,
+      parameters,
+      ...(returnType === undefined ? {} : { returnType }),
+    });
+    index = Math.max(index, cursor - 1);
+  }
+  return functions;
 }
 
 function routeScopes(
@@ -1298,6 +1452,297 @@ function pipelineInvocation(
   return undefined;
 }
 
+function processBuilderType(
+  tokens: readonly KotlinToken[],
+  aliases: ReadonlySet<string>,
+): boolean {
+  const type = compact(tokens);
+  return aliases.has(type) || type === "java.lang.ProcessBuilder";
+}
+
+function helperExpression(
+  declaration: KotlinTopLevelFunction,
+): KotlinToken[] | undefined {
+  if (declaration.bodyKind === "expression") return declaration.body;
+  const statements = statementTokens(declaration.body).map(meaningfulTokens);
+  if (statements.length !== 1 || statements[0]?.[0]?.value !== "return")
+    return undefined;
+  const expression = statements[0].slice(1);
+  return expression.length === 0 ? undefined : expression;
+}
+
+function processHelperSummaries(
+  tokens: readonly KotlinToken[],
+  aliases: ReadonlySet<string>,
+): KotlinProcessHelperSummaries {
+  const declarations = topLevelFunctions(tokens);
+  const counts = new Map<string, number>();
+  for (const declaration of declarations) {
+    counts.set(declaration.name, (counts.get(declaration.name) ?? 0) + 1);
+  }
+  const factories = new Map<string, ProcessBuilderFactorySummary>();
+  const commandHelpers = new Map<string, ProcessCommandHelperSummary>();
+  const emptyBuilders = new Map<string, ProcessBuilderState>();
+  const emptyCommandLists = new Map<string, ProcessArgument[]>();
+  for (const declaration of declarations) {
+    if (counts.get(declaration.name) !== 1) continue;
+    const parameters = declaration.parameters.map(({ name }) => name);
+    if (
+      declaration.returnType !== undefined &&
+      processBuilderType(declaration.returnType, aliases)
+    ) {
+      const expression = helperExpression(declaration);
+      const state =
+        expression === undefined
+          ? undefined
+          : exactBuilderExpression(
+              expression,
+              aliases,
+              emptyBuilders,
+              emptyCommandLists,
+            );
+      if (state !== undefined) {
+        factories.set(declaration.name, {
+          name: declaration.name,
+          parameters,
+          state,
+        });
+      }
+    }
+
+    if (declaration.bodyKind !== "block") continue;
+    const builderParameters = declaration.parameters
+      .map((parameter, index) => ({ index, parameter }))
+      .filter(({ parameter }) => processBuilderType(parameter.type, aliases));
+    if (builderParameters.length !== 1) continue;
+    if (
+      declaration.returnType !== undefined &&
+      !new Set(["Unit", "kotlin.Unit"]).has(compact(declaration.returnType))
+    ) {
+      continue;
+    }
+    const statements = statementTokens(declaration.body).map(meaningfulTokens);
+    if (statements.length !== 1) continue;
+    const builderParameter = builderParameters[0];
+    const statement = statements[0] ?? [];
+    if (
+      builderParameter === undefined ||
+      statement[0]?.value !== builderParameter.parameter.name ||
+      statement[1]?.value !== "." ||
+      statement[2]?.value !== "command" ||
+      statement[3]?.value !== "(" ||
+      matchingDelimiter(statement, 3) !== statement.length - 1
+    ) {
+      continue;
+    }
+    const replacement = commandReplacement(
+      statement,
+      builderParameter.parameter.name,
+      emptyCommandLists,
+    );
+    if (replacement === undefined) continue;
+    commandHelpers.set(declaration.name, {
+      builderParameterIndex: builderParameter.index,
+      name: declaration.name,
+      parameters,
+      replacement,
+    });
+  }
+  return { commandHelpers, factories };
+}
+
+interface KotlinHelperCall {
+  arguments: KotlinToken[][];
+  line: number;
+  tail: KotlinToken[];
+}
+
+function helperCall(
+  tokens: readonly KotlinToken[],
+  name: string,
+  parameterCount: number,
+): KotlinHelperCall | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  if (meaningful[0]?.value !== name || meaningful[1]?.value !== "(")
+    return undefined;
+  const close = matchingDelimiter(meaningful, 1);
+  if (close === undefined) return undefined;
+  const arguments_ = splitArguments(meaningful.slice(2, close));
+  if (
+    arguments_.length !== parameterCount ||
+    arguments_.some((argument) =>
+      meaningfulTokens(argument).some(({ value }) => value === "="),
+    )
+  ) {
+    return undefined;
+  }
+  return {
+    arguments: arguments_.map(meaningfulTokens),
+    line: meaningful[0]?.line ?? 1,
+    tail: meaningful.slice(close + 1),
+  };
+}
+
+function substitutedTokens(
+  tokens: readonly KotlinToken[],
+  parameters: readonly string[],
+  arguments_: readonly KotlinToken[][],
+): KotlinToken[] {
+  const argumentByParameter = new Map<string, KotlinToken[]>();
+  for (let index = 0; index < parameters.length; index += 1) {
+    const parameter = parameters[index];
+    const argument = arguments_[index];
+    if (parameter !== undefined && argument !== undefined)
+      argumentByParameter.set(parameter, argument);
+  }
+  const result: KotlinToken[] = [];
+  for (const token of tokens) {
+    const direct =
+      token.kind === "identifier"
+        ? argumentByParameter.get(token.value)
+        : undefined;
+    if (direct !== undefined) {
+      result.push(...direct.map((candidate) => ({ ...candidate })));
+      continue;
+    }
+    if (token.kind !== "string" || token.references.length === 0) {
+      result.push({ ...token });
+      continue;
+    }
+    const references = token.references.flatMap((reference) => {
+      const argument = argumentByParameter.get(reference);
+      if (argument === undefined) return [reference];
+      const names = argument.flatMap((candidate) =>
+        candidate.kind === "string"
+          ? candidate.references
+          : candidate.kind === "identifier"
+            ? [candidate.value]
+            : [],
+      );
+      return names.length === 0 ? ["__helper_literal__"] : names;
+    });
+    result.push({ ...token, references: [...new Set(references)] });
+  }
+  return result;
+}
+
+function instantiatedProcessArguments(
+  templates: readonly ProcessArgument[],
+  parameters: readonly string[],
+  arguments_: readonly KotlinToken[][],
+  taints: ReadonlyMap<string, KotlinTaint>,
+): ProcessArgument[] {
+  const parameterTaints = new Map<string, KotlinTaint>();
+  for (let index = 0; index < parameters.length; index += 1) {
+    const parameter = parameters[index];
+    const argument = arguments_[index];
+    if (parameter === undefined || argument === undefined) continue;
+    const taint = expressionTaint(argument, taints);
+    if (taint !== undefined) parameterTaints.set(parameter, taint);
+  }
+  return templates.map((template) => {
+    const tokens_ = substitutedTokens(template.tokens, parameters, arguments_);
+    const resolvedTaint = expressionTaint(template.tokens, parameterTaints);
+    return {
+      ...template,
+      tokens: tokens_,
+      ...(resolvedTaint === undefined ? {} : { resolvedTaint }),
+    };
+  });
+}
+
+function factoryExpression(
+  tokens: readonly KotlinToken[],
+  summaries: KotlinProcessHelperSummaries,
+  taints: ReadonlyMap<string, KotlinTaint>,
+): ProcessBuilderState | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  const summary = summaries.factories.get(meaningful[0]?.value ?? "");
+  if (summary === undefined) return undefined;
+  const call = helperCall(meaningful, summary.name, summary.parameters.length);
+  if (
+    call === undefined ||
+    (call.tail.length > 0 && compact(call.tail) !== ".start()")
+  ) {
+    return undefined;
+  }
+  return {
+    ...summary.state,
+    arguments: instantiatedProcessArguments(
+      summary.state.arguments,
+      summary.parameters,
+      call.arguments,
+      taints,
+    ),
+    factoryPropagators: [
+      {
+        kind: "kotlin-process-builder-factory",
+        line: summary.state.constructorLine,
+        symbol: summary.name,
+      },
+      {
+        kind: "kotlin-process-helper-call",
+        line: call.line,
+        symbol: summary.name,
+      },
+    ],
+  };
+}
+
+function commandHelperInvocation(
+  tokens: readonly KotlinToken[],
+  summaries: KotlinProcessHelperSummaries,
+  builders: ReadonlyMap<string, ProcessBuilderState>,
+  taints: ReadonlyMap<string, KotlinTaint>,
+):
+  | {
+      propagators: KotlinPropagator[];
+      replacement: CommandReplacement;
+      state: ProcessBuilderState;
+    }
+  | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  const summary = summaries.commandHelpers.get(meaningful[0]?.value ?? "");
+  if (summary === undefined) return undefined;
+  const call = helperCall(meaningful, summary.name, summary.parameters.length);
+  if (call === undefined || call.tail.length > 0) return undefined;
+  const builderArgument = meaningfulTokens(
+    call.arguments[summary.builderParameterIndex] ?? [],
+  );
+  if (
+    builderArgument.length !== 1 ||
+    builderArgument[0]?.kind !== "identifier"
+  ) {
+    return undefined;
+  }
+  const state = builders.get(builderArgument[0].value);
+  if (state === undefined) return undefined;
+  return {
+    propagators: [
+      {
+        kind: "kotlin-process-command-helper",
+        line: summary.replacement.line,
+        symbol: summary.name,
+      },
+      {
+        kind: "kotlin-process-helper-call",
+        line: call.line,
+        symbol: summary.name,
+      },
+    ],
+    replacement: {
+      arguments: instantiatedProcessArguments(
+        summary.replacement.arguments,
+        summary.parameters,
+        call.arguments,
+        taints,
+      ),
+      line: summary.replacement.line,
+    },
+    state,
+  };
+}
+
 function literalArgument(
   tokens: readonly KotlinToken[],
   literals: ReadonlyMap<string, string>,
@@ -1327,9 +1772,15 @@ function processRisk(
   const argumentTaint = (
     argument: ProcessArgument | undefined,
   ): KotlinTaint | undefined => {
-    const taint = expressionTaint(argument?.tokens ?? [], taints);
+    const taint =
+      argument?.resolvedTaint ??
+      expressionTaint(argument?.tokens ?? [], taints);
     if (taint === undefined) return undefined;
-    const propagators = [...taint.propagators];
+    const propagators = [
+      ...taint.propagators,
+      ...(state.factoryPropagators ?? []),
+      ...(state.commandHelperPropagators ?? []),
+    ];
     if (state.commandSetLine !== undefined) {
       propagators.push({
         kind: "kotlin-process-command-replacement",
@@ -1531,6 +1982,7 @@ export function kotlinKtorCommandInjectionRecords(
   }
   const tokens = kotlinTokens(text);
   if (tokens === undefined) return [];
+  const helperSummaries = processHelperSummaries(tokens, aliases);
   const records: KotlinKtorCommandInjectionRecord[] = [];
   const resourceTypes = typedResourceClassNames(text);
   for (const scope of routeScopes(
@@ -1574,7 +2026,7 @@ export function kotlinKtorCommandInjectionRecords(
         builderLists,
         commandLists,
       );
-      const constructor =
+      const directConstructor =
         assignedBuilderList !== undefined || pipeline !== undefined
           ? undefined
           : processConstructor(
@@ -1582,6 +2034,15 @@ export function kotlinKtorCommandInjectionRecords(
               aliases,
               commandLists,
             );
+      const constructor =
+        directConstructor ??
+        (assignedBuilderList !== undefined || pipeline !== undefined
+          ? undefined
+          : factoryExpression(
+              assigned?.expression ?? statement,
+              helperSummaries,
+              taints,
+            ));
       const directStart =
         constructor === undefined ? undefined : startLine(statement);
       if (constructor !== undefined && directStart !== undefined) {
@@ -1647,11 +2108,26 @@ export function kotlinKtorCommandInjectionRecords(
           else literals.set(assigned.name, literal);
         }
       }
+      const helperInvocation = commandHelperInvocation(
+        statement,
+        helperSummaries,
+        builders,
+        taints,
+      );
+      if (helperInvocation !== undefined) {
+        helperInvocation.state.arguments =
+          helperInvocation.replacement.arguments;
+        helperInvocation.state.commandSetLine =
+          helperInvocation.replacement.line;
+        helperInvocation.state.commandHelperPropagators =
+          helperInvocation.propagators;
+      }
       for (const [name, state] of builders) {
         const replacement = commandReplacement(statement, name, commandLists);
         if (replacement !== undefined) {
           state.arguments = replacement.arguments;
           state.commandSetLine = replacement.line;
+          state.commandHelperPropagators = undefined;
           builders.set(name, state);
         }
         const mutation = builderCommandListMutation(statement, name);

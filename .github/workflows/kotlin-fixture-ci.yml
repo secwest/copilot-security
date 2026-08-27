@@ -40,6 +40,10 @@ jobs:
             benchmarks/fixtures/kotlin-ktor-resource-live-command-list-argv/pom.xml
             benchmarks/fixtures/kotlin-ktor-resource-inline-pipeline-injection/pom.xml
             benchmarks/fixtures/kotlin-ktor-resource-inline-pipeline-argv/pom.xml
+            benchmarks/fixtures/kotlin-ktor-resource-builder-factory-injection/pom.xml
+            benchmarks/fixtures/kotlin-ktor-resource-builder-factory-argv/pom.xml
+            benchmarks/fixtures/kotlin-ktor-resource-command-helper-injection/pom.xml
+            benchmarks/fixtures/kotlin-ktor-resource-command-helper-argv/pom.xml
 
       - name: Compile Ktor applications and run native Kotlin witnesses
         shell: bash
@@ -53,3 +57,7 @@ jobs:
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-live-command-list-argv/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-inline-pipeline-injection/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-inline-pipeline-argv/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-builder-factory-injection/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-builder-factory-argv/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-command-helper-injection/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-command-helper-argv/pom.xml verify
