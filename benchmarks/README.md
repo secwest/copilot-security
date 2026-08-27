@@ -91,7 +91,29 @@ report. Additional regressions prove commit-horizon behavior, immutable path
 scope, explicit disabled/non-Git/unavailable states, and strict `0..2048`
 depth validation.
 
-The versioned corpus currently contains 126 vulnerable/control pairs:
+## Unicode source-display-control benchmark
+
+`source-bidi-authorization-manifest.json` isolates source-review spoofing from
+ordinary right-to-left language content. The positive fixture contains exact
+RLO and isolate controls in a JavaScript comment and logically grants deletion
+to a non-admin who does not own the document. Its runtime witness proves that
+authorization result. The negative control contains Arabic and Hebrew prose,
+uses no explicit direction controls, and enforces the intended admin-or-owner
+policy.
+
+The focused manifest requires perfect three-run precision, recall, stability,
+location and severity accuracy, substantive validation and attack path, and
+grounded code evidence. Deterministic regression separately checks exact
+code-point metadata, base64 prompt isolation, pairing semantics, bounded
+control-flood behavior, and ordinary-prose silence. Run it with:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/source-bidi-authorization-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-source-bidi
+```
+
+The versioned corpus currently contains 138 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

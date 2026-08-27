@@ -1,0 +1,8 @@
+{
+  "name": "javascript-bidi-natural-language-control",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node witness.mjs"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "javascript-trojan-source-authorization-bypass",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node witness.mjs"
+  }
+}

@@ -2,6 +2,73 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Add bounded Trojan Source discovery and a paired benchmark
+
+**Why this belongs in the host pass.** Unicode Technical Standard #55 explains
+that source code has a logical structure which ordinary bidirectional text
+rendering does not preserve, recommends lexical-structure-aware display, and
+also calls for diagnostics because diffs, terminals, mail, and compiler output
+often remain plain text. GCC exposes the same operational split through
+`-Wbidi-chars=unpaired` and `-Wbidi-chars=any`: an unclosed directional context
+is a strong default warning, while any explicit control can still deserve
+review. The scanner therefore performs deterministic discovery before model
+correction rather than hoping that a model or terminal visually notices an
+invisible character. References: [Unicode Source Code Handling][uts55],
+[Unicode Bidirectional Algorithm][uax9], and [GCC warning options][gcc-bidi].
+
+**Precision and evidence boundary.** Detect exact embeddings, overrides,
+isolates, and their pop controls at U+202A-202E and U+2066-2069. Detect ALM,
+LRM, and RLM only when immediately adjacent to ASCII syntax, covering the
+operator-reordering class without turning ordinary right-to-left prose into a
+finding. Preserve the code point name, abbreviation, logical line and column,
+pair status, partner location, a heuristic lexical-context hint, and whether
+ASCII syntax is adjacent. Rank unpaired controls, overrides, and line-spanning
+pairs first, but emit candidates rather than findings. The model must compare
+logical compiler/interpreter token order with review order and prove the
+concrete authorization, validation, branch, identifier, or data-flow effect.
+CVE-2021-42574 describes the technique; the reported finding should use the
+primary CWE for the resulting defect. Balanced controls are not automatically
+safe, and unpaired controls are not automatically exploitable. Base64-encode
+the source excerpt before prompt framing so the evidence cannot reorder its own
+instructions.
+
+**Adversarial resource boundary.** The repository reader already caps files
+and aggregate bytes, but allocating one record and copying one full line for
+every control would let a small hostile source file amplify memory and CPU.
+Scan code points linearly, retain fixed head and tail samples plus a separate
+high-risk sample for overrides and syntax-adjacent marks, and expose the exact
+file count. When anything is omitted, mark every retained explicit-control
+pair status `unknown-truncated`; do not manufacture exact pairing from a
+sample. Bound excerpt lines around the retained location. A fixed-size ring
+keeps tail sampling constant-space and constant-time. The correction prompt is
+required to inspect the named file through a code-point-safe representation
+when truncation is present.
+
+**Effectiveness measurement.** Add a real positive/negative pair rather than a
+detector-only string test. The positive JavaScript fixture logically grants
+every non-admin access while an RLO/isolate comment sequence obscures the
+unconditional return. Its executable witness proves an outsider can delete a
+victim-owned document. The negative control uses ordinary Arabic and Hebrew
+prose without explicit controls and returns the exact admin-or-owner decision;
+its witness denies the same outsider. The focused manifest requires perfect
+precision, recall, location, severity, evidence quality, and three-run
+stability, while the full corpus now enforces 138 paired boundaries. Focused
+Windows tests pass 28 cases and 2,136 assertions, including exact safe JSONL,
+nested pairing, ordinary-prose silence, runtime outcomes, and a bounded
+6,001-control flood; native Ubuntu passes the same 28 cases. The authoritative
+native Windows suite passes 1,821 tests and 13,374 assertions across 203 files
+in 560.17 seconds, with 27 intentional platform/integration skips and no
+failure. The high-severity production dependency audit reports no known
+vulnerability. The package contract now includes the new compiled module; a
+fresh 271-entry archive passes strict content validation, clean installation,
+public import, CLI execution, and every 79-file bundled-plugin check. Its
+2,124,756 bytes hash to
+`52dfc0676c98fd712c39abd0453af9d97a0a66ac96de51b7c5e59e83902ecafd`.
+
+[uts55]: https://www.unicode.org/reports/tr55/
+[uax9]: https://www.unicode.org/reports/tr9/
+[gcc-bidi]: https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wbidi-chars
+
 ## 2026-08-27 — Recover a long self-scan and publish only canonical operator output
 
 **Remediation acceptance.** Scan a 3,331-file tracked-only archive of exact

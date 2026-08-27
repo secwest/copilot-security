@@ -456,6 +456,10 @@ describe("effectiveness benchmark", () => {
         "python-chainlit-mcp-stdio-repaired-control",
       ],
       [
+        "javascript-trojan-source-authorization-bypass",
+        "javascript-bidi-natural-language-control",
+      ],
+      [
         "node-nx-self-hosted-cache-archive-escape",
         "node-nx-self-hosted-cache-archive-contained",
       ],

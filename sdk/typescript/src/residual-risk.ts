@@ -30,6 +30,7 @@ import { goPgxSqlInjectionRecords } from "./go-pgx-risk.js";
 import { goSqlInjectionRecords } from "./go-sql-risk.js";
 import { goSqlxSqlInjectionRecords } from "./go-sqlx-risk.js";
 import { goSquirrelSqlInjectionRecords } from "./go-squirrel-risk.js";
+import { sourceDisplayControlRiskRecords } from "./source-display-control-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -3279,6 +3280,28 @@ interface ResidualRiskRecord {
   endLine: number;
   excerpt: string;
   sourceExcerpt?: string;
+  sourceDisplayControl?: {
+    schemaVersion: "1.0";
+    codePoint: string;
+    name: string;
+    abbreviation: string;
+    family: "embedding" | "isolate" | "mark" | "override";
+    column: number;
+    pairStatus:
+      | "mark-adjacent-syntax"
+      | "unknown-truncated"
+      | "paired-cross-line"
+      | "paired-same-line"
+      | "unpaired-closer"
+      | "unpaired-opener";
+    pairedLine?: number;
+    pairedColumn?: number;
+    lexicalContextHint: "code-like" | "comment-like" | "string-like";
+    adjacentAsciiSyntax: boolean;
+    fileControlCount: number;
+    retainedControlCount: number;
+    inventoryTruncated: boolean;
+  };
   frameworkModel?: {
     schemaVersion: "1.2";
     id: string;
@@ -4377,6 +4400,7 @@ export async function buildResidualRiskInventory(
 
   for (const file of sourceFiles) {
     records.push(
+      ...sourceDisplayControlRiskRecords(file.path, file.lines),
       ...frameworkDataflowRecords(file.path, file.lines, sourceFiles),
       ...cloudFormationRiskRecords(file.path, file.lines, file.text),
       ...kubernetesRiskRecords(file.path, file.lines, file.text),

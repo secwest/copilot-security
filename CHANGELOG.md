@@ -6,6 +6,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added a bounded deterministic source-display-control pass based on Unicode's
+  source-code handling guidance and GCC's bidirectional-character diagnostics.
+  It emits exact code-point, line, column, pairing, context-hint, and
+  syntax-adjacency metadata for U+202A-202E and U+2066-2069, plus U+061C and
+  U+200E/F when a directional mark touches ASCII syntax. Unpaired controls,
+  overrides, and cross-line pairs rank above balanced same-line embeddings;
+  ordinary Arabic or Hebrew text without explicit controls remains quiet.
+  Excerpts stay base64-framed so an invisible control cannot reorder the model
+  prompt itself.
+- Hardened the new pass against hostile control floods. A file retains bounded
+  head, tail, and override/syntax-adjacent samples, carries the exact total and
+  retained counts, marks pairing unknown when sampling prevents an exact
+  conclusion, and bounds every excerpt line. Linear scanning and a fixed-size
+  tail ring avoid per-control shifting and quadratic column calculation.
+- Added a strict Trojan Source authorization benchmark pair to both the full
+  138-pair corpus and a focused perfect-gate manifest. The positive fixture
+  uses an RLO and isolate sequence to disguise an unconditional non-admin
+  grant; the negative fixture contains ordinary Arabic and Hebrew prose with a
+  correct admin-or-owner policy. Runtime witnesses prove the authorization
+  difference. Focused Windows regression passes 28 tests and 2,136 assertions,
+  including exact candidate metadata, raw-control prompt isolation, pairing,
+  nested-isolate behavior, false-positive resistance, a 6,001-control flood,
+  manifest gates, and both executable outcomes; native Ubuntu passes the same
+  28 cases. The authoritative native Windows suite passes 1,821 tests and
+  13,374 assertions across 203 files in 560.17 seconds, with 27 intentional
+  platform/integration skips and zero failures. The production dependency
+  audit reports no known vulnerability. A fresh 271-entry npm archive passes
+  the strict file contract, clean install, public import, CLI, and 79-file
+  bundled-plugin smoke test; its 2,124,756 bytes hash to
+  `52dfc0676c98fd712c39abd0453af9d97a0a66ac96de51b7c5e59e83902ecafd`.
 - A fresh tracked-only self-scan of exact remediation checkpoint
   `8e991945847ef77b3958341222c2a6481dabe072` now closes all 494 immutable
   inventory surfaces with zero deferrals and zero findings, confirming that

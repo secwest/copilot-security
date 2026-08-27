@@ -5744,6 +5744,49 @@
         "python-chainlit-mcp-stdio-repaired-control/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "javascript-trojan-source-authorization-bypass",
+      "description": "Unicode bidirectional controls in a comment disguise an unconditional authorization grant to non-admin users who do not own the document.",
+      "fixture": "fixtures/javascript-trojan-source-authorization-bypass",
+      "findingsPaths": [
+        "javascript-trojan-source-authorization-bypass/run-1/findings.json",
+        "javascript-trojan-source-authorization-bypass/run-2/findings.json",
+        "javascript-trojan-source-authorization-bypass/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "javascript-trojan-source-authorization-bypass",
+          "cwe": ["CWE-863"],
+          "locations": [
+            {
+              "path": "src/authorize.js",
+              "startLine": 4,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "critical"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredTextAnyOf": [
+            ["bidirectional", "bidi", "trojan source", "U+202E"],
+            ["unconditional", "non-admin", "non-administrator", "owner"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "javascript-bidi-natural-language-control",
+      "description": "Ordinary Arabic and Hebrew prose accompanies a correct administrator-or-owner policy without explicit direction controls.",
+      "fixture": "fixtures/javascript-bidi-natural-language-control",
+      "findingsPaths": [
+        "javascript-bidi-natural-language-control/run-1/findings.json",
+        "javascript-bidi-natural-language-control/run-2/findings.json",
+        "javascript-bidi-natural-language-control/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

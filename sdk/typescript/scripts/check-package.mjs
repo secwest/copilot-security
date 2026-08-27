@@ -178,6 +178,7 @@ const distFiles = new Set(
     "scan-comparison",
     "scan-history-renderer",
     "secret-candidates",
+    "source-display-control-risk",
     "targets",
     "traefik-risk",
     "trusted-executable",
