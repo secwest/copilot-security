@@ -32,16 +32,17 @@ All notable scanner, application, benchmark, and operational changes are recorde
   PHP 8.3.6 parses all four source/witness files. Their in-memory SQLite
   witnesses return `injected_rows=2` and `parameterized_rows=0` respectively.
   A new least-privilege `php-fixture-ci` workflow makes this executable boundary
-  a hosted regression. Focused Windows tests pass 14 cases and 95 assertions;
-  the adjacent canonical and residual-risk lane passes 98 tests and 3,270
+  a hosted regression. Focused Windows tests pass 14 cases and 96 assertions,
+  including byte-identical LF/CRLF provenance;
+  the adjacent canonical and residual-risk lane passes 98 tests and 3,271
   assertions with one intentional Windows symlink skip, while native Ubuntu
-  passes all 99 tests and 3,271 assertions. The authoritative Windows suite
-  passes 1,844 tests and 13,541 assertions across 205 files in 543.04 seconds,
+  passes all 99 tests and 3,272 assertions. The authoritative Windows suite
+  passes 1,844 tests and 13,542 assertions across 205 files in 557.03 seconds,
   with 27 intentional platform/integration skips and zero failures. Formatting,
   generated-model drift, TypeScript, the production build, and the high-severity
-  production dependency audit are clean. A fresh 279-entry, 2,166,042-byte npm
+  production dependency audit are clean. A fresh 279-entry, 2,166,045-byte npm
   archive with SHA-256
-  `cedd951b0e76ffae697c06264ed95216c2e7aa56b9f8a4104b24f2200c9a9255`
+  `5226d9fddd1ffe49457e648fbef7a043630f90e66b0abd1f7a95267e797fbb69`
   passes strict inspection and two isolated installs, including the public API,
   CLI, and all 79 bundled plugin files; the disposable archive is removed.
 - Added the scanner's first native Terraform model,

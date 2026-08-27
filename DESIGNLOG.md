@@ -58,22 +58,32 @@ interpolates before preparation; the control uses a placeholder and supplies
 the same bytes as parameter data. Native PHP 8.3.6 parses all source and
 witness files. In-memory SQLite execution returns both seeded rows on the
 positive and zero rows on the control. A pinned-checkout, read-only hosted PHP
-workflow repeats those exact outcomes. Fourteen focused tests pass 95
+workflow repeats those exact outcomes. Fourteen focused tests pass 96
 assertions over PDO/MySQLi object and procedural forms, direct and prepared
 execution, `filter_input`, selected server keys, heredoc, formatting, compound
 concatenation, safe parameters and scalar normalization, scope and receiver
-identity, escaping evidence, malformed input, and adversarial resource bounds.
+identity, LF/CRLF-stable line provenance, escaping evidence, malformed input,
+and adversarial resource bounds.
 The strict pair advances the full corpus to 140 pairs and 840 repeated scans.
-The adjacent Windows canonical/residual lane passes 98 tests and 3,270
+The adjacent Windows canonical/residual lane passes 98 tests and 3,271
 assertions with one intentional symlink skip; native Ubuntu passes all 99 tests
-and 3,271 assertions and executes both PHP 8.3.6 SQLite witnesses. The complete
-Windows suite passes 1,844 tests and 13,541 assertions across 205 files in
-543.04 seconds, with 27 intentional environment skips and no failure. Format,
+and 3,272 assertions and executes both PHP 8.3.6 SQLite witnesses. The complete
+Windows suite passes 1,844 tests and 13,542 assertions across 205 files in
+557.03 seconds, with 27 intentional environment skips and no failure. Format,
 generated-model drift, types, build, and the high-severity production audit are
-clean. A disposable 279-entry, 2,166,042-byte archive with SHA-256
-`cedd951b0e76ffae697c06264ed95216c2e7aa56b9f8a4104b24f2200c9a9255`
+clean. A disposable 279-entry, 2,166,045-byte archive with SHA-256
+`5226d9fddd1ffe49457e648fbef7a043630f90e66b0abd1f7a95267e797fbb69`
 passes strict package inspection and two isolated consumer installs, including
 the public API, executable CLI, and all 79 bundled plugin files, then is removed.
+
+**Cross-platform correction.** The first hosted Windows Node job exposed a
+line-ending defect that LF-only local and Linux runs could not: lexical
+whitespace consumed `\r` and `\n` separately, so the position counter treated a
+CRLF pair as two lines. Token identity and the candidate decision remained
+correct, but every source, preparation, and execution line was wrong. The
+counter now preserves state across consumed chunks and treats LF, CRLF, and
+lone CR as one logical line break. A fixture-level CRLF assertion requires the
+same line 7 source, line 9 preparation, and line 10 execution as the LF file.
 
 [php-prepared]: https://www.php.net/manual/en/pdo.prepared-statements.php
 [pdo-prepare]: https://www.php.net/manual/en/pdo.prepare.php

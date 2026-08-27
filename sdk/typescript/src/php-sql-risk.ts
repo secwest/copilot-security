@@ -143,19 +143,23 @@ function phpTokens(source: string): PhpToken[] | undefined {
   let column = 1;
   let inPhp = false;
   let sawOpeningTag = false;
+  let previousWasCarriageReturn = false;
 
   const advance = (text: string): void => {
-    const newlines = text.match(/\r\n|\r|\n/gu) ?? [];
-    if (newlines.length === 0) {
-      column += [...text].length;
-      return;
+    for (const character of text) {
+      if (character === "\r") {
+        line += 1;
+        column = 1;
+        previousWasCarriageReturn = true;
+      } else if (character === "\n") {
+        if (!previousWasCarriageReturn) line += 1;
+        column = 1;
+        previousWasCarriageReturn = false;
+      } else {
+        column += 1;
+        previousWasCarriageReturn = false;
+      }
     }
-    line += newlines.length;
-    const lastNewline = Math.max(
-      text.lastIndexOf("\n"),
-      text.lastIndexOf("\r"),
-    );
-    column = [...text.slice(lastNewline + 1)].length + 1;
   };
   const consume = (length: number): string => {
     const text = source.slice(index, index + length);

@@ -121,6 +121,23 @@ describe("PHP PDO and MySQLi SQL-injection model benchmark", () => {
       "php-variable-assignment",
       "php-database-prepare",
     ]);
+    const vulnerableSource = await readFile(
+      join(benchmarkRoot, "fixtures", caseIds[0], "src", "search.php"),
+      "utf8",
+    );
+    expect(
+      records(vulnerableSource.replace(/\r?\n/gu, "\r\n"), "src/search.php")[0],
+    ).toMatchObject({
+      line: 10,
+      frameworkModel: {
+        source: { line: 7 },
+        sink: {
+          line: 10,
+          symbol:
+            "database=pdo;receiver=$database;statement=$statement;prepareLine=9;method=execute",
+        },
+      },
+    });
     expect(safe).toEqual([]);
   });
 
