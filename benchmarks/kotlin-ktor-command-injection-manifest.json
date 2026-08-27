@@ -160,7 +160,12 @@
           "requiredValidationTextAnyOf": [
             ["typed resource", "@Resource", "DiagnosticResource"],
             ["commandLine", "interpolation", "formatted"],
-            ["inline ProcessBuilder", "inline builder", "pipeline list"],
+            [
+              "inline ProcessBuilder",
+              "inline builder",
+              "inline pipeline",
+              "pipeline list"
+            ],
             ["startPipeline", "sh -c", "shell"]
           ],
           "requiredAttackPathTextAnyOf": [

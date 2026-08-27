@@ -44,8 +44,63 @@ Kotlin 2.2.20 and Ktor 3.5.2 compile both applications on Java 21 under Ubuntu.
 Their fixed-string witnesses create only two short-lived processes: the shell
 case interprets a harmless command separator, while the argv case returns the
 same shell-looking text literally. Focused Kotlin and canonical gates pass 39
-tests and 2,399 assertions. The Kotlin manifest now contains eight cases and
+tests and 2,400 assertions. The Kotlin manifest now contains eight cases and
 the canonical corpus contains 146 pairs, 292 cases, and 876 scan positions.
+
+**Evaluator vocabulary boundary.** The live finding described the second
+`ProcessBuilder` as an "inline pipeline element" and the enclosing operation as
+"inline pipeline assembly", while also naming `listOf` and `startPipeline` in
+the attack path. The first benchmark report nevertheless rejected the finding
+because its validation-only synonym group recognized `inline ProcessBuilder`,
+`inline builder`, or `pipeline list`, but not `inline pipeline`. Add that exact
+semantic equivalent and assert it in the focused regression. This changes no
+location, CWE, severity, validation, attack-path, code-evidence, shell, source,
+or negative-control requirement. Re-evaluation of the untouched sealed finding
+then accepts the positive and control with no missing validation group; the
+original immutable campaign remains preserved as evidence of the evaluator
+false negative.
+
+**Native, distribution, and self-scan acceptance.** A first complete native
+run was rejected because five benchmark-runner recovery cases correctly saw a
+stale `dist/copilot-client.js` after the source change. Rebuilding the runtime
+made all six recovery cases pass in isolation, after which the authoritative
+suite passed 1,892 tests and 14,044 assertions across 208 files in 483.08
+seconds with 27 intentional skips and no failures. Ubuntu passes the focused
+152-test, 3,666-assertion Kotlin/corpus/residual/transport/package lane with one
+Windows-launcher skip. Generated-model drift, formatting, TypeScript, the
+production build, and the production advisory audit are clean.
+
+The Ubuntu-produced npm archive contains 291 entries, occupies 2,243,305
+packed and 11,567,078 unpacked bytes, retains `-rwxr-xr-x` on the launcher, and
+has SHA-1 `6d9e1a5f246c4415ee0eb1b5bed1788196086220` and SHA-256
+`7a4aff551ea28dac598c6c4e7f0f545c99419f2ff60731f1fffd6c4bc86b2c8c`.
+Strict inspection and two isolated installations on each platform validate the
+public API, CLI, and all 79 bundled plugin files. A tracked-only archive of
+revision `8a5dbd11f6135922043b566891b551349382486d` produces byte-identical
+inventories twice: 256 rows, 553,364 bytes, and SHA-256
+`e0e02c0a5fd199ecf86d809957031322d5796e158a639fd726a70acaf1ffefcd`.
+It contains no Kotlin row from scanner or test code, while independently rooted
+positive and control fixtures produce exactly one and zero. All disposable
+package and self-scan paths were removed.
+
+**Live Copilot evidence.** Deep/xhigh campaign
+`e927657629a46ca5debc3e6e9f59bb00fda6f704b9f5d6f35a1246953b23509a`
+binds the exact implementation revision, two fixture digests, scanner and
+package bytes, stored GitHub authentication, and no artificial credit ceiling.
+Both cases completed on attempt one with status 0 and no timeout. The positive
+took 257,309 ms, produced one high finding and complete coverage, and required
+two deterministic code-evidence role alignments. The fixed-argv control took
+395,676 ms, produced no finding, and completed coverage. Precision, recall, F1,
+stability, validation, attack-path, code-evidence, severity, and negative-case
+metrics are all 1.0; after the exact synonym repair above, both case evaluations
+pass without changing scan bytes. Results remain at
+`C:\security-benchmarks\copilot-security-kotlin-inline-pipeline-8a5dbd1`.
+
+All eleven hosted workflow families pass the implementation revision: Node
+`33118228836`, container `33118228863`, Kotlin `33118228879`, Java
+`33118228789`, .NET `33118228820`, Go `33118228818`, Rust `33118228843`,
+Ruby `33118228799`, PHP `33118228811`, Windows GUI `33118228807`, and Linux
+GUI `33118228810`.
 
 ## 2026-08-27 — Preserve ProcessBuilder live command-list identity
 

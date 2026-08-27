@@ -29,7 +29,61 @@ All notable scanner, application, benchmark, and operational changes are recorde
   witnesses pass on Ubuntu using only two short-lived processes. Deterministic
   review emits one shell finding at the exact `startPipeline` call and no
   finding for fixed `printf` argv. Focused Kotlin plus canonical tests pass 39
-  tests and 2,399 assertions, and TypeScript checking is clean.
+  tests and 2,400 assertions, and TypeScript checking is clean. The manifest's
+  validation vocabulary now accepts the precise phrase `inline pipeline`, so a
+  finding that explicitly describes an inline pipeline element or assembly is
+  not rejected merely because it omits the equivalent wording `inline builder`
+  or `pipeline list`.
+- Completed rebuilt native and cross-platform acceptance. The authoritative
+  Windows suite passes 1,892 tests and 14,044 assertions across 208 files in
+  483.08 seconds, with 27 intentional platform/integration skips and no
+  failures. A pre-build run was rejected because five benchmark-runner tests
+  correctly stopped at the stale-runtime guard; after rebuilding `dist`, all
+  six recovery tests pass alone and the complete suite passes. Ubuntu/WSL
+  passes 152 tests and 3,666 assertions across the focused Kotlin, canonical
+  corpus, residual-inventory, Copilot transport, and package-provenance lanes,
+  with one Windows-launcher skip and no failure. Formatting, generated-model
+  drift, TypeScript checking, the production build, and the production
+  advisory audit are clean.
+- Validated an Ubuntu-produced 291-entry npm archive through strict inspection
+  and two isolated installs on each of Windows and Linux. Every install proves
+  the public API, executable CLI, and all 79 bundled plugin files. The archive
+  occupied 2,243,305 packed and 11,567,078 unpacked bytes, retained
+  `-rwxr-xr-x` on `bin/copilot-security.mjs`, and had SHA-1
+  `6d9e1a5f246c4415ee0eb1b5bed1788196086220` and SHA-256
+  `7a4aff551ea28dac598c6c4e7f0f545c99419f2ff60731f1fffd6c4bc86b2c8c`.
+  The exact archive and temporary self-scan tree were removed after
+  acceptance.
+- Verified deterministic self-scan behavior against an isolated tracked-only
+  archive of revision `8a5dbd11f6135922043b566891b551349382486d`.
+  Two inventories are byte-identical at 256 rows and 553,364 bytes with
+  SHA-256
+  `e0e02c0a5fd199ecf86d809957031322d5796e158a639fd726a70acaf1ffefcd`
+  and contain no Kotlin command-injection row from scanner or test code.
+  Rooting the same build at the archived inline-pipeline exploit and argv
+  control produces exactly one and zero Kotlin rows respectively.
+- Ran provenance-bound deep/xhigh Copilot campaign
+  `e927657629a46ca5debc3e6e9f59bb00fda6f704b9f5d6f35a1246953b23509a`
+  against the inline-pipeline pair with stored GitHub credentials, six bounded
+  available attempts, a 30-minute process-tree deadline, and no artificial
+  credit ceiling. Both cases completed on attempt one with status 0 and no
+  timeout: the positive took 257,309 ms and produced one high finding with
+  complete coverage after two deterministic endpoint-role alignments; the
+  control took 395,676 ms and produced no finding with complete coverage. The
+  first report had perfect completion, precision, recall, F1, stability,
+  validation, attack-path, code-evidence, severity, and negative-case metrics,
+  but failed the positive case's exact validation-wording gate because the
+  sealed finding said `inline pipeline assembly` rather than one of three
+  narrower synonyms. Re-evaluating the untouched sealed artifacts with the
+  corrected vocabulary accepts both cases with no missing validation terms.
+  The durable original campaign remains outside the repository at
+  `C:\security-benchmarks\copilot-security-kotlin-inline-pipeline-8a5dbd1`.
+- All eleven hosted workflow families pass implementation revision
+  `8a5dbd11f6135922043b566891b551349382486d`: Node `33118228836`,
+  container `33118228863`, Kotlin `33118228879`, Java `33118228789`,
+  .NET `33118228820`, Go `33118228818`, Rust `33118228843`, Ruby
+  `33118228799`, PHP `33118228811`, Windows GUI `33118228807`, and Linux
+  GUI `33118228810`.
 - Extended `kotlin-ktor-command-injection` through the JDK's live command-list
   boundary. The model now preserves shared list identity when a collection is
   passed to `ProcessBuilder(List)` or `command(List)`, follows the mutable view

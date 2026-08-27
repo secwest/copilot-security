@@ -135,6 +135,9 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
       requireAttackPath: true,
       requireCodeEvidence: true,
     });
+    expect(
+      benchmark.cases[6]?.expected[0]?.requiredValidationTextAnyOf?.[2],
+    ).toContain("inline pipeline");
     expect(benchmark.cases[7]?.expected).toEqual([]);
   });
 
