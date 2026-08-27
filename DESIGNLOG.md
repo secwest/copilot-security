@@ -134,6 +134,44 @@ platform/integration skips and no failures. Ubuntu passes 155 tests and 3,736
 assertions across the focused Kotlin/corpus/residual/transport/package lane,
 with one Windows-launcher skip and no failure.
 
+**Final package and self-review closure.** Exact public revision
+`44cb6e3fe3a0402f7c3c7e0c3a05f4e43a38b323` produces a 291-entry Ubuntu
+`pnpm pack` archive. Windows and POSIX-strict inspection plus two isolated
+installs per operating system validate the public import, executable CLI, and
+all 79 bundled plugin files. The archive occupied 2,252,340 packed and
+11,619,605 unpacked bytes, retained `-rwxr-xr-x` on the launcher, and had SHA-1
+`3bfd82e403cc4345957638a9a53acfb750e1995c` and SHA-256
+`fb3b52ef3606508d9a01f71df32d0a4a3e62e44f53eb8c69c1cf4a7ce6427f9b`.
+Local packs correctly omit registry publish-time `gitHead`; hosted exact-head
+workflows remain the revision authority rather than injecting a false field.
+
+Two residual inventories of a disposable tracked-only archive of that revision
+are byte-identical at 256 rows and 553,364 bytes with SHA-256
+`e0e02c0a5fd199ecf86d809957031322d5796e158a639fd726a70acaf1ffefcd`.
+No scanner or test source produces a Kotlin row. Independently rooted factory
+and command-helper exploits produce one row each, while their topology-matched
+argv controls produce zero. The package, archive, and inventory artifacts were
+removed after verification.
+
+All eleven hosted families pass implementation revision
+`4792c82eb7e111d9b60b41ca88ab1d11545fbf9f`: Node `33123927139`, container
+`33123927134`, Kotlin `33123927113`, Java `33123927159`, .NET `33123927125`,
+Go `33123927186`, Rust `33123927137`, Ruby `33123927133`, PHP `33123927120`,
+Windows GUI `33123927136`, and Linux GUI `33123927160`. All eleven also pass
+helper-quality revision `2684694f9b7ee193d33f503f6a002b833e167ec1`: Node
+`33125991771`, container `33125991731`, Kotlin `33125991737`, Java
+`33125991797`, .NET `33125991748`, Go `33125991885`, Rust `33125991747`,
+Ruby `33125991758`, PHP `33125991707`, Windows GUI `33125991776`, and Linux
+GUI `33125991887`.
+
+All eleven hosted families pass final exact-source revision
+`44cb6e3fe3a0402f7c3c7e0c3a05f4e43a38b323`: Node `33127231770`, container
+`33127231782`, Kotlin `33127231781`, Java `33127231877`, .NET `33127231774`,
+Go `33127231976`, Rust `33127231854`, Ruby `33127231823`, PHP `33127231765`,
+Windows GUI `33127231799`, and Linux GUI `33127231846`. The repository is
+public at `https://github.com/secwest/copilot-security` on default branch
+`main`.
+
 ## 2026-08-27 — Model exact ProcessBuilder pipeline lists
 
 **Why named-builder search was insufficient.** The JDK specifies that
