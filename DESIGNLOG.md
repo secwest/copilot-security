@@ -73,6 +73,14 @@ audit are clean. A 283-entry, 2,186,440-byte package with SHA-256
 passes strict archive inspection and two isolated 67-package consumers,
 including the public API, CLI, and all 79 plugin files, then is removed.
 
+**Hosted Windows correction.** The first Node 22 hosted run passed the detector,
+fixture inventory, CRLF provenance, and 1,855 other tests, but failed a
+test-only witness-content comparison because Git materialized the Ruby file
+with CRLF and the expected multiline fragment used LF. Normalize CRLF only for
+that content assertion. This does not normalize the detector input: its
+separate fixture-level CRLF test continues to require exact source line 5 and
+sink line 6 provenance over the original bytes.
+
 [ruby-process]: https://docs.ruby-lang.org/en/3.4/Process.html
 [ruby-open3]: https://docs.ruby-lang.org/en/3.4/Open3.html
 [ruby-shellwords]: https://docs.ruby-lang.org/en/3.4/Shellwords.html

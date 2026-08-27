@@ -44,6 +44,11 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `f242c4b1e88acf39ae2c0e3ace255b7053085afb5e87b89f59c3900eca75733d`
   passes strict inspection and two isolated installs, including the public API,
   CLI, and all 79 bundled plugin files; the disposable archive is removed.
+  The first hosted Windows Node run found one test-only line-ending assumption:
+  Git checked the control witness out with CRLF while its content assertion
+  required LF. The assertion now canonicalizes CRLF before comparing the Ruby
+  argv shape; source/sink provenance already has a separate byte-level CRLF
+  regression.
 - Added the canonical corpus's first PHP model,
   `php-pdo-mysqli-sql-injection`. A bounded PHP-aware lexer and same-scope
   dataflow pass follows `$_GET`, `$_POST`, `$_REQUEST`, `$_COOKIE`, selected

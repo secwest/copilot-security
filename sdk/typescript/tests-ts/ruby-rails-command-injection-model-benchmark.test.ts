@@ -201,7 +201,9 @@ describe("Ruby on Rails command-injection model benchmark", () => {
       expect(witness).not.toContain("Net::");
     }
     expect(vulnerable).toContain('"printf diagnostic#{payload}"');
-    expect(safe).toContain('"printf",\n  "%s",\n  payload');
+    expect(safe.replace(/\r\n/gu, "\n")).toContain(
+      '"printf",\n  "%s",\n  payload',
+    );
 
     const workflow = await readFile(
       resolve(
