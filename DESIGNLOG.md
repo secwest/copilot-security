@@ -81,6 +81,21 @@ that content assertion. This does not normalize the detector input: its
 separate fixture-level CRLF test continues to require exact source line 5 and
 sink line 6 provenance over the original bytes.
 
+**Live scanner measurement.** Run one provenance-bound deep scan of each case
+with stored native Copilot credentials, four available fresh attempts, and no
+artificial credit ceiling. Campaign
+`999c678379c7f0e8122eaa8ed9135a2afe0c119a5ca5439a30671e8cc4259c7e`
+binds revision `450ac020392a8619050f42aed08b3a00ac7a949b`, the focused manifest,
+fixture bytes, runner, comparison policy, CLI, and package digests. Both cases
+complete on attempt one. The positive returns exactly one high finding with
+complete coverage in three minutes; the argv control returns zero findings
+with complete coverage in four minutes fifteen seconds. The evaluator records
+one true positive, no false positives or false negatives, and 1.0 completion,
+precision, recall, F1, case pass, negative-control pass, stable detection,
+validation, attack-path, code-evidence, and severity-accuracy rates. Sealed
+results remain outside the repository at
+`C:\security-benchmarks\copilot-security-ruby-command-450ac020`.
+
 [ruby-process]: https://docs.ruby-lang.org/en/3.4/Process.html
 [ruby-open3]: https://docs.ruby-lang.org/en/3.4/Open3.html
 [ruby-shellwords]: https://docs.ruby-lang.org/en/3.4/Shellwords.html

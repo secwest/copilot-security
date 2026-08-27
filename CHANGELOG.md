@@ -49,6 +49,15 @@ All notable scanner, application, benchmark, and operational changes are recorde
   required LF. The assertion now canonicalizes CRLF before comparing the Ruby
   argv shape; source/sink provenance already has a separate byte-level CRLF
   regression.
+- Ran a provenance-bound deep Copilot benchmark against one repetition of both
+  Ruby cases. Campaign `999c678379c7f0e8122eaa8ed9135a2afe0c119a5ca5439a30671e8cc4259c7e`
+  completed both scans on their first attempt using stored native credentials:
+  the vulnerable case produced exactly one high finding with complete coverage,
+  and the argv control produced none. Every perfect gate passed: completion,
+  precision, recall, F1, case and negative-control pass rates, stable detection,
+  validation, attack-path and code-evidence coverage, severity accuracy, and
+  zero false positives. The sealed external results are retained under
+  `C:\security-benchmarks\copilot-security-ruby-command-450ac020`.
 - Added the canonical corpus's first PHP model,
   `php-pdo-mysqli-sql-injection`. A bounded PHP-aware lexer and same-scope
   dataflow pass follows `$_GET`, `$_POST`, `$_REQUEST`, `$_COOKIE`, selected
