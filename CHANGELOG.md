@@ -36,6 +36,37 @@ All notable scanner, application, benchmark, and operational changes are recorde
   with one intentional platform skip and no failures. Benchmark source
   anchoring now accepts bounded conventional nested layouts such as
   `src/main/kotlin` instead of requiring a file directly under `src`.
+- Ran a provenance-bound deep Copilot benchmark against both Kotlin cases with
+  xhigh effort, stored credentials, six available fresh attempts, and no
+  artificial credit ceiling. Campaign
+  `45c66e91d688c25f03987f6bdfc7ea2350afaf6ba748477dbf9bbaaaff4ca4ef`
+  binds revision `e01cde71e37eac85d3d412c07457a483f1bea84f` and completed
+  both scans on attempt one. The shell case produced exactly one critical
+  finding with complete coverage after deterministic re-anchoring of five
+  excerpts; the literal-argv control produced none with complete coverage.
+  Completion, precision, recall, F1, case and negative-control pass rates,
+  stable detection, validation, attack path, code evidence, and severity
+  accuracy are all 1.0 with zero false positives. No quota, credit,
+  classifier, authentication, transport, or retry event occurred. Sealed
+  results remain outside the repository at
+  `C:\security-benchmarks\copilot-security-kotlin-ktor-e01cde7`.
+- Final Kotlin acceptance passes 1,883 Windows tests and 13,892 assertions
+  across 208 files in 508.63 seconds, with 27 intentional platform/integration
+  skips and zero failures. The focused Linux lane passes 97 tests and 3,307
+  assertions with no failures or skips. A tracked-files-only self-scan is
+  byte-identical across two runs (256 rows, 554,239 bytes, SHA-256
+  `d3c8bb8b0a90794e3f39cc400e925fb1d122587d2d81cb2b2f540cd76ed34722`),
+  produces no Kotlin row from scanner production or test trees, and produces
+  exactly one vulnerable and zero safe rows when the archived fixtures are
+  scanned at their own roots. Formatting, TypeScript checking, the production
+  build, and the high-severity production dependency audit are clean. A fresh
+  291-entry, 2,199,580-byte npm archive (11,487,538 bytes unpacked) with
+  SHA-256
+  `61859f3c0bf52a90aa9c920e588a45290ef9fe2bd2e9e635bc4da249ec0304cf`
+  passes strict inspection and an isolated 67-package install, including the
+  public API, CLI, and all 79 bundled plugin files. All eleven hosted workflows
+  pass at the exact revision. Disposable package and self-scan artifacts were
+  removed; the provenance-bound live benchmark was intentionally retained.
 - Added the canonical corpus's first Rust model,
   `rust-web-command-injection`. A bounded Rust lexer and same-function dataflow
   pass follows exact Axum and Actix Web Query, Path, Form, and Json extractors

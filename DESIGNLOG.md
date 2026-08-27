@@ -56,6 +56,25 @@ access, or complete compromise. The canonical benchmark's source check now
 walks a bounded eight-level tree so conventional `src/main/kotlin` remains
 source-anchored without inventing a dummy file directly under `src`.
 
+The final provenance-bound live campaign
+`45c66e91d688c25f03987f6bdfc7ea2350afaf6ba748477dbf9bbaaaff4ca4ef`
+used deep mode, xhigh effort, stored Copilot credentials, no credit ceiling,
+and six bounded fresh attempts at revision
+`e01cde71e37eac85d3d412c07457a483f1bea84f`. Both cases completed on
+attempt one. The vulnerable route produced one critical finding and complete
+coverage after the host re-anchored five excerpt copies from repository bytes;
+the fixed-program literal-argv route produced zero findings and complete
+coverage. Every effectiveness and evidence metric is 1.0 and false positives
+are zero. No allowance, classifier, authentication, transport, or retry event
+occurred. The complete Windows suite passes 1,883 tests and 13,892 assertions;
+the focused Linux lane passes 97 tests and 3,307 assertions. All eleven hosted
+workflows pass. A deterministic tracked-only self-scan produces 256 rows and
+zero Kotlin model rows twice with SHA-256
+`d3c8bb8b0a90794e3f39cc400e925fb1d122587d2d81cb2b2f540cd76ed34722`.
+The inspected npm package includes the new module, passes an isolated install,
+and has SHA-256
+`61859f3c0bf52a90aa9c920e588a45290ef9fe2bd2e9e635bc4da249ec0304cf`.
+
 **Consequence.** The canonical corpus advances to 143 paired families and 286
 cases while preserving a zero-false-positive gate for the literal-argv
 control. Future Kotlin work should add cross-function summaries or other Ktor
