@@ -60,6 +60,18 @@ that test's fixed 25-second child timeout and return no status. The isolated
 guard itself completes in 9.95 seconds. Full-suite, package, hosted, and a
 post-remediation self-scan are recorded in the following acceptance checkpoint.
 
+**Hosted type portability.** The post-copy guard is intentionally a small
+standalone ESM helper so tests can exercise the trust-boundary check without
+starting the benchmark runner. Its neighboring declaration was initially
+omitted. Windows' local strict check did not expose that omission, while the
+hosted Linux Node lane correctly rejected the untyped `.mjs` import and the
+container lane inherited the same failure. Follow the existing benchmark-helper
+convention by adding `fixture-security.d.mts`; both native Windows and Ubuntu
+WSL strict TypeScript checks now pass. This is a declaration-only portability
+fix and does not weaken or alter the runtime rejection. The authoritative
+post-remediation Windows suite remains green at 1,808 passes, 27 intentional
+skips, 13,305 assertions, and zero failures across 201 files in 590.41 seconds.
+
 ## 2026-08-26 — Bounded fresh-session coverage closure
 
 **Observed failure mode.** The exact Chainlit implementation self-scan produced
