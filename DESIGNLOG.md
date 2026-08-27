@@ -70,7 +70,7 @@ default root `.chainlit` tree as a package side effect; that exact untracked
 tree and both verified witness package directories were removed after the
 evidence was recorded.
 
-**Regression state.** The focused Windows suite passes seven tests and 43
+**Regression and acceptance state.** The focused Windows suite passes seven tests and 43
 assertions with one intentional platform symlink skip; native Ubuntu passes all
 eight tests and 45 assertions, including symlinked `requirements.txt` and
 `.chainlit/config.toml` rejection. The combined focused and canonical registry
@@ -80,8 +80,40 @@ assertions with 27 intentional platform/integration skips, zero failures, and
 200 files in 537.83 seconds. Generated-model drift, formatting, TypeScript, the
 clean production build, and the high-severity production dependency audit are
 green. The canonical corpus now contains 137 exploit/control pairs, 274 cases,
-and 822 scheduled scans. Self-scan, package, desktop, and hosted exact-head
-acceptance remain to be recorded at the implementation checkpoint.
+and 822 scheduled scans. Two compiled inventories of a tracked-only exact-head
+snapshot are byte-identical at 256 rows and 552,649 bytes with SHA-256
+`7f5b9fa2b9cdefa842a728dacb9a130a9d5bba55ef8f1972ab2f2db3ac5d68cd`.
+They contain 201 structured rows, 55 lexical leads, and 250 fixture paths;
+exactly one Chainlit row retains `src/app.py:1` and all seven propagators, while
+the repaired twin is absent. The 267-entry, 2,111,003-byte npm archive has
+SHA-256 `d0f0882f281195247fc293c6383cdb1f1aae40fb865f25af67e00cdaff9b0457`.
+Fresh Windows and Linux installs validate the public API, executable CLI, and
+all 79 plugin files. Windows passes 7/7 core and 3/3 desktop tests, a hidden
+startup probe, and a 346,796-byte single-file GUI publish with SHA-256
+`a393896769829c24a31cfa4348c86188489f63faa18a4c0ba8a008c2449dad50`.
+Ubuntu passes the same 7/7 and 3/3 suites, 2/2 Linux GUI tests, non-graphical and
+Xvfb startup, and a 72,568-byte native publish with SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+
+The real self-scan is deliberately recorded as negative evidence about
+completeness, not converted into a pass. With `GH_TOKEN` removed, stored
+Copilot credentials, no `max-ai-credits` cap, `xhigh` effort, and the sealed
+tracked-only snapshot as its target, checkpoint
+`ad948d76805c4868582b02febe16e34f5ebc6aaa` processes 4,187,566 input tokens,
+3,687,900 of them cached, and 31,312 output tokens in 6 minutes 22 seconds. The
+response stream ends after artifact production; deterministic recovery verifies
+and seals the manifest, findings, coverage, report, threat model, and work
+ledger. No finding survives, but host inventory reconciliation expands the
+model's 17 reviewed surfaces to 491 total surfaces and marks 474 missing path
+closures as `needs_follow_up`, plus one reconciliation deferral. Coverage is
+therefore partial and the CLI exits nonzero. This proves both that the stored
+account is usable without an artificial credit limit and that zero findings
+under partial coverage must never be presented as clearance. A future
+effectiveness increment should schedule bounded follow-up sessions over the
+unclosed inventory instead of trusting one repository-wide response to close
+every path. All seven hosted families pass the exact implementation SHA: Node
+`33041570009`, container `33041570031`, .NET `33041570022`, Go `33041570076`,
+Java `33041569982`, Windows GUI `33041569983`, and Linux GUI `33041569977`.
 
 ## 2026-08-26 — AsyncSSH SCP server-filename path traversal
 

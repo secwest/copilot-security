@@ -38,6 +38,46 @@ All notable scanner, application, benchmark, and operational changes are recorde
   from deployment, authentication, session, proxy, privilege, containment,
   executable-semantics, and resource-limit evidence, and preserves residual
   risk from developer-configured stdio processes and concurrent sessions.
+- Accepted exact Chainlit implementation checkpoint
+  `ad948d76805c4868582b02febe16e34f5ebc6aaa`. The authoritative native
+  Windows suite passes 1,800 tests and 13,242 assertions across 200 files in
+  537.83 seconds, with 27 intentional platform/integration skips and no
+  failures. The focused-plus-canonical lanes pass 25 tests/2,126 assertions on
+  Windows with one intentional symlink skip and all 26 tests/2,128 assertions
+  on native Ubuntu/WSL. The wider Windows focused, residual-risk, and canonical
+  lane passes 91 tests/3,182 assertions with two intentional skips. Generated
+  output, formatting, TypeScript, the production build, and the high-severity
+  production dependency audit are green. Two compiled inventories of a
+  tracked-only exact-commit archive are byte-identical at 256 rows, 552,649
+  bytes, and SHA-256
+  `7f5b9fa2b9cdefa842a728dacb9a130a9d5bba55ef8f1972ab2f2db3ac5d68cd`;
+  201 rows carry structured evidence, 55 are lexical leads, and 250 are
+  fixture paths. Exactly one row retains the affected Chainlit fixture at
+  `src/app.py:1` with all seven propagators; the source-identical 2.12.0
+  control is absent. Strict Windows and native Linux inspection validates a
+  267-entry, 2,111,003-byte npm archive with SHA-256
+  `d0f0882f281195247fc293c6383cdb1f1aae40fb865f25af67e00cdaff9b0457`.
+  Fresh isolated installs add 67 packages on Windows and 75 on Linux and
+  validate the public import, executable CLI, and all 79 bundled plugin files.
+  The Windows GUI builds without warnings, passes 7/7 core and 3/3 shared
+  desktop tests, survives a hidden startup probe, and publishes a 346,796-byte
+  single-file executable with SHA-256
+  `a393896769829c24a31cfa4348c86188489f63faa18a4c0ba8a008c2449dad50`.
+  Native Ubuntu repeats the 7/7 and 3/3 suites, passes 2/2 Linux interface tests
+  plus non-graphical and Xvfb startup, and publishes a 72,568-byte executable
+  with SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+  A real uncapped stored-credential Copilot self-scan processes 4,187,566 input
+  tokens (3,687,900 cached) and 31,312 output tokens in 6 minutes 22 seconds.
+  The response stream ends after producing valid artifacts, which the
+  deterministic workbench recovers and seals. It reports zero surviving
+  findings but correctly exits nonzero with partial coverage: only 17 of 491
+  reconciled surfaces have review closure, while 474 inventory paths remain
+  explicit `needs_follow_up` items. Zero findings in that run is therefore not
+  security clearance. All seven hosted families pass the exact implementation
+  SHA: Node `33041570009` with all Windows, macOS, and Linux matrix jobs;
+  container `33041570031`; .NET `33041570022`; Go `33041570076`; Java
+  `33041569982`; Windows GUI `33041569983`; and Linux GUI `33041569977`.
 - Added `python-asyncssh-scp-download-path-traversal`, an exact Python model for
   [GHSA-2wxc-x7rj-hg8f / CVE-2026-54591](https://github.com/ronf/asyncssh/security/advisories/GHSA-2wxc-x7rj-hg8f).
   It requires a live non-shadowed official `asyncssh.scp` binding, a proven
