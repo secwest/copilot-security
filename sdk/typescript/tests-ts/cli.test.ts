@@ -2044,6 +2044,10 @@ describe("CLI", () => {
         options?.onReconnect?.(3, 3, {
           reason: "transport_interrupted",
         });
+        options?.onReconnect?.(2, 5, {
+          reason: "closure_incomplete",
+          phase: "coverage_closure",
+        });
         options?.onReconnect?.(2, 3, {
           reason: "transport_interrupted",
           phase: "draft_quality_correction",
@@ -2065,6 +2069,9 @@ describe("CLI", () => {
     );
     expect(stderr.text()).toContain(
       "Model transport ended; starting fresh session (3/3).",
+    );
+    expect(stderr.text()).toContain(
+      "Coverage gaps remain; continuing host-audited closure in a fresh session (2/5).",
     );
     expect(stderr.text()).toContain(
       "Draft transport ended; continuing host-audited quality correction in a fresh session (2/3).",

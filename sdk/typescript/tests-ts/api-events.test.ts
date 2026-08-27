@@ -8,6 +8,7 @@ import {
   CompleteDraftArtifactsError,
   CopilotSecurityError,
   IncompleteScanError,
+  ScanClosureIncompleteError,
   ScanInterruptedError,
   type ScanReconnectDetails,
   type ScanWorkerStatus,
@@ -455,6 +456,61 @@ describe("one-shot scan events", () => {
     });
   });
 
+  test("preserves exhausted closure identity when deterministic finalization saves partial artifacts", async () => {
+    const root = await temporaryDirectory();
+    const scanDir = join(root, "scan");
+    let recovered: Error | null = null;
+    async function* exhaustedClosure(): AsyncGenerator<ThreadEvent> {
+      yield { type: "thread.started", thread_id: "thread-partial-closure" };
+      yield {
+        type: "turn.failed",
+        error: { message: "private model text must not be forwarded" },
+        failure_kind: "closure_incomplete",
+        finding_quality_gap_count: 2,
+        coverage_gap_count: 474,
+        usage: { input_tokens: 100, output_tokens: 10 },
+      };
+    }
+
+    const result = await runScanEvents({
+      thread: {
+        id: null,
+        async runStreamed() {
+          return { events: exhaustedClosure() };
+        },
+      },
+      events: exhaustedClosure(),
+      signal: new AbortController().signal,
+      scanDir,
+      pluginRoot: PLUGIN_ROOT,
+      expectation: {
+        repository: "/repository",
+        repositoryRevision: "deadbeef",
+        target: { kind: "repository", paths: [] },
+        mode: "standard",
+        pluginVersion: "0.1.0",
+      },
+      recoverIncompleteWithFinalize: true,
+      onFinalize: async (usage) => {
+        await copyCompletedScan(root);
+        return usage;
+      },
+      onRecovered: (failure) => {
+        recovered = failure;
+      },
+    });
+
+    expect(recovered).toBeInstanceOf(ScanClosureIncompleteError);
+    expect(recovered).toMatchObject({
+      findingQualityGapCount: 2,
+      coverageGapCount: 474,
+    });
+    expect((recovered as unknown as Error).message).not.toContain(
+      "private model text",
+    );
+    expect(result.threadId).toBe("thread-partial-closure");
+  });
+
   test("recovers a thrown complete-draft signal when deterministic finalization accepts the artifacts", async () => {
     const root = await temporaryDirectory();
     const scanDir = join(root, "scan");
@@ -657,6 +713,14 @@ describe("one-shot scan events", () => {
       };
       yield {
         type: "copilot.fresh_session_retry",
+        attempt: 3,
+        max_attempts: 3,
+        reason: "closure_incomplete",
+        recovery_phase: "coverage_closure",
+        coverage_gap_count: 474,
+      };
+      yield {
+        type: "copilot.fresh_session_retry",
         attempt: 999,
         max_attempts: 999,
         reason: "model_timeout",
@@ -692,8 +756,17 @@ describe("one-shot scan events", () => {
           phase: "draft_quality_correction",
         },
       },
+      {
+        attempt: 3,
+        maximum: 3,
+        details: {
+          reason: "closure_incomplete",
+          phase: "coverage_closure",
+        },
+      },
     ]);
     expect(JSON.stringify(reconnects)).not.toContain("private provider detail");
+    expect(JSON.stringify(reconnects)).not.toContain("474");
   });
 
   test("classifies retryable reconnect causes without exposing provider details", async () => {

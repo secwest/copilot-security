@@ -429,22 +429,27 @@ strict JSON is not rewritten. A normalized draft still has to pass the same
 canonical schemas, repository evidence grounding, coverage reconciliation, and
 seal checks; normalization cannot make an invalid security result acceptable.
 
-A hard model-turn deadline or recognized transport interruption starts a new,
-isolated Copilot CLI session over the same disposable analysis snapshot and
-immutable host worklist. Direct scans allow three sessions by default. Set
+A hard model-turn deadline, recognized transport interruption, or persistent
+host-proven closure gap starts a new, isolated Copilot CLI session over the
+same disposable analysis snapshot and immutable host worklist. Direct scans
+allow three total sessions by default. Set
 `--max-session-attempts N`, or SDK `maxSessionAttempts`, from `1` through `5`;
 `1` disables fresh-session recovery. Authentication, authorization, scanner
 contract, sandbox, cancellation, cost-limit, and exhausted safety-classifier
 failures remain terminal. Recovery never trusts conversational state or a
 prior session's artifact claims: an ordinary replacement must re-consume the
 inventory, while draft-quality recovery treats existing artifacts as untrusted
-drafts and consumes freshly computed host gap inventories. Successful built-in
-file views remain valid host telemetry across sessions over the same immutable
-snapshot; unfinished tool calls are cleared at every session boundary, and
-shell reads, labels, receipts, or summaries cannot replace direct-view
-evidence. Every path still passes the same deterministic host audits before
-sealing. Session shutdown is bounded so a hung disconnect cannot prevent the
-next attempt. Streamed and persisted token usage is accumulated across all
+drafts and consumes freshly computed host gap inventories. A closure replacement
+skips the broad discovery replay, preserves only host-observed successful file
+views, and directly works the remaining coverage and finding-quality gaps.
+Successful built-in file views remain valid host telemetry across sessions over
+the same immutable snapshot; unfinished tool calls are cleared at every session
+boundary, and shell reads, labels, receipts, or summaries cannot replace
+direct-view evidence. Every path still passes the same deterministic host audits
+before sealing. If the total budget is exhausted, the workbench may preserve
+validated partial artifacts but cannot promote their coverage or zero findings
+to clearance. Session shutdown is bounded so a hung disconnect cannot prevent
+the next attempt. Streamed and persisted token usage is accumulated across all
 attempt roots and their subagents, so scanner-owned cost enforcement cannot be
 reset by recovery.
 

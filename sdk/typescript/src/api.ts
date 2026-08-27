@@ -43,6 +43,7 @@ import {
   OutputDirectoryError,
   OutputInsideProtectedRootError,
   type ProtectedScanPathKind,
+  ScanClosureIncompleteError,
   ScanCostLimitExceededError,
   ScanInterruptedError,
 } from "./errors.js";
@@ -170,7 +171,7 @@ export interface ScanOptions {
   maxCostUsd?: number;
   /** Native Copilot AI-credit limit for the root session and subagents. */
   maxAiCredits?: number;
-  /** Isolated Copilot sessions allowed for retryable model-turn failures. */
+  /** Isolated Copilot sessions allowed for transport recovery and host-proven closure. */
   maxSessionAttempts?: number;
   onCost?: (cost: Readonly<ScanCost>) => void;
   onOutputArchived?: (archiveDir: string) => void;
@@ -208,9 +209,10 @@ export interface ScanReconnectDetails {
     | "authentication"
     | "authorization"
     | "model_timeout"
-    | "transport_interrupted";
+    | "transport_interrupted"
+    | "closure_incomplete";
   retryAfterSeconds?: number;
-  phase?: "scan" | "draft_quality_correction";
+  phase?: "scan" | "draft_quality_correction" | "coverage_closure";
 }
 
 type ScanObserverName =
@@ -1138,12 +1140,14 @@ export class CopilotSecurity {
           return snapshot.usage;
         },
         recoverIncompleteWithFinalize: true,
-        onRecovered: () => {
+        onRecovered: (failure) => {
           notifyObserver(
             "onWarning",
             options.onWarning,
             options.onObserverError,
-            "Copilot's response stream ended after producing scan artifacts; the deterministic workbench validated and recovered the completed scan.",
+            failure instanceof ScanClosureIncompleteError
+              ? `Copilot exhausted the bounded fresh-session closure budget with ${failure.coverageGapCount} coverage gap(s) and ${failure.findingQualityGapCount} finding-quality gap(s); the deterministic workbench preserved validated partial artifacts.`
+              : "Copilot's response stream ended after producing scan artifacts; the deterministic workbench validated and recovered the completed scan.",
           );
         },
         onScanStarted: options.onScanStarted,
@@ -1718,7 +1722,11 @@ export async function runScanEvents(
           (event["attempt"] as number) <= (event["max_attempts"] as number) &&
           (event["max_attempts"] as number) <= MAX_FRESH_SESSION_ATTEMPTS &&
           typeof event["reason"] === "string" &&
-          ["model_timeout", "transport_interrupted"].includes(event["reason"])
+          [
+            "model_timeout",
+            "transport_interrupted",
+            "closure_incomplete",
+          ].includes(event["reason"])
         ) {
           notifyObserver(
             "onReconnect",
@@ -1729,14 +1737,18 @@ export async function runScanEvents(
             {
               reason: event["reason"] as
                 | "model_timeout"
-                | "transport_interrupted",
-              ...(["scan", "draft_quality_correction"].includes(
-                event["recovery_phase"] as string,
-              )
+                | "transport_interrupted"
+                | "closure_incomplete",
+              ...([
+                "scan",
+                "draft_quality_correction",
+                "coverage_closure",
+              ].includes(event["recovery_phase"] as string)
                 ? {
                     phase: event["recovery_phase"] as
                       | "scan"
-                      | "draft_quality_correction",
+                      | "draft_quality_correction"
+                      | "coverage_closure",
                   }
                 : {}),
             },
@@ -1761,7 +1773,17 @@ export async function runScanEvents(
           isRecord(event["error"]) &&
           typeof event["error"]["message"] === "string"
         ) {
-          terminalFailure = new CopilotSecurityError(event["error"]["message"]);
+          terminalFailure =
+            event["failure_kind"] === "closure_incomplete" &&
+            Number.isSafeInteger(event["finding_quality_gap_count"]) &&
+            (event["finding_quality_gap_count"] as number) >= 0 &&
+            Number.isSafeInteger(event["coverage_gap_count"]) &&
+            (event["coverage_gap_count"] as number) >= 0
+              ? new ScanClosureIncompleteError(
+                  event["finding_quality_gap_count"] as number,
+                  event["coverage_gap_count"] as number,
+                )
+              : new CopilotSecurityError(event["error"]["message"]);
           if (event["usage"] !== undefined) usage = event["usage"];
         } else if (
           event.type === "error" &&

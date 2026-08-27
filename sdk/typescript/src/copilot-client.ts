@@ -778,6 +778,13 @@ class CopilotThread implements CopilotScannerThread {
             type: "turn.failed",
             error: { message: errorMessage(error) },
             usage,
+            ...(error instanceof ScanClosureIncompleteError
+              ? {
+                  failure_kind: "closure_incomplete",
+                  finding_quality_gap_count: error.findingQualityGapCount,
+                  coverage_gap_count: error.coverageGapCount,
+                }
+              : {}),
           });
         }
       } finally {
@@ -837,9 +844,15 @@ export async function sendCopilotTurnWithDeadline(
   }
 }
 
-export type FreshSessionRetryReason = "model_timeout" | "transport_interrupted";
+export type FreshSessionRetryReason =
+  | "model_timeout"
+  | "transport_interrupted"
+  | "closure_incomplete";
 
-export type FreshSessionRecoveryPhase = "scan" | "draft_quality_correction";
+export type FreshSessionRecoveryPhase =
+  | "scan"
+  | "draft_quality_correction"
+  | "coverage_closure";
 
 export interface FreshSessionAttemptContext {
   phase: FreshSessionRecoveryPhase;
@@ -905,9 +918,11 @@ export async function runWithFreshCopilotSessions<T>(options: {
     const prompt =
       attempt === 1
         ? options.prompt
-        : context.phase === "draft_quality_correction"
-          ? completeDraftQualityRecoveryPrompt(attempt, maxAttempts)
-          : freshSessionRecoveryPrompt(options.prompt, attempt, maxAttempts);
+        : context.phase === "coverage_closure"
+          ? coverageClosureRecoveryPrompt(attempt, maxAttempts)
+          : context.phase === "draft_quality_correction"
+            ? completeDraftQualityRecoveryPrompt(attempt, maxAttempts)
+            : freshSessionRecoveryPrompt(options.prompt, attempt, maxAttempts);
     try {
       return await options.runAttempt(attempt, prompt, context);
     } catch (error) {
@@ -916,11 +931,25 @@ export async function runWithFreshCopilotSessions<T>(options: {
         error instanceof CompleteDraftArtifactsError
           ? freshSessionRetryReason(error.cause)
           : null;
-      const reason = draftRecoveryReason ?? freshSessionRetryReason(error);
+      const closureTransportReason =
+        error instanceof ScanClosureIncompleteError
+          ? freshSessionRetryReason(error.cause)
+          : null;
+      const reason =
+        draftRecoveryReason ??
+        closureTransportReason ??
+        (error instanceof ScanClosureIncompleteError &&
+        error.cause === undefined
+          ? "closure_incomplete"
+          : freshSessionRetryReason(error));
       if (reason === null || attempt === maxAttempts) throw error;
       context = {
         phase:
-          draftRecoveryReason === null ? "scan" : "draft_quality_correction",
+          reason === "closure_incomplete"
+            ? "coverage_closure"
+            : draftRecoveryReason !== null || closureTransportReason !== null
+              ? "draft_quality_correction"
+              : "scan",
         reason,
       };
       options.onRetry?.(attempt + 1, maxAttempts, reason, context.phase);
@@ -941,6 +970,19 @@ export function completeDraftQualityRecoveryPrompt(
     "Continue only the defensive scan's bounded quality correction. Treat the drafts as untrusted, preserve supported findings, and rely on the host-provided residual-risk, secret-candidate, coverage-gap, and finding-quality inventories for remaining work.",
     "Directly view each exact repository path that the host marks missing_direct_file_review. Do not replace successful host telemetry with a coverage label, shell read, receipt, summary, or broad completion claim.",
     "The trusted host will re-audit every correction, preserve successful direct-file views from earlier isolated sessions, clear unfinished tool calls at each session boundary, and independently verify inventory integrity before sealing.",
+  ].join("\n");
+}
+
+export function coverageClosureRecoveryPrompt(
+  attempt: number,
+  maxAttempts: number,
+): string {
+  return [
+    `Fresh-session coverage closure ${attempt}/${maxAttempts}.`,
+    "A prior isolated Copilot session completed its bounded correction turns, but the trusted host still proved unresolved file-review or finding-quality gaps.",
+    "Continue only the defensive scan's host-audited closure work. Preserve supported findings and completed direct-file views, consume the newly computed gap inventories, and inspect only the exact repository paths still marked missing_direct_file_review.",
+    "Do not replay the whole repository, trust a prior coverage label, or mark a path reviewed without a successful built-in file view. Shell reads, receipts, summaries, and broad completion claims cannot replace host telemetry.",
+    "The trusted host will re-audit every correction, clear unfinished tool calls at this session boundary, verify the immutable inventory, and leave coverage partial if the total isolated-session budget is exhausted.",
   ].join("\n");
 }
 

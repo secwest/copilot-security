@@ -7,6 +7,7 @@ import {
   addCopilotUsage,
   closureGapCounts,
   completeDraftQualityRecoveryPrompt,
+  coverageClosureRecoveryPrompt,
   CopilotFileReviewTracker,
   copilotModelTurnTimeoutMilliseconds,
   copilotModelErrorRecovery,
@@ -40,6 +41,7 @@ import {
   CopilotSecurityError,
   ModelTransportInterruptedError,
   ModelTurnDeadlineExceededError,
+  ScanClosureIncompleteError,
   scanAuthentication,
   type ScanAuthentication,
 } from "../src/index.js";
@@ -737,6 +739,123 @@ describe("Copilot port", () => {
       ["model_timeout", "draft_quality_correction"],
       ["transport_interrupted", "draft_quality_correction"],
     ]);
+  });
+
+  test("spends the remaining isolated-session budget on host-proven coverage closure", async () => {
+    const attempts: Array<{
+      attempt: number;
+      phase: string;
+      reason?: string;
+      prompt: string;
+    }> = [];
+    const retries: Array<[number, number, string, string]> = [];
+    const remainingCoverage = [474, 73, 0];
+
+    const result = await runWithFreshCopilotSessions({
+      maxAttempts: 5,
+      prompt: "perform the complete repository scan",
+      runAttempt: async (attempt, prompt, context) => {
+        attempts.push({ attempt, prompt, ...context });
+        const gaps = remainingCoverage.shift();
+        if (gaps === undefined) throw new Error("missing benchmark state");
+        if (gaps > 0) throw new ScanClosureIncompleteError(0, gaps);
+        return "closed";
+      },
+      onRetry: (attempt, maximum, reason, phase) => {
+        retries.push([attempt, maximum, reason, phase]);
+      },
+    });
+
+    expect(result).toBe("closed");
+    expect(remainingCoverage).toHaveLength(0);
+    expect(attempts.map(({ attempt }) => attempt)).toEqual([1, 2, 3]);
+    expect(attempts[0]).toMatchObject({ attempt: 1, phase: "scan" });
+    for (const attempt of attempts.slice(1)) {
+      expect(attempt).toMatchObject({
+        phase: "coverage_closure",
+        reason: "closure_incomplete",
+      });
+      expect(attempt.prompt).toContain("Fresh-session coverage closure");
+      expect(attempt.prompt).toContain("missing_direct_file_review");
+      expect(attempt.prompt).toContain(
+        "inspect only the exact repository paths",
+      );
+      expect(attempt.prompt).not.toContain(
+        "perform the complete repository scan",
+      );
+    }
+    expect(retries).toEqual([
+      [2, 5, "closure_incomplete", "coverage_closure"],
+      [3, 5, "closure_incomplete", "coverage_closure"],
+    ]);
+    expect(coverageClosureRecoveryPrompt(5, 5)).toContain(
+      "leave coverage partial if the total isolated-session budget is exhausted",
+    );
+  });
+
+  test("fails closed when host-proven gaps exhaust the total isolated-session budget", async () => {
+    const attempts: Array<{ attempt: number; phase: string }> = [];
+    const gapCounts: number[] = [];
+    const terminal = new ScanClosureIncompleteError(2, 11);
+
+    await expect(
+      runWithFreshCopilotSessions({
+        maxAttempts: 3,
+        prompt: "scan",
+        runAttempt: async (attempt, _prompt, context) => {
+          attempts.push({ attempt, phase: context.phase });
+          gapCounts.push(terminal.coverageGapCount);
+          throw terminal;
+        },
+      }),
+    ).rejects.toBe(terminal);
+
+    expect(attempts).toEqual([
+      { attempt: 1, phase: "scan" },
+      { attempt: 2, phase: "coverage_closure" },
+      { attempt: 3, phase: "coverage_closure" },
+    ]);
+    expect(gapCounts).toEqual([11, 11, 11]);
+  });
+
+  test("preserves transport classification inside closure and does not replay terminal causes", async () => {
+    const phases: string[] = [];
+    const reasons: string[] = [];
+    const recovered = await runWithFreshCopilotSessions({
+      maxAttempts: 2,
+      prompt: "scan",
+      runAttempt: async (attempt, _prompt, context) => {
+        phases.push(context.phase);
+        if (attempt === 1) {
+          throw new ScanClosureIncompleteError(0, 4, {
+            cause: new ModelTransportInterruptedError(),
+          });
+        }
+        return "closed";
+      },
+      onRetry: (_attempt, _maximum, reason) => reasons.push(reason),
+    });
+    expect(recovered).toBe("closed");
+    expect(phases).toEqual(["scan", "draft_quality_correction"]);
+    expect(reasons).toEqual(["transport_interrupted"]);
+
+    let attempts = 0;
+    const terminal = new ScanClosureIncompleteError(0, 4, {
+      cause: new CopilotSecurityError(
+        "safety filtering rejected the authorized defensive scan after bounded retries",
+      ),
+    });
+    await expect(
+      runWithFreshCopilotSessions({
+        maxAttempts: 5,
+        prompt: "scan",
+        runAttempt: async () => {
+          attempts += 1;
+          throw terminal;
+        },
+      }),
+    ).rejects.toBe(terminal);
+    expect(attempts).toBe(1);
   });
 
   test("fails closed after the configured fresh-session budget", async () => {

@@ -43,6 +43,23 @@ repository, so benchmark evidence is derived from the claimed source range.
 Presence and substantive-quality flags are both retained in per-match
 diagnostics.
 
+## Coverage-closure orchestration microbenchmark
+
+`coverage-closure-orchestration-benchmark.json` preserves the sealed
+implementation-checkpoint self-scan baseline of 491 reconciled surfaces, 17
+reviewed surfaces, and 474 explicit coverage gaps. It does not claim that a
+synthetic run is another observed self-scan. Instead, its deterministic
+scenarios score the fresh-session scheduler at the same gap scale.
+
+The completion scenario must reduce 474 gaps to zero within three of five
+available sessions, invoke broad discovery exactly once, use targeted closure
+prompts thereafter, improve the closure rate by at least 0.96, and reach a 1.0
+final closure rate. Its paired exhaustion control keeps all 474 gaps through
+three sessions and must terminate with `ScanClosureIncompleteError`; it may not
+convert the zero-finding draft into complete coverage. The regression combines
+these scenarios with host file-view tracking tests that preserve successful
+views and discard unfinished tool calls across session boundaries.
+
 ## Local secret-candidate microbenchmark
 
 `secret-candidate-manifest.json` exercises the deterministic pre-model secret

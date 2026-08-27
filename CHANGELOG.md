@@ -6,6 +6,49 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added bounded automatic fresh-session coverage closure. When the trusted host
+  still proves missing direct file reviews or finding-quality gaps after a
+  session's correction turns, the scanner now spends the remaining shared
+  `--max-session-attempts` budget on isolated closure sessions instead of
+  immediately recovering a partial result. Closure sessions skip broad
+  repository discovery, preserve only successful host-observed built-in file
+  views, clear unfinished tool calls, consume freshly recomputed gap
+  inventories, and inspect the exact remaining paths. Transport failure inside
+  correction remains transport-classified, while authentication,
+  authorization, cancellation, cost limits, scanner contract failures,
+  nonretryable provider errors, and exhausted safety recovery remain terminal.
+  The total budget remains bounded from one through five sessions and defaults
+  to three, so retries cannot create an independent unbounded loop.
+- Preserved fail-closed closure identity across the Copilot event boundary.
+  Retry events expose only the sanitized `closure_incomplete` reason and
+  `coverage_closure` phase; terminal events carry validated nonnegative gap
+  counts without provider response text. The API reconstructs
+  `ScanClosureIncompleteError`, reports exact residual coverage and
+  finding-quality counts, and may preserve deterministically validated partial
+  artifacts without promoting zero findings or partial coverage to clearance.
+  The CLI now distinguishes targeted closure from transport and full-scan
+  recovery in live progress output, and its session-budget help covers both
+  transport recovery and host-proven closure.
+- Added `coverage-closure-orchestration-benchmark.json`. Its observed baseline
+  records the preceding exact-checkpoint self-scan's 491 reconciled surfaces,
+  17 reviewed surfaces, and 474 explicit gaps. Separate deterministic synthetic
+  scenarios require the scheduler to reduce 474 gaps to zero within three of
+  five sessions with no broad discovery replay, while a paired no-progress
+  control must exhaust three sessions as incomplete and preserve a partial
+  result. The benchmark requires a final closure rate of 1.0, at least 0.96
+  closure gain, no more than five total sessions, and zero broad replays after
+  the first scan; it does not misrepresent synthetic data as another observed
+  self-scan.
+- Added regression coverage for successful closure, budget exhaustion,
+  transport interruption during closure, nonretryable provider failure,
+  sanitized retry events, reconstructed terminal error identity, recovery
+  warnings, CLI progress, and benchmark thresholds. Focused Windows and native
+  Ubuntu runs each pass 149 tests with one intentional platform skip and no
+  failures. The authoritative native Windows suite passes 1,807 tests and
+  13,297 assertions across 201 files in 591.69 seconds, with 27 intentional
+  platform/integration skips and zero failures. Formatting, generated-model
+  drift, TypeScript, the production build, Windows and Linux focused behavior,
+  and the high-severity production dependency audit are green.
 - Added `python-chainlit-mcp-stdio-command-injection`, an exact Python model
   for
   [GHSA-w3fx-mc44-mf6j / CVE-2026-45018](https://github.com/advisories/GHSA-w3fx-mc44-mf6j).

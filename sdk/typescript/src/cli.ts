@@ -1105,7 +1105,7 @@ export async function main(
             .max(MAX_FRESH_SESSION_ATTEMPTS)
             .default(DEFAULT_FRESH_SESSION_ATTEMPTS)
             .describe(
-              "Fresh Copilot sessions allowed for retryable model-turn failures.",
+              "Fresh Copilot sessions allowed for transport recovery and host-proven coverage closure.",
             ),
           dryRun: z
             .boolean()
@@ -2713,25 +2713,27 @@ async function runScan(
       onReconnect: (attempt, maxAttempts, details) => {
         progress?.stopTimer();
         const message =
-          details?.phase === "draft_quality_correction"
-            ? `Draft transport ended; continuing host-audited quality correction in a fresh session (${attempt}/${maxAttempts}).`
-            : details?.reason === "rate_limit"
-              ? `Rate limit reached; retrying${
-                  details.retryAfterSeconds === undefined
-                    ? ""
-                    : ` in ${details.retryAfterSeconds}s`
-                } (${attempt}/${maxAttempts}).`
-              : details?.reason === "network"
-                ? `Network connection interrupted; retrying (${attempt}/${maxAttempts}).`
-                : details?.reason === "model_timeout"
-                  ? `Model turn deadline reached; starting fresh session (${attempt}/${maxAttempts}).`
-                  : details?.reason === "transport_interrupted"
-                    ? `Model transport ended; starting fresh session (${attempt}/${maxAttempts}).`
-                    : details?.reason === "authentication"
-                      ? `Authentication interrupted; retrying (${attempt}/${maxAttempts}).`
-                      : details?.reason === "authorization"
-                        ? `Model access interrupted; retrying (${attempt}/${maxAttempts}).`
-                        : `Copilot connection interrupted; retrying (${attempt}/${maxAttempts})`;
+          details?.reason === "closure_incomplete"
+            ? `Coverage gaps remain; continuing host-audited closure in a fresh session (${attempt}/${maxAttempts}).`
+            : details?.phase === "draft_quality_correction"
+              ? `Draft transport ended; continuing host-audited quality correction in a fresh session (${attempt}/${maxAttempts}).`
+              : details?.reason === "rate_limit"
+                ? `Rate limit reached; retrying${
+                    details.retryAfterSeconds === undefined
+                      ? ""
+                      : ` in ${details.retryAfterSeconds}s`
+                  } (${attempt}/${maxAttempts}).`
+                : details?.reason === "network"
+                  ? `Network connection interrupted; retrying (${attempt}/${maxAttempts}).`
+                  : details?.reason === "model_timeout"
+                    ? `Model turn deadline reached; starting fresh session (${attempt}/${maxAttempts}).`
+                    : details?.reason === "transport_interrupted"
+                      ? `Model transport ended; starting fresh session (${attempt}/${maxAttempts}).`
+                      : details?.reason === "authentication"
+                        ? `Authentication interrupted; retrying (${attempt}/${maxAttempts}).`
+                        : details?.reason === "authorization"
+                          ? `Model access interrupted; retrying (${attempt}/${maxAttempts}).`
+                          : `Copilot connection interrupted; retrying (${attempt}/${maxAttempts})`;
         progress?.stage(message);
         progress?.startTimer(runningMessage());
       },

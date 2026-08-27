@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0",
+  "benchmark": "coverage-closure-orchestration",
+  "observedBaseline": {
+    "checkpoint": "ad948d76805c4868582b02febe16e34f5ebc6aaa",
+    "inventorySurfaces": 491,
+    "reviewedSurfaces": 17,
+    "coverageGaps": 474,
+    "coverageCompleteness": "partial"
+  },
+  "thresholds": {
+    "minimumFinalClosureRate": 1,
+    "minimumClosureRateGain": 0.96,
+    "maximumTotalSessions": 5,
+    "maximumBroadDiscoveryReplays": 0,
+    "requirePartialOnExhaustion": true
+  },
+  "scenarios": [
+    {
+      "id": "bounded-follow-up-closes-observed-scale-gap",
+      "maxSessionAttempts": 5,
+      "coverageGapSequence": [474, 73, 0],
+      "expected": {
+        "completed": true,
+        "sessionsUsed": 3,
+        "broadDiscoverySessions": 1,
+        "closureSessions": 2,
+        "finalCoverageGaps": 0
+      }
+    },
+    {
+      "id": "bounded-follow-up-exhaustion-remains-partial",
+      "maxSessionAttempts": 3,
+      "coverageGapSequence": [474, 474, 474],
+      "expected": {
+        "completed": false,
+        "sessionsUsed": 3,
+        "broadDiscoverySessions": 1,
+        "closureSessions": 2,
+        "finalCoverageGaps": 474
+      }
+    }
+  ]
+}

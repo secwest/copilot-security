@@ -2,6 +2,71 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-26 — Bounded fresh-session coverage closure
+
+**Observed failure mode.** The exact Chainlit implementation self-scan produced
+valid, recoverable artifacts and no surviving findings, but host reconciliation
+proved that only 17 of 491 surfaces had direct review closure. The remaining
+474 paths were explicit gaps. Same-session correction could not close that
+inventory, and the existing fresh-session mechanism recognized only hard model
+deadlines and transport failures. Consequently, persistent
+`ScanClosureIncompleteError` reached the API recovery layer, which correctly
+kept the result partial but could not spend another isolated session on the
+known work. Treating this as a mere ended response stream also obscured the
+actual terminal condition. This is effectiveness evidence, not a provider
+allowance problem: the run used stored credentials without an AI-credit cap and
+processed more than four million input tokens.
+
+**Scheduler decision.** Make host-proven incomplete closure a third bounded
+fresh-session reason alongside model timeout and interrupted transport. It uses
+the existing total `maxSessionAttempts` budget—one through five, default
+three—rather than adding a second retry counter. The first attempt receives the
+normal scan prompt. A closure attempt does not replay broad discovery: it
+receives a purpose-specific prompt, recomputes the residual-risk, coverage, and
+finding-quality inventories, and works only exact remaining gaps. Successful
+built-in file views remain trusted host telemetry because every session reads
+the same sealed snapshot; unfinished tool-call IDs are discarded at each
+boundary. Model labels, summaries, shell reads, receipts, and prior artifact
+claims never substitute for a successful direct view. This preserves prior
+work without trusting prior conversation state.
+
+**Error and safety boundary.** A plain `ScanClosureIncompleteError` is eligible
+for targeted closure. If its cause is a recognized transport error, retry
+classification stays transport-specific while correction remains targeted. A
+nonretryable cause is terminal, including an exhausted classifier recovery,
+which prevents an aggressive retry policy from bypassing a deliberate provider
+decision. Authentication, authorization, scanner contracts, sandbox setup,
+cancellation, and cost enforcement also remain terminal. Usage accumulates
+across all session roots and subagents, so neither cost nor credit accounting
+can be reset by closure. Exhaustion preserves the original structured closure
+error and exact host gap counts across the subprocess event protocol; only
+validated numeric metadata crosses that boundary, never provider response text.
+The deterministic workbench may recover and seal safe partial artifacts, but
+partial coverage and zero findings remain explicitly non-clearing.
+
+**Benchmark contract.** The orchestration microbenchmark separates observation
+from simulation. Its immutable observed input is the prior self-scan's 491
+surfaces, 17 closures, and 474 gaps. The positive scheduler scenario models
+residual gaps of 474, 73, and zero across three of five allowed sessions. It
+must achieve 1.0 final closure, at least 0.96 gain, and exactly one broad
+discovery pass. The paired control retains all 474 gaps for three of three
+sessions and must terminate with `ScanClosureIncompleteError`, a partial result,
+and no false completeness. These synthetic cases test orchestration at the
+observed scale without being presented as new scanner measurements.
+
+**Regression state before live acceptance.** Focused native Windows and Ubuntu
+runs each execute 150 tests: 149 pass, one intentional platform-specific case
+skips, and none fail. They cover closure success and exhaustion, transport
+inside closure, nonretryable error causes, event sanitization and
+reconstruction, CLI messaging, and both benchmark scenarios. The full native
+Windows suite passes 1,807 tests and 13,297 assertions across 201 files in
+591.69 seconds, with 27 intentional platform/integration skips and zero
+failures. Generated models, formatting, strict TypeScript, production build,
+and the high-severity production dependency audit are clean. Exact-commit
+package, hosted-CI, and real tracked-snapshot self-scan results are recorded in
+the subsequent acceptance entry so measured closure is not conflated with the
+synthetic scheduler gate.
+
 ## 2026-08-26 — Chainlit MCP stdio client-command injection
 
 **Gap and primary evidence.** GitHub's reviewed
