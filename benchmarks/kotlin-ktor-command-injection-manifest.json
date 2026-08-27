@@ -142,6 +142,46 @@
       "id": "kotlin-ktor-resource-live-command-list-argv",
       "fixture": "fixtures/kotlin-ktor-resource-live-command-list-argv",
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-inline-pipeline-injection",
+      "fixture": "fixtures/kotlin-ktor-resource-inline-pipeline-injection",
+      "expected": [
+        {
+          "title": "Ktor typed resource reaches an inline ProcessBuilder pipeline shell command",
+          "cwe": ["CWE-78", "CWE-88"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/main/kotlin/example/Diagnostics.kt",
+          "line": 18,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["typed resource", "@Resource", "DiagnosticResource"],
+            ["commandLine", "interpolation", "formatted"],
+            ["inline ProcessBuilder", "inline builder", "pipeline list"],
+            ["startPipeline", "sh -c", "shell"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["commandLine", "command string", "shell grammar"],
+            ["startPipeline", "listOf", "pipeline assembly"],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-inline-pipeline-argv",
+      "fixture": "fixtures/kotlin-ktor-resource-inline-pipeline-argv",
+      "expected": []
     }
   ]
 }

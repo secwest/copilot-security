@@ -6122,6 +6122,63 @@
         "kotlin-ktor-resource-live-command-list-argv/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-inline-pipeline-injection",
+      "description": "A typed Ktor Resource value reaches shell grammar in an inline ProcessBuilder contained by the exact list passed to startPipeline.",
+      "fixture": "fixtures/kotlin-ktor-resource-inline-pipeline-injection",
+      "findingsPaths": [
+        "kotlin-ktor-resource-inline-pipeline-injection/run-1/findings.json",
+        "kotlin-ktor-resource-inline-pipeline-injection/run-2/findings.json",
+        "kotlin-ktor-resource-inline-pipeline-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "kotlin-ktor-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/main/kotlin/example/Diagnostics.kt",
+              "startLine": 18,
+              "endLine": 18,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["typed resource", "@Resource", "DiagnosticResource"],
+            ["commandLine", "interpolation", "formatted"],
+            ["inline ProcessBuilder", "inline builder", "pipeline list"],
+            ["startPipeline", "sh -c", "shell"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["commandLine", "command string", "shell grammar"],
+            ["startPipeline", "listOf", "pipeline assembly"],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-inline-pipeline-argv",
+      "description": "The topology-matched inline-pipeline control keeps the typed Resource value in ordinary argv for a fixed printf process.",
+      "fixture": "fixtures/kotlin-ktor-resource-inline-pipeline-argv",
+      "findingsPaths": [
+        "kotlin-ktor-resource-inline-pipeline-argv/run-1/findings.json",
+        "kotlin-ktor-resource-inline-pipeline-argv/run-2/findings.json",
+        "kotlin-ktor-resource-inline-pipeline-argv/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

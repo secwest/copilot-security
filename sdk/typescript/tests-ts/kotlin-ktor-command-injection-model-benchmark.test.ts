@@ -38,6 +38,8 @@ const caseIds = [
   "kotlin-ktor-resource-argv-command",
   "kotlin-ktor-resource-live-command-list-injection",
   "kotlin-ktor-resource-live-command-list-argv",
+  "kotlin-ktor-resource-inline-pipeline-injection",
+  "kotlin-ktor-resource-inline-pipeline-argv",
 ] as const;
 const handlerPath = "src/main/kotlin/example/Diagnostics.kt";
 
@@ -127,6 +129,13 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
       requireCodeEvidence: true,
     });
     expect(benchmark.cases[5]?.expected).toEqual([]);
+    expect(benchmark.cases[6]?.expected[0]).toMatchObject({
+      cwe: ["CWE-78", "CWE-88"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(benchmark.cases[7]?.expected).toEqual([]);
   });
 
   test("preserves exact Ktor source, interpolation, ProcessBuilder, and start", async () => {
@@ -275,6 +284,12 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
     );
     expect(workflow).toContain(
       "kotlin-ktor-resource-live-command-list-argv/pom.xml verify",
+    );
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-inline-pipeline-injection/pom.xml verify",
+    );
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-inline-pipeline-argv/pom.xml verify",
     );
   });
 
@@ -439,6 +454,119 @@ ${body}
         builder.start()`),
     );
     expect(safe).toEqual([]);
+  });
+
+  test("tracks exact inline and retained ProcessBuilder pipeline lists", () => {
+    const resource = (body: string): string =>
+      `package example
+import io.ktor.resources.Resource
+import io.ktor.server.resources.get
+import io.ktor.server.routing.routing
+import java.lang.ProcessBuilder
+
+@Resource("/diagnostics/{target}")
+data class DiagnosticResource(val target: String)
+
+fun routes() = routing {
+    get<DiagnosticResource> { input ->
+${body}
+    }
+}
+`;
+
+    const inline = records(
+      resource(`        val value = input.target
+        ProcessBuilder.startPipeline(
+            listOf(
+                ProcessBuilder("printf", "%s", "fixed"),
+                ProcessBuilder("sh", "-c", value),
+            ),
+        )`),
+    );
+    expect(inline).toHaveLength(1);
+    expect(inline[0]?.frameworkModel.sink).toMatchObject({
+      kind: "kotlin-process-shell-command",
+      symbol: "java.lang.ProcessBuilder;method=startPipeline;argument=3",
+    });
+    expect(
+      inline[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toContain("kotlin-process-pipeline-assembly");
+
+    const retained = records(
+      resource(`        val value = input.target
+        val builder = ProcessBuilder("sh", "-c", value)
+        val pipeline = mutableListOf(builder)
+        ProcessBuilder.startPipeline(pipeline)`),
+    );
+    expect(retained).toHaveLength(1);
+
+    const chained = records(
+      resource(`        val value = input.target
+        val pipeline = arrayListOf(
+            ProcessBuilder("printf", "%s", "fixed"),
+            ProcessBuilder("printf", "%s", "fixed")
+                .command("sh", "-c", value),
+        )
+        java.lang.ProcessBuilder.startPipeline(pipeline)`),
+    );
+    expect(chained).toHaveLength(1);
+
+    const appended = records(
+      resource(`        val value = input.target
+        val pipeline = mutableListOf(
+            ProcessBuilder("printf", "%s", "fixed"),
+        )
+        pipeline.add(ProcessBuilder("sh", "-c", value))
+        ProcessBuilder.startPipeline(pipeline)`),
+    );
+    expect(appended).toHaveLength(1);
+    expect(
+      appended[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual(
+      expect.arrayContaining([
+        "kotlin-process-pipeline-list-mutation",
+        "kotlin-process-pipeline-assembly",
+      ]),
+    );
+
+    const controls = [
+      `        val value = input.target
+        ProcessBuilder.startPipeline(
+            listOf(ProcessBuilder("printf", "%s", value)),
+        )`,
+      `        val value = input.target
+        val builder = ProcessBuilder("sh", "-c", value)
+        val pipeline = listOf(builder)
+        builder.command("printf", "%s", value)
+        ProcessBuilder.startPipeline(pipeline)`,
+      `        val value = input.target
+        val builder = ProcessBuilder("sh", "-c", value)
+        ProcessBuilder.startPipeline(notAList(builder))`,
+      `        val value = input.target
+        val dangerous = ProcessBuilder("sh", "-c", value)
+        val pipeline = mutableListOf(dangerous)
+        val retained = pipeline
+        retained.clear()
+        retained.add(ProcessBuilder("printf", "%s", value))
+        ProcessBuilder.startPipeline(pipeline)`,
+      `        val value = input.target
+        val dangerous = ProcessBuilder("sh", "-c", value)
+        val pipeline = arrayListOf(dangerous)
+        pipeline[0] = ProcessBuilder("printf", "%s", value)
+        ProcessBuilder.startPipeline(pipeline)`,
+      `        val value = input.target
+        val dangerous = ProcessBuilder("sh", "-c", value)
+        val pipeline = mutableListOf(dangerous)
+        pipeline.removeAt(0)
+        ProcessBuilder.startPipeline(pipeline)`,
+      `        val value = input.target
+        val dangerous = ProcessBuilder("sh", "-c", value)
+        val pipeline = mutableListOf(dangerous)
+        pipeline.set(4, ProcessBuilder("printf", "%s", value))
+        ProcessBuilder.startPipeline(pipeline)`,
+    ];
+    for (const control of controls)
+      expect(records(resource(control))).toEqual([]);
   });
 
   test("tracks live command-list mutation, retained views, and builder aliases", () => {
@@ -728,6 +856,54 @@ fun routes() = routing {
     expect(vulnerable).toContain("liveCommand.set(2, payload)");
     expect(safe).toContain("liveCommand.clear()");
     expect(safe).toContain('liveCommand.add("printf")');
+  });
+
+  test("keeps inline-pipeline fixtures executable, paired, and precisely modeled", async () => {
+    const vulnerableRecords = await fixtureRecords(caseIds[6]);
+    const safeRecords = await fixtureRecords(caseIds[7]);
+    expect(vulnerableRecords).toHaveLength(1);
+    expect(vulnerableRecords[0]).toMatchObject({
+      line: 18,
+      frameworkModel: {
+        source: { kind: "ktor-typed-resource" },
+        sink: {
+          kind: "kotlin-process-shell-command",
+          symbol: "java.lang.ProcessBuilder;method=startPipeline;argument=3",
+        },
+      },
+    });
+    expect(
+      vulnerableRecords[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toContain("kotlin-process-pipeline-assembly");
+    expect(safeRecords).toEqual([]);
+
+    const vulnerable = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        caseIds[6],
+        "src/test/kotlin/example/InlinePipelineInjectionWitnessTest.kt",
+      ),
+      "utf8",
+    );
+    const safe = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        caseIds[7],
+        "src/test/kotlin/example/InlinePipelineArgvWitnessTest.kt",
+      ),
+      "utf8",
+    );
+    for (const witness of [vulnerable, safe]) {
+      expect(witness).toContain("ProcessBuilder.startPipeline");
+      expect(witness).toContain("listOf(");
+      expect(witness).toContain("pipeline-expanded");
+      expect(witness).not.toContain("java.io.File");
+      expect(witness).not.toContain("java.net");
+    }
+    expect(vulnerable).toContain('ProcessBuilder("sh", "-c", commandLine)');
+    expect(safe).toContain('ProcessBuilder("printf", "%s", argument)');
   });
 
   test("recognizes shell, interpreter, batch, and executable-selection boundaries", () => {

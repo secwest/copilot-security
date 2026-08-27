@@ -4153,6 +4153,9 @@ const KOTLIN_KTOR_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
     "java.lang.ProcessBuilder",
     "live command list",
     "command list mutation",
+    "inline pipeline",
+    "pipeline list",
+    "pipeline list mutation",
   ],
   ["sh -c", "shell", "-c"],
 ] as const;
@@ -4167,6 +4170,8 @@ const KOTLIN_KTOR_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
     "startPipeline",
     "builder alias",
     "liveCommand",
+    "listOf",
+    "pipeline assembly",
   ],
   ["stdout", "response", "respondText"],
 ] as const;

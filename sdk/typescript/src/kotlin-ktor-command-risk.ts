@@ -36,6 +36,8 @@ interface KotlinPropagator {
   kind:
     | "kotlin-command-list-mutation"
     | "kotlin-local-assignment"
+    | "kotlin-process-pipeline-assembly"
+    | "kotlin-process-pipeline-list-mutation"
     | "kotlin-process-command-replacement"
     | "kotlin-string-concatenation"
     | "kotlin-string-interpolation";
@@ -59,6 +61,18 @@ interface ProcessBuilderState {
   arguments: ProcessArgument[];
   commandSetLine?: number;
   constructorLine: number;
+}
+
+interface ProcessPipelineInvocation {
+  builders: ProcessBuilderState[];
+  line: number;
+}
+
+interface ProcessBuilderListMutation {
+  builder?: ProcessBuilderState;
+  index?: number;
+  kind: "append" | "clear" | "insert" | "remove" | "set";
+  line: number;
 }
 
 interface CommandReplacement {
@@ -813,6 +827,221 @@ function builderExpression(
   return builders.get(meaningful[0].value);
 }
 
+function exactBuilderExpression(
+  tokens: readonly KotlinToken[],
+  aliases: ReadonlySet<string>,
+  builders: ReadonlyMap<string, ProcessBuilderState>,
+  commandLists: ReadonlyMap<string, ProcessArgument[]>,
+): ProcessBuilderState | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  const referenced = builderExpression(meaningful, builders);
+  if (referenced !== undefined) return referenced;
+  let openIndex: number | undefined;
+  if (aliases.has(meaningful[0]?.value ?? "") && meaningful[1]?.value === "(") {
+    openIndex = 1;
+  } else if (
+    compact(meaningful.slice(0, 6)) === "java.lang.ProcessBuilder(" &&
+    meaningful[5]?.value === "("
+  ) {
+    openIndex = 5;
+  }
+  if (openIndex === undefined) return undefined;
+  const close = matchingDelimiter(meaningful, openIndex);
+  if (close === undefined) return undefined;
+  const tail = meaningful.slice(close + 1);
+  if (tail.length > 0) {
+    if (
+      tail[0]?.value !== "." ||
+      tail[1]?.value !== "command" ||
+      tail[2]?.value !== "("
+    ) {
+      return undefined;
+    }
+    const commandClose = matchingDelimiter(tail, 2);
+    if (commandClose !== tail.length - 1) return undefined;
+  }
+  return processConstructor(meaningful, aliases, commandLists);
+}
+
+function builderListExpression(
+  tokens: readonly KotlinToken[],
+  aliases: ReadonlySet<string>,
+  builders: ReadonlyMap<string, ProcessBuilderState>,
+  builderLists: ReadonlyMap<string, ProcessBuilderState[]>,
+  commandLists: ReadonlyMap<string, ProcessArgument[]>,
+): ProcessBuilderState[] | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  if (meaningful.length === 1 && meaningful[0]?.kind === "identifier") {
+    return builderLists.get(meaningful[0].value);
+  }
+  if (
+    !new Set(["arrayListOf", "listOf", "mutableListOf"]).has(
+      meaningful[0]?.value ?? "",
+    ) ||
+    meaningful[1]?.value !== "(" ||
+    matchingDelimiter(meaningful, 1) !== meaningful.length - 1
+  ) {
+    return undefined;
+  }
+  const elements = splitArguments(meaningful.slice(2, -1));
+  const result: ProcessBuilderState[] = [];
+  for (const element of elements) {
+    const builder = exactBuilderExpression(
+      element,
+      aliases,
+      builders,
+      commandLists,
+    );
+    if (builder === undefined) return undefined;
+    result.push(builder);
+  }
+  return result;
+}
+
+function builderListMutation(
+  tokens: readonly KotlinToken[],
+  receiver: string,
+  aliases: ReadonlySet<string>,
+  builders: ReadonlyMap<string, ProcessBuilderState>,
+  commandLists: ReadonlyMap<string, ProcessArgument[]>,
+): ProcessBuilderListMutation | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  if (meaningful[0]?.value !== receiver) return undefined;
+  const suffix = meaningful.slice(1);
+  if (suffix[0]?.value === "[") {
+    const close = matchingDelimiter(suffix, 0);
+    if (
+      close === undefined ||
+      suffix[close + 1]?.value !== "=" ||
+      suffix[close + 2] === undefined
+    ) {
+      return undefined;
+    }
+    const index = commandIndex(suffix.slice(1, close));
+    const builder = exactBuilderExpression(
+      suffix.slice(close + 2),
+      aliases,
+      builders,
+      commandLists,
+    );
+    const line = suffix[close + 1]?.line ?? suffix[0]?.line ?? 1;
+    return index === undefined || builder === undefined
+      ? undefined
+      : { builder, index, kind: "set", line };
+  }
+  if (
+    suffix[0]?.value !== "." ||
+    suffix[1]?.kind !== "identifier" ||
+    suffix[2]?.value !== "("
+  ) {
+    return undefined;
+  }
+  const close = matchingDelimiter(suffix, 2);
+  if (close === undefined || close !== suffix.length - 1) return undefined;
+  const method = suffix[1].value;
+  const arguments_ = splitArguments(suffix.slice(3, close));
+  const line = suffix[1].line;
+  if (method === "clear" && arguments_.length === 0)
+    return { kind: "clear", line };
+  if (method === "removeAt" && arguments_.length === 1) {
+    const index = commandIndex(arguments_[0] ?? []);
+    return index === undefined ? undefined : { index, kind: "remove", line };
+  }
+  if (method === "set" && arguments_.length === 2) {
+    const index = commandIndex(arguments_[0] ?? []);
+    const builder = exactBuilderExpression(
+      arguments_[1] ?? [],
+      aliases,
+      builders,
+      commandLists,
+    );
+    return index === undefined || builder === undefined
+      ? undefined
+      : { builder, index, kind: "set", line };
+  }
+  if (method === "add" && arguments_.length === 1) {
+    const builder = exactBuilderExpression(
+      arguments_[0] ?? [],
+      aliases,
+      builders,
+      commandLists,
+    );
+    return builder === undefined
+      ? undefined
+      : { builder, kind: "append", line };
+  }
+  if (method === "add" && arguments_.length === 2) {
+    const index = commandIndex(arguments_[0] ?? []);
+    const builder = exactBuilderExpression(
+      arguments_[1] ?? [],
+      aliases,
+      builders,
+      commandLists,
+    );
+    return index === undefined || builder === undefined
+      ? undefined
+      : { builder, index, kind: "insert", line };
+  }
+  return undefined;
+}
+
+function applyBuilderListMutation(
+  builders: ProcessBuilderState[],
+  mutation: ProcessBuilderListMutation,
+  mutationLines: WeakMap<
+    ProcessBuilderState[],
+    Map<ProcessBuilderState, number>
+  >,
+): boolean {
+  const recordMutation = (builder: ProcessBuilderState): void => {
+    let lines = mutationLines.get(builders);
+    if (lines === undefined) {
+      lines = new Map<ProcessBuilderState, number>();
+      mutationLines.set(builders, lines);
+    }
+    lines.set(builder, mutation.line);
+  };
+  if (mutation.kind === "clear") {
+    builders.splice(0, builders.length);
+    mutationLines.get(builders)?.clear();
+    return true;
+  }
+  if (mutation.kind === "append" && mutation.builder !== undefined) {
+    builders.push(mutation.builder);
+    recordMutation(mutation.builder);
+    return true;
+  }
+  if (
+    mutation.kind === "insert" &&
+    mutation.builder !== undefined &&
+    mutation.index !== undefined &&
+    mutation.index <= builders.length
+  ) {
+    builders.splice(mutation.index, 0, mutation.builder);
+    recordMutation(mutation.builder);
+    return true;
+  }
+  if (
+    mutation.kind === "remove" &&
+    mutation.index !== undefined &&
+    mutation.index < builders.length
+  ) {
+    builders.splice(mutation.index, 1);
+    return true;
+  }
+  if (
+    mutation.kind === "set" &&
+    mutation.builder !== undefined &&
+    mutation.index !== undefined &&
+    mutation.index < builders.length
+  ) {
+    builders[mutation.index] = mutation.builder;
+    recordMutation(mutation.builder);
+    return true;
+  }
+  return false;
+}
+
 function commandIndex(tokens: readonly KotlinToken[]): number | undefined {
   const meaningful = meaningfulTokens(tokens);
   if (meaningful.length !== 1 || meaningful[0]?.kind !== "number")
@@ -1031,11 +1260,13 @@ function startLine(
   return undefined;
 }
 
-function pipelineStartLine(
+function pipelineInvocation(
   tokens: readonly KotlinToken[],
-  builder: string,
   aliases: ReadonlySet<string>,
-): number | undefined {
+  builders: ReadonlyMap<string, ProcessBuilderState>,
+  builderLists: ReadonlyMap<string, ProcessBuilderState[]>,
+  commandLists: ReadonlyMap<string, ProcessArgument[]>,
+): ProcessPipelineInvocation | undefined {
   for (let index = 0; index < tokens.length - 2; index += 1) {
     if (
       tokens[index]?.value !== "startPipeline" ||
@@ -1052,13 +1283,17 @@ function pipelineStartLine(
     if (!aliasReceiver && !qualifiedReceiver) continue;
     const close = matchingDelimiter(tokens, index + 1);
     if (close === undefined) continue;
-    if (
-      tokens
-        .slice(index + 2, close)
-        .some((token) => token.kind === "identifier" && token.value === builder)
-    ) {
-      return tokens[index]?.line;
-    }
+    const arguments_ = splitArguments(tokens.slice(index + 2, close));
+    if (arguments_.length !== 1) continue;
+    const pipelineBuilders = builderListExpression(
+      arguments_[0] ?? [],
+      aliases,
+      builders,
+      builderLists,
+      commandLists,
+    );
+    if (pipelineBuilders !== undefined)
+      return { builders: pipelineBuilders, line: tokens[index]?.line ?? 1 };
   }
   return undefined;
 }
@@ -1313,11 +1548,40 @@ export function kotlinKtorCommandInjectionRecords(
     }
     const literals = new Map<string, string>();
     const builders = new Map<string, ProcessBuilderState>();
+    const builderLists = new Map<string, ProcessBuilderState[]>();
+    const builderListMutationLines = new WeakMap<
+      ProcessBuilderState[],
+      Map<ProcessBuilderState, number>
+    >();
     const commandLists = new Map<string, ProcessArgument[]>();
     let routeAborted = false;
     for (const statement of statementTokens(scope.body)) {
       const assigned = assignment(statement);
-      const constructor = processConstructor(statement, aliases, commandLists);
+      const assignedBuilderList =
+        assigned === undefined
+          ? undefined
+          : builderListExpression(
+              assigned.expression,
+              aliases,
+              builders,
+              builderLists,
+              commandLists,
+            );
+      const pipeline = pipelineInvocation(
+        statement,
+        aliases,
+        builders,
+        builderLists,
+        commandLists,
+      );
+      const constructor =
+        assignedBuilderList !== undefined || pipeline !== undefined
+          ? undefined
+          : processConstructor(
+              assigned?.expression ?? statement,
+              aliases,
+              commandLists,
+            );
       const directStart =
         constructor === undefined ? undefined : startLine(statement);
       if (constructor !== undefined && directStart !== undefined) {
@@ -1331,7 +1595,9 @@ export function kotlinKtorCommandInjectionRecords(
             ? builderExpression(assigned.expression, builders)
             : undefined;
         const referencedCommandList =
-          constructor === undefined && referencedBuilder === undefined
+          constructor === undefined &&
+          referencedBuilder === undefined &&
+          assignedBuilderList === undefined
             ? commandListExpression(assigned.expression, builders, commandLists)
             : undefined;
         if (constructor !== undefined && directStart === undefined) {
@@ -1346,10 +1612,16 @@ export function kotlinKtorCommandInjectionRecords(
         } else {
           commandLists.set(assigned.name, referencedCommandList);
         }
+        if (assignedBuilderList === undefined) {
+          builderLists.delete(assigned.name);
+        } else {
+          builderLists.set(assigned.name, assignedBuilderList);
+        }
         if (
           constructor !== undefined ||
           referencedBuilder !== undefined ||
-          referencedCommandList !== undefined
+          referencedCommandList !== undefined ||
+          assignedBuilderList !== undefined
         ) {
           taints.delete(assigned.name);
           literals.delete(assigned.name);
@@ -1391,19 +1663,10 @@ export function kotlinKtorCommandInjectionRecords(
           break;
         }
         const line = startLine(statement, name);
-        const pipelineLine = pipelineStartLine(statement, name, aliases);
-        if (line !== undefined || pipelineLine !== undefined) {
+        if (line !== undefined) {
           const risk = processRisk(state, taints, literals);
           if (risk !== undefined) {
-            records.push(
-              recordForRisk(
-                path,
-                lines,
-                line ?? pipelineLine ?? state.constructorLine,
-                risk,
-                line === undefined ? "startPipeline" : "start",
-              ),
-            );
+            records.push(recordForRisk(path, lines, line, risk, "start"));
           }
         }
       }
@@ -1419,6 +1682,51 @@ export function kotlinKtorCommandInjectionRecords(
         }
       }
       if (routeAborted) break;
+      for (const [name, pipelineBuilders] of builderLists) {
+        const mutation = builderListMutation(
+          statement,
+          name,
+          aliases,
+          builders,
+          commandLists,
+        );
+        if (
+          mutation !== undefined &&
+          !applyBuilderListMutation(
+            pipelineBuilders,
+            mutation,
+            builderListMutationLines,
+          )
+        ) {
+          routeAborted = true;
+          break;
+        }
+      }
+      if (routeAborted) break;
+      if (pipeline !== undefined) {
+        for (const state of new Set(pipeline.builders)) {
+          const risk = processRisk(state, taints, literals);
+          if (risk !== undefined) {
+            const mutationLine = builderListMutationLines
+              .get(pipeline.builders)
+              ?.get(state);
+            if (mutationLine !== undefined) {
+              risk.taint.propagators.push({
+                kind: "kotlin-process-pipeline-list-mutation",
+                line: mutationLine,
+              });
+            }
+            risk.taint.propagators.push({
+              kind: "kotlin-process-pipeline-assembly",
+              line: pipeline.line,
+              symbol: "ProcessBuilder.startPipeline",
+            });
+            records.push(
+              recordForRisk(path, lines, pipeline.line, risk, "startPipeline"),
+            );
+          }
+        }
+      }
       if (records.length >= MAX_RECORDS) return records;
     }
   }

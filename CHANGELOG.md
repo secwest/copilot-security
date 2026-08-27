@@ -6,6 +6,30 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended `kotlin-ktor-command-injection` through exact
+  `ProcessBuilder.startPipeline(List<ProcessBuilder>)` assembly. Inline builders
+  inside `listOf`, `mutableListOf`, and `arrayListOf`, retained builder-list
+  variables, builder-list aliases, and fluent inline `command(...)` replacement
+  now reach pipeline execution. The former identifier-anywhere approximation
+  was removed, so arbitrary wrappers that merely mention a known builder no
+  longer count as a pipeline.
+- Preserved live pipeline-list state and order. Constant indexed writes, `set`,
+  append/indexed `add`, `removeAt`, and `clear` update the builders that will
+  actually execute; aliases share the same list; replacement or removal can
+  eliminate an earlier risk; and deterministically invalid indices abort the
+  straight-line route before launch. New
+  `kotlin-process-pipeline-list-mutation` and
+  `kotlin-process-pipeline-assembly` propagators retain those edges in attack
+  paths without weakening executable-selection, shell/interpreter, or ordinary
+  argv distinctions.
+- Added a topology-matched typed-resource inline-pipeline exploit/control pair,
+  expanding the perfect-gate Kotlin manifest to eight cases and the canonical
+  corpus to 146 pairs, 292 cases, and 876 repeated scan positions. Both Ktor
+  3.5.2/Kotlin 2.2.20 applications compile and their fixed-string Java 21
+  witnesses pass on Ubuntu using only two short-lived processes. Deterministic
+  review emits one shell finding at the exact `startPipeline` call and no
+  finding for fixed `printf` argv. Focused Kotlin plus canonical tests pass 39
+  tests and 2,399 assertions, and TypeScript checking is clean.
 - Extended `kotlin-ktor-command-injection` through the JDK's live command-list
   boundary. The model now preserves shared list identity when a collection is
   passed to `ProcessBuilder(List)` or `command(List)`, follows the mutable view

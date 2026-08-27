@@ -2,6 +2,51 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Model exact ProcessBuilder pipeline lists
+
+**Why named-builder search was insufficient.** The JDK specifies that
+`startPipeline` starts one process for each builder in its supplied list and
+uses each builder's effective command and attributes. A builder constructed
+inline inside `listOf(...)` therefore executes even though it is never assigned
+to a local name. Conversely, finding a known builder identifier anywhere in
+the argument expression does not prove that the expression is a
+`List<ProcessBuilder>`. The earlier model missed the inline case and could
+accept an arbitrary wrapper containing the name. Reference: [JDK
+ProcessBuilder][jdk-process-builder].
+
+**Exact assembly and identity.** Pipeline closure now requires the exact
+imported or fully qualified static `ProcessBuilder.startPipeline` receiver and
+one proven builder-list argument. Supported lists are direct `listOf`,
+`mutableListOf`, or `arrayListOf` expressions, retained list variables, and
+exact aliases. Each element must be a proven builder identity or an inline
+exact builder constructor, optionally followed by one exact fluent
+`command(...)` replacement. The model retains object identity: changing a
+builder after adding it to a list changes the state observed at pipeline start.
+Unknown wrapper calls, unresolved elements, and unrelated occurrences of a
+builder name fail closed instead of being treated as executable lists.
+
+**Ordered mutable-list boundary.** A mutable retained builder list supports
+constant indexed assignment, `set`, append and indexed `add`, `removeAt`, and
+`clear`. Aliases share the same array. Adds and replacements record
+`kotlin-process-pipeline-list-mutation`; every builder that reaches the exact
+static call records `kotlin-process-pipeline-assembly`. Clear, removal, or safe
+replacement can eliminate a previously dangerous builder, while a definitely
+out-of-bounds mutation prevents later straight-line execution. Dynamic
+indices, custom collection builders, general higher-order transformations,
+and cross-function list construction remain outside this bounded same-route
+model until exact summaries and matched negative controls exist.
+
+**Executable evidence.** The positive typed-resource fixture places an inline
+`sh -c` builder after a fixed producer inside the exact pipeline list. The
+control preserves the route, source, two-builder pipeline, output read, and
+response but uses fixed `printf` with the resource value in ordinary argv.
+Kotlin 2.2.20 and Ktor 3.5.2 compile both applications on Java 21 under Ubuntu.
+Their fixed-string witnesses create only two short-lived processes: the shell
+case interprets a harmless command separator, while the argv case returns the
+same shell-looking text literally. Focused Kotlin and canonical gates pass 39
+tests and 2,399 assertions. The Kotlin manifest now contains eight cases and
+the canonical corpus contains 146 pairs, 292 cases, and 876 scan positions.
+
 ## 2026-08-27 — Preserve ProcessBuilder live command-list identity
 
 **Why replacement-only state is incomplete.** Oracle documents three related

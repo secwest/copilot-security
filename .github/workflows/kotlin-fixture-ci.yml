@@ -38,6 +38,8 @@ jobs:
             benchmarks/fixtures/kotlin-ktor-resource-argv-command/pom.xml
             benchmarks/fixtures/kotlin-ktor-resource-live-command-list-injection/pom.xml
             benchmarks/fixtures/kotlin-ktor-resource-live-command-list-argv/pom.xml
+            benchmarks/fixtures/kotlin-ktor-resource-inline-pipeline-injection/pom.xml
+            benchmarks/fixtures/kotlin-ktor-resource-inline-pipeline-argv/pom.xml
 
       - name: Compile Ktor applications and run native Kotlin witnesses
         shell: bash
@@ -49,3 +51,5 @@ jobs:
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-argv-command/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-live-command-list-injection/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-live-command-list-argv/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-inline-pipeline-injection/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/kotlin-ktor-resource-inline-pipeline-argv/pom.xml verify
