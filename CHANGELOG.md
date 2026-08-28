@@ -50,6 +50,44 @@ All notable scanner, application, benchmark, and operational changes are recorde
   search-pattern class and medium severity when deployment exposure remains
   unknown, while its field-specific workload, shared-event-loop, evidence, and
   negative-control gates remain mandatory.
+- Final exact-revision campaign
+  `dba2cf8001efda9f58fab6767b87eca48a51c1551b582cb96a807e0765419c0c`
+  closes the counterexample loop at public commit
+  `88367a1e3edeb55348b22d8ff6fc9bb9a77851a2`. Both deep high-effort scans
+  complete on attempt one with complete coverage. The exploit produces one
+  medium CWE-1333 finding that independently traces MCP registration, both
+  bounded input properties, the `searchText` helper, pattern construction,
+  synchronous execution, nonlinear work, and the shared Node event loop; the
+  fixed-pattern control produces no finding. All strict completion, precision,
+  recall, F1, case, negative-case, stability, validation, attack-path,
+  code-evidence, severity, and semantic gates equal one, with zero false
+  positives or false negatives. A finalize-only rebuild verifies the same
+  campaign, corpus, comparison-policy, scanner, package, source, fixture, and
+  sealed artifact hashes. The two runs consume 3,087,003 input, 2,682,221
+  cached, and 51,655 output tokens over 664,626 ms of cumulative worker time;
+  no authentication, allowance, rate-limit, classifier, transport, timeout, or
+  retry event occurs.
+- Exact-checkpoint self-review is byte-for-byte stable. Two compiled scans of
+  the 3,570-file tracked-only archive emit 256 rows, 555,898 bytes, and SHA-256
+  `3a7dc85e52b995f7a1e4cd8fe86f71d7b25c404d3fd16f3302c5eb5e366fd675`
+  in 27,578.952 and 10,627.158 ms. Independently rooting the archived exploit
+  emits one complete MCP regex model at execution line 8 plus one generic
+  complexity lead; repeated output is 2,331 bytes with SHA-256
+  `c45ed172cc1efd2b389049094c1ca5275aef583a38fd5b2104b4f480822250e5`.
+  The matched control emits the empty SHA-256 on both passes. Strict Windows
+  and Ubuntu/WSL consumers validate the same 299-entry, 2,333,795-byte package
+  with SHA-256
+  `00f22a1c99301b7d20aa96449bd4bb5b1bd1894c504fc6a36946d07471bf5826`,
+  including the public import, executable CLI, and all 79 bundled plugin
+  files. The local pack correctly omits registry publish-time `gitHead`; its
+  standard contract passes, and exact hosted checkout supplies provenance.
+  The production advisory audit is clean.
+- All eleven exact-head workflow families pass at `88367a1`: Node
+  `33182642390`, Windows GUI `33182642395`, Linux GUI `33182642391`, container
+  `33182642452`, Java `33182642367`, Kotlin `33182642349`, .NET `33182642397`,
+  Go `33182642369`, Rust `33182642384`, Ruby `33182642365`, and PHP
+  `33182642363`. The Node matrix includes all twelve bounded MCP witnesses on
+  Windows and Ubuntu. The repository remains public on default branch `main`.
 - Added deterministic `node-mcp-tool-code-injection` coverage for official MCP
   TypeScript SDK tool input reaching actual JavaScript execution. The model
   accepts only the live unshadowed global `eval` or exact named, namespace,

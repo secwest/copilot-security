@@ -103,6 +103,72 @@ intentional platform or integration skips and zero failures. The accepted run
 starts only after a clean production build; an earlier aggregate was discarded
 when benchmark-runner tests correctly rejected the stale compiled tree.
 
+**Immutable live, self-review, distribution, and hosted closure.** Fresh
+campaign `dba2cf8001efda9f58fab6767b87eca48a51c1551b582cb96a807e0765419c0c`
+binds manifest SHA-256
+`d83ed34bfaca31e85994dbeab74df1d10a5d46ef8b18783078ac276462dfb648`,
+scanner package SHA-256
+`00d680b590c3afac034a8d402eaa99ed2781f5fc784fe41de4359988bf258c47`,
+and public source revision `88367a1e3edeb55348b22d8ff6fc9bb9a77851a2`.
+Both `gpt-5.6-terra` high-effort deep cases complete on attempt one. The exploit
+finishes in 315,624 ms with one medium CWE-1333 finding and the fixed-pattern
+control finishes in 349,002 ms with none. The matched report independently
+contains MCP caller and registration, `pattern` and `text` schema limits,
+`searchText`, construction, execution, the 4,096-character subject bound,
+nonlinear work, shared-event-loop impact, safe witness, and deployment
+uncertainty. Every perfect metric and field-local semantic gate passes. A
+finalize-only evaluation rebuild revalidates the campaign and both sealed run
+receipts without rescanning; no provider failure classification or retry is
+recorded. Together the workers consume 3,087,003 input, 2,682,221 cached, and
+51,655 output tokens.
+
+Two production-build inventories of a 3,570-file tracked-only archive of that
+exact revision take 27,578.952 and 10,627.158 ms and emit 256 byte-identical
+rows totaling 555,898 bytes with SHA-256
+`3a7dc85e52b995f7a1e4cd8fe86f71d7b25c404d3fd16f3302c5eb5e366fd675`.
+Repository fixture exclusion intentionally keeps the MCP specialization out of
+that aggregate. Independently rooting the archived exploit emits two stable
+rows totaling 2,331 bytes with SHA-256
+`c45ed172cc1efd2b389049094c1ca5275aef583a38fd5b2104b4f480822250e5`:
+one exact `node-mcp-tool-regex-injection` row at the line-8 execution sink and
+one generic regular-expression-complexity lead. The specialized row retains
+source property `pattern`, registration, `searchText`,
+`RegExp.test:pattern[0]`, schema control, and CWE-400/CWE-730. The independently
+rooted control emits zero bytes twice.
+
+The permission-preserving pnpm archive contains 299 entries, is 2,333,795
+bytes, and has SHA-256
+`00f22a1c99301b7d20aa96449bd4bb5b1bd1894c504fc6a36946d07471bf5826`.
+Fresh Windows and Ubuntu/WSL consumers install 67 and 75 dependencies and
+validate the public import, executable CLI, and all 79 bundled plugin files.
+The release-only provenance check correctly rejects the local archive because
+local packs do not invent registry `gitHead`; the standard archive contract
+passes and hosted exact-head checkouts provide source provenance. The
+production advisory audit reports no known vulnerabilities. All eleven hosted
+workflow families pass at the exact revision: [Node
+`33182642390`](https://github.com/secwest/copilot-security/actions/runs/33182642390),
+[Windows GUI
+`33182642395`](https://github.com/secwest/copilot-security/actions/runs/33182642395),
+[Linux GUI
+`33182642391`](https://github.com/secwest/copilot-security/actions/runs/33182642391),
+[container
+`33182642452`](https://github.com/secwest/copilot-security/actions/runs/33182642452),
+[Java
+`33182642367`](https://github.com/secwest/copilot-security/actions/runs/33182642367),
+[Kotlin
+`33182642349`](https://github.com/secwest/copilot-security/actions/runs/33182642349),
+[.NET
+`33182642397`](https://github.com/secwest/copilot-security/actions/runs/33182642397),
+[Go
+`33182642369`](https://github.com/secwest/copilot-security/actions/runs/33182642369),
+[Rust
+`33182642384`](https://github.com/secwest/copilot-security/actions/runs/33182642384),
+[Ruby
+`33182642365`](https://github.com/secwest/copilot-security/actions/runs/33182642365),
+and [PHP
+`33182642363`](https://github.com/secwest/copilot-security/actions/runs/33182642363).
+The public repository remains on default branch `main`.
+
 ## 2026-08-28 — Model MCP tool input that becomes executable JavaScript
 
 **Coverage gap and comparative evidence.** The MCP host pass had exact process,
