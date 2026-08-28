@@ -73,6 +73,24 @@ plugin files. The archive occupies 2,285,786 bytes and has SHA-1
 `57fd1c4ff722fcb87e5bbbbdeae53db2ad6cf9bf` and SHA-256
 `071b3238396fae8ce4e1cac8a38b0ac00dc9495e10d30193433ae4b9ac9449ae`.
 
+Two residual inventories of a disposable tracked-only archive of public
+revision `8a61ea2016896584cd54ae74cf52afef82464960` are byte-identical at the
+256-record cap and 555,117 bytes, with SHA-256
+`b91960e118d2d86f89080fb343ad08870aa8e768029fefc9e90f4e3b365628ef`.
+Scanner and test source emit no Java/Spring command row. Independently rooting
+the same build at the exploit fixture emits exactly one
+`java-process-shell-command` row at `ProcessBuilder.start`, with command
+replacement and execution provenance; the matched literal-argv control emits
+zero. The archive and inventories were removed.
+
+All eleven hosted workflow families pass the implementation revision: Node
+`33137966098`, container `33137966111`, Java `33137966005`, Kotlin
+`33137966113`, .NET `33137966079`, Go `33137966084`, Rust `33137966100`, Ruby
+`33137966089`, PHP `33137966138`, Windows GUI `33137966136`, and Linux GUI
+`33137966021`. The Node matrix covers Ubuntu Node 22, 24, 24.0.0, 26, and
+26.0.0 plus macOS and Windows Node 22; every job completes test, format, build,
+package inspection, and runtime smoke checks.
+
 ## 2026-08-27 — Preserve Kotlin collection conversion into Runtime command arrays
 
 **Why conversion is a real command boundary.** Oracle defines

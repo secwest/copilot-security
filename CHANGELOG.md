@@ -44,6 +44,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   plugin files. The 2,285,786-byte archive has SHA-1
   `57fd1c4ff722fcb87e5bbbbdeae53db2ad6cf9bf` and SHA-256
   `071b3238396fae8ce4e1cac8a38b0ac00dc9495e10d30193433ae4b9ac9449ae`.
+- Repeated deterministic residual review against a disposable tracked-only
+  archive of public revision `8a61ea2016896584cd54ae74cf52afef82464960`.
+  Both inventories are byte-identical at the 256-record cap and 555,117 bytes,
+  with SHA-256
+  `b91960e118d2d86f89080fb343ad08870aa8e768029fefc9e90f4e3b365628ef`.
+  Scanner and test source emit no Java/Spring command row; independently
+  rooting the exploit fixture emits exactly one shell-command row at
+  `ProcessBuilder.start`, while the matched argv control emits none.
+- All eleven hosted workflow families pass the exact implementation revision:
+  Node `33137966098`, container `33137966111`, Java `33137966005`, Kotlin
+  `33137966113`, .NET `33137966079`, Go `33137966084`, Rust `33137966100`,
+  Ruby `33137966089`, PHP `33137966138`, Windows GUI `33137966136`, and Linux
+  GUI `33137966021`.
 - Extended Kotlin `Runtime.exec` command-vector recovery through exact
   `listOf`, `mutableListOf`, and `arrayListOf` values converted with
   `Collection.toTypedArray()`. Direct, fully qualified, retained, and aliased
