@@ -56,6 +56,44 @@ rebuilds `printf %s <target>` and proves metacharacters remain data. Both Maven
 witnesses pass on Ubuntu. The focused manifest grows to six strict cases, and
 the canonical corpus grows to 154 pairs, 308 cases, and 924 repeated positions.
 
+**Local, package, and cross-platform acceptance.** The authoritative elevated
+Windows suite passes 1,931 tests and 14,425 assertions across 209 files in
+499.64 seconds, with 27 intentional platform/integration skips and no failure.
+Formatting, generated-model drift, TypeScript checking, the clean production
+build, and the production audit are green; the audit reports no known
+vulnerabilities. The focused Ubuntu compiler and scanner suite passes 112
+tests and 3,431 assertions, while both executable Java modules compile and pass
+their bounded witnesses. Windows and POSIX-strict Ubuntu accept the 295-entry,
+2,292,693-byte package through isolated installation, public import, CLI
+execution, and inspection of all 79 bundled plugin files. The archive has SHA-1
+`6005d7768d8afad49aa57b513b22ade3b7770685` and SHA-256
+`7e2032655bd1eb8d5b6cbc0fa911fec66a060b5c41b1f5d14b3d5d82901eeac2`.
+
+**Immutable self-review and hosted closure.** Two residual inventories of a
+disposable tracked-only archive of public implementation revision
+`0c38212172411f7f9bd538c1f21676b2226f9140` are byte-identical at the
+256-record cap and 559,742 bytes, with SHA-256
+`d07c41289099cca745829c42157d28a8e09a9f5133d0162cc06b40b4538c3fa2`.
+An independently rooted SDK inventory emits no Spring Java command row. The
+caller-list exploit emits exactly one row at line 22 with
+`java-command-list-mutation`, `java-caller-command-list-binding`, and
+`java-process-execution`; the topology-matched argv control emits zero. All
+temporary archives, inventories, Maven output, isolated installs, and the
+packed archive were removed.
+
+All eleven hosted workflow families pass that exact implementation revision:
+[Node `33144720489`](https://github.com/secwest/copilot-security/actions/runs/33144720489),
+[container `33144720531`](https://github.com/secwest/copilot-security/actions/runs/33144720531),
+[Java `33144720477`](https://github.com/secwest/copilot-security/actions/runs/33144720477),
+[Kotlin `33144720492`](https://github.com/secwest/copilot-security/actions/runs/33144720492),
+[.NET `33144720484`](https://github.com/secwest/copilot-security/actions/runs/33144720484),
+[Go `33144720527`](https://github.com/secwest/copilot-security/actions/runs/33144720527),
+[Rust `33144720511`](https://github.com/secwest/copilot-security/actions/runs/33144720511),
+[Ruby `33144720509`](https://github.com/secwest/copilot-security/actions/runs/33144720509),
+[PHP `33144720516`](https://github.com/secwest/copilot-security/actions/runs/33144720516),
+[Windows GUI `33144720490`](https://github.com/secwest/copilot-security/actions/runs/33144720490),
+and [Linux GUI `33144720491`](https://github.com/secwest/copilot-security/actions/runs/33144720491).
+
 ## 2026-08-27 — Preserve Java ProcessBuilder live command-list identity
 
 **Observed gap and authoritative semantics.** The first exact Spring Java

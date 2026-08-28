@@ -28,6 +28,32 @@ All notable scanner, application, benchmark, and operational changes are recorde
   native Ubuntu witnesses pass. The specialized manifest now has six strict
   cases, and the canonical corpus has 154 pairs, 308 cases, and 924 repeated
   scan positions.
+- Completed authoritative Windows acceptance for the caller-list increment:
+  1,931 tests pass with 27 intentional platform/integration skips, no failure,
+  and 14,425 assertions across 209 files in 499.64 seconds. Formatting,
+  generated-model drift, TypeScript checking, a clean production build, and
+  the production dependency audit are clean; the audit reports no known
+  vulnerabilities. Focused Linux compiler and scanner gates pass 112 tests and
+  3,431 assertions, and both Java 21 Maven witnesses pass.
+- Validated the 295-entry package on Windows and POSIX-strict Ubuntu through
+  isolated installation, public import, CLI execution, and all 79 bundled
+  plugin files. The 2,292,693-byte archive has SHA-1
+  `6005d7768d8afad49aa57b513b22ade3b7770685` and SHA-256
+  `7e2032655bd1eb8d5b6cbc0fa911fec66a060b5c41b1f5d14b3d5d82901eeac2`.
+- Repeated deterministic residual review against a disposable tracked-only
+  archive of public revision `0c38212172411f7f9bd538c1f21676b2226f9140`.
+  Both whole-repository inventories are byte-identical at the 256-record cap
+  and 559,742 bytes, with SHA-256
+  `d07c41289099cca745829c42157d28a8e09a9f5133d0162cc06b40b4538c3fa2`.
+  The independently rooted SDK inventory emits no Spring Java command row;
+  the caller-list exploit emits exactly one at line 22 with mutation,
+  caller-list-binding, and process-execution provenance, while the matched
+  argv control emits none.
+- All eleven hosted workflow families pass the exact implementation revision:
+  Node `33144720489`, container `33144720531`, Java `33144720477`, Kotlin
+  `33144720492`, .NET `33144720484`, Go `33144720527`, Rust `33144720511`,
+  Ruby `33144720509`, PHP `33144720516`, Windows GUI `33144720490`, and Linux
+  GUI `33144720491`.
 - Extended the exact Spring Java command model through the documented live
   identity of `ProcessBuilder.command()`. Direct and aliased `set`, `add`,
   indexed insertion, `remove`, and `clear` now update the effective command;
