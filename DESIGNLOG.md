@@ -83,8 +83,20 @@ control retains that subject but selects only fixed expressions. The host gate
 now requires subject provenance and meaningful matching-work evidence in both
 validation and attack path.
 
+Corrected campaign
+`c6452f14a702bb7bb329c8e8078b81a52e4dcdc2a826cd1c1223ba27c8360519`
+then found exactly one workload-backed defect and kept the control clean, but
+the evaluator could not match it: the report used CWE-1333 and calibrated
+severity to medium because transport/deployment exposure was absent, while the
+manifest accepted only CWE-400/CWE-730 at high or critical. Both classifications
+are supported by the comparative primary rules. The benchmark now accepts
+CWE-1333 as the specific uncontrolled-search-pattern class and medium severity
+under deployment uncertainty; it still requires the exact MCP, subject,
+matching-work, event-loop, evidence, and control semantics, so taxonomy breadth
+cannot credit an unrelated finding.
+
 **Local acceptance.** Focused Windows and native WSL lanes each pass 59 tests
-and 2,725 assertions, both executable witnesses, generated-model drift, and
+and 2,726 assertions, both executable witnesses, generated-model drift, and
 TypeScript checking. The authoritative native Windows Bun 1.3.14 suite passes
 1,977 tests and 14,923 assertions across 210 files in 496.94 seconds, with 27
 intentional platform or integration skips and zero failures. The accepted run

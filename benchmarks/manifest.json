@@ -7042,7 +7042,7 @@
       "expected": [
         {
           "id": "node-mcp-tool-regex-injection",
-          "cwe": ["CWE-400", "CWE-730"],
+          "cwe": ["CWE-400", "CWE-730", "CWE-1333"],
           "locations": [
             {
               "path": "src/server.mjs",
@@ -7051,7 +7051,7 @@
               "lineTolerance": 1
             }
           ],
-          "acceptableSeverities": ["critical", "high"],
+          "acceptableSeverities": ["critical", "high", "medium"],
           "requireValidation": true,
           "requireAttackPath": true,
           "requireCodeEvidence": true,

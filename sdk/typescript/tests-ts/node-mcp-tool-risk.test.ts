@@ -78,6 +78,12 @@ describe("Node MCP tool-input security model", () => {
     expect(manifest.cases[4]?.expected).toHaveLength(1);
     expect(manifest.cases[5]?.expected).toEqual([]);
     expect(manifest.cases[6]?.expected).toHaveLength(1);
+    expect(manifest.cases[6]?.expected[0]).toMatchObject({
+      cwe: ["CWE-400", "CWE-730", "CWE-1333"],
+      acceptableSeverities: ["critical", "high", "medium"],
+      path: "src/server.mjs",
+      line: 8,
+    });
     expect(manifest.cases[7]?.expected).toEqual([]);
     expect(manifest.cases[8]?.expected).toHaveLength(1);
     expect(manifest.cases[9]?.expected).toEqual([]);

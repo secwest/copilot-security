@@ -148,10 +148,10 @@
       "expected": [
         {
           "title": "MCP tool input becomes an executed regular expression through a same-file helper",
-          "cwe": ["CWE-400", "CWE-730"],
-          "acceptableSeverities": ["critical", "high"],
+          "cwe": ["CWE-400", "CWE-730", "CWE-1333"],
+          "acceptableSeverities": ["critical", "high", "medium"],
           "path": "src/server.mjs",
-          "line": 9,
+          "line": 8,
           "lineTolerance": 1,
           "requireValidation": true,
           "requireAttackPath": true,

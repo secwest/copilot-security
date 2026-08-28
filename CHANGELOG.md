@@ -28,7 +28,7 @@ All notable scanner, application, benchmark, and operational changes are recorde
   names to operator-owned literals. The strict MCP corpus now contains twelve
   cases and twelve cross-platform witnesses; the canonical corpus contains 162
   pairs, 324 cases, and 972 repeated scan positions.
-- Focused Windows and native WSL lanes each pass 59 tests and 2,725 assertions,
+- Focused Windows and native WSL lanes each pass 59 tests and 2,726 assertions,
   both executable witnesses, generated-model drift, and TypeScript checking.
   The authoritative native Windows suite passes 1,977 tests and 14,923
   assertions across 210 files in 496.94 seconds, with 27 intentional platform or
@@ -41,6 +41,15 @@ All notable scanner, application, benchmark, and operational changes are recorde
   pair adds the independently supplied bounded subject, and the stricter host
   quality gate now requires subject/work amplification evidence so harmless
   dynamic regular expressions do not become availability findings.
+- Preserved corrected campaign
+  `c6452f14a702bb7bb329c8e8078b81a52e4dcdc2a826cd1c1223ba27c8360519`
+  as a second ground-truth counterexample. It found the exact workload-backed
+  defect and kept the fixed-pattern control clean, but the manifest counted the
+  medium CWE-1333 report as unexpected because it accepted only high/critical
+  CWE-400/CWE-730. The corpus now accepts CWE-1333 as the specific uncontrolled
+  search-pattern class and medium severity when deployment exposure remains
+  unknown, while its field-specific workload, shared-event-loop, evidence, and
+  negative-control gates remain mandatory.
 - Added deterministic `node-mcp-tool-code-injection` coverage for official MCP
   TypeScript SDK tool input reaching actual JavaScript execution. The model
   accepts only the live unshadowed global `eval` or exact named, namespace,
