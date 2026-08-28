@@ -42,6 +42,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `StdioServerTransport`; the evaluator remains their only security-relevant
   delta. Regression tests pin the common start script and launcher, and both
   Windows and WSL witnesses remain clean and bounded.
+- Accepted live campaign
+  `2dfe83e47c92ce6de9947e80482d840adeea8b4a17715fd6c8dc3f56acab8b21`
+  at public revision `89c12e6563dc6e11a30be10fe64be121fb128016`.
+  Both reachable deep/high cases complete on attempt one with complete coverage:
+  the exploit produces one high CWE-94 finding, and the fixed-grammar control
+  produces none. Completion, precision, recall, F1, case and negative-case pass,
+  stable detection, validation, attack path, code evidence, and severity are all
+  1.0 with zero false positives or negatives. Finalize-only revalidation accepts
+  the same sealed receipts, and no allowance, authentication, rate-limit,
+  classifier, transport, timeout, or retry event occurs.
+- The implementation checkpoint passes the authoritative 1,983-test Windows
+  suite with 14,991 assertions across 210 files, 27 intentional skips, and zero
+  failures. The post-counterexample focused Windows and WSL lanes each pass 65
+  tests and 2,798 assertions; both reachable package-backed witnesses pass.
+  Production dependency audit reports no known vulnerability.
+- Exact-head tracked-only self-review of 3,582 files is byte-stable across two
+  production inventories: 256 rows, 553,659 bytes, 206 structured and 50 lexical
+  records, SHA-256
+  `51ff34c0e0170f88555497de26ea9367ef7025cc76d085880ec134100acae79b`.
+  Independently rooted scans emit one exact lifecycle row for the exploit and no
+  structured row for the control, twice identically. A 299-entry, 2,310,421-byte
+  Linux release archive with SHA-256
+  `ba4777fa4021288f5e3e9fc1d304324ccd543cd77c3d846e4fc05d1343ed9da4`
+  passes isolated Linux and Windows import, executable CLI, and all 79 bundled
+  plugin checks.
+- All eleven hosted workflow families pass at exact reachability revision
+  `89c12e6563dc6e11a30be10fe64be121fb128016`: Node `33192877968`,
+  Windows GUI `33192877902`, Linux GUI `33192877994`, container `33192877934`,
+  Java `33192878044`, Kotlin `33192877916`, .NET `33192877889`, Go
+  `33192877942`, Rust `33192877925`, Ruby `33192877911`, and PHP `33192877945`.
 - Added deterministic `node-mcp-tool-regex-injection` coverage for official MCP
   TypeScript SDK tool input used as argument zero of the live global `RegExp`
   and then actually executed through `test` or `exec`. The bounded source model

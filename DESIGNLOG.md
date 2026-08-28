@@ -92,6 +92,72 @@ The exploit/control delta is still only tool-derived versus fixed Function
 source. Tests pin the identical launcher and start topology on both Windows and
 WSL.
 
+**Accepted live closure.** Public reachability revision
+`89c12e6563dc6e11a30be10fe64be121fb128016` is sealed into campaign
+`2dfe83e47c92ce6de9947e80482d840adeea8b4a17715fd6c8dc3f56acab8b21`,
+corpus `485e678fd4ff06b10501826da9dd52427db8c6300208c41e7bbc698b543e5358`,
+and manifest SHA-256
+`b0a51ef64f3a1b6fa09a182757179cc956b681df99d2ebfb8a020e4daf55ded0`.
+Both `gpt-5.6-terra` high-effort deep scans authenticate from stored Copilot
+credentials and complete on attempt one. The exploit finishes in 324,668 ms
+with one high CWE-94 finding; the fixed-grammar control finishes in 274,534 ms
+with none. Every strict metric and content gate equals one, with no false
+positive or false negative. Finalize-only rebuild accepts both campaign-bound
+status receipts and artifact hashes without a new model call. The scans consume
+3,091,321 input, 2,696,518 cached, and 44,299 output tokens. No allowance,
+authentication, rate-limit, classifier, transport, timeout, or retry event is
+recorded.
+
+**Local, self-review, and distribution closure.** The exact scanner
+implementation passes 1,983 tests and 14,991 assertions across 210 files in
+509.84 seconds, with 27 intentional platform/integration skips and no failure.
+After the two ground-truth corrections, both Windows and native WSL focused
+lanes pass 65 tests and 2,798 assertions; both package-backed witnesses pass on
+both hosts. Formatting and the production audit are clean, with no known
+production vulnerability. The independently produced Linux release archive has
+299 entries, is 2,310,421 bytes, and has SHA-256
+`ba4777fa4021288f5e3e9fc1d304324ccd543cd77c3d846e4fc05d1343ed9da4`.
+Fresh Linux and Windows consumers validate its public import, executable CLI,
+and all 79 bundled plugin files. A separate Windows archive passes the Windows
+consumer and has 299 entries, 2,310,416 bytes, and SHA-256
+`af737662f8e20d41176e83a18cb38fcc2d84b99a3c03dde84732ea2f767a662f`;
+the cross-platform check correctly rejects its Windows-origin launcher mode on
+Linux, which is why the Linux-produced release artifact is authoritative.
+
+The 3,582-file tracked-only archive of the exact accepted revision is 3,492,173
+bytes with SHA-256
+`d4bd9370602866c5569bf18686c1723d793e2fa6280525eabd65d347c1a57074`.
+Two production inventories take 15,185.566 and 21,103.566 ms and are
+byte-identical at 256 rows and 553,659 bytes, with 206 structured rows, 50
+lexical leads, 254 fixture paths, and SHA-256
+`51ff34c0e0170f88555497de26ea9367ef7025cc76d085880ec134100acae79b`.
+Independent exact-root scans of the reachable exploit take 94.907 and 96.294 ms
+and emit two byte-identical rows totaling 2,578 bytes with SHA-256
+`1b7ce8777162ad3ab5019ee2a75191aee44078bf17fefbff3fd3e2e5a8151be4`.
+The structured row reports the line-8 execution sink, line-17 MCP source,
+CWE-94/CWE-95, registration, line-7 `Function:code[0]` construction, and the
+line-18 `evaluateExpression` helper. Independent control scans take 102.494 and
+107.616 ms and contain no structured row; their three lexical leads are
+byte-identical at 1,581 bytes with SHA-256
+`225b99d2670b5e7ed010485d2699d3e0fd95729f890b56884b0b9ac5819ee913`.
+
+**Hosted closure.** All eleven workflow families conclude successfully at the
+exact accepted revision: [Node `33192877968`](https://github.com/secwest/copilot-security/actions/runs/33192877968),
+[Windows GUI `33192877902`](https://github.com/secwest/copilot-security/actions/runs/33192877902),
+[Linux GUI `33192877994`](https://github.com/secwest/copilot-security/actions/runs/33192877994),
+[container `33192877934`](https://github.com/secwest/copilot-security/actions/runs/33192877934),
+[Java `33192878044`](https://github.com/secwest/copilot-security/actions/runs/33192878044),
+[Kotlin `33192877916`](https://github.com/secwest/copilot-security/actions/runs/33192877916),
+[.NET `33192877889`](https://github.com/secwest/copilot-security/actions/runs/33192877889),
+[Go `33192877942`](https://github.com/secwest/copilot-security/actions/runs/33192877942),
+[Rust `33192877925`](https://github.com/secwest/copilot-security/actions/runs/33192877925),
+[Ruby `33192877911`](https://github.com/secwest/copilot-security/actions/runs/33192877911),
+and [PHP `33192877945`](https://github.com/secwest/copilot-security/actions/runs/33192877945).
+The Node matrix covers supported Ubuntu, Windows, and macOS releases,
+typechecking, full tests, formatting, builds, package inspection and smoke tests,
+and all fourteen MCP witnesses on Windows and Ubuntu. The public repository
+remains on default branch `main`.
+
 ## 2026-08-28 — Model executed MCP regular-expression patterns
 
 **Coverage gap and comparative evidence.** The exact MCP host pass covered
