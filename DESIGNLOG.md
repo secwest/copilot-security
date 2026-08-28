@@ -2,6 +2,69 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Preserve Java ProcessBuilder live command-list identity
+
+**Observed gap and authoritative semantics.** The first exact Spring Java
+process model handled constructor arguments and `command(...)` replacement,
+but the same call parser could mistake the zero-argument `command()` getter for
+an empty replacement and did not retain the returned list's object identity.
+Oracle specifies both halves of the boundary: `command(List)` does not copy its
+argument, and `command()` returns the actual command list rather than a copy,
+so later updates are reflected in the builder. GitHub's current CodeQL Java
+command-argument library likewise models mutations of the mutable
+`List<String>` returned from the builder. Sources:
+[Oracle Java 26 `ProcessBuilder`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/ProcessBuilder.html)
+and [CodeQL `CommandArguments.qll`](https://github.com/github/codeql/blob/main/java/ql/lib/semmle/code/java/security/CommandArguments.qll).
+
+**State and identity model.** The scanner now distinguishes `command()` from
+`command(...)`, retains exact live-list aliases, and updates the effective
+command for `set`, append or indexed `add`, indexed `remove`, and `clear`.
+Builder aliases point to one mutable process state. Command replacement installs
+a new argument list, which correctly detaches earlier getter views; passing a
+known live view to another builder reuses that same list identity. Static
+non-negative integer indices must be in range under the operation's actual
+contract. Unknown mutators, overloads whose effect cannot be proved,
+out-of-bounds operations, and malformed calls abort that method's candidate
+instead of continuing with stale state after an operation that would throw or
+rewrite the list opaquely. Read-only list calls do not erase a valid path.
+
+**Attack-path evidence.** A tainted command position whose meaning depends on
+one of these mutations carries `java-command-list-mutation`. Host-audited
+validation and attack-path closure must name `ProcessBuilder.command()`, the
+live command list, or the exact list mutation. Java closure now also derives
+requirements from the recorded sink kind—shell grammar, interpreter source,
+tokenized/split command, or executable selection—and from `env` delegation or
+`Runtime.exec` provenance. This prevents a generic “request reaches process”
+description from satisfying an edge-specific row. The correction prompt
+requires the same identity, mutation, detachment, exceptional-index, and
+unsupported-rewrite reasoning.
+
+**Executable benchmark.** A Spring 7.0.9/Java 21 pair retains request binding,
+the same initially benign builder, getter, second list alias, `clear` plus
+three `add` calls, `start`, stdout capture, a two-second timeout, exit checking,
+and returned output. The positive rebuilds `sh -c <target>` and executes only a
+fixed-string `printf` witness. The control rebuilds `printf %s <target>` and
+proves shell metacharacters remain literal. Both Maven modules compile and pass
+their one-test witness on Ubuntu. The specialized manifest now covers two
+exploit/control pairs, and the canonical corpus reaches 153 pairs, 306 cases,
+and 918 repeated positions. Focused Windows and Ubuntu scanner gates pass 39
+tests and 2,338 assertions, including alias sharing, direct getter mutation,
+insert/remove/repair, detached views, impossible operations, read-only calls,
+and mutation-specific quality closure.
+
+**Local acceptance.** The authoritative Windows suite passes 1,924 tests and
+14,387 assertions across 209 files in 494.85 seconds, with 27 intentional
+platform/integration skips and no failure. Formatting, generated-model drift,
+TypeScript checking, the clean production build, and the production dependency
+audit are green; the audit reports no known vulnerabilities. Windows and
+POSIX-strict Ubuntu both accept the 295-entry package and validate isolated
+installation, public import, CLI execution, and all 79 bundled plugin files.
+The 2,290,494-byte archive has SHA-1
+`cacf9314b9f84a8aff628eca11ae9d1883b1c3ee` and SHA-256
+`9f58862bf67501e77db79ab04589a7b90303cc857b5454626968866d2070086f`.
+Self-scan and hosted acceptance are recorded after the exact implementation
+revision is sealed.
+
 ## 2026-08-27 — Replace Java Spring command proximity with execution semantics
 
 **Observed parity gap.** The prior Java `spring-http-command` model paired any

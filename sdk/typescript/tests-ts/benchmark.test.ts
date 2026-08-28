@@ -546,6 +546,10 @@ describe("effectiveness benchmark", () => {
         "spring-java-fluent-process-builder-argv",
       ],
       [
+        "spring-java-live-command-list-injection",
+        "spring-java-live-command-list-argv",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

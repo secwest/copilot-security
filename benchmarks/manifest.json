@@ -6579,6 +6579,72 @@
         "spring-java-fluent-process-builder-argv/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "spring-java-live-command-list-injection",
+      "description": "A Spring MVC request parameter reaches sh -c after an alias mutates the actual list returned by ProcessBuilder.command(), followed by start dispatch.",
+      "fixture": "fixtures/spring-java-live-command-list-injection",
+      "findingsPaths": [
+        "spring-java-live-command-list-injection/run-1/findings.json",
+        "spring-java-live-command-list-injection/run-2/findings.json",
+        "spring-java-live-command-list-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "spring-java-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/main/java/example/DiagnosticsController.java",
+              "startLine": 21,
+              "endLine": 21,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["RequestParam", "Spring request parameter", "request parameter"],
+            [
+              "ProcessBuilder.command()",
+              "live command list",
+              "command list mutation"
+            ],
+            ["sh -c", "shell grammar", "shell command"],
+            ["ProcessBuilder.start", "start", "process execution"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["target", "request parameter"],
+            [
+              "ProcessBuilder.command()",
+              "live command list",
+              "command list mutation"
+            ],
+            ["sh -c", "shell grammar", "command string"],
+            ["ProcessBuilder", "process execution", "start"],
+            ["stdout", "response", "returned"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spring-java-live-command-list-argv",
+      "description": "The topology-matched Spring control retains the live command-list getter, alias, clear/add mutations, and start dispatch but rebuilds fixed printf argv with request data as one literal argument.",
+      "fixture": "fixtures/spring-java-live-command-list-argv",
+      "findingsPaths": [
+        "spring-java-live-command-list-argv/run-1/findings.json",
+        "spring-java-live-command-list-argv/run-2/findings.json",
+        "spring-java-live-command-list-argv/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

@@ -21,6 +21,7 @@ interface JavaSource {
 
 interface JavaPropagator {
   kind:
+    | "java-command-list-mutation"
     | "java-local-assignment"
     | "java-process-command-replacement"
     | "java-process-delegated-launcher"
@@ -40,13 +41,31 @@ interface JavaTaint {
 interface ProcessArgument {
   line: number;
   literal?: string;
+  mutationLine?: number;
   taint?: JavaTaint;
 }
 
 interface ProcessState {
   arguments: ProcessArgument[];
+  commandSetKind: "constructor" | "replacement";
   commandSetLine: number;
 }
+
+interface CommandListMutation {
+  argument?: ProcessArgument;
+  index?: number;
+  kind: "append" | "clear" | "insert" | "remove" | "set";
+  line: number;
+}
+
+interface UnsupportedCommandListMutation {
+  kind: "unsupported";
+  line: number;
+}
+
+type CommandListMutationResult =
+  | CommandListMutation
+  | UnsupportedCommandListMutation;
 
 interface JavaCollectionFactories {
   arraysAsList: boolean;
@@ -464,7 +483,7 @@ function literalValue(tokens: readonly JavaToken[]): string | undefined {
 }
 
 function processArguments(
-  arguments_: readonly JavaToken[][],
+  arguments_: readonly (readonly JavaToken[])[],
   taints: ReadonlyMap<string, JavaTaint>,
 ): ProcessArgument[] {
   return arguments_.map((argument) => ({
@@ -506,11 +525,17 @@ function inlineListFactoryArguments(
 }
 
 function processCommandArguments(
-  arguments_: readonly JavaToken[][],
+  arguments_: readonly (readonly JavaToken[])[],
   taints: ReadonlyMap<string, JavaTaint>,
   factories: JavaCollectionFactories,
+  commandLists?: ReadonlyMap<string, ProcessArgument[]>,
 ): ProcessArgument[] {
   if (arguments_.length === 1 && arguments_[0] !== undefined) {
+    const only = arguments_[0];
+    if (only.length === 1 && only[0]?.kind === "identifier") {
+      const referenced = commandLists?.get(only[0].value);
+      if (referenced !== undefined) return referenced;
+    }
     const arrayArguments = inlineStringArrayArguments(arguments_[0]);
     if (arrayArguments !== undefined)
       return processArguments(arrayArguments, taints);
@@ -546,6 +571,203 @@ function assignmentTarget(tokens: readonly JavaToken[]): string | undefined {
   const equals = tokens.findIndex((token) => token.value === "=");
   if (equals < 1 || tokens[equals + 1]?.value === "=") return undefined;
   return simpleNameBefore(tokens, equals - 1);
+}
+
+function assignmentExpression(
+  tokens: readonly JavaToken[],
+): JavaToken[] | undefined {
+  const equals = tokens.findIndex((token) => token.value === "=");
+  return equals >= 1 && tokens[equals + 1] !== undefined
+    ? [...tokens.slice(equals + 1)]
+    : undefined;
+}
+
+function singleIdentifier(tokens: readonly JavaToken[]): string | undefined {
+  return tokens.length === 1 && tokens[0]?.kind === "identifier"
+    ? tokens[0].value
+    : undefined;
+}
+
+function commandListExpression(
+  tokens: readonly JavaToken[],
+  builders: ReadonlyMap<string, ProcessState>,
+  commandLists: ReadonlyMap<string, ProcessArgument[]>,
+): ProcessArgument[] | undefined {
+  const alias = singleIdentifier(tokens);
+  if (alias !== undefined) return commandLists.get(alias);
+  if (
+    tokens.length === 5 &&
+    tokens[0]?.kind === "identifier" &&
+    tokens[1]?.value === "." &&
+    tokens[2]?.value === "command" &&
+    tokens[3]?.value === "(" &&
+    tokens[4]?.value === ")"
+  ) {
+    return builders.get(tokens[0].value)?.arguments;
+  }
+  return undefined;
+}
+
+function commandIndex(tokens: readonly JavaToken[]): number | undefined {
+  if (tokens.length !== 1 || tokens[0]?.kind !== "number") return undefined;
+  const normalized = tokens[0].value.replaceAll("_", "");
+  if (!/^(?:0|[1-9][0-9]*)$/u.test(normalized)) return undefined;
+  const index = Number(normalized);
+  return Number.isSafeInteger(index) && index <= MAX_JAVA_TOKENS
+    ? index
+    : undefined;
+}
+
+function mutatedArgument(
+  tokens: readonly JavaToken[],
+  taints: ReadonlyMap<string, JavaTaint>,
+  mutationLine: number,
+): ProcessArgument | undefined {
+  if (tokens.length === 0) return undefined;
+  const argument = processArguments([tokens], taints)[0];
+  return argument === undefined ? undefined : { ...argument, mutationLine };
+}
+
+const READ_ONLY_LIST_METHODS = new Set([
+  "contains",
+  "containsAll",
+  "equals",
+  "forEach",
+  "get",
+  "hashCode",
+  "indexOf",
+  "isEmpty",
+  "iterator",
+  "lastIndexOf",
+  "listIterator",
+  "parallelStream",
+  "size",
+  "spliterator",
+  "stream",
+  "subList",
+  "toArray",
+  "toString",
+]);
+
+function mutationAfterPrefix(
+  tokens: readonly JavaToken[],
+  prefixLength: number,
+  taints: ReadonlyMap<string, JavaTaint>,
+): CommandListMutationResult | undefined {
+  const suffix = tokens.slice(prefixLength);
+  if (
+    suffix[0]?.value !== "." ||
+    suffix[1]?.kind !== "identifier" ||
+    suffix[2]?.value !== "("
+  ) {
+    return undefined;
+  }
+  const close = matchingForward(suffix, 2, "(", ")");
+  if (close === undefined || close !== suffix.length - 1) return undefined;
+  const method = suffix[1].value;
+  const arguments_ = splitArguments(suffix.slice(3, close));
+  const line = suffix[1].line;
+  if (READ_ONLY_LIST_METHODS.has(method)) return undefined;
+  if (method === "clear" && arguments_.length === 0)
+    return { kind: "clear", line };
+  if (method === "set" && arguments_.length === 2) {
+    const index = commandIndex(arguments_[0] ?? []);
+    const argument = mutatedArgument(arguments_[1] ?? [], taints, line);
+    return index === undefined || argument === undefined
+      ? { kind: "unsupported", line }
+      : { argument, index, kind: "set", line };
+  }
+  if (method === "add" && arguments_.length === 1) {
+    const argument = mutatedArgument(arguments_[0] ?? [], taints, line);
+    return argument === undefined
+      ? { kind: "unsupported", line }
+      : { argument, kind: "append", line };
+  }
+  if (method === "add" && arguments_.length === 2) {
+    const index = commandIndex(arguments_[0] ?? []);
+    const argument = mutatedArgument(arguments_[1] ?? [], taints, line);
+    return index === undefined || argument === undefined
+      ? { kind: "unsupported", line }
+      : { argument, index, kind: "insert", line };
+  }
+  if (method === "remove" && arguments_.length === 1) {
+    const index = commandIndex(arguments_[0] ?? []);
+    return index === undefined
+      ? { kind: "unsupported", line }
+      : { index, kind: "remove", line };
+  }
+  return { kind: "unsupported", line };
+}
+
+function commandListMutation(
+  tokens: readonly JavaToken[],
+  receiver: string,
+  taints: ReadonlyMap<string, JavaTaint>,
+): CommandListMutationResult | undefined {
+  if (tokens[0]?.value !== receiver) return undefined;
+  return mutationAfterPrefix(tokens, 1, taints);
+}
+
+function builderCommandListMutation(
+  tokens: readonly JavaToken[],
+  receiver: string,
+  taints: ReadonlyMap<string, JavaTaint>,
+): CommandListMutationResult | undefined {
+  if (
+    tokens[0]?.value !== receiver ||
+    tokens[1]?.value !== "." ||
+    tokens[2]?.value !== "command" ||
+    tokens[3]?.value !== "(" ||
+    tokens[4]?.value !== ")"
+  ) {
+    return undefined;
+  }
+  return mutationAfterPrefix(tokens, 5, taints);
+}
+
+function applyCommandListMutation(
+  arguments_: ProcessArgument[],
+  mutation: CommandListMutationResult,
+): boolean {
+  if (mutation.kind === "unsupported") return false;
+  if (mutation.kind === "clear") {
+    arguments_.splice(0, arguments_.length);
+    return true;
+  }
+  if (mutation.kind === "append" && mutation.argument !== undefined) {
+    arguments_.push(mutation.argument);
+    return true;
+  }
+  if (
+    mutation.kind === "insert" &&
+    mutation.argument !== undefined &&
+    mutation.index !== undefined &&
+    mutation.index <= arguments_.length
+  ) {
+    arguments_.splice(mutation.index, 0, mutation.argument);
+    for (const argument of arguments_) argument.mutationLine = mutation.line;
+    return true;
+  }
+  if (
+    mutation.kind === "remove" &&
+    mutation.index !== undefined &&
+    mutation.index < arguments_.length
+  ) {
+    arguments_.splice(mutation.index, 1);
+    for (const argument of arguments_) argument.mutationLine = mutation.line;
+    return true;
+  }
+  if (
+    mutation.kind === "set" &&
+    mutation.argument !== undefined &&
+    mutation.index !== undefined &&
+    mutation.index < arguments_.length
+  ) {
+    arguments_[mutation.index] = mutation.argument;
+    for (const argument of arguments_) argument.mutationLine = mutation.line;
+    return true;
+  }
+  return false;
 }
 
 function invocationIndex(
@@ -624,13 +846,34 @@ function taintedArgumentRisk(
   commandString = false,
 ): JavaRisk | undefined {
   if (arguments_.length === 0) return undefined;
+  const argumentTaint = (
+    argument: ProcessArgument | undefined,
+  ): JavaTaint | undefined => {
+    const taint = argument?.taint;
+    if (
+      taint !== undefined &&
+      argument?.mutationLine !== undefined &&
+      !taint.propagators.some(
+        ({ kind, line }) =>
+          kind === "java-command-list-mutation" &&
+          line === argument.mutationLine,
+      )
+    ) {
+      taint.propagators.push({
+        kind: "java-command-list-mutation",
+        line: argument.mutationLine,
+        symbol: "ProcessBuilder.command live list",
+      });
+    }
+    return taint;
+  };
   if (commandString) {
-    const taint = arguments_[0]?.taint;
+    const taint = argumentTaint(arguments_[0]);
     return taint === undefined
       ? undefined
       : { kind: "java-process-split-command", taint, argumentIndex: 1 };
   }
-  const executableTaint = arguments_[0]?.taint;
+  const executableTaint = argumentTaint(arguments_[0]);
   if (executableTaint !== undefined) {
     return {
       kind: "java-process-executable-selection",
@@ -644,7 +887,7 @@ function taintedArgumentRisk(
   const literals = arguments_.map((argument) =>
     argument.literal?.toLowerCase(),
   );
-  const taints = arguments_.map((argument) => argument.taint);
+  const taints = arguments_.map(argumentTaint);
   const riskAfterFlag = (
     flags: ReadonlySet<string>,
     kind: JavaProcessSinkKind,
@@ -940,6 +1183,8 @@ export function javaSpringCommandInjectionRecords(
         taints.set(name, { source, propagators: [], controls: [] });
     }
     const builders = new Map<string, ProcessState>();
+    const commandLists = new Map<string, ProcessArgument[]>();
+    let scopeAborted = false;
     for (const statement of statementSlices(scope.body)) {
       const target = assignmentTarget(statement);
       const constructor = processBuilderAvailable
@@ -956,7 +1201,9 @@ export function javaSpringCommandInjectionRecords(
               constructorCall.arguments,
               taints,
               collectionFactories,
+              commandLists,
             ),
+            commandSetKind: "constructor",
             commandSetLine: statement[constructor.index]?.line ?? 1,
           };
           let cursor = constructorCall.closeParen + 1;
@@ -966,12 +1213,18 @@ export function javaSpringCommandInjectionRecords(
               break;
             const commandCall = callArgumentsAt(statement, command + 1);
             if (commandCall === undefined) break;
+            if (commandCall.arguments.length === 0) {
+              cursor = commandCall.closeParen + 1;
+              break;
+            }
             state = {
               arguments: processCommandArguments(
                 commandCall.arguments,
                 taints,
                 collectionFactories,
+                commandLists,
               ),
+              commandSetKind: "replacement",
               commandSetLine: statement[command]?.line ?? state.commandSetLine,
             };
             cursor = commandCall.closeParen + 1;
@@ -985,18 +1238,18 @@ export function javaSpringCommandInjectionRecords(
           if (start !== undefined && statement[start - 1]?.value === ".") {
             const risk = taintedArgumentRisk(state.arguments);
             if (risk !== undefined) {
-              risk.taint.propagators.push(
-                {
+              if (state.commandSetKind === "replacement") {
+                risk.taint.propagators.push({
                   kind: "java-process-command-replacement",
                   line: state.commandSetLine,
                   symbol: "effective command",
-                },
-                {
-                  kind: "java-process-execution",
-                  line: statement[start]?.line ?? 1,
-                  symbol: "ProcessBuilder.start",
-                },
-              );
+                });
+              }
+              risk.taint.propagators.push({
+                kind: "java-process-execution",
+                line: statement[start]?.line ?? 1,
+                symbol: "ProcessBuilder.start",
+              });
               records.push(
                 recordForRisk(
                   path,
@@ -1018,18 +1271,39 @@ export function javaSpringCommandInjectionRecords(
           if (
             receiver !== undefined &&
             commandCall !== undefined &&
+            commandCall.arguments.length > 0 &&
             builders.has(receiver)
           ) {
-            builders.set(receiver, {
-              arguments: processCommandArguments(
-                commandCall.arguments,
-                taints,
-                collectionFactories,
-              ),
-              commandSetLine: statement[command]?.line ?? 1,
-            });
+            const state = builders.get(receiver)!;
+            state.arguments = processCommandArguments(
+              commandCall.arguments,
+              taints,
+              collectionFactories,
+              commandLists,
+            );
+            state.commandSetKind = "replacement";
+            state.commandSetLine = statement[command]?.line ?? 1;
           }
         }
+        const leadingReceiver = statement[0]?.value ?? "";
+        const builderState = builders.get(leadingReceiver);
+        const liveArguments = commandLists.get(leadingReceiver);
+        const mutation =
+          builderState !== undefined
+            ? builderCommandListMutation(statement, leadingReceiver, taints)
+            : liveArguments !== undefined
+              ? commandListMutation(statement, leadingReceiver, taints)
+              : undefined;
+        if (mutation !== undefined) {
+          const arguments_ = builderState?.arguments ?? liveArguments;
+          if (
+            arguments_ === undefined ||
+            !applyCommandListMutation(arguments_, mutation)
+          ) {
+            scopeAborted = true;
+          }
+        }
+        if (scopeAborted) break;
         const start = invocationIndex(statement, "start");
         if (start !== undefined && statement[start - 1]?.value === ".") {
           const receiver = simpleNameBefore(statement, start - 2);
@@ -1040,18 +1314,18 @@ export function javaSpringCommandInjectionRecords(
               ? undefined
               : taintedArgumentRisk(state.arguments);
           if (risk !== undefined && state !== undefined) {
-            risk.taint.propagators.push(
-              {
+            if (state.commandSetKind === "replacement") {
+              risk.taint.propagators.push({
                 kind: "java-process-command-replacement",
                 line: state.commandSetLine,
                 symbol: "effective command",
-              },
-              {
-                kind: "java-process-execution",
-                line: statement[start]?.line ?? 1,
-                symbol: "ProcessBuilder.start",
-              },
-            );
+              });
+            }
+            risk.taint.propagators.push({
+              kind: "java-process-execution",
+              line: statement[start]?.line ?? 1,
+              symbol: "ProcessBuilder.start",
+            });
             records.push(
               recordForRisk(
                 path,
@@ -1104,26 +1378,46 @@ export function javaSpringCommandInjectionRecords(
           }
         }
       }
-      if (constructor === undefined && target !== undefined) {
-        const equals = statement.findIndex((token) => token.value === "=");
-        const taint = expressionTaint(statement.slice(equals + 1), taints);
-        if (taint !== undefined) {
+      if (target !== undefined) {
+        const expression = assignmentExpression(statement) ?? [];
+        const builderAliasName = singleIdentifier(expression);
+        const builderAlias =
+          constructor === undefined && builderAliasName !== undefined
+            ? builders.get(builderAliasName)
+            : undefined;
+        const commandListAlias =
+          constructor === undefined && builderAlias === undefined
+            ? commandListExpression(expression, builders, commandLists)
+            : undefined;
+        if (constructor !== undefined) {
+          commandLists.delete(target);
+          taints.delete(target);
+        } else if (builderAlias !== undefined) {
+          builders.set(target, builderAlias);
+          commandLists.delete(target);
+          taints.delete(target);
+        } else if (commandListAlias !== undefined) {
+          commandLists.set(target, commandListAlias);
+          builders.delete(target);
+          taints.delete(target);
+        } else {
+          builders.delete(target);
+          commandLists.delete(target);
+          const taint = expressionTaint(expression, taints);
+          if (taint === undefined) {
+            taints.delete(target);
+            continue;
+          }
           taint.propagators.push({
             kind: "java-local-assignment",
-            line: statement[equals]?.line ?? taint.source.line,
+            line: expression[0]?.line ?? taint.source.line,
             symbol: target,
           });
           taints.set(target, taint);
-        } else {
-          taints.delete(target);
-          const alias = statement
-            .slice(equals + 1)
-            .find((token) => token.kind === "identifier")?.value;
-          const state = alias === undefined ? undefined : builders.get(alias);
-          if (state !== undefined) builders.set(target, state);
         }
       }
     }
+    if (scopeAborted) continue;
   }
   const seen = new Set<string>();
   return records.filter((record) => {

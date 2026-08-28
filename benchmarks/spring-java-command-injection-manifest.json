@@ -54,6 +54,55 @@
       "id": "spring-java-fluent-process-builder-argv",
       "fixture": "fixtures/spring-java-fluent-process-builder-argv",
       "expected": []
+    },
+    {
+      "id": "spring-java-live-command-list-injection",
+      "fixture": "fixtures/spring-java-live-command-list-injection",
+      "expected": [
+        {
+          "title": "Spring request parameter reaches a shell through ProcessBuilder.command() live-list mutation",
+          "cwe": ["CWE-78", "CWE-88"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/main/java/example/DiagnosticsController.java",
+          "line": 21,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["RequestParam", "Spring request parameter", "request parameter"],
+            [
+              "ProcessBuilder.command()",
+              "live command list",
+              "command list mutation"
+            ],
+            ["sh -c", "shell grammar", "shell command"],
+            ["ProcessBuilder.start", "start", "process execution"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["target", "request parameter"],
+            [
+              "ProcessBuilder.command()",
+              "live command list",
+              "command list mutation"
+            ],
+            ["sh -c", "shell grammar", "command string"],
+            ["ProcessBuilder", "process execution", "start"],
+            ["stdout", "response", "returned"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spring-java-live-command-list-argv",
+      "fixture": "fixtures/spring-java-live-command-list-argv",
+      "expected": []
     }
   ]
 }

@@ -6,6 +6,39 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended the exact Spring Java command model through the documented live
+  identity of `ProcessBuilder.command()`. Direct and aliased `set`, `add`,
+  indexed insertion, `remove`, and `clear` now update the effective command;
+  builder aliases share state, while a later `command(...)` replacement
+  detaches previously returned list views. Impossible indices, unresolved
+  operands, exceptional shapes, and unsupported mutators fail closed instead
+  of preserving stale dangerous state.
+- Added `java-command-list-mutation` provenance and variant-specific Java
+  finding-quality obligations. Validation and attack-path fields must now
+  identify the exact shell, interpreter, split-command, or executable-selection
+  boundary; live-list rows must additionally explain the getter/mutation edge,
+  and delegated `env` or `Runtime.exec` rows must retain those dispatch edges.
+  The correction prompt distinguishes the zero-argument getter from command
+  replacement and requires bounded mutation and detachment reasoning.
+- Added a topology-matched Spring 7.0.9/Java 21 live-command-list pair. Both
+  fixtures obtain and alias the getter's actual list, clear and rebuild it,
+  start the process, capture stdout, and enforce a two-second timeout. Only the
+  positive reconstructs `sh -c`; the control reconstructs fixed `printf` argv
+  and preserves metacharacters as one literal argument. Both Maven witnesses
+  pass on Ubuntu, and the focused Windows and Ubuntu lanes pass 39 tests and
+  2,338 assertions. The canonical corpus now contains 153 pairs, 306 cases,
+  and 918 repeated scan positions.
+- Completed authoritative Windows acceptance for the live-list increment:
+  1,924 tests pass with 27 intentional platform/integration skips, no failure,
+  and 14,387 assertions across 209 files in 494.85 seconds. Formatting,
+  generated-model drift, TypeScript checking, a clean production build, and
+  the production dependency audit are clean; the audit reports no known
+  vulnerabilities.
+- Validated the 295-entry package on Windows and POSIX-strict Ubuntu through
+  isolated installation, public import, CLI execution, and all 79 bundled
+  plugin files. The 2,290,494-byte archive has SHA-1
+  `cacf9314b9f84a8aff628eca11ae9d1883b1c3ee` and SHA-256
+  `9f58862bf67501e77db79ab04589a7b90303cc857b5454626968866d2070086f`.
 - Replaced the Java side of the broad `spring-http-command` proximity model
   for production Spring sources with `spring-java-command-injection`, an exact
   same-handler process model. It requires a supported Spring request-binding

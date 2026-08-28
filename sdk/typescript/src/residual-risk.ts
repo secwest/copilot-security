@@ -45777,7 +45777,9 @@ function modelSpecificSinkLocations(
     const variantRequirements =
       frameworkModelId === "kotlin-ktor-command-injection"
         ? kotlinProcessEvidenceRequirements(frameworkModel)
-        : { validation: [], attackPath: [] };
+        : frameworkModelId === "spring-java-command-injection"
+          ? javaProcessEvidenceRequirements(frameworkModel)
+          : { validation: [], attackPath: [] };
     locations.push({
       frameworkModelId,
       location: {
@@ -45793,6 +45795,121 @@ function modelSpecificSinkLocations(
     });
   }
   return locations;
+}
+
+function javaProcessEvidenceRequirements(
+  frameworkModel: Record<string, unknown>,
+): ModelSpecificFindingRequirements {
+  const validation: string[][] = [];
+  const attackPath: string[][] = [];
+  const sink = isRecord(frameworkModel["sink"])
+    ? frameworkModel["sink"]
+    : undefined;
+  const sinkKind = typeof sink?.["kind"] === "string" ? sink["kind"] : "";
+  if (sinkKind === "java-process-shell-command") {
+    validation.push(
+      ["command string", "shell grammar", "shell command"],
+      ["sh -c", "bash", "shell", "-c", "cmd /c", "PowerShell", "batch"],
+    );
+    attackPath.push(
+      ["command string", "shell grammar", "shell command"],
+      ["sh -c", "bash", "shell", "-c", "cmd /c", "PowerShell", "batch"],
+    );
+  } else if (sinkKind === "java-process-interpreter-command") {
+    validation.push([
+      "interpreter command",
+      "interpreter source",
+      "eval flag",
+      "source text",
+    ]);
+    attackPath.push([
+      "interpreter command",
+      "interpreter source",
+      "eval flag",
+      "source text",
+    ]);
+  } else if (sinkKind === "java-process-split-command") {
+    validation.push([
+      "env -S",
+      "split-string",
+      "split command",
+      "command string",
+      "Runtime.exec(String)",
+      "Runtime command string",
+      "StringTokenizer",
+    ]);
+    attackPath.push([
+      "env -S",
+      "split-string",
+      "split command",
+      "command string",
+      "Runtime.exec(String)",
+      "Runtime command string",
+      "StringTokenizer",
+    ]);
+  } else if (sinkKind === "java-process-executable-selection") {
+    validation.push([
+      "executable selection",
+      "program selection",
+      "command selection",
+      "program name",
+      "executable name",
+    ]);
+    attackPath.push([
+      "executable selection",
+      "program selection",
+      "command selection",
+      "child executable",
+      "program name",
+    ]);
+  }
+  const seenKinds = new Set<string>();
+  const propagators = Array.isArray(frameworkModel["propagators"])
+    ? frameworkModel["propagators"]
+    : [];
+  for (const propagator of propagators) {
+    if (!isRecord(propagator) || typeof propagator["kind"] !== "string") {
+      continue;
+    }
+    const kind = propagator["kind"];
+    if (seenKinds.has(kind)) continue;
+    if (kind === "java-process-delegated-launcher") {
+      validation.push([
+        "delegating launcher",
+        "delegated launcher",
+        "first non-assignment operand",
+        "env delegation",
+      ]);
+      attackPath.push([
+        "delegating launcher",
+        "delegated launcher",
+        "delegated executable",
+        "env delegation",
+      ]);
+      seenKinds.add(kind);
+    } else if (kind === "java-runtime-exec") {
+      validation.push(["Runtime.exec", "java.lang.Runtime", "runtime exec"]);
+      attackPath.push(["Runtime.exec", "java.lang.Runtime", "runtime exec"]);
+      seenKinds.add(kind);
+    } else if (kind === "java-command-list-mutation") {
+      validation.push([
+        "ProcessBuilder.command()",
+        "live command list",
+        "command list mutation",
+        "List.set",
+        "List.add",
+      ]);
+      attackPath.push([
+        "ProcessBuilder.command()",
+        "live command list",
+        "command list mutation",
+        "List.set",
+        "List.add",
+      ]);
+      seenKinds.add(kind);
+    }
+  }
+  return { validation, attackPath };
 }
 
 function kotlinProcessEvidenceRequirements(

@@ -66,9 +66,13 @@ describe("Spring Java command-injection model", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([
       "spring-java-fluent-process-builder-injection",
       "spring-java-fluent-process-builder-argv",
+      "spring-java-live-command-list-injection",
+      "spring-java-live-command-list-argv",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toHaveLength(0);
+    expect(manifest.cases[2]?.expected).toHaveLength(1);
+    expect(manifest.cases[3]?.expected).toHaveLength(0);
 
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkRoot, "fixtures", manifest.cases[0]!.id),
@@ -89,6 +93,15 @@ describe("Spring Java command-injection model", () => {
       "java-process-shell-command",
     );
     expect(safe).not.toContain("spring-java-command-injection");
+
+    const liveListVulnerable = await buildResidualRiskInventory(
+      join(benchmarkRoot, "fixtures", manifest.cases[2]!.id),
+    );
+    const liveListSafe = await buildResidualRiskInventory(
+      join(benchmarkRoot, "fixtures", manifest.cases[3]!.id),
+    );
+    expect(liveListVulnerable).toContain("java-command-list-mutation");
+    expect(liveListSafe).not.toContain("spring-java-command-injection");
   });
 
   test("detects a fluent ProcessBuilder shell command including login flags", () => {
@@ -307,6 +320,121 @@ describe("Spring Java command-injection model", () => {
     );
   });
 
+  test("tracks live command-list aliases through clear and append", () => {
+    const found = records(
+      spring(`        ProcessBuilder builder = new ProcessBuilder("printf", "%s", "fixed");
+        java.util.List<String> command = builder.command();
+        java.util.List<String> alias = command;
+        alias.clear();
+        alias.add("sh");
+        alias.add("-c");
+        alias.add(target);
+        builder.start();`),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel.sink).toMatchObject({
+      kind: "java-process-shell-command",
+      symbol: "java.lang.ProcessBuilder;method=start;argument=3",
+    });
+    expect(found[0]?.frameworkModel.propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "java-command-list-mutation",
+          symbol: "ProcessBuilder.command live list",
+        }),
+        expect.objectContaining({ kind: "java-process-execution" }),
+      ]),
+    );
+  });
+
+  test("tracks direct command getter mutation and shared builder aliases", () => {
+    const direct = records(
+      spring(`        ProcessBuilder builder = new ProcessBuilder("printf", "%s", target);
+        builder.command().set(0, "sh");
+        builder.command().set(1, "-c");
+        builder.start();`),
+    );
+    expect(direct).toHaveLength(1);
+    expect(
+      direct[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toContain("java-command-list-mutation");
+
+    const builderAlias = records(
+      spring(`        ProcessBuilder builder = new ProcessBuilder("printf", "%s", "fixed");
+        ProcessBuilder alias = builder;
+        alias.command("sh", "-c", target);
+        builder.start();`),
+    );
+    expect(builderAlias).toHaveLength(1);
+    expect(
+      builderAlias[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toContain("java-process-command-replacement");
+  });
+
+  test("models list insertion, removal, repair, and detached old views", () => {
+    expect(
+      records(
+        spring(`        ProcessBuilder builder = new ProcessBuilder("sh", target);
+        java.util.List<String> command = builder.command();
+        command.add(1, "-c");
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        spring(`        ProcessBuilder builder = new ProcessBuilder("sh", "-c", target);
+        java.util.List<String> command = builder.command();
+        command.remove(1);
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        spring(`        ProcessBuilder builder = new ProcessBuilder("sh", "-c", target);
+        java.util.List<String> command = builder.command();
+        command.set(0, "printf");
+        command.set(1, "%s");
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        spring(`        ProcessBuilder builder = new ProcessBuilder("sh", "-c", target);
+        java.util.List<String> oldCommand = builder.command();
+        builder.command("printf", "%s", target);
+        oldCommand.set(0, "sh");
+        builder.start();`),
+      ),
+    ).toEqual([]);
+  });
+
+  test("fails closed on impossible or unresolved live-list mutation", () => {
+    expect(
+      records(
+        spring(`        ProcessBuilder builder = new ProcessBuilder("sh", "-c", target);
+        java.util.List<String> command = builder.command();
+        command.set(99, "fixed");
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        spring(`        ProcessBuilder builder = new ProcessBuilder("sh", "-c", target);
+        java.util.List<String> command = builder.command();
+        command.replaceAll(String::trim);
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        spring(`        ProcessBuilder builder = new ProcessBuilder("sh", "-c", target);
+        java.util.List<String> command = builder.command();
+        command.size();
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+  });
+
   test("ignores command text inside comments and strings", () => {
     const source =
       spring(`        String note = "new ProcessBuilder(target).start()";
@@ -465,6 +593,132 @@ class ProcessBuilder {
         "Spring RequestParam target reaches java.lang.ProcessBuilder after the fluent command replacement; /bin/bash -l -c places it in shell command grammar before start.";
       finding.attackPath.summary =
         "The request parameter target enters a shell command string and ProcessBuilder start performs process execution before stdout is returned in the response.";
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      expect(
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          inventory,
+        ),
+      ).toBe("");
+    } finally {
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("requires live-list mutation evidence when the host row records it", async () => {
+    const repository = join(
+      benchmarkRoot,
+      "fixtures",
+      "spring-java-live-command-list-injection",
+    );
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-spring-java-live-quality-"),
+    );
+    try {
+      const finding = {
+        findingId: "occ_spring_java_live_command",
+        taxonomy: { cwe: ["CWE-78", "CWE-88"] },
+        locations: [
+          { path: handlerPath, startLine: 12, role: "source" },
+          { path: handlerPath, startLine: 21, role: "sink" },
+        ],
+        codeEvidence: [
+          {
+            id: "java-live-source",
+            path: handlerPath,
+            startLine: 12,
+            endLine: 12,
+            role: "source",
+            code: '@RequestParam("target") String target',
+            explanation: "The handler binds target from the HTTP request.",
+          },
+          {
+            id: "java-live-sink",
+            path: handlerPath,
+            startLine: 15,
+            endLine: 21,
+            role: "sink",
+            code: "List<String> command = builder.command(); ... builder.start();",
+            explanation: "The configured process is started.",
+          },
+        ],
+        validation: {
+          method: "static_source_trace",
+          summary:
+            "Spring RequestParam target reaches java.lang.ProcessBuilder as a command string in sh -c shell grammar before start.",
+          exploitWitness: "A bounded fixed string checks the process boundary.",
+          negativeControl: "Fixed printf receives one ordinary argument.",
+          evidence: ["java-live-source", "java-live-sink"],
+          counterEvidence: "No dominating exact repair is present.",
+          remainingUncertainty: "Deployment remains unknown.",
+        },
+        attackPath: {
+          summary:
+            "The Spring request parameter target enters a shell command string for sh -c and ProcessBuilder start performs process execution.",
+          dataflow: {
+            source: "The Spring request parameter target.",
+            sink: "A sh -c command string executed by ProcessBuilder start.",
+            outcome: "Process integrity may be affected.",
+          },
+          reachability: {
+            attacker: "A remote caller.",
+            entrypoint: "The diagnostics handler.",
+            outcome: "A child process may run.",
+          },
+          brokenControls: ["No exact command/data boundary"],
+          evidenceRefs: ["java-live-source", "java-live-sink"],
+        },
+      };
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const inventory = await buildResidualRiskInventory(repository);
+      const gap = (
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          inventory,
+        )
+      )
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))[1];
+      expect(gap).toMatchObject({
+        findingId: "occ_spring_java_live_command",
+        frameworkModelId: "spring-java-command-injection",
+        reasons: [
+          "missing_model_specific_validation_evidence",
+          "missing_model_specific_attack_path_evidence",
+        ],
+        missingValidationTextAnyOf: [
+          [
+            "ProcessBuilder.command()",
+            "live command list",
+            "command list mutation",
+            "List.set",
+            "List.add",
+          ],
+        ],
+        missingAttackPathTextAnyOf: [
+          [
+            "ProcessBuilder.command()",
+            "live command list",
+            "command list mutation",
+            "List.set",
+            "List.add",
+          ],
+        ],
+      });
+
+      finding.validation.summary +=
+        " ProcessBuilder.command() returns the live command list, and List.add mutations install the tainted shell operand.";
+      finding.attackPath.summary +=
+        " The aliased live command list from ProcessBuilder.command() is rebuilt by List.add before dispatch.";
       await writeFile(
         join(scanDirectory, "findings.json"),
         JSON.stringify({ findings: [finding] }),

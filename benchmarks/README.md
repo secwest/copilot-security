@@ -240,7 +240,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-rust-command
 ```
 
-## Spring Java fluent command benchmark
+## Spring Java command-state benchmark
 
 `spring-java-command-injection-manifest.json` replaces constructor-proximity
 reasoning with an exact Spring-handler process boundary. Its positive preserves
@@ -249,7 +249,12 @@ an intervening fluent call, a later `command("/bin/bash", "-l", "-c", target)`
 replacement, and `start()`. The topology-matched control fixes `printf` and
 keeps the request value in one ordinary argv element. Both Java 21 witnesses
 start one bounded process and perform no file, network, credential,
-persistence, or privilege operation. Run the strict benchmark with:
+persistence, or privilege operation. A second pair starts from an initially
+benign retained builder, obtains and aliases the actual list returned by
+`ProcessBuilder.command()`, and rebuilds the effective command with `clear`
+plus `add`. Its positive installs `sh -c`; its matched control preserves the
+same live-list mutations but installs fixed `printf` argv. Run the strict
+benchmark with:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -257,7 +262,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-spring-java-command
 ```
 
-The versioned corpus currently contains 152 vulnerable/control pairs:
+The versioned corpus currently contains 153 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
