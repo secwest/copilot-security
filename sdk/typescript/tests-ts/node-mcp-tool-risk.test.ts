@@ -890,9 +890,11 @@ const example = "server.registerTool('run', { inputSchema: schema }, ({ command 
       join(tmpdir(), "copilot-security-node-mcp-argument-quality-scan-"),
     );
     try {
-      const application = v2(
-        '    return execFile(process.execPath, ["-e", "process.stdout.write(process.argv[1])", command]);',
-      );
+      const application = `${v2("    return runCommand(command);")}
+function runCommand(value: string) {
+  return execFile(process.execPath, ["-e", "process.stdout.write(process.argv[1])", value]);
+}
+`;
       await writeFile(join(repository, "server.ts"), application, "utf8");
       const sinkLine =
         application
@@ -969,6 +971,34 @@ const example = "server.registerTool('run', { inputSchema: schema }, ({ command 
       ].join(" ");
       finding.validation.summary = closure;
       finding.attackPath.summary = closure;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      const missingHelper = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      const helperRows = missingHelper
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(helperRows[1]?.missingValidationTextAnyOf).toContainEqual([
+        "runCommand",
+        "same-file helper",
+        "helper call",
+      ]);
+      expect(helperRows[1]?.missingAttackPathTextAnyOf).toContainEqual([
+        "runCommand",
+        "same-file helper",
+        "helper call",
+      ]);
+
+      const helperClosure = `${closure} The same-file helper call runCommand carries the value to the sink.`;
+      finding.validation.summary = helperClosure;
+      finding.attackPath.summary = helperClosure;
       await writeFile(
         join(scanDirectory, "findings.json"),
         JSON.stringify({ findings: [finding] }),

@@ -72,6 +72,44 @@ Native WSL produces 2,295,118 bytes, SHA-1
 `fe3464cce2812b4e6c6253259ef1d8235c1686cd`, and SHA-256
 `7b97f65eaab77497dcc57c0d04f8a0684110384884a71213291b48db3fa05b76`.
 
+**Exact implementation-checkpoint self-scan.** Public commit
+`23b081f0ae6b7122934daa87303f372c7b735069` contains 3,550 tracked files.
+Its 5,423,185-byte tracked-only archive has SHA-256
+`2f8531b73739d0eb0402bfe602ce737108753e618de58265c4d9f45dacaf4476`.
+Two production inventories take 10,329.532 and 9,923.145 ms and are
+byte-identical at the 256-row cap, 557,948 bytes, 210 structured rows, 46
+lexical rows, and SHA-256
+`d90bcb95b7bfe0557e9e7d5ce122a295fb3a986b333ea553e3514634744dceab`.
+An independently rooted copy of the exact exploit source produces one
+structured row at `server.mjs:9`: tool input `command` at line 27 reaches
+`execFile:argv[2]` with CWE-88/CWE-94 through the registration and
+`runCommand` helper. The exact end-of-options twin produces no structured row.
+
+**First live remediation result and second-order decision.** Targeted campaign
+`ea7ac6bf5f3c91b682f932dd2ca7055c0dfa283b2a5d6abc7f6807f9fe7dc6b0`
+ran the new exploit, its control, and the prior SSRF semantic miss at the exact
+public commit. All three deep/high scans completed with stored Copilot
+credentials on attempt one, complete coverage, no allowance, rate,
+authentication, classifier, timeout, or retry event, two true positives, zero
+false positives, and precision/recall/F1 1.0. The argument exploit was high;
+the control had zero findings; SSRF was high. The strict case pass rate was
+nevertheless 1/3: argument validation contained the delimiter but did not
+explain the option region in accepted terms, while the SSRF attack path
+omitted its recorded `loadUrl` helper hop. This is a scanner reporting defect,
+not a reason to relax ground truth. The three scans consumed 4,109,128 input,
+3,311,616 cached, and 83,497 output tokens over 14 minutes 9 seconds of worker
+time and roughly 9 minutes 22 seconds wall time.
+
+Tighten the host re-audit in two ways. First, the bare `--` spelling no longer
+closes the interpreter boundary; validation and attack path must say option
+region, end-of-options, or argument injection. Second, derive field-local
+requirements from each `mcp-tool-helper-call` propagator and require the exact
+safe identifier, or an explicit same-file/helper-call description, in both
+fields. This makes provenance enforcement follow host-modeled data rather than
+fixture-specific prompt prose. Windows and native WSL each pass the resulting
+49-test focused lane with 2,622 assertions; Windows TypeScript and a clean
+production build are green.
+
 ## 2026-08-28 — Extend MCP capability modeling to filesystem authority
 
 **Observed gap and primary evidence.** MCP tool callbacks already received

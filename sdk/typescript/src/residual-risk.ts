@@ -4244,7 +4244,7 @@ const NODE_MCP_TOOL_ARGUMENT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
   ["process.execPath", "Node interpreter", "execFile", "spawn"],
-  ["option region", "end-of-options", "--", "argument injection"],
+  ["option region", "end-of-options", "argument injection"],
   ["CWE-88", "CWE-94", "interpreter option", "code execution"],
 ] as const;
 
@@ -45847,8 +45847,9 @@ function modelSpecificSinkLocations(
     ) {
       continue;
     }
-    const variantRequirements =
-      frameworkModelId === "kotlin-ktor-command-injection"
+    const variantRequirements = frameworkModelId.startsWith("node-mcp-tool-")
+      ? nodeMcpToolEvidenceRequirements(frameworkModel)
+      : frameworkModelId === "kotlin-ktor-command-injection"
         ? kotlinProcessEvidenceRequirements(frameworkModel)
         : frameworkModelId === "spring-java-command-injection"
           ? javaProcessEvidenceRequirements(frameworkModel)
@@ -45868,6 +45869,33 @@ function modelSpecificSinkLocations(
     });
   }
   return locations;
+}
+
+function nodeMcpToolEvidenceRequirements(
+  frameworkModel: Record<string, unknown>,
+): ModelSpecificFindingRequirements {
+  const validation: string[][] = [];
+  const attackPath: string[][] = [];
+  const propagators = Array.isArray(frameworkModel["propagators"])
+    ? frameworkModel["propagators"]
+    : [];
+  const seenSymbols = new Set<string>();
+  for (const propagator of propagators) {
+    if (
+      !isRecord(propagator) ||
+      propagator["kind"] !== "mcp-tool-helper-call" ||
+      typeof propagator["symbol"] !== "string" ||
+      !/^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(propagator["symbol"]) ||
+      seenSymbols.has(propagator["symbol"])
+    ) {
+      continue;
+    }
+    const symbol = propagator["symbol"];
+    validation.push([symbol, "same-file helper", "helper call"]);
+    attackPath.push([symbol, "same-file helper", "helper call"]);
+    seenSymbols.add(symbol);
+  }
+  return { validation, attackPath };
 }
 
 function javaProcessEvidenceRequirements(

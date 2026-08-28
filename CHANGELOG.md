@@ -21,6 +21,28 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `a54b3338e3e1eba8b76d6a95ad40e077620a72858cf3c5d4f6a54f4ddb2edb3b`
   therefore failed honestly at 0.75 precision and 1.0 recall rather than
   suppressing the counterexample.
+- The first three-case remediation campaign at public implementation revision
+  `23b081f0ae6b7122934daa87303f372c7b735069` completed the new argument
+  exploit, its end-of-options control, and the SSRF semantic regression on
+  attempt one with complete coverage and no authentication, allowance,
+  rate-limit, classifier, timeout, or retry event. Detection was exact at two
+  true positives, zero false positives, precision/recall/F1 1.0, and a clean
+  negative control. The strict report gate still failed honestly: argument
+  validation used the bare `--` token without spelling out the option-region
+  consequence, and the SSRF attack path omitted the modeled `loadUrl` helper
+  hop. Campaign
+  `ea7ac6bf5f3c91b682f932dd2ca7055c0dfa283b2a5d6abc7f6807f9fe7dc6b0`
+  consumed 4,109,128 input, 3,311,616 cached, and 83,497 output tokens over 14
+  minutes 9 seconds of cumulative worker time and about 9 minutes 22 seconds
+  of wall time.
+- Hardened the host-owned MCP finding-quality audit rather than weakening the
+  corpus. A bare `--` no longer satisfies interpreter-option explanation by
+  itself, and every recorded `mcp-tool-helper-call` now contributes its exact
+  symbol as a dynamic validation and attack-path requirement. The correction
+  prompt requires field-local option-region wording and exact same-file helper
+  provenance. Focused Windows and native WSL lanes each pass 49 tests and 2,622
+  assertions after this second-order correction; TypeScript and a clean
+  production build pass on Windows.
 - Added `node-mcp-tool-argument-injection` with schema 1.2 source, sink,
   helper, registration, and control provenance plus CWE-88/CWE-94. Exact
   `execFile` or `spawn` calls using `process.execPath` now split literal argv,
@@ -65,6 +87,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   row at `src/server.mjs:12` with tool-input source line 25,
   `writeFile:path[0]`, CWE-22/CWE-73, and helper provenance; its fixed twin
   emits no MCP path row.
+- Two production-build inventories of the 3,550-file tracked-only public
+  interpreter-option checkpoint
+  `23b081f0ae6b7122934daa87303f372c7b735069` complete in 10,329.532 and
+  9,923.145 ms and are byte-identical at the 256-row cap, 557,948 bytes, and
+  SHA-256
+  `d90bcb95b7bfe0557e9e7d5ce122a295fb3a986b333ea553e3514634744dceab`.
+  The 5,423,185-byte archive has SHA-256
+  `2f8531b73739d0eb0402bfe602ce737108753e618de58265c4d9f45dacaf4476`.
+  An independently rooted exploit emits one structured
+  `node-mcp-tool-argument-injection` row at `server.mjs:9`, sourced from tool
+  input line 27, with `execFile:argv[2]`, CWE-88/CWE-94, registration, and
+  `runCommand` helper provenance. The independently rooted `--` control emits
+  no structured row.
 - Extended the standalone JavaScript/TypeScript MCP tool-handler model from
   process and network capabilities to Node filesystem authority. Exact
   `node:fs`, `node:fs/promises`, legacy `fs`, and `fs/promises` named,
