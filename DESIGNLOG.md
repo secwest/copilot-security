@@ -38,6 +38,22 @@ tests with 1,448 assertions and one intentional platform skip. Native WSL
 passes 65 tests and 269 assertions with one Windows-launcher skip. Formatting,
 TypeScript checking, and the production advisory audit are clean.
 
+**Second live counterexample.** Campaign
+`566da36bc97ccf0e0798e7da58a2724e7f03eafa283178761042574f9502caa6`
+again completed both scans on attempt one with one true positive, no false
+positive or false negative, and a clean control. The corrected process boundary
+was not exercised because the host auditor found no remaining gap. The stricter
+benchmark still rejected the exploit: validation described Worker construction
+without naming `worker_threads`, `Worker constructor`, or `new Worker`, while
+attack-path data called it CWE-94 code evaluation without explicitly stating
+code execution or code injection. The Worker propagator now adds those exact
+binding and impact groups independently to validation and attack path. An
+adversarial regression reproduces the two omissions and the fully explicit
+closure. Windows and native WSL each pass the resulting 118-test lane with
+1,555 assertions and no failure; TypeScript, formatting, and the fresh build
+are clean. No allowance, authentication, rate-limit, classifier, transport,
+timeout, or retry event occurred in either live campaign.
+
 ## 2026-08-28 — Treat MCP Worker eval mode as an immediate execution lifecycle
 
 **Comparative gap.** The MCP pass already closed direct global `eval`, compiled

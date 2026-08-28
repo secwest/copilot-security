@@ -45980,6 +45980,7 @@ function nodeMcpToolEvidenceRequirements(
       validation.push(construction, execution);
       attackPath.push(construction, execution);
     } else if (kind === "mcp-tool-worker-startup") {
+      const binding = ["worker_threads", "Worker constructor", "new Worker"];
       const startup = [
         symbol,
         "eval: true",
@@ -45987,8 +45988,9 @@ function nodeMcpToolEvidenceRequirements(
         "worker startup",
         "once the worker is online",
       ];
-      validation.push(startup);
-      attackPath.push(startup);
+      const executionImpact = ["code execution", "code injection"];
+      validation.push(binding, startup, executionImpact);
+      attackPath.push(binding, startup, executionImpact);
     } else if (kind === "mcp-tool-code-linking") {
       validation.push([
         symbol,

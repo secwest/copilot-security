@@ -1796,6 +1796,41 @@ function runCommand(value: string) {
         "missing_model_specific_attack_path_evidence",
       );
 
+      finding.validation.summary = [
+        "An MCP tool registerTool callback receives client-controlled tool input from a model invocation through an inputSchema string schema.",
+        "Worker eval mode starts JavaScript source code evaluation once the worker is online and reaches code injection.",
+        "The same-file evaluateExpression helper call preserves the input.",
+      ].join(" ");
+      finding.attackPath.summary = [
+        "An MCP tool registerTool callback receives client-controlled tool input from a model invocation through an inputSchema string schema.",
+        "The live node:worker_threads new Worker constructor receives the JavaScript source through the same-file evaluateExpression helper call.",
+        "Literal eval: true causes worker startup code evaluation once the worker is online at an explicit execution step (CWE-94).",
+      ].join(" ");
+      finding.attackPath.reachability.outcome = "dynamic evaluation";
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      const missingWorkerBindingAndImpact =
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          workerInventory,
+        );
+      expect(missingWorkerBindingAndImpact).toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(missingWorkerBindingAndImpact).toContain(
+        '"worker_threads","Worker constructor","new Worker"',
+      );
+      expect(missingWorkerBindingAndImpact).toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+      expect(missingWorkerBindingAndImpact).toContain(
+        '"code execution","code injection"',
+      );
+
       const workerClosure = [
         "An MCP tool registerTool callback receives client-controlled tool input from a model invocation.",
         "Its inputSchema string schema proves shape but not an allowed arithmetic grammar.",

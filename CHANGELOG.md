@@ -17,6 +17,11 @@ All notable scanner, application, benchmark, and operational changes are recorde
   regression binds the manifest location to the deterministic framework row,
   preventing future fixture drift from turning a true detection into a
   misleading semantic failure.
+- Strengthened Worker-specific field-local closure so validation and attack
+  path each have to name an official `worker_threads`/`new Worker` constructor
+  boundary and explicitly state code execution or code injection. General
+  Worker/evaluation prose and CWE-94 alone no longer satisfy those two proof
+  obligations.
 - Added deterministic MCP code-injection coverage for tool input reaching
   argument zero of the exact Node `worker_threads` or `node:worker_threads`
   `Worker` constructor with an object-literal `eval: true` option. The model
