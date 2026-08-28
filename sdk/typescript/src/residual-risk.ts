@@ -42,9 +42,9 @@ import {
 } from "./java-spring-command-risk.js";
 import { nodeMcpToolRiskRecords } from "./node-mcp-tool-risk.js";
 
-const MAX_FILES = 2_000;
+const MAX_FILES = 8_192;
 const MAX_FILE_BYTES = 256 * 1024;
-const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
 const MAX_CANDIDATES = 4_096;
 const MAX_SIGNALS = 256;
 const MAX_SIGNALS_PER_FILE = MAX_SIGNALS;
@@ -3270,6 +3270,7 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
 const IGNORED_DIRECTORIES = new Set([
   ".git",
   ".hg",
+  ".pnpm-store",
   ".svn",
   ".venv",
   "bin",

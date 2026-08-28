@@ -6,6 +6,21 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Expanded deterministic residual discovery from 2,000 files/8 MiB to 8,192
+  files/32 MiB after self-review showed that the file ceiling was applied
+  during directory traversal before final path sorting. Added `.pnpm-store` to
+  the generated-tree denylist so a workspace-local package cache cannot consume
+  source budget or enter model prompts. The 256-row final cap and its
+  framework-kind, category, and path-diversity reservation remain unchanged.
+  A regression creates 2,048 ordinary source files, an ignored package-cache
+  decoy, and a lexically late MCP/SQLite sink; the structured CWE-89 row must
+  survive. The expanded Windows model/benchmark/inventory lane passes 141 tests
+  and 4,005 assertions with one intentional symlink skip, and the new native
+  WSL boundary passes with four assertions. The rebuilt 299-entry,
+  2,348,280-byte archive has SHA-256
+  `56c490c33467ec8930d8b60ddf93adb60a97a6435f9c3cb0bdf2be6182244d7d`
+  and passes isolated Windows and WSL public-import, CLI, and 79-file bundled
+  plugin validation.
 - Added deterministic `node-mcp-tool-sql-injection` coverage for exact MCP tool
   input reaching argument zero of the official built-in `node:sqlite`
   `DatabaseSync.exec` API. Named, aliased, namespace, default, CommonJS, and

@@ -1484,6 +1484,46 @@ describe("residual risk inventory", () => {
     );
   });
 
+  test("retains structured MCP sinks beyond the former 2000-file discovery ceiling", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-source-budget-"),
+    );
+    temporaryPaths.push(repository);
+    await mkdir(join(repository, ".pnpm-store"));
+    await writeFile(
+      join(repository, ".pnpm-store", "cached-server.mjs"),
+      "database.exec(toolInput);\n",
+    );
+    await Promise.all(
+      Array.from({ length: 2_048 }, (_, index) =>
+        writeFile(
+          join(repository, `a-${index.toString().padStart(4, "0")}.js`),
+          `export const value${index} = ${index};\n`,
+        ),
+      ),
+    );
+    await writeFile(
+      join(repository, "z-mcp-sqlite.mjs"),
+      [
+        'import { McpServer } from "@modelcontextprotocol/server";',
+        'import { DatabaseSync } from "node:sqlite";',
+        'import { z } from "zod";',
+        'const database = new DatabaseSync(":memory:");',
+        'const server = new McpServer({ name: "late", version: "1.0.0" });',
+        'server.registerTool("lookup", { inputSchema: z.object({ sql: z.string() }) }, async ({ sql }) => {',
+        "  database.exec(sql);",
+        "  return { content: [] };",
+        "});",
+      ].join("\n"),
+    );
+
+    const inventory = await buildRawResidualRiskInventory(repository);
+    expect(inventory).toContain('"id":"node-mcp-tool-sql-injection"');
+    expect(inventory).toContain('"path":"z-mcp-sqlite.mjs"');
+    expect(inventory).toContain('"kind":"mcp-tool-sql-query"');
+    expect(inventory).not.toContain(".pnpm-store");
+  });
+
   test("pairs cross-site ambient session state changes with a session-bound CSRF token", async () => {
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkFixtures, "javascript-csrf-recovery-email"),

@@ -2,6 +2,43 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Preserve structured findings beyond the old source-discovery prefix
+
+**Self-review counterexample.** Exact-checkpoint review of the SQLite work
+prompted an audit of the repository-wide residual inventory. MCP benchmark
+paths are deliberately excluded by the MCP production-path owner, so their
+absence from a root inventory was expected and the independently rooted pair
+remained the model proof. The audit nevertheless found a broader coverage
+defect: `discoverSourcePaths` stopped while traversing after 2,000 source paths
+and sorted only that truncated prefix. A large tree could therefore exclude
+later application files before signal ranking. The local `.pnpm-store` was
+also not ignored, allowing generated package-cache content to compete for that
+bounded traversal budget.
+
+**Accepted bounded expansion.** Residual discovery now admits at most 8,192
+files and 32 MiB instead of 2,000 files and 8 MiB, and ignores exact directory
+components named `.pnpm-store`. Individual files remain capped at 256 KiB,
+generated directories retain their existing exclusions, and the final prompt
+inventory remains capped at 256 rows. Framework model/sink-kind reservation,
+then all remaining structured rows, category diversity, path diversity, and
+per-path soft limits still decide which records survive. The change spends
+more deterministic host work to prevent an early filesystem-order cutoff; it
+does not enlarge model prompt output or trust cache contents.
+
+**Regression evidence.** A temporary corpus contains 2,048 ordinary source
+files, an ignored `.pnpm-store` decoy, and a lexically late official
+MCP/`node:sqlite` tool sink. The old file ceiling could not inspect the final
+source. The new test requires the exact `node-mcp-tool-sql-injection` and
+`mcp-tool-sql-query` row and proves that no cache path enters the inventory.
+The expanded Windows MCP, canonical benchmark, and residual-inventory lane
+passes 141 tests and 4,005 assertions with one intentional symlink skip. The
+same source-budget regression passes under native WSL with four assertions.
+Formatting, generated-model drift, TypeScript checking, and the clean build
+pass. The 299-entry, 2,348,280-byte package has SHA-256
+`56c490c33467ec8930d8b60ddf93adb60a97a6435f9c3cb0bdf2be6182244d7d`
+and passes isolated Windows and WSL public-import, executable-CLI, and all 79
+bundled-plugin checks.
+
 ## 2026-08-28 — Close the MCP tool-input to built-in SQLite execution boundary
 
 **Comparative gap.** The dedicated MCP pass already modeled process, code,
