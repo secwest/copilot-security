@@ -159,6 +159,8 @@ jobs:
           - node-mcp-v2-fixed-destination
           - node-mcp-v2-path-traversal
           - node-mcp-v2-fixed-file
+          - node-mcp-v2-runtime-alias-argument-injection
+          - node-mcp-v2-runtime-alias-argument-data
 
     steps:
       - name: Checkout repository

@@ -6,6 +6,51 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a deterministic MCP argument-injection false negative when a fixed
+  Node executable is preserved through one stable local or module-scope alias,
+  such as `const runtime = process.execPath`, before tool-controlled values
+  enter `execFile(runtime, argv)`. The detector now records the exact
+  `runtime=process.execPath` edge and still requires an exact `--`
+  end-of-options element before every tainted option-region argument. Generic
+  fixed-executable/argv guidance remains valid for ordinary programs, while
+  the Node interpreter's own option parser receives explicit treatment.
+- Kept runtime-alias inference fail closed: a local `process` shadow,
+  `process` or `process.execPath` replacement, deletion or reflective mutation,
+  alias reassignment or destructuring, multiple declarations, alias chains,
+  nested ambiguous declarations, computed/global process expressions, and
+  unsupported runtime forms suppress the structured row. Finding-quality
+  correction now requires both validation and attack-path fields to repeat the
+  recorded runtime-alias symbol and independently explain the Node option
+  region and end-of-options boundary.
+- Added a topology-matched MCP SDK 2.0.0/Zod 4.4.3 executable pair with a
+  reachable stdio launcher, frozen dependency locks, one same-file helper, and
+  bounded inert values. The exploit proves that `--version` is consumed as a
+  Node option through the aliased runtime; the control inserts exact `--` and
+  proves that `--version`, `--help`, and the fixed marker remain ordinary
+  program data. Both witnesses pass under Windows Node 24.15.0 and WSL Node
+  22.23.1 without shell, filesystem, network, credential, persistence, or
+  attacker-code effects. The strict MCP lane now contains 22 cases across 11
+  matched pairs, and the canonical corpus contains 167 pairs, 334 cases, and
+  1,002 repeated positions.
+- The compiled exploit inventory contains one exact
+  `node-mcp-tool-argument-injection` row at `src/server.mjs:11`, with
+  `execFile:argv[2]`, CWE-88/CWE-94, registration, helper, and
+  `runtime=process.execPath` propagators; the independently rooted control has
+  no structured argument-injection row. Two complete product-root inventories
+  are byte-identical at 256 rows, 584,350 bytes, 243 structured records, 13
+  lexical leads, and SHA-256
+  `d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`,
+  completing in 19.114 and 19.082 seconds.
+- Focused Windows acceptance passes 82 tests and 3,061 assertions; native WSL
+  passes the 64-test/648-assertion MCP model lane and both new witnesses. The
+  clean complete Windows suite selects 2,028 tests across 210 files: 1,999 pass
+  and 27 intentionally skip under the managed shell, while its two
+  permission-sensitive cases pass in an exact 48/48 host-permission rerun.
+  Formatting, generated-model drift, TypeScript, build, and production audit
+  are clean. The rebuilt 299-entry, 2,353,336-byte package at SHA-256
+  `79b36a83b30fa5126e13795e7523a2fb4669938d312a50a6ffb1dd1d252f2d8e`
+  passes isolated install, public import, CLI, and all 79 bundled-plugin
+  checks.
 - Closed a deterministic MCP SQL-injection false negative for tool-controlled
   SQL compiled by the official built-in `node:sqlite`
   `DatabaseSync.prepare` API and then executed through the exact returned

@@ -2,6 +2,83 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Preserve exact Node runtime identity through one stable alias
+
+**Comparative gap.** The command model already distinguished shell grammar
+from a fixed executable plus an argv array, then made one Node-specific
+exception: tool input before an exact `--` in `execFile(process.execPath,
+argv)` still occupies the Node interpreter option region. That exception did
+not survive the ordinary refactor `const runtime = process.execPath`.
+Node's official [CLI documentation](https://nodejs.org/api/cli.html) places
+options before the program or eval input and defines `--` as the end of Node
+options; the official
+[`process.execPath` documentation](https://nodejs.org/api/process.html#processexecpath)
+defines the exact absolute executable path that started the process. Generic
+high-precision guidance such as CodeQL's
+[command-line injection query help](https://codeql.github.com/codeql-query-help/javascript/js-command-line-injection/)
+correctly treats a fixed executable with separate arguments as the usual shell
+injection repair, but it does not establish that an interpreter will treat all
+pre-`--` arguments as data. The red regression emitted no structured row for
+the stable alias even though the same inert `--version` witness was consumed by
+Node.
+
+**Accepted identity proof.** Direct `process.execPath` remains supported. The
+model now also follows exactly one `const`, `let`, or `var` alias whose
+initializer is exactly `process.execPath`, either at module scope or at the
+top level of the current tool handler/helper body, including a TypeScript type
+annotation. The alias must have one declaration, remain unreassigned before
+the sink, and be used as the exact executable expression. A positive row adds
+an `mcp-tool-node-runtime` propagator with the source line and exact symbol,
+such as `runtime=process.execPath`. Model correction requires that exact
+runtime edge in both validation and attack-path text, independently of the MCP
+registration and same-file helper edges.
+
+**Fail-closed boundaries.** A local declaration or parameter named `process`,
+replacement of `process` or its `execPath` member, bracket assignment,
+deletion, `Object.defineProperty` or `Object.assign` mutation, alias
+reassignment including compound/destructuring forms, duplicate declarations,
+alias chains, nested-block declarations, computed properties,
+`globalThis.process`, and other unsupported expressions suppress the row. The
+model does not attempt cross-file runtime identity, object-property storage,
+destructured process bindings, imported `node:process`, or arbitrary alias
+graphs. These are explicit conservative limits rather than evidence that such
+code is safe. Even with exact runtime identity, an exact `--` must precede
+every tainted option-region element; schema validation and fixed-executable
+argv separation alone do not close this interpreter boundary.
+
+**Executable benchmark.** The matched twins use MCP SDK 2.0.0, Zod 4.4.3,
+frozen npm locks, a reachable stdio server, module-scope runtime alias, one
+same-file `runCommand` helper, bounded output, and a timeout. The exploit omits
+`--`; passing the fixed `--version` value causes Node to print its version. The
+control differs at the repair boundary by placing exact `--` before the same
+values and observes the marker, `--version`, and `--help` as program data.
+Both witnesses pass on Windows Node 24.15.0 and WSL Node 22.23.1. They execute
+no shell, attacker code, filesystem or network operation and touch no
+credential or persistent state. The specialized MCP corpus now has 22 cases
+and 11 matched pairs; the canonical corpus has 167 pairs, 334 cases, and 1,002
+repeated positions.
+
+**Acceptance evidence.** The compiled exploit inventory emits exactly one
+`node-mcp-tool-argument-injection`/CWE-88/CWE-94 row at
+`src/server.mjs:11`. Its sink is `execFile:argv[2]`, and its propagators bind
+the tool registration at line 23, `runtime=process.execPath` at line 5, and
+the `runCommand` helper at line 30. The compiled control inventory contains no
+argument-injection row. Two product-root inventory passes complete in 19.114
+and 19.082 seconds and are byte-identical: 256 rows, 584,350 bytes, 243
+structured rows, 13 lexical leads, and SHA-256
+`d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+Focused Windows acceptance passes 82 tests and 3,061 assertions; WSL passes
+the 64-test/648-assertion MCP lane and both witnesses. The complete clean
+Windows suite selects 2,028 tests across 210 files: 1,999 pass and 27 skip in
+the managed shell, and the two permission-sensitive failures there pass in an
+exact 48/48 host-access rerun. Generated-model checks, TypeScript, formatting,
+build, and production audit are clean. The rebuilt 299-entry package is
+2,353,336 bytes with SHA-256
+`79b36a83b30fa5126e13795e7523a2fb4669938d312a50a6ffb1dd1d252f2d8e`
+and passes isolated install, public import, CLI, and all 79 bundled-plugin
+checks. Hosted workflow evidence is recorded separately after the exact
+implementation revision runs.
+
 ## 2026-08-28 — Require execution of the exact prepared built-in SQLite statement
 
 **Comparative gap.** The first built-in SQLite model deliberately covered

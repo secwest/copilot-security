@@ -39,7 +39,8 @@ The package is ESM-only and provides:
   and relative wrappers while rejecting serialization APIs, fixed or
   wrong-role data, star expansion, reassignment, member replacement, and local
   module shadows; an ownership-sensitive MCP model that preserves exact tool
-  input through same-file helpers into process, code-evaluation, regular-
+  input through same-file helpers into process, including one stable exact
+  `process.execPath` runtime alias, code-evaluation, regular-
   expression, built-in `node:sqlite` direct and prepared SQL execution,
   filesystem-path, and network sinks;
   and request-to-PyYAML unsafe-loader hypotheses that preserve

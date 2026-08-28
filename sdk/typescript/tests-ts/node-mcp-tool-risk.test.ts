@@ -93,6 +93,8 @@ describe("Node MCP tool-input security model", () => {
       "node-mcp-v2-fixed-destination",
       "node-mcp-v2-path-traversal",
       "node-mcp-v2-fixed-file",
+      "node-mcp-v2-runtime-alias-argument-injection",
+      "node-mcp-v2-runtime-alias-argument-data",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -146,6 +148,15 @@ describe("Node MCP tool-input security model", () => {
     expect(manifest.cases[17]?.expected).toEqual([]);
     expect(manifest.cases[18]?.expected).toHaveLength(1);
     expect(manifest.cases[19]?.expected).toEqual([]);
+    expect(manifest.cases[20]?.expected).toHaveLength(1);
+    expect(manifest.cases[20]?.expected[0]).toMatchObject({
+      cwe: ["CWE-88", "CWE-94"],
+      acceptableSeverities: ["critical", "high"],
+      path: "src/server.mjs",
+      line: 11,
+      lineTolerance: 1,
+    });
+    expect(manifest.cases[21]?.expected).toEqual([]);
 
     const canonical = JSON.parse(
       await readFile(join(benchmarkRoot, "manifest.json"), "utf8"),
@@ -291,6 +302,74 @@ describe("Node MCP tool-input security model", () => {
     expect(found[0]?.categories).toContain(
       "broken-control:mcp-tool-interpreter-end-of-options-missing",
     );
+  });
+
+  test("preserves Node interpreter-option injection through a stable runtime alias", () => {
+    const found = records(
+      v2(
+        '    const runtime = process.execPath;\n    return execFile(runtime, ["-e", "process.stdout.write(process.argv[1])", command]);',
+      ),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel.id).toBe(
+      "node-mcp-tool-argument-injection",
+    );
+    expect(found[0]?.frameworkModel.sink.symbol).toBe("execFile:argv[2]");
+    expect(found[0]?.frameworkModel.propagators).toContainEqual(
+      expect.objectContaining({
+        kind: "mcp-tool-node-runtime",
+        symbol: "runtime=process.execPath",
+      }),
+    );
+  });
+
+  test("supports module-scope and typed Node runtime aliases", () => {
+    const moduleAlias = v2(
+      '    return execFile(runtime, ["-e", "process.stdout.write(process.argv[1])", command]);',
+    ).replace(
+      "const server =",
+      "const runtime = process.execPath;\n\nconst server =",
+    );
+    const typedAlias = v2(
+      '    const runtime: string = process.execPath;\n    return spawn(runtime, ["-e", "process.stdout.write(process.argv[1])", command]);',
+    );
+    for (const source of [moduleAlias, typedAlias]) {
+      const found = records(source);
+      expect(found).toHaveLength(1);
+      expect(found[0]?.frameworkModel.id).toBe(
+        "node-mcp-tool-argument-injection",
+      );
+      expect(
+        found[0]?.frameworkModel.propagators.some(
+          ({ kind, symbol }) =>
+            kind === "mcp-tool-node-runtime" &&
+            symbol === "runtime=process.execPath",
+        ),
+      ).toBeTrue();
+    }
+  });
+
+  test("requires an exact live Node runtime alias and end-of-options boundary", () => {
+    const args = '["-e", "process.stdout.write(process.argv[1])", command]';
+    const rejected = [
+      `    let runtime = process.execPath;\n    runtime = "node";\n    return execFile(runtime, ${args});`,
+      `    const runtime = process.execPath;\n    const forwarded = runtime;\n    return execFile(forwarded, ${args});`,
+      `    const process = { execPath: "node" };\n    return execFile(process.execPath, ${args});`,
+      `    process.execPath = "node";\n    return execFile(process.execPath, ${args});`,
+      `    let runtime = process.execPath;\n    [runtime] = ["node"];\n    return execFile(runtime, ${args});`,
+      `    delete process.execPath;\n    return execFile(process.execPath, ${args});`,
+      `    Object.defineProperty(process, "execPath", { value: "node" });\n    return execFile(process.execPath, ${args});`,
+      `    Object.assign(process, { execPath: "node" });\n    return execFile(process.execPath, ${args});`,
+      `    const runtime = globalThis.process.execPath;\n    return execFile(runtime, ${args});`,
+    ];
+    for (const body of rejected) expect(records(v2(body))).toEqual([]);
+    expect(
+      records(
+        v2(
+          '    const runtime = process.execPath;\n    return execFile(runtime, ["-e", "process.stdout.write(process.argv[1])", "--", command]);',
+        ),
+      ),
+    ).toEqual([]);
   });
 
   test("treats an exact Node end-of-options element as a strong control", () => {
@@ -1838,15 +1917,16 @@ const example = "server.registerTool('run', { inputSchema: schema }, ({ command 
     );
     try {
       const application = `${v2("    return runCommand(command);")}
+const runtime = process.execPath;
 function runCommand(value: string) {
-  return execFile(process.execPath, ["-e", "process.stdout.write(process.argv[1])", value]);
+  return execFile(runtime, ["-e", "process.stdout.write(process.argv[1])", value]);
 }
 `;
       await writeFile(join(repository, "server.ts"), application, "utf8");
       const sinkLine =
         application
           .split(/\r?\n/u)
-          .findIndex((line) => line.includes("execFile(process.execPath")) + 1;
+          .findIndex((line) => line.includes("execFile(runtime")) + 1;
       const finding = {
         occurrenceId: "occ_node_mcp_argument_quality",
         taxonomy: { cwe: ["CWE-88", "CWE-94"] },
@@ -1942,10 +2022,35 @@ function runCommand(value: string) {
         "same-file helper",
         "helper call",
       ]);
+      expect(helperRows[1]?.missingValidationTextAnyOf).toContainEqual([
+        "runtime=process.execPath",
+        "stable runtime alias",
+        "process.execPath alias",
+      ]);
+      expect(helperRows[1]?.missingAttackPathTextAnyOf).toContainEqual([
+        "runtime=process.execPath",
+        "stable runtime alias",
+        "process.execPath alias",
+      ]);
 
       const helperClosure = `${closure} The same-file helper call runCommand carries the value to the sink.`;
       finding.validation.summary = helperClosure;
       finding.attackPath.summary = helperClosure;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      const missingRuntimeAlias = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      expect(missingRuntimeAlias).toContain("runtime=process.execPath");
+
+      const completeClosure = `${helperClosure} The stable runtime alias runtime=process.execPath preserves the exact Node executable identity.`;
+      finding.validation.summary = completeClosure;
+      finding.attackPath.summary = completeClosure;
       await writeFile(
         join(scanDirectory, "findings.json"),
         JSON.stringify({ findings: [finding] }),
@@ -2531,6 +2636,9 @@ function runCommand(value: string) {
     expect(prompt).toContain("schema-less callback receives context");
     expect(prompt).toContain("fixed executable plus separate argv data");
     expect(prompt).toContain("process.execPath");
+    expect(prompt).toContain("stable process.execPath alias");
+    expect(prompt).toContain("runtime-alias symbol");
+    expect(prompt).toContain("local process shadow");
     expect(prompt).toContain("end-of-options");
     expect(prompt).toContain("node:vm is not a security mechanism");
     expect(prompt).toContain("inert construction");

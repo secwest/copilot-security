@@ -481,6 +481,59 @@
       "id": "node-mcp-v2-fixed-file",
       "fixture": "fixtures/node-mcp-v2-fixed-file",
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-runtime-alias-argument-injection",
+      "fixture": "fixtures/node-mcp-v2-runtime-alias-argument-injection",
+      "expected": [
+        {
+          "title": "MCP tool input reaches a Node option through a stable runtime alias",
+          "cwe": ["CWE-88", "CWE-94"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/server.mjs",
+          "line": 11,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["command", "tool input", "callback input"],
+            ["runCommand", "same-file helper", "helper call"],
+            [
+              "runtime=process.execPath",
+              "stable runtime alias",
+              "process.execPath alias"
+            ],
+            ["Node interpreter", "execFile", "child_process"],
+            ["option region", "end-of-options", "argument injection"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-diagnostic", "registerTool", "tool callback"],
+            ["runCommand", "same-file helper", "helper call"],
+            [
+              "runtime=process.execPath",
+              "stable runtime alias",
+              "process.execPath alias"
+            ],
+            ["dash-prefixed", "option region", "end-of-options"],
+            ["code execution", "Node runtime", "argument injection"]
+          ],
+          "forbiddenText": [
+            "execFile argv always prevents argument injection",
+            "a process.execPath alias makes every argv element data",
+            "the witness executed attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-runtime-alias-argument-data",
+      "fixture": "fixtures/node-mcp-v2-runtime-alias-argument-data",
+      "expected": []
     }
   ]
 }

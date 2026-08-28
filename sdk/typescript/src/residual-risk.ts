@@ -45990,6 +45990,14 @@ function nodeMcpToolEvidenceRequirements(
     ) {
       validation.push([symbol, "same-file helper", "helper call"]);
       attackPath.push([symbol, "same-file helper", "helper call"]);
+    } else if (kind === "mcp-tool-node-runtime") {
+      const runtime = [
+        symbol,
+        "stable runtime alias",
+        "process.execPath alias",
+      ];
+      validation.push(runtime);
+      attackPath.push(runtime);
     } else if (kind === "mcp-tool-code-construction") {
       const construction = [
         symbol,

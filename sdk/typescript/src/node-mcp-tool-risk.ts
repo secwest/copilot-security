@@ -1733,8 +1733,14 @@ function commandSinks(
       });
       continue;
     }
+    const nodeRuntime = nodeRuntimeExecutable(
+      source,
+      structural,
+      registration.body,
+      first,
+    );
     const interpreterOption =
-      second === undefined || !isNodeRuntimeExecutable(source, first)
+      second === undefined || nodeRuntime === undefined
         ? undefined
         : taintedNodeOptionArgument(
             source,
@@ -1743,12 +1749,22 @@ function commandSinks(
             registration,
             taint,
           );
-    if (interpreterOption !== undefined) {
+    if (interpreterOption !== undefined && nodeRuntime !== undefined) {
       sinks.push({
         kind: "mcp-tool-interpreter-option",
         line: call.line,
         symbol: `${call.symbol}:argv[${interpreterOption.index}]`,
-        source: interpreterOption.source,
+        source: {
+          ...interpreterOption.source,
+          propagators: [
+            ...interpreterOption.source.propagators,
+            {
+              kind: "mcp-tool-node-runtime",
+              line: nodeRuntime.line,
+              symbol: nodeRuntime.symbol,
+            },
+          ],
+        },
       });
       continue;
     }
@@ -3086,11 +3102,125 @@ function bodyHasNamedParameter(
   );
 }
 
-function isNodeRuntimeExecutable(source: string, range: Range): boolean {
+interface NodeRuntimeIdentity {
+  line: number;
+  symbol: string;
+}
+
+function structuralBraceDepthAt(structural: string, offset: number): number {
+  let depth = 0;
+  for (let index = 0; index < offset; index += 1) {
+    if (structural[index] === "{") depth += 1;
+    else if (structural[index] === "}") depth = Math.max(0, depth - 1);
+  }
+  return depth;
+}
+
+function processExecPathIsLive(
+  structural: string,
+  body: Range,
+  offset: number,
+): boolean {
+  const prefix = structural.slice(0, offset);
   return (
-    source.slice(range.start, range.end).replaceAll(/\s/gu, "") ===
-    "process.execPath"
+    !hasLocalDeclaration(structural, "process") &&
+    !bodyHasNamedParameter(structural, body, "process") &&
+    !identifierWasReassigned(structural, "process", offset) &&
+    !memberWasReassigned(structural, "process", "execPath", offset) &&
+    !/\bdelete\s+process\s*\.\s*execPath\b/u.test(prefix) &&
+    !/(?<![.\w$])process\s*\[[^\]\n]{0,64}\]\s*(?:=(?!=|>)|\+\+|--)/u.test(
+      prefix,
+    ) &&
+    !/(?<![.\w$])Object\s*\.\s*(?:defineProperty|assign)\s*\(\s*process\s*,/u.test(
+      prefix,
+    )
   );
+}
+
+function runtimeAliasWasReassigned(
+  structural: string,
+  alias: string,
+  start: number,
+  end: number,
+): boolean {
+  const escaped = escapeRegularExpression(alias);
+  return (
+    new RegExp(
+      String.raw`(?<![.\w$])${escaped}\s*(?:(?:(?:\*\*|&&|\|\||\?\?|<<|>>>?|[+\-*/%&|^])?=(?!=|>))|\+\+|--)`,
+      "u",
+    ).test(structural.slice(start, end)) ||
+    new RegExp(
+      String.raw`(?:\[[^\]\n;]*\b${escaped}\b[^\]\n;]*\]|\{[^}\n;]*\b${escaped}\b[^}\n;]*\})\s*=(?!=|>)`,
+      "u",
+    ).test(structural.slice(start, end))
+  );
+}
+
+function nodeRuntimeExecutable(
+  source: string,
+  structural: string,
+  body: Range,
+  range: Range,
+): NodeRuntimeIdentity | undefined {
+  const expression = structural.slice(range.start, range.end).trim();
+  if (expression.replaceAll(/\s/gu, "") === "process.execPath") {
+    if (!processExecPathIsLive(structural, body, range.start)) return undefined;
+    return { line: lineAt(source, range.start), symbol: "process.execPath" };
+  }
+
+  const alias = expression.match(/^([A-Za-z_$][\w$]*)$/u)?.[1];
+  if (alias === undefined || bodyHasNamedParameter(structural, body, alias))
+    return undefined;
+  const escaped = escapeRegularExpression(alias);
+  const declarations = [
+    ...structural
+      .slice(0, range.start)
+      .matchAll(
+        new RegExp(
+          String.raw`\b(?:class|function|const|let|var)\s+${escaped}\b|\bimport\s+(?:\{[^}]*\b${escaped}\b[^}]*\}|${escaped}\b|\*\s+as\s+${escaped}\b)`,
+          "gu",
+        ),
+      ),
+  ];
+  if (declarations.length !== 1) return undefined;
+
+  const assignments = [
+    ...structural
+      .slice(0, range.start)
+      .matchAll(
+        new RegExp(
+          String.raw`(?:^|[;{}\n])\s*(const|let|var)\s+${escaped}(?:\s*:[^=;\n]+)?\s*=\s*process\s*\.\s*execPath\s*(?:;|\n|$)`,
+          "gu",
+        ),
+      ),
+  ];
+  if (assignments.length !== 1) return undefined;
+  const assignment = assignments[0]!;
+  const declarationOffset =
+    assignment.index! + assignment[0].indexOf(assignment[1]!);
+  const definitionEnd = assignment.index! + assignment[0].length;
+  const declarationDepth = structuralBraceDepthAt(
+    structural,
+    declarationOffset,
+  );
+  const bodyDepth = structuralBraceDepthAt(structural, body.start);
+  const isTopLevelBodyDeclaration =
+    declarationOffset >= body.start &&
+    declarationOffset < body.end &&
+    declarationDepth === bodyDepth;
+  if (declarationDepth !== 0 && !isTopLevelBodyDeclaration) return undefined;
+  const processOffset =
+    assignment.index! + assignment[0].lastIndexOf("process");
+  if (
+    !processExecPathIsLive(structural, body, processOffset) ||
+    runtimeAliasWasReassigned(structural, alias, definitionEnd, range.start)
+  ) {
+    return undefined;
+  }
+  return {
+    line: lineAt(source, processOffset),
+    symbol: `${alias}=process.execPath`,
+  };
 }
 
 function taintedNodeOptionArgument(

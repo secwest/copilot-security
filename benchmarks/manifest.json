@@ -7488,6 +7488,76 @@
         "node-mcp-v2-fixed-file/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-runtime-alias-argument-injection",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into the Node option region after process.execPath is preserved through one stable module-scope runtime alias.",
+      "fixture": "fixtures/node-mcp-v2-runtime-alias-argument-injection",
+      "findingsPaths": [
+        "node-mcp-v2-runtime-alias-argument-injection/run-1/findings.json",
+        "node-mcp-v2-runtime-alias-argument-injection/run-2/findings.json",
+        "node-mcp-v2-runtime-alias-argument-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-argument-injection",
+          "cwe": ["CWE-88", "CWE-94"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["command", "tool input", "callback input"],
+            ["runCommand", "same-file helper", "helper call"],
+            [
+              "runtime=process.execPath",
+              "stable runtime alias",
+              "process.execPath alias"
+            ],
+            ["Node interpreter", "execFile", "child_process"],
+            ["option region", "end-of-options", "argument injection"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-diagnostic", "registerTool", "tool callback"],
+            ["runCommand", "same-file helper", "helper call"],
+            [
+              "runtime=process.execPath",
+              "stable runtime alias",
+              "process.execPath alias"
+            ],
+            ["dash-prefixed", "option region", "end-of-options"],
+            ["code execution", "Node runtime", "argument injection"]
+          ],
+          "forbiddenText": [
+            "execFile argv always prevents argument injection",
+            "a process.execPath alias makes every argv element data",
+            "the witness executed attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-runtime-alias-argument-data",
+      "description": "The topology-matched MCP v2 control preserves the same runtime alias, helper, timeout, response, and tool input while an exact -- ends Node option parsing before every untrusted argv element.",
+      "fixture": "fixtures/node-mcp-v2-runtime-alias-argument-data",
+      "findingsPaths": [
+        "node-mcp-v2-runtime-alias-argument-data/run-1/findings.json",
+        "node-mcp-v2-runtime-alias-argument-data/run-2/findings.json",
+        "node-mcp-v2-runtime-alias-argument-data/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

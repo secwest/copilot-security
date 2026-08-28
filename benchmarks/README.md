@@ -280,14 +280,18 @@ node ../../benchmarks/run-benchmark.mjs `
 ## Node MCP tool-handler security benchmark
 
 `node-mcp-tool-security-manifest.json` measures tool input at seven distinct
-capability boundaries across ten matched pairs under perfect selected-run
+capability boundaries across eleven matched pairs under perfect selected-run
 gates. The command pair uses
 the real stable `@modelcontextprotocol/server` 2.0.0 API: the exploit carries a
 tool field through an arrow helper into `child_process.exec`, while its
 topology-matched control uses a fixed `process.execPath` and an explicit `--`.
 The argument pair keeps that fixed Node runtime on both sides: the exploit puts
 tool data in the runtime option region, while the control places the same data
-after `--`. The code-evaluation pair carries an expression through a same-file
+after `--`. A second argument pair preserves `process.execPath` through one
+stable module-scope alias; the exploit keeps tool data in Node's option region,
+while its topology-matched control retains the alias and places every untrusted
+argument after `--`. Reassignment, shadows, alias chains, and ambiguous nested
+aliases remain negative model cases. The code-evaluation pair carries an expression through a same-file
 helper into direct JavaScript `eval`; its control preserves expression input,
 the helper, arithmetic results, and the MCP response while an explicit numeric
 `+`/`*` grammar never evaluates the tool string as source. A second
@@ -323,7 +327,7 @@ load-generating patterns. The network witnesses use a
 random-port loopback listener, close it in all paths, and never contact an
 external or metadata address. The filesystem witnesses create and remove only
 fresh temporary trees containing synthetic marker data. Both SQLite pairs use
-only in-memory databases and fixed inert rows. Node CI executes all twenty
+only in-memory databases and fixed inert rows. Node CI executes all twenty-two
 witnesses on Windows and Linux. Run the focused scanner benchmark with:
 
 ```powershell
@@ -332,7 +336,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-node-mcp-tools
 ```
 
-The versioned corpus currently contains 166 vulnerable/control pairs:
+The versioned corpus currently contains 167 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
