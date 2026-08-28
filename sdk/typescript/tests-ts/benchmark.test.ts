@@ -542,6 +542,10 @@ describe("effectiveness benchmark", () => {
         "traefik-directory-toml-replacepathregex-repaired",
       ],
       [
+        "spring-java-fluent-process-builder-injection",
+        "spring-java-fluent-process-builder-argv",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

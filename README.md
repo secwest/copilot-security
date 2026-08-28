@@ -2197,8 +2197,11 @@ command family pairs both `Runtime.exec(arrayOf("env", ...))` and exact
 fixed-`printf` argv controls. The converted-list model preserves snapshot
 semantics and records the conversion in the attack path, covering a
 delegating-launcher false negative without pretending that `Runtime.exec`
-always invokes a shell. The complete 151-pair, 302-case corpus produces 906
-scans that measure both accuracy and model variance.
+always invokes a shell. The Java Spring command pair additionally preserves
+an unassigned fluent `ProcessBuilder`, later `command("/bin/bash", "-l",
+  "-c", target)` replacement, and actual `start()`; its matched control keeps
+the value in fixed-`printf` argv. The complete 152-pair, 304-case corpus
+produces 912 scans that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses
 keyword-mode findings that could not reach the modeled loader branch.

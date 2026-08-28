@@ -165,6 +165,7 @@ const distFiles = new Set(
     "go-squirrel-risk",
     "go-template-risk",
     "index",
+    "java-spring-command-risk",
     "knowledge-base",
     "kubernetes-risk",
     "kotlin-ktor-command-risk",

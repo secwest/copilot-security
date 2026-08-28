@@ -6522,6 +6522,63 @@
         "kotlin-ktor-resource-runtime-list-env-argv/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "spring-java-fluent-process-builder-injection",
+      "description": "A Spring MVC request parameter reaches the command-string operand after /bin/bash -l -c through an unassigned fluent ProcessBuilder.command chain and actual start dispatch.",
+      "fixture": "fixtures/spring-java-fluent-process-builder-injection",
+      "findingsPaths": [
+        "spring-java-fluent-process-builder-injection/run-1/findings.json",
+        "spring-java-fluent-process-builder-injection/run-2/findings.json",
+        "spring-java-fluent-process-builder-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "spring-java-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/main/java/example/DiagnosticsController.java",
+              "startLine": 15,
+              "endLine": 15,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["RequestParam", "Spring request parameter", "request parameter"],
+            ["fluent", "chained", "ProcessBuilder.command"],
+            ["/bin/bash", "bash -l -c", "shell"],
+            ["ProcessBuilder.start", "start", "process execution"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["target", "request parameter"],
+            ["command string", "shell grammar", "-c"],
+            ["ProcessBuilder", "process execution", "start"],
+            ["stdout", "response", "returned"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spring-java-fluent-process-builder-argv",
+      "description": "The topology-matched Spring MVC control retains the fluent ProcessBuilder and start dispatch but fixes printf and passes request data only as one literal operating-system argument.",
+      "fixture": "fixtures/spring-java-fluent-process-builder-argv",
+      "findingsPaths": [
+        "spring-java-fluent-process-builder-argv/run-1/findings.json",
+        "spring-java-fluent-process-builder-argv/run-2/findings.json",
+        "spring-java-fluent-process-builder-argv/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

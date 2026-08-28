@@ -2,6 +2,77 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Replace Java Spring command proximity with execution semantics
+
+**Observed parity gap.** The prior Java `spring-http-command` model paired any
+nearby Spring source with a `ProcessBuilder` constructor or `Runtime.exec`
+token. It did not require `start()`, resolve later command replacement, or
+distinguish a shell command operand from ordinary argv. The official Semgrep
+tracker records a current false negative for the complementary case: an
+unassigned fluent builder whose `command("/bin/bash", "-l", "-c", input)`
+replacement and `start()` occur in one chain. GitHub's CodeQL tracker separately
+demonstrates that treating every later array element as data misses `env`'s
+delegated executable position. Sources: [Semgrep issue 3743](https://github.com/semgrep/semgrep-rules/issues/3743)
+and [CodeQL issue 22262](https://github.com/github/codeql/issues/22262).
+
+**Exact boundary.** `spring-java-command-injection` owns production Java files
+with official Spring web-binding imports. It tokenizes bounded Java source,
+selects annotated route methods, seeds only annotated request parameters, and
+tracks local assignment/concatenation plus effective `ProcessBuilder` state.
+Constructor arguments are replaced by the last modeled `command(...)`; a
+record exists only when that state reaches `start()`. Fluent unassigned chains
+and separately retained builders share the same evaluator. `Runtime.exec`
+preserves the documented distinction between tokenized strings and inline
+`String[]` vectors. Fully qualified `java.util.List.of` and
+`java.util.Arrays.asList` command vectors are exact; unqualified forms require
+an unshadowed matching `java.util` import. Local or imported
+`ProcessBuilder`/`Runtime` lookalikes, collection-factory lookalikes, tests,
+generated sources, non-routes, inert construction, overwritten state, and
+fixed ordinary-executable argv are rejected. The older broad Java rule is
+suppressed only where this exact model owns the file, preserving legacy and
+Kotlin coverage without duplicate Java hypotheses.
+
+**Command semantics and evidence.** Oracle specifies that `ProcessBuilder`
+stores a program-and-argument list, that `command(List)` and `command()` expose
+live state, and that `start()` creates the process from the then-current
+attributes. The model classifies element zero as executable selection, follows
+POSIX shell `-c` even after login flags, and recognizes CMD, PowerShell,
+interpreter-code, batch, and GNU `env` delegation. It deliberately treats
+later arguments to a fixed ordinary executable as strong counterevidence.
+Sources: [Oracle ProcessBuilder](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/ProcessBuilder.html),
+[Oracle Runtime](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/Runtime.html),
+and [Spring RequestParam](https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/web/bind/annotation/RequestParam.html).
+
+**Benchmark shape.** A Spring 7.0.9/Java 21 pair preserves request binding,
+unassigned fluent builder construction, error-stream handling, real process
+start, output capture, wait, and returned output. The positive places the bound
+value after `/bin/bash -l -c`; the control fixes `printf` and passes the same
+value as one literal argv element. The witnesses execute only bounded fixed
+strings. The pair advances the canonical corpus to 152 pairs, 304 cases, and
+912 repeated positions. The dedicated model passes 16 tests and 59 assertions.
+The six-file adjacent lane passes 149 tests and 3,846 assertions on Ubuntu/WSL;
+Windows passes 148 tests and 3,845 assertions with the one expected
+symlink-capability skip. Both application modules compile on Java 21 and their
+one-test bounded process witnesses pass. The hosted Java workflow now caches
+and verifies both projects.
+
+**Acceptance and distribution.** The final authoritative Windows run passes
+1,919 tests and 14,356 assertions across 209 files in 501.60 seconds, with 27
+intentional platform/integration skips and no failure. An earlier loaded run
+terminated the format-string native subprocess at 12.5 seconds; the isolated
+test passed immediately, and the clean full rerun passed it in aggregate. This
+is recorded as runner contention rather than hidden by weakening the test.
+Formatting, generated-model drift, TypeScript checking, the clean production
+build, and the production dependency audit are clean; the audit reports no
+known vulnerabilities.
+
+The package checker was extended for the new production module and accepts all
+295 archive entries on Windows and POSIX-strict Ubuntu. Isolated installs on
+both systems validate the public import, executable CLI, and all 79 bundled
+plugin files. The archive occupies 2,285,786 bytes and has SHA-1
+`57fd1c4ff722fcb87e5bbbbdeae53db2ad6cf9bf` and SHA-256
+`071b3238396fae8ce4e1cac8a38b0ac00dc9495e10d30193433ae4b9ac9449ae`.
+
 ## 2026-08-27 — Preserve Kotlin collection conversion into Runtime command arrays
 
 **Why conversion is a real command boundary.** Oracle defines

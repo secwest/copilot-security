@@ -6,6 +6,44 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Replaced the Java side of the broad `spring-http-command` proximity model
+  for production Spring sources with `spring-java-command-injection`, an exact
+  same-handler process model. It requires a supported Spring request-binding
+  annotation and route mapping, follows Java assignment and concatenation,
+  resolves constructor, fluent, and later `ProcessBuilder.command(...)` state,
+  and requires actual `start()` or `Runtime.exec(...)` execution. The Kotlin
+  and legacy loose-source fallback remains available outside the exact model's
+  ownership boundary.
+- Added exact Java command-position classification for executable selection,
+  POSIX shells including intervening login flags, CMD, PowerShell, interpreter
+  code flags, Windows batch consumers, `Runtime.exec(String)` tokenization,
+  inline `String[]` command vectors, and POSIX `env` delegation. Ordinary argv,
+  inert builders, overwritten dangerous state, non-routes, generated/test
+  sources, and local/imported platform lookalikes remain negative controls.
+- Made unqualified `List.of(...)` and `Arrays.asList(...)` command vectors
+  conditional on an unshadowed `java.util` import; fully qualified factories
+  remain exact. Project-local collection lookalikes now fail closed instead of
+  being mistaken for a tainted executable.
+- Added a topology-matched Spring 7.0.9/Java 21 fluent-builder exploit/control
+  pair with bounded Maven witnesses and a perfect-gate specialized manifest.
+  The canonical corpus now has 152 pairs, 304 cases, and 912 repeated scan
+  positions. The dedicated model passes 16 tests and 59 assertions. The
+  six-file adjacent lane passes 149 tests and 3,846 assertions on Ubuntu; on
+  Windows it passes 148 tests and 3,845 assertions with one intentional
+  symlink-capability skip.
+- Added both Spring command fixtures to the hosted Java 21 Maven cache and
+  verification lane. Local Ubuntu/WSL execution compiles each application and
+  passes its one-test bounded process witness with no failure, error, or skip.
+- Completed authoritative Windows acceptance for this increment: 1,919 tests
+  pass with 27 intentional platform/integration skips, no failure, and 14,356
+  assertions across 209 files in 501.60 seconds. Formatting, generated-model
+  drift, TypeScript checking, a clean production build, and the production
+  dependency audit are clean; the audit reports no known vulnerabilities.
+- Validated the 295-entry package on Windows and POSIX-strict Ubuntu through
+  isolated installation, public import, CLI execution, and all 79 bundled
+  plugin files. The 2,285,786-byte archive has SHA-1
+  `57fd1c4ff722fcb87e5bbbbdeae53db2ad6cf9bf` and SHA-256
+  `071b3238396fae8ce4e1cac8a38b0ac00dc9495e10d30193433ae4b9ac9449ae`.
 - Extended Kotlin `Runtime.exec` command-vector recovery through exact
   `listOf`, `mutableListOf`, and `arrayListOf` values converted with
   `Collection.toTypedArray()`. Direct, fully qualified, retained, and aliased

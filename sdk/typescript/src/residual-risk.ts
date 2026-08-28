@@ -36,6 +36,10 @@ import { phpSqlInjectionRecords } from "./php-sql-risk.js";
 import { rubyCommandInjectionRecords } from "./ruby-command-risk.js";
 import { rustCommandInjectionRecords } from "./rust-command-risk.js";
 import { kotlinKtorCommandInjectionRecords } from "./kotlin-ktor-command-risk.js";
+import {
+  javaSpringCommandInjectionRecords,
+  javaSpringCommandModelOwnsFile,
+} from "./java-spring-command-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -4186,6 +4190,40 @@ const KOTLIN_KTOR_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
   ["stdout", "response", "respondText"],
 ] as const;
 
+const SPRING_JAVA_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
+  [
+    "RequestParam",
+    "RequestHeader",
+    "PathVariable",
+    "RequestBody",
+    "Spring request",
+  ],
+  [
+    "ProcessBuilder",
+    "Runtime.exec",
+    "java.lang.ProcessBuilder",
+    "java.lang.Runtime",
+  ],
+] as const;
+
+const SPRING_JAVA_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
+  [
+    "request parameter",
+    "request header",
+    "path variable",
+    "request body",
+    "Spring request",
+  ],
+  [
+    "executable selection",
+    "shell",
+    "interpreter",
+    "split command",
+    "command string",
+  ],
+  ["start", "Runtime.exec", "process execution"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -4392,6 +4430,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
       attackPath: KOTLIN_KTOR_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
+  [
+    "spring-java-command-injection",
+    {
+      validation: SPRING_JAVA_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: SPRING_JAVA_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
 ]);
 
 export async function buildResidualRiskInventory(
@@ -4490,6 +4535,7 @@ export async function buildResidualRiskInventory(
       ...rubyCommandInjectionRecords(file.path, file.lines, file.text),
       ...rustCommandInjectionRecords(file.path, file.lines, file.text),
       ...kotlinKtorCommandInjectionRecords(file.path, file.lines, file.text),
+      ...javaSpringCommandInjectionRecords(file.path, file.lines, file.text),
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
       ...githubActionsSelfHostedPrRecords(file.path, file.lines, file.text),
       ...githubActionsWorkflowInjectionRecords(
@@ -17538,6 +17584,12 @@ function frameworkDataflowRecords(
       : text;
   const records: ResidualRiskRecord[] = [];
   for (const model of FRAMEWORK_DATAFLOW_MODELS) {
+    if (
+      model.id === "spring-http-command" &&
+      extension === ".java" &&
+      javaSpringCommandModelOwnsFile(path, text)
+    )
+      continue;
     if (
       !model.extensions.has(extension) ||
       !model.activation.some((expression) => expression.test(activationText))

@@ -186,7 +186,7 @@ node ../../benchmarks/run-benchmark.mjs `
 
 ## Kotlin Ktor delegated-command benchmark
 
-`kotlin-ktor-command-injection-manifest.json` now holds sixteen strict cases.
+`kotlin-ktor-command-injection-manifest.json` now holds eighteen strict cases.
 Alongside direct shell, mutable command-list, inline pipeline, builder-factory,
 command-helper, and `ProcessBuilder` delegation boundaries, its newest pair
 preserves a typed Ktor Resource, `Runtime.getRuntime().exec(arrayOf("env",
@@ -240,7 +240,24 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-rust-command
 ```
 
-The versioned corpus currently contains 149 vulnerable/control pairs:
+## Spring Java fluent command benchmark
+
+`spring-java-command-injection-manifest.json` replaces constructor-proximity
+reasoning with an exact Spring-handler process boundary. Its positive preserves
+the currently missed fluent shape reported by Semgrep: an unassigned builder,
+an intervening fluent call, a later `command("/bin/bash", "-l", "-c", target)`
+replacement, and `start()`. The topology-matched control fixes `printf` and
+keeps the request value in one ordinary argv element. Both Java 21 witnesses
+start one bounded process and perform no file, network, credential,
+persistence, or privilege operation. Run the strict benchmark with:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/spring-java-command-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-spring-java-command
+```
+
+The versioned corpus currently contains 152 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual
