@@ -289,7 +289,11 @@ tool data in the runtime option region, while the control places the same data
 after `--`. The code-evaluation pair carries an expression through a same-file
 helper into direct JavaScript `eval`; its control preserves expression input,
 the helper, arithmetic results, and the MCP response while an explicit numeric
-`+`/`*` grammar never evaluates the tool string as source. The regular-expression
+`+`/`*` grammar never evaluates the tool string as source. A second
+code-evaluation pair closes the compile/execute lifecycle: the exploit compiles
+tool input with `Function` and invokes the retained result, while the stronger
+control retains a compiled-Function invocation but parses tool input into
+numeric and allowlisted-operator data for fixed source. The regular-expression
 pair compiles a tool pattern through a same-file helper and executes it with
 `test` against a separately bounded tool-supplied match subject; its control
 preserves both schemas, helper, subject, and response while a fixed-pattern map
@@ -310,7 +314,7 @@ load-generating patterns. The network witnesses use a
 random-port loopback listener, close it in all paths, and never contact an
 external or metadata address. The filesystem witnesses create and remove only
 fresh temporary trees containing synthetic marker data. Node CI executes all
-twelve witnesses on Windows and Linux. Run the focused scanner benchmark with:
+fourteen witnesses on Windows and Linux. Run the focused scanner benchmark with:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -318,7 +322,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-node-mcp-tools
 ```
 
-The versioned corpus currently contains 162 vulnerable/control pairs:
+The versioned corpus currently contains 163 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

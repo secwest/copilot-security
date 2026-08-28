@@ -6,6 +6,28 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added deterministic compile-to-execution lifecycle coverage for MCP tool input
+  that reaches the live global `Function` constructor or exact `node:vm`
+  `compileFunction`, `Script`, or `SourceTextModule` bindings. Bare compilation
+  remains negative; findings require invocation, a `Script.runIn*` call, or a
+  complete module link/instantiate/evaluate lifecycle. The model rejects
+  shadows, wrong modules, replaced imports or members, overwritten compiled
+  values, replaced execution methods, unawaited legacy linking, and incomplete
+  module state transitions. Existing immediate `vm.runIn*` coverage now also
+  fails closed after binding or member replacement.
+- Preserved construction and module-lifecycle propagators across same-file
+  helper summaries, and strengthened field-local quality gates so validation
+  and attack path separately name the compilation API, explicit execution
+  step, and module linking or instantiation where applicable. Correction
+  guidance permits only fixed side-effect-free arithmetic and distinguishes
+  compilation from execution using Node's documented lifecycle.
+- Added a real MCP TypeScript SDK 2.0.0 exploit/control pair. The exploit puts
+  the `expression` property into `Function` source and invokes the retained
+  result. The stronger control still invokes a compiled `Function`, but its
+  source is fixed and an explicit arithmetic grammar passes only numbers and an
+  allowlisted operator as data. Both bounded witnesses pass. The strict MCP
+  corpus now contains fourteen cases and witnesses; the canonical corpus
+  contains 163 pairs, 326 cases, and 978 repeated scan positions.
 - Added deterministic `node-mcp-tool-regex-injection` coverage for official MCP
   TypeScript SDK tool input used as argument zero of the live global `RegExp`
   and then actually executed through `test` or `exec`. The bounded source model

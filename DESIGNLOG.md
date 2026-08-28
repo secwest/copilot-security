@@ -2,6 +2,69 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Close MCP JavaScript compilation lifecycles
+
+**Coverage gap and comparative evidence.** The MCP model recognized direct
+global `eval` and exact `node:vm` `runInContext`, `runInNewContext`, and
+`runInThisContext`, but deliberately treated all constructors and compilers as
+inert. That avoided false positives, yet missed the common two-stage pattern
+where tool input is compiled, retained, and executed later. Node's current
+[`vm` documentation](https://nodejs.org/api/vm.html) explicitly says that
+`new vm.Script(code)` compiles without running, exposes three `Script.runIn*`
+execution methods, returns an invokable function from `vm.compileFunction`, and
+requires creation/parsing, linking, and evaluation for `vm.Module`. Modern
+`SourceTextModule` linking uses `linkRequests`, then `instantiate`, then
+`evaluate`; the legacy asynchronous `link` path must complete before evaluation.
+CodeQL's high-precision
+[`js/code-injection`](https://codeql.github.com/codeql-query-help/javascript/js-code-injection/)
+query and its
+[`NodeJSVmSink`](https://codeql.github.com/codeql-standard-libraries/javascript/semmle/javascript/security/dataflow/CodeInjectionCustomizations.qll/type.CodeInjectionCustomizations%24CodeInjection%24NodeJSVmSink.html)
+model establish untrusted dynamic JavaScript and `node:vm` as CWE-94/CWE-95
+sinks. The public
+[`mcpaudit`](https://github.com/allenwu-blip/mcpaudit) MCP005 rule broadens API
+coverage to `Function` and `vm` compilers but documents that it does not perform
+taint tracking. The useful improvement is therefore not another name list: it
+is exact MCP-source taint plus same-result lifecycle closure.
+
+**Accepted execution boundaries.** Global `Function` is accepted only when it
+is unshadowed and unreplaced, a tool-derived parameter-name or body argument is
+compiled, and that exact result is called directly or through live
+`Function.prototype.call`/`apply`. Exact `vm` imports support named aliases,
+namespace/default imports, CommonJS destructuring or receivers, and TypeScript
+import-equals. `compileFunction` requires later invocation. `new Script`
+requires later `runInContext`, `runInNewContext`, or `runInThisContext` on the
+same retained instance, or the equivalent immediate chain. `new
+SourceTextModule` requires the same retained instance to reach either an awaited
+legacy `link` then `evaluate`, or modern `linkRequests`, `instantiate`, then
+`evaluate`. Construction, linking, instantiation, and execution are recorded
+at their own lines; the execution is the reported sink.
+
+**Fail-closed identity and state.** Reject bare construction, `Script` calls
+without `new`, `new compileFunction`, direct unlinked module evaluation,
+unawaited legacy linking, modern linking without instantiation, wrong modules,
+local or parameter shadows, and any prior replacement of an imported receiver
+or relevant constructor member. Reject reassignment of the retained compiled
+value and replacement of its callable or lifecycle method before use. Reject
+replaced constructor prototype methods as well. The same binding-liveness rule
+now protects immediate `vm.runIn*` sinks, closing an older false-positive path.
+This bounded same-file model intentionally declines computed properties,
+cross-object aliasing, and ambiguous module-state concurrency rather than
+guessing identity.
+
+**Evidence contract and benchmark.** A `mcp-tool-code-construction` propagator
+survives same-file helper summaries; module rows additionally record linking
+and instantiation. Field-local gates require construction and explicit
+execution language in both validation and attack path, plus those module stages
+when present. The matched MCP 2.0.0/Zod 4.4.3 fixtures keep the same expression
+schema, tool, helper, response, and compiled-Function invocation. The exploit
+interpolates the tool expression into source and invokes it. The control parses
+an exact numeric `+`/`*` grammar and invokes fixed operator-owned source with
+only converted numeric and allowlisted-operator arguments. Fixed arithmetic and
+object-literal witnesses demonstrate the boundary without shell, filesystem,
+network, credential, persistence, privilege, or destructive effects. The
+strict lane advances to fourteen cases; the canonical corpus advances to 163
+pairs, 326 cases, and 978 repeated scan positions.
+
 ## 2026-08-28 — Model executed MCP regular-expression patterns
 
 **Coverage gap and comparative evidence.** The exact MCP host pass covered

@@ -131,6 +131,11 @@ const IMMEDIATE_VM_EVALUATORS = new Set([
   "runInNewContext",
   "runInThisContext",
 ]);
+const VM_CODE_CONSTRUCTORS = new Set([
+  "compileFunction",
+  "Script",
+  "SourceTextModule",
+]);
 const POSIX_SHELLS = new Set(["ash", "bash", "dash", "ksh", "sh", "zsh"]);
 const POWERSHELLS = new Set([
   "powershell",
@@ -1312,6 +1317,7 @@ function helperSinks(
           ...sourceBinding,
           propagators: [
             ...sourceBinding.propagators,
+            ...helper.sink.source.propagators,
             {
               kind: "mcp-tool-helper-call",
               line: lineAt(source, offset),
@@ -1330,6 +1336,8 @@ interface CallSite {
   method: string;
   symbol: string;
   line: number;
+  offset: number;
+  close: number;
   arguments: Range[];
 }
 
@@ -1358,6 +1366,8 @@ function boundCalls(
         method: imported,
         symbol: local,
         line: lineAt(source, offset),
+        offset,
+        close,
         arguments: splitArgumentRanges(structural, open + 1, close).map(
           (range) => trimSourceRange(source, range),
         ),
@@ -1381,6 +1391,8 @@ function boundCalls(
         method: match[1]!,
         symbol: `${namespace}.${match[1]}`,
         line: lineAt(source, offset),
+        offset,
+        close,
         arguments: splitArgumentRanges(structural, open + 1, close).map(
           (range) => trimSourceRange(source, range),
         ),
@@ -1416,6 +1428,8 @@ function filesystemCalls(
         method: match[1]!,
         symbol: `${namespace}.promises.${match[1]}`,
         line: lineAt(source, offset),
+        offset,
+        close,
         arguments: splitArgumentRanges(structural, open + 1, close).map(
           (range) => trimSourceRange(source, range),
         ),
@@ -1577,6 +1591,8 @@ function evaluationSinks(
       registration.body,
       bindings,
       IMMEDIATE_VM_EVALUATORS,
+    ).filter((call) =>
+      exactBindingCallIsLive(structural, registration.body, call),
     ),
     ...globalEvalCalls(source, structural, registration.body),
   ];
@@ -1597,7 +1613,573 @@ function evaluationSinks(
       source: sourceBinding,
     });
   }
+  sinks.push(
+    ...compiledEvaluationSinks(
+      source,
+      structural,
+      registration,
+      taint,
+      bindings,
+    ),
+  );
   return sinks;
+}
+
+interface CodeExecutionSite {
+  line: number;
+  offset: number;
+  symbol: string;
+  method?: string;
+  propagators?: Array<{ kind: string; line: number; symbol?: string }>;
+}
+
+function compiledEvaluationSinks(
+  source: string,
+  structural: string,
+  registration: Registration,
+  taint: readonly TaintBinding[],
+  bindings: BindingSet,
+): Sink[] {
+  const sinks: Sink[] = [];
+  for (const call of globalFunctionConstructorCalls(
+    source,
+    structural,
+    registration.body,
+  )) {
+    const execution = callableExecutionAfterConstruction(
+      source,
+      structural,
+      registration.body,
+      call.offset,
+      call.close,
+      "Function",
+    );
+    if (execution === undefined) continue;
+    for (const [argumentIndex, argument] of call.arguments.entries()) {
+      const sourceBinding = liveTaintForRange(
+        structural,
+        argument,
+        registration.body,
+        taint,
+      );
+      if (sourceBinding === undefined) continue;
+      sinks.push(
+        compiledEvaluationSink(
+          sourceBinding,
+          execution,
+          call.line,
+          `Function:code[${argumentIndex}]`,
+          argumentIndex,
+        ),
+      );
+    }
+  }
+
+  for (const call of boundCalls(
+    source,
+    structural,
+    registration.body,
+    bindings,
+    VM_CODE_CONSTRUCTORS,
+  )) {
+    if (!exactBindingCallIsLive(structural, registration.body, call)) continue;
+    const code = call.arguments[0];
+    if (code === undefined) continue;
+    const sourceBinding = liveTaintForRange(
+      structural,
+      code,
+      registration.body,
+      taint,
+    );
+    if (sourceBinding === undefined) continue;
+
+    let execution: CodeExecutionSite | undefined;
+    if (call.method === "compileFunction") {
+      if (hasNewPrefix(structural, registration.body, call.offset)) continue;
+      execution = callableExecutionAfterConstruction(
+        source,
+        structural,
+        registration.body,
+        call.offset,
+        call.close,
+        call.symbol,
+      );
+    } else if (call.method === "Script") {
+      if (!hasNewPrefix(structural, registration.body, call.offset)) continue;
+      execution = methodExecutionAfterConstruction(
+        source,
+        structural,
+        registration.body,
+        call.offset,
+        call.close,
+        IMMEDIATE_VM_EVALUATORS,
+      );
+    } else if (call.method === "SourceTextModule") {
+      if (!hasNewPrefix(structural, registration.body, call.offset)) continue;
+      execution = moduleEvaluationAfterConstruction(
+        source,
+        structural,
+        registration.body,
+        call.offset,
+        call.close,
+        call.symbol,
+      );
+    }
+    if (execution === undefined) continue;
+    if (
+      execution.method !== undefined &&
+      constructorPrototypeMethodWasReplaced(
+        structural,
+        call.symbol,
+        execution.method,
+        execution.offset,
+      )
+    ) {
+      continue;
+    }
+    sinks.push(
+      compiledEvaluationSink(
+        sourceBinding,
+        execution,
+        call.line,
+        `${call.symbol}:code[0]`,
+        0,
+      ),
+    );
+  }
+  return sinks;
+}
+
+function compiledEvaluationSink(
+  sourceBinding: TaintBinding,
+  execution: CodeExecutionSite,
+  constructionLine: number,
+  constructionSymbol: string,
+  codeArgumentIndex: number,
+): Sink {
+  return {
+    kind: "mcp-tool-code-evaluation",
+    line: execution.line,
+    symbol: `${execution.symbol}:code[${codeArgumentIndex}]`,
+    source: {
+      ...sourceBinding,
+      propagators: [
+        ...sourceBinding.propagators,
+        {
+          kind: "mcp-tool-code-construction",
+          line: constructionLine,
+          symbol: constructionSymbol,
+        },
+        ...(execution.propagators ?? []),
+      ],
+    },
+  };
+}
+
+function globalFunctionConstructorCalls(
+  source: string,
+  structural: string,
+  body: Range,
+): CallSite[] {
+  if (
+    hasLocalDeclaration(structural, "Function") ||
+    bodyHasNamedParameter(structural, body, "Function")
+  ) {
+    return [];
+  }
+  const calls: CallSite[] = [];
+  const expression =
+    /(?<![.\w$])(?:new\s+)?(?:Function|(?:globalThis|global|window)\s*\.\s*Function)\s*\(/gu;
+  for (const match of structural
+    .slice(body.start, body.end)
+    .matchAll(expression)) {
+    const offset = body.start + match.index!;
+    if (globalFunctionWasReplaced(structural, offset)) continue;
+    const open = offset + match[0].lastIndexOf("(");
+    const close = matchingStructuralDelimiter(structural, open, "(", ")");
+    if (close < 0 || close > body.end) continue;
+    calls.push({
+      method: "Function",
+      symbol: "Function",
+      line: lineAt(source, offset),
+      offset,
+      close,
+      arguments: splitArgumentRanges(structural, open + 1, close).map((range) =>
+        trimSourceRange(source, range),
+      ),
+    });
+  }
+  return calls;
+}
+
+function callableExecutionAfterConstruction(
+  source: string,
+  structural: string,
+  body: Range,
+  constructorOffset: number,
+  constructorClose: number,
+  constructorSymbol: string,
+): CodeExecutionSite | undefined {
+  const directSuffix = structural.slice(
+    constructorClose + 1,
+    Math.min(body.end, constructorClose + 257),
+  );
+  const direct = /^\s*(?:\.\s*(call|apply))?\s*\(/u.exec(directSuffix);
+  if (direct !== null) {
+    const method = direct[1];
+    const offset = constructorClose + 1 + direct.index;
+    if (
+      method !== undefined &&
+      functionPrototypeMethodWasReplaced(structural, method, offset)
+    ) {
+      return undefined;
+    }
+    return {
+      line: lineAt(source, offset),
+      offset,
+      symbol:
+        method === undefined
+          ? `${constructorSymbol}()`
+          : `${constructorSymbol}.${method}`,
+      ...(method === undefined ? {} : { method }),
+    };
+  }
+
+  const variable = assignedConstructionVariable(
+    structural,
+    body,
+    constructorOffset,
+  );
+  if (variable === undefined) return undefined;
+  const escaped = escapeRegularExpression(variable);
+  const execution = new RegExp(
+    String.raw`(?<![.\w$])${escaped}\s*(?:\.\s*(call|apply))?\s*\(`,
+    "gu",
+  );
+  for (const match of structural
+    .slice(constructorClose + 1, body.end)
+    .matchAll(execution)) {
+    const offset = constructorClose + 1 + match.index!;
+    const method = match[1];
+    if (
+      constructedValueWasReplaced(
+        structural,
+        variable,
+        constructorClose + 1,
+        offset,
+        new Set(["call", "apply"]),
+      ) ||
+      (method !== undefined &&
+        functionPrototypeMethodWasReplaced(structural, method, offset))
+    ) {
+      return undefined;
+    }
+    return {
+      line: lineAt(source, offset),
+      offset,
+      symbol: method === undefined ? `${variable}()` : `${variable}.${method}`,
+      ...(method === undefined ? {} : { method }),
+    };
+  }
+  return undefined;
+}
+
+function methodExecutionAfterConstruction(
+  source: string,
+  structural: string,
+  body: Range,
+  constructorOffset: number,
+  constructorClose: number,
+  methods: ReadonlySet<string>,
+): CodeExecutionSite | undefined {
+  const alternatives = [...methods].map(escapeRegularExpression).join("|");
+  const directSuffix = structural.slice(
+    constructorClose + 1,
+    Math.min(body.end, constructorClose + 257),
+  );
+  const direct = new RegExp(
+    String.raw`^\s*\.\s*(${alternatives})\s*\(`,
+    "u",
+  ).exec(directSuffix);
+  if (direct !== null) {
+    const offset = constructorClose + 1 + direct.index;
+    return {
+      line: lineAt(source, offset),
+      offset,
+      symbol: direct[1]!,
+      method: direct[1]!,
+    };
+  }
+  const variable = assignedConstructionVariable(
+    structural,
+    body,
+    constructorOffset,
+  );
+  if (variable === undefined) return undefined;
+  const escaped = escapeRegularExpression(variable);
+  const execution = new RegExp(
+    String.raw`(?<![.\w$])${escaped}\s*\.\s*(${alternatives})\s*\(`,
+    "gu",
+  );
+  for (const match of structural
+    .slice(constructorClose + 1, body.end)
+    .matchAll(execution)) {
+    const offset = constructorClose + 1 + match.index!;
+    if (
+      constructedValueWasReplaced(
+        structural,
+        variable,
+        constructorClose + 1,
+        offset,
+        methods,
+      )
+    ) {
+      return undefined;
+    }
+    return {
+      line: lineAt(source, offset),
+      offset,
+      symbol: `${variable}.${match[1]}`,
+      method: match[1]!,
+    };
+  }
+  return undefined;
+}
+
+function moduleEvaluationAfterConstruction(
+  source: string,
+  structural: string,
+  body: Range,
+  constructorOffset: number,
+  constructorClose: number,
+  constructorSymbol: string,
+): CodeExecutionSite | undefined {
+  const variable = assignedConstructionVariable(
+    structural,
+    body,
+    constructorOffset,
+  );
+  if (variable === undefined) return undefined;
+  const escaped = escapeRegularExpression(variable);
+  const eventPattern = new RegExp(
+    String.raw`(?<![.\w$])${escaped}\s*\.\s*(linkRequests|instantiate|link|evaluate)\s*\(`,
+    "gu",
+  );
+  let legacyLinked = false;
+  let requestsLinked = false;
+  let instantiated = false;
+  const lifecycle: Array<{ kind: string; line: number; symbol?: string }> = [];
+  const scanStart = constructorClose + 1;
+  let cursor = scanStart;
+  for (const match of structural
+    .slice(scanStart, body.end)
+    .matchAll(eventPattern)) {
+    const offset = scanStart + match.index!;
+    const method = match[1]!;
+    if (
+      constructedValueWasReplaced(
+        structural,
+        variable,
+        cursor,
+        offset,
+        new Set(["link", "linkRequests", "instantiate", "evaluate"]),
+      ) ||
+      constructorPrototypeMethodWasReplaced(
+        structural,
+        constructorSymbol,
+        method,
+        offset,
+      )
+    ) {
+      return undefined;
+    }
+    if (method === "link") {
+      if (!callIsDirectlyAwaited(structural, offset)) return undefined;
+      legacyLinked = true;
+      lifecycle.push({
+        kind: "mcp-tool-code-linking",
+        line: lineAt(source, offset),
+        symbol: `${variable}.link`,
+      });
+    } else if (method === "linkRequests") {
+      requestsLinked = true;
+      lifecycle.push({
+        kind: "mcp-tool-code-linking",
+        line: lineAt(source, offset),
+        symbol: `${variable}.linkRequests`,
+      });
+    } else if (method === "instantiate") {
+      if (!requestsLinked) return undefined;
+      instantiated = true;
+      lifecycle.push({
+        kind: "mcp-tool-code-instantiation",
+        line: lineAt(source, offset),
+        symbol: `${variable}.instantiate`,
+      });
+    } else if (method === "evaluate") {
+      if (!legacyLinked && !(requestsLinked && instantiated)) return undefined;
+      return {
+        line: lineAt(source, offset),
+        offset,
+        symbol: `${variable}.evaluate`,
+        method,
+        propagators: lifecycle,
+      };
+    }
+    cursor = offset + match[0].length;
+  }
+  return undefined;
+}
+
+function assignedConstructionVariable(
+  structural: string,
+  body: Range,
+  constructorOffset: number,
+): string | undefined {
+  const prefix = structural.slice(
+    Math.max(body.start, constructorOffset - 512),
+    constructorOffset,
+  );
+  return /(?:^|[;{}\n])\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;\n]+)?\s*=\s*(?:new\s+)?$/u.exec(
+    prefix,
+  )?.[1];
+}
+
+function exactBindingCallIsLive(
+  structural: string,
+  body: Range,
+  call: CallSite,
+): boolean {
+  const [root, member] = call.symbol.split(".");
+  if (root === undefined) return false;
+  if (
+    bodyHasNamedParameter(structural, body, root) ||
+    localDeclarationBefore(structural, body, root, call.offset) ||
+    identifierWasReassigned(structural, root, call.offset)
+  ) {
+    return false;
+  }
+  return (
+    member === undefined ||
+    !memberWasReassigned(structural, root, member, call.offset)
+  );
+}
+
+function localDeclarationBefore(
+  structural: string,
+  body: Range,
+  name: string,
+  offset: number,
+): boolean {
+  const escaped = escapeRegularExpression(name);
+  return new RegExp(
+    String.raw`\b(?:class|function|const|let|var)\s+${escaped}\b`,
+    "u",
+  ).test(structural.slice(body.start, offset));
+}
+
+function identifierWasReassigned(
+  structural: string,
+  name: string,
+  offset: number,
+): boolean {
+  const escaped = escapeRegularExpression(name);
+  const expression = new RegExp(
+    String.raw`(?<![.\w$])${escaped}\s*(?:=(?!=|>)|\+\+|--)`,
+    "gu",
+  );
+  for (const match of structural.slice(0, offset).matchAll(expression)) {
+    const prefix = structural.slice(
+      Math.max(0, match.index! - 32),
+      match.index!,
+    );
+    if (/\b(?:const|let|var|import)\s*$/u.test(prefix)) continue;
+    return true;
+  }
+  return false;
+}
+
+function memberWasReassigned(
+  structural: string,
+  root: string,
+  member: string,
+  offset: number,
+): boolean {
+  const expression = new RegExp(
+    String.raw`(?<![.\w$])${escapeRegularExpression(root)}\s*\.\s*${escapeRegularExpression(member)}\s*(?:=(?!=|>)|\+\+|--)`,
+    "u",
+  );
+  return expression.test(structural.slice(0, offset));
+}
+
+function constructedValueWasReplaced(
+  structural: string,
+  variable: string,
+  start: number,
+  end: number,
+  methods: ReadonlySet<string>,
+): boolean {
+  const escaped = escapeRegularExpression(variable);
+  const alternatives = [...methods].map(escapeRegularExpression).join("|");
+  return new RegExp(
+    String.raw`(?<![.\w$])${escaped}\s*(?:=(?!=|>)|\+\+|--)|(?<![.\w$])${escaped}\s*\.\s*(?:${alternatives})\s*(?:=(?!=|>)|\+\+|--)`,
+    "u",
+  ).test(structural.slice(start, end));
+}
+
+function constructorPrototypeMethodWasReplaced(
+  structural: string,
+  constructorSymbol: string,
+  method: string,
+  offset: number,
+): boolean {
+  const parts = constructorSymbol.split(".");
+  const constructorExpression = parts
+    .map(escapeRegularExpression)
+    .join(String.raw`\s*\.\s*`);
+  return new RegExp(
+    String.raw`(?<![.\w$])${constructorExpression}\s*\.\s*prototype\s*\.\s*${escapeRegularExpression(method)}\s*(?:=(?!=|>)|\+\+|--)`,
+    "u",
+  ).test(structural.slice(0, offset));
+}
+
+function functionPrototypeMethodWasReplaced(
+  structural: string,
+  method: string,
+  offset: number,
+): boolean {
+  return new RegExp(
+    String.raw`(?:(?<![.\w$])Function|(?<![\w$])(?:globalThis|global|window)\s*\.\s*Function)\s*\.\s*prototype\s*\.\s*${escapeRegularExpression(method)}\s*(?:=(?!=|>)|\+\+|--)`,
+    "u",
+  ).test(structural.slice(0, offset));
+}
+
+function globalFunctionWasReplaced(
+  structural: string,
+  offset: number,
+): boolean {
+  return (
+    identifierWasReassigned(structural, "Function", offset) ||
+    /(?<![\w$])(?:globalThis|global|window)\s*\.\s*Function\s*(?:=(?!=|>)|\+\+|--)/u.test(
+      structural.slice(0, offset),
+    )
+  );
+}
+
+function hasNewPrefix(
+  structural: string,
+  body: Range,
+  offset: number,
+): boolean {
+  return /\bnew\s*$/u.test(
+    structural.slice(Math.max(body.start, offset - 32), offset),
+  );
+}
+
+function callIsDirectlyAwaited(structural: string, offset: number): boolean {
+  return /\bawait\s*$/u.test(
+    structural.slice(Math.max(0, offset - 32), offset),
+  );
 }
 
 function regexSinks(
@@ -1760,6 +2342,8 @@ function globalEvalCalls(
       method: "eval",
       symbol: "eval",
       line: lineAt(source, offset),
+      offset,
+      close,
       arguments: splitArgumentRanges(structural, open + 1, close).map((range) =>
         trimSourceRange(source, range),
       ),

@@ -619,7 +619,10 @@ A second proves that fixed `process.execPath` is still unsafe when a
 dash-prefixed tool value appears before `--`, then preserves it as data in the
 control. A third contrasts direct JavaScript evaluation with a fixed arithmetic
 grammar that preserves useful calculation without treating the tool string as
-source. A fourth contrasts an executed tool-supplied regular-expression pattern
+source. A fourth preserves compiled-Function invocation on both sides while
+contrasting tool-derived source with parsed numeric and allowlisted-operator
+data passed to fixed source. A fifth contrasts an executed tool-supplied
+regular-expression pattern
 over a separately bounded tool-supplied subject with an allowlisted map of fixed
 operator-owned expressions. The other pairs contrast a tool-selected fetch destination with a fixed
 loopback origin whose body alone contains tool data, and a tool-selected

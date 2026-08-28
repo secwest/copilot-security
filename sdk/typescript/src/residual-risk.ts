@@ -4252,7 +4252,25 @@ const NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
   ["inputSchema", "schema validation", "string schema"],
-  ["eval", "node:vm", "runInContext", "runInNewContext", "runInThisContext"],
+  [
+    "eval",
+    "Function",
+    "node:vm",
+    "compileFunction",
+    "vm.Script",
+    "SourceTextModule",
+    "runInContext",
+    "runInNewContext",
+    "runInThisContext",
+  ],
+  [
+    "invoked",
+    "runInContext",
+    "runInNewContext",
+    "runInThisContext",
+    "evaluate",
+    "code evaluation",
+  ],
   ["JavaScript source", "code string", "dynamic code", "code evaluation"],
   ["CWE-94", "CWE-95", "code injection", "code execution"],
 ] as const;
@@ -45921,19 +45939,58 @@ function nodeMcpToolEvidenceRequirements(
     : [];
   const seenSymbols = new Set<string>();
   for (const propagator of propagators) {
+    if (!isRecord(propagator) || typeof propagator["kind"] !== "string")
+      continue;
+    const kind = propagator["kind"];
+    if (typeof propagator["symbol"] !== "string") continue;
+    const symbol = propagator["symbol"];
+    const identity = `${kind}:${symbol}`;
+    if (seenSymbols.has(identity)) continue;
     if (
-      !isRecord(propagator) ||
-      propagator["kind"] !== "mcp-tool-helper-call" ||
-      typeof propagator["symbol"] !== "string" ||
-      !/^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(propagator["symbol"]) ||
-      seenSymbols.has(propagator["symbol"])
+      kind === "mcp-tool-helper-call" &&
+      /^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(symbol)
     ) {
+      validation.push([symbol, "same-file helper", "helper call"]);
+      attackPath.push([symbol, "same-file helper", "helper call"]);
+    } else if (kind === "mcp-tool-code-construction") {
+      const construction = [
+        symbol,
+        "Function constructor",
+        "compileFunction",
+        "vm.Script",
+        "SourceTextModule",
+        "code construction",
+      ];
+      const execution = [
+        "explicit execution step",
+        "invoked compiled function",
+        "runInContext",
+        "runInNewContext",
+        "runInThisContext",
+        "evaluate",
+      ];
+      validation.push(construction, execution);
+      attackPath.push(construction, execution);
+    } else if (kind === "mcp-tool-code-linking") {
+      validation.push([
+        symbol,
+        "module linking",
+        "linkRequests",
+        "awaited link",
+      ]);
+      attackPath.push([
+        symbol,
+        "module linking",
+        "linkRequests",
+        "awaited link",
+      ]);
+    } else if (kind === "mcp-tool-code-instantiation") {
+      validation.push([symbol, "module instantiation", "instantiate"]);
+      attackPath.push([symbol, "module instantiation", "instantiate"]);
+    } else {
       continue;
     }
-    const symbol = propagator["symbol"];
-    validation.push([symbol, "same-file helper", "helper call"]);
-    attackPath.push([symbol, "same-file helper", "helper call"]);
-    seenSymbols.add(symbol);
+    seenSymbols.add(identity);
   }
   return { validation, attackPath };
 }
