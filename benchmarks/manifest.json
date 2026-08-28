@@ -6787,6 +6787,70 @@
         "spring-java-collections-addall-argv/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "spring-java-collections-copy-injection",
+      "description": "A Spring MVC request parameter reaches sh -c after java.util.Collections.copy overwrites a caller-owned ArrayList retained without copying by ProcessBuilder(List), followed by start dispatch.",
+      "fixture": "fixtures/spring-java-collections-copy-injection",
+      "findingsPaths": [
+        "spring-java-collections-copy-injection/run-1/findings.json",
+        "spring-java-collections-copy-injection/run-2/findings.json",
+        "spring-java-collections-copy-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "spring-java-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/main/java/example/DiagnosticsController.java",
+              "startLine": 19,
+              "endLine": 19,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["RequestParam", "Spring request parameter", "request parameter"],
+            ["ArrayList", "mutable list", "caller-owned command list"],
+            ["Collections.copy", "prefix overwrite", "command list mutation"],
+            ["sh -c", "shell grammar", "shell command"],
+            ["ProcessBuilder.start", "start", "process execution"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["target", "request parameter"],
+            [
+              "ProcessBuilder(List)",
+              "shared command list",
+              "no-copy command list"
+            ],
+            ["Collections.copy", "prefix overwrite", "command list mutation"],
+            ["sh -c", "shell grammar", "command string"],
+            ["ProcessBuilder", "process execution", "start"],
+            ["stdout", "response", "returned"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spring-java-collections-copy-argv",
+      "description": "The topology-matched Spring control retains caller-owned ArrayList construction, no-copy ProcessBuilder(List) binding, Collections.copy prefix mutation, and start dispatch but installs fixed printf argv.",
+      "fixture": "fixtures/spring-java-collections-copy-argv",
+      "findingsPaths": [
+        "spring-java-collections-copy-argv/run-1/findings.json",
+        "spring-java-collections-copy-argv/run-2/findings.json",
+        "spring-java-collections-copy-argv/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

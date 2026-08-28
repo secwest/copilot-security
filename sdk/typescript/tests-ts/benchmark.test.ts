@@ -558,6 +558,10 @@ describe("effectiveness benchmark", () => {
         "spring-java-collections-addall-argv",
       ],
       [
+        "spring-java-collections-copy-injection",
+        "spring-java-collections-copy-argv",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

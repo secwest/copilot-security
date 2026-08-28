@@ -69,6 +69,8 @@ interface CommandListMutation {
     | "append"
     | "append-many"
     | "clear"
+    | "copy-prefix"
+    | "fill"
     | "insert"
     | "insert-many"
     | "remove"
@@ -981,7 +983,7 @@ function builderCommandListMutation(
   return mutationAfterPrefix(tokens, 5, taints, factories, commandLists);
 }
 
-function collectionsAddAllMutation(
+function collectionsStaticMutation(
   tokens: readonly JavaToken[],
   taints: ReadonlyMap<string, JavaTaint>,
   factories: JavaCollectionFactories,
@@ -989,22 +991,24 @@ function collectionsAddAllMutation(
   commandLists: ReadonlyMap<string, CommandListState>,
 ): BoundCommandListMutation | undefined {
   for (let index = 0; index < tokens.length; index += 1) {
-    const qualified =
+    const qualifiedPrefix =
       tokens[index]?.value === "java" &&
       tokens[index + 1]?.value === "." &&
       tokens[index + 2]?.value === "util" &&
       tokens[index + 3]?.value === "." &&
       tokens[index + 4]?.value === "Collections" &&
-      tokens[index + 5]?.value === "." &&
-      tokens[index + 6]?.value === "addAll" &&
-      tokens[index + 7]?.value === "(";
-    const unqualified =
+      tokens[index + 5]?.value === ".";
+    const unqualifiedPrefix =
       tokens[index]?.value === "Collections" &&
-      tokens[index + 1]?.value === "." &&
-      tokens[index + 2]?.value === "addAll" &&
-      tokens[index + 3]?.value === "(";
-    if (!qualified && !unqualified) continue;
-    const methodIndex = index + (qualified ? 6 : 2);
+      tokens[index + 1]?.value === ".";
+    if (!qualifiedPrefix && !unqualifiedPrefix) continue;
+    const methodIndex = index + (qualifiedPrefix ? 6 : 2);
+    const method = tokens[methodIndex]?.value;
+    if (
+      !new Set(["addAll", "copy", "fill"]).has(method ?? "") ||
+      tokens[methodIndex + 1]?.value !== "("
+    )
+      continue;
     const call = callArgumentsAt(tokens, methodIndex + 1);
     if (
       call === undefined ||
@@ -1019,8 +1023,45 @@ function collectionsAddAllMutation(
     );
     if (command === undefined) return undefined;
     const line = tokens[methodIndex]?.line ?? 1;
-    if (unqualified && !factories.collections) {
+    if (unqualifiedPrefix && !factories.collections) {
       return { command, mutation: { kind: "unsupported", line } };
+    }
+    if (method === "copy") {
+      if (call.arguments.length !== 2)
+        return { command, mutation: { kind: "unsupported", line } };
+      const source = localCommandListExpression(
+        call.arguments[1] ?? [],
+        taints,
+        factories,
+        builders,
+        commandLists,
+      );
+      if (source === undefined)
+        return { command, mutation: { kind: "unsupported", line } };
+      return {
+        command,
+        mutation: {
+          arguments: source.arguments.map((argument) => ({
+            ...cloneProcessArgument(argument),
+            mutationLine: line,
+          })),
+          kind: "copy-prefix",
+          line,
+          noOpOnEmpty: true,
+        },
+      };
+    }
+    if (method === "fill") {
+      if (call.arguments.length !== 2)
+        return { command, mutation: { kind: "unsupported", line } };
+      const argument = mutatedArgument(call.arguments[1] ?? [], taints, line);
+      return {
+        command,
+        mutation:
+          argument === undefined
+            ? { kind: "unsupported", line }
+            : { argument, kind: "fill", line, noOpOnEmpty: true },
+      };
     }
     const arguments_ = processArguments(call.arguments.slice(1), taints).map(
       (argument) => ({ ...argument, mutationLine: line }),
@@ -1045,12 +1086,16 @@ function applyCommandListMutation(
   if (mutation.kind === "unsupported") return false;
   if (
     mutation.noOpOnEmpty === true &&
-    mutation.kind === "append-many" &&
-    mutation.arguments?.length === 0
+    ((mutation.kind === "append-many" && mutation.arguments?.length === 0) ||
+      (mutation.kind === "copy-prefix" && mutation.arguments?.length === 0) ||
+      (mutation.kind === "fill" && command.arguments.length === 0))
   )
     return true;
   if (command.capability === "unmodifiable") return false;
-  if (command.capability === "fixed-size" && mutation.kind !== "set")
+  if (
+    command.capability === "fixed-size" &&
+    !new Set(["copy-prefix", "fill", "set"]).has(mutation.kind)
+  )
     return false;
   const arguments_ = command.arguments;
   if (mutation.kind === "clear") {
@@ -1063,6 +1108,24 @@ function applyCommandListMutation(
   }
   if (mutation.kind === "append-many" && mutation.arguments !== undefined) {
     arguments_.push(...mutation.arguments);
+    return true;
+  }
+  if (
+    mutation.kind === "copy-prefix" &&
+    mutation.arguments !== undefined &&
+    mutation.arguments.length <= arguments_.length
+  ) {
+    for (let index = 0; index < mutation.arguments.length; index += 1) {
+      arguments_[index] = mutation.arguments[index]!;
+    }
+    for (const argument of arguments_) argument.mutationLine = mutation.line;
+    return true;
+  }
+  if (mutation.kind === "fill" && mutation.argument !== undefined) {
+    for (let index = 0; index < arguments_.length; index += 1) {
+      arguments_[index] = cloneProcessArgument(mutation.argument);
+    }
+    for (const argument of arguments_) argument.mutationLine = mutation.line;
     return true;
   }
   if (
@@ -1692,7 +1755,7 @@ export function javaSpringCommandInjectionRecords(
                   commandLists,
                 )
               : undefined;
-        const staticMutation = collectionsAddAllMutation(
+        const staticMutation = collectionsStaticMutation(
           statement,
           taints,
           collectionFactories,

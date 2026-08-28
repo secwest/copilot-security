@@ -72,6 +72,8 @@ describe("Spring Java command-injection model", () => {
       "spring-java-caller-command-list-argv",
       "spring-java-collections-addall-injection",
       "spring-java-collections-addall-argv",
+      "spring-java-collections-copy-injection",
+      "spring-java-collections-copy-argv",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toHaveLength(0);
@@ -81,6 +83,8 @@ describe("Spring Java command-injection model", () => {
     expect(manifest.cases[5]?.expected).toHaveLength(0);
     expect(manifest.cases[6]?.expected).toHaveLength(1);
     expect(manifest.cases[7]?.expected).toHaveLength(0);
+    expect(manifest.cases[8]?.expected).toHaveLength(1);
+    expect(manifest.cases[9]?.expected).toHaveLength(0);
 
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkRoot, "fixtures", manifest.cases[0]!.id),
@@ -130,6 +134,16 @@ describe("Spring Java command-injection model", () => {
     expect(collectionsVulnerable).toContain("java-caller-command-list-binding");
     expect(collectionsVulnerable).toContain("java-command-list-mutation");
     expect(collectionsSafe).not.toContain("spring-java-command-injection");
+
+    const copyVulnerable = await buildResidualRiskInventory(
+      join(benchmarkRoot, "fixtures", manifest.cases[8]!.id),
+    );
+    const copySafe = await buildResidualRiskInventory(
+      join(benchmarkRoot, "fixtures", manifest.cases[9]!.id),
+    );
+    expect(copyVulnerable).toContain("java-caller-command-list-binding");
+    expect(copyVulnerable).toContain("java-command-list-mutation");
+    expect(copySafe).not.toContain("spring-java-command-injection");
   });
 
   test("detects a fluent ProcessBuilder shell command including login flags", () => {
@@ -562,6 +576,128 @@ describe("Spring Java command-injection model", () => {
     expect(records(lookalike)).toEqual([]);
   });
 
+  test("models exact Collections.copy prefix rewrites and exception boundaries", () => {
+    const imported = (body: string): string =>
+      spring(body).replace(
+        "import org.springframework.web.bind.annotation.RequestParam;",
+        "import org.springframework.web.bind.annotation.RequestParam;\nimport java.util.ArrayList;\nimport java.util.Arrays;\nimport java.util.Collections;\nimport java.util.List;",
+      );
+    expect(
+      records(
+        imported(`        List<String> replacement = List.of("sh", "-c", target);
+        List<String> command = new ArrayList<>(List.of("printf", "%s", "fixed"));
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.copy(command, replacement);
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        spring(`        ProcessBuilder builder = new ProcessBuilder("printf", "%s", "fixed");
+        java.util.Collections.copy(builder.command(), java.util.List.of("sh", "-c", target));
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        imported(`        List<String> command = Arrays.asList("printf", "%s", "fixed");
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.copy(command, List.of("sh", "-c", target));
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        imported(`        List<String> command = new ArrayList<>();
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.copy(command, List.of("sh", "-c", target));
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        imported(`        List<String> command = List.of("printf", "%s", "fixed");
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.copy(command, List.of("sh", "-c", target));
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        imported(`        List<String> command = List.of("sh", "-c", target);
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.copy(command, List.of());
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        imported(`        List<String> command = new ArrayList<>(List.of("fixed", "fixed", "fixed"));
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.copy(command, List.of("printf", "%s", target));
+        builder.start();`),
+      ),
+    ).toEqual([]);
+
+    const lookalike =
+      imported(`        List<String> command = new ArrayList<>(List.of("fixed", "fixed", "fixed"));
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.copy(command, List.of("sh", "-c", target));
+        builder.start();`).replace(
+        "import java.util.Collections;",
+        "import example.Collections;",
+      );
+    expect(records(lookalike)).toEqual([]);
+  });
+
+  test("models exact Collections.fill rewrites without resizing", () => {
+    const imported = (body: string): string =>
+      spring(body).replace(
+        "import org.springframework.web.bind.annotation.RequestParam;",
+        "import org.springframework.web.bind.annotation.RequestParam;\nimport java.util.ArrayList;\nimport java.util.Arrays;\nimport java.util.Collections;\nimport java.util.List;",
+      );
+    expect(
+      records(
+        imported(`        List<String> command = new ArrayList<>(List.of("fixed", "fixed", "fixed"));
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.fill(command, target);
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        imported(`        List<String> command = Arrays.asList("fixed", "fixed", "fixed");
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.fill(command, target);
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        imported(`        List<String> command = List.of("fixed", "fixed", "fixed");
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.fill(command, target);
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        imported(`        List<String> command = new ArrayList<>(List.of("sh", "-c", target));
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.fill(command, "fixed");
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        imported(`        List<String> command = new ArrayList<>();
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.fill(command, target);
+        builder.start();`),
+      ),
+    ).toEqual([]);
+  });
+
   test("preserves exact LinkedList construction, copies, and ownership", () => {
     const imported = (body: string): string =>
       spring(body).replace(
@@ -867,6 +1003,12 @@ class ProcessBuilder {
     expect(prompt).toContain("List.of rejects every mutation");
     expect(prompt).toContain("ArrayList and LinkedList are resizable");
     expect(prompt).toContain("Collections.addAll calls add");
+    expect(prompt).toContain(
+      "Collections.copy overwrites the destination prefix",
+    );
+    expect(prompt).toContain(
+      "Collections.fill overwrites every existing element",
+    );
     expect(prompt).toContain("addFirst/addLast/removeFirst/removeLast");
   });
 
@@ -1070,6 +1212,8 @@ class ProcessBuilder {
             "List.add",
             "List.addAll",
             "Collections.addAll",
+            "Collections.copy",
+            "Collections.fill",
             "LinkedList",
             "addFirst",
           ],
@@ -1083,6 +1227,8 @@ class ProcessBuilder {
             "List.add",
             "List.addAll",
             "Collections.addAll",
+            "Collections.copy",
+            "Collections.fill",
             "LinkedList",
             "addFirst",
           ],

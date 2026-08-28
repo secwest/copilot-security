@@ -45916,6 +45916,8 @@ function javaProcessEvidenceRequirements(
         "List.add",
         "List.addAll",
         "Collections.addAll",
+        "Collections.copy",
+        "Collections.fill",
         "LinkedList",
         "addFirst",
       ]);
@@ -45927,6 +45929,8 @@ function javaProcessEvidenceRequirements(
         "List.add",
         "List.addAll",
         "Collections.addAll",
+        "Collections.copy",
+        "Collections.fill",
         "LinkedList",
         "addFirst",
       ]);

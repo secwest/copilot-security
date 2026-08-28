@@ -2,6 +2,63 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Model static Java command-prefix and fill rewrites
+
+**Observed gap and primary evidence.** The caller-list state machine could
+append static varargs, but it still lost two JDK algorithms that rewrite an
+already-sized command without changing list identity. `Collections.copy`
+copies each source element to the same destination index, requires the
+destination to be at least as large as the source, and leaves any remaining
+destination suffix untouched. `Collections.fill` replaces every existing
+element. OpenJDK implements both through `List.set`; consequently a fixed-size
+`Arrays.asList` destination supports the rewrite, while a nonempty
+unmodifiable destination cannot. GitHub CodeQL's current Java command-argument
+library independently treats collection-element updates as part of external
+process argument reasoning. Sources:
+[OpenJDK `Collections.java`](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/Collections.java),
+[Oracle Java 26 `Collections`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/Collections.html),
+and [CodeQL `CommandArguments.qll`](https://github.com/github/codeql/blob/main/java/ql/lib/semmle/code/java/security/CommandArguments.qll).
+
+**Exact state and exception boundaries.** An exact imported or fully qualified
+`Collections.copy(destination, source)` resolves both known lists, clones the
+source's current ordered arguments, and replaces only the corresponding
+destination prefix. A source larger than the destination aborts the candidate
+because the real call throws before process dispatch. Exact
+`Collections.fill(destination, value)` clones the value into every existing
+slot. Both operations preserve size, so mutable and fixed-size lists accept
+them; a nonempty unmodifiable list aborts. Empty sources for copy and empty
+destinations for fill are proven no-ops under the OpenJDK implementation.
+Unresolved lists, malformed arity, foreign `Collections` imports, and unknown
+effects fail closed rather than preserving a stale dangerous command.
+
+**Regression and executable closure.** Adversarial tests cover caller aliases,
+the live `ProcessBuilder.command()` getter, inline and named copy sources,
+fixed-size lists, too-small destinations, unmodifiable lists, exact repairs,
+empty operations, fill rewrites, and imported lookalikes. Correction and
+finding-quality guidance now name the prefix/all-slot distinction. A fifth
+matched Spring 7.0.9/Java 21 pair binds a caller-owned, already-sized
+`ArrayList` through `ProcessBuilder(List)`, then copies a three-element command
+into it. The positive copies `sh -c <target>` and the control copies
+`printf %s <target>`; both retain the same process, timeout, stdout, and
+response topology. The focused manifest grows to ten strict cases and the
+canonical benchmark to 156 pairs, 312 cases, and 936 repeated positions.
+
+**Local and distribution acceptance.** The authoritative elevated Windows
+suite passes 1,936 tests and 14,490 assertions across 209 files in 514.66
+seconds, with 27 intentional platform/integration skips and no failure. The
+focused native Ubuntu compiler and scanner slice passes 118 tests and 3,501
+assertions; both Java 21 Maven witnesses pass. Formatting, generated-model
+drift, TypeScript checking, a clean production build, and the production audit
+are green, with no known production dependency vulnerability. Isolated
+Windows and POSIX-strict Ubuntu installs accept their independently produced
+295-entry archives through public import, CLI execution, and all 79 plugin
+files. The 2,265,788-byte Windows archive has SHA-1
+`56776c8fedd5b596016f2af7689a989989d8d157` and SHA-256
+`e885cf9510a4b233874262760d17e12b3708635606de199804ba1cab2791f8f2`;
+the 2,265,816-byte native Ubuntu archive has SHA-1
+`54667c3e5636cc76f55b8f6fa306326babf26203` and SHA-256
+`a5252c2fd6cab03c82e7ad9b3ee37a7d693b235562f0fe23930ba23bf62fc392`.
+
 ## 2026-08-27 — Model static and sequenced Java command-list mutation
 
 **Observed gap and primary evidence.** The caller-list state machine recognized

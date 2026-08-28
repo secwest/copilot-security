@@ -263,7 +263,13 @@ pair retains an exact mutable `LinkedList` through `ProcessBuilder(List)` and
 uses `Collections.addAll` for the command transition. The positive supplies
 `sh`, `-c`, and the request value; the control supplies `printf`, `%s`, and the
 same value. Regression also covers import lookalikes, empty-varargs no-ops,
-and Java 21 sequenced-list end mutations. Run the strict benchmark with:
+and Java 21 sequenced-list end mutations. A fifth pair starts with an
+already-sized caller-owned `ArrayList` retained by the builder and replaces its
+three-element prefix through `Collections.copy`; the control performs the same
+copy but installs ordinary `printf` argv. Regression also distinguishes exact
+prefix copying and full-list `Collections.fill` from size-changing mutations,
+including too-small, fixed-size, unmodifiable, empty, and lookalike cases. Run
+the strict benchmark with:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -271,7 +277,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-spring-java-command
 ```
 
-The versioned corpus currently contains 155 vulnerable/control pairs:
+The versioned corpus currently contains 156 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

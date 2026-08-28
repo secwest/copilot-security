@@ -6,6 +6,35 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended exact Java command-vector mutation through
+  `java.util.Collections.copy` and `Collections.fill`. Copy overwrites only
+  the destination prefix and rejects a source larger than the destination;
+  fill replaces every existing element. Both preserve size, work on known
+  mutable and fixed-size lists, treat empty operations as no-ops, and fail
+  closed for nonempty unmodifiable, unresolved, malformed, or lookalike calls.
+- Added adversarial coverage for caller aliases, live `builder.command()`
+  destinations, inline and named sources, fixed-size lists, too-small
+  destinations, unmodifiable lists, exact repairs, empty operations, and
+  imported lookalikes. A fifth Spring 7.0.9/Java 21 pair preserves
+  caller-owned `ArrayList` identity through `ProcessBuilder(List)` and copies
+  either `sh -c` or fixed `printf` argv into the retained command. The focused
+  manifest now has ten strict cases, and the canonical corpus has 156 pairs,
+  312 cases, and 936 repeated scan positions.
+- Completed authoritative Windows acceptance for the static rewrite increment:
+  1,936 tests pass with 27 intentional platform/integration skips, no failure,
+  and 14,490 assertions across 209 files in 514.66 seconds. Formatting,
+  generated-model drift, TypeScript checking, a clean production build, and
+  the production dependency audit are clean; the audit reports no known
+  vulnerabilities. Focused native Ubuntu gates pass 118 tests and 3,501
+  assertions, and both Java 21 Maven witnesses pass.
+- Validated independently packed Windows and POSIX-strict Ubuntu archives
+  through isolated installation, public import, CLI execution, and all 79
+  bundled plugin files. The 295-entry, 2,265,788-byte Windows archive has
+  SHA-1 `56776c8fedd5b596016f2af7689a989989d8d157` and SHA-256
+  `e885cf9510a4b233874262760d17e12b3708635606de199804ba1cab2791f8f2`;
+  the 295-entry, 2,265,816-byte native Ubuntu archive has SHA-1
+  `54667c3e5636cc76f55b8f6fa306326babf26203` and SHA-256
+  `a5252c2fd6cab03c82e7ad9b3ee37a7d693b235562f0fe23930ba23bf62fc392`.
 - Extended caller-owned Java command state to exact imported and fully
   qualified `java.util.LinkedList` construction, including independent
   collection-copy construction. The model now handles Java 21

@@ -2203,10 +2203,14 @@ an unassigned fluent `ProcessBuilder`, later `command("/bin/bash", "-l",
 the value in fixed-`printf` argv. A second Java pair preserves the actual list
 returned by `ProcessBuilder.command()`, an alias, `clear`/`add` mutations, and
 `start()` while contrasting `sh -c` command grammar with fixed `printf` argv.
-The next pair preserves a caller-owned `LinkedList`, the no-copy
+The third Java pair preserves a caller-owned `ArrayList`, its no-copy builder
+binding, and mutation through a retained alias. The fourth preserves a
+caller-owned `LinkedList`, the no-copy
 `ProcessBuilder(List)` binding, and static `Collections.addAll` mutation while
-contrasting `sh -c` command grammar with fixed `printf` argv. The complete
-155-pair, 310-case corpus produces 930 scans that measure both
+contrasting `sh -c` command grammar with fixed `printf` argv. A fifth pair uses
+`Collections.copy` to replace an already bound three-element command prefix,
+again contrasting `sh -c` with ordinary `printf` argv. The complete 156-pair,
+312-case corpus produces 936 scans that measure both
 accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses
