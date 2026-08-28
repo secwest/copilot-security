@@ -6,6 +6,42 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added deterministic `node-mcp-tool-code-injection` coverage for official MCP
+  TypeScript SDK tool input reaching actual JavaScript execution. The model
+  accepts only the live unshadowed global `eval` or exact named, namespace,
+  default, CommonJS, and TypeScript import-equals bindings of `vm`/`node:vm`
+  `runInContext`, `runInNewContext`, and `runInThisContext`. It preserves local
+  assignment and same-file helper provenance, emits CWE-94/CWE-95, and rejects
+  fixed code, wrong modules, evaluator parameters and declarations, overwritten
+  input, tests, comments, strings, and unrelated member calls that borrow an
+  imported identifier's spelling.
+- Kept execution closure stricter than constructor-only rules. `Function`,
+  `vm.compileFunction`, `new vm.Script`, and `new vm.SourceTextModule` do not
+  produce an execution finding until a later model proves invocation or
+  evaluation. A dedicated field-local quality gate requires both validation
+  and attack path to identify the MCP caller, input schema limitation, exact
+  evaluator, JavaScript-source boundary, CWE, and concrete in-process effect;
+  the correction prompt permits only fixed side-effect-free arithmetic.
+- Added a real `@modelcontextprotocol/server` 2.0.0 exploit/control pair. The
+  exploit passes an expression through `evaluateExpression` to direct `eval`;
+  its witness evaluates only fixed inert arithmetic and object values. The
+  topology-matched control preserves the schema, tool, helper, arithmetic
+  result, and response while an explicit numeric `+`/`*` grammar rejects the
+  object expression without dynamic evaluation. Both Windows and native WSL
+  witnesses pass.
+  The strict MCP manifest now contains ten cases, hosted Node CI includes ten
+  Windows/Linux witnesses, and the canonical corpus contains 161 pairs, 322
+  cases, and 966 repeated scan positions. Focused Windows and native WSL lanes
+  each pass 54 tests and 2,677 assertions with TypeScript clean.
+- Full local acceptance passes 1,970 tests and 14,869 assertions across 210
+  files in 552.75 seconds, with 27 intentional platform or integration skips.
+  The managed Windows process denied the nested-Git and private-ACL boundary
+  tests; the unchanged native rerun passes all 48 tests and 242 assertions.
+  Generated-model drift, formatting, TypeScript, the clean production build,
+  and the production advisory audit are green. Compiled inventory emits exactly
+  one structured code-evaluation row for the exploit and none for its parser
+  control. Isolated Windows and native WSL consumers validate the public import,
+  executable CLI, and all 79 bundled plugin files.
 - Promoted a live benchmark counterexample into deterministic coverage. The
   first six-case MCP filesystem campaign at public revision
   `f16dc15e8d87f4cedf7b8259252d1c904edf09b5` completed every deep scan on

@@ -62,6 +62,8 @@ describe("Node MCP tool-input security model", () => {
       "node-mcp-v2-command-argv",
       "node-mcp-v2-argument-injection",
       "node-mcp-v2-argument-data",
+      "node-mcp-v2-code-injection",
+      "node-mcp-v2-arithmetic-parser",
       "node-mcp-v2-ssrf",
       "node-mcp-v2-fixed-destination",
       "node-mcp-v2-path-traversal",
@@ -75,12 +77,15 @@ describe("Node MCP tool-input security model", () => {
     expect(manifest.cases[5]?.expected).toEqual([]);
     expect(manifest.cases[6]?.expected).toHaveLength(1);
     expect(manifest.cases[7]?.expected).toEqual([]);
+    expect(manifest.cases[8]?.expected).toHaveLength(1);
+    expect(manifest.cases[9]?.expected).toEqual([]);
 
     for (const [index, modelId] of [
       [0, "node-mcp-tool-command-injection"],
       [2, "node-mcp-tool-argument-injection"],
-      [4, "node-mcp-tool-ssrf"],
-      [6, "node-mcp-tool-path-traversal"],
+      [4, "node-mcp-tool-code-injection"],
+      [6, "node-mcp-tool-ssrf"],
+      [8, "node-mcp-tool-path-traversal"],
     ] as const) {
       const vulnerable = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index]!.id),
@@ -136,6 +141,93 @@ describe("Node MCP tool-input security model", () => {
       ),
     );
     expect(found).toEqual([]);
+  });
+
+  test("detects MCP tool input reaching direct JavaScript evaluation", () => {
+    const found = records(v2("    return eval(command);"));
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel.id).toBe("node-mcp-tool-code-injection");
+    expect(found[0]?.frameworkModel.sink.kind).toBe("mcp-tool-code-evaluation");
+    expect(found[0]?.frameworkModel.sink.symbol).toBe("eval:code[0]");
+    expect(found[0]?.frameworkModel.sink.cweIds).toEqual(["CWE-94", "CWE-95"]);
+    expect(found[0]?.categories).toContain(
+      "broken-control:mcp-tool-code-data-boundary",
+    );
+  });
+
+  test("supports exact Node VM immediate evaluator bindings", () => {
+    const cases = [
+      [
+        'import { runInThisContext as execute } from "node:vm";\n',
+        "    return execute(command);",
+        "execute:code[0]",
+      ],
+      [
+        'import * as vm from "node:vm";\n',
+        "    return vm.runInNewContext(command, {}, { timeout: 50 });",
+        "vm.runInNewContext:code[0]",
+      ],
+      [
+        'import vm from "node:vm";\n',
+        "    return vm.runInContext(command, vm.createContext({}), { timeout: 50 });",
+        "vm.runInContext:code[0]",
+      ],
+      [
+        'const vm = require("vm");\n',
+        "    return vm.runInThisContext(command, { timeout: 50 });",
+        "vm.runInThisContext:code[0]",
+      ],
+      [
+        'import vm = require("node:vm");\n',
+        "    return vm.runInNewContext(command, {}, { timeout: 50 });",
+        "vm.runInNewContext:code[0]",
+      ],
+    ] as const;
+    for (const [binding, body, symbol] of cases) {
+      const found = records(`${binding}${v2(body)}`);
+      expect(found).toHaveLength(1);
+      expect(found[0]?.frameworkModel.id).toBe("node-mcp-tool-code-injection");
+      expect(found[0]?.frameworkModel.sink.symbol).toBe(symbol);
+    }
+  });
+
+  test("requires evaluation rather than inert code construction", () => {
+    const source = `${'import vm from "node:vm";\n'}${v2(`
+    new Function(command);
+    vm.compileFunction(command);
+    new vm.Script(command);
+    new vm.SourceTextModule(command);
+    return eval("6 * 7");`)}`;
+    expect(records(source)).toEqual([]);
+  });
+
+  test("rejects shadowed and lookalike JavaScript evaluators", () => {
+    const localEval = `${v2("    return eval(command);")}
+function eval(value: string) { return value; }
+`;
+    expect(records(localEval)).toEqual([]);
+
+    const helperParameter = `${v2("    return evaluate(command, JSON.parse);")}
+function evaluate(code: string, eval: (value: string) => unknown) {
+  return eval(code);
+}
+`;
+    expect(records(helperParameter)).toEqual([]);
+
+    const lookalike = `${'import * as vm from "./vm.js";\n'}${v2(
+      "    return vm.runInNewContext(command, {});",
+    )}`;
+    expect(records(lookalike)).toEqual([]);
+
+    const borrowedDirectName = `${'import { runInThisContext as execute } from "node:vm";\n'}${v2(`
+    const local = { execute(value: string) { return value; } };
+    return local.execute(command);`)}`;
+    expect(records(borrowedDirectName)).toEqual([]);
+
+    const borrowedNamespaceName = `${'import * as vm from "node:vm";\n'}${v2(`
+    const local = { vm: { runInNewContext(value: string) { return value; } } };
+    return local.vm.runInNewContext(command);`)}`;
+    expect(records(borrowedNamespaceName)).toEqual([]);
   });
 
   test("detects stable-v2 SSRF through global fetch and local propagation", () => {
@@ -576,6 +668,23 @@ async function loadUrl(target: string) {
     expect(networkRows).toHaveLength(1);
     expect(networkRows[0]?.frameworkModel.id).toBe("node-mcp-tool-ssrf");
     expect(networkRows[0]?.frameworkModel.scope).toBe("same-file");
+
+    const evaluation = `${v2("    return evaluateExpression(command);")}
+function evaluateExpression(expression: string) {
+  return eval(expression);
+}
+`;
+    const evaluationRows = records(evaluation);
+    expect(evaluationRows).toHaveLength(1);
+    expect(evaluationRows[0]?.frameworkModel.id).toBe(
+      "node-mcp-tool-code-injection",
+    );
+    expect(evaluationRows[0]?.frameworkModel.propagators).toContainEqual(
+      expect.objectContaining({
+        kind: "mcp-tool-helper-call",
+        symbol: "evaluateExpression",
+      }),
+    );
   });
 
   test("follows tool input through arrow and function-expression helpers", () => {
@@ -1017,6 +1126,111 @@ function runCommand(value: string) {
     }
   });
 
+  test("requires code-evaluation validation and attack-path closure", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-node-mcp-code-quality-repository-"),
+    );
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-node-mcp-code-quality-scan-"),
+    );
+    try {
+      const application = v2("    return eval(command);");
+      await writeFile(join(repository, "server.ts"), application, "utf8");
+      const sourceLines = application.split(/\r?\n/u);
+      const sinkLine =
+        sourceLines.findIndex((line) => line.includes("eval(command)")) + 1;
+      const finding = {
+        occurrenceId: "occ_node_mcp_code_quality",
+        taxonomy: { cwe: ["CWE-94", "CWE-95"] },
+        locations: [{ path: "server.ts", startLine: sinkLine, role: "sink" }],
+        codeEvidence: [
+          {
+            id: "mcp-code-sink",
+            path: "server.ts",
+            startLine: sinkLine,
+            code: sourceLines[sinkLine - 1],
+            explanation:
+              "The registered tool callback passes its command string to direct evaluation.",
+            role: "sink",
+          },
+        ],
+        validation: {
+          summary: "Static review confirms an evaluation call in the handler.",
+          method: "source review and bounded arithmetic witness",
+          exploitWitness: "The fixed expression 6 * 7 evaluates to 42.",
+          negativeControl: "A fixed arithmetic parser never evaluates source.",
+          evidence: ["mcp-code-sink"],
+          counterEvidence: "Deployment exposure remains unknown.",
+          remainingUncertainty: "Runtime privileges were not established.",
+        },
+        attackPath: {
+          summary: "An untrusted string may reach evaluation.",
+          dataflow: {
+            source: "mcp-code-sink",
+            sink: "mcp-code-sink",
+            outcome: "dynamic evaluation",
+          },
+          reachability: {
+            attacker: "MCP client",
+            entrypoint: "tool invocation",
+            outcome: "in-process code execution",
+          },
+          brokenControls: ["No code/data boundary"],
+          evidenceRefs: ["mcp-code-sink"],
+        },
+      };
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      const inventory = await buildResidualRiskInventory(repository);
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      const rows = incomplete
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(rows[1]).toMatchObject({
+        findingId: "occ_node_mcp_code_quality",
+        frameworkModelId: "node-mcp-tool-code-injection",
+      });
+      expect(rows[1]?.reasons).toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(rows[1]?.reasons).toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+
+      const closure = [
+        "An MCP tool registerTool callback receives client-controlled tool input from a model invocation.",
+        "Its inputSchema string schema proves shape and length but not an allowed arithmetic grammar.",
+        "The live global eval treats the string as dynamic JavaScript source during code evaluation.",
+        "CWE-94 and CWE-95 describe the resulting in-process code injection and code execution boundary.",
+      ].join(" ");
+      finding.validation.summary = closure;
+      finding.attackPath.summary = closure;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      expect(
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          inventory,
+        ),
+      ).toBe("");
+    } finally {
+      await rm(repository, { recursive: true, force: true });
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
+  });
+
   test("gives validation exact MCP source and sink boundaries", () => {
     const prompt = scanQualityGatePrompt(
       "{}",
@@ -1031,11 +1245,15 @@ function runCommand(value: string) {
     );
     expect(prompt).toContain("For node-mcp-tool-command-injection");
     expect(prompt).toContain("node-mcp-tool-argument-injection");
+    expect(prompt).toContain("node-mcp-tool-code-injection");
     expect(prompt).toContain("node-mcp-tool-path-traversal");
     expect(prompt).toContain("schema-less callback receives context");
     expect(prompt).toContain("fixed executable plus separate argv data");
     expect(prompt).toContain("process.execPath");
     expect(prompt).toContain("end-of-options");
+    expect(prompt).toContain("node:vm is not a security mechanism");
+    expect(prompt).toContain("inert construction");
+    expect(prompt).toContain("fixed side-effect-free arithmetic");
     expect(prompt).toContain("path-bearing Node fs");
     expect(prompt).toContain("path.join or path.resolve alone");
     expect(prompt).toContain("request body or same-host path");
@@ -1043,5 +1261,6 @@ function runCommand(value: string) {
     expect(prompt).toContain("disposable loopback endpoint");
     expect(prompt).toContain("CWE-22/CWE-73");
     expect(prompt).toContain("CWE-88/CWE-94");
+    expect(prompt).toContain("CWE-94/CWE-95");
   });
 });

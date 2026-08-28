@@ -279,26 +279,32 @@ node ../../benchmarks/run-benchmark.mjs `
 
 ## Node MCP tool-handler security benchmark
 
-`node-mcp-tool-security-manifest.json` measures tool input at four distinct
+`node-mcp-tool-security-manifest.json` measures tool input at five distinct
 capability boundaries under perfect selected-run gates. The command pair uses
 the real stable `@modelcontextprotocol/server` 2.0.0 API: the exploit carries a
 tool field through an arrow helper into `child_process.exec`, while its
 topology-matched control uses a fixed `process.execPath` and an explicit `--`.
 The argument pair keeps that fixed Node runtime on both sides: the exploit puts
 tool data in the runtime option region, while the control places the same data
-after `--`. The SSRF pair carries a tool URL through a helper into global
-`fetch`; its control fixes a disposable loopback origin before loading the
-server and places tool data only in the request body. The path pair passes a
-tool-selected name through a same-file helper to the path argument of
+after `--`. The code-evaluation pair carries an expression through a same-file
+helper into direct JavaScript `eval`; its control preserves expression input,
+the helper, arithmetic results, and the MCP response while an explicit numeric
+`+`/`*` grammar never evaluates the tool string as source. The SSRF pair carries
+a tool URL through a helper into global `fetch`; its control fixes a disposable
+loopback origin before loading the server and places tool data only in the
+request body. The path pair passes a tool-selected name through a same-file
+helper to the path argument of
 `node:fs/promises.writeFile`; its control uses the same API and helper topology
 but fixes the file URL and confines both tool values to file contents.
 
 Each fixture pins exact dependencies and supplies a bounded witness. The
-process witnesses emit only inert fixed text or Node's version string. The network witnesses use a
+process witnesses emit only inert fixed text or Node's version string. The
+code-evaluation witnesses use fixed side-effect-free arithmetic and object
+values. The network witnesses use a
 random-port loopback listener, close it in all paths, and never contact an
 external or metadata address. The filesystem witnesses create and remove only
 fresh temporary trees containing synthetic marker data. Node CI executes all
-eight witnesses on Windows and Linux. Run the focused scanner benchmark with:
+ten witnesses on Windows and Linux. Run the focused scanner benchmark with:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -306,7 +312,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-node-mcp-tools
 ```
 
-The versioned corpus currently contains 160 vulnerable/control pairs:
+The versioned corpus currently contains 161 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

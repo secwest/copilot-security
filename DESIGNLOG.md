@@ -2,6 +2,88 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Model MCP tool input that becomes executable JavaScript
+
+**Coverage gap and comparative evidence.** The MCP host pass had exact process,
+interpreter-option, filesystem, and network capability models, but JavaScript
+evaluation remained a generic lexical lead. CodeQL's high-precision
+[`js/code-injection`](https://codeql.github.com/codeql-query-help/javascript/js-code-injection/)
+query treats untrusted input evaluated as code as a 9.3 security-severity path
+problem under CWE-94/CWE-95. The current Node
+[`vm` documentation](https://nodejs.org/api/vm.html) says the module compiles
+and runs code and is not a security mechanism. Public Semgrep rules model the
+same VM primitives for Express and AWS Lambda, including `runInContext`,
+`runInNewContext`, `runInThisContext`, `compileFunction`, `Script`, and
+`SourceTextModule`. Authenticated current-source searches found no
+`McpServer` or `@modelcontextprotocol/server` source model in either the
+official CodeQL repository or public Semgrep rules. That establishes an MCP
+source-model opportunity; it does not claim that every configuration of those
+scanners misses every manually supplied MCP source.
+
+**Execution and identity boundary.** Add `node-mcp-tool-code-injection` only
+after the existing exact official SDK registration and schema-bearing callback
+proof. Immediate execution accepts the live unshadowed global `eval`, or exact
+named, namespace, default, CommonJS, and TypeScript import-equals bindings of
+`vm`/`node:vm` `runInContext`, `runInNewContext`, or `runInThisContext`.
+Argument zero must carry the exact tool property directly, through bounded
+local assignments, or through one same-file function, arrow, or function
+expression helper. Emit `mcp-tool-code-evaluation`, CWE-94/CWE-95, registration,
+assignment, and helper provenance.
+
+Construction is not execution. A bare `Function`, `compileFunction`, `Script`,
+or `SourceTextModule` compiles or constructs a callable/module but does not by
+itself prove attacker code ran. Reject those constructor-only patterns until a
+future pass proves the matching invocation, `runIn*`, link/evaluate lifecycle,
+and non-reassignment. Also reject wrong VM modules, local eval declarations or
+parameters, fixed source, overwritten values, unrelated helper arguments,
+tests, generated files, text lookalikes, and object members that merely reuse an
+official binding's local spelling. The shared bound-call matcher now requires
+direct and namespace bindings not be preceded by another member dereference,
+closing that false-positive class for every existing MCP capability model.
+
+**Validation and safe witness boundary.** The official MCP SDK
+[`registerTool` implementation](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/packages/server/src/server/mcp.ts)
+validates handler arguments against `inputSchema`; the MCP
+[`tools` security considerations](https://modelcontextprotocol.io/specification/2024-11-05/server/tools)
+also require input validation and access controls. A string schema proves shape
+and length, not an allowed programming language. Both validation and attack
+path must therefore name the MCP client/model/tool invocation, expression
+property, schema limitation, exact evaluator, JavaScript-source boundary,
+same-file helper when present, CWE, and demonstrated in-process effect. Dynamic
+validation is restricted to fixed side-effect-free arithmetic and a
+topology-matched parser control; shell, file, network, credential, persistence,
+privilege, and destructive effects are forbidden.
+
+**Executable contract.** Both fixtures pin `@modelcontextprotocol/server`
+2.0.0 and Zod 4.4.3 and preserve the expression schema, tool registration,
+`evaluateExpression` helper, arithmetic result, and MCP response. The exploit
+uses direct eval and checks only `6 * 7` plus a fixed object-literal value. The
+control implements an explicit two-operand numeric `+`/`*` grammar, preserves
+`6 * 7` and `9 + 4`, and rejects the object expression. Both witnesses pass on
+Windows and native WSL. Focused tests cover global eval, all immediate VM binding forms,
+helper propagation, inert construction, fixed code, local shadows, evaluator
+parameters with nested function types, wrong modules, borrowed member names,
+strict manifest pairing, canonical pairing, quality closure, and correction
+guidance. Focused Windows and native WSL lanes each pass 54 tests and 2,677
+assertions with TypeScript clean. The strict MCP corpus advances to ten cases;
+the canonical corpus advances to 161 pairs, 322 cases, and 966 repeated scan
+positions.
+
+**Local acceptance.** The authoritative Windows Bun 1.3.14 suite passes 1,970
+tests and 14,869 assertions across 210 files in 552.75 seconds, with 27
+intentional platform or integration skips. The managed process denies only the
+two tests that initialize nested Git state and replace Windows directory ACLs;
+the unchanged native rerun passes all 48 tests and 242 assertions. Generated
+model drift, formatting, TypeScript, a clean production build, and
+`pnpm audit --prod --audit-level high` are green with no known vulnerabilities.
+Compiled inventory over the exploit contains exactly one
+`node-mcp-tool-code-injection` row at `src/server.mjs:7`, sourced from the MCP
+tool property at line 16 and propagated through registration plus the
+`evaluateExpression` helper; its sink is `eval:code[0]` with CWE-94/CWE-95. The
+topology-matched arithmetic parser emits no row from any MCP tool model.
+Isolated Windows and native WSL consumers validate the public import,
+executable CLI, and all 79 bundled plugin files.
+
 ## 2026-08-28 — Turn a live MCP control failure into interpreter-option coverage
 
 **Counterexample, not suppression.** The first six-case live MCP campaign at

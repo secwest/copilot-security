@@ -101,6 +101,48 @@
       "expected": []
     },
     {
+      "id": "node-mcp-v2-code-injection",
+      "fixture": "fixtures/node-mcp-v2-code-injection",
+      "expected": [
+        {
+          "title": "MCP tool input reaches direct JavaScript evaluation through a same-file helper",
+          "cwe": ["CWE-94", "CWE-95"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/server.mjs",
+          "line": 7,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["expression", "tool input", "callback input"],
+            ["evaluateExpression", "same-file helper", "helper call"],
+            ["eval", "JavaScript source", "code evaluation"],
+            ["inputSchema", "string schema", "schema validation"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["calculate-expression", "registerTool", "tool callback"],
+            ["evaluateExpression", "same-file helper", "helper call"],
+            ["eval", "dynamic code", "JavaScript source"],
+            ["in-process", "code execution", "code injection"]
+          ],
+          "forbiddenText": [
+            "string schema prevents code injection",
+            "the witness executed an attacker payload",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-arithmetic-parser",
+      "fixture": "fixtures/node-mcp-v2-arithmetic-parser",
+      "expected": []
+    },
+    {
       "id": "node-mcp-v2-ssrf",
       "fixture": "fixtures/node-mcp-v2-ssrf",
       "expected": [

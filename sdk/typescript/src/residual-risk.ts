@@ -4248,6 +4248,15 @@ const NODE_MCP_TOOL_ARGUMENT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-88", "CWE-94", "interpreter option", "code execution"],
 ] as const;
 
+const NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["MCP tool", "registerTool", "server.tool", "tool callback"],
+  ["tool input", "callback input", "LLM-controlled", "client-controlled"],
+  ["inputSchema", "schema validation", "string schema"],
+  ["eval", "node:vm", "runInContext", "runInNewContext", "runInThisContext"],
+  ["JavaScript source", "code string", "dynamic code", "code evaluation"],
+  ["CWE-94", "CWE-95", "code injection", "code execution"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4277,6 +4286,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_MCP_TOOL_ARGUMENT_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_MCP_TOOL_ARGUMENT_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-mcp-tool-code-injection",
+    {
+      validation: NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [

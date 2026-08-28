@@ -143,6 +143,8 @@ jobs:
           - node-mcp-v2-command-argv
           - node-mcp-v2-argument-injection
           - node-mcp-v2-argument-data
+          - node-mcp-v2-code-injection
+          - node-mcp-v2-arithmetic-parser
           - node-mcp-v2-ssrf
           - node-mcp-v2-fixed-destination
           - node-mcp-v2-path-traversal

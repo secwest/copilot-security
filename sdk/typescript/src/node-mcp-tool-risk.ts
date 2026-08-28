@@ -8,6 +8,7 @@ const MCP_MODULES = new Set([
   "@modelcontextprotocol/sdk/server/mcp.js",
 ]);
 const CHILD_PROCESS_MODULES = new Set(["child_process", "node:child_process"]);
+const VM_MODULES = new Set(["vm", "node:vm"]);
 const FS_MODULES = new Set([
   "fs",
   "fs/promises",
@@ -125,6 +126,11 @@ const NETWORK_METHODS = new Set([
   "put",
   "request",
 ]);
+const IMMEDIATE_VM_EVALUATORS = new Set([
+  "runInContext",
+  "runInNewContext",
+  "runInThisContext",
+]);
 const POSIX_SHELLS = new Set(["ash", "bash", "dash", "ksh", "sh", "zsh"]);
 const POWERSHELLS = new Set([
   "powershell",
@@ -135,10 +141,12 @@ const POWERSHELLS = new Set([
 
 type McpModelId =
   | "node-mcp-tool-argument-injection"
+  | "node-mcp-tool-code-injection"
   | "node-mcp-tool-command-injection"
   | "node-mcp-tool-path-traversal"
   | "node-mcp-tool-ssrf";
 type McpSinkKind =
+  | "mcp-tool-code-evaluation"
   | "mcp-tool-executable-selection"
   | "mcp-tool-filesystem-path"
   | "mcp-tool-interpreter-option"
@@ -213,6 +221,7 @@ export interface NodeMcpToolRiskRecord {
         | readonly ["CWE-22", "CWE-73"]
         | readonly ["CWE-78", "CWE-88"]
         | readonly ["CWE-88", "CWE-94"]
+        | readonly ["CWE-94", "CWE-95"]
         | readonly ["CWE-918"];
     };
     propagators: Array<{
@@ -226,10 +235,11 @@ export interface NodeMcpToolRiskRecord {
 }
 
 /**
- * Finds exact MCP SDK tool-input flows to Node process, filesystem, and network
- * sinks. The pass is intentionally bounded and ownership-sensitive: unresolved
- * imports, schema-less v2 callbacks, unsupported callback forms, and shadowed
- * globals produce no framework row for later stages to over-trust.
+ * Finds exact MCP SDK tool-input flows to Node process, code-evaluation,
+ * filesystem, and network sinks. The pass is intentionally bounded and
+ * ownership-sensitive: unresolved imports, schema-less v2 callbacks,
+ * unsupported callback forms, and shadowed globals produce no framework row
+ * for later stages to over-trust.
  */
 export function nodeMcpToolRiskRecords(
   path: string,
@@ -249,6 +259,12 @@ export function nodeMcpToolRiskRecords(
   if (registrations.length === 0) return [];
 
   const commandBindings = bindingsForModules(imports, CHILD_PROCESS_MODULES);
+  const evaluationBindings = bindingsForModules(imports, VM_MODULES);
+  for (const [local, imported] of evaluationBindings.direct) {
+    if (imported === "default") {
+      evaluationBindings.namespaces.set(local, "node:vm");
+    }
+  }
   const filesystemBindings = bindingsForModules(imports, FS_MODULES);
   for (const [local, imported] of filesystemBindings.direct) {
     if (imported === "default" || imported === "promises") {
@@ -271,6 +287,7 @@ export function nodeMcpToolRiskRecords(
     source,
     structural,
     commandBindings,
+    evaluationBindings,
     filesystemBindings,
     fetchBindings,
     httpBindings,
@@ -282,6 +299,13 @@ export function nodeMcpToolRiskRecords(
     const taint = propagatedBindings(source, structural, registration);
     const sinks = [
       ...commandSinks(source, structural, registration, taint, commandBindings),
+      ...evaluationSinks(
+        source,
+        structural,
+        registration,
+        taint,
+        evaluationBindings,
+      ),
       ...filesystemSinks(
         source,
         structural,
@@ -304,11 +328,13 @@ export function nodeMcpToolRiskRecords(
       const modelId: McpModelId =
         sink.kind === "mcp-tool-network-destination"
           ? "node-mcp-tool-ssrf"
-          : sink.kind === "mcp-tool-filesystem-path"
-            ? "node-mcp-tool-path-traversal"
-            : sink.kind === "mcp-tool-interpreter-option"
-              ? "node-mcp-tool-argument-injection"
-              : "node-mcp-tool-command-injection";
+          : sink.kind === "mcp-tool-code-evaluation"
+            ? "node-mcp-tool-code-injection"
+            : sink.kind === "mcp-tool-filesystem-path"
+              ? "node-mcp-tool-path-traversal"
+              : sink.kind === "mcp-tool-interpreter-option"
+                ? "node-mcp-tool-argument-injection"
+                : "node-mcp-tool-command-injection";
       const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(lines.length, sink.line + CONTEXT_LINES_AFTER);
       const sourceStart = Math.max(1, registration.line - 2);
@@ -322,20 +348,24 @@ export function nodeMcpToolRiskRecords(
           `modeled-sink:${sink.kind}`,
           modelId === "node-mcp-tool-ssrf"
             ? "broken-control:mcp-tool-network-destination-not-pinned"
-            : modelId === "node-mcp-tool-path-traversal"
-              ? "broken-control:mcp-tool-filesystem-path-not-confined"
-              : modelId === "node-mcp-tool-argument-injection"
-                ? "broken-control:mcp-tool-interpreter-end-of-options-missing"
-                : "broken-control:mcp-tool-command-data-boundary",
+            : modelId === "node-mcp-tool-code-injection"
+              ? "broken-control:mcp-tool-code-data-boundary"
+              : modelId === "node-mcp-tool-path-traversal"
+                ? "broken-control:mcp-tool-filesystem-path-not-confined"
+                : modelId === "node-mcp-tool-argument-injection"
+                  ? "broken-control:mcp-tool-interpreter-end-of-options-missing"
+                  : "broken-control:mcp-tool-command-data-boundary",
         ],
         priority:
-          modelId === "node-mcp-tool-ssrf"
-            ? 122
-            : modelId === "node-mcp-tool-path-traversal"
-              ? 124
-              : modelId === "node-mcp-tool-argument-injection"
-                ? 126
-                : 127,
+          modelId === "node-mcp-tool-code-injection"
+            ? 129
+            : modelId === "node-mcp-tool-ssrf"
+              ? 122
+              : modelId === "node-mcp-tool-path-traversal"
+                ? 124
+                : modelId === "node-mcp-tool-argument-injection"
+                  ? 126
+                  : 127,
         startLine,
         endLine,
         excerpt: sourceExcerpt(lines, startLine, endLine),
@@ -359,11 +389,13 @@ export function nodeMcpToolRiskRecords(
             cweIds:
               modelId === "node-mcp-tool-ssrf"
                 ? (["CWE-918"] as const)
-                : modelId === "node-mcp-tool-path-traversal"
-                  ? (["CWE-22", "CWE-73"] as const)
-                  : modelId === "node-mcp-tool-argument-injection"
-                    ? (["CWE-88", "CWE-94"] as const)
-                    : (["CWE-78", "CWE-88"] as const),
+                : modelId === "node-mcp-tool-code-injection"
+                  ? (["CWE-94", "CWE-95"] as const)
+                  : modelId === "node-mcp-tool-path-traversal"
+                    ? (["CWE-22", "CWE-73"] as const)
+                    : modelId === "node-mcp-tool-argument-injection"
+                      ? (["CWE-88", "CWE-94"] as const)
+                      : (["CWE-78", "CWE-88"] as const),
           },
           propagators: [
             {
@@ -523,6 +555,23 @@ function matchingDelimiterInSource(
     }
     if (current === opening) depth += 1;
     else if (current === closing) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function matchingOpeningStructuralDelimiter(
+  structural: string,
+  close: number,
+  opening: string,
+  closing: string,
+): number {
+  let depth = 0;
+  for (let index = close; index >= 0; index -= 1) {
+    if (structural[index] === closing) depth += 1;
+    else if (structural[index] === opening) {
       depth -= 1;
       if (depth === 0) return index;
     }
@@ -1038,6 +1087,7 @@ function helperSummaries(
   source: string,
   structural: string,
   commandBindings: BindingSet,
+  evaluationBindings: BindingSet,
   filesystemBindings: BindingSet,
   fetchBindings: BindingSet,
   httpBindings: BindingSet,
@@ -1067,6 +1117,7 @@ function helperSummaries(
         splitArgumentRanges(structural, open + 1, close),
         { start: bodyOpen + 1, end: bodyClose },
         commandBindings,
+        evaluationBindings,
         filesystemBindings,
         fetchBindings,
         httpBindings,
@@ -1112,6 +1163,7 @@ function helperSummaries(
         splitArgumentRanges(structural, open + 1, close),
         { start: bodyOpen + 1, end: bodyClose },
         commandBindings,
+        evaluationBindings,
         filesystemBindings,
         fetchBindings,
         httpBindings,
@@ -1130,6 +1182,7 @@ function summarizeHelperBody(
   parameterRanges: readonly Range[],
   body: Range,
   commandBindings: BindingSet,
+  evaluationBindings: BindingSet,
   filesystemBindings: BindingSet,
   fetchBindings: BindingSet,
   httpBindings: BindingSet,
@@ -1178,6 +1231,13 @@ function summarizeHelperBody(
         helperRegistration,
         taint,
         commandBindings,
+      ),
+      ...evaluationSinks(
+        source,
+        structural,
+        helperRegistration,
+        taint,
+        evaluationBindings,
       ),
       ...filesystemSinks(
         source,
@@ -1271,7 +1331,7 @@ function boundCalls(
   for (const [local, imported] of bindings.direct) {
     if (!accepted.has(imported)) continue;
     const expression = new RegExp(
-      String.raw`\b${escapeRegularExpression(local)}\s*\(`,
+      String.raw`(?<![.\w$])${escapeRegularExpression(local)}\s*\(`,
       "gu",
     );
     for (const match of structural
@@ -1294,7 +1354,7 @@ function boundCalls(
   for (const [namespace] of bindings.namespaces) {
     const methods = [...accepted].map(escapeRegularExpression).join("|");
     const expression = new RegExp(
-      String.raw`\b${escapeRegularExpression(namespace)}\s*\.\s*(${methods})\s*\(`,
+      String.raw`(?<![.\w$])${escapeRegularExpression(namespace)}\s*\.\s*(${methods})\s*\(`,
       "gu",
     );
     for (const match of structural
@@ -1487,6 +1547,96 @@ function commandSinks(
     }
   }
   return sinks;
+}
+
+function evaluationSinks(
+  source: string,
+  structural: string,
+  registration: Registration,
+  taint: readonly TaintBinding[],
+  bindings: BindingSet,
+): Sink[] {
+  const sinks: Sink[] = [];
+  const calls = [
+    ...boundCalls(
+      source,
+      structural,
+      registration.body,
+      bindings,
+      IMMEDIATE_VM_EVALUATORS,
+    ),
+    ...globalEvalCalls(source, structural, registration.body),
+  ];
+  for (const call of calls) {
+    const code = call.arguments[0];
+    if (code === undefined) continue;
+    const sourceBinding = liveTaintForRange(
+      structural,
+      code,
+      registration.body,
+      taint,
+    );
+    if (sourceBinding === undefined) continue;
+    sinks.push({
+      kind: "mcp-tool-code-evaluation",
+      line: call.line,
+      symbol: `${call.symbol}:code[0]`,
+      source: sourceBinding,
+    });
+  }
+  return sinks;
+}
+
+function globalEvalCalls(
+  source: string,
+  structural: string,
+  body: Range,
+): CallSite[] {
+  if (
+    hasLocalDeclaration(structural, "eval") ||
+    bodyHasNamedParameter(structural, body, "eval")
+  ) {
+    return [];
+  }
+  const calls: CallSite[] = [];
+  const expression = /(?<![.\w$])eval\s*\(/gu;
+  for (const match of structural
+    .slice(body.start, body.end)
+    .matchAll(expression)) {
+    const offset = body.start + match.index!;
+    const prefix = structural.slice(body.start, offset);
+    if (/(?<![.\w$])eval\s*(?:=(?!=|>)|\+\+|--)/u.test(prefix)) continue;
+    const open = offset + match[0].lastIndexOf("(");
+    const close = matchingStructuralDelimiter(structural, open, "(", ")");
+    if (close < 0 || close > body.end) continue;
+    calls.push({
+      method: "eval",
+      symbol: "eval",
+      line: lineAt(source, offset),
+      arguments: splitArgumentRanges(structural, open + 1, close).map((range) =>
+        trimSourceRange(source, range),
+      ),
+    });
+  }
+  return calls;
+}
+
+function bodyHasNamedParameter(
+  structural: string,
+  body: Range,
+  name: string,
+): boolean {
+  const close = structural.lastIndexOf(")", body.start - 1);
+  if (close < Math.max(0, body.start - 8192)) return false;
+  const open = matchingOpeningStructuralDelimiter(structural, close, "(", ")");
+  if (open < 0) return false;
+  const exact = new RegExp(
+    String.raw`^(?:\.\.\.\s*)?${escapeRegularExpression(name)}(?:\s*[?:=].*)?$`,
+    "u",
+  );
+  return splitArgumentRanges(structural, open + 1, close).some((range) =>
+    exact.test(structural.slice(range.start, range.end).trim()),
+  );
 }
 
 function isNodeRuntimeExecutable(source: string, range: Range): boolean {

@@ -6972,6 +6972,65 @@
       "expected": []
     },
     {
+      "id": "node-mcp-v2-code-injection",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into direct JavaScript eval, so a string schema becomes executable source rather than a constrained arithmetic value.",
+      "fixture": "fixtures/node-mcp-v2-code-injection",
+      "findingsPaths": [
+        "node-mcp-v2-code-injection/run-1/findings.json",
+        "node-mcp-v2-code-injection/run-2/findings.json",
+        "node-mcp-v2-code-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-code-injection",
+          "cwe": ["CWE-94", "CWE-95"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["expression", "tool input", "callback input"],
+            ["evaluateExpression", "same-file helper", "helper call"],
+            ["eval", "JavaScript source", "code evaluation"],
+            ["inputSchema", "string schema", "schema validation"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["calculate-expression", "registerTool", "tool callback"],
+            ["evaluateExpression", "same-file helper", "helper call"],
+            ["eval", "dynamic code", "JavaScript source"],
+            ["in-process", "code execution", "code injection"]
+          ],
+          "forbiddenText": [
+            "string schema prevents code injection",
+            "the witness executed an attacker payload",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-arithmetic-parser",
+      "description": "The topology-matched MCP v2 control preserves expression input, the same helper and response, and useful arithmetic while an explicit two-operand grammar converts numeric tokens without dynamic JavaScript evaluation.",
+      "fixture": "fixtures/node-mcp-v2-arithmetic-parser",
+      "findingsPaths": [
+        "node-mcp-v2-arithmetic-parser/run-1/findings.json",
+        "node-mcp-v2-arithmetic-parser/run-2/findings.json",
+        "node-mcp-v2-arithmetic-parser/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "node-mcp-v2-ssrf",
       "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into the global fetch destination with a bounded timeout and returned response text.",
       "fixture": "fixtures/node-mcp-v2-ssrf",
