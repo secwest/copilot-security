@@ -418,7 +418,11 @@ host gap inventories and resumes the mandatory correction and deterministic
 re-audit series. If the configured session budget is exhausted, the remaining
 drafts still have to pass deterministic workbench normalization, validation,
 and sealing before any partial result can survive; missing drafts use ordinary
-fresh-session scan recovery.
+fresh-session scan recovery. A typed closure-exhaustion failure may prepare and
+retain valid partial drafts, but it remains terminal to that scanner process:
+it cannot be promoted into a completed scan. An outer benchmark or service
+retry policy can therefore preserve the failed attempt and start from a fresh
+output root without mistaking partial evidence for success.
 
 Model turns occasionally leave complete flow-style object literals instead of
 strict JSON. Before workbench sealing, the host may normalize only bounded,

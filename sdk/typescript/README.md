@@ -440,7 +440,11 @@ reads, receipts, or summaries cannot create direct-review evidence. Direct
 writes to host-owned inventory files are denied, and the original in-scope
 inventory digest is verified independently by both completion phases. Native
 AI-credit limits apply per fresh session; scanner-owned cost tracking is
-cumulative across all attempt roots and their subagents.
+cumulative across all attempt roots and their subagents. If host-proven closure
+still has gaps after the bounded session budget, the SDK prepares any valid
+partial drafts but rejects the scan with `ScanClosureIncompleteError`; it does
+not return a completed `ScanResult`. This preserves evidence while allowing an
+outer runner to perform a fresh output-root retry.
 Scanner-owned state is isolated under `COPILOT_SECURITY_HOME` (default:
 `~/.copilot-security`). `COPILOT_HOME` is read only as the source of existing
 Copilot CLI authentication; a private copy is prepared under the scanner-owned

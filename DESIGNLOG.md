@@ -2,6 +2,42 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Keep exhausted closure terminal across process-level retries
+
+**Observed acceptance failure.** Live Worker campaign
+`981289ac3a80716fcd528ed3f2d21069cf8cd3770cfc8b525e29f95ebc10aecd`
+completed both deep/high Copilot scans on attempt one with complete coverage,
+one true positive, no false positive, no false negative, and no allowance,
+authentication, rate-limit, classifier, transport, or timeout event. The
+negative control correctly produced no finding. The exploit produced the exact
+critical Worker-eval finding, but its validation and attack path omitted some
+field-local schema, helper, startup, and execution terms. The deterministic
+quality auditor retained one gap after exhausting the isolated-session budget.
+The API prepared those valid partial drafts and then incorrectly converted the
+typed `ScanClosureIncompleteError` into a completed scan. Consequently, the
+benchmark's process-level `--max-attempts` policy never received a failure to
+retry, and the semantic case gate correctly rejected the sealed output.
+
+**Accepted boundary.** Deterministic finalization may still normalize and
+prepare partial drafts after closure exhaustion so evidence is not lost. It
+must then rethrow the typed closure failure before `complete-scan`, result
+collection, or receipt publication. Ordinary stream termination after complete
+valid drafts retains its existing recovery path; known host-proven closure gaps
+do not. A benchmark or service supervisor can now archive the failed output and
+start a genuinely fresh scan without weakening field-local evidence gates or
+misreporting partial output as complete.
+
+**Ground-truth correction and regression evidence.** The same preflight found
+that the new manifest still pointed at line 9 while the executable
+`new Worker(expression, { eval: true })` sink and deterministic framework row
+are at line 12. Ground truth now uses line 12, and the MCP regression directly
+compares that expectation with the generated sink path and line. The combined
+manifest/model lane passes 69 tests and 2,871 assertions. After a fresh build,
+the affected Windows event, retry, CLI, and real credential-ACL lane passes 152
+tests with 1,448 assertions and one intentional platform skip. Native WSL
+passes 65 tests and 269 assertions with one Windows-launcher skip. Formatting,
+TypeScript checking, and the production advisory audit are clean.
+
 ## 2026-08-28 — Treat MCP Worker eval mode as an immediate execution lifecycle
 
 **Comparative gap.** The MCP pass already closed direct global `eval`, compiled

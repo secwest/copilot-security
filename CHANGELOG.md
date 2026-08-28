@@ -6,6 +6,17 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Kept exhausted host-proven coverage or finding-quality closure terminal after
+  deterministic draft preparation. Validated partial evidence remains
+  recoverable, but it can no longer be converted into a completed scan, clean
+  result, or successful benchmark receipt. Outer benchmark and service retry
+  policies now receive the typed closure failure and can start a genuinely
+  fresh scanner attempt.
+- Corrected the Worker benchmark expectation from stale line 9 to the actual
+  line-12 `new Worker(expression, { eval: true })` execution sink. A direct
+  regression binds the manifest location to the deterministic framework row,
+  preventing future fixture drift from turning a true detection into a
+  misleading semantic failure.
 - Added deterministic MCP code-injection coverage for tool input reaching
   argument zero of the exact Node `worker_threads` or `node:worker_threads`
   `Worker` constructor with an object-literal `eval: true` option. The model

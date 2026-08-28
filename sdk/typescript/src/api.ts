@@ -1835,6 +1835,9 @@ export async function runScanEvents(
         try {
           usage = (await options.onFinalize(usage)) ?? usage;
           finalized = true;
+          if (failure instanceof ScanClosureIncompleteError) {
+            throw failure;
+          }
           status = "completed";
           try {
             options.onRecovered?.(failure);

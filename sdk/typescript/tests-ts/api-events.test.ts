@@ -456,10 +456,11 @@ describe("one-shot scan events", () => {
     });
   });
 
-  test("preserves exhausted closure identity when deterministic finalization saves partial artifacts", async () => {
+  test("preserves partial artifacts but rejects an exhausted closure", async () => {
     const root = await temporaryDirectory();
     const scanDir = join(root, "scan");
     let recovered: Error | null = null;
+    let finalized = 0;
     async function* exhaustedClosure(): AsyncGenerator<ThreadEvent> {
       yield { type: "thread.started", thread_id: "thread-partial-closure" };
       yield {
@@ -472,43 +473,48 @@ describe("one-shot scan events", () => {
       };
     }
 
-    const result = await runScanEvents({
-      thread: {
-        id: null,
-        async runStreamed() {
-          return { events: exhaustedClosure() };
+    let rejection: unknown = null;
+    try {
+      await runScanEvents({
+        thread: {
+          id: null,
+          async runStreamed() {
+            return { events: exhaustedClosure() };
+          },
         },
-      },
-      events: exhaustedClosure(),
-      signal: new AbortController().signal,
-      scanDir,
-      pluginRoot: PLUGIN_ROOT,
-      expectation: {
-        repository: "/repository",
-        repositoryRevision: "deadbeef",
-        target: { kind: "repository", paths: [] },
-        mode: "standard",
-        pluginVersion: "0.1.0",
-      },
-      recoverIncompleteWithFinalize: true,
-      onFinalize: async (usage) => {
-        await copyCompletedScan(root);
-        return usage;
-      },
-      onRecovered: (failure) => {
-        recovered = failure;
-      },
-    });
+        events: exhaustedClosure(),
+        signal: new AbortController().signal,
+        scanDir,
+        pluginRoot: PLUGIN_ROOT,
+        expectation: {
+          repository: "/repository",
+          repositoryRevision: "deadbeef",
+          target: { kind: "repository", paths: [] },
+          mode: "standard",
+          pluginVersion: "0.1.0",
+        },
+        recoverIncompleteWithFinalize: true,
+        onFinalize: async (usage) => {
+          finalized += 1;
+          await copyCompletedScan(root);
+          return usage;
+        },
+        onRecovered: (failure) => {
+          recovered = failure;
+        },
+      });
+    } catch (error) {
+      rejection = error;
+    }
 
-    expect(recovered).toBeInstanceOf(ScanClosureIncompleteError);
-    expect(recovered).toMatchObject({
+    expect(finalized).toBe(1);
+    expect(recovered).toBeNull();
+    expect(rejection).toBeInstanceOf(ScanClosureIncompleteError);
+    expect(rejection).toMatchObject({
       findingQualityGapCount: 2,
       coverageGapCount: 474,
     });
-    expect((recovered as unknown as Error).message).not.toContain(
-      "private model text",
-    );
-    expect(result.threadId).toBe("thread-partial-closure");
+    expect((rejection as Error).message).not.toContain("private model text");
   });
 
   test("recovers a thrown complete-draft signal when deterministic finalization accepts the artifacts", async () => {
