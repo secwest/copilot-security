@@ -64,6 +64,39 @@ manifest reaches 14 cases and the canonical corpus reaches 149 pairs, 298
 cases, and 894 scan positions. Focused Kotlin plus canonical regression passes
 45 tests and 2,521 assertions; TypeScript checking is clean.
 
+**Cross-platform and distribution acceptance.** After rebuilding the runtime
+from exact public revision
+`5c67fdc62f46c365438394c9417d56a8f2b0df46`, Windows passes 1,898 tests and
+14,166 assertions across 208 files in 475.85 seconds, with 27 intentional
+platform/integration skips and no failures. Ubuntu/WSL passes 158 tests and
+3,788 assertions across the focused Kotlin/corpus/residual/transport/package
+lane, with one Windows-launcher skip and no failure. The production dependency
+audit reports no known vulnerabilities.
+
+The exact-source package contains 291 entries. POSIX-strict and Windows
+inspection plus two isolated installs per operating system validate the public
+import, executable CLI, and all 79 bundled plugin files. It occupied 2,256,002
+packed and 11,858,432 unpacked bytes, retained `-rwxr-xr-x` on the launcher,
+and had SHA-1 `3df883b58a5105b6606981480a370c1e09680ed6` and SHA-256
+`3bebb4015b127e588173c00dc7c0c7ca532c69a4b790eb1c00b0313c661b0c43`.
+The archive was removed after validation.
+
+Two residual inventories of a disposable tracked-only archive are
+byte-identical at the 256-record bound and 553,364 bytes, with SHA-256
+`e0e02c0a5fd199ecf86d809957031322d5796e158a639fd726a70acaf1ffefcd`.
+When rooted independently at the paired fixtures, the exploit produces exactly
+one `kotlin-ktor-command-injection` framework row whose sink is executable
+selection and whose propagator is the delegated `env` launcher; the fixed
+`printf` argv control produces zero. The tracked-only archive prevents
+unversioned workspace content from entering self-review and was removed after
+verification.
+
+All eleven hosted families pass the same implementation revision: Node
+`33129523493`, container `33129523472`, Kotlin `33129523509`, Java
+`33129523483`, .NET `33129523467`, Go `33129523465`, Rust `33129523461`, Ruby
+`33129523481`, PHP `33129523514`, Windows GUI `33129523503`, and Linux GUI
+`33129523448`.
+
 ## 2026-08-27 — Summarize exact same-file ProcessBuilder helpers
 
 **Why a helper boundary matters.** Kotlin applications commonly keep process
