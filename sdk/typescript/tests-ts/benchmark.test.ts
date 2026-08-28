@@ -513,6 +513,10 @@ describe("effectiveness benchmark", () => {
         "node-mcp-v2-function-fixed-grammar",
       ],
       ["node-mcp-v2-worker-eval-injection", "node-mcp-v2-worker-data-boundary"],
+      [
+        "node-mcp-v2-sqlite-sql-injection",
+        "node-mcp-v2-sqlite-bound-parameters",
+      ],
       ["node-mcp-v2-regex-injection", "node-mcp-v2-fixed-patterns"],
       ["node-mcp-v2-ssrf", "node-mcp-v2-fixed-destination"],
       ["node-mcp-v2-path-traversal", "node-mcp-v2-fixed-file"],

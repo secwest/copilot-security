@@ -2,6 +2,93 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Close the MCP tool-input to built-in SQLite execution boundary
+
+**Comparative gap.** The dedicated MCP pass already modeled process, code,
+worker, regular-expression, filesystem, and network capabilities, but it did
+not model database execution. Generic HTTP SQL hypotheses do not establish an
+MCP tool registration as their source. Node's official
+[`node:sqlite` documentation](https://nodejs.org/api/sqlite.html) states that
+`DatabaseSync.exec(sql)` executes SQL strings and recommends prepared
+statements with bound parameters to protect against SQL injection. The current
+official [CodeQL JavaScript library
+guide](https://codeql.github.com/docs/codeql-language-guides/codeql-library-for-javascript/)
+lists SQL models for packages such as `mysql`, `pg`, `sqlite3`, `mssql`, and
+Sequelize, but does not list the built-in `node:sqlite` module. This makes an
+exact MCP-to-built-in-SQLite path a useful, independently defensible coverage
+addition rather than a generic API-name rule.
+
+**Accepted source and sink.** A structured row requires the existing exact MCP
+v1 or stable-v2 registration and schema proof, tool-derived data in SQL
+argument zero, and a live module-scope instance constructed from the exact
+`node:sqlite` `DatabaseSync` binding. Named aliases, namespace/default imports,
+CommonJS destructures or receivers, TypeScript import-equals, one stable
+instance alias, local assignments, and same-file helper summaries preserve the
+path. The sink is `DatabaseSync.exec` because it executes the supplied SQL
+grammar directly; tool data passed only to a `StatementSync` execution method
+after fixed `prepare` text is parameter data and remains negative.
+
+**Fail-closed identity and lifecycle.** Constructor calls with anything other
+than one proven database argument are declined because their open-state and
+options are outside this bounded model. Construction inside a callback,
+`sqlite3`, local lookalikes, constructor or namespace replacement, receiver or
+`exec` replacement, prototype replacement, local receiver shadowing, and a
+direct or stable-alias `close()` before execution all suppress the row. The
+close check intentionally treats a conditional earlier close as unresolved
+rather than claiming a high-confidence executable sink. It handles a proven
+module-scope close and handler/helper-local closes but does not guess through
+arbitrary interprocedural resource lifecycles.
+
+**Evidence contract.** The model emits `node-mcp-tool-sql-injection`, CWE-89,
+and distinct `mcp-tool-sqlite-database` and `mcp-tool-sql-execution`
+propagators. Validation and attack path must each independently name the MCP
+source and field, schema boundary, same-file helper where present, exact
+`node:sqlite`/`DatabaseSync` identity, `exec` argument-zero SQL edge, grammar
+change, prepared/bound-parameter counterfactual, and the least concrete
+database integrity or confidentiality consequence. Correction guidance rejects
+public-reachability and full-database-compromise claims that repository
+evidence does not establish. Any dynamic validation is restricted to a
+disposable in-memory database with fixed inert rows.
+
+**Executable benchmark and drift repair.** Both twins use MCP SDK 2.0.0, Zod
+4.4.3, the same reachable stdio launcher, and an in-memory database. The
+exploit interpolates one fixed witness value into an `INSERT` passed through a
+same-file helper to `exec`; the value terminates the first literal and adds one
+second inert `INSERT`. The control keeps SQL fixed and binds the exact value to
+a `?` placeholder. Windows Node 24.15.0 and WSL Node 22.23.1 reproduce two
+rows versus one literal row without persistent state or external effects. The
+strict MCP manifest now has 18 cases; the canonical corpus has 165 pairs, 330
+cases, and 990 repeated positions. The specialized and canonical Worker and
+SQLite locations are now directly compared with generated framework rows; this
+also repaired the canonical Worker's stale line-9 expectation to its actual
+line-12 sink.
+
+**Acceptance evidence.** Focused Windows tests pass 74 tests and 2,941
+assertions. Native WSL passes the model, canonical benchmark, and residual-risk
+lane with 141 tests and 4,001 assertions. The complete Windows aggregate passes
+1,992 tests and 15,140 assertions across 210 files, with 27 intentional
+platform/environment skips and no unresolved failure. Five initial runner
+failures correctly reported that compiled output was stale; the other initial
+failure was the managed shell denying private Windows ACL replacement. After a
+clean build and native host-permission rerun, all 48 affected tests and 242
+assertions pass, including the dedicated `copilot-security-home` isolation
+test. Formatting, generated-model drift, TypeScript checking, and the clean
+production build pass. Production audit reports no known vulnerabilities. The
+299-entry, 2,348,253-byte package has SHA-256
+`c276d1d2bb300cb5ca4ef020b4e744a1834b1978884d72f90587e9890125ebfc`
+and passes isolated Windows and WSL public-import, executable-CLI, and all 79
+bundled-plugin checks.
+
+Independently rooted fixture inventories prove the intended boundary: the
+exploit has one exact MCP source at `src/server.mjs:33`, helper call at line 34,
+construction at line 5, and CWE-89 `database.exec:sql[0]` sink at line 19; its
+3,336-byte
+inventory has SHA-256
+`e402fe38490734c1923e3cc35038ff0e5de17ca54caf8c9c2a0a99fece479378`.
+The prepared/bound control emits no SQL row; its 1,094-byte inventory has
+SHA-256
+`a0c9ffed7899f78a1b7e9dbe0bdeb4d9f2201d01a444eb3890f32524da998f89`.
+
 ## 2026-08-28 — Keep exhausted closure terminal across process-level retries
 
 **Observed acceptance failure.** Live Worker campaign

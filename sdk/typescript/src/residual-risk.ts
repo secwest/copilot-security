@@ -4296,6 +4296,18 @@ const NODE_MCP_TOOL_REGEX_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-400", "CWE-730", "ReDoS", "denial of service"],
 ] as const;
 
+const NODE_MCP_TOOL_SQL_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["MCP tool", "registerTool", "server.tool", "tool callback"],
+  ["tool input", "callback input", "LLM-controlled", "client-controlled"],
+  ["inputSchema", "schema validation", "string schema"],
+  ["node:sqlite", "built-in SQLite", "DatabaseSync"],
+  ["DatabaseSync.exec", "database.exec", "exec(sql)", "SQL execution"],
+  ["SQL text", "query string", "argument zero", "sql[0]"],
+  ["SQL injection", "query structure", "SQL grammar"],
+  ["prepared statement", "bound parameter", "placeholder"],
+  ["CWE-89", "database confidentiality", "database integrity"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4339,6 +4351,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_MCP_TOOL_REGEX_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_MCP_TOOL_REGEX_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-mcp-tool-sql-injection",
+    {
+      validation: NODE_MCP_TOOL_SQL_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_MCP_TOOL_SQL_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -45991,6 +46010,20 @@ function nodeMcpToolEvidenceRequirements(
       const executionImpact = ["code execution", "code injection"];
       validation.push(binding, startup, executionImpact);
       attackPath.push(binding, startup, executionImpact);
+    } else if (kind === "mcp-tool-sqlite-database") {
+      const binding = [symbol, "node:sqlite", "DatabaseSync"];
+      validation.push(binding);
+      attackPath.push(binding);
+    } else if (kind === "mcp-tool-sql-execution") {
+      const execution = [
+        symbol,
+        "DatabaseSync.exec",
+        "database.exec",
+        "exec(sql)",
+        "SQL execution",
+      ];
+      validation.push(execution);
+      attackPath.push(execution);
     } else if (kind === "mcp-tool-code-linking") {
       validation.push([
         symbol,

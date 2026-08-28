@@ -38,7 +38,10 @@ The package is ESM-only and provides:
   request-to-standard-library-pickle hypotheses that preserve argument zero
   and relative wrappers while rejecting serialization APIs, fixed or
   wrong-role data, star expansion, reassignment, member replacement, and local
-  module shadows; and request-to-PyYAML unsafe-loader hypotheses that preserve
+  module shadows; an ownership-sensitive MCP model that preserves exact tool
+  input through same-file helpers into process, code-evaluation, regular-
+  expression, built-in `node:sqlite` SQL, filesystem-path, and network sinks;
+  and request-to-PyYAML unsafe-loader hypotheses that preserve
   the stream argument and relative wrappers while rejecting safe/full loaders,
   fixed data, reassignment, and local module shadows; including JDK
   `HttpClient`, Spring `RestTemplate`, reactive Spring `WebClient`, and

@@ -617,7 +617,8 @@ node benchmarks/run-benchmark.mjs `
 ```
 
 The Node MCP tool-handler lane uses the real stable TypeScript server package
-and separates six tool-controlled capability boundaries across eight matched pairs. One pair contrasts a tool
+and separates seven tool-controlled capability boundaries across nine matched
+pairs. One pair contrasts a tool
 field reaching a shell command with an explicit end-of-options argv control.
 A second proves that fixed `process.execPath` is still unsafe when a
 dash-prefixed tool value appears before `--`, then preserves it as data in the
@@ -629,8 +630,10 @@ data passed to fixed source. A fifth contrasts an executed tool-supplied
 worker source with a fixed server-owned Worker program that receives only
 parsed numeric and allowlisted operator values through structured-cloned
 `workerData`. This preserves `Worker(..., { eval: true })` on both sides while
-isolating the code/data boundary. A sixth contrasts an executed tool-supplied
-regular-expression pattern
+isolating the code/data boundary. A sixth contrasts tool-derived SQL executed
+by the official built-in `node:sqlite` `DatabaseSync.exec` API with fixed SQL
+whose tool value is passed only as a prepared-statement bound parameter. A
+seventh contrasts an executed tool-supplied regular-expression pattern
 over a separately bounded tool-supplied subject with an allowlisted map of fixed
 operator-owned expressions. The other pairs contrast a tool-selected fetch destination with a fixed
 loopback origin whose body alone contains tool data, and a tool-selected

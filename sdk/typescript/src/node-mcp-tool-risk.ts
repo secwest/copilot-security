@@ -13,6 +13,7 @@ const WORKER_THREAD_MODULES = new Set([
   "worker_threads",
   "node:worker_threads",
 ]);
+const SQLITE_MODULES = new Set(["node:sqlite"]);
 const FS_MODULES = new Set([
   "fs",
   "fs/promises",
@@ -154,6 +155,7 @@ type McpModelId =
   | "node-mcp-tool-command-injection"
   | "node-mcp-tool-path-traversal"
   | "node-mcp-tool-regex-injection"
+  | "node-mcp-tool-sql-injection"
   | "node-mcp-tool-ssrf";
 type McpSinkKind =
   | "mcp-tool-code-evaluation"
@@ -163,6 +165,7 @@ type McpSinkKind =
   | "mcp-tool-interpreter-option"
   | "mcp-tool-network-destination"
   | "mcp-tool-regular-expression"
+  | "mcp-tool-sql-query"
   | "mcp-tool-shell-command"
   | "mcp-tool-shell-enabled-spawn";
 
@@ -233,6 +236,7 @@ export interface NodeMcpToolRiskRecord {
         | readonly ["CWE-22", "CWE-73"]
         | readonly ["CWE-78", "CWE-88"]
         | readonly ["CWE-88", "CWE-94"]
+        | readonly ["CWE-89"]
         | readonly ["CWE-94", "CWE-95"]
         | readonly ["CWE-400", "CWE-730"]
         | readonly ["CWE-918"];
@@ -249,8 +253,8 @@ export interface NodeMcpToolRiskRecord {
 
 /**
  * Finds exact MCP SDK tool-input flows to Node process, code-evaluation,
- * regular-expression, filesystem, and network sinks. The pass is intentionally
- * bounded and ownership-sensitive: unresolved imports, schema-less v2
+ * regular-expression, SQL, filesystem, and network sinks. The pass is
+ * intentionally bounded and ownership-sensitive: unresolved imports, schema-less v2
  * callbacks, unsupported callback forms, and shadowed globals produce no
  * framework row for later stages to over-trust.
  */
@@ -279,6 +283,17 @@ export function nodeMcpToolRiskRecords(
     }
   }
   const workerBindings = bindingsForModules(imports, WORKER_THREAD_MODULES);
+  const sqliteBindings = bindingsForModules(imports, SQLITE_MODULES);
+  for (const [local, imported] of sqliteBindings.direct) {
+    if (imported === "default") {
+      sqliteBindings.namespaces.set(local, "node:sqlite");
+    }
+  }
+  const sqliteDatabases = constructedSqliteDatabases(
+    source,
+    structural,
+    sqliteBindings,
+  );
   const filesystemBindings = bindingsForModules(imports, FS_MODULES);
   for (const [local, imported] of filesystemBindings.direct) {
     if (imported === "default" || imported === "promises") {
@@ -303,6 +318,7 @@ export function nodeMcpToolRiskRecords(
     commandBindings,
     evaluationBindings,
     workerBindings,
+    sqliteDatabases,
     filesystemBindings,
     fetchBindings,
     httpBindings,
@@ -323,6 +339,7 @@ export function nodeMcpToolRiskRecords(
         workerBindings,
       ),
       ...regexSinks(source, structural, registration, taint),
+      ...sqliteSinks(source, structural, registration, taint, sqliteDatabases),
       ...filesystemSinks(
         source,
         structural,
@@ -350,11 +367,13 @@ export function nodeMcpToolRiskRecords(
             ? "node-mcp-tool-code-injection"
             : sink.kind === "mcp-tool-regular-expression"
               ? "node-mcp-tool-regex-injection"
-              : sink.kind === "mcp-tool-filesystem-path"
-                ? "node-mcp-tool-path-traversal"
-                : sink.kind === "mcp-tool-interpreter-option"
-                  ? "node-mcp-tool-argument-injection"
-                  : "node-mcp-tool-command-injection";
+              : sink.kind === "mcp-tool-sql-query"
+                ? "node-mcp-tool-sql-injection"
+                : sink.kind === "mcp-tool-filesystem-path"
+                  ? "node-mcp-tool-path-traversal"
+                  : sink.kind === "mcp-tool-interpreter-option"
+                    ? "node-mcp-tool-argument-injection"
+                    : "node-mcp-tool-command-injection";
       const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(lines.length, sink.line + CONTEXT_LINES_AFTER);
       const sourceStart = Math.max(1, registration.line - 2);
@@ -372,24 +391,28 @@ export function nodeMcpToolRiskRecords(
               ? "broken-control:mcp-tool-code-data-boundary"
               : modelId === "node-mcp-tool-regex-injection"
                 ? "broken-control:mcp-tool-regex-pattern-boundary"
-                : modelId === "node-mcp-tool-path-traversal"
-                  ? "broken-control:mcp-tool-filesystem-path-not-confined"
-                  : modelId === "node-mcp-tool-argument-injection"
-                    ? "broken-control:mcp-tool-interpreter-end-of-options-missing"
-                    : "broken-control:mcp-tool-command-data-boundary",
+                : modelId === "node-mcp-tool-sql-injection"
+                  ? "broken-control:mcp-tool-sql-data-boundary"
+                  : modelId === "node-mcp-tool-path-traversal"
+                    ? "broken-control:mcp-tool-filesystem-path-not-confined"
+                    : modelId === "node-mcp-tool-argument-injection"
+                      ? "broken-control:mcp-tool-interpreter-end-of-options-missing"
+                      : "broken-control:mcp-tool-command-data-boundary",
         ],
         priority:
           modelId === "node-mcp-tool-code-injection"
             ? 129
             : modelId === "node-mcp-tool-regex-injection"
               ? 125
-              : modelId === "node-mcp-tool-ssrf"
-                ? 122
-                : modelId === "node-mcp-tool-path-traversal"
-                  ? 124
-                  : modelId === "node-mcp-tool-argument-injection"
-                    ? 126
-                    : 127,
+              : modelId === "node-mcp-tool-sql-injection"
+                ? 126
+                : modelId === "node-mcp-tool-ssrf"
+                  ? 122
+                  : modelId === "node-mcp-tool-path-traversal"
+                    ? 124
+                    : modelId === "node-mcp-tool-argument-injection"
+                      ? 126
+                      : 127,
         startLine,
         endLine,
         excerpt: sourceExcerpt(lines, startLine, endLine),
@@ -417,11 +440,13 @@ export function nodeMcpToolRiskRecords(
                   ? (["CWE-94", "CWE-95"] as const)
                   : modelId === "node-mcp-tool-regex-injection"
                     ? (["CWE-400", "CWE-730"] as const)
-                    : modelId === "node-mcp-tool-path-traversal"
-                      ? (["CWE-22", "CWE-73"] as const)
-                      : modelId === "node-mcp-tool-argument-injection"
-                        ? (["CWE-88", "CWE-94"] as const)
-                        : (["CWE-78", "CWE-88"] as const),
+                    : modelId === "node-mcp-tool-sql-injection"
+                      ? (["CWE-89"] as const)
+                      : modelId === "node-mcp-tool-path-traversal"
+                        ? (["CWE-22", "CWE-73"] as const)
+                        : modelId === "node-mcp-tool-argument-injection"
+                          ? (["CWE-88", "CWE-94"] as const)
+                          : (["CWE-78", "CWE-88"] as const),
           },
           propagators: [
             {
@@ -1109,12 +1134,144 @@ interface HelperSummary {
   sink: Sink;
 }
 
+interface SqliteDatabaseBinding {
+  constructionLine: number;
+  constructionOffset: number;
+  constructorSymbol: string;
+  rootReceiver: string;
+}
+
+function constructedSqliteDatabases(
+  source: string,
+  structural: string,
+  bindings: BindingSet,
+): ReadonlyMap<string, SqliteDatabaseBinding> {
+  const constructors: Array<{
+    expression: string;
+    symbol: string;
+    bindingRoot: string;
+    member?: string;
+  }> = [];
+  for (const [local, imported] of bindings.direct) {
+    if (imported === "DatabaseSync") {
+      constructors.push({
+        expression: escapeRegularExpression(local),
+        symbol: local,
+        bindingRoot: local,
+      });
+    }
+  }
+  for (const [namespace] of bindings.namespaces) {
+    constructors.push({
+      expression: `${escapeRegularExpression(namespace)}\\s*\\.\\s*DatabaseSync`,
+      symbol: `${namespace}.DatabaseSync`,
+      bindingRoot: namespace,
+      member: "DatabaseSync",
+    });
+  }
+
+  const databases = new Map<string, SqliteDatabaseBinding>();
+  for (const constructor of constructors) {
+    const declaration = new RegExp(
+      String.raw`(?:^|[;}\n])\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;\n]+)?\s*=\s*new\s+${constructor.expression}\s*\(`,
+      "gu",
+    );
+    for (const match of structural.matchAll(declaration)) {
+      const offset = match.index! + match[0].lastIndexOf("new");
+      if (!isModuleScopeOffset(structural, offset)) continue;
+      if (
+        identifierWasReassigned(structural, constructor.bindingRoot, offset) ||
+        (constructor.member !== undefined &&
+          memberWasReassigned(
+            structural,
+            constructor.bindingRoot,
+            constructor.member,
+            offset,
+          ))
+      ) {
+        continue;
+      }
+      const open = structural.indexOf("(", offset);
+      const close = matchingStructuralDelimiter(structural, open, "(", ")");
+      if (open < 0 || close < 0) continue;
+      if (callArgumentCount(source, structural, open + 1, close) !== 1)
+        continue;
+      const receiver = match[1]!;
+      databases.set(receiver, {
+        constructionLine: lineAt(source, offset),
+        constructionOffset: offset,
+        constructorSymbol: constructor.symbol,
+        rootReceiver: receiver,
+      });
+    }
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [receiver, database] of [...databases]) {
+      const alias = new RegExp(
+        String.raw`(?:^|[;}\n])\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;\n]+)?\s*=\s*${escapeRegularExpression(receiver)}\s*(?:;|\n|$)`,
+        "gu",
+      );
+      for (const match of structural.matchAll(alias)) {
+        const offset = match.index! + match[0].indexOf(match[1]!);
+        if (
+          databases.has(match[1]!) ||
+          !isModuleScopeOffset(structural, offset) ||
+          identifierWasReassigned(structural, receiver, offset)
+        ) {
+          continue;
+        }
+        databases.set(match[1]!, database);
+        changed = true;
+      }
+    }
+  }
+  return databases;
+}
+
+function callArgumentCount(
+  source: string,
+  structural: string,
+  start: number,
+  end: number,
+): number {
+  if (source.slice(start, end).trim() === "") return 0;
+  let count = 1;
+  let round = 0;
+  let square = 0;
+  let curly = 0;
+  for (let index = start; index < end; index += 1) {
+    const token = structural[index];
+    if (token === "(") round += 1;
+    else if (token === ")") round -= 1;
+    else if (token === "[") square += 1;
+    else if (token === "]") square -= 1;
+    else if (token === "{") curly += 1;
+    else if (token === "}") curly -= 1;
+    else if (token === "," && round === 0 && square === 0 && curly === 0)
+      count += 1;
+  }
+  return count;
+}
+
+function isModuleScopeOffset(structural: string, offset: number): boolean {
+  let depth = 0;
+  for (let index = 0; index < offset; index += 1) {
+    if (structural[index] === "{") depth += 1;
+    else if (structural[index] === "}") depth = Math.max(0, depth - 1);
+  }
+  return depth === 0;
+}
+
 function helperSummaries(
   source: string,
   structural: string,
   commandBindings: BindingSet,
   evaluationBindings: BindingSet,
   workerBindings: BindingSet,
+  sqliteDatabases: ReadonlyMap<string, SqliteDatabaseBinding>,
   filesystemBindings: BindingSet,
   fetchBindings: BindingSet,
   httpBindings: BindingSet,
@@ -1146,6 +1303,7 @@ function helperSummaries(
         commandBindings,
         evaluationBindings,
         workerBindings,
+        sqliteDatabases,
         filesystemBindings,
         fetchBindings,
         httpBindings,
@@ -1193,6 +1351,7 @@ function helperSummaries(
         commandBindings,
         evaluationBindings,
         workerBindings,
+        sqliteDatabases,
         filesystemBindings,
         fetchBindings,
         httpBindings,
@@ -1213,6 +1372,7 @@ function summarizeHelperBody(
   commandBindings: BindingSet,
   evaluationBindings: BindingSet,
   workerBindings: BindingSet,
+  sqliteDatabases: ReadonlyMap<string, SqliteDatabaseBinding>,
   filesystemBindings: BindingSet,
   fetchBindings: BindingSet,
   httpBindings: BindingSet,
@@ -1271,6 +1431,13 @@ function summarizeHelperBody(
         workerBindings,
       ),
       ...regexSinks(source, structural, helperRegistration, taint),
+      ...sqliteSinks(
+        source,
+        structural,
+        helperRegistration,
+        taint,
+        sqliteDatabases,
+      ),
       ...filesystemSinks(
         source,
         structural,
@@ -2297,6 +2464,121 @@ function callIsDirectlyAwaited(structural: string, offset: number): boolean {
   return /\bawait\s*$/u.test(
     structural.slice(Math.max(0, offset - 32), offset),
   );
+}
+
+function sqliteSinks(
+  source: string,
+  structural: string,
+  registration: Registration,
+  taint: readonly TaintBinding[],
+  databases: ReadonlyMap<string, SqliteDatabaseBinding>,
+): Sink[] {
+  if (databases.size === 0) return [];
+  const databaseBindings: BindingSet = {
+    direct: new Map(),
+    namespaces: new Map(
+      [...databases.keys()].map((receiver) => [receiver, "node:sqlite"]),
+    ),
+  };
+  const sinks: Sink[] = [];
+  for (const call of boundCalls(
+    source,
+    structural,
+    registration.body,
+    databaseBindings,
+    new Set(["exec"]),
+  )) {
+    const receiver = call.symbol.split(".")[0];
+    const database =
+      receiver === undefined ? undefined : databases.get(receiver);
+    const sql = call.arguments[0];
+    if (
+      database === undefined ||
+      sql === undefined ||
+      !exactBindingCallIsLive(structural, registration.body, call) ||
+      sqliteDatabaseWasClosed(
+        source,
+        structural,
+        registration,
+        databaseBindings,
+        database,
+        call.offset,
+      ) ||
+      constructorPrototypeMethodWasReplaced(
+        structural,
+        database.constructorSymbol,
+        "exec",
+        call.offset,
+      )
+    ) {
+      continue;
+    }
+    const sourceBinding = liveTaintForRange(
+      structural,
+      sql,
+      registration.body,
+      taint,
+    );
+    if (sourceBinding === undefined) continue;
+    sinks.push({
+      kind: "mcp-tool-sql-query",
+      line: call.line,
+      symbol: `${call.symbol}:sql[0]`,
+      source: {
+        ...sourceBinding,
+        propagators: [
+          ...sourceBinding.propagators,
+          {
+            kind: "mcp-tool-sqlite-database",
+            line: database.constructionLine,
+            symbol: `${database.rootReceiver}=new ${database.constructorSymbol}`,
+          },
+          {
+            kind: "mcp-tool-sql-execution",
+            line: call.line,
+            symbol: `${call.symbol}:sql[0]`,
+          },
+        ],
+      },
+    });
+  }
+  return sinks;
+}
+
+function sqliteDatabaseWasClosed(
+  source: string,
+  structural: string,
+  registration: Registration,
+  bindings: BindingSet,
+  database: SqliteDatabaseBinding,
+  executionOffset: number,
+): boolean {
+  const handlerClose = boundCalls(
+    source,
+    structural,
+    registration.body,
+    bindings,
+    new Set(["close"]),
+  ).some(
+    (call) =>
+      call.offset < executionOffset &&
+      exactBindingCallIsLive(structural, registration.body, call),
+  );
+  if (handlerClose) return true;
+
+  for (const receiver of bindings.namespaces.keys()) {
+    const close = new RegExp(
+      String.raw`(?<![.\w$])${escapeRegularExpression(receiver)}\s*\.\s*close\s*\(`,
+      "gu",
+    );
+    for (const match of structural
+      .slice(database.constructionOffset)
+      .matchAll(close)) {
+      const offset = database.constructionOffset + match.index!;
+      if (isModuleScopeOffset(structural, offset)) return true;
+    }
+  }
+  return false;
 }
 
 function regexSinks(

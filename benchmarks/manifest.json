@@ -7120,8 +7120,8 @@
           "locations": [
             {
               "path": "src/server.mjs",
-              "startLine": 9,
-              "endLine": 9,
+              "startLine": 12,
+              "endLine": 12,
               "lineTolerance": 1
             }
           ],
@@ -7165,6 +7165,73 @@
         "node-mcp-v2-worker-data-boundary/run-1/findings.json",
         "node-mcp-v2-worker-data-boundary/run-2/findings.json",
         "node-mcp-v2-worker-data-boundary/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "node-mcp-v2-sqlite-sql-injection",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into argument zero of built-in node:sqlite DatabaseSync.exec, allowing the input to change SQL statement structure.",
+      "fixture": "fixtures/node-mcp-v2-sqlite-sql-injection",
+      "findingsPaths": [
+        "node-mcp-v2-sqlite-sql-injection/run-1/findings.json",
+        "node-mcp-v2-sqlite-sql-injection/run-2/findings.json",
+        "node-mcp-v2-sqlite-sql-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-sql-injection",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 19,
+              "endLine": 19,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["term", "tool input", "callback input"],
+            ["recordLookup", "same-file helper", "helper call"],
+            ["node:sqlite", "built-in SQLite", "DatabaseSync"],
+            ["DatabaseSync.exec", "database.exec", "exec(sql)"],
+            ["argument zero", "sql[0]", "SQL text"],
+            ["interpolation", "query structure", "SQL grammar"],
+            ["prepared statement", "bound parameter", "placeholder"],
+            ["CWE-89", "database integrity", "SQL injection"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["record-lookup", "registerTool", "tool callback"],
+            ["recordLookup", "same-file helper", "helper call"],
+            ["node:sqlite", "built-in SQLite", "DatabaseSync"],
+            ["DatabaseSync.exec", "database.exec", "exec(sql)"],
+            ["interpolated SQL", "stacked statement", "query structure"],
+            ["database write", "database integrity", "unauthorized row"],
+            ["prepared statement", "bound parameter", "placeholder"]
+          ],
+          "forbiddenText": [
+            "string schema prevents SQL injection",
+            "every prepared statement is vulnerable",
+            "the witness modified persistent data",
+            "proves the MCP server is publicly reachable",
+            "the host database is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-sqlite-bound-parameters",
+      "description": "The topology-matched MCP v2 control keeps SQL fixed and passes the same tool input only as a StatementSync bound parameter.",
+      "fixture": "fixtures/node-mcp-v2-sqlite-bound-parameters",
+      "findingsPaths": [
+        "node-mcp-v2-sqlite-bound-parameters/run-1/findings.json",
+        "node-mcp-v2-sqlite-bound-parameters/run-2/findings.json",
+        "node-mcp-v2-sqlite-bound-parameters/run-3/findings.json"
       ],
       "expected": []
     },

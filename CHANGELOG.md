@@ -6,6 +6,44 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added deterministic `node-mcp-tool-sql-injection` coverage for exact MCP tool
+  input reaching argument zero of the official built-in `node:sqlite`
+  `DatabaseSync.exec` API. Named, aliased, namespace, default, CommonJS, and
+  TypeScript import-equals bindings are supported, along with a stable database
+  alias and same-file helper propagation. The row preserves the MCP source,
+  schema, helper edge, database construction, SQL execution, and CWE-89 sink.
+- Kept the SQLite model fail closed on `sqlite3` and local lookalikes,
+  constructor options, callback-local or ambiguous construction, reassigned
+  constructors and receivers, replaced prototype or instance methods, and a
+  database closed before execution. Fixed SQL with the same tool value passed
+  through `StatementSync` bound parameters remains a strong negative control.
+  Model-specific validation and attack-path gates independently require the
+  exact MCP, built-in SQLite, SQL-grammar, parameterization, and concrete
+  integrity or confidentiality boundaries.
+- Added a reachable MCP SDK 2.0.0/Zod 4.4.3 exploit/control pair backed by an
+  in-memory `DatabaseSync`. The bounded exploit witness proves that one fixed
+  value changes SQL structure and inserts a second inert row; the control binds
+  that identical value as one SQL scalar and inserts one literal row. Both
+  witnesses pass on Windows Node 24.15.0 and WSL Node 22.23.1 without
+  filesystem, network, subprocess, credential, or persistent-database effects.
+  The strict MCP lane now contains 18 cases across nine matched pairs, and the
+  canonical corpus contains 165 pairs, 330 cases, and 990 repeated positions.
+- Bound the specialized and canonical Worker and SQLite ground-truth locations
+  to their deterministic framework rows, and corrected the canonical Worker
+  sink from stale line 9 to the actual line-12 constructor. Focused Windows
+  acceptance passes 74 tests and 2,941 assertions; native WSL passes 141 tests
+  and 4,001 assertions. The complete Windows aggregate passes 1,992 tests and
+  15,140 assertions across 210 files, with 27 intentional platform/environment
+  skips and no unresolved failures after the clean-build and native-ACL lane.
+  Formatting, generated-model drift, TypeScript checking, and the production
+  build are clean.
+- Production audit reports no known vulnerabilities. A 299-entry,
+  2,348,253-byte npm archive with SHA-256
+  `c276d1d2bb300cb5ca4ef020b4e744a1834b1978884d72f90587e9890125ebfc`
+  passes isolated Windows and WSL public-import, executable-CLI, and all
+  79-bundled-plugin checks. Independently rooted fixtures emit one exact CWE-89
+  row at `src/server.mjs:19` for the exploit and none for the prepared/bound
+  control.
 - Kept exhausted host-proven coverage or finding-quality closure terminal after
   deterministic draft preparation. Validated partial evidence remains
   recoverable, but it can no longer be converted into a completed scan, clean

@@ -35,6 +35,14 @@ ${body}
 `;
 }
 
+function sqliteV2(
+  body: string,
+  sqliteImport = 'import { DatabaseSync } from "node:sqlite";',
+  database = 'const database = new DatabaseSync(":memory:");',
+) {
+  return `${sqliteImport}\n${database}\n${v2(body)}`;
+}
+
 function records(source: string, path = sourcePath): NodeMcpToolRiskRecord[] {
   return nodeMcpToolRiskRecords(path, source.split(/\r?\n/u), source);
 }
@@ -52,8 +60,8 @@ describe("Node MCP tool-input security model", () => {
       cases: Array<{
         id: string;
         expected: Array<{
-          path?: string;
-          line?: number;
+          path: string;
+          line: number;
           lineTolerance?: number;
         }>;
       }>;
@@ -75,6 +83,8 @@ describe("Node MCP tool-input security model", () => {
       "node-mcp-v2-function-fixed-grammar",
       "node-mcp-v2-worker-eval-injection",
       "node-mcp-v2-worker-data-boundary",
+      "node-mcp-v2-sqlite-sql-injection",
+      "node-mcp-v2-sqlite-bound-parameters",
       "node-mcp-v2-regex-injection",
       "node-mcp-v2-fixed-patterns",
       "node-mcp-v2-ssrf",
@@ -106,18 +116,55 @@ describe("Node MCP tool-input security model", () => {
     expect(manifest.cases[9]?.expected).toEqual([]);
     expect(manifest.cases[10]?.expected).toHaveLength(1);
     expect(manifest.cases[10]?.expected[0]).toMatchObject({
+      cwe: ["CWE-89"],
+      acceptableSeverities: ["critical", "high"],
+      path: "src/server.mjs",
+      line: 19,
+      lineTolerance: 1,
+    });
+    expect(manifest.cases[11]?.expected).toEqual([]);
+    expect(manifest.cases[12]?.expected).toHaveLength(1);
+    expect(manifest.cases[12]?.expected[0]).toMatchObject({
       cwe: ["CWE-400", "CWE-730", "CWE-1333"],
       acceptableSeverities: ["critical", "high", "medium"],
       path: "src/server.mjs",
       line: 8,
     });
-    expect(manifest.cases[11]?.expected).toEqual([]);
-    expect(manifest.cases[12]?.expected).toHaveLength(1);
     expect(manifest.cases[13]?.expected).toEqual([]);
     expect(manifest.cases[14]?.expected).toHaveLength(1);
     expect(manifest.cases[15]?.expected).toEqual([]);
+    expect(manifest.cases[16]?.expected).toHaveLength(1);
+    expect(manifest.cases[17]?.expected).toEqual([]);
 
-    for (const index of [6, 7, 8, 9]) {
+    const canonical = JSON.parse(
+      await readFile(join(benchmarkRoot, "manifest.json"), "utf8"),
+    ) as {
+      cases: Array<{
+        id: string;
+        expected: Array<{
+          locations?: Array<{
+            path: string;
+            startLine: number;
+            endLine: number;
+            lineTolerance?: number;
+          }>;
+        }>;
+      }>;
+    };
+    for (const index of [8, 10]) {
+      const specializedCase = manifest.cases[index]!;
+      const canonicalCase = canonical.cases.find(
+        ({ id }) => id === specializedCase.id,
+      );
+      expect(canonicalCase?.expected[0]?.locations?.[0]).toEqual({
+        path: specializedCase.expected[0]!.path,
+        startLine: specializedCase.expected[0]!.line,
+        endLine: specializedCase.expected[0]!.line,
+        lineTolerance: specializedCase.expected[0]!.lineTolerance,
+      });
+    }
+
+    for (const index of [6, 7, 8, 9, 10, 11]) {
       const fixture = join(
         benchmarkRoot,
         "fixtures",
@@ -140,9 +187,10 @@ describe("Node MCP tool-input security model", () => {
       [4, "node-mcp-tool-code-injection"],
       [6, "node-mcp-tool-code-injection"],
       [8, "node-mcp-tool-code-injection"],
-      [10, "node-mcp-tool-regex-injection"],
-      [12, "node-mcp-tool-ssrf"],
-      [14, "node-mcp-tool-path-traversal"],
+      [10, "node-mcp-tool-sql-injection"],
+      [12, "node-mcp-tool-regex-injection"],
+      [14, "node-mcp-tool-ssrf"],
+      [16, "node-mcp-tool-path-traversal"],
     ] as const) {
       const vulnerable = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index]!.id),
@@ -167,6 +215,22 @@ describe("Node MCP tool-input security model", () => {
               "mcp-tool-worker-code-evaluation",
           );
         expect(workerRecord?.frameworkModel.sink).toMatchObject({
+          path: manifest.cases[index]!.expected[0]!.path,
+          line: manifest.cases[index]!.expected[0]!.line,
+        });
+      }
+      if (index === 10) {
+        expect(vulnerable).toContain("mcp-tool-sql-query");
+        expect(vulnerable).toContain("mcp-tool-sqlite-database");
+        const sqlRecord = vulnerable
+          .split(/\r?\n/u)
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as NodeMcpToolRiskRecord)
+          .find(
+            (record) =>
+              record.frameworkModel.sink.kind === "mcp-tool-sql-query",
+          );
+        expect(sqlRecord?.frameworkModel.sink).toMatchObject({
           path: manifest.cases[index]!.expected[0]!.path,
           line: manifest.cases[index]!.expected[0]!.line,
         });
@@ -659,6 +723,146 @@ function RegExp(value: string) { return { test: () => value.length > 0 }; }
         ),
       ),
     ).toEqual([]);
+  });
+
+  test("detects MCP tool input executed as SQL by node:sqlite", () => {
+    const found = records(
+      sqliteV2(
+        "    const sql = `SELECT role FROM users WHERE name = '${command}'`;\n    return database.exec(sql);",
+      ),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel.id).toBe("node-mcp-tool-sql-injection");
+    expect(found[0]?.frameworkModel.source).toMatchObject({
+      kind: "mcp-tool-input",
+      symbol: "sql",
+    });
+    expect(found[0]?.frameworkModel.sink).toMatchObject({
+      kind: "mcp-tool-sql-query",
+      symbol: "database.exec:sql[0]",
+      cweIds: ["CWE-89"],
+    });
+    expect(
+      found[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "mcp-tool-registration",
+      "mcp-tool-local-assignment",
+      "mcp-tool-sqlite-database",
+      "mcp-tool-sql-execution",
+    ]);
+  });
+
+  test("supports official node:sqlite bindings and a stable database alias", () => {
+    for (const [sqliteImport, database, receiver] of [
+      [
+        'import { DatabaseSync as DB } from "node:sqlite";',
+        'const database = new DB(":memory:");',
+        "database",
+      ],
+      [
+        'import * as sqlite from "node:sqlite";',
+        'const database = new sqlite.DatabaseSync(":memory:");',
+        "database",
+      ],
+      [
+        'import sqlite from "node:sqlite";',
+        'const database = new sqlite.DatabaseSync(":memory:");',
+        "database",
+      ],
+      [
+        'const { DatabaseSync: DB } = require("node:sqlite");',
+        'const database = new DB(":memory:");',
+        "database",
+      ],
+      [
+        'const sqlite = require("node:sqlite");',
+        'const database = new sqlite.DatabaseSync(":memory:");',
+        "database",
+      ],
+      [
+        'import sqlite = require("node:sqlite");',
+        'const database = new sqlite.DatabaseSync(":memory:");\nconst auditDatabase = database;',
+        "auditDatabase",
+      ],
+    ] as const) {
+      const found = records(
+        sqliteV2(
+          `    return ${receiver}.exec(command);`,
+          sqliteImport,
+          database,
+        ),
+      );
+      expect(found).toHaveLength(1);
+      expect(found[0]?.frameworkModel.sink.kind).toBe("mcp-tool-sql-query");
+    }
+  });
+
+  test("keeps bound parameters as data and rejects unproved SQLite identity", () => {
+    const controls = [
+      sqliteV2(
+        '    const statement = database.prepare("SELECT role FROM users WHERE name = ?");\n    return statement.get(command);',
+      ),
+      sqliteV2(
+        '    database.exec("SELECT role FROM users");\n    return command;',
+      ),
+      sqliteV2(
+        "    const database = { exec: customExec };\n    return database.exec(command);",
+      ),
+      sqliteV2(
+        "    return database.exec(command);",
+        'import { DatabaseSync } from "sqlite3";',
+      ),
+      sqliteV2(
+        "    return database.exec(command);",
+        "class DatabaseSync { exec(value) { return value; } }",
+      ),
+      sqliteV2(
+        "    return database.exec(command);",
+        'import { DatabaseSync } from "node:sqlite";',
+        'const database = new DatabaseSync(":memory:", options);',
+      ),
+      sqliteV2(
+        "    return database.exec(command);",
+        'import { DatabaseSync } from "node:sqlite";\nDatabaseSync.prototype.exec = customExec;',
+      ),
+      sqliteV2(
+        "    return database.exec(command);",
+        'import { DatabaseSync } from "node:sqlite";',
+        'let database = new DatabaseSync(":memory:");\ndatabase = replacement;',
+      ),
+      sqliteV2(
+        "    return database.exec(command);",
+        'import { DatabaseSync } from "node:sqlite";',
+        'const database = new DatabaseSync(":memory:");\ndatabase.exec = customExec;',
+      ),
+      sqliteV2("    database.close();\n    return database.exec(command);"),
+      sqliteV2(
+        "    return database.exec(command);",
+        'import { DatabaseSync } from "node:sqlite";',
+        'const database = new DatabaseSync(":memory:");\ndatabase.close();',
+      ),
+      `${sqliteV2("    return database.exec(command);")}\ndatabase.close();`,
+    ];
+    for (const control of controls) expect(records(control)).toEqual([]);
+  });
+
+  test("follows MCP SQL text through a same-file helper", () => {
+    const found = records(
+      sqliteV2(
+        "    return runQuery(command);",
+        'import { DatabaseSync } from "node:sqlite";\nfunction runQuery(sql) {\n  return database.exec(sql);\n}',
+      ),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel.id).toBe("node-mcp-tool-sql-injection");
+    expect(
+      found[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "mcp-tool-registration",
+      "mcp-tool-sqlite-database",
+      "mcp-tool-sql-execution",
+      "mcp-tool-helper-call",
+    ]);
   });
 
   test("rejects shadowed and lookalike JavaScript evaluators", () => {
@@ -1858,6 +2062,110 @@ function runCommand(value: string) {
     }
   });
 
+  test("requires built-in SQLite validation and attack-path closure", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-node-mcp-sql-quality-repository-"),
+    );
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-node-mcp-sql-quality-scan-"),
+    );
+    try {
+      const application = sqliteV2(
+        "    return recordLookup(command);",
+        'import { DatabaseSync } from "node:sqlite";\nfunction recordLookup(sql) {\n  return database.exec(sql);\n}',
+      );
+      await writeFile(join(repository, "server.ts"), application, "utf8");
+      const sourceLines = application.split(/\r?\n/u);
+      const sinkLine =
+        sourceLines.findIndex((line) => line.includes("database.exec(sql)")) +
+        1;
+      const finding = {
+        occurrenceId: "occ_node_mcp_sql_quality",
+        taxonomy: { cwe: ["CWE-89"] },
+        locations: [{ path: "server.ts", startLine: sinkLine, role: "sink" }],
+        codeEvidence: [
+          {
+            id: "mcp-sql-sink",
+            path: "server.ts",
+            startLine: sinkLine,
+            code: sourceLines[sinkLine - 1],
+            explanation: "The registered tool input reaches a database call.",
+            role: "sink",
+          },
+        ],
+        validation: {
+          summary: "Static review confirms SQL execution in a helper.",
+          method: "source review and bounded in-memory database witness",
+          exploitWitness: "A fixed inert value changes the observed row count.",
+          negativeControl: "A fixed query binds the same value separately.",
+          evidence: ["mcp-sql-sink"],
+          counterEvidence: "Deployment database privileges remain unknown.",
+          remainingUncertainty: "Persistent deployment data was not tested.",
+        },
+        attackPath: {
+          summary: "An untrusted value may reach a database operation.",
+          dataflow: {
+            source: "mcp-sql-sink",
+            sink: "mcp-sql-sink",
+            outcome: "database query execution",
+          },
+          reachability: {
+            attacker: "MCP client",
+            entrypoint: "tool invocation",
+            outcome: "database integrity change",
+          },
+          brokenControls: ["No SQL grammar boundary"],
+          evidenceRefs: ["mcp-sql-sink"],
+        },
+      };
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      const inventory = await buildResidualRiskInventory(repository);
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      expect(incomplete).toContain("occ_node_mcp_sql_quality");
+      expect(incomplete).toContain("node-mcp-tool-sql-injection");
+      expect(incomplete).toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(incomplete).toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+
+      const closure = [
+        "An MCP tool registerTool callback receives client-controlled tool input from a model tool invocation.",
+        "Its inputSchema string schema proves shape but does not constrain SQL grammar or query structure.",
+        "The term crosses the same-file recordLookup helper into the official node:sqlite built-in SQLite DatabaseSync instance database=new DatabaseSync.",
+        "DatabaseSync.exec executes database.exec:sql[0] SQL text in argument zero, where interpolation permits SQL injection.",
+        "A fixed prepared statement placeholder with a bound parameter is the matched negative control.",
+        "CWE-89 describes the resulting database integrity risk while deployment confidentiality and privileges remain unproved.",
+      ].join(" ");
+      finding.validation.summary = closure;
+      finding.attackPath.summary = closure;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      expect(
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          inventory,
+        ),
+      ).toBe("");
+    } finally {
+      await rm(repository, { recursive: true, force: true });
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
+  });
+
   test("requires regular-expression validation and attack-path closure", async () => {
     const repository = await mkdtemp(
       join(tmpdir(), "copilot-security-node-mcp-regex-quality-repository-"),
@@ -1984,6 +2292,7 @@ function runCommand(value: string) {
     expect(prompt).toContain("For node-mcp-tool-command-injection");
     expect(prompt).toContain("node-mcp-tool-argument-injection");
     expect(prompt).toContain("node-mcp-tool-code-injection");
+    expect(prompt).toContain("node-mcp-tool-sql-injection");
     expect(prompt).toContain("node-mcp-tool-regex-injection");
     expect(prompt).toContain("node-mcp-tool-path-traversal");
     expect(prompt).toContain("schema-less callback receives context");
@@ -1996,6 +2305,9 @@ function runCommand(value: string) {
     expect(prompt).toContain("linkRequests then instantiate then evaluate");
     expect(prompt).toContain("unawaited legacy linking");
     expect(prompt).toContain("fixed side-effect-free arithmetic");
+    expect(prompt).toContain("DatabaseSync.exec");
+    expect(prompt).toContain("StatementSync run, get, all, or iterate");
+    expect(prompt).toContain("disposable in-memory database");
     expect(prompt).toContain("actual test/exec execution");
     expect(prompt).toContain("inert constructor-only code");
     expect(prompt).toContain("small fixed server-owned string");
