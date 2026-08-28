@@ -100,7 +100,8 @@ describe("Node MCP tool-input security model", () => {
       cwe: ["CWE-94", "CWE-95"],
       acceptableSeverities: ["critical", "high"],
       path: "src/server.mjs",
-      line: 9,
+      line: 12,
+      lineTolerance: 1,
     });
     expect(manifest.cases[9]?.expected).toEqual([]);
     expect(manifest.cases[10]?.expected).toHaveLength(1);
@@ -156,6 +157,19 @@ describe("Node MCP tool-input security model", () => {
         expect(vulnerable).toContain("mcp-tool-worker-code-evaluation");
         expect(vulnerable).toContain("mcp-tool-worker-startup");
         expect(vulnerable).toContain("Worker:eval:true");
+        const workerRecord = vulnerable
+          .split(/\r?\n/u)
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as NodeMcpToolRiskRecord)
+          .find(
+            (record) =>
+              record.frameworkModel.sink.kind ===
+              "mcp-tool-worker-code-evaluation",
+          );
+        expect(workerRecord?.frameworkModel.sink).toMatchObject({
+          path: manifest.cases[index]!.expected[0]!.path,
+          line: manifest.cases[index]!.expected[0]!.line,
+        });
       }
       const control = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index + 1]!.id),

@@ -208,7 +208,7 @@
           "cwe": ["CWE-94", "CWE-95"],
           "acceptableSeverities": ["critical", "high"],
           "path": "src/server.mjs",
-          "line": 9,
+          "line": 12,
           "lineTolerance": 1,
           "requireValidation": true,
           "requireAttackPath": true,
