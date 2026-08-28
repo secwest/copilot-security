@@ -221,7 +221,7 @@
           "cwe": ["CWE-78", "CWE-88"],
           "acceptableSeverities": ["critical", "high"],
           "path": "src/main/java/example/DiagnosticsController.java",
-          "line": 19,
+          "line": 20,
           "lineTolerance": 2,
           "requireValidation": true,
           "requireAttackPath": true,

@@ -35,6 +35,34 @@ All notable scanner, application, benchmark, and operational changes are recorde
   the 295-entry, 2,265,816-byte native Ubuntu archive has SHA-1
   `54667c3e5636cc76f55b8f6fa306326babf26203` and SHA-256
   `a5252c2fd6cab03c82e7ad9b3ee37a7d693b235562f0fe23930ba23bf62fc392`.
+- Ran the new copy exploit/control pair through strict live deep Copilot
+  scanning at exact public implementation revision
+  `5fd98134b558f76f088ae192a714ddc236a25098`, with two workers and the
+  bounded ten-attempt recovery policy. Both cases completed on attempt one
+  with complete coverage and no authentication, allowance, rate-limit,
+  classifier, timeout, or retry event. The exploit produced one critical
+  validated finding and the topology-matched argv control produced none, so
+  precision, recall, F1, case accuracy, negative accuracy, stable detection,
+  validation, attack path, code evidence, severity, and completion are all
+  `1`, with zero false positives and false negatives. Campaign
+  `6a0108841ea0f9df03561c4c547e2302e3e9c673ad6c3ef786a3b2de81ccd66f`
+  used 4,090,209 input tokens, including 3,034,221 cached tokens, and 138,474
+  output tokens in 14 minutes 37 seconds of cumulative scanner time.
+- Two deterministic production-build residual inventories of a 3,507-file
+  tracked-only archive of that exact revision are byte-identical at the
+  256-record cap and 564,069 bytes, with SHA-256
+  `8c2dde78157d113b130c384db986f03647a3586a02e06a3bd265a5703ba16488`.
+  The archive SHA-256 is
+  `1eeb737cc951eef9f1cdc8358986f537051660e15e4e679eaa4ab05b11c560e7`.
+  An independently rooted SDK inventory emits no Spring Java command row;
+  the exploit emits exactly one at sink line 20, sourced at line 14, with
+  command-list-mutation, caller-list-binding, and process-execution
+  provenance, while the matched argv control emits none.
+- All eleven hosted workflow families pass the exact implementation revision:
+  Node `33152938924`, container `33152938885`, Java `33152938954`, Kotlin
+  `33152938961`, .NET `33152938917`, Go `33152938948`, Rust `33152938899`,
+  Ruby `33152938895`, PHP `33152938936`, Windows GUI `33152938903`, and Linux
+  GUI `33152938943`.
 - Extended caller-owned Java command state to exact imported and fully
   qualified `java.util.LinkedList` construction, including independent
   collection-copy construction. The model now handles Java 21

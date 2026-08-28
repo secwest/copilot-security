@@ -6804,8 +6804,8 @@
           "locations": [
             {
               "path": "src/main/java/example/DiagnosticsController.java",
-              "startLine": 19,
-              "endLine": 19,
+              "startLine": 20,
+              "endLine": 20,
               "lineTolerance": 2
             }
           ],
