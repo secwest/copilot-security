@@ -6,6 +6,34 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added deterministic MCP code-injection coverage for tool input reaching
+  argument zero of the exact Node `worker_threads` or `node:worker_threads`
+  `Worker` constructor with an object-literal `eval: true` option. The model
+  supports named aliases, namespace imports, CommonJS destructuring, and
+  TypeScript import-equals, including same-file helpers. It records distinct
+  construction and worker-startup evidence because Node executes the string
+  once the worker comes online.
+- Kept the Worker model fail closed on calls without `new`, omitted, false,
+  dynamic, duplicated, spread, or computed eval options, input used only as
+  `workerData`, wrong modules, local and parameter shadows, and replaced direct
+  or namespace bindings. Worker-specific field-local gates require both
+  validation and attack path to name the official binding, argument-zero code
+  edge, literal eval mode, and startup execution; generic Function lifecycle
+  prose is rejected.
+- Added a reachable official MCP SDK 2.0.0/Zod 4.4.3 exploit/control pair. The
+  exploit starts a worker from the tool expression. The topology-matched
+  control retains Worker eval mode but fixes all source, parses an explicit
+  two-operand arithmetic grammar, and transfers only numbers plus an
+  allowlisted operator through structured-cloned `workerData`. Both bounded
+  Windows and WSL witnesses return `42`; the control rejects JavaScript object
+  syntax. The strict MCP lane advances to sixteen cases, and the canonical
+  corpus to 164 pairs, 328 cases, and 984 repeated positions.
+- Focused Windows and native WSL acceptance each pass 51 tests and 490
+  assertions with zero failures, including four official Worker binding forms,
+  helper propagation, adversarial false-positive controls, exact manifest
+  integration, and Worker-specific quality-gate closure. TypeScript checking
+  passes on both hosts.
+
 - Added deterministic compile-to-execution lifecycle coverage for MCP tool input
   that reaches the live global `Function` constructor or exact `node:vm`
   `compileFunction`, `Script`, or `SourceTextModule` bindings. Bare compilation

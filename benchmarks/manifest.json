@@ -7105,6 +7105,70 @@
       "expected": []
     },
     {
+      "id": "node-mcp-v2-worker-eval-injection",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into node:worker_threads Worker argument zero with literal eval:true, making the input JavaScript source that executes when the worker comes online.",
+      "fixture": "fixtures/node-mcp-v2-worker-eval-injection",
+      "findingsPaths": [
+        "node-mcp-v2-worker-eval-injection/run-1/findings.json",
+        "node-mcp-v2-worker-eval-injection/run-2/findings.json",
+        "node-mcp-v2-worker-eval-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-code-injection",
+          "cwe": ["CWE-94", "CWE-95"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["expression", "tool input", "callback input"],
+            ["evaluateExpression", "same-file helper", "helper call"],
+            ["worker_threads", "Worker constructor", "new Worker"],
+            ["eval: true", "eval mode", "JavaScript source"],
+            ["worker startup", "worker is online", "executes once online"],
+            ["inputSchema", "string schema", "schema validation"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["calculate-expression", "registerTool", "tool callback"],
+            ["evaluateExpression", "same-file helper", "helper call"],
+            ["worker_threads", "Worker constructor", "new Worker"],
+            ["eval: true", "eval mode", "dynamic JavaScript source"],
+            ["worker startup", "worker is online", "executes once online"],
+            ["in-process", "code execution", "code injection"]
+          ],
+          "forbiddenText": [
+            "string schema prevents code injection",
+            "workerData contains the JavaScript source",
+            "the witness executed an attacker payload",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-worker-data-boundary",
+      "description": "The topology-matched MCP v2 control retains Worker eval mode but fixes all worker source, parses a two-operand arithmetic grammar, and sends only structured-cloned numeric and allowlisted operator data through workerData.",
+      "fixture": "fixtures/node-mcp-v2-worker-data-boundary",
+      "findingsPaths": [
+        "node-mcp-v2-worker-data-boundary/run-1/findings.json",
+        "node-mcp-v2-worker-data-boundary/run-2/findings.json",
+        "node-mcp-v2-worker-data-boundary/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "node-mcp-v2-regex-injection",
       "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into global RegExp pattern construction and later test execution against an independently supplied 4,096-character subject, permitting nonlinear matching to block the shared Node event loop.",
       "fixture": "fixtures/node-mcp-v2-regex-injection",

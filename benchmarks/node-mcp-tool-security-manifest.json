@@ -200,6 +200,53 @@
       "expected": []
     },
     {
+      "id": "node-mcp-v2-worker-eval-injection",
+      "fixture": "fixtures/node-mcp-v2-worker-eval-injection",
+      "expected": [
+        {
+          "title": "MCP tool input becomes worker JavaScript source through a same-file helper",
+          "cwe": ["CWE-94", "CWE-95"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/server.mjs",
+          "line": 9,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["expression", "tool input", "callback input"],
+            ["evaluateExpression", "same-file helper", "helper call"],
+            ["worker_threads", "Worker constructor", "new Worker"],
+            ["eval: true", "eval mode", "JavaScript source"],
+            ["worker startup", "worker is online", "executes once online"],
+            ["inputSchema", "string schema", "schema validation"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["calculate-expression", "registerTool", "tool callback"],
+            ["evaluateExpression", "same-file helper", "helper call"],
+            ["worker_threads", "Worker constructor", "new Worker"],
+            ["eval: true", "eval mode", "dynamic JavaScript source"],
+            ["worker startup", "worker is online", "executes once online"],
+            ["in-process", "code execution", "code injection"]
+          ],
+          "forbiddenText": [
+            "string schema prevents code injection",
+            "workerData contains the JavaScript source",
+            "the witness executed an attacker payload",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-worker-data-boundary",
+      "fixture": "fixtures/node-mcp-v2-worker-data-boundary",
+      "expected": []
+    },
+    {
       "id": "node-mcp-v2-regex-injection",
       "fixture": "fixtures/node-mcp-v2-regex-injection",
       "expected": [

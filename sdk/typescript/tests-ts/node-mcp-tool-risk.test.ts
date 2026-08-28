@@ -73,6 +73,8 @@ describe("Node MCP tool-input security model", () => {
       "node-mcp-v2-arithmetic-parser",
       "node-mcp-v2-function-constructor",
       "node-mcp-v2-function-fixed-grammar",
+      "node-mcp-v2-worker-eval-injection",
+      "node-mcp-v2-worker-data-boundary",
       "node-mcp-v2-regex-injection",
       "node-mcp-v2-fixed-patterns",
       "node-mcp-v2-ssrf",
@@ -95,18 +97,26 @@ describe("Node MCP tool-input security model", () => {
     expect(manifest.cases[7]?.expected).toEqual([]);
     expect(manifest.cases[8]?.expected).toHaveLength(1);
     expect(manifest.cases[8]?.expected[0]).toMatchObject({
+      cwe: ["CWE-94", "CWE-95"],
+      acceptableSeverities: ["critical", "high"],
+      path: "src/server.mjs",
+      line: 9,
+    });
+    expect(manifest.cases[9]?.expected).toEqual([]);
+    expect(manifest.cases[10]?.expected).toHaveLength(1);
+    expect(manifest.cases[10]?.expected[0]).toMatchObject({
       cwe: ["CWE-400", "CWE-730", "CWE-1333"],
       acceptableSeverities: ["critical", "high", "medium"],
       path: "src/server.mjs",
       line: 8,
     });
-    expect(manifest.cases[9]?.expected).toEqual([]);
-    expect(manifest.cases[10]?.expected).toHaveLength(1);
     expect(manifest.cases[11]?.expected).toEqual([]);
     expect(manifest.cases[12]?.expected).toHaveLength(1);
     expect(manifest.cases[13]?.expected).toEqual([]);
+    expect(manifest.cases[14]?.expected).toHaveLength(1);
+    expect(manifest.cases[15]?.expected).toEqual([]);
 
-    for (const index of [6, 7]) {
+    for (const index of [6, 7, 8, 9]) {
       const fixture = join(
         benchmarkRoot,
         "fixtures",
@@ -128,9 +138,10 @@ describe("Node MCP tool-input security model", () => {
       [2, "node-mcp-tool-argument-injection"],
       [4, "node-mcp-tool-code-injection"],
       [6, "node-mcp-tool-code-injection"],
-      [8, "node-mcp-tool-regex-injection"],
-      [10, "node-mcp-tool-ssrf"],
-      [12, "node-mcp-tool-path-traversal"],
+      [8, "node-mcp-tool-code-injection"],
+      [10, "node-mcp-tool-regex-injection"],
+      [12, "node-mcp-tool-ssrf"],
+      [14, "node-mcp-tool-path-traversal"],
     ] as const) {
       const vulnerable = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index]!.id),
@@ -140,6 +151,11 @@ describe("Node MCP tool-input security model", () => {
       if (index === 6) {
         expect(vulnerable).toContain("mcp-tool-code-construction");
         expect(vulnerable).toContain("Function:code[0]");
+      }
+      if (index === 8) {
+        expect(vulnerable).toContain("mcp-tool-worker-code-evaluation");
+        expect(vulnerable).toContain("mcp-tool-worker-startup");
+        expect(vulnerable).toContain("Worker:eval:true");
       }
       const control = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index + 1]!.id),
@@ -366,6 +382,117 @@ describe("Node MCP tool-input security model", () => {
         records(`${'import * as vm from "node:vm";\n'}${v2(body)}`),
       ).toEqual([]);
     }
+  });
+
+  test("detects exact worker_threads eval source at worker startup", () => {
+    const cases = [
+      [
+        'import { Worker as ThreadWorker } from "node:worker_threads";\n',
+        "    return new ThreadWorker(command, { eval: true });",
+        "ThreadWorker:code[0]",
+      ],
+      [
+        'import * as threads from "node:worker_threads";\n',
+        '    return new threads.Worker(command, { name: "bounded", eval: true });',
+        "threads.Worker:code[0]",
+      ],
+      [
+        'const { Worker: ThreadWorker } = require("worker_threads");\n',
+        "    return new ThreadWorker(command, { eval: true });",
+        "ThreadWorker:code[0]",
+      ],
+      [
+        'import threads = require("node:worker_threads");\n',
+        "    return new threads.Worker(command, { eval: true });",
+        "threads.Worker:code[0]",
+      ],
+      [
+        'import { Worker } from "node:worker_threads";\n',
+        '    return new Worker(command, { "eval": true });',
+        "Worker:code[0]",
+      ],
+    ] as const;
+    for (const [binding, body, symbol] of cases) {
+      const found = records(`${binding}${v2(body)}`);
+      expect(found).toHaveLength(1);
+      expect(found[0]?.frameworkModel.id).toBe("node-mcp-tool-code-injection");
+      expect(found[0]?.frameworkModel.sink.kind).toBe(
+        "mcp-tool-worker-code-evaluation",
+      );
+      expect(found[0]?.frameworkModel.sink.symbol).toBe(symbol);
+      expect(found[0]?.frameworkModel.propagators).toContainEqual(
+        expect.objectContaining({
+          kind: "mcp-tool-code-construction",
+          symbol: expect.stringContaining("new "),
+        }),
+      );
+      expect(found[0]?.frameworkModel.propagators).toContainEqual(
+        expect.objectContaining({
+          kind: "mcp-tool-worker-startup",
+          symbol: expect.stringContaining("eval:true"),
+        }),
+      );
+    }
+  });
+
+  test("follows MCP input through a same-file worker eval helper", () => {
+    const found = records(
+      `${'import { Worker } from "node:worker_threads";\n'}${v2(`
+    return runWorker(command);`)}
+function runWorker(source) {
+  return new Worker(source, { eval: true });
+}`,
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel.sink.kind).toBe(
+      "mcp-tool-worker-code-evaluation",
+    );
+    expect(
+      found[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual([
+      "mcp-tool-registration",
+      "mcp-tool-code-construction",
+      "mcp-tool-worker-startup",
+      "mcp-tool-helper-call",
+    ]);
+  });
+
+  test("keeps workerData as data and fails closed on ambiguous Worker options", () => {
+    const cases = [
+      "    return new Worker(command);",
+      "    return new Worker(command, { eval: false });",
+      "    return new Worker(command, { eval });",
+      "    return Worker(command, { eval: true });",
+      '    return new Worker("const { workerData } = require(\\"node:worker_threads\\");", { eval: true, workerData: command });',
+      "    return new Worker(command, { eval: true, eval: false });",
+      "    return new Worker(command, { ...options, eval: true });",
+      '    return new Worker(command, { ["eval"]: true });',
+    ];
+    for (const body of cases) {
+      expect(
+        records(
+          `${'import { Worker } from "node:worker_threads";\n'}${v2(body)}`,
+        ),
+      ).toEqual([]);
+    }
+  });
+
+  test("rejects replaced, shadowed, and lookalike Worker capabilities", () => {
+    const cases = [
+      `${'import { Worker } from "node:worker_threads";\n'}${v2(
+        "    Worker = SafeWorker;\n    return new Worker(command, { eval: true });",
+      )}`,
+      `${'import * as threads from "node:worker_threads";\n'}${v2(
+        "    threads.Worker = SafeWorker;\n    return new threads.Worker(command, { eval: true });",
+      )}`,
+      `${'import { Worker } from "node:worker_threads";\n'}${v2(
+        "    const Worker = SafeWorker;\n    return new Worker(command, { eval: true });",
+      )}`,
+      `${'import { Worker } from "worker-pool";\n'}${v2(
+        "    return new Worker(command, { eval: true });",
+      )}`,
+    ];
+    for (const source of cases) expect(records(source)).toEqual([]);
   });
 
   test("rejects replaced code constructors, compiled values, and lifecycle methods", () => {
@@ -1610,6 +1737,70 @@ function runCommand(value: string) {
           scanDirectory,
           repository,
           compiledInventory,
+        ),
+      ).toBe("");
+
+      const workerApplication = `${'import { Worker } from "node:worker_threads";\n'}${v2(
+        "    return new Worker(command, { eval: true });",
+      )}`;
+      await writeFile(join(repository, "server.ts"), workerApplication, "utf8");
+      const workerLines = workerApplication.split(/\r?\n/u);
+      const workerLine =
+        workerLines.findIndex((line) => line.includes("new Worker(command")) +
+        1;
+      finding.locations = [
+        { path: "server.ts", startLine: workerLine, role: "sink" },
+      ];
+      finding.codeEvidence = [
+        {
+          id: "mcp-code-sink",
+          path: "server.ts",
+          startLine: workerLine,
+          code: workerLines[workerLine - 1] ?? "",
+          explanation:
+            "The registered tool starts a worker whose source is its input.",
+          role: "sink",
+        },
+      ];
+      finding.validation.summary = lifecycleClosure;
+      finding.attackPath.summary = lifecycleClosure;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      const workerInventory = await buildResidualRiskInventory(repository);
+      const missingWorkerLifecycle = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        workerInventory,
+      );
+      expect(missingWorkerLifecycle).toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(missingWorkerLifecycle).toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+
+      const workerClosure = [
+        "An MCP tool registerTool callback receives client-controlled tool input from a model invocation.",
+        "Its inputSchema string schema proves shape but not an allowed arithmetic grammar.",
+        "The live node:worker_threads new Worker constructor receives that input as argument-zero JavaScript source with literal eval: true.",
+        "Worker eval mode starts code evaluation once the worker is online, providing the explicit worker startup execution step.",
+        "CWE-94 and CWE-95 describe the resulting in-process code injection and code execution boundary.",
+      ].join(" ");
+      finding.validation.summary = workerClosure;
+      finding.attackPath.summary = workerClosure;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      expect(
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          workerInventory,
         ),
       ).toBe("");
     } finally {

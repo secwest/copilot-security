@@ -4259,6 +4259,8 @@ const NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS = [
     "compileFunction",
     "vm.Script",
     "SourceTextModule",
+    "worker_threads",
+    "Worker",
     "runInContext",
     "runInNewContext",
     "runInThisContext",
@@ -4269,6 +4271,8 @@ const NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS = [
     "runInNewContext",
     "runInThisContext",
     "evaluate",
+    "worker startup",
+    "once the worker is online",
     "code evaluation",
   ],
   ["JavaScript source", "code string", "dynamic code", "code evaluation"],
@@ -45959,6 +45963,8 @@ function nodeMcpToolEvidenceRequirements(
         "compileFunction",
         "vm.Script",
         "SourceTextModule",
+        "worker_threads",
+        "Worker",
         "code construction",
       ];
       const execution = [
@@ -45968,9 +45974,21 @@ function nodeMcpToolEvidenceRequirements(
         "runInNewContext",
         "runInThisContext",
         "evaluate",
+        "worker startup",
+        "once the worker is online",
       ];
       validation.push(construction, execution);
       attackPath.push(construction, execution);
+    } else if (kind === "mcp-tool-worker-startup") {
+      const startup = [
+        symbol,
+        "eval: true",
+        "Worker eval mode",
+        "worker startup",
+        "once the worker is online",
+      ];
+      validation.push(startup);
+      attackPath.push(startup);
     } else if (kind === "mcp-tool-code-linking") {
       validation.push([
         symbol,

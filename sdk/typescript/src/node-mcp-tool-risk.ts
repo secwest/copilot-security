@@ -9,6 +9,10 @@ const MCP_MODULES = new Set([
 ]);
 const CHILD_PROCESS_MODULES = new Set(["child_process", "node:child_process"]);
 const VM_MODULES = new Set(["vm", "node:vm"]);
+const WORKER_THREAD_MODULES = new Set([
+  "worker_threads",
+  "node:worker_threads",
+]);
 const FS_MODULES = new Set([
   "fs",
   "fs/promises",
@@ -153,6 +157,7 @@ type McpModelId =
   | "node-mcp-tool-ssrf";
 type McpSinkKind =
   | "mcp-tool-code-evaluation"
+  | "mcp-tool-worker-code-evaluation"
   | "mcp-tool-executable-selection"
   | "mcp-tool-filesystem-path"
   | "mcp-tool-interpreter-option"
@@ -273,6 +278,7 @@ export function nodeMcpToolRiskRecords(
       evaluationBindings.namespaces.set(local, "node:vm");
     }
   }
+  const workerBindings = bindingsForModules(imports, WORKER_THREAD_MODULES);
   const filesystemBindings = bindingsForModules(imports, FS_MODULES);
   for (const [local, imported] of filesystemBindings.direct) {
     if (imported === "default" || imported === "promises") {
@@ -296,6 +302,7 @@ export function nodeMcpToolRiskRecords(
     structural,
     commandBindings,
     evaluationBindings,
+    workerBindings,
     filesystemBindings,
     fetchBindings,
     httpBindings,
@@ -313,6 +320,7 @@ export function nodeMcpToolRiskRecords(
         registration,
         taint,
         evaluationBindings,
+        workerBindings,
       ),
       ...regexSinks(source, structural, registration, taint),
       ...filesystemSinks(
@@ -337,7 +345,8 @@ export function nodeMcpToolRiskRecords(
       const modelId: McpModelId =
         sink.kind === "mcp-tool-network-destination"
           ? "node-mcp-tool-ssrf"
-          : sink.kind === "mcp-tool-code-evaluation"
+          : sink.kind === "mcp-tool-code-evaluation" ||
+              sink.kind === "mcp-tool-worker-code-evaluation"
             ? "node-mcp-tool-code-injection"
             : sink.kind === "mcp-tool-regular-expression"
               ? "node-mcp-tool-regex-injection"
@@ -1105,6 +1114,7 @@ function helperSummaries(
   structural: string,
   commandBindings: BindingSet,
   evaluationBindings: BindingSet,
+  workerBindings: BindingSet,
   filesystemBindings: BindingSet,
   fetchBindings: BindingSet,
   httpBindings: BindingSet,
@@ -1135,6 +1145,7 @@ function helperSummaries(
         { start: bodyOpen + 1, end: bodyClose },
         commandBindings,
         evaluationBindings,
+        workerBindings,
         filesystemBindings,
         fetchBindings,
         httpBindings,
@@ -1181,6 +1192,7 @@ function helperSummaries(
         { start: bodyOpen + 1, end: bodyClose },
         commandBindings,
         evaluationBindings,
+        workerBindings,
         filesystemBindings,
         fetchBindings,
         httpBindings,
@@ -1200,6 +1212,7 @@ function summarizeHelperBody(
   body: Range,
   commandBindings: BindingSet,
   evaluationBindings: BindingSet,
+  workerBindings: BindingSet,
   filesystemBindings: BindingSet,
   fetchBindings: BindingSet,
   httpBindings: BindingSet,
@@ -1255,6 +1268,7 @@ function summarizeHelperBody(
         helperRegistration,
         taint,
         evaluationBindings,
+        workerBindings,
       ),
       ...regexSinks(source, structural, helperRegistration, taint),
       ...filesystemSinks(
@@ -1582,6 +1596,7 @@ function evaluationSinks(
   registration: Registration,
   taint: readonly TaintBinding[],
   bindings: BindingSet,
+  workerBindings: BindingSet,
 ): Sink[] {
   const sinks: Sink[] = [];
   const calls = [
@@ -1622,7 +1637,109 @@ function evaluationSinks(
       bindings,
     ),
   );
+  sinks.push(
+    ...workerEvaluationSinks(
+      source,
+      structural,
+      registration,
+      taint,
+      workerBindings,
+    ),
+  );
   return sinks;
+}
+
+function workerEvaluationSinks(
+  source: string,
+  structural: string,
+  registration: Registration,
+  taint: readonly TaintBinding[],
+  bindings: BindingSet,
+): Sink[] {
+  const sinks: Sink[] = [];
+  for (const call of boundCalls(
+    source,
+    structural,
+    registration.body,
+    bindings,
+    new Set(["Worker"]),
+  )) {
+    if (!exactBindingCallIsLive(structural, registration.body, call)) continue;
+    if (!hasNewPrefix(structural, registration.body, call.offset)) continue;
+    const code = call.arguments[0];
+    const options = call.arguments[1];
+    if (
+      code === undefined ||
+      options === undefined ||
+      !hasExactLiteralTrueProperty(source, structural, options, "eval")
+    ) {
+      continue;
+    }
+    const sourceBinding = liveTaintForRange(
+      structural,
+      code,
+      registration.body,
+      taint,
+    );
+    if (sourceBinding === undefined) continue;
+    sinks.push({
+      kind: "mcp-tool-worker-code-evaluation",
+      line: call.line,
+      symbol: `${call.symbol}:code[0]`,
+      source: {
+        ...sourceBinding,
+        propagators: [
+          ...sourceBinding.propagators,
+          {
+            kind: "mcp-tool-code-construction",
+            line: call.line,
+            symbol: `new ${call.symbol}:code[0]`,
+          },
+          {
+            kind: "mcp-tool-worker-startup",
+            line: call.line,
+            symbol: `${call.symbol}:eval:true`,
+          },
+        ],
+      },
+    });
+  }
+  return sinks;
+}
+
+function hasExactLiteralTrueProperty(
+  source: string,
+  structural: string,
+  range: Range,
+  property: string,
+): boolean {
+  const object = trimRange(structural, range);
+  if (structural[object.start] !== "{") return false;
+  const close = matchingStructuralDelimiter(structural, object.start, "{", "}");
+  if (close !== object.end - 1) return false;
+  let matched = false;
+  for (const entry of splitArgumentRanges(
+    structural,
+    object.start + 1,
+    close,
+  )) {
+    const shape = structural.slice(entry.start, entry.end).trim();
+    if (shape.startsWith("...") || shape.startsWith("[")) return false;
+    const colon = structural.indexOf(":", entry.start);
+    if (colon < 0 || colon >= entry.end) continue;
+    const key = source.slice(entry.start, colon).trim();
+    if (
+      key !== property &&
+      key !== `"${property}"` &&
+      key !== `'${property}'`
+    ) {
+      continue;
+    }
+    if (matched || structural.slice(colon + 1, entry.end).trim() !== "true")
+      return false;
+    matched = true;
+  }
+  return matched;
 }
 
 interface CodeExecutionSite {

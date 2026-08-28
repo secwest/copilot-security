@@ -2,6 +2,67 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Treat MCP Worker eval mode as an immediate execution lifecycle
+
+**Comparative gap.** The MCP pass already closed direct global `eval`, compiled
+`Function`, and exact `node:vm` construction-to-execution lifecycles. It did not
+model Node worker-source evaluation. Node's current
+[`worker_threads` documentation](https://nodejs.org/api/worker_threads.html#new-workerfilename-options)
+states that when `options.eval` is true, the first constructor argument is a
+JavaScript string executed once the worker is online. CodeQL's current
+[`js/code-injection`](https://codeql.github.com/codeql-query-help/javascript/js-code-injection/)
+query establishes attacker-controlled JavaScript evaluation as CWE-94/CWE-95,
+but its public query inventory does not expose a Worker-specific lifecycle
+contract. The current public
+[`mcpaudit`](https://github.com/allenwu-blip/mcpaudit) MCP005 surface lists
+common dynamic evaluators and deliberately performs no taint analysis. Exact
+MCP source-to-Worker flow is therefore a useful beyond-parity addition rather
+than another unowned API-name match.
+
+**Accepted execution boundary.** A row requires an official
+`node:worker_threads` or `worker_threads` binding, a live `new Worker` call,
+tool-derived data in argument zero, and an exact object-literal options argument
+with one uncomputed `eval: true` property. Named imports and aliases, namespace
+imports, CommonJS destructuring or receivers, and TypeScript import-equals are
+accepted. Same-file helper summaries preserve the tool property, code
+construction, worker startup, and helper-call edges. The sink is reported at
+construction because this particular constructor schedules execution itself;
+there is no later `run` method analogous to `vm.Script`.
+
+**Fail-closed shape and identity.** Omitted, false, dynamic, duplicated,
+computed, and spread eval options are rejected because their effective runtime
+value is not proven by the bounded source model. Calls without `new`, wrong
+packages, local or parameter shadows, reassigned direct imports, and replaced
+namespace `Worker` members are rejected. Tool input confined to `workerData`
+is data, not worker source. These choices intentionally decline options-object
+aliases and dynamic merges rather than turning configuration ambiguity into a
+high-severity code-injection claim.
+
+**Evidence and correction contract.** The framework row uses the existing
+`node-mcp-tool-code-injection` identity but a distinct
+`mcp-tool-worker-code-evaluation` sink. It records
+`mcp-tool-code-construction` and `mcp-tool-worker-startup` propagators.
+Validation and attack path must each independently name the MCP tool source,
+string-schema limitation, exact Worker binding and constructor, argument-zero
+JavaScript edge, literal eval mode, execution once online, and CWE-94/CWE-95
+outcome. A report that merely describes a Function invocation cannot close a
+Worker row. Safe correction keeps worker source fixed and server-owned, parses
+the intended input grammar before construction, and transfers only
+structured-cloned values through `workerData`.
+
+**Executable benchmark.** Both MCP 2.0.0/Zod 4.4.3 twins expose the same
+reachable stdio server, expression schema, tool, helper, response, Worker eval
+mode, and bounded promise lifecycle. The exploit places the expression directly
+in Worker source. Its witness executes only two fixed side-effect-free programs
+that return `42` over `parentPort`. The control accepts only numeric `+` and `*`,
+keeps source fixed, passes numbers and an allowlisted operator through
+`workerData`, and rejects object-expression syntax before startup. Neither
+witness touches the filesystem, network, subprocesses, credentials, or
+persistent state. Windows and native WSL each pass 51 focused tests and 490
+assertions plus both witnesses and TypeScript checking. The strict MCP corpus
+now has sixteen cases; the canonical corpus has 164 pairs, 328 cases, and 984
+repeated positions.
+
 ## 2026-08-28 — Close MCP JavaScript compilation lifecycles
 
 **Coverage gap and comparative evidence.** The MCP model recognized direct
