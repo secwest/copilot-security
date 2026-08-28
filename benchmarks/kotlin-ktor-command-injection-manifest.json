@@ -298,6 +298,52 @@
       "id": "kotlin-ktor-resource-command-helper-argv",
       "fixture": "fixtures/kotlin-ktor-resource-command-helper-argv",
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-env-executable-injection",
+      "fixture": "fixtures/kotlin-ktor-resource-env-executable-injection",
+      "expected": [
+        {
+          "title": "Ktor typed resource selects an executable through env",
+          "cwe": ["CWE-78", "CWE-88"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/main/kotlin/example/Diagnostics.kt",
+          "line": 17,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            [
+              "typed resource",
+              "Ktor resource",
+              "@Resource",
+              "DiagnosticResource"
+            ],
+            ["env", "delegating launcher", "delegated launcher"],
+            ["executable selection", "program selection", "command selection"],
+            ["ProcessBuilder", "java.lang.ProcessBuilder", "start"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["env", "delegating launcher", "delegated executable"],
+            ["executable selection", "program selection", "command selection"],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "env always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-env-argv",
+      "fixture": "fixtures/kotlin-ktor-resource-env-argv",
+      "expected": []
     }
   ]
 }

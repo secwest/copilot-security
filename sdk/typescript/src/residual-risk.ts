@@ -4148,7 +4148,6 @@ const KOTLIN_KTOR_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
     "typed resource",
     "@Resource",
   ],
-  ["commandLine", "interpolation", "formatted"],
   [
     "ProcessBuilder",
     "java.lang.ProcessBuilder",
@@ -4162,12 +4161,10 @@ const KOTLIN_KTOR_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
     "command helper",
     "mutator helper",
   ],
-  ["sh -c", "shell", "-c"],
 ] as const;
 
 const KOTLIN_KTOR_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
   ["target", "query value", "request value", "resource value"],
-  ["commandLine", "command string", "shell grammar"],
   [
     "ProcessBuilder",
     "process",
@@ -45721,9 +45718,9 @@ function modelSpecificSinkLocations(
     ) {
       continue;
     }
-    const helperRequirements =
+    const variantRequirements =
       frameworkModelId === "kotlin-ktor-command-injection"
-        ? kotlinProcessHelperEvidenceRequirements(frameworkModel)
+        ? kotlinProcessEvidenceRequirements(frameworkModel)
         : { validation: [], attackPath: [] };
     locations.push({
       frameworkModelId,
@@ -45731,10 +45728,10 @@ function modelSpecificSinkLocations(
         path: sink["path"],
         startLine: Number(sink["line"]),
       },
-      additionalValidationRequirements: helperRequirements.validation.map(
+      additionalValidationRequirements: variantRequirements.validation.map(
         (group) => [...group],
       ),
-      additionalAttackPathRequirements: helperRequirements.attackPath.map(
+      additionalAttackPathRequirements: variantRequirements.attackPath.map(
         (group) => [...group],
       ),
     });
@@ -45742,11 +45739,72 @@ function modelSpecificSinkLocations(
   return locations;
 }
 
-function kotlinProcessHelperEvidenceRequirements(
+function kotlinProcessEvidenceRequirements(
   frameworkModel: Record<string, unknown>,
 ): ModelSpecificFindingRequirements {
   const validation: string[][] = [];
   const attackPath: string[][] = [];
+  const sink = isRecord(frameworkModel["sink"])
+    ? frameworkModel["sink"]
+    : undefined;
+  const sinkKind = typeof sink?.["kind"] === "string" ? sink["kind"] : "";
+  if (sinkKind === "kotlin-process-shell-command") {
+    validation.push(
+      [
+        "commandLine",
+        "command string",
+        "shell grammar",
+        "interpolation",
+        "formatted",
+      ],
+      ["sh -c", "shell", "-c", "cmd.exe", "PowerShell", "batch file"],
+    );
+    attackPath.push(
+      ["commandLine", "command string", "shell grammar"],
+      ["sh -c", "shell", "-c", "cmd.exe", "PowerShell", "batch file"],
+    );
+  } else if (sinkKind === "kotlin-process-interpreter-command") {
+    validation.push([
+      "interpreter command",
+      "interpreter source",
+      "eval flag",
+      "source text",
+    ]);
+    attackPath.push([
+      "interpreter command",
+      "interpreter source",
+      "eval flag",
+      "source text",
+    ]);
+  } else if (sinkKind === "kotlin-process-split-command") {
+    validation.push([
+      "env -S",
+      "split-string",
+      "split command",
+      "command string",
+    ]);
+    attackPath.push([
+      "env -S",
+      "split-string",
+      "split command",
+      "command string",
+    ]);
+  } else if (sinkKind === "kotlin-process-executable-selection") {
+    validation.push([
+      "executable selection",
+      "program selection",
+      "command selection",
+      "program name",
+      "executable name",
+    ]);
+    attackPath.push([
+      "executable selection",
+      "program selection",
+      "command selection",
+      "child executable",
+      "program name",
+    ]);
+  }
   const seenKinds = new Set<string>();
   const propagators = Array.isArray(frameworkModel["propagators"])
     ? frameworkModel["propagators"]
@@ -45762,7 +45820,19 @@ function kotlinProcessHelperEvidenceRequirements(
       /^[A-Za-z_][A-Za-z0-9_]*$/u.test(propagator["symbol"])
         ? propagator["symbol"]
         : undefined;
-    if (kind === "kotlin-process-builder-factory") {
+    if (kind === "kotlin-process-delegated-launcher") {
+      validation.push([
+        "delegating launcher",
+        "delegated launcher",
+        "first non-assignment operand",
+      ]);
+      attackPath.push([
+        "delegating launcher",
+        "delegated launcher",
+        "delegated executable",
+      ]);
+      seenKinds.add(kind);
+    } else if (kind === "kotlin-process-builder-factory") {
       validation.push([
         ...(symbol === undefined ? [] : [symbol]),
         "builder factory",

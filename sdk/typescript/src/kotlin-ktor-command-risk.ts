@@ -38,6 +38,7 @@ interface KotlinPropagator {
     | "kotlin-local-assignment"
     | "kotlin-process-builder-factory"
     | "kotlin-process-command-helper"
+    | "kotlin-process-delegated-launcher"
     | "kotlin-process-helper-call"
     | "kotlin-process-pipeline-assembly"
     | "kotlin-process-pipeline-list-mutation"
@@ -133,6 +134,7 @@ interface KotlinRouteScope {
 type KotlinProcessSinkKind =
   | "kotlin-process-executable-selection"
   | "kotlin-process-interpreter-command"
+  | "kotlin-process-split-command"
   | "kotlin-process-shell-command";
 
 interface KotlinRisk {
@@ -1764,6 +1766,120 @@ function executableBase(value: string): string {
   return value.split(/[\\/]/u).at(-1)?.toLowerCase() ?? value.toLowerCase();
 }
 
+interface EnvCommandResolution {
+  commandIndex?: number;
+  splitStringIndex?: number;
+}
+
+function singleStringValue(
+  argument: ProcessArgument | undefined,
+): string | undefined {
+  const meaningful = (argument?.tokens ?? []).filter(
+    ({ kind }) => kind !== "newline",
+  );
+  return meaningful.length === 1 && meaningful[0]?.kind === "string"
+    ? meaningful[0].value
+    : undefined;
+}
+
+function envCommandResolution(
+  state: ProcessBuilderState,
+  literalsByIndex: readonly (string | undefined)[],
+  taintsByIndex: readonly (KotlinTaint | undefined)[],
+): EnvCommandResolution {
+  const noArgumentOptions = new Set([
+    "-",
+    "-i",
+    "-v",
+    "--debug",
+    "--ignore-environment",
+    "--list-signal-handling",
+  ]);
+  const argumentOptions = new Set([
+    "-a",
+    "-C",
+    "-u",
+    "--argv0",
+    "--chdir",
+    "--unset",
+  ]);
+  const terminalOptions = new Set(["-0", "--help", "--null", "--version"]);
+  const joinedArgumentPrefixes = [
+    "--argv0=",
+    "--block-signal=",
+    "--chdir=",
+    "--default-signal=",
+    "--ignore-signal=",
+    "--unset=",
+  ] as const;
+  const optionalSignalOptions = new Set([
+    "--block-signal",
+    "--default-signal",
+    "--ignore-signal",
+  ]);
+  let options = true;
+  for (let index = 1; index < state.arguments.length; index += 1) {
+    const literal = literalsByIndex[index];
+    const staticString = singleStringValue(state.arguments[index]);
+    if (options) {
+      if (literal === "--") {
+        options = false;
+        continue;
+      }
+      if (terminalOptions.has(literal ?? "")) return {};
+      if (
+        noArgumentOptions.has(literal ?? "") ||
+        optionalSignalOptions.has(literal ?? "") ||
+        /^-(?:i|v)+$/u.test(literal ?? "")
+      ) {
+        continue;
+      }
+      if (
+        joinedArgumentPrefixes.some((prefix) =>
+          (staticString ?? "").startsWith(prefix),
+        ) ||
+        /^-[aCu].+/u.test(staticString ?? "")
+      ) {
+        continue;
+      }
+      if (literal === "-S" || literal === "--split-string") {
+        const splitStringIndex = index + 1;
+        return splitStringIndex < state.arguments.length &&
+          taintsByIndex[splitStringIndex] !== undefined
+          ? { splitStringIndex }
+          : {};
+      }
+      if ((staticString ?? "").startsWith("-S") && staticString !== "-S") {
+        return taintsByIndex[index] === undefined
+          ? {}
+          : { splitStringIndex: index };
+      }
+      if ((staticString ?? "").startsWith("--split-string=")) {
+        return taintsByIndex[index] === undefined
+          ? {}
+          : { splitStringIndex: index };
+      }
+      if (argumentOptions.has(literal ?? "")) {
+        if (index + 1 >= state.arguments.length) return {};
+        index += 1;
+        continue;
+      }
+      if (literal?.startsWith("-") === true) return {};
+      if (literal === undefined && taintsByIndex[index] === undefined)
+        return {};
+      options = false;
+    }
+    if (
+      literal?.includes("=") === true ||
+      singleStringValue(state.arguments[index])?.includes("=") === true
+    ) {
+      continue;
+    }
+    return { commandIndex: index };
+  }
+  return {};
+}
+
 function processRisk(
   state: ProcessBuilderState,
   taints: ReadonlyMap<string, KotlinTaint>,
@@ -1812,6 +1928,52 @@ function processRisk(
   const taintsByIndex = state.arguments.map((argument) =>
     argumentTaint(argument),
   );
+  if (base === "env") {
+    const resolution = envCommandResolution(
+      state,
+      literalsByIndex,
+      taintsByIndex,
+    );
+    const delegation: KotlinPropagator = {
+      kind: "kotlin-process-delegated-launcher",
+      line: state.commandSetLine ?? state.constructorLine,
+      symbol: "env",
+    };
+    if (resolution.splitStringIndex !== undefined) {
+      const taint = taintsByIndex[resolution.splitStringIndex];
+      if (taint !== undefined) {
+        return {
+          kind: "kotlin-process-split-command",
+          taint: {
+            ...taint,
+            propagators: [...taint.propagators, delegation],
+          },
+          argumentIndex: resolution.splitStringIndex + 1,
+        };
+      }
+    }
+    if (resolution.commandIndex !== undefined) {
+      const nestedRisk = processRisk(
+        {
+          ...state,
+          arguments: state.arguments.slice(resolution.commandIndex),
+        },
+        taints,
+        literals,
+      );
+      if (nestedRisk !== undefined) {
+        return {
+          ...nestedRisk,
+          taint: {
+            ...nestedRisk.taint,
+            propagators: [...nestedRisk.taint.propagators, delegation],
+          },
+          argumentIndex: nestedRisk.argumentIndex + resolution.commandIndex,
+        };
+      }
+    }
+    return undefined;
+  }
   const commandAfter = (
     flags: ReadonlySet<string>,
     kind: KotlinProcessSinkKind,

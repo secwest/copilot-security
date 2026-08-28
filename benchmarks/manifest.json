@@ -6329,6 +6329,69 @@
         "kotlin-ktor-resource-command-helper-argv/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-env-executable-injection",
+      "description": "A typed Ktor Resource value occupies the executable operand delegated by the POSIX env launcher.",
+      "fixture": "fixtures/kotlin-ktor-resource-env-executable-injection",
+      "findingsPaths": [
+        "kotlin-ktor-resource-env-executable-injection/run-1/findings.json",
+        "kotlin-ktor-resource-env-executable-injection/run-2/findings.json",
+        "kotlin-ktor-resource-env-executable-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "kotlin-ktor-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/main/kotlin/example/Diagnostics.kt",
+              "startLine": 17,
+              "endLine": 17,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            [
+              "typed resource",
+              "Ktor resource",
+              "@Resource",
+              "DiagnosticResource"
+            ],
+            ["env", "delegating launcher", "delegated launcher"],
+            ["executable selection", "program selection", "command selection"],
+            ["ProcessBuilder", "java.lang.ProcessBuilder", "start"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["env", "delegating launcher", "delegated executable"],
+            ["executable selection", "program selection", "command selection"],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "env always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-env-argv",
+      "description": "The topology-matched env control fixes printf as the delegated executable and retains the Resource value only as ordinary argument data.",
+      "fixture": "fixtures/kotlin-ktor-resource-env-argv",
+      "findingsPaths": [
+        "kotlin-ktor-resource-env-argv/run-1/findings.json",
+        "kotlin-ktor-resource-env-argv/run-2/findings.json",
+        "kotlin-ktor-resource-env-argv/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

@@ -2192,7 +2192,7 @@ middleware-protected admin wildcard, root static handler, operational server,
 and inert `httptest` marker constant while changing only Echo 4.15.2 to 4.15.3.
 The affected router/static decoding disagreement discloses the marker through
 an encoded separator; the repaired static handler returns 404. The complete
-129-pair, 258-case corpus produces 774 scans that measure both accuracy and
+149-pair, 298-case corpus produces 894 scans that measure both accuracy and
 model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

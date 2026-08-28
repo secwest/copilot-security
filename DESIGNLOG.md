@@ -2,6 +2,68 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Model delegated executable selection through POSIX env
+
+**Why ordinary-argv reasoning was insufficient.** `ProcessBuilder` normally
+selects its executable from element zero and preserves later elements as
+separate arguments. A launcher can reinterpret those later elements. The
+official GNU Coreutils `env` contract says that options come first,
+`NAME=VALUE` operands modify the environment, and the first remaining operand
+selects a program through `PATH`; later operands become that program's argv.
+Oracle likewise documents the Java array-based process APIs as explicit program
+plus argument vectors. A public CodeQL issue demonstrates the practical false
+negative in `Runtime.exec(new String[]{"env", input})`: treating every
+non-shell later argument as inert misses executable selection. Sources:
+[GNU `env` invocation](https://www.gnu.org/s/coreutils/manual/html_node/env-invocation.html),
+[Java Runtime](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/Runtime.html),
+and [github/codeql#22262](https://github.com/github/codeql/issues/22262).
+
+**Exact bounded semantics.** When the effective executable basename is `env`,
+the model walks only supported literal option grammar. It consumes fixed
+no-argument options, fixed option/value pairs, joined option values, `--`, and
+environment assignments. `--` ends option parsing but does not turn a later
+`NAME=VALUE` into the command. Unknown literal options fail closed because the
+real launcher would reject them; unresolved untainted option structure is not
+guessed. Once a command operand is found, the existing process classifier runs
+recursively on that suffix. Thus `env sh -c <taint>` remains a shell-command
+sink at the original argument number, while `env <tainted-program>` becomes
+executable selection and `env printf %s <taint>` remains ordinary argv.
+Recursion consumes at least one argument per launcher and is therefore bounded
+by the already bounded command list.
+
+GNU `env -S` and `--split-string` parse one value into command arguments. A
+tainted split value is recorded separately as
+`kotlin-process-split-command`; a fixed split value is not expanded by an
+approximate shell tokenizer. This preserves precision until the scanner has an
+exact bounded implementation of GNU's quoting, escapes, comments, and variable
+expansion. Interpolated `--unset=...`, `-u...`, and `NAME=...` values are
+recognized from their guaranteed static structure so taint in environment
+metadata is not mislabeled executable selection. Environment-variable attack
+surfaces such as dynamic loader variables remain a separate future model.
+
+**Evidence and quality contract.** A
+`kotlin-process-delegated-launcher` propagator records `env` and the exact
+configuration line. Finding-quality obligations are now selected by the
+recorded sink kind instead of imposing shell-specific `commandLine` and `sh -c`
+phrases on executable-selection findings. The shared gate still requires the
+Ktor source, real `ProcessBuilder` boundary, execution, and returned effect.
+Executable-selection rows additionally require program-selection semantics;
+delegated rows additionally require the launcher edge; shell, interpreter, and
+split-command rows receive their own grammar groups. This makes the report more
+precise without allowing generic process prose to satisfy a specialized row.
+
+**Paired executable evidence.** The new Ktor 3.5.2/Kotlin 2.2.20 positive and
+control keep the typed Resource, `env`, `--`, process start, output read,
+`waitFor`, and response constant. Only the location of the request value
+changes: delegated executable versus argv after fixed `printf`. Their Java 21
+tests substitute fixed `printf` and `delegated-marker` strings, execute one
+short-lived process, and perform no file or network operation. Both Maven
+witnesses compile and pass on Ubuntu/WSL with one test and no failure, error,
+or skip apiece. The specialized
+manifest reaches 14 cases and the canonical corpus reaches 149 pairs, 298
+cases, and 894 scan positions. Focused Kotlin plus canonical regression passes
+45 tests and 2,521 assertions; TypeScript checking is clean.
+
 ## 2026-08-27 — Summarize exact same-file ProcessBuilder helpers
 
 **Why a helper boundary matters.** Kotlin applications commonly keep process

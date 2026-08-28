@@ -44,6 +44,8 @@ const caseIds = [
   "kotlin-ktor-resource-builder-factory-argv",
   "kotlin-ktor-resource-command-helper-injection",
   "kotlin-ktor-resource-command-helper-argv",
+  "kotlin-ktor-resource-env-executable-injection",
+  "kotlin-ktor-resource-env-argv",
 ] as const;
 const handlerPath = "src/main/kotlin/example/Diagnostics.kt";
 
@@ -160,6 +162,19 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
       requireCodeEvidence: true,
     });
     expect(benchmark.cases[11]?.expected).toEqual([]);
+    expect(benchmark.cases[12]?.expected[0]).toMatchObject({
+      cwe: ["CWE-78", "CWE-88"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(
+      benchmark.cases[12]?.expected[0]?.requiredValidationTextAnyOf?.[1],
+    ).toContain("delegating launcher");
+    expect(
+      benchmark.cases[12]?.expected[0]?.requiredAttackPathTextAnyOf?.[2],
+    ).toContain("executable selection");
+    expect(benchmark.cases[13]?.expected).toEqual([]);
   });
 
   test("preserves exact Ktor source, interpolation, ProcessBuilder, and start", async () => {
@@ -327,6 +342,10 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
     expect(workflow).toContain(
       "kotlin-ktor-resource-command-helper-argv/pom.xml verify",
     );
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-env-executable-injection/pom.xml verify",
+    );
+    expect(workflow).toContain("kotlin-ktor-resource-env-argv/pom.xml verify");
   });
 
   test("recognizes exact Ktor query, path, header, query-string, and body sources", () => {
@@ -1164,6 +1183,57 @@ fun routes() = routing {
     }
   });
 
+  test("keeps env delegation fixtures executable, paired, and precisely modeled", async () => {
+    const vulnerableRecords = await fixtureRecords(caseIds[12]);
+    const safeRecords = await fixtureRecords(caseIds[13]);
+    expect(vulnerableRecords).toHaveLength(1);
+    expect(vulnerableRecords[0]).toMatchObject({
+      line: 17,
+      frameworkModel: {
+        source: { kind: "ktor-typed-resource" },
+        sink: {
+          kind: "kotlin-process-executable-selection",
+          symbol: "java.lang.ProcessBuilder;method=start;argument=3",
+        },
+      },
+    });
+    expect(vulnerableRecords[0]?.frameworkModel.propagators).toContainEqual(
+      expect.objectContaining({
+        kind: "kotlin-process-delegated-launcher",
+        symbol: "env",
+      }),
+    );
+    expect(safeRecords).toEqual([]);
+
+    const vulnerable = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        caseIds[12],
+        "src/test/kotlin/example/EnvExecutableInjectionWitnessTest.kt",
+      ),
+      "utf8",
+    );
+    const safe = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        caseIds[13],
+        "src/test/kotlin/example/EnvArgvWitnessTest.kt",
+      ),
+      "utf8",
+    );
+    for (const witness of [vulnerable, safe]) {
+      expect(witness).toContain('ProcessBuilder("env", "--"');
+      expect(witness).toContain("process.waitFor()");
+      expect(witness).toContain("delegated-marker");
+      expect(witness).not.toContain("java.io.File");
+      expect(witness).not.toContain("java.net");
+    }
+    expect(vulnerable).toContain("requestProgram");
+    expect(safe).toContain('"printf", "%s", requestValue');
+  });
+
   test("recognizes shell, interpreter, batch, and executable-selection boundaries", () => {
     const commands = [
       ['"/bin/sh"', '"-c"', "kotlin-process-shell-command"],
@@ -1189,6 +1259,69 @@ fun routes() = routing {
     expect(selected[0]?.frameworkModel.sink.kind).toBe(
       "kotlin-process-executable-selection",
     );
+  });
+
+  test("models env delegated commands, option operands, and split command strings", () => {
+    const direct = records(
+      ktor(`        val program = call.parameters["program"]!!
+        ProcessBuilder("env", program).start()`),
+    );
+    expect(direct).toHaveLength(1);
+    expect(direct[0]?.frameworkModel.sink).toMatchObject({
+      kind: "kotlin-process-executable-selection",
+      symbol: "java.lang.ProcessBuilder;method=start;argument=2",
+    });
+    expect(direct[0]?.frameworkModel.propagators).toContainEqual(
+      expect.objectContaining({
+        kind: "kotlin-process-delegated-launcher",
+        symbol: "env",
+      }),
+    );
+
+    const afterAssignmentsAndDelimiter = records(
+      ktor(`        val program = call.parameters["program"]!!
+        ProcessBuilder("/usr/bin/env", "--", "MODE=fixed", program).start()`),
+    );
+    expect(afterAssignmentsAndDelimiter).toHaveLength(1);
+    expect(afterAssignmentsAndDelimiter[0]?.frameworkModel.sink.symbol).toBe(
+      "java.lang.ProcessBuilder;method=start;argument=4",
+    );
+
+    const delegatedShell = records(
+      ktor(`        val commandLine = call.receiveText()
+        ProcessBuilder("env", "-i", "--unset", "PATH", "sh", "-c", commandLine).start()`),
+    );
+    expect(delegatedShell).toHaveLength(1);
+    expect(delegatedShell[0]?.frameworkModel.sink).toMatchObject({
+      kind: "kotlin-process-shell-command",
+      symbol: "java.lang.ProcessBuilder;method=start;argument=7",
+    });
+
+    const splitString = records(
+      ktor(`        val commandLine = call.receiveText()
+        ProcessBuilder("env", "--split-string=$commandLine").start()`),
+    );
+    expect(splitString).toHaveLength(1);
+    expect(splitString[0]?.frameworkModel.sink).toMatchObject({
+      kind: "kotlin-process-split-command",
+      symbol: "java.lang.ProcessBuilder;method=start;argument=2",
+    });
+
+    const safeBodies = [
+      `        val value = call.receiveText()
+        ProcessBuilder("env", "printf", "%s", value).start()`,
+      `        val value = call.receiveText()
+        ProcessBuilder("env", "-u", value, "printf", "%s", "fixed").start()`,
+      `        val value = call.receiveText()
+        ProcessBuilder("env", "--unset=$value", "printf", "%s", "fixed").start()`,
+      `        val value = call.receiveText()
+        ProcessBuilder("env", "MODE=$value").start()`,
+      `        val value = call.receiveText()
+        ProcessBuilder("env", "--not-an-env-option", value).start()`,
+      `        val value = call.receiveText()
+        ProcessBuilder("env", "-S", "printf %s", value).start()`,
+    ];
+    for (const body of safeBodies) expect(records(ktor(body))).toEqual([]);
   });
 
   test("rejects literal argv, inert or reassigned builders, numeric normalization, and lookalikes", () => {
@@ -1284,6 +1417,10 @@ fun routes() = routing {
     expect(prompt).toContain("proven builder alias");
     expect(prompt).toContain("same route lambda");
     expect(prompt).toContain("bounded harmless environment-marker witness");
+    expect(prompt).toContain("POSIX env is a delegating launcher");
+    expect(prompt).toContain(
+      "--split-string value as env-parsed command grammar",
+    );
   });
 
   test("forces incomplete Kotlin evidence through host-audited correction", async () => {
@@ -1583,6 +1720,121 @@ fun routes() = routing {
       } finally {
         await rm(scanDirectory, { recursive: true, force: true });
       }
+    }
+  });
+
+  test("requires env delegation and executable-selection closure", async () => {
+    const repository = join(benchmarkRoot, "fixtures", caseIds[12]);
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-kotlin-env-quality-"),
+    );
+    try {
+      const finding = {
+        findingId: "occ_kotlin_env_quality",
+        taxonomy: { cwe: ["CWE-78", "CWE-88"] },
+        locations: [
+          { path: handlerPath, startLine: 10, endLine: 11, role: "source" },
+          { path: handlerPath, startLine: 17, endLine: 17, role: "sink" },
+        ],
+        codeEvidence: [
+          {
+            id: "env-resource-source",
+            path: handlerPath,
+            startLine: 10,
+            endLine: 11,
+            role: "source",
+            code: '@Resource("/diagnostics/{target}")\ndata class DiagnosticResource(val target: String)',
+            explanation: "The typed route value contains remote input.",
+          },
+          {
+            id: "env-process-start",
+            path: handlerPath,
+            startLine: 17,
+            endLine: 17,
+            role: "sink",
+            code: 'ProcessBuilder("env", "--", input.target).start()',
+            explanation: "The process launcher starts.",
+          },
+        ],
+        validation: {
+          method: "static_source_trace",
+          summary:
+            "The typed Ktor resource input.target reaches java.lang.ProcessBuilder start.",
+          exploitWitness:
+            "A fixed harmless printf witness occupies the request-controlled position.",
+          negativeControl:
+            "The paired control fixes printf before the same value in ordinary argv.",
+          evidence: ["env-resource-source", "env-process-start"],
+          counterEvidence:
+            "No shell is needed for this command-selection boundary.",
+          remainingUncertainty: "Deployment reachability remains unknown.",
+        },
+        attackPath: {
+          summary:
+            "The target resource value reaches ProcessBuilder start and stdout reaches respondText in the response.",
+          dataflow: {
+            source: "The target resource value.",
+            sink: "A ProcessBuilder start.",
+            outcome: "A child process may start.",
+          },
+          reachability: {
+            attacker: "A remote HTTP caller.",
+            entrypoint: "The typed diagnostics route.",
+            outcome: "Process output is returned.",
+          },
+          brokenControls: ["No fixed executable at the delegated boundary"],
+          evidenceRefs: ["env-resource-source", "env-process-start"],
+        },
+      };
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const residualRiskInventory =
+        await buildResidualRiskInventory(repository);
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        residualRiskInventory,
+      );
+      const gap = incomplete
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))[1];
+      expect(gap).toMatchObject({
+        findingId: "occ_kotlin_env_quality",
+        frameworkModelId: "kotlin-ktor-command-injection",
+        reasons: [
+          "missing_model_specific_validation_evidence",
+          "missing_model_specific_attack_path_evidence",
+        ],
+        missingValidationTextAnyOf: [
+          expect.arrayContaining(["executable selection"]),
+          expect.arrayContaining(["delegating launcher"]),
+        ],
+        missingAttackPathTextAnyOf: [
+          expect.arrayContaining(["executable selection"]),
+          expect.arrayContaining(["delegated executable"]),
+        ],
+      });
+
+      finding.validation.summary +=
+        " The env delegating launcher uses input.target for executable selection.";
+      finding.attackPath.summary +=
+        " The env delegated executable is selected by the target value, creating executable selection.";
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      expect(
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          residualRiskInventory,
+        ),
+      ).toBe("");
+    } finally {
+      await rm(scanDirectory, { recursive: true, force: true });
     }
   });
 });

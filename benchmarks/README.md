@@ -184,6 +184,32 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-ruby-command
 ```
 
+## Kotlin Ktor delegated-command benchmark
+
+`kotlin-ktor-command-injection-manifest.json` now holds fourteen strict cases.
+Alongside direct shell, mutable command-list, inline pipeline, builder-factory,
+and command-helper boundaries, its newest pair preserves a typed Ktor Resource,
+`ProcessBuilder("env", "--", ...)`, process start, captured output, and HTTP
+response. In the positive, the Resource value occupies `env`'s delegated
+executable position. The control fixes `printf` in that position and passes the
+same value later as one ordinary argument.
+
+The deterministic model follows recognized `env` options, option arguments,
+`NAME=VALUE` assignments, and `--`; recursively classifies the first remaining
+operand as an executable; carries nested shell/interpreter semantics through
+that boundary; and distinguishes tainted `-S`/`--split-string` command text.
+Regression also rejects assignment-only calls, tainted `--unset` operands,
+fixed delegated executables, unknown failing options, and fixed split commands
+whose later values remain argv. Both native witnesses substitute only fixed,
+harmless `printf` values, start one short-lived process, and perform no network
+or file I/O. Run the strict benchmark with:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/kotlin-ktor-command-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-kotlin-command
+```
+
 ## Rust Axum and Actix Web command-injection benchmark
 
 `rust-axum-command-injection-manifest.json` adds the canonical corpus's first
@@ -210,7 +236,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-rust-command
 ```
 
-The versioned corpus currently contains 142 vulnerable/control pairs:
+The versioned corpus currently contains 149 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

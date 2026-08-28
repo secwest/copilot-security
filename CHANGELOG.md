@@ -6,6 +6,30 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended the deterministic Kotlin/JVM process model through POSIX `env`
+  delegation. After recognized fixed options and `NAME=VALUE` assignments, the
+  first remaining operand is recursively analyzed as the executable; nested
+  shell and interpreter grammar retains its original sink kind and adjusted
+  argument position. Tainted `-S`/`--split-string` command text has a distinct
+  `kotlin-process-split-command` sink, while option arguments, assignment-only
+  calls, unknown failing options, fixed delegated executables, and later argv
+  remain negative. The new `kotlin-process-delegated-launcher` propagator
+  records the exact `env` boundary.
+- Added a topology-matched Ktor typed-resource `env` executable-selection and
+  fixed-`printf` argv pair, each pinned to Ktor 3.5.2, Kotlin 2.2.20, Java 21,
+  and a one-process fixed-string witness. The specialized Kotlin manifest now
+  has 14 cases; the canonical corpus has 149 pairs, 298 cases, and 894 repeated
+  scan positions. Focused Kotlin and canonical regression passes 45 tests and
+  2,521 assertions with no failure. Both new Maven witnesses compile and pass
+  on Ubuntu/WSL with one test, no failure, error, or skip apiece.
+- Made Kotlin finding-quality closure sink-aware. Common Ktor source,
+  `ProcessBuilder`, execution, response, and evidence obligations remain
+  shared, while shell, interpreter, `env -S`, executable-selection,
+  delegating-launcher, factory, and mutator semantics are required only for the
+  variant actually recorded. A regression proves that generic process prose
+  cannot close an `env` row until validation names executable selection and a
+  delegating launcher and the attack path names executable selection and the
+  delegated executable.
 - Extended `kotlin-ktor-command-injection` across two bounded same-file helper
   boundaries. A uniquely named top-level factory with an explicit exact
   `ProcessBuilder` return type may now contribute a direct constructor and
@@ -124,6 +148,12 @@ All notable scanner, application, benchmark, and operational changes are recorde
   PHP `33127231765`, Windows GUI `33127231799`, and Linux GUI
   `33127231846`. The repository remains public at
   `https://github.com/secwest/copilot-security` with default branch `main`.
+- All ten path-applicable hosted workflow families pass acceptance-only
+  revision `01787f425108d228961b6f11f5a56d4b7296e6da`: Node `33127954581`,
+  Kotlin `33127954442`, Java `33127954530`, .NET `33127954391`, Go
+  `33127954468`, Rust `33127954437`, Ruby `33127954460`, PHP `33127954385`,
+  Windows GUI `33127954395`, and Linux GUI `33127954502`. The container
+  workflow was not triggered by that documentation-only revision.
 - Closed hosted verification of prior acceptance revision
   `754f12f549dfa36b221b5e1df4451fe964493011`: Node `33121285236`,
   container `33121285223`, Kotlin `33121285286`, Java `33121285279`, .NET
