@@ -84,6 +84,52 @@ topology-matched arithmetic parser emits no row from any MCP tool model.
 Isolated Windows and native WSL consumers validate the public import,
 executable CLI, and all 79 bundled plugin files.
 
+**Exact-checkpoint reproducibility.** At public implementation checkpoint
+`4d4d4a454006357cd942a4444ba81f9d4d0e8211`, two compiled inventories of a
+disposable root-level `git archive` take 29,042.671 and 10,597.841 ms and emit
+256 byte-identical rows totaling 557,948 bytes with SHA-256
+`d90bcb95b7bfe0557e9e7d5ce122a295fb3a986b333ea553e3514634744dceab`.
+There are 254 benchmark-fixture rows and two non-fixture lexical review leads.
+The MCP model deliberately rejects paths containing `fixtures`, `tests`,
+generated output, or mocks, so benchmark programs do not masquerade as
+deployed application findings during a repository self-review. Independently
+rooting each exact archived fixture preserves the intended application path:
+the exploit emits exactly one structured row at `src/server.mjs:7`, sourced at
+line 16 and propagated through registration plus `evaluateExpression` into
+`eval:code[0]` with CWE-94/CWE-95, while the parser control emits none. Two
+inventories of each root are byte-identical; their output sizes and SHA-256
+values are 2,295 bytes with
+`54ea1d682728ae83b02fc90cce9ac9091b779cbbb8c574909fc36fa003476e8b`
+and 689 bytes with
+`37386a2cb61f160da8c53c479371049904e1e00a711d187d72ffc46f9cf0a43c`.
+
+**Package, live, and hosted closure.** Strict package inspection validates a
+299-entry, 2,299,273-byte npm archive with SHA-256
+`8c8e04e224fca3d1e0c1355462adc1bfdf9ccb965d299ffdfa7ad8529541d82b`;
+its isolated consumer validates the public import, executable CLI, and all 79
+bundled plugin files. Live deep high-effort campaign
+`3720809396b82d0a25f427516b9602f347ffeaef7a27bb99e7ceca1032efcfab`
+uses two workers and completes both cases on attempt one. The parser control
+finishes in 218,474 ms with zero findings; the exploit finishes in 329,332 ms
+with one critical finding after deterministic excerpt re-anchoring and
+endpoint-role alignment. Together they consume 2,266,198 input tokens,
+1,603,584 cached tokens, and 54,710 output tokens. Every strict rate is one,
+with zero false positives and false negatives. Recomputed findings, coverage,
+and manifest hashes match both receipts; no authentication, allowance,
+rate-limit, classifier, transport, timeout, or retry event occurs. All exact
+checkpoint workflows pass: [Node `33173887506`](https://github.com/secwest/copilot-security/actions/runs/33173887506),
+[Windows GUI `33173887408`](https://github.com/secwest/copilot-security/actions/runs/33173887408),
+[Linux GUI `33173887466`](https://github.com/secwest/copilot-security/actions/runs/33173887466),
+[container `33173887411`](https://github.com/secwest/copilot-security/actions/runs/33173887411),
+[Java `33173887406`](https://github.com/secwest/copilot-security/actions/runs/33173887406),
+[Kotlin `33173887492`](https://github.com/secwest/copilot-security/actions/runs/33173887492),
+[.NET `33173887379`](https://github.com/secwest/copilot-security/actions/runs/33173887379),
+[Go `33173887498`](https://github.com/secwest/copilot-security/actions/runs/33173887498),
+[Rust `33173887486`](https://github.com/secwest/copilot-security/actions/runs/33173887486),
+[Ruby `33173887517`](https://github.com/secwest/copilot-security/actions/runs/33173887517),
+and [PHP `33173887421`](https://github.com/secwest/copilot-security/actions/runs/33173887421).
+The repository remains public on default branch `main`.
+
 ## 2026-08-28 — Turn a live MCP control failure into interpreter-option coverage
 
 **Counterexample, not suppression.** The first six-case live MCP campaign at

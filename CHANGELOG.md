@@ -42,6 +42,31 @@ All notable scanner, application, benchmark, and operational changes are recorde
   one structured code-evaluation row for the exploit and none for its parser
   control. Isolated Windows and native WSL consumers validate the public import,
   executable CLI, and all 79 bundled plugin files.
+- Final evidence at exact implementation checkpoint
+  `4d4d4a454006357cd942a4444ba81f9d4d0e8211` is green. Two compiled reviews
+  of a root-level tracked archive take 29,042.671 and 10,597.841 ms and produce
+  256 byte-identical rows, 557,948 bytes, and SHA-256
+  `d90bcb95b7bfe0557e9e7d5ce122a295fb3a986b333ea553e3514634744dceab`.
+  The repository review intentionally excludes benchmark fixture paths from
+  the MCP application model; independently rooting the exact archived pair
+  produces one line-7 code-evaluation row with the complete source, sink,
+  helper, and CWE contract for the exploit and none for the control. Their
+  repeated inventories are byte-identical with SHA-256 values
+  `54ea1d682728ae83b02fc90cce9ac9091b779cbbb8c574909fc36fa003476e8b`
+  and `37386a2cb61f160da8c53c479371049904e1e00a711d187d72ffc46f9cf0a43c`.
+  Strict inspection validates a 299-entry, 2,299,273-byte npm archive with
+  SHA-256
+  `8c8e04e224fca3d1e0c1355462adc1bfdf9ccb965d299ffdfa7ad8529541d82b`.
+  Live campaign
+  `3720809396b82d0a25f427516b9602f347ffeaef7a27bb99e7ceca1032efcfab`
+  completes both deep high-effort cases on attempt one: one true positive, a
+  clean parser control, zero false positives or false negatives, and every
+  strict completion, precision, recall, F1, negative-case, stability,
+  validation, attack-path, code-evidence, and severity rate equal to one.
+  Recomputed findings, coverage, and manifest hashes match both sealed run
+  receipts. No authentication, allowance, rate-limit, classifier, transport,
+  timeout, or retry event occurs. All eleven exact-source workflows pass, and
+  the repository remains public on default branch `main`.
 - Promoted a live benchmark counterexample into deterministic coverage. The
   first six-case MCP filesystem campaign at public revision
   `f16dc15e8d87f4cedf7b8259252d1c904edf09b5` completed every deep scan on
