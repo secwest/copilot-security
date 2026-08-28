@@ -60,6 +60,8 @@ describe("Node MCP tool-input security model", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([
       "node-mcp-v2-command-injection",
       "node-mcp-v2-command-argv",
+      "node-mcp-v2-argument-injection",
+      "node-mcp-v2-argument-data",
       "node-mcp-v2-ssrf",
       "node-mcp-v2-fixed-destination",
       "node-mcp-v2-path-traversal",
@@ -71,11 +73,14 @@ describe("Node MCP tool-input security model", () => {
     expect(manifest.cases[3]?.expected).toEqual([]);
     expect(manifest.cases[4]?.expected).toHaveLength(1);
     expect(manifest.cases[5]?.expected).toEqual([]);
+    expect(manifest.cases[6]?.expected).toHaveLength(1);
+    expect(manifest.cases[7]?.expected).toEqual([]);
 
     for (const [index, modelId] of [
       [0, "node-mcp-tool-command-injection"],
-      [2, "node-mcp-tool-ssrf"],
-      [4, "node-mcp-tool-path-traversal"],
+      [2, "node-mcp-tool-argument-injection"],
+      [4, "node-mcp-tool-ssrf"],
+      [6, "node-mcp-tool-path-traversal"],
     ] as const) {
       const vulnerable = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index]!.id),
@@ -102,6 +107,35 @@ describe("Node MCP tool-input security model", () => {
     expect(
       found[0]?.frameworkModel.propagators.map(({ kind }) => kind),
     ).toEqual(["mcp-tool-registration", "mcp-tool-local-assignment"]);
+  });
+
+  test("detects Node interpreter-option injection before end-of-options", () => {
+    const found = records(
+      v2(
+        '    return execFile(process.execPath, ["-e", "process.stdout.write(process.argv[1])", command]);',
+      ),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel.id).toBe(
+      "node-mcp-tool-argument-injection",
+    );
+    expect(found[0]?.frameworkModel.sink.kind).toBe(
+      "mcp-tool-interpreter-option",
+    );
+    expect(found[0]?.frameworkModel.sink.symbol).toBe("execFile:argv[2]");
+    expect(found[0]?.frameworkModel.sink.cweIds).toEqual(["CWE-88", "CWE-94"]);
+    expect(found[0]?.categories).toContain(
+      "broken-control:mcp-tool-interpreter-end-of-options-missing",
+    );
+  });
+
+  test("treats an exact Node end-of-options element as a strong control", () => {
+    const found = records(
+      v2(
+        '    return execFile(process.execPath, ["-e", "process.stdout.write(process.argv[1])", "--", command]);',
+      ),
+    );
+    expect(found).toEqual([]);
   });
 
   test("detects stable-v2 SSRF through global fetch and local propagation", () => {
@@ -848,6 +882,111 @@ const example = "server.registerTool('run', { inputSchema: schema }, ({ command 
     }
   });
 
+  test("requires interpreter-option validation and attack-path closure", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-node-mcp-argument-quality-repository-"),
+    );
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-node-mcp-argument-quality-scan-"),
+    );
+    try {
+      const application = v2(
+        '    return execFile(process.execPath, ["-e", "process.stdout.write(process.argv[1])", command]);',
+      );
+      await writeFile(join(repository, "server.ts"), application, "utf8");
+      const sinkLine =
+        application
+          .split(/\r?\n/u)
+          .findIndex((line) => line.includes("execFile(process.execPath")) + 1;
+      const finding = {
+        occurrenceId: "occ_node_mcp_argument_quality",
+        taxonomy: { cwe: ["CWE-88", "CWE-94"] },
+        locations: [{ path: "server.ts", startLine: sinkLine, role: "sink" }],
+        codeEvidence: [
+          {
+            id: "mcp-argument-sink",
+            path: "server.ts",
+            startLine: sinkLine,
+            code: application.split(/\r?\n/u)[sinkLine - 1],
+            explanation:
+              "The registered tool callback places command before an end-of-options boundary.",
+            role: "sink",
+          },
+        ],
+        validation: {
+          summary: "Static review confirms a process call in the handler.",
+          method: "source review and bounded inert option witness",
+          exploitWitness: "The inert --version option reaches Node.",
+          negativeControl: "An exact -- keeps the same value as data.",
+          evidence: ["mcp-argument-sink"],
+          counterEvidence: "The executable is fixed.",
+          remainingUncertainty: "Deployment exposure was not established.",
+        },
+        attackPath: {
+          summary: "An untrusted value may reach process execution.",
+          dataflow: {
+            source: "mcp-argument-sink",
+            sink: "mcp-argument-sink",
+            outcome: "interpreter option",
+          },
+          reachability: {
+            attacker: "MCP client",
+            entrypoint: "tool invocation",
+            outcome: "code execution",
+          },
+          brokenControls: ["Missing end-of-options boundary"],
+          evidenceRefs: ["mcp-argument-sink"],
+        },
+      };
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      const inventory = await buildResidualRiskInventory(repository);
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      const rows = incomplete.split("\n").map((line) => JSON.parse(line));
+      expect(rows[1]).toMatchObject({
+        findingId: "occ_node_mcp_argument_quality",
+        frameworkModelId: "node-mcp-tool-argument-injection",
+      });
+      expect(rows[1]?.reasons).toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(rows[1]?.reasons).toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+
+      const closure = [
+        "The MCP tool registerTool callback receives client-controlled tool input.",
+        "execFile launches process.execPath as the Node interpreter.",
+        "No -- end-of-options token precedes input in the option region, enabling argument injection.",
+        "CWE-88 and CWE-94 describe the interpreter-option code execution boundary.",
+      ].join(" ");
+      finding.validation.summary = closure;
+      finding.attackPath.summary = closure;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      expect(
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          inventory,
+        ),
+      ).toBe("");
+    } finally {
+      await rm(repository, { recursive: true, force: true });
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
+  });
+
   test("gives validation exact MCP source and sink boundaries", () => {
     const prompt = scanQualityGatePrompt(
       "{}",
@@ -861,14 +1000,18 @@ const example = "server.registerTool('run', { inputSchema: schema }, ({ command 
       "[]",
     );
     expect(prompt).toContain("For node-mcp-tool-command-injection");
+    expect(prompt).toContain("node-mcp-tool-argument-injection");
     expect(prompt).toContain("node-mcp-tool-path-traversal");
     expect(prompt).toContain("schema-less callback receives context");
     expect(prompt).toContain("fixed executable plus separate argv data");
+    expect(prompt).toContain("process.execPath");
+    expect(prompt).toContain("end-of-options");
     expect(prompt).toContain("path-bearing Node fs");
     expect(prompt).toContain("path.join or path.resolve alone");
     expect(prompt).toContain("request body or same-host path");
     expect(prompt).toContain("disposable temporary tree");
     expect(prompt).toContain("disposable loopback endpoint");
     expect(prompt).toContain("CWE-22/CWE-73");
+    expect(prompt).toContain("CWE-88/CWE-94");
   });
 });

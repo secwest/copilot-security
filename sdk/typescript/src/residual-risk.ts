@@ -4240,6 +4240,14 @@ const NODE_MCP_TOOL_COMMAND_FIELD_EVIDENCE_REQUIREMENTS = [
   ],
 ] as const;
 
+const NODE_MCP_TOOL_ARGUMENT_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["MCP tool", "registerTool", "server.tool", "tool callback"],
+  ["tool input", "callback input", "LLM-controlled", "client-controlled"],
+  ["process.execPath", "Node interpreter", "execFile", "spawn"],
+  ["option region", "end-of-options", "--", "argument injection"],
+  ["CWE-88", "CWE-94", "interpreter option", "code execution"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4264,6 +4272,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
 > = new Map([
+  [
+    "node-mcp-tool-argument-injection",
+    {
+      validation: NODE_MCP_TOOL_ARGUMENT_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_MCP_TOOL_ARGUMENT_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
   [
     "node-mcp-tool-command-injection",
     {

@@ -134,12 +134,14 @@ const POWERSHELLS = new Set([
 ]);
 
 type McpModelId =
+  | "node-mcp-tool-argument-injection"
   | "node-mcp-tool-command-injection"
   | "node-mcp-tool-path-traversal"
   | "node-mcp-tool-ssrf";
 type McpSinkKind =
   | "mcp-tool-executable-selection"
   | "mcp-tool-filesystem-path"
+  | "mcp-tool-interpreter-option"
   | "mcp-tool-network-destination"
   | "mcp-tool-shell-command"
   | "mcp-tool-shell-enabled-spawn";
@@ -210,6 +212,7 @@ export interface NodeMcpToolRiskRecord {
       cweIds:
         | readonly ["CWE-22", "CWE-73"]
         | readonly ["CWE-78", "CWE-88"]
+        | readonly ["CWE-88", "CWE-94"]
         | readonly ["CWE-918"];
     };
     propagators: Array<{
@@ -303,7 +306,9 @@ export function nodeMcpToolRiskRecords(
           ? "node-mcp-tool-ssrf"
           : sink.kind === "mcp-tool-filesystem-path"
             ? "node-mcp-tool-path-traversal"
-            : "node-mcp-tool-command-injection";
+            : sink.kind === "mcp-tool-interpreter-option"
+              ? "node-mcp-tool-argument-injection"
+              : "node-mcp-tool-command-injection";
       const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(lines.length, sink.line + CONTEXT_LINES_AFTER);
       const sourceStart = Math.max(1, registration.line - 2);
@@ -319,14 +324,18 @@ export function nodeMcpToolRiskRecords(
             ? "broken-control:mcp-tool-network-destination-not-pinned"
             : modelId === "node-mcp-tool-path-traversal"
               ? "broken-control:mcp-tool-filesystem-path-not-confined"
-              : "broken-control:mcp-tool-command-data-boundary",
+              : modelId === "node-mcp-tool-argument-injection"
+                ? "broken-control:mcp-tool-interpreter-end-of-options-missing"
+                : "broken-control:mcp-tool-command-data-boundary",
         ],
         priority:
           modelId === "node-mcp-tool-ssrf"
             ? 122
             : modelId === "node-mcp-tool-path-traversal"
               ? 124
-              : 127,
+              : modelId === "node-mcp-tool-argument-injection"
+                ? 126
+                : 127,
         startLine,
         endLine,
         excerpt: sourceExcerpt(lines, startLine, endLine),
@@ -352,7 +361,9 @@ export function nodeMcpToolRiskRecords(
                 ? (["CWE-918"] as const)
                 : modelId === "node-mcp-tool-path-traversal"
                   ? (["CWE-22", "CWE-73"] as const)
-                  : (["CWE-78", "CWE-88"] as const),
+                  : modelId === "node-mcp-tool-argument-injection"
+                    ? (["CWE-88", "CWE-94"] as const)
+                    : (["CWE-78", "CWE-88"] as const),
           },
           propagators: [
             {
@@ -1442,6 +1453,25 @@ function commandSinks(
       });
       continue;
     }
+    const interpreterOption =
+      second === undefined || !isNodeRuntimeExecutable(source, first)
+        ? undefined
+        : taintedNodeOptionArgument(
+            source,
+            structural,
+            second,
+            registration,
+            taint,
+          );
+    if (interpreterOption !== undefined) {
+      sinks.push({
+        kind: "mcp-tool-interpreter-option",
+        line: call.line,
+        symbol: `${call.symbol}:argv[${interpreterOption.index}]`,
+        source: interpreterOption.source,
+      });
+      continue;
+    }
     const executable = literalValue(source.slice(first.start, first.end));
     if (
       secondTaint !== undefined &&
@@ -1457,6 +1487,45 @@ function commandSinks(
     }
   }
   return sinks;
+}
+
+function isNodeRuntimeExecutable(source: string, range: Range): boolean {
+  return (
+    source.slice(range.start, range.end).replaceAll(/\s/gu, "") ===
+    "process.execPath"
+  );
+}
+
+function taintedNodeOptionArgument(
+  source: string,
+  structural: string,
+  argumentArray: Range,
+  registration: Registration,
+  taint: readonly TaintBinding[],
+): { index: number; source: TaintBinding } | undefined {
+  const array = trimRange(structural, argumentArray);
+  if (structural[array.start] !== "[") return undefined;
+  const close = matchingStructuralDelimiter(structural, array.start, "[", "]");
+  if (close !== array.end - 1) return undefined;
+  const elements = splitArgumentRanges(structural, array.start + 1, close).map(
+    (range) => trimSourceRange(source, range),
+  );
+  let optionsEnded = false;
+  for (const [index, element] of elements.entries()) {
+    if (literalValue(source.slice(element.start, element.end)) === "--") {
+      optionsEnded = true;
+      continue;
+    }
+    const sourceBinding = liveTaintForRange(
+      structural,
+      element,
+      registration.body,
+      taint,
+    );
+    if (sourceBinding !== undefined && !optionsEnded)
+      return { index, source: sourceBinding };
+  }
+  return undefined;
 }
 
 function isShell(executable: string): boolean {

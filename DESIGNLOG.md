@@ -2,6 +2,76 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Turn a live MCP control failure into interpreter-option coverage
+
+**Counterexample, not suppression.** The first six-case live MCP campaign at
+public revision `f16dc15e8d87f4cedf7b8259252d1c904edf09b5` completed every
+case on attempt one with complete coverage. Command, SSRF, and path positives
+were all detected; fixed-destination and fixed-file controls were clean. The
+supposed fixed-argv command control produced a high-confidence finding because
+`execFile(process.execPath, ["-e", fixedScript, command])` leaves `command`
+inside Node's runtime option region. A bounded local reproduction confirmed
+that `--version` and `--help` supersede script data, while a fixed `--eval`
+spelling replaces the intended script. The report was therefore a true
+benchmark counterexample, not a false positive to filter. The same campaign's
+SSRF report traced the correct path and CWE but did not repeat schema-only
+control and MCP-caller evidence inside the exact validation and attack-path
+fields required by the corpus. Campaign
+`a54b3338e3e1eba8b76d6a95ad40e077620a72858cf3c5d4f6a54f4ddb2edb3b`
+correctly failed its perfect gates at precision 0.75, recall 1, F1 0.8571,
+and negative-case pass rate 0.6667. Its six first-attempt scans consumed
+15,018,404 input tokens, 13,025,311 cached tokens, and 286,376 output tokens
+over 57 minutes 6 seconds of cumulative worker time and about 30 minutes 55
+seconds of wall time. No classifier, allowance, rate-limit, authentication,
+timeout, or retry event occurred.
+
+**Model decision.** Add `node-mcp-tool-argument-injection` rather than widening
+shell injection. The host accepts only exact official MCP registration flow,
+exact child-process binding, fixed `process.execPath`, an inline literal argv
+array, and a tool-controlled element before an exact literal `--`. It records
+the specific argv index as `mcp-tool-interpreter-option`, CWE-88/CWE-94, and
+registration/helper provenance. An exact `--` before the tainted element is a
+strong control. This narrow boundary captures the observed defect without
+guessing about arbitrary executables, variable-built arrays, local lookalikes,
+or the option grammar of unrelated interpreters. Fixed executable plus argv
+remains a strong control for shell injection; it is not a universal control
+for the selected executable's own parser.
+
+**Reporting and safe validation decision.** Both validation and attack path
+must independently name the MCP client/model/tool caller, callback input,
+`inputSchema` shape-only property, `process.execPath`, `execFile` or `spawn`,
+the option region, missing end-of-options boundary, and bounded effect. The
+quality prompt now imposes that field-local evidence on command, argument,
+path, and SSRF reports. Dynamic argument validation is limited to inert Node
+options or fixed text. The positive witness checks only that `--version` is
+consumed; the matched control inserts `--` and proves ordinary text,
+`--version`, and `--help` are returned unchanged. No payload performs file,
+network, credential, persistence, privilege, or destructive activity.
+
+**Regression and distribution evidence.** The strict MCP corpus now contains
+eight cases across shell command, Node interpreter option, network destination,
+and filesystem path boundaries. The canonical corpus contains 160 paired
+cases, 320 case entries, and 960 repeated scan positions. Windows and native
+WSL each pass 49 focused tests and 2,620 assertions, including exact model
+output, end-of-options suppression, package-backed helper flow, canonical
+pairing, and host-enforced model-specific quality closure. All eight witnesses
+are in the Windows/Linux hosted matrix. The full managed Windows aggregate
+exercises 1,994 tests: 1,965 pass, 27 intentional platform/integration skips
+remain, and two fail only because the managed host denies nested Git and
+private Windows ACL operations. The complete two-file native rerun passes 48
+tests and 242 assertions. Formatting, generated output, TypeScript, clean
+production build, and the production advisory audit are green with no known
+vulnerability.
+
+Isolated Windows and WSL consumers validate public import, CLI behavior, and
+all 79 bundled plugin files. Both archives have 299 entries. Windows produces
+2,295,107 bytes, SHA-1 `8ce4f983b6b35d9824d10be65d49b7dd617ebc1f`,
+and SHA-256
+`d855338f684bc6d20cc540a1912b3bddc4a8ba7059a671a2f022a72fe9fb12cd`.
+Native WSL produces 2,295,118 bytes, SHA-1
+`fe3464cce2812b4e6c6253259ef1d8235c1686cd`, and SHA-256
+`7b97f65eaab77497dcc57c0d04f8a0684110384884a71213291b48db3fa05b76`.
+
 ## 2026-08-28 — Extend MCP capability modeling to filesystem authority
 
 **Observed gap and primary evidence.** MCP tool callbacks already received
@@ -76,6 +146,21 @@ plugin checks. The 2,292,791-byte Windows archive has SHA-1
 The 2,292,804-byte native Ubuntu archive has SHA-1
 `cc341599a33513bdfeee72d9e2bbdd60d2fb3a11` and SHA-256
 `4aee804faca6645295825b515bacd03c8ded2c29ed1ae3b09ab4b2a3a81bd8ea`.
+
+**Exact public-checkpoint evidence.** Implementation commit
+`f16dc15e8d87f4cedf7b8259252d1c904edf09b5` is public on `main`. Two
+production-build inventories of its 3,540-file tracked-only archive take
+10,202.859 and 10,556.737 ms and produce 256 byte-identical rows totaling
+559,541 bytes with SHA-256
+`cc1c59d537047fefae3343046f4904a29c602c813b1d35c2e51e1cf0340eb397`.
+The 5,411,477-byte archive has SHA-256
+`43ab8f1899879690781bd756167cb084a6813d099df828e747feb55d71f9b67d`.
+Global selection retains 211 structured rows and 45 lexical leads. An
+independently rooted exploit fixture emits one structured path row at
+`src/server.mjs:12`, sourced from tool input at line 25, with
+`writeFile:path[0]`, CWE-22/CWE-73, registration and helper provenance, and the
+unconfined-path control failure. The independently rooted fixed-file twin
+emits no MCP path row.
 
 ## 2026-08-28 — Model MCP tool callbacks as remote-capability boundaries
 

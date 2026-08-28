@@ -58,6 +58,49 @@
       "expected": []
     },
     {
+      "id": "node-mcp-v2-argument-injection",
+      "fixture": "fixtures/node-mcp-v2-argument-injection",
+      "expected": [
+        {
+          "title": "MCP tool input reaches a Node interpreter option through a same-file helper",
+          "cwe": ["CWE-88", "CWE-94"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/server.mjs",
+          "line": 11,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["command", "tool input", "callback input"],
+            ["runCommand", "same-file helper", "helper call"],
+            ["process.execPath", "Node interpreter", "execFile"],
+            ["option region", "end-of-options", "argument injection"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-diagnostic", "registerTool", "tool callback"],
+            ["runCommand", "same-file helper", "helper call"],
+            ["dash-prefixed", "option region", "end-of-options"],
+            ["code execution", "Node runtime", "argument injection"]
+          ],
+          "forbiddenText": [
+            "execFile argv always prevents argument injection",
+            "fixed process.execPath makes every argv element data",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised",
+            "the witness executed attacker code"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-argument-data",
+      "fixture": "fixtures/node-mcp-v2-argument-data",
+      "expected": []
+    },
+    {
       "id": "node-mcp-v2-ssrf",
       "fixture": "fixtures/node-mcp-v2-ssrf",
       "expected": [

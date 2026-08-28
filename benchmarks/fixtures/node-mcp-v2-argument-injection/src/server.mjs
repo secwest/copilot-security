@@ -8,7 +8,7 @@ export function runCommand(command) {
   return new Promise((resolve, reject) => {
     execFile(
       process.execPath,
-      ["-e", "process.stdout.write(process.argv[1])", "--", command],
+      ["-e", "process.stdout.write(process.argv[1])", command],
       { timeout: 2_000, maxBuffer: 64 * 1024 },
       (error, stdout) => {
         if (error) reject(error);

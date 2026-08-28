@@ -6,6 +6,65 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Promoted a live benchmark counterexample into deterministic coverage. The
+  first six-case MCP filesystem campaign at public revision
+  `f16dc15e8d87f4cedf7b8259252d1c904edf09b5` completed every deep scan on
+  attempt one with complete coverage and no authentication, allowance,
+  rate-limit, classifier, timeout, or retry event. The new path exploit passed
+  every evidence and semantic gate and its fixed-file control remained clean,
+  but the campaign correctly found that the supposed command argv control was
+  still vulnerable to Node interpreter-option injection. A bounded local
+  check confirmed `--version` and `--help` were consumed as runtime options,
+  and a fixed `--eval` spelling replaced the intended inert script. The SSRF
+  finding was correct but omitted required schema-control and MCP-caller terms
+  from its field-local validation and attack path. Campaign
+  `a54b3338e3e1eba8b76d6a95ad40e077620a72858cf3c5d4f6a54f4ddb2edb3b`
+  therefore failed honestly at 0.75 precision and 1.0 recall rather than
+  suppressing the counterexample.
+- Added `node-mcp-tool-argument-injection` with schema 1.2 source, sink,
+  helper, registration, and control provenance plus CWE-88/CWE-94. Exact
+  `execFile` or `spawn` calls using `process.execPath` now split literal argv,
+  locate the tool-controlled element, and require an exact `--`
+  end-of-options element before it. Fixed executables remain strong
+  shell-injection counterevidence, but no longer erase interpreter-option
+  injection. New field-local quality requirements force both validation and
+  attack path to name the MCP caller, schema-only control, Node runtime,
+  option region, end-of-options boundary, and concrete interpreter effect.
+- Corrected the original argv control by inserting `--` and extending its
+  witness with dash-prefixed inputs. Added a separate real
+  `@modelcontextprotocol/server` 2.0.0 argument-injection/control pair: the
+  positive consumes only inert `--version`, while the control proves ordinary,
+  `--version`, and `--help` strings remain script data. The strict MCP manifest
+  now has eight cases, Node CI runs eight witnesses on Windows and Linux, and
+  the canonical corpus has 160 pairs, 320 cases, and 960 repeated scan
+  positions.
+- The remediation-focused Windows and native WSL lanes each pass 49 tests and
+  2,620 assertions. The full managed Windows aggregate exercises 1,994 tests:
+  1,965 pass, 27 intentional platform/integration skips remain, and two are
+  denied only at the nested-Git and private-Windows-ACL host boundaries. The
+  complete two-file native rerun passes all 48 permission-sensitive tests and
+  242 assertions. Formatting, generated-model drift, TypeScript, production
+  build, and the production advisory audit are green; no known production
+  vulnerabilities were reported.
+- Isolated Windows and native WSL package consumers validate public import,
+  CLI execution, and all 79 bundled plugin files. Both archives contain 299
+  entries. The 2,295,107-byte Windows archive has SHA-1
+  `8ce4f983b6b35d9824d10be65d49b7dd617ebc1f` and SHA-256
+  `d855338f684bc6d20cc540a1912b3bddc4a8ba7059a671a2f022a72fe9fb12cd`;
+  the 2,295,118-byte WSL archive has SHA-1
+  `fe3464cce2812b4e6c6253259ef1d8235c1686cd` and SHA-256
+  `7b97f65eaab77497dcc57c0d04f8a0684110384884a71213291b48db3fa05b76`.
+- Two production-build inventories of a 3,540-file tracked-only archive of
+  public filesystem checkpoint `f16dc15e8d87f4cedf7b8259252d1c904edf09b5`
+  complete in 10,202.859 and 10,556.737 ms and are byte-identical at the
+  256-row cap, 559,541 bytes, and SHA-256
+  `cc1c59d537047fefae3343046f4904a29c602c813b1d35c2e51e1cf0340eb397`.
+  The 5,411,477-byte archive has SHA-256
+  `43ab8f1899879690781bd756167cb084a6813d099df828e747feb55d71f9b67d`.
+  An independently rooted path fixture emits exactly one structured MCP path
+  row at `src/server.mjs:12` with tool-input source line 25,
+  `writeFile:path[0]`, CWE-22/CWE-73, and helper provenance; its fixed twin
+  emits no MCP path row.
 - Extended the standalone JavaScript/TypeScript MCP tool-handler model from
   process and network capabilities to Node filesystem authority. Exact
   `node:fs`, `node:fs/promises`, legacy `fs`, and `fs/promises` named,
@@ -25,9 +84,10 @@ All notable scanner, application, benchmark, and operational changes are recorde
   options, and response topology. The exploit demonstrates only a one-level
   escape inside a fresh disposable temporary tree; the control fixes the file
   URL and keeps an attacker-looking path string in file contents. Both
-  witnesses pass on Windows and native Ubuntu/WSL, Node CI now runs six MCP
-  witnesses on both hosts, the strict manifest has six cases, and the canonical
-  corpus has 159 pairs, 318 cases, and 954 repeated scan positions.
+  witnesses pass on Windows and native Ubuntu/WSL. This checkpoint initially
+  advanced the strict manifest to six cases and the canonical corpus to 159
+  pairs, 318 cases, and 954 repeated scan positions; the later
+  interpreter-option remediation above advances those counts again.
 - Completed authoritative Windows acceptance for the MCP filesystem increment:
   1,964 tests pass with 27 intentional platform/integration skips, no failure,
   and 14,787 assertions across 210 files in 477.45 seconds. Focused Windows and
