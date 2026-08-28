@@ -27,7 +27,7 @@ const server = new McpServer({ name: "tools", version: "1.0.0" });
 server.registerTool(
   "operate",
   { inputSchema: z.object({ ${input} }) },
-  async ({ command, url }) => {
+  async ({ command, url, pattern }) => {
 ${body}
     return { content: [] };
   },
@@ -64,6 +64,8 @@ describe("Node MCP tool-input security model", () => {
       "node-mcp-v2-argument-data",
       "node-mcp-v2-code-injection",
       "node-mcp-v2-arithmetic-parser",
+      "node-mcp-v2-regex-injection",
+      "node-mcp-v2-fixed-patterns",
       "node-mcp-v2-ssrf",
       "node-mcp-v2-fixed-destination",
       "node-mcp-v2-path-traversal",
@@ -79,13 +81,16 @@ describe("Node MCP tool-input security model", () => {
     expect(manifest.cases[7]?.expected).toEqual([]);
     expect(manifest.cases[8]?.expected).toHaveLength(1);
     expect(manifest.cases[9]?.expected).toEqual([]);
+    expect(manifest.cases[10]?.expected).toHaveLength(1);
+    expect(manifest.cases[11]?.expected).toEqual([]);
 
     for (const [index, modelId] of [
       [0, "node-mcp-tool-command-injection"],
       [2, "node-mcp-tool-argument-injection"],
       [4, "node-mcp-tool-code-injection"],
-      [6, "node-mcp-tool-ssrf"],
-      [8, "node-mcp-tool-path-traversal"],
+      [6, "node-mcp-tool-regex-injection"],
+      [8, "node-mcp-tool-ssrf"],
+      [10, "node-mcp-tool-path-traversal"],
     ] as const) {
       const vulnerable = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index]!.id),
@@ -199,6 +204,116 @@ describe("Node MCP tool-input security model", () => {
     new vm.SourceTextModule(command);
     return eval("6 * 7");`)}`;
     expect(records(source)).toEqual([]);
+  });
+
+  test("detects MCP tool input compiled and executed as a regular expression", () => {
+    const found = records(
+      v2(
+        '    const expression = new RegExp(pattern, "u");\n    return expression.test("fixed diagnostic text");',
+        "pattern: z.string()",
+      ),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel.id).toBe("node-mcp-tool-regex-injection");
+    expect(found[0]?.frameworkModel.sink.kind).toBe(
+      "mcp-tool-regular-expression",
+    );
+    expect(found[0]?.frameworkModel.sink.symbol).toBe("RegExp.test:pattern[0]");
+    expect(found[0]?.frameworkModel.sink.cweIds).toEqual([
+      "CWE-400",
+      "CWE-730",
+    ]);
+    expect(
+      found[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual(["mcp-tool-registration", "mcp-tool-regex-construction"]);
+    expect(found[0]?.categories).toContain(
+      "broken-control:mcp-tool-regex-pattern-boundary",
+    );
+  });
+
+  test("supports immediate callable RegExp execution", () => {
+    for (const body of [
+      '    return new RegExp(pattern, "u").test("fixed diagnostic text");',
+      '    return RegExp(pattern, "u").exec("fixed diagnostic text");',
+    ]) {
+      const found = records(v2(body, "pattern: z.string()"));
+      expect(found).toHaveLength(1);
+      expect(found[0]?.frameworkModel.id).toBe("node-mcp-tool-regex-injection");
+    }
+  });
+
+  test("requires regex execution and keeps tool input in the pattern role", () => {
+    expect(
+      records(
+        v2('    return new RegExp(pattern, "u");', "pattern: z.string()"),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        v2(
+          "    const expression = /error/u;\n    return expression.test(pattern);",
+          "pattern: z.string()",
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        v2(
+          '    const expression = new RegExp("error", pattern);\n    return expression.test("fixed diagnostic text");',
+          "pattern: z.string()",
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  test("rejects shadowed, replaced, and invalidated RegExp capabilities", () => {
+    const localConstructor = `${v2(
+      '    const expression = new RegExp(pattern);\n    return expression.test("fixed");',
+      "pattern: z.string()",
+    )}
+function RegExp(value: string) { return { test: () => value.length > 0 }; }
+`;
+    expect(records(localConstructor)).toEqual([]);
+    expect(
+      records(
+        `globalThis.RegExp = customConstructor;\n${v2(
+          '    const expression = new RegExp(pattern);\n    return expression.test("fixed");',
+          "pattern: z.string()",
+        )}`,
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        `RegExp.prototype.test = () => true;\n${v2(
+          '    const expression = new RegExp(pattern);\n    return expression.test("fixed");',
+          "pattern: z.string()",
+        )}`,
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        v2(
+          '    RegExp = customConstructor;\n    const expression = new RegExp(pattern);\n    return expression.test("fixed");',
+          "pattern: z.string()",
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        v2(
+          '    let expression = new RegExp(pattern);\n    expression = /fixed/u;\n    return expression.test("fixed");',
+          "pattern: z.string()",
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        v2(
+          '    const expression = new RegExp(pattern);\n    expression.test = () => true;\n    return expression.test("fixed");',
+          "pattern: z.string()",
+        ),
+      ),
+    ).toEqual([]);
   });
 
   test("rejects shadowed and lookalike JavaScript evaluators", () => {
@@ -1231,6 +1346,116 @@ function runCommand(value: string) {
     }
   });
 
+  test("requires regular-expression validation and attack-path closure", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-node-mcp-regex-quality-repository-"),
+    );
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-node-mcp-regex-quality-scan-"),
+    );
+    try {
+      const application = v2(
+        '    const expression = new RegExp(pattern, "u");\n    return expression.test("fixed diagnostic text");',
+        "pattern: z.string().min(1).max(64)",
+      );
+      await writeFile(join(repository, "server.ts"), application, "utf8");
+      const sourceLines = application.split(/\r?\n/u);
+      const sinkLine =
+        sourceLines.findIndex((line) => line.includes("expression.test")) + 1;
+      const finding = {
+        occurrenceId: "occ_node_mcp_regex_quality",
+        taxonomy: { cwe: ["CWE-400", "CWE-730"] },
+        locations: [{ path: "server.ts", startLine: sinkLine, role: "sink" }],
+        codeEvidence: [
+          {
+            id: "mcp-regex-sink",
+            path: "server.ts",
+            startLine: sinkLine,
+            code: sourceLines[sinkLine - 1],
+            explanation:
+              "The registered tool callback executes a constructed expression.",
+            role: "sink",
+          },
+        ],
+        validation: {
+          summary:
+            "Static review confirms a regular expression in the handler.",
+          method: "source review and bounded metacharacter witness",
+          exploitWitness:
+            "A short alternation changes the selected diagnostics.",
+          negativeControl: "A fixed-pattern map accepts only operator names.",
+          evidence: ["mcp-regex-sink"],
+          counterEvidence: "Deployment exposure remains unknown.",
+          remainingUncertainty: "Runtime concurrency was not established.",
+        },
+        attackPath: {
+          summary: "An untrusted pattern may reach expression execution.",
+          dataflow: {
+            source: "mcp-regex-sink",
+            sink: "mcp-regex-sink",
+            outcome: "regular-expression evaluation",
+          },
+          reachability: {
+            attacker: "MCP client",
+            entrypoint: "tool invocation",
+            outcome: "synchronous denial of service",
+          },
+          brokenControls: ["No regular-expression grammar boundary"],
+          evidenceRefs: ["mcp-regex-sink"],
+        },
+      };
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      const inventory = await buildResidualRiskInventory(repository);
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      const rows = incomplete
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(rows[1]).toMatchObject({
+        findingId: "occ_node_mcp_regex_quality",
+        frameworkModelId: "node-mcp-tool-regex-injection",
+      });
+      expect(rows[1]?.reasons).toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(rows[1]?.reasons).toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+
+      const closure = [
+        "An MCP tool registerTool callback receives client-controlled tool input from a model invocation.",
+        "Its inputSchema string schema proves shape and length but does not constrain regular-expression pattern grammar or metacharacters.",
+        "The pattern property reaches global RegExp construction and actual test execution.",
+        "CWE-400 and CWE-730 describe ReDoS and the resulting synchronous Node event-loop denial of service.",
+      ].join(" ");
+      finding.validation.summary = closure;
+      finding.attackPath.summary = closure;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      expect(
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          inventory,
+        ),
+      ).toBe("");
+    } finally {
+      await rm(repository, { recursive: true, force: true });
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
+  });
+
   test("gives validation exact MCP source and sink boundaries", () => {
     const prompt = scanQualityGatePrompt(
       "{}",
@@ -1246,6 +1471,7 @@ function runCommand(value: string) {
     expect(prompt).toContain("For node-mcp-tool-command-injection");
     expect(prompt).toContain("node-mcp-tool-argument-injection");
     expect(prompt).toContain("node-mcp-tool-code-injection");
+    expect(prompt).toContain("node-mcp-tool-regex-injection");
     expect(prompt).toContain("node-mcp-tool-path-traversal");
     expect(prompt).toContain("schema-less callback receives context");
     expect(prompt).toContain("fixed executable plus separate argv data");
@@ -1254,6 +1480,10 @@ function runCommand(value: string) {
     expect(prompt).toContain("node:vm is not a security mechanism");
     expect(prompt).toContain("inert construction");
     expect(prompt).toContain("fixed side-effect-free arithmetic");
+    expect(prompt).toContain("actual test/exec execution");
+    expect(prompt).toContain("inert constructor-only code");
+    expect(prompt).toContain("fixed-pattern control");
+    expect(prompt).toContain("never execute a catastrophic-backtracking");
     expect(prompt).toContain("path-bearing Node fs");
     expect(prompt).toContain("path.join or path.resolve alone");
     expect(prompt).toContain("request body or same-host path");
@@ -1262,5 +1492,6 @@ function runCommand(value: string) {
     expect(prompt).toContain("CWE-22/CWE-73");
     expect(prompt).toContain("CWE-88/CWE-94");
     expect(prompt).toContain("CWE-94/CWE-95");
+    expect(prompt).toContain("CWE-400/CWE-730");
   });
 });

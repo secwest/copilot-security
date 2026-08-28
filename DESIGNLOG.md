@@ -2,6 +2,79 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Model executed MCP regular-expression patterns
+
+**Coverage gap and comparative evidence.** The exact MCP host pass covered
+process, interpreter-option, JavaScript-evaluation, filesystem, and network
+capabilities but did not distinguish a tool string used as executable
+regular-expression grammar from the same string used as ordinary search data.
+CodeQL's high-precision
+[`js/regex-injection`](https://codeql.github.com/codeql-query-help/javascript/js-regex-injection/)
+path query models untrusted input interpreted as a regular expression under
+CWE-730/CWE-400 and calls out both changed matching meaning and exponential-time
+denial of service. Its current
+[`RegExpInjection.ql`](https://github.com/github/codeql/blob/main/javascript/ql/src/Security/CWE-730/RegExpInjection.ql)
+and
+[`RegExpInjectionCustomizations.qll`](https://github.com/github/codeql/blob/main/javascript/ql/lib/semmle/javascript/security/dataflow/RegExpInjectionCustomizations.qll)
+use active remote/CLI/environment threat sources, an interpreted-as-regexp sink,
+and regexp-oriented escaping sanitizers. Semgrep's current
+[`detect-non-literal-regexp`](https://github.com/semgrep/semgrep-rules/blob/develop/javascript/lang/security/audit/detect-non-literal-regexp.yaml)
+audit rule covers a function parameter passed to callable or constructed
+`RegExp` and warns about main-thread ReDoS under CWE-1333. Authenticated searches
+of the current official CodeQL and public Semgrep sources found no explicit
+`McpServer` or `@modelcontextprotocol/server` regular-expression source model.
+This motivates the MCP-specific composition; it does not claim generic scanners
+cannot find the flow when configured with another source.
+
+**Execution and identity boundary.** Add `node-mcp-tool-regex-injection` only
+after the existing exact official SDK import, live server alias, schema-bearing
+tool registration, callback binding, local assignment, and optional same-file
+helper proof. The exact tool property must be live at argument zero of the
+unshadowed, unreassigned global `RegExp`, either called or constructed. The
+result must then reach an actual `test` or `exec`, immediately or through a
+named local binding. Emit the execution line as
+`mcp-tool-regular-expression`, record construction separately, and classify the
+boundary as CWE-400/CWE-730.
+
+Construction alone is insufficient. Reject an inert `RegExp`, tool input used
+only as flags, a fixed expression tested against tool data, locally declared or
+parameter-shadowed `RegExp`, global replacement before construction, expression
+variable replacement before use, and replaced `test`/`exec`. This is narrower
+than a non-literal-constructor rule on purpose: it removes candidates where the
+repository does not prove attacker-controlled grammar is ever interpreted.
+
+**Validation and safe control.** A Zod string with minimum and maximum length
+proves type and size, not allowed metacharacter grammar or worst-case matching
+complexity. Both validation and attack path must identify the MCP client, model,
+or tool invocation; exact property and schema limit; helper when present;
+construction and later execution; grammar boundary; CWE pair; and concrete
+synchronous Node event-loop effect. Dynamic evidence is restricted to short
+fixed `^error:`, `warning|error`, and invalid `[` inputs. It must never run a
+catastrophic-backtracking or load-generating expression. The strong control is
+an exact allowlist from fixed names to operator-owned regular-expression
+literals. Escaping is acceptable only when review proves a complete correct
+metacharacter escape dominates every construction.
+
+**Executable and regression contract.** Both fixtures pin
+`@modelcontextprotocol/server` 2.0.0 and Zod 4.4.3 and preserve the same
+`pattern` schema, `search-diagnostics` tool, `searchLines` helper, diagnostic
+corpus, and MCP response. The exploit constructs and executes the supplied
+pattern. The control maps `errors` and `warnings` to fixed literals and treats
+metacharacter strings as unknown names. The strict MCP manifest advances to
+twelve cases and Node CI executes all twelve witnesses on Windows and Linux.
+The canonical corpus advances to 162 pairs, 324 cases, and 972 repeated scan
+positions. Unit coverage includes assigned and immediate construction,
+callable/new forms, `test`/`exec`, source-role negatives, shadows, replacements,
+manifest pairing, field-local quality closure, and exact correction guidance.
+
+**Local acceptance.** Focused Windows and native WSL lanes each pass 59 tests
+and 2,723 assertions, both executable witnesses, generated-model drift, and
+TypeScript checking. The authoritative native Windows Bun 1.3.14 suite passes
+1,977 tests and 14,921 assertions across 210 files in 500 seconds, with 27
+intentional platform or integration skips and zero failures. The accepted run
+starts only after a clean production build; an earlier aggregate was discarded
+when benchmark-runner tests correctly rejected the stale compiled tree.
+
 ## 2026-08-28 — Model MCP tool input that becomes executable JavaScript
 
 **Coverage gap and comparative evidence.** The MCP host pass had exact process,

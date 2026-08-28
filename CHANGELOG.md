@@ -6,6 +6,31 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added deterministic `node-mcp-tool-regex-injection` coverage for official MCP
+  TypeScript SDK tool input used as argument zero of the live global `RegExp`
+  and then actually executed through `test` or `exec`. The bounded source model
+  preserves local assignment and same-file helper provenance, emits
+  CWE-400/CWE-730, and rejects constructor-only code, tool input used only as
+  flags or test data, fixed expressions, shadows, reassignment, and replaced
+  expression methods.
+- Added a field-local finding-quality contract and correction guidance. Both
+  validation and attack path must name the MCP caller, exact property and schema
+  limitation, construction, execution, pattern-grammar boundary, CWE pair, and
+  concrete synchronous Node event-loop effect. Validation permits only short
+  fixed metacharacter examples and the matched safe control; catastrophic or
+  load-generating expressions are explicitly forbidden.
+- Added real `@modelcontextprotocol/server` 2.0.0 exploit/control fixtures. The
+  exploit carries the `pattern` property through `searchLines` into constructed
+  and executed regular-expression syntax. The topology-matched control keeps
+  the SDK, schema, tool, helper, diagnostics, and response while mapping fixed
+  names to operator-owned literals. The strict MCP corpus now contains twelve
+  cases and twelve cross-platform witnesses; the canonical corpus contains 162
+  pairs, 324 cases, and 972 repeated scan positions.
+- Focused Windows and native WSL lanes each pass 59 tests and 2,723 assertions,
+  both executable witnesses, generated-model drift, and TypeScript checking.
+  The authoritative native Windows suite passes 1,977 tests and 14,921
+  assertions across 210 files in 500 seconds, with 27 intentional platform or
+  integration skips and zero failures.
 - Added deterministic `node-mcp-tool-code-injection` coverage for official MCP
   TypeScript SDK tool input reaching actual JavaScript execution. The model
   accepts only the live unshadowed global `eval` or exact named, namespace,

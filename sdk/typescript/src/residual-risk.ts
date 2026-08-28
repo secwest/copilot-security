@@ -4257,6 +4257,16 @@ const NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-94", "CWE-95", "code injection", "code execution"],
 ] as const;
 
+const NODE_MCP_TOOL_REGEX_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["MCP tool", "registerTool", "server.tool", "tool callback"],
+  ["tool input", "callback input", "LLM-controlled", "client-controlled"],
+  ["inputSchema", "schema validation", "string schema"],
+  ["RegExp", "regular expression", "regex pattern"],
+  ["test", "exec", "regex execution", "executed expression"],
+  ["metacharacter", "pattern grammar", "regex injection"],
+  ["CWE-400", "CWE-730", "ReDoS", "denial of service"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4293,6 +4303,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-mcp-tool-regex-injection",
+    {
+      validation: NODE_MCP_TOOL_REGEX_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_MCP_TOOL_REGEX_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [

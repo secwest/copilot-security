@@ -143,6 +143,50 @@
       "expected": []
     },
     {
+      "id": "node-mcp-v2-regex-injection",
+      "fixture": "fixtures/node-mcp-v2-regex-injection",
+      "expected": [
+        {
+          "title": "MCP tool input becomes an executed regular expression through a same-file helper",
+          "cwe": ["CWE-400", "CWE-730"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/server.mjs",
+          "line": 9,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["pattern", "tool input", "callback input"],
+            ["searchLines", "same-file helper", "helper call"],
+            ["RegExp", "regular expression", "regex pattern"],
+            ["test", "regex execution", "executed expression"],
+            ["inputSchema", "string schema", "schema validation"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["search-diagnostics", "registerTool", "tool callback"],
+            ["searchLines", "same-file helper", "helper call"],
+            ["RegExp", "pattern grammar", "regex construction"],
+            ["test", "event loop", "denial of service", "ReDoS"]
+          ],
+          "forbiddenText": [
+            "string schema prevents regex injection",
+            "length limit prevents ReDoS",
+            "the witness executed catastrophic backtracking",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fixed-patterns",
+      "fixture": "fixtures/node-mcp-v2-fixed-patterns",
+      "expected": []
+    },
+    {
       "id": "node-mcp-v2-ssrf",
       "fixture": "fixtures/node-mcp-v2-ssrf",
       "expected": [

@@ -144,6 +144,7 @@ type McpModelId =
   | "node-mcp-tool-code-injection"
   | "node-mcp-tool-command-injection"
   | "node-mcp-tool-path-traversal"
+  | "node-mcp-tool-regex-injection"
   | "node-mcp-tool-ssrf";
 type McpSinkKind =
   | "mcp-tool-code-evaluation"
@@ -151,6 +152,7 @@ type McpSinkKind =
   | "mcp-tool-filesystem-path"
   | "mcp-tool-interpreter-option"
   | "mcp-tool-network-destination"
+  | "mcp-tool-regular-expression"
   | "mcp-tool-shell-command"
   | "mcp-tool-shell-enabled-spawn";
 
@@ -222,6 +224,7 @@ export interface NodeMcpToolRiskRecord {
         | readonly ["CWE-78", "CWE-88"]
         | readonly ["CWE-88", "CWE-94"]
         | readonly ["CWE-94", "CWE-95"]
+        | readonly ["CWE-400", "CWE-730"]
         | readonly ["CWE-918"];
     };
     propagators: Array<{
@@ -236,10 +239,10 @@ export interface NodeMcpToolRiskRecord {
 
 /**
  * Finds exact MCP SDK tool-input flows to Node process, code-evaluation,
- * filesystem, and network sinks. The pass is intentionally bounded and
- * ownership-sensitive: unresolved imports, schema-less v2 callbacks,
- * unsupported callback forms, and shadowed globals produce no framework row
- * for later stages to over-trust.
+ * regular-expression, filesystem, and network sinks. The pass is intentionally
+ * bounded and ownership-sensitive: unresolved imports, schema-less v2
+ * callbacks, unsupported callback forms, and shadowed globals produce no
+ * framework row for later stages to over-trust.
  */
 export function nodeMcpToolRiskRecords(
   path: string,
@@ -306,6 +309,7 @@ export function nodeMcpToolRiskRecords(
         taint,
         evaluationBindings,
       ),
+      ...regexSinks(source, structural, registration, taint),
       ...filesystemSinks(
         source,
         structural,
@@ -330,11 +334,13 @@ export function nodeMcpToolRiskRecords(
           ? "node-mcp-tool-ssrf"
           : sink.kind === "mcp-tool-code-evaluation"
             ? "node-mcp-tool-code-injection"
-            : sink.kind === "mcp-tool-filesystem-path"
-              ? "node-mcp-tool-path-traversal"
-              : sink.kind === "mcp-tool-interpreter-option"
-                ? "node-mcp-tool-argument-injection"
-                : "node-mcp-tool-command-injection";
+            : sink.kind === "mcp-tool-regular-expression"
+              ? "node-mcp-tool-regex-injection"
+              : sink.kind === "mcp-tool-filesystem-path"
+                ? "node-mcp-tool-path-traversal"
+                : sink.kind === "mcp-tool-interpreter-option"
+                  ? "node-mcp-tool-argument-injection"
+                  : "node-mcp-tool-command-injection";
       const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(lines.length, sink.line + CONTEXT_LINES_AFTER);
       const sourceStart = Math.max(1, registration.line - 2);
@@ -350,22 +356,26 @@ export function nodeMcpToolRiskRecords(
             ? "broken-control:mcp-tool-network-destination-not-pinned"
             : modelId === "node-mcp-tool-code-injection"
               ? "broken-control:mcp-tool-code-data-boundary"
-              : modelId === "node-mcp-tool-path-traversal"
-                ? "broken-control:mcp-tool-filesystem-path-not-confined"
-                : modelId === "node-mcp-tool-argument-injection"
-                  ? "broken-control:mcp-tool-interpreter-end-of-options-missing"
-                  : "broken-control:mcp-tool-command-data-boundary",
+              : modelId === "node-mcp-tool-regex-injection"
+                ? "broken-control:mcp-tool-regex-pattern-boundary"
+                : modelId === "node-mcp-tool-path-traversal"
+                  ? "broken-control:mcp-tool-filesystem-path-not-confined"
+                  : modelId === "node-mcp-tool-argument-injection"
+                    ? "broken-control:mcp-tool-interpreter-end-of-options-missing"
+                    : "broken-control:mcp-tool-command-data-boundary",
         ],
         priority:
           modelId === "node-mcp-tool-code-injection"
             ? 129
-            : modelId === "node-mcp-tool-ssrf"
-              ? 122
-              : modelId === "node-mcp-tool-path-traversal"
-                ? 124
-                : modelId === "node-mcp-tool-argument-injection"
-                  ? 126
-                  : 127,
+            : modelId === "node-mcp-tool-regex-injection"
+              ? 125
+              : modelId === "node-mcp-tool-ssrf"
+                ? 122
+                : modelId === "node-mcp-tool-path-traversal"
+                  ? 124
+                  : modelId === "node-mcp-tool-argument-injection"
+                    ? 126
+                    : 127,
         startLine,
         endLine,
         excerpt: sourceExcerpt(lines, startLine, endLine),
@@ -391,11 +401,13 @@ export function nodeMcpToolRiskRecords(
                 ? (["CWE-918"] as const)
                 : modelId === "node-mcp-tool-code-injection"
                   ? (["CWE-94", "CWE-95"] as const)
-                  : modelId === "node-mcp-tool-path-traversal"
-                    ? (["CWE-22", "CWE-73"] as const)
-                    : modelId === "node-mcp-tool-argument-injection"
-                      ? (["CWE-88", "CWE-94"] as const)
-                      : (["CWE-78", "CWE-88"] as const),
+                  : modelId === "node-mcp-tool-regex-injection"
+                    ? (["CWE-400", "CWE-730"] as const)
+                    : modelId === "node-mcp-tool-path-traversal"
+                      ? (["CWE-22", "CWE-73"] as const)
+                      : modelId === "node-mcp-tool-argument-injection"
+                        ? (["CWE-88", "CWE-94"] as const)
+                        : (["CWE-78", "CWE-88"] as const),
           },
           propagators: [
             {
@@ -1239,6 +1251,7 @@ function summarizeHelperBody(
         taint,
         evaluationBindings,
       ),
+      ...regexSinks(source, structural, helperRegistration, taint),
       ...filesystemSinks(
         source,
         structural,
@@ -1585,6 +1598,140 @@ function evaluationSinks(
     });
   }
   return sinks;
+}
+
+function regexSinks(
+  source: string,
+  structural: string,
+  registration: Registration,
+  taint: readonly TaintBinding[],
+): Sink[] {
+  if (
+    hasLocalDeclaration(structural, "RegExp") ||
+    bodyHasNamedParameter(structural, registration.body, "RegExp")
+  ) {
+    return [];
+  }
+  const sinks: Sink[] = [];
+  const constructor = /(?<![.\w$])(?:new\s+)?RegExp\s*\(/gu;
+  for (const match of structural
+    .slice(registration.body.start, registration.body.end)
+    .matchAll(constructor)) {
+    const offset = registration.body.start + match.index!;
+    if (
+      /(?<![.\w$])RegExp\s*(?:=(?!=|>)|\+\+|--)/u.test(
+        structural.slice(0, offset),
+      ) ||
+      /(?<![\w$])(?:globalThis|global|window)\s*\.\s*RegExp\s*(?:=(?!=|>)|\+\+|--)/u.test(
+        structural.slice(0, offset),
+      )
+    ) {
+      continue;
+    }
+    const open = offset + match[0].lastIndexOf("(");
+    const close = matchingStructuralDelimiter(structural, open, "(", ")");
+    if (close < 0 || close > registration.body.end) continue;
+    const pattern = splitArgumentRanges(structural, open + 1, close)[0];
+    if (pattern === undefined) continue;
+    const sourceBinding = liveTaintForRange(
+      structural,
+      trimSourceRange(source, pattern),
+      registration.body,
+      taint,
+    );
+    if (sourceBinding === undefined) continue;
+    const execution = regexExecutionAfterConstruction(
+      source,
+      structural,
+      registration.body,
+      offset,
+      close,
+    );
+    if (execution === undefined) continue;
+    const escapedMethod = escapeRegularExpression(execution.method);
+    if (
+      new RegExp(
+        String.raw`(?:(?<![.\w$])RegExp|(?<![\w$])(?:globalThis|global|window)\s*\.\s*RegExp)\s*\.\s*prototype\s*\.\s*${escapedMethod}\s*(?:=(?!=|>)|\+\+|--)`,
+        "u",
+      ).test(structural.slice(0, execution.offset))
+    ) {
+      continue;
+    }
+    sinks.push({
+      kind: "mcp-tool-regular-expression",
+      line: execution.line,
+      symbol: `RegExp.${execution.method}:pattern[0]`,
+      source: {
+        ...sourceBinding,
+        propagators: [
+          ...sourceBinding.propagators,
+          {
+            kind: "mcp-tool-regex-construction",
+            line: lineAt(source, offset),
+            symbol: "RegExp:pattern[0]",
+          },
+        ],
+      },
+    });
+  }
+  return sinks;
+}
+
+function regexExecutionAfterConstruction(
+  source: string,
+  structural: string,
+  body: Range,
+  constructorOffset: number,
+  constructorClose: number,
+): { line: number; method: "exec" | "test"; offset: number } | undefined {
+  const directSuffix = structural.slice(
+    constructorClose + 1,
+    Math.min(body.end, constructorClose + 257),
+  );
+  const direct = /^\s*\.\s*(exec|test)\s*\(/u.exec(directSuffix);
+  if (direct !== null) {
+    return {
+      line: lineAt(source, constructorClose + 1 + direct.index),
+      method: direct[1] as "exec" | "test",
+      offset: constructorClose + 1 + direct.index,
+    };
+  }
+
+  const declarationPrefix = structural.slice(
+    Math.max(body.start, constructorOffset - 512),
+    constructorOffset,
+  );
+  const assignment =
+    /(?:^|[;{}\n])\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*$/u.exec(
+      declarationPrefix,
+    );
+  const variable = assignment?.[1];
+  if (variable === undefined) return undefined;
+  const escaped = escapeRegularExpression(variable);
+  const execution = new RegExp(
+    String.raw`(?<![.\w$])${escaped}\s*\.\s*(exec|test)\s*\(`,
+    "gu",
+  );
+  for (const match of structural
+    .slice(constructorClose + 1, body.end)
+    .matchAll(execution)) {
+    const offset = constructorClose + 1 + match.index!;
+    const between = structural.slice(constructorClose + 1, offset);
+    if (
+      new RegExp(
+        String.raw`(?<![.\w$])${escaped}\s*(?:=(?!=|>)|\+\+|--)|(?<![.\w$])${escaped}\s*\.\s*(?:exec|test)\s*=(?!=|>)`,
+        "u",
+      ).test(between)
+    ) {
+      return undefined;
+    }
+    return {
+      line: lineAt(source, offset),
+      method: match[1] as "exec" | "test",
+      offset,
+    };
+  }
+  return undefined;
 }
 
 function globalEvalCalls(

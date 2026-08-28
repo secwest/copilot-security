@@ -508,6 +508,7 @@ describe("effectiveness benchmark", () => {
       ["node-mcp-v2-command-injection", "node-mcp-v2-command-argv"],
       ["node-mcp-v2-argument-injection", "node-mcp-v2-argument-data"],
       ["node-mcp-v2-code-injection", "node-mcp-v2-arithmetic-parser"],
+      ["node-mcp-v2-regex-injection", "node-mcp-v2-fixed-patterns"],
       ["node-mcp-v2-ssrf", "node-mcp-v2-fixed-destination"],
       ["node-mcp-v2-path-traversal", "node-mcp-v2-fixed-file"],
       [

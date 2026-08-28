@@ -613,13 +613,14 @@ node benchmarks/run-benchmark.mjs `
 ```
 
 The Node MCP tool-handler lane uses the real stable TypeScript server package
-and separates five remote-capability boundaries. One pair contrasts a tool
+and separates six tool-controlled capability boundaries. One pair contrasts a tool
 field reaching a shell command with an explicit end-of-options argv control.
 A second proves that fixed `process.execPath` is still unsafe when a
 dash-prefixed tool value appears before `--`, then preserves it as data in the
 control. A third contrasts direct JavaScript evaluation with a fixed arithmetic
 grammar that preserves useful calculation without treating the tool string as
-source. The other pairs contrast a tool-selected fetch destination with a fixed
+source. A fourth contrasts an executed tool-supplied regular-expression pattern
+with an allowlisted map of fixed operator-owned expressions. The other pairs contrast a tool-selected fetch destination with a fixed
 loopback origin whose body alone contains tool data, and a tool-selected
 `writeFile` path with a fixed operator file whose contents alone contain tool
 data. All witnesses are bounded, and the strict manifest requires perfect

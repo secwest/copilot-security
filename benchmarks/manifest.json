@@ -7031,6 +7031,67 @@
       "expected": []
     },
     {
+      "id": "node-mcp-v2-regex-injection",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into global RegExp pattern construction and later test execution, permitting regex grammar injection and synchronous event-loop denial of service.",
+      "fixture": "fixtures/node-mcp-v2-regex-injection",
+      "findingsPaths": [
+        "node-mcp-v2-regex-injection/run-1/findings.json",
+        "node-mcp-v2-regex-injection/run-2/findings.json",
+        "node-mcp-v2-regex-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-regex-injection",
+          "cwe": ["CWE-400", "CWE-730"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["pattern", "tool input", "callback input"],
+            ["searchLines", "same-file helper", "helper call"],
+            ["RegExp", "regular expression", "regex pattern"],
+            ["test", "regex execution", "executed expression"],
+            ["inputSchema", "string schema", "schema validation"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["search-diagnostics", "registerTool", "tool callback"],
+            ["searchLines", "same-file helper", "helper call"],
+            ["RegExp", "pattern grammar", "regex construction"],
+            ["test", "event loop", "denial of service", "ReDoS"]
+          ],
+          "forbiddenText": [
+            "string schema prevents regex injection",
+            "length limit prevents ReDoS",
+            "the witness executed catastrophic backtracking",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fixed-patterns",
+      "description": "The topology-matched MCP v2 control preserves the schema, tool, helper, diagnostic corpus, matching operation, and response while tool input selects only operator-owned regular-expression literals from a fixed map.",
+      "fixture": "fixtures/node-mcp-v2-fixed-patterns",
+      "findingsPaths": [
+        "node-mcp-v2-fixed-patterns/run-1/findings.json",
+        "node-mcp-v2-fixed-patterns/run-2/findings.json",
+        "node-mcp-v2-fixed-patterns/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "node-mcp-v2-ssrf",
       "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into the global fetch destination with a bounded timeout and returned response text.",
       "fixture": "fixtures/node-mcp-v2-ssrf",
