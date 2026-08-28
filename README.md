@@ -620,7 +620,8 @@ dash-prefixed tool value appears before `--`, then preserves it as data in the
 control. A third contrasts direct JavaScript evaluation with a fixed arithmetic
 grammar that preserves useful calculation without treating the tool string as
 source. A fourth contrasts an executed tool-supplied regular-expression pattern
-with an allowlisted map of fixed operator-owned expressions. The other pairs contrast a tool-selected fetch destination with a fixed
+over a separately bounded tool-supplied subject with an allowlisted map of fixed
+operator-owned expressions. The other pairs contrast a tool-selected fetch destination with a fixed
 loopback origin whose body alone contains tool data, and a tool-selected
 `writeFile` path with a fixed operator file whose contents alone contain tool
 data. All witnesses are bounded, and the strict manifest requires perfect

@@ -15,22 +15,32 @@ All notable scanner, application, benchmark, and operational changes are recorde
   expression methods.
 - Added a field-local finding-quality contract and correction guidance. Both
   validation and attack path must name the MCP caller, exact property and schema
-  limitation, construction, execution, pattern-grammar boundary, CWE pair, and
-  concrete synchronous Node event-loop effect. Validation permits only short
-  fixed metacharacter examples and the matched safe control; catastrophic or
-  load-generating expressions are explicitly forbidden.
+  limitation, construction, execution, match-subject provenance and work bound,
+  pattern-grammar boundary, CWE pair, and concrete synchronous Node event-loop
+  effect. Small fixed server-owned subjects are counterevidence. Validation
+  permits only short fixed metacharacter examples and the matched safe control;
+  catastrophic or load-generating expressions are explicitly forbidden.
 - Added real `@modelcontextprotocol/server` 2.0.0 exploit/control fixtures. The
-  exploit carries the `pattern` property through `searchLines` into constructed
-  and executed regular-expression syntax. The topology-matched control keeps
-  the SDK, schema, tool, helper, diagnostics, and response while mapping fixed
+  exploit carries the `pattern` property through `searchText` into constructed
+  and executed regular-expression syntax over an independently supplied text
+  subject capped at 4,096 characters. The topology-matched control keeps the
+  SDK, both schemas, tool, helper, subject, and response while mapping fixed
   names to operator-owned literals. The strict MCP corpus now contains twelve
   cases and twelve cross-platform witnesses; the canonical corpus contains 162
   pairs, 324 cases, and 972 repeated scan positions.
-- Focused Windows and native WSL lanes each pass 59 tests and 2,723 assertions,
+- Focused Windows and native WSL lanes each pass 59 tests and 2,725 assertions,
   both executable witnesses, generated-model drift, and TypeScript checking.
-  The authoritative native Windows suite passes 1,977 tests and 14,921
-  assertions across 210 files in 500 seconds, with 27 intentional platform or
+  The authoritative native Windows suite passes 1,977 tests and 14,923
+  assertions across 210 files in 496.94 seconds, with 27 intentional platform or
   integration skips and zero failures.
+- Preserved failed live campaign
+  `2e7279a06889e5490dc3526f41632a40f8d8d999404dca55d540a5c83be15e0d`
+  as a benchmark counterexample. The scanner correctly rejected the first
+  fixture because its pattern ran over only three short fixed strings, yielding
+  one benchmark false negative but no reportable security impact. The corrected
+  pair adds the independently supplied bounded subject, and the stricter host
+  quality gate now requires subject/work amplification evidence so harmless
+  dynamic regular expressions do not become availability findings.
 - Added deterministic `node-mcp-tool-code-injection` coverage for official MCP
   TypeScript SDK tool input reaching actual JavaScript execution. The model
   accepts only the live unshadowed global `eval` or exact named, namespace,

@@ -1,8 +1,8 @@
 # MCP v2 fixed-pattern control
 
 This topology-matched control preserves the MCP server, string schema,
-`search-diagnostics` tool, same-file `searchLines` helper, diagnostic corpus,
-matching operation, and response. Tool input selects only between two
+`search-diagnostics` tool, same-file `searchText` helper, caller-supplied match
+subject, matching operation, and response. Tool input selects only between two
 operator-owned regular-expression literals in an immutable local map; it never
 becomes regex grammar.
 

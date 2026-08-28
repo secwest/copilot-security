@@ -24,7 +24,7 @@
           "cwe": ["CWE-78", "CWE-88"],
           "acceptableSeverities": ["critical", "high"],
           "path": "src/server.mjs",
-          "line": 9,
+          "line": 8,
           "lineTolerance": 1,
           "requireValidation": true,
           "requireAttackPath": true,
@@ -159,17 +159,21 @@
           "requiredValidationTextAnyOf": [
             ["MCP", "McpServer", "registerTool"],
             ["pattern", "tool input", "callback input"],
-            ["searchLines", "same-file helper", "helper call"],
+            ["searchText", "same-file helper", "helper call"],
             ["RegExp", "regular expression", "regex pattern"],
             ["test", "regex execution", "executed expression"],
-            ["inputSchema", "string schema", "schema validation"]
+            ["inputSchema", "string schema", "schema validation"],
+            ["text", "match subject", "haystack"],
+            ["4096", "matching work", "input length"]
           ],
           "requiredAttackPathTextAnyOf": [
             ["MCP client", "model", "tool caller", "tool invocation"],
             ["search-diagnostics", "registerTool", "tool callback"],
-            ["searchLines", "same-file helper", "helper call"],
+            ["searchText", "same-file helper", "helper call"],
             ["RegExp", "pattern grammar", "regex construction"],
-            ["test", "event loop", "denial of service", "ReDoS"]
+            ["text", "match subject", "haystack"],
+            ["4096", "matching work", "input length"],
+            ["test", "shared event loop", "other clients", "ReDoS"]
           ],
           "forbiddenText": [
             "string schema prevents regex injection",

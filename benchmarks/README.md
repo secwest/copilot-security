@@ -279,7 +279,7 @@ node ../../benchmarks/run-benchmark.mjs `
 
 ## Node MCP tool-handler security benchmark
 
-`node-mcp-tool-security-manifest.json` measures tool input at five distinct
+`node-mcp-tool-security-manifest.json` measures tool input at six distinct
 capability boundaries under perfect selected-run gates. The command pair uses
 the real stable `@modelcontextprotocol/server` 2.0.0 API: the exploit carries a
 tool field through an arrow helper into `child_process.exec`, while its
@@ -291,8 +291,9 @@ helper into direct JavaScript `eval`; its control preserves expression input,
 the helper, arithmetic results, and the MCP response while an explicit numeric
 `+`/`*` grammar never evaluates the tool string as source. The regular-expression
 pair compiles a tool pattern through a same-file helper and executes it with
-`test`; its control preserves the schema, helper, data, and response while a
-fixed-pattern map selects only operator-owned regular-expression literals. The SSRF pair carries
+`test` against a separately bounded tool-supplied match subject; its control
+preserves both schemas, helper, subject, and response while a fixed-pattern map
+selects only operator-owned regular-expression literals. The SSRF pair carries
 a tool URL through a helper into global `fetch`; its control fixes a disposable
 loopback origin before loading the server and places tool data only in the
 request body. The path pair passes a tool-selected name through a same-file

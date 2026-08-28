@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { searchLines } from "./src/server.mjs";
+import { searchText } from "./src/server.mjs";
 
-assert.deepEqual(searchLines("errors"), ["error: disk unavailable"]);
-assert.deepEqual(searchLines("warnings"), ["warning: cpu elevated"]);
-assert.deepEqual(searchLines("^error:"), []);
-assert.deepEqual(searchLines("["), []);
+assert.equal(searchText("errors", "error: disk unavailable"), true);
+assert.equal(searchText("warnings", "warning: cpu elevated"), true);
+assert.equal(searchText("errors", "ok"), false);
+assert.equal(searchText("^error:", "error: disk unavailable"), false);
+assert.equal(searchText("[", "fixed short text"), false);
 
 console.log("MCP fixed-pattern witness passed");

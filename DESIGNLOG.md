@@ -47,8 +47,10 @@ repository does not prove attacker-controlled grammar is ever interpreted.
 proves type and size, not allowed metacharacter grammar or worst-case matching
 complexity. Both validation and attack path must identify the MCP client, model,
 or tool invocation; exact property and schema limit; helper when present;
-construction and later execution; grammar boundary; CWE pair; and concrete
-synchronous Node event-loop effect. Dynamic evidence is restricted to short
+construction and later execution; match-subject provenance and work bound;
+grammar boundary; CWE pair; and concrete synchronous Node event-loop effect.
+Small fixed server-owned subjects without another concrete impact are rejection
+evidence. Dynamic evidence is restricted to short
 fixed `^error:`, `warning|error`, and invalid `[` inputs. It must never run a
 catastrophic-backtracking or load-generating expression. The strong control is
 an exact allowlist from fixed names to operator-owned regular-expression
@@ -57,20 +59,34 @@ metacharacter escape dominates every construction.
 
 **Executable and regression contract.** Both fixtures pin
 `@modelcontextprotocol/server` 2.0.0 and Zod 4.4.3 and preserve the same
-`pattern` schema, `search-diagnostics` tool, `searchLines` helper, diagnostic
-corpus, and MCP response. The exploit constructs and executes the supplied
-pattern. The control maps `errors` and `warnings` to fixed literals and treats
-metacharacter strings as unknown names. The strict MCP manifest advances to
+`pattern` and `text` schemas, `search-diagnostics` tool, `searchText` helper,
+caller-supplied match subject, and MCP response. The exploit constructs and
+executes the supplied pattern against text capped at 4,096 characters. The
+control maps `errors` and `warnings` to fixed literals and treats metacharacter
+strings as unknown names. The strict MCP manifest advances to
 twelve cases and Node CI executes all twelve witnesses on Windows and Linux.
 The canonical corpus advances to 162 pairs, 324 cases, and 972 repeated scan
 positions. Unit coverage includes assigned and immediate construction,
 callable/new forms, `test`/`exec`, source-role negatives, shadows, replacements,
 manifest pairing, field-local quality closure, and exact correction guidance.
 
+**Live counterexample and correction.** Campaign
+`2e7279a06889e5490dc3526f41632a40f8d8d999404dca55d540a5c83be15e0d`
+completed both original cases on attempt one with no provider failure. It
+correctly rejected the apparent exploit because every expression ran over only
+three short fixed server-owned strings; completion and negative accuracy were
+one, but recall and F1 were zero under the incorrect ground truth. Candidate and
+validation ledgers explicitly identified the bounded corpus as counterevidence.
+The fixture was therefore corrected instead of forcing a false positive: the
+caller now supplies an independently bounded 4,096-character subject, while the
+control retains that subject but selects only fixed expressions. The host gate
+now requires subject provenance and meaningful matching-work evidence in both
+validation and attack path.
+
 **Local acceptance.** Focused Windows and native WSL lanes each pass 59 tests
-and 2,723 assertions, both executable witnesses, generated-model drift, and
+and 2,725 assertions, both executable witnesses, generated-model drift, and
 TypeScript checking. The authoritative native Windows Bun 1.3.14 suite passes
-1,977 tests and 14,921 assertions across 210 files in 500 seconds, with 27
+1,977 tests and 14,923 assertions across 210 files in 496.94 seconds, with 27
 intentional platform or integration skips and zero failures. The accepted run
 starts only after a clean production build; an earlier aggregate was discarded
 when benchmark-runner tests correctly rejected the stale compiled tree.

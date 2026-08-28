@@ -7032,7 +7032,7 @@
     },
     {
       "id": "node-mcp-v2-regex-injection",
-      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into global RegExp pattern construction and later test execution, permitting regex grammar injection and synchronous event-loop denial of service.",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into global RegExp pattern construction and later test execution against an independently supplied 4,096-character subject, permitting nonlinear matching to block the shared Node event loop.",
       "fixture": "fixtures/node-mcp-v2-regex-injection",
       "findingsPaths": [
         "node-mcp-v2-regex-injection/run-1/findings.json",
@@ -7046,8 +7046,8 @@
           "locations": [
             {
               "path": "src/server.mjs",
-              "startLine": 9,
-              "endLine": 9,
+              "startLine": 8,
+              "endLine": 8,
               "lineTolerance": 1
             }
           ],
@@ -7058,17 +7058,21 @@
           "requiredValidationTextAnyOf": [
             ["MCP", "McpServer", "registerTool"],
             ["pattern", "tool input", "callback input"],
-            ["searchLines", "same-file helper", "helper call"],
+            ["searchText", "same-file helper", "helper call"],
             ["RegExp", "regular expression", "regex pattern"],
             ["test", "regex execution", "executed expression"],
-            ["inputSchema", "string schema", "schema validation"]
+            ["inputSchema", "string schema", "schema validation"],
+            ["text", "match subject", "haystack"],
+            ["4096", "matching work", "input length"]
           ],
           "requiredAttackPathTextAnyOf": [
             ["MCP client", "model", "tool caller", "tool invocation"],
             ["search-diagnostics", "registerTool", "tool callback"],
-            ["searchLines", "same-file helper", "helper call"],
+            ["searchText", "same-file helper", "helper call"],
             ["RegExp", "pattern grammar", "regex construction"],
-            ["test", "event loop", "denial of service", "ReDoS"]
+            ["text", "match subject", "haystack"],
+            ["4096", "matching work", "input length"],
+            ["test", "shared event loop", "other clients", "ReDoS"]
           ],
           "forbiddenText": [
             "string schema prevents regex injection",
@@ -7082,7 +7086,7 @@
     },
     {
       "id": "node-mcp-v2-fixed-patterns",
-      "description": "The topology-matched MCP v2 control preserves the schema, tool, helper, diagnostic corpus, matching operation, and response while tool input selects only operator-owned regular-expression literals from a fixed map.",
+      "description": "The topology-matched MCP v2 control preserves both schemas, tool, helper, caller-supplied match subject, matching operation, and response while the pattern field selects only operator-owned regular-expression literals from a fixed map.",
       "fixture": "fixtures/node-mcp-v2-fixed-patterns",
       "findingsPaths": [
         "node-mcp-v2-fixed-patterns/run-1/findings.json",

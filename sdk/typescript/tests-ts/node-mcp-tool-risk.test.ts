@@ -27,7 +27,7 @@ const server = new McpServer({ name: "tools", version: "1.0.0" });
 server.registerTool(
   "operate",
   { inputSchema: z.object({ ${input} }) },
-  async ({ command, url, pattern }) => {
+  async ({ command, url, pattern, text }) => {
 ${body}
     return { content: [] };
   },
@@ -1355,8 +1355,8 @@ function runCommand(value: string) {
     );
     try {
       const application = v2(
-        '    const expression = new RegExp(pattern, "u");\n    return expression.test("fixed diagnostic text");',
-        "pattern: z.string().min(1).max(64)",
+        '    const expression = new RegExp(pattern, "u");\n    return expression.test(text);',
+        "pattern: z.string().min(1).max(64), text: z.string().max(4096)",
       );
       await writeFile(join(repository, "server.ts"), application, "utf8");
       const sourceLines = application.split(/\r?\n/u);
@@ -1433,8 +1433,9 @@ function runCommand(value: string) {
       const closure = [
         "An MCP tool registerTool callback receives client-controlled tool input from a model invocation.",
         "Its inputSchema string schema proves shape and length but does not constrain regular-expression pattern grammar or metacharacters.",
-        "The pattern property reaches global RegExp construction and actual test execution.",
-        "CWE-400 and CWE-730 describe ReDoS and the resulting synchronous Node event-loop denial of service.",
+        "The pattern property reaches global RegExp construction and actual test execution against the client-controlled text match subject.",
+        "The subject input length permits meaningful nonlinear matching work on Node's shared event loop.",
+        "CWE-400 and CWE-730 describe ReDoS and the resulting synchronous denial of service for other clients.",
       ].join(" ");
       finding.validation.summary = closure;
       finding.attackPath.summary = closure;
@@ -1482,6 +1483,8 @@ function runCommand(value: string) {
     expect(prompt).toContain("fixed side-effect-free arithmetic");
     expect(prompt).toContain("actual test/exec execution");
     expect(prompt).toContain("inert constructor-only code");
+    expect(prompt).toContain("small fixed server-owned string");
+    expect(prompt).toContain("match-subject provenance and work bound");
     expect(prompt).toContain("fixed-pattern control");
     expect(prompt).toContain("never execute a catastrophic-backtracking");
     expect(prompt).toContain("path-bearing Node fs");

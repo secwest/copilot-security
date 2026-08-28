@@ -4263,6 +4263,13 @@ const NODE_MCP_TOOL_REGEX_FIELD_EVIDENCE_REQUIREMENTS = [
   ["inputSchema", "schema validation", "string schema"],
   ["RegExp", "regular expression", "regex pattern"],
   ["test", "exec", "regex execution", "executed expression"],
+  ["match input", "match subject", "haystack", "text"],
+  [
+    "matching work",
+    "subject length",
+    "input length",
+    "attacker-controlled text",
+  ],
   ["metacharacter", "pattern grammar", "regex injection"],
   ["CWE-400", "CWE-730", "ReDoS", "denial of service"],
 ] as const;
