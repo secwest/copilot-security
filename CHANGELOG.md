@@ -20,7 +20,14 @@ All notable scanner, application, benchmark, and operational changes are recorde
   2,348,280-byte archive has SHA-256
   `56c490c33467ec8930d8b60ddf93adb60a97a6435f9c3cb0bdf2be6182244d7d`
   and passes isolated Windows and WSL public-import, CLI, and 79-file bundled
-  plugin validation.
+  plugin validation. At public revision
+  `0a8472d0510e07e79ba8b50bb3ab06813ffbb5b8`, two exact-head inventories
+  complete in 20.55 and 19.41 seconds and are byte-identical: 256 rows and
+  584,350 bytes, with 243 structured records and 13 lexical leads at SHA-256
+  `d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+  The production-path owner intentionally excludes benchmark fixtures, so the
+  root inventory emits no MCP SQLite row; the independently rooted matched
+  pair remains the positive/negative proof.
 - Added deterministic `node-mcp-tool-sql-injection` coverage for exact MCP tool
   input reaching argument zero of the official built-in `node:sqlite`
   `DatabaseSync.exec` API. Named, aliased, namespace, default, CommonJS, and

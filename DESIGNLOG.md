@@ -37,7 +37,14 @@ Formatting, generated-model drift, TypeScript checking, and the clean build
 pass. The 299-entry, 2,348,280-byte package has SHA-256
 `56c490c33467ec8930d8b60ddf93adb60a97a6435f9c3cb0bdf2be6182244d7d`
 and passes isolated Windows and WSL public-import, executable-CLI, and all 79
-bundled-plugin checks.
+bundled-plugin checks. At public revision
+`0a8472d0510e07e79ba8b50bb3ab06813ffbb5b8`, two exact-head inventories take
+20,545.886 and 19,411.913 milliseconds and are byte-identical: 256 rows,
+584,350 bytes, 243 structured records, 13 lexical leads, and SHA-256
+`d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+The root inventory correctly emits no MCP SQLite row because benchmark paths
+remain outside the production MCP owner; independently rooted fixture
+inventories remain the positive and negative model proof.
 
 ## 2026-08-28 — Close the MCP tool-input to built-in SQLite execution boundary
 
