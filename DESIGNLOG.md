@@ -62,8 +62,34 @@ installation, public import, CLI execution, and all 79 bundled plugin files.
 The 2,290,494-byte archive has SHA-1
 `cacf9314b9f84a8aff628eca11ae9d1883b1c3ee` and SHA-256
 `9f58862bf67501e77db79ab04589a7b90303cc857b5454626968866d2070086f`.
-Self-scan and hosted acceptance are recorded after the exact implementation
-revision is sealed.
+
+**Immutable self-review and hosted closure.** Two residual inventories of a
+disposable tracked-only archive of public implementation revision
+`f7106087e0d4c4fa0b5088decad013035fb318e6` are byte-identical at the
+256-record cap and 557,503 bytes, with SHA-256
+`d44274164d835c59b55dafc80f15a32fedeb9826485dd8cd45901259ab5ca0c7`.
+An independently rooted 256-row SDK inventory emits no Spring Java command
+row. The exploit fixture inventory emits exactly one such row at line 21 with
+`java-command-list-mutation` and `java-process-execution`; the topology-matched
+argv control emits zero. All temporary archives and generated inventories were
+removed.
+
+All eleven hosted workflow families pass the same implementation revision:
+[Node `33141073732`](https://github.com/secwest/copilot-security/actions/runs/33141073732),
+[container `33141073725`](https://github.com/secwest/copilot-security/actions/runs/33141073725),
+[Java `33141073874`](https://github.com/secwest/copilot-security/actions/runs/33141073874),
+[Kotlin `33141073801`](https://github.com/secwest/copilot-security/actions/runs/33141073801),
+[.NET `33141073731`](https://github.com/secwest/copilot-security/actions/runs/33141073731),
+[Go `33141073733`](https://github.com/secwest/copilot-security/actions/runs/33141073733),
+[Rust `33141073755`](https://github.com/secwest/copilot-security/actions/runs/33141073755),
+[Ruby `33141073739`](https://github.com/secwest/copilot-security/actions/runs/33141073739),
+[PHP `33141073745`](https://github.com/secwest/copilot-security/actions/runs/33141073745),
+[Windows GUI `33141073727`](https://github.com/secwest/copilot-security/actions/runs/33141073727),
+and [Linux GUI `33141073807`](https://github.com/secwest/copilot-security/actions/runs/33141073807).
+The Node workflow passes its seven-job Ubuntu Node 22/24/26, macOS, and Windows
+matrix; the Java workflow compiles and executes the expanded Spring set; and
+the Linux GUI workflow passes package inspection, locked build and tests,
+headless/X11 startup, and privileged installer link-pivot rejection.
 
 ## 2026-08-27 — Replace Java Spring command proximity with execution semantics
 

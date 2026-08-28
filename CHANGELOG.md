@@ -39,6 +39,20 @@ All notable scanner, application, benchmark, and operational changes are recorde
   plugin files. The 2,290,494-byte archive has SHA-1
   `cacf9314b9f84a8aff628eca11ae9d1883b1c3ee` and SHA-256
   `9f58862bf67501e77db79ab04589a7b90303cc857b5454626968866d2070086f`.
+- Repeated deterministic residual review against a disposable tracked-only
+  archive of public revision `f7106087e0d4c4fa0b5088decad013035fb318e6`.
+  Both whole-repository inventories are byte-identical at the 256-record cap
+  and 557,503 bytes, with SHA-256
+  `d44274164d835c59b55dafc80f15a32fedeb9826485dd8cd45901259ab5ca0c7`.
+  The independently rooted SDK inventory emits no Spring Java command row;
+  the exploit fixture emits exactly one at line 21 with live-list mutation and
+  process-execution provenance, while the matched argv control emits none.
+- All eleven hosted workflow families pass the exact implementation revision:
+  Node `33141073732`, container `33141073725`, Java `33141073874`, Kotlin
+  `33141073801`, .NET `33141073731`, Go `33141073733`, Rust `33141073755`,
+  Ruby `33141073739`, PHP `33141073745`, Windows GUI `33141073727`, and Linux
+  GUI `33141073807`. The Node matrix covers Ubuntu Node 22, 24, 24.0.0, 26,
+  and 26.0.0 plus macOS and Windows Node 22.
 - Replaced the Java side of the broad `spring-http-command` proximity model
   for production Spring sources with `spring-java-command-injection`, an exact
   same-handler process model. It requires a supported Spring request-binding
