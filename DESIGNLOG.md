@@ -49,6 +49,37 @@ checks are clean. Sink-aware quality regression additionally refuses a finding
 that explains Ktor, `env`, executable selection, and returned output but omits
 `Runtime.exec` from validation and attack-path fields.
 
+**Exact-source acceptance.** Public revision
+`e9ac09d463cd86b0b6ba95ba798cd6804d548575` passes 1,901 tests and 14,224
+assertions across 208 files on Windows in 515.91 seconds, with 27 intentional
+platform/integration skips and no failure. The focused Ubuntu/WSL lane passes
+161 tests and 3,846 assertions across five files in 20.01 seconds, with one
+Windows-launcher skip and no failure. Formatting, generated-model drift,
+TypeScript, the production build, and the production dependency audit are
+clean; the audit reports no known vulnerabilities.
+
+The exact-head Ubuntu package has 291 entries. Windows and POSIX-strict
+inspection plus two isolated installs per operating system validate the public
+import, executable CLI, and all 79 bundled plugin files. The archive occupied
+2,259,669 packed and 11,884,544 unpacked bytes, retained `-rwxr-xr-x` on the
+launcher, and had SHA-1 `54683acc3e965f38ff54bb2ae0c8c180e9a6ada8` and
+SHA-256 `583f843788cb2e2eb5388fd10042e50e8b32a7af183dbaf28d1a4870d014b604`.
+It was removed after validation.
+
+Two inventories of a disposable tracked-only archive are byte-identical at the
+256-record cap and 552,767 bytes, with SHA-256
+`dd5e1b7418249e6586321677ee737f542b35b78fbb57aa1c31e7ade666e7a23f`.
+Scanner and test source produce no Kotlin command or Runtime framework row.
+Independently rooting the same build at the exploit produces exactly one
+Runtime row; the matched argv control produces zero. The archive and
+inventories were removed.
+
+All eleven hosted families pass the exact implementation revision: Node
+`33131671387`, container `33131671489`, Kotlin `33131671488`, Java
+`33131671447`, .NET `33131671476`, Go `33131671438`, Rust `33131671524`, Ruby
+`33131671501`, PHP `33131671478`, Windows GUI `33131671499`, and Linux GUI
+`33131671442`.
+
 [java-runtime]: https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/Runtime.html
 [codeql-runtime-env]: https://github.com/github/codeql/issues/22262
 

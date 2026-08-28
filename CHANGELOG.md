@@ -27,6 +27,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
   a runtime row until both fields name the runtime launch boundary. The quality
   correction prompt now distinguishes tokenized strings from explicit arrays
   and explicitly rejects the claim that ordinary array argv is shell grammar.
+- Completed exact-source native acceptance for revision
+  `e9ac09d463cd86b0b6ba95ba798cd6804d548575`. Windows passes 1,901 tests
+  and 14,224 assertions across 208 files in 515.91 seconds, with 27 intentional
+  platform/integration skips and no failures. Ubuntu/WSL passes 161 tests and
+  3,846 assertions across the focused Kotlin, canonical corpus,
+  residual-inventory, Copilot transport, and package-provenance lanes in 20.01
+  seconds, with one Windows-launcher skip and no failure. The production
+  dependency audit reports no known vulnerabilities.
+- Built the exact-head package under Ubuntu and validated it on both operating
+  systems. POSIX-strict and Windows inspection accept all 291 entries, and two
+  isolated installs per operating system validate the public import,
+  executable CLI, and all 79 bundled plugin files. The archive occupied
+  2,259,669 packed and 11,884,544 unpacked bytes, retained `-rwxr-xr-x` on
+  `bin/copilot-security.mjs`, and had SHA-1
+  `54683acc3e965f38ff54bb2ae0c8c180e9a6ada8` and SHA-256
+  `583f843788cb2e2eb5388fd10042e50e8b32a7af183dbaf28d1a4870d014b604`.
+  The validated archive was removed.
+- Repeated deterministic self-review against a disposable tracked-only archive
+  of the exact revision. Both inventories are byte-identical at the 256-record
+  cap and 552,767 bytes, with SHA-256
+  `dd5e1b7418249e6586321677ee737f542b35b78fbb57aa1c31e7ade666e7a23f`.
+  Scanner and test source emit no Kotlin command or Runtime row. Independently
+  rooting the scanner at the new exploit produces exactly one Runtime framework
+  row; its topology-matched argv control produces none. The temporary archive
+  and inventories were removed.
+- All eleven hosted workflow families pass the exact implementation revision:
+  Node `33131671387`, container `33131671489`, Kotlin `33131671488`, Java
+  `33131671447`, .NET `33131671476`, Go `33131671438`, Rust `33131671524`,
+  Ruby `33131671501`, PHP `33131671478`, Windows GUI `33131671499`, and Linux
+  GUI `33131671442`.
 - Extended the deterministic Kotlin/JVM process model through POSIX `env`
   delegation. After recognized fixed options and `NAME=VALUE` assignments, the
   first remaining operand is recursively analyzed as the executable; nested
