@@ -98,6 +98,49 @@
       "id": "node-mcp-v2-fixed-destination",
       "fixture": "fixtures/node-mcp-v2-fixed-destination",
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-path-traversal",
+      "fixture": "fixtures/node-mcp-v2-path-traversal",
+      "expected": [
+        {
+          "title": "MCP tool input selects a Node filesystem write path through a same-file helper",
+          "cwe": ["CWE-22", "CWE-73"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/server.mjs",
+          "line": 12,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["name", "tool input", "callback input"],
+            ["saveDocument", "same-file helper", "helper call"],
+            ["writeFile", "filesystem path", "path argument"],
+            ["new URL", "document root", "path confinement"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["save-document", "registerTool", "tool callback"],
+            ["saveDocument", "same-file helper", "helper call"],
+            ["path traversal", "directory escape", "filesystem path"],
+            ["arbitrary file write", "file overwrite", "writeFile"]
+          ],
+          "forbiddenText": [
+            "inputSchema prevents path traversal",
+            "new URL guarantees containment",
+            "proves the MCP server is publicly reachable",
+            "arbitrary host files were overwritten",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fixed-file",
+      "fixture": "fixtures/node-mcp-v2-fixed-file",
+      "expected": []
     }
   ]
 }

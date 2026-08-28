@@ -507,6 +507,7 @@ describe("effectiveness benchmark", () => {
       ],
       ["node-mcp-v2-command-injection", "node-mcp-v2-command-argv"],
       ["node-mcp-v2-ssrf", "node-mcp-v2-fixed-destination"],
+      ["node-mcp-v2-path-traversal", "node-mcp-v2-fixed-file"],
       [
         "python-asyncssh-scp-download-path-traversal",
         "python-asyncssh-scp-repaired-control",

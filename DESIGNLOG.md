@@ -2,6 +2,81 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Extend MCP capability modeling to filesystem authority
+
+**Observed gap and primary evidence.** MCP tool callbacks already received
+deterministic command and outbound-network review, but a remotely invokable
+tool could still pass its client-controlled input to Node filesystem APIs
+without a host-owned candidate. The MCP tools specification requires input
+validation and access controls but does not make a string schema a path policy.
+Node documents path as the first argument of `readFile`, `writeFile`, and the
+broader callback, synchronous, and promise APIs. CodeQL's high-precision
+JavaScript path-injection query treats uncontrolled path expressions as
+CWE-22, CWE-23, CWE-36, CWE-73, and CWE-99, and explicitly distinguishes
+normalization from containment. Sources: [MCP tools specification](https://modelcontextprotocol.io/specification/2024-11-05/server/tools),
+[Node filesystem API](https://nodejs.org/api/fs.html),
+[CodeQL JavaScript path-injection help](https://codeql.github.com/codeql-query-help/javascript/js-path-injection/),
+and [CodeQL JavaScript built-in query inventory](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-queries/javascript-typescript-built-in-queries).
+
+**Decision and ownership boundary.** Add `node-mcp-tool-path-traversal` to the
+existing official-SDK model. Accept exact `node:fs`, `node:fs/promises`, `fs`,
+and `fs/promises` bindings in named, namespace, default, CommonJS,
+TypeScript-import-equals, and `fs.promises` forms. A declarative method table
+identifies each path-bearing position; two-path copy, rename, link, and symlink
+operations inspect both arguments. The source must still originate in a
+schema-bearing official `McpServer` tool callback and reach the exact argument
+directly, through bounded local assignment, or through a same-file helper.
+Helper-local assignments now preserve provenance for command, path, and network
+models rather than dropping the flow between a helper parameter and its sink.
+
+**Precision and validation boundary.** File data, flags, modes, encodings,
+callbacks, and fixed operator paths are not path authority. `path.join` and
+`path.resolve` normalize or construct a path but do not alone prove it remains
+under an intended root, particularly with absolute input, platform separators,
+symlinks, or check/use races. Final validation must identify the exact fs
+argument and effect, then prove either an explicit allowlist or a boundary-safe
+canonical confinement design. Schema validation, authentication, and tool
+approval affect reachability and severity but do not erase the path edge. Any
+dynamic witness is restricted to a newly created disposable tree with
+synthetic marker data; it must not read, overwrite, rename, or delete an
+arbitrary host file.
+
+**Executable regression contract.** The package-backed positive and control
+both pin `@modelcontextprotocol/server` 2.0.0 and Zod 4.4.3, register the same
+two-string tool, cross the same helper, call `writeFile` with identical options,
+and return the selected location. The positive resolves the tool-selected name
+against a document directory without containment and proves a one-level escape
+only inside a disposable temporary root. The control fixes the operator file
+URL and writes both tool strings solely as content. Windows and native WSL
+witnesses pass. Direct regressions cover all 75 configured method/argument
+positions, non-path arguments, official import forms, CommonJS, local
+propagation, helper propagation, fixed controls, lookalikes, model-specific
+quality closure, strict selected-run gates, and canonical pairing. The focused
+lane passes 46 tests and 2,589 assertions. The strict MCP manifest now contains
+six cases; the canonical corpus advances to 159 pairs, 318 cases, and 954
+repeated scan positions.
+
+**Local and distribution acceptance.** The final authoritative native Windows
+suite passes 1,964 tests and 14,787 assertions across 210 files in 477.45
+seconds, with 27 intentional platform/integration skips and no failure. A first
+direct aggregate was deliberately not accepted because five benchmark-runner
+tests correctly stopped at the stale-production-build guard after source
+changes; rebuilding production output made the exact six-test file pass, and
+the clean aggregate supplied the accepted result. Windows and native WSL each
+pass the 46-test focused model and canonical lane with 2,589 assertions, and
+both package-backed witnesses pass on both hosts. Formatting, generated-model
+drift, TypeScript, the production build, and the production dependency audit
+are clean, with no known production vulnerability.
+
+Independent Windows and native Ubuntu packages each contain 299 entries and
+pass isolated installation, public import, executable CLI, and all 79 bundled
+plugin checks. The 2,292,791-byte Windows archive has SHA-1
+`bd88c776384f626730e9ecd8dadf21ce94893bc5` and SHA-256
+`7bb1534fb7d1e53a101c6a9841d84bde2c297ecac417dfe5e393b77c16202858`.
+The 2,292,804-byte native Ubuntu archive has SHA-1
+`cc341599a33513bdfeee72d9e2bbdd60d2fb3a11` and SHA-256
+`4aee804faca6645295825b515bacd03c8ded2c29ed1ae3b09ab4b2a3a81bd8ea`.
+
 ## 2026-08-28 — Model MCP tool callbacks as remote-capability boundaries
 
 **Observed gap and primary evidence.** General JavaScript and TypeScript MCP

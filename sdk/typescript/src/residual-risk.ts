@@ -4247,6 +4247,19 @@ const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["SSRF", "internal service", "metadata", "destination", "host"],
 ] as const;
 
+const NODE_MCP_TOOL_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["MCP tool", "registerTool", "server.tool", "tool callback"],
+  ["tool input", "callback input", "LLM-controlled", "client-controlled"],
+  ["node:fs", "fs.promises", "readFile", "writeFile", "filesystem path"],
+  [
+    "path traversal",
+    "path confinement",
+    "safe root",
+    "directory escape",
+    "arbitrary file",
+  ],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
@@ -4263,6 +4276,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-mcp-tool-path-traversal",
+    {
+      validation: NODE_MCP_TOOL_PATH_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_MCP_TOOL_PATH_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [

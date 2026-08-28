@@ -6969,6 +6969,66 @@
         "node-mcp-v2-fixed-destination/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-path-traversal",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper, is resolved against an intended document root without containment, and becomes the first path argument to node:fs/promises.writeFile.",
+      "fixture": "fixtures/node-mcp-v2-path-traversal",
+      "findingsPaths": [
+        "node-mcp-v2-path-traversal/run-1/findings.json",
+        "node-mcp-v2-path-traversal/run-2/findings.json",
+        "node-mcp-v2-path-traversal/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-path-traversal",
+          "cwe": ["CWE-22", "CWE-73"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 12,
+              "endLine": 12,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["name", "tool input", "callback input"],
+            ["saveDocument", "same-file helper", "helper call"],
+            ["writeFile", "filesystem path", "path argument"],
+            ["new URL", "document root", "path confinement"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["save-document", "registerTool", "tool callback"],
+            ["saveDocument", "same-file helper", "helper call"],
+            ["path traversal", "directory escape", "filesystem path"],
+            ["arbitrary file write", "file overwrite", "writeFile"]
+          ],
+          "forbiddenText": [
+            "inputSchema prevents path traversal",
+            "new URL guarantees containment",
+            "proves the MCP server is publicly reachable",
+            "arbitrary host files were overwritten",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fixed-file",
+      "description": "The topology-matched MCP v2 control keeps registration, schema, callback, helper, writeFile options, and response while the operator fixes the file URL and tool input is only file content.",
+      "fixture": "fixtures/node-mcp-v2-fixed-file",
+      "findingsPaths": [
+        "node-mcp-v2-fixed-file/run-1/findings.json",
+        "node-mcp-v2-fixed-file/run-2/findings.json",
+        "node-mcp-v2-fixed-file/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

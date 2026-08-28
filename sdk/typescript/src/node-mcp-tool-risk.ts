@@ -8,6 +8,12 @@ const MCP_MODULES = new Set([
   "@modelcontextprotocol/sdk/server/mcp.js",
 ]);
 const CHILD_PROCESS_MODULES = new Set(["child_process", "node:child_process"]);
+const FS_MODULES = new Set([
+  "fs",
+  "fs/promises",
+  "node:fs",
+  "node:fs/promises",
+]);
 const FETCH_MODULES = new Set(["node-fetch", "undici"]);
 const HTTP_MODULES = new Set(["http", "https", "node:http", "node:https"]);
 const SOURCE_EXTENSIONS = new Set(["cjs", "js", "jsx", "mjs", "ts", "tsx"]);
@@ -41,6 +47,73 @@ const ARRAY_ARGUMENT_METHODS = new Set([
   "spawn",
   "spawnSync",
 ]);
+const FILESYSTEM_PATH_ARGUMENTS = new Map<string, readonly number[]>([
+  ["access", [0]],
+  ["accessSync", [0]],
+  ["appendFile", [0]],
+  ["appendFileSync", [0]],
+  ["chmod", [0]],
+  ["chmodSync", [0]],
+  ["chown", [0]],
+  ["chownSync", [0]],
+  ["copyFile", [0, 1]],
+  ["copyFileSync", [0, 1]],
+  ["cp", [0, 1]],
+  ["cpSync", [0, 1]],
+  ["createReadStream", [0]],
+  ["createWriteStream", [0]],
+  ["existsSync", [0]],
+  ["lchmod", [0]],
+  ["lchmodSync", [0]],
+  ["lchown", [0]],
+  ["lchownSync", [0]],
+  ["link", [0, 1]],
+  ["linkSync", [0, 1]],
+  ["lstat", [0]],
+  ["lstatSync", [0]],
+  ["lutimes", [0]],
+  ["lutimesSync", [0]],
+  ["mkdir", [0]],
+  ["mkdirSync", [0]],
+  ["mkdtemp", [0]],
+  ["mkdtempSync", [0]],
+  ["open", [0]],
+  ["openAsBlob", [0]],
+  ["openSync", [0]],
+  ["opendir", [0]],
+  ["opendirSync", [0]],
+  ["readdir", [0]],
+  ["readdirSync", [0]],
+  ["readFile", [0]],
+  ["readFileSync", [0]],
+  ["readlink", [0]],
+  ["readlinkSync", [0]],
+  ["realpath", [0]],
+  ["realpathSync", [0]],
+  ["rename", [0, 1]],
+  ["renameSync", [0, 1]],
+  ["rm", [0]],
+  ["rmSync", [0]],
+  ["rmdir", [0]],
+  ["rmdirSync", [0]],
+  ["stat", [0]],
+  ["statSync", [0]],
+  ["statfs", [0]],
+  ["statfsSync", [0]],
+  ["symlink", [0, 1]],
+  ["symlinkSync", [0, 1]],
+  ["truncate", [0]],
+  ["truncateSync", [0]],
+  ["unlink", [0]],
+  ["unlinkSync", [0]],
+  ["unwatchFile", [0]],
+  ["utimes", [0]],
+  ["utimesSync", [0]],
+  ["watch", [0]],
+  ["watchFile", [0]],
+  ["writeFile", [0]],
+  ["writeFileSync", [0]],
+]);
 const NETWORK_METHODS = new Set([
   "delete",
   "fetch",
@@ -60,9 +133,13 @@ const POWERSHELLS = new Set([
   "pwsh.exe",
 ]);
 
-type McpModelId = "node-mcp-tool-command-injection" | "node-mcp-tool-ssrf";
+type McpModelId =
+  | "node-mcp-tool-command-injection"
+  | "node-mcp-tool-path-traversal"
+  | "node-mcp-tool-ssrf";
 type McpSinkKind =
   | "mcp-tool-executable-selection"
+  | "mcp-tool-filesystem-path"
   | "mcp-tool-network-destination"
   | "mcp-tool-shell-command"
   | "mcp-tool-shell-enabled-spawn";
@@ -130,7 +207,10 @@ export interface NodeMcpToolRiskRecord {
       path: string;
       line: number;
       symbol: string;
-      cweIds: readonly ["CWE-78", "CWE-88"] | readonly ["CWE-918"];
+      cweIds:
+        | readonly ["CWE-22", "CWE-73"]
+        | readonly ["CWE-78", "CWE-88"]
+        | readonly ["CWE-918"];
     };
     propagators: Array<{
       kind: string;
@@ -143,10 +223,10 @@ export interface NodeMcpToolRiskRecord {
 }
 
 /**
- * Finds exact MCP SDK tool-input flows to Node process and network sinks. The
- * pass is intentionally bounded and ownership-sensitive: unresolved imports,
- * schema-less v2 callbacks, unsupported callback forms, and shadowed globals
- * produce no framework row for later stages to over-trust.
+ * Finds exact MCP SDK tool-input flows to Node process, filesystem, and network
+ * sinks. The pass is intentionally bounded and ownership-sensitive: unresolved
+ * imports, schema-less v2 callbacks, unsupported callback forms, and shadowed
+ * globals produce no framework row for later stages to over-trust.
  */
 export function nodeMcpToolRiskRecords(
   path: string,
@@ -166,6 +246,15 @@ export function nodeMcpToolRiskRecords(
   if (registrations.length === 0) return [];
 
   const commandBindings = bindingsForModules(imports, CHILD_PROCESS_MODULES);
+  const filesystemBindings = bindingsForModules(imports, FS_MODULES);
+  for (const [local, imported] of filesystemBindings.direct) {
+    if (imported === "default" || imported === "promises") {
+      filesystemBindings.namespaces.set(
+        local,
+        imported === "promises" ? "node:fs/promises" : "node:fs",
+      );
+    }
+  }
   const fetchBindings = bindingsForModules(imports, FETCH_MODULES);
   const httpBindings = bindingsForModules(imports, HTTP_MODULES);
   const axiosBindings = bindingsForModules(imports, new Set(["axios"]));
@@ -179,6 +268,7 @@ export function nodeMcpToolRiskRecords(
     source,
     structural,
     commandBindings,
+    filesystemBindings,
     fetchBindings,
     httpBindings,
     axiosBindings,
@@ -189,6 +279,13 @@ export function nodeMcpToolRiskRecords(
     const taint = propagatedBindings(source, structural, registration);
     const sinks = [
       ...commandSinks(source, structural, registration, taint, commandBindings),
+      ...filesystemSinks(
+        source,
+        structural,
+        registration,
+        taint,
+        filesystemBindings,
+      ),
       ...networkSinks(
         source,
         structural,
@@ -204,7 +301,9 @@ export function nodeMcpToolRiskRecords(
       const modelId: McpModelId =
         sink.kind === "mcp-tool-network-destination"
           ? "node-mcp-tool-ssrf"
-          : "node-mcp-tool-command-injection";
+          : sink.kind === "mcp-tool-filesystem-path"
+            ? "node-mcp-tool-path-traversal"
+            : "node-mcp-tool-command-injection";
       const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(lines.length, sink.line + CONTEXT_LINES_AFTER);
       const sourceStart = Math.max(1, registration.line - 2);
@@ -218,9 +317,16 @@ export function nodeMcpToolRiskRecords(
           `modeled-sink:${sink.kind}`,
           modelId === "node-mcp-tool-ssrf"
             ? "broken-control:mcp-tool-network-destination-not-pinned"
-            : "broken-control:mcp-tool-command-data-boundary",
+            : modelId === "node-mcp-tool-path-traversal"
+              ? "broken-control:mcp-tool-filesystem-path-not-confined"
+              : "broken-control:mcp-tool-command-data-boundary",
         ],
-        priority: modelId === "node-mcp-tool-ssrf" ? 122 : 127,
+        priority:
+          modelId === "node-mcp-tool-ssrf"
+            ? 122
+            : modelId === "node-mcp-tool-path-traversal"
+              ? 124
+              : 127,
         startLine,
         endLine,
         excerpt: sourceExcerpt(lines, startLine, endLine),
@@ -244,7 +350,9 @@ export function nodeMcpToolRiskRecords(
             cweIds:
               modelId === "node-mcp-tool-ssrf"
                 ? (["CWE-918"] as const)
-                : (["CWE-78", "CWE-88"] as const),
+                : modelId === "node-mcp-tool-path-traversal"
+                  ? (["CWE-22", "CWE-73"] as const)
+                  : (["CWE-78", "CWE-88"] as const),
           },
           propagators: [
             {
@@ -919,6 +1027,7 @@ function helperSummaries(
   source: string,
   structural: string,
   commandBindings: BindingSet,
+  filesystemBindings: BindingSet,
   fetchBindings: BindingSet,
   httpBindings: BindingSet,
   axiosBindings: BindingSet,
@@ -947,6 +1056,7 @@ function helperSummaries(
         splitArgumentRanges(structural, open + 1, close),
         { start: bodyOpen + 1, end: bodyClose },
         commandBindings,
+        filesystemBindings,
         fetchBindings,
         httpBindings,
         axiosBindings,
@@ -991,6 +1101,7 @@ function helperSummaries(
         splitArgumentRanges(structural, open + 1, close),
         { start: bodyOpen + 1, end: bodyClose },
         commandBindings,
+        filesystemBindings,
         fetchBindings,
         httpBindings,
         axiosBindings,
@@ -1008,6 +1119,7 @@ function summarizeHelperBody(
   parameterRanges: readonly Range[],
   body: Range,
   commandBindings: BindingSet,
+  filesystemBindings: BindingSet,
   fetchBindings: BindingSet,
   httpBindings: BindingSet,
   axiosBindings: BindingSet,
@@ -1036,18 +1148,18 @@ function summarizeHelperBody(
       /^([A-Za-z_$][\w$]*)(?:\s*:\s*.+)?$/u,
     )?.[1];
     if (parameterName === undefined) continue;
-    const taint: TaintBinding[] = [
-      {
-        name: parameterName,
-        line: lineAt(source, parameterRanges[parameterIndex]!.start),
-        expression: new RegExp(
-          String.raw`(?<![.\w$])${escapeRegularExpression(parameterName)}\b(?!\s*:)`,
-          "u",
-        ),
-        definedAt: body.start,
-        propagators: [],
-      },
-    ];
+    const parameterSource: SourceBinding = {
+      name: parameterName,
+      line: lineAt(source, parameterRanges[parameterIndex]!.start),
+      expression: new RegExp(
+        String.raw`(?<![.\w$])${escapeRegularExpression(parameterName)}\b(?!\s*:)`,
+        "u",
+      ),
+    };
+    const taint = propagatedBindings(source, structural, {
+      ...helperRegistration,
+      sources: [parameterSource],
+    });
     const sinks = [
       ...commandSinks(
         source,
@@ -1055,6 +1167,13 @@ function summarizeHelperBody(
         helperRegistration,
         taint,
         commandBindings,
+      ),
+      ...filesystemSinks(
+        source,
+        structural,
+        helperRegistration,
+        taint,
+        filesystemBindings,
       ),
       ...networkSinks(
         source,
@@ -1185,6 +1304,78 @@ function boundCalls(
     }
   }
   return calls;
+}
+
+function filesystemCalls(
+  source: string,
+  structural: string,
+  body: Range,
+  bindings: BindingSet,
+): CallSite[] {
+  const accepted = new Set(FILESYSTEM_PATH_ARGUMENTS.keys());
+  const calls = boundCalls(source, structural, body, bindings, accepted);
+  const methods = [...accepted].map(escapeRegularExpression).join("|");
+  for (const [namespace, module] of bindings.namespaces) {
+    if (module === "fs/promises" || module === "node:fs/promises") continue;
+    const expression = new RegExp(
+      String.raw`\b${escapeRegularExpression(namespace)}\s*\.\s*promises\s*\.\s*(${methods})\s*\(`,
+      "gu",
+    );
+    for (const match of structural
+      .slice(body.start, body.end)
+      .matchAll(expression)) {
+      const offset = body.start + match.index!;
+      const open = offset + match[0].lastIndexOf("(");
+      const close = matchingStructuralDelimiter(structural, open, "(", ")");
+      if (close < 0 || close > body.end) continue;
+      calls.push({
+        method: match[1]!,
+        symbol: `${namespace}.promises.${match[1]}`,
+        line: lineAt(source, offset),
+        arguments: splitArgumentRanges(structural, open + 1, close).map(
+          (range) => trimSourceRange(source, range),
+        ),
+      });
+    }
+  }
+  return calls;
+}
+
+function filesystemSinks(
+  source: string,
+  structural: string,
+  registration: Registration,
+  taint: readonly TaintBinding[],
+  bindings: BindingSet,
+): Sink[] {
+  const sinks: Sink[] = [];
+  for (const call of filesystemCalls(
+    source,
+    structural,
+    registration.body,
+    bindings,
+  )) {
+    for (const argumentIndex of FILESYSTEM_PATH_ARGUMENTS.get(call.method) ??
+      []) {
+      const argument = call.arguments[argumentIndex];
+      if (argument === undefined) continue;
+      const sourceBinding = liveTaintForRange(
+        structural,
+        argument,
+        registration.body,
+        taint,
+      );
+      if (sourceBinding === undefined) continue;
+      sinks.push({
+        kind: "mcp-tool-filesystem-path",
+        line: call.line,
+        symbol: `${call.symbol}:path[${argumentIndex}]`,
+        source: sourceBinding,
+      });
+      break;
+    }
+  }
+  return sinks;
 }
 
 function commandSinks(

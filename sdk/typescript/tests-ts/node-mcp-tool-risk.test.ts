@@ -18,6 +18,7 @@ const benchmarkRoot = resolve(process.cwd(), "..", "..", "benchmarks");
 function v2(body: string, input = "command: z.string()") {
   return `import { McpServer } from "@modelcontextprotocol/server";
 import { exec, execFile, spawn } from "node:child_process";
+import { readFile, writeFile } from "node:fs/promises";
 import * as https from "node:https";
 import axios from "axios";
 import { z } from "zod";
@@ -39,7 +40,7 @@ function records(source: string, path = sourcePath): NodeMcpToolRiskRecord[] {
 }
 
 describe("Node MCP tool-input security model", () => {
-  test("keeps both executable exploit/control pairs under perfect gates", async () => {
+  test("keeps all executable exploit/control pairs under perfect gates", async () => {
     const manifest = JSON.parse(
       await readFile(
         join(benchmarkRoot, "node-mcp-tool-security-manifest.json"),
@@ -61,15 +62,20 @@ describe("Node MCP tool-input security model", () => {
       "node-mcp-v2-command-argv",
       "node-mcp-v2-ssrf",
       "node-mcp-v2-fixed-destination",
+      "node-mcp-v2-path-traversal",
+      "node-mcp-v2-fixed-file",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
     expect(manifest.cases[2]?.expected).toHaveLength(1);
     expect(manifest.cases[3]?.expected).toEqual([]);
+    expect(manifest.cases[4]?.expected).toHaveLength(1);
+    expect(manifest.cases[5]?.expected).toEqual([]);
 
     for (const [index, modelId] of [
       [0, "node-mcp-tool-command-injection"],
       [2, "node-mcp-tool-ssrf"],
+      [4, "node-mcp-tool-path-traversal"],
     ] as const) {
       const vulnerable = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index]!.id),
@@ -114,6 +120,23 @@ describe("Node MCP tool-input security model", () => {
     expect(found[0]?.frameworkModel.sink.cweIds).toEqual(["CWE-918"]);
   });
 
+  test("detects stable-v2 filesystem authority through a path argument", () => {
+    const found = records(
+      v2(
+        '    const target = command;\n    return readFile(target, "utf8");',
+        "command: z.string().min(1)",
+      ),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel.id).toBe("node-mcp-tool-path-traversal");
+    expect(found[0]?.frameworkModel.sink.kind).toBe("mcp-tool-filesystem-path");
+    expect(found[0]?.frameworkModel.sink.symbol).toBe("readFile:path[0]");
+    expect(found[0]?.frameworkModel.sink.cweIds).toEqual(["CWE-22", "CWE-73"]);
+    expect(found[0]?.categories).toContain(
+      "broken-control:mcp-tool-filesystem-path-not-confined",
+    );
+  });
+
   test("supports v1 tool registration, import aliases, and server aliases", () => {
     const source = `import { McpServer as Server } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { execSync as run } from "child_process";
@@ -148,6 +171,196 @@ server.tool("run", { program: z.string() }, async (args) => {
       "mcp-tool-executable-selection",
     );
     expect(found[0]?.frameworkModel.sink.symbol).toBe("cp.spawn");
+  });
+
+  test("supports Node fs namespace, promises, default, and import-equals bindings", () => {
+    const namespace = `import { McpServer } from "@modelcontextprotocol/server";
+import * as fs from "node:fs";
+const server = new McpServer({ name: "files", version: "1.0.0" });
+server.registerTool("read", { inputSchema: schema }, async ({ path }) => {
+  return fs.promises.readFile(path, "utf8");
+});
+`;
+    expect(records(namespace)[0]?.frameworkModel.sink.symbol).toBe(
+      "fs.promises.readFile:path[0]",
+    );
+
+    const defaultBinding = `import { McpServer } from "@modelcontextprotocol/server";
+import fs from "node:fs";
+const server = new McpServer({ name: "files", version: "1.0.0" });
+server.registerTool("read", { inputSchema: schema }, async ({ path }) => {
+  return fs.readFileSync(path, "utf8");
+});
+`;
+    expect(records(defaultBinding)[0]?.frameworkModel.sink.symbol).toBe(
+      "fs.readFileSync:path[0]",
+    );
+
+    const importEquals = `import mcp = require("@modelcontextprotocol/sdk/server/mcp.js");
+import fs = require("node:fs");
+const server = new mcp.McpServer({ name: "files", version: "1.0.0" });
+server.tool("read", { path: schema }, async (input) => fs.readFileSync(input.path));
+`;
+    expect(records(importEquals)[0]?.frameworkModel.sink.symbol).toBe(
+      "fs.readFileSync:path[0]",
+    );
+
+    const commonJs = `const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
+const fsp = require("node:fs/promises");
+const server = new McpServer({ name: "files", version: "1.0.0" });
+server.tool("remove", { path: schema }, async (input) => fsp.rm(input.path));
+`;
+    expect(records(commonJs)[0]?.frameworkModel.sink.symbol).toBe(
+      "fsp.rm:path[0]",
+    );
+  });
+
+  test("tracks every filesystem path position but not write contents", () => {
+    const secondPath = `import { McpServer } from "@modelcontextprotocol/server";
+import { rename } from "node:fs/promises";
+const server = new McpServer({ name: "files", version: "1.0.0" });
+server.registerTool("move", { inputSchema: schema }, async ({ path }) => {
+  return rename("operator-source.txt", path);
+});
+`;
+    expect(records(secondPath)[0]?.frameworkModel.sink.symbol).toBe(
+      "rename:path[1]",
+    );
+    expect(
+      records(
+        v2('    return writeFile("operator-fixed.txt", command, "utf8");'),
+      ),
+    ).toEqual([]);
+  });
+
+  test("covers the complete Node filesystem path-method table", () => {
+    const cases: Array<[string, string, number]> = [
+      ["access", "path", 0],
+      ["accessSync", "path", 0],
+      ["appendFile", 'path, "data"', 0],
+      ["appendFileSync", 'path, "data"', 0],
+      ["chmod", "path, 0o600", 0],
+      ["chmodSync", "path, 0o600", 0],
+      ["chown", "path, 1, 1", 0],
+      ["chownSync", "path, 1, 1", 0],
+      ["copyFile", 'path, "fixed"', 0],
+      ["copyFile", '"fixed", path', 1],
+      ["copyFileSync", 'path, "fixed"', 0],
+      ["copyFileSync", '"fixed", path', 1],
+      ["cp", 'path, "fixed"', 0],
+      ["cp", '"fixed", path', 1],
+      ["cpSync", 'path, "fixed"', 0],
+      ["cpSync", '"fixed", path', 1],
+      ["createReadStream", "path", 0],
+      ["createWriteStream", "path", 0],
+      ["existsSync", "path", 0],
+      ["lchmod", "path, 0o600", 0],
+      ["lchmodSync", "path, 0o600", 0],
+      ["lchown", "path, 1, 1", 0],
+      ["lchownSync", "path, 1, 1", 0],
+      ["link", 'path, "fixed"', 0],
+      ["link", '"fixed", path', 1],
+      ["linkSync", 'path, "fixed"', 0],
+      ["linkSync", '"fixed", path', 1],
+      ["lstat", "path", 0],
+      ["lstatSync", "path", 0],
+      ["lutimes", "path, new Date(), new Date()", 0],
+      ["lutimesSync", "path, new Date(), new Date()", 0],
+      ["mkdir", "path", 0],
+      ["mkdirSync", "path", 0],
+      ["mkdtemp", "path", 0],
+      ["mkdtempSync", "path", 0],
+      ["open", 'path, "r"', 0],
+      ["openAsBlob", "path", 0],
+      ["openSync", 'path, "r"', 0],
+      ["opendir", "path", 0],
+      ["opendirSync", "path", 0],
+      ["readdir", "path", 0],
+      ["readdirSync", "path", 0],
+      ["readFile", "path", 0],
+      ["readFileSync", "path", 0],
+      ["readlink", "path", 0],
+      ["readlinkSync", "path", 0],
+      ["realpath", "path", 0],
+      ["realpathSync", "path", 0],
+      ["rename", 'path, "fixed"', 0],
+      ["rename", '"fixed", path', 1],
+      ["renameSync", 'path, "fixed"', 0],
+      ["renameSync", '"fixed", path', 1],
+      ["rm", "path", 0],
+      ["rmSync", "path", 0],
+      ["rmdir", "path", 0],
+      ["rmdirSync", "path", 0],
+      ["stat", "path", 0],
+      ["statSync", "path", 0],
+      ["statfs", "path", 0],
+      ["statfsSync", "path", 0],
+      ["symlink", 'path, "fixed"', 0],
+      ["symlink", '"fixed", path', 1],
+      ["symlinkSync", 'path, "fixed"', 0],
+      ["symlinkSync", '"fixed", path', 1],
+      ["truncate", "path, 0", 0],
+      ["truncateSync", "path, 0", 0],
+      ["unlink", "path", 0],
+      ["unlinkSync", "path", 0],
+      ["unwatchFile", "path", 0],
+      ["utimes", "path, new Date(), new Date()", 0],
+      ["utimesSync", "path, new Date(), new Date()", 0],
+      ["watch", "path", 0],
+      ["watchFile", "path", 0],
+      ["writeFile", 'path, "data"', 0],
+      ["writeFileSync", 'path, "data"', 0],
+    ];
+    for (const [method, arguments_, position] of cases) {
+      const source = `import { McpServer } from "@modelcontextprotocol/server";
+import { ${method} } from "node:fs";
+const server = new McpServer({ name: "files", version: "1.0.0" });
+server.registerTool("operate", { inputSchema: schema }, async ({ path }) => {
+  return ${method}(${arguments_});
+});
+`;
+      const found = records(source);
+      expect(found, `${method} path argument ${position}`).toHaveLength(1);
+      expect(found[0]?.frameworkModel.sink.symbol).toBe(
+        `${method}:path[${position}]`,
+      );
+    }
+  });
+
+  test("does not confuse filesystem data, flags, modes, or encodings with paths", () => {
+    const controls = [
+      ["writeFile", '"fixed.txt", path'],
+      ["appendFile", '"fixed.txt", path'],
+      ["open", '"fixed.txt", path'],
+      ["readFile", '"fixed.txt", path'],
+      ["chmod", '"fixed.txt", path'],
+      ["chown", '"fixed.txt", path, 1'],
+      ["utimes", '"fixed.txt", path, new Date()'],
+    ];
+    for (const [method, arguments_] of controls) {
+      const source = `import { McpServer } from "@modelcontextprotocol/server";
+import { ${method} } from "node:fs";
+const server = new McpServer({ name: "files", version: "1.0.0" });
+server.registerTool("operate", { inputSchema: schema }, async ({ path }) => {
+  return ${method}(${arguments_});
+});
+`;
+      expect(records(source), method).toEqual([]);
+    }
+  });
+
+  test("treats join and resolve as construction rather than confinement", () => {
+    const source = `import { McpServer } from "@modelcontextprotocol/server";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+const server = new McpServer({ name: "files", version: "1.0.0" });
+server.registerTool("read", { inputSchema: schema }, async ({ path }) => {
+  return readFile(resolve("operator-root", path), "utf8");
+});
+`;
+    expect(records(source)[0]?.frameworkModel.id).toBe(
+      "node-mcp-tool-path-traversal",
+    );
   });
 
   test("supports multiline imports and TypeScript import-equals namespaces", () => {
@@ -360,7 +573,7 @@ function runCommand(script: string, data: string) {
     expect(records(source)).toEqual([]);
   });
 
-  test("rejects SDK, server, process, and network lookalikes", () => {
+  test("rejects SDK, server, process, filesystem, and network lookalikes", () => {
     const wrongSdk = v2("    exec(command);").replace(
       "@modelcontextprotocol/server",
       "@example/modelcontextprotocol-server",
@@ -372,6 +585,12 @@ function runCommand(script: string, data: string) {
       '"./child_process.js"',
     );
     expect(records(wrongProcess)).toEqual([]);
+
+    const wrongFilesystem = v2("    return readFile(command);").replace(
+      '"node:fs/promises"',
+      '"./fs.js"',
+    );
+    expect(records(wrongFilesystem)).toEqual([]);
 
     const wrongServer = v2("    exec(command);").replace(
       "const server = new McpServer",
@@ -524,6 +743,111 @@ const example = "server.registerTool('run', { inputSchema: schema }, ({ command 
     }
   });
 
+  test("requires filesystem-specific validation and attack-path closure", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-node-mcp-path-quality-repository-"),
+    );
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-node-mcp-path-quality-scan-"),
+    );
+    try {
+      const application = v2(
+        '    return writeFile(command, "synthetic marker", "utf8");',
+      );
+      await writeFile(join(repository, "server.ts"), application, "utf8");
+      const sinkLine =
+        application
+          .split(/\r?\n/u)
+          .findIndex((line) => line.includes("writeFile(command")) + 1;
+      const finding = {
+        occurrenceId: "occ_node_mcp_path_quality",
+        taxonomy: { cwe: ["CWE-22", "CWE-73"] },
+        locations: [{ path: "server.ts", startLine: sinkLine, role: "sink" }],
+        codeEvidence: [
+          {
+            id: "mcp-path-sink",
+            path: "server.ts",
+            startLine: sinkLine,
+            code: '    return writeFile(command, "synthetic marker", "utf8");',
+            explanation:
+              "The registered tool callback passes its command value as the file path.",
+            role: "sink",
+          },
+        ],
+        validation: {
+          summary: "Static review confirms a filesystem call in the handler.",
+          method: "source review and bounded negative control",
+          exploitWitness: "Synthetic data reaches the reviewed call boundary.",
+          negativeControl: "A fixed literal does not carry client data.",
+          evidence: ["mcp-path-sink"],
+          counterEvidence: "Authentication and deployment remain unknown.",
+          remainingUncertainty: "Runtime exposure was not established.",
+        },
+        attackPath: {
+          summary: "An untrusted value may reach a filesystem operation.",
+          dataflow: {
+            source: "mcp-path-sink",
+            sink: "mcp-path-sink",
+            outcome: "file write",
+          },
+          reachability: {
+            attacker: "MCP client",
+            entrypoint: "tool invocation",
+            outcome: "file write",
+          },
+          brokenControls: ["Unrestricted path selection"],
+          evidenceRefs: ["mcp-path-sink"],
+        },
+      };
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      const inventory = await buildResidualRiskInventory(repository);
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      const rows = incomplete.split("\n").map((line) => JSON.parse(line));
+      expect(rows[1]).toMatchObject({
+        findingId: "occ_node_mcp_path_quality",
+        frameworkModelId: "node-mcp-tool-path-traversal",
+      });
+      expect(rows[1]?.reasons).toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(rows[1]?.reasons).toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+
+      const closure = [
+        "The MCP tool registerTool callback receives client-controlled tool input.",
+        "node:fs writeFile consumes that input as its filesystem path argument.",
+        "Path traversal can escape because no safe-root path confinement is present.",
+        "The negative control fixes the operator path and uses tool input only as file contents.",
+      ].join(" ");
+      finding.validation.summary = closure;
+      finding.attackPath.summary = closure;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      expect(
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          inventory,
+        ),
+      ).toBe("");
+    } finally {
+      await rm(repository, { recursive: true, force: true });
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
+  });
+
   test("gives validation exact MCP source and sink boundaries", () => {
     const prompt = scanQualityGatePrompt(
       "{}",
@@ -537,9 +861,14 @@ const example = "server.registerTool('run', { inputSchema: schema }, ({ command 
       "[]",
     );
     expect(prompt).toContain("For node-mcp-tool-command-injection");
+    expect(prompt).toContain("node-mcp-tool-path-traversal");
     expect(prompt).toContain("schema-less callback receives context");
     expect(prompt).toContain("fixed executable plus separate argv data");
+    expect(prompt).toContain("path-bearing Node fs");
+    expect(prompt).toContain("path.join or path.resolve alone");
     expect(prompt).toContain("request body or same-host path");
+    expect(prompt).toContain("disposable temporary tree");
     expect(prompt).toContain("disposable loopback endpoint");
+    expect(prompt).toContain("CWE-22/CWE-73");
   });
 });

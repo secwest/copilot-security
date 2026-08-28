@@ -6,6 +6,43 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended the standalone JavaScript/TypeScript MCP tool-handler model from
+  process and network capabilities to Node filesystem authority. Exact
+  `node:fs`, `node:fs/promises`, legacy `fs`, and `fs/promises` named,
+  namespace, default, CommonJS, TypeScript import-equals, and `fs.promises`
+  bindings now trace client-controlled tool input to every modeled path-bearing
+  argument, including both source and destination paths for copy, rename, link,
+  and symlink operations.
+- Added `node-mcp-tool-path-traversal` schema 1.2 evidence with CWE-22/CWE-73,
+  same-file helper-local propagation, filesystem-specific validation and
+  attack-path closure, and a 75-case method/argument-position regression table.
+  File contents, flags, modes, encodings, callbacks, fixed paths, local
+  lookalikes, overwritten values, and unrelated helper arguments remain
+  negative. `path.join` and `path.resolve` construction stays reviewable until
+  an allowlist or boundary-safe canonical containment design proves it safe.
+- Added a real `@modelcontextprotocol/server` 2.0.0 exploit/control pair with
+  identical schema-bearing registration, two-input helper, `writeFile` effect,
+  options, and response topology. The exploit demonstrates only a one-level
+  escape inside a fresh disposable temporary tree; the control fixes the file
+  URL and keeps an attacker-looking path string in file contents. Both
+  witnesses pass on Windows and native Ubuntu/WSL, Node CI now runs six MCP
+  witnesses on both hosts, the strict manifest has six cases, and the canonical
+  corpus has 159 pairs, 318 cases, and 954 repeated scan positions.
+- Completed authoritative Windows acceptance for the MCP filesystem increment:
+  1,964 tests pass with 27 intentional platform/integration skips, no failure,
+  and 14,787 assertions across 210 files in 477.45 seconds. Focused Windows and
+  native Ubuntu/WSL gates each pass 46 tests and 2,589 assertions. Formatting,
+  generated-model drift, TypeScript checking, a clean production build, and
+  the production dependency audit are green; the audit reports no known
+  vulnerabilities.
+- Validated independently packed Windows and native Ubuntu archives through
+  isolated installation, public import, CLI execution, and all 79 bundled
+  plugin files. Both contain 299 entries. The 2,292,791-byte Windows archive
+  has SHA-1 `bd88c776384f626730e9ecd8dadf21ce94893bc5` and SHA-256
+  `7bb1534fb7d1e53a101c6a9841d84bde2c297ecac417dfe5e393b77c16202858`;
+  the 2,292,804-byte native Ubuntu archive has SHA-1
+  `cc341599a33513bdfeee72d9e2bbdd60d2fb3a11` and SHA-256
+  `4aee804faca6645295825b515bacd03c8ded2c29ed1ae3b09ab4b2a3a81bd8ea`.
 - Added a standalone JavaScript/TypeScript MCP tool-handler model for the
   stable `@modelcontextprotocol/server` API and the legacy
   `@modelcontextprotocol/sdk/server/mcp.js` API. Exact `McpServer`
