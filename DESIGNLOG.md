@@ -73,6 +73,13 @@ TypeScript, formatting, build, and production audit are clean. The rebuilt
 299-entry, 2,351,834-byte package at SHA-256
 `1436bccff878d919e80621cbd77890863b692337e21491af3ee12153d6485538`
 passes isolated install, public import, CLI, and all 79 bundled-plugin checks.
+All eleven hosted workflow families pass at implementation revision
+`f675b257d1c667112d24fc454195cf7aeb00b0e5`: Node `33217653997`, container
+`33217654074`, Linux GUI `33217654009`, Windows GUI `33217654024`, Go
+`33217654055`, Java `33217654056`, Kotlin `33217654025`, .NET `33217654069`,
+Rust `33217654083`, Ruby `33217654022`, and PHP `33217654071`. The Node run
+contains successful Ubuntu and Windows jobs for both the prepared-SQL exploit
+and its bound-parameter control.
 
 ## 2026-08-28 — Preserve structured findings beyond the old source-discovery prefix
 
