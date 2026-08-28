@@ -2,6 +2,52 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Preserve Kotlin collection conversion into Runtime command arrays
+
+**Why conversion is a real command boundary.** Oracle defines
+`Runtime.exec(String[])` over an array containing the command and its arguments.
+Kotlin defines `Collection.toTypedArray()` as allocating an array sized to the
+collection and populating that array from the collection's elements. Kotlin
+services commonly construct a command as a list and convert it immediately
+before the Java call, so limiting recovery to `arrayOf(...)` misses the same
+executable, shell, interpreter, batch, and delegating-launcher positions behind
+one standard-library conversion. Sources: [Kotlin `toTypedArray`][kotlin-typed-array]
+and [Java Runtime][java-runtime].
+
+**Exact recovery and snapshot semantics.** The model accepts direct or retained
+exact `listOf`, `mutableListOf`, and `arrayListOf` values followed by
+`toTypedArray()`, including a fully qualified `kotlin.collections` factory.
+Conversion clones the bounded element state: a later change to the source list
+does not alter the created array, while a constant-index change to the resulting
+array does. This mirrors the documented allocation/population contract and
+avoids both false negatives from list construction and false positives from
+conflating two objects. Unresolved receivers, bare lists passed to `exec`, local
+factory functions, local `toTypedArray` extensions, malformed calls, and
+ordinary argv remain negative. The syntax evidence remains deliberately
+same-file and does not claim compiler-grade overload resolution.
+
+**Attack-path and grammar precision.** A tainted element crossing the conversion
+adds `kotlin-runtime-array-conversion` with the conversion line and standard
+library symbol. Finding-quality closure requires `toTypedArray` or equivalent
+typed-array conversion language in validation and attack-path fields, in
+addition to the existing `Runtime.exec` and nested command-boundary proof. The
+same increment preserves exact local string shapes through aliases for GNU
+`env` parsing. Fixed-name `NAME=VALUE` and fixed option prefixes remain
+recognizable, but reassignment or an attacker-controlled prefix invalidates the
+shape so an apparent equals sign cannot hide option or executable selection.
+
+**Executable evidence.** A new Ktor 3.5.2/Kotlin 2.2.20 pair keeps typed Resource
+input, `listOf(...).toTypedArray()`, `Runtime.exec`, `env`, output capture, wait,
+and response topology constant. Only the request value's command position
+changes. Each Java 21 witness starts one short-lived fixed-string process and
+passes under Ubuntu/WSL with one test and no failure, error, or skip. The
+specialized manifest reaches 18 cases and the canonical corpus reaches 151
+pairs, 302 cases, and 906 scan positions. Focused model and quality tests cover
+direct, fully qualified, retained, snapshot, live-array repair, argv, and
+shadowed lookalike cases.
+
+[kotlin-typed-array]: https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/to-typed-array.html
+
 ## 2026-08-27 — Extend Kotlin command analysis through Runtime.exec
 
 **Why a second Java launch API matters.** The JVM exposes process creation

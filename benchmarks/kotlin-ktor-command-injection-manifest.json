@@ -391,6 +391,55 @@
       "id": "kotlin-ktor-resource-runtime-env-argv",
       "fixture": "fixtures/kotlin-ktor-resource-runtime-env-argv",
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-runtime-list-env-executable-injection",
+      "fixture": "fixtures/kotlin-ktor-resource-runtime-list-env-executable-injection",
+      "expected": [
+        {
+          "title": "Ktor typed resource selects an executable through a converted Runtime exec command array",
+          "cwe": ["CWE-78", "CWE-88"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/main/kotlin/example/Diagnostics.kt",
+          "line": 17,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            [
+              "typed resource",
+              "Ktor resource",
+              "@Resource",
+              "DiagnosticResource"
+            ],
+            ["env", "delegating launcher", "delegated launcher"],
+            ["executable selection", "program selection", "command selection"],
+            ["toTypedArray", "typed array conversion", "collection to array"],
+            ["Runtime.exec", "java.lang.Runtime", "runtime exec"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["toTypedArray", "typed array conversion", "collection to array"],
+            ["Runtime.exec", "java.lang.Runtime", "runtime exec"],
+            ["env", "delegating launcher", "delegated executable"],
+            ["executable selection", "program selection", "command selection"],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "Runtime.exec always invokes a shell",
+            "env always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-runtime-list-env-argv",
+      "fixture": "fixtures/kotlin-ktor-resource-runtime-list-env-argv",
+      "expected": []
     }
   ]
 }

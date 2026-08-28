@@ -462,6 +462,10 @@ describe("effectiveness benchmark", () => {
         "kotlin-ktor-resource-runtime-env-argv",
       ],
       [
+        "kotlin-ktor-resource-runtime-list-env-executable-injection",
+        "kotlin-ktor-resource-runtime-list-env-argv",
+      ],
+      [
         "node-multi-hop-rhinostone-swig-template-traversal",
         "node-multi-hop-repaired-rhinostone-swig-template-root",
       ],

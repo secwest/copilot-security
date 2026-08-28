@@ -2192,10 +2192,12 @@ middleware-protected admin wildcard, root static handler, operational server,
 and inert `httptest` marker constant while changing only Echo 4.15.2 to 4.15.3.
 The affected router/static decoding disagreement discloses the marker through
 an encoded separator; the repaired static handler returns 404. The Kotlin
-command family also now pairs `Runtime.exec(arrayOf("env", ...))` executable
-selection with a topology-matched fixed-`printf` argv control, covering a
+command family pairs both `Runtime.exec(arrayOf("env", ...))` and exact
+`listOf(...).toTypedArray()` command construction with topology-matched
+fixed-`printf` argv controls. The converted-list model preserves snapshot
+semantics and records the conversion in the attack path, covering a
 delegating-launcher false negative without pretending that `Runtime.exec`
-always invokes a shell. The complete 150-pair, 300-case corpus produces 900
+always invokes a shell. The complete 151-pair, 302-case corpus produces 906
 scans that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses

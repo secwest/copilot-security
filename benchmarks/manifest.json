@@ -6456,6 +6456,72 @@
         "kotlin-ktor-resource-runtime-env-argv/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "kotlin-ktor-resource-runtime-list-env-executable-injection",
+      "description": "A typed Ktor Resource value occupies the executable operand delegated by POSIX env after an exact Kotlin Collection.toTypedArray conversion into the Runtime.exec array overload.",
+      "fixture": "fixtures/kotlin-ktor-resource-runtime-list-env-executable-injection",
+      "findingsPaths": [
+        "kotlin-ktor-resource-runtime-list-env-executable-injection/run-1/findings.json",
+        "kotlin-ktor-resource-runtime-list-env-executable-injection/run-2/findings.json",
+        "kotlin-ktor-resource-runtime-list-env-executable-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "kotlin-ktor-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/main/kotlin/example/Diagnostics.kt",
+              "startLine": 17,
+              "endLine": 17,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            [
+              "typed resource",
+              "Ktor resource",
+              "@Resource",
+              "DiagnosticResource"
+            ],
+            ["env", "delegating launcher", "delegated launcher"],
+            ["executable selection", "program selection", "command selection"],
+            ["toTypedArray", "typed array conversion", "collection to array"],
+            ["Runtime.exec", "java.lang.Runtime", "runtime exec"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "resource value", "target"],
+            ["toTypedArray", "typed array conversion", "collection to array"],
+            ["Runtime.exec", "java.lang.Runtime", "runtime exec"],
+            ["env", "delegating launcher", "delegated executable"],
+            ["executable selection", "program selection", "command selection"],
+            ["stdout", "response", "respondText"]
+          ],
+          "forbiddenText": [
+            "Runtime.exec always invokes a shell",
+            "env always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ktor-resource-runtime-list-env-argv",
+      "description": "The topology-matched collection-conversion control fixes printf as the delegated executable and retains the Resource value only as ordinary argv in the Runtime.exec command array.",
+      "fixture": "fixtures/kotlin-ktor-resource-runtime-list-env-argv",
+      "findingsPaths": [
+        "kotlin-ktor-resource-runtime-list-env-argv/run-1/findings.json",
+        "kotlin-ktor-resource-runtime-list-env-argv/run-2/findings.json",
+        "kotlin-ktor-resource-runtime-list-env-argv/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

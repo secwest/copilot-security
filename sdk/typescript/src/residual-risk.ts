@@ -45846,6 +45846,18 @@ function kotlinProcessEvidenceRequirements(
       validation.push(["Runtime.exec", "java.lang.Runtime", "runtime exec"]);
       attackPath.push(["Runtime.exec", "java.lang.Runtime", "runtime exec"]);
       seenKinds.add(kind);
+    } else if (kind === "kotlin-runtime-array-conversion") {
+      validation.push([
+        "toTypedArray",
+        "typed array conversion",
+        "collection to array",
+      ]);
+      attackPath.push([
+        "toTypedArray",
+        "typed array conversion",
+        "collection to array",
+      ]);
+      seenKinds.add(kind);
     } else if (kind === "kotlin-process-builder-factory") {
       validation.push([
         ...(symbol === undefined ? [] : [symbol]),

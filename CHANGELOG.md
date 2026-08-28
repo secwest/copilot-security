@@ -6,6 +6,30 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended Kotlin `Runtime.exec` command-vector recovery through exact
+  `listOf`, `mutableListOf`, and `arrayListOf` values converted with
+  `Collection.toTypedArray()`. Direct, fully qualified, retained, and aliased
+  collection shapes preserve element positions and snapshot semantics;
+  mutation of the resulting array remains live, while later mutation of the
+  source list does not rewrite the already-created array. Local collection
+  factories and `toTypedArray` extensions remain negative.
+- Added `kotlin-runtime-array-conversion` attack-path provenance and made
+  finding-quality closure require the conversion in both validation and
+  attack-path prose when it lies on the recorded tainted path. The correction
+  prompt now distinguishes list snapshots, later source-list changes, and live
+  mutations of the converted command array.
+- Preserved exact aliased string shapes while classifying POSIX `env` options
+  and assignments. Aliased `--split-string=...`, `--unset=...`, and fixed-name
+  `NAME=VALUE` operands retain their grammar, while reassignment and
+  attacker-controlled prefixes invalidate the shape instead of suppressing a
+  candidate.
+- Added a topology-matched typed-resource `Runtime.exec` converted-list
+  exploit/control pair with harmless native witnesses. Both Kotlin 2.2.20/Ktor
+  3.5.2 fixtures compile and pass on Java 21 under Ubuntu/WSL. The specialized
+  Kotlin manifest now has 18 cases; the canonical corpus has 151 pairs, 302
+  cases, and 906 repeated scan positions. Focused Kotlin and canonical gates
+  pass 50 tests and 2,641 assertions; formatting, generated-model drift, and
+  TypeScript checks are clean.
 - Extended the deterministic Kotlin/Ktor process model to exact
   `java.lang.Runtime.exec` boundaries. The tokenized `exec(String)` overload is
   a split-command sink; `exec(arrayOf(...))` preserves explicit command-vector
