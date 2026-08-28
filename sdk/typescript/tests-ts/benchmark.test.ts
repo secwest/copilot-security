@@ -517,6 +517,10 @@ describe("effectiveness benchmark", () => {
         "node-mcp-v2-sqlite-sql-injection",
         "node-mcp-v2-sqlite-bound-parameters",
       ],
+      [
+        "node-mcp-v2-sqlite-prepared-sql-injection",
+        "node-mcp-v2-sqlite-prepared-bound-parameters",
+      ],
       ["node-mcp-v2-regex-injection", "node-mcp-v2-fixed-patterns"],
       ["node-mcp-v2-ssrf", "node-mcp-v2-fixed-destination"],
       ["node-mcp-v2-path-traversal", "node-mcp-v2-fixed-file"],

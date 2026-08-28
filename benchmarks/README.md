@@ -279,8 +279,9 @@ node ../../benchmarks/run-benchmark.mjs `
 
 ## Node MCP tool-handler security benchmark
 
-`node-mcp-tool-security-manifest.json` measures tool input at six distinct
-capability boundaries under perfect selected-run gates. The command pair uses
+`node-mcp-tool-security-manifest.json` measures tool input at seven distinct
+capability boundaries across ten matched pairs under perfect selected-run
+gates. The command pair uses
 the real stable `@modelcontextprotocol/server` 2.0.0 API: the exploit carries a
 tool field through an arrow helper into `child_process.exec`, while its
 topology-matched control uses a fixed `process.execPath` and an explicit `--`.
@@ -293,7 +294,15 @@ the helper, arithmetic results, and the MCP response while an explicit numeric
 code-evaluation pair closes the compile/execute lifecycle: the exploit compiles
 tool input with `Function` and invokes the retained result, while the stronger
 control retains a compiled-Function invocation but parses tool input into
-numeric and allowlisted-operator data for fixed source. The regular-expression
+numeric and allowlisted-operator data for fixed source. The Worker pair requires
+tool-derived JavaScript to reach `new Worker(..., { eval: true })` and actual
+worker startup; its control keeps the evaluated Worker lifecycle but passes
+only structured-cloned numeric/operator data to fixed server-owned source. One
+SQLite pair sends tool-derived grammar to `DatabaseSync.exec`; its control uses
+fixed SQL and a `StatementSync` bound parameter. A second SQLite pair requires
+tool-derived grammar in `DatabaseSync.prepare` and subsequent execution of that
+exact returned statement through `get`; its control preserves both lifecycle
+steps but binds the same value outside SQL grammar. The regular-expression
 pair compiles a tool pattern through a same-file helper and executes it with
 `test` against a separately bounded tool-supplied match subject; its control
 preserves both schemas, helper, subject, and response while a fixed-pattern map
@@ -313,8 +322,9 @@ alternation, and invalid syntax; they never execute catastrophic-backtracking or
 load-generating patterns. The network witnesses use a
 random-port loopback listener, close it in all paths, and never contact an
 external or metadata address. The filesystem witnesses create and remove only
-fresh temporary trees containing synthetic marker data. Node CI executes all
-fourteen witnesses on Windows and Linux. Run the focused scanner benchmark with:
+fresh temporary trees containing synthetic marker data. Both SQLite pairs use
+only in-memory databases and fixed inert rows. Node CI executes all twenty
+witnesses on Windows and Linux. Run the focused scanner benchmark with:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -322,7 +332,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-node-mcp-tools
 ```
 
-The versioned corpus currently contains 163 vulnerable/control pairs:
+The versioned corpus currently contains 166 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

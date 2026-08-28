@@ -6,6 +6,52 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a deterministic MCP SQL-injection false negative for tool-controlled
+  SQL compiled by the official built-in `node:sqlite`
+  `DatabaseSync.prepare` API and then executed through the exact returned
+  `StatementSync` with `all`, `get`, `iterate`, or `run`. The model now emits
+  separate preparation and execution edges, supports immediate execution,
+  declarations including `using`/`await using`, later `let`/`var` assignment,
+  one stable statement alias, and same-file helper propagation. Preparation
+  without execution and tool values bound into fixed placeholder SQL remain
+  negative controls.
+- Kept prepared-SQL discovery fail closed on database or statement
+  reassignment, instance or prototype method replacement, pre-execution
+  closure/disposal, shadowed or unsupported statement flows, and ambiguous
+  database identity. Corrected an adjacent lifecycle bug found during
+  self-review: closing one independent `DatabaseSync` instance no longer
+  suppresses a sink on another instance, while closing an alias of the same
+  database still does. Model-specific quality gates now require both the exact
+  `prepare` edge and the exact `StatementSync` execution edge and forbid
+  inferring `exec`-style stacked-statement behavior from `prepare`.
+- Added an exact MCP SDK 2.0.0/Zod 4.4.3 exploit/control pair using only an
+  in-memory database. The exploit passes interpolated tool input to
+  `database.prepare` and proves an unauthorized internal-role lookup when the
+  returned statement executes; its topology-matched control keeps SQL fixed
+  and binds the identical value through `statement.get(name)`. Both witnesses
+  pass on Windows Node 24.15.0 and WSL Node 22.23.1. The strict MCP lane now
+  contains 20 cases across ten matched pairs, and the canonical corpus contains
+  166 pairs, 332 cases, and 996 repeated positions.
+- The compiled detector emits one exact `node-mcp-tool-sql-injection`/CWE-89
+  row for the independently rooted exploit, with `database.prepare:sql[0]`
+  and `statement.get:prepared-sql[0]` edges, and no structured row for the
+  bound-parameter control. Two product-root self-inventories complete in
+  20.068 and 19.161 seconds and are byte-identical at 584,350 bytes and SHA-256
+  `d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`,
+  matching the previous accepted 256-row checkpoint. The root inventory
+  correctly contains no MCP fixture row because benchmark trees remain outside
+  production model ownership.
+- Focused Windows acceptance passes 79 tests and 3,021 assertions; the wider
+  model, canonical benchmark, and residual-risk lane passes 146 tests and
+  4,084 assertions with one intentional symlink skip; and native WSL passes
+  the focused 79-test/3,021-assertion lane. The clean complete Windows suite
+  selects 2,025 tests across 210 files: 1,996 pass and 27 intentionally skip in
+  the managed shell, while the two host-permission cases blocked there pass in
+  an exact 48/48 native-ACL rerun. Generated models, TypeScript, formatting,
+  build, and production audit are clean. A 299-entry, 2,351,834-byte archive
+  with SHA-256
+  `1436bccff878d919e80621cbd77890863b692337e21491af3ee12153d6485538`
+  passes isolated install, public-import, CLI, and all 79 bundled-plugin checks.
 - Expanded deterministic residual discovery from 2,000 files/8 MiB to 8,192
   files/32 MiB after self-review showed that the file ceiling was applied
   during directory traversal before final path sorting. Added `.pnpm-store` to

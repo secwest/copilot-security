@@ -297,6 +297,59 @@
       "expected": []
     },
     {
+      "id": "node-mcp-v2-sqlite-prepared-sql-injection",
+      "fixture": "fixtures/node-mcp-v2-sqlite-prepared-sql-injection",
+      "expected": [
+        {
+          "title": "MCP tool input becomes prepared SQL executed by built-in StatementSync",
+          "cwe": ["CWE-89"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/server.mjs",
+          "line": 20,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["name", "tool input", "callback input"],
+            ["lookupRole", "same-file helper", "helper call"],
+            ["node:sqlite", "built-in SQLite", "DatabaseSync"],
+            ["DatabaseSync.prepare", "database.prepare", "prepare"],
+            ["StatementSync.get", "statement.get", "get()"],
+            ["argument zero", "sql[0]", "SQL text"],
+            ["interpolation", "query structure", "SQL grammar"],
+            ["bound parameter", "placeholder", "parameterized"],
+            ["CWE-89", "database confidentiality", "unauthorized read"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["lookup-role", "registerTool", "tool callback"],
+            ["lookupRole", "same-file helper", "helper call"],
+            ["node:sqlite", "built-in SQLite", "DatabaseSync"],
+            ["DatabaseSync.prepare", "database.prepare", "prepare"],
+            ["StatementSync.get", "statement.get", "execution"],
+            ["OR role", "query predicate", "query structure"],
+            ["internal role", "unauthorized read", "database confidentiality"],
+            ["bound parameter", "placeholder", "parameterized"]
+          ],
+          "forbiddenText": [
+            "string schema prevents SQL injection",
+            "every prepared statement is vulnerable",
+            "prepare alone executes the query",
+            "the witness read persistent data",
+            "proves the MCP server is publicly reachable",
+            "the host database is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-sqlite-prepared-bound-parameters",
+      "fixture": "fixtures/node-mcp-v2-sqlite-prepared-bound-parameters",
+      "expected": []
+    },
+    {
       "id": "node-mcp-v2-regex-injection",
       "fixture": "fixtures/node-mcp-v2-regex-injection",
       "expected": [

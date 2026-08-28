@@ -2,6 +2,78 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Require execution of the exact prepared built-in SQLite statement
+
+**Comparative gap.** The first built-in SQLite model deliberately covered
+`DatabaseSync.exec` and treated fixed SQL plus bound `StatementSync` values as
+the matched control, but did not recognize attacker-controlled SQL passed to
+`DatabaseSync.prepare` and later executed. Node's official
+[`node:sqlite` documentation](https://nodejs.org/api/sqlite.html) defines
+`prepare(sql)` as compiling SQL into a `StatementSync`; `all`, `get`,
+`iterate`, and `run` bind parameters and execute that statement. The current
+official CodeQL
+[`sqlite3` model](https://github.com/github/codeql/blob/fa8a2870208efa9356e13adef583e9ef43c70717/javascript/ql/lib/semmle/javascript/frameworks/sqlite3/model.yml)
+models package-level preparation as a query call, while the current JavaScript
+library has no `node:sqlite`, `DatabaseSync`, or `StatementSync` model. The
+accepted addition therefore covers the built-in API but uses a stricter
+lifecycle boundary than treating preparation alone as execution.
+
+**Accepted lifecycle.** A prepared row retains the existing exact MCP
+registration, schema, source-property, module-scope built-in database, and
+same-file propagation requirements. Tool-controlled SQL must reach argument
+zero of live `DatabaseSync.prepare`, and that exact returned statement must
+subsequently reach `all`, `get`, `iterate`, or `run`. The bounded structural
+model recognizes an immediate chain, a local `const`/`let`/`var`/`using` or
+`await using` declaration, a later assignment to a declared `let` or `var`,
+and one stable alias. It emits distinct `mcp-tool-sql-preparation` and
+`mcp-tool-sql-execution` propagators so validation and attack-path analysis
+must prove both boundaries independently.
+
+**Fail-closed counterevidence.** Inert preparation, fixed placeholder SQL with
+tool input only in execution arguments, unsupported or computed execution
+shapes, statement or database reassignment, replaced instance methods, exact
+imported or namespaced prototype replacement, and a database or statement
+closed/disposed before execution suppress the row. Cross-file statement
+storage, object-property storage, destructured execution methods, more than one
+alias hop, and arbitrary interprocedural lifecycle reasoning remain outside
+this high-confidence model. Preparation does not justify stacked-statement
+claims: reviewers must prove behavior at the exact prepared API and the actual
+deployment database privileges. Self-review also corrected database-instance
+isolation so closing an unrelated instance cannot suppress a live sink on a
+different instance; aliases of the closed instance remain suppressed.
+
+**Executable benchmark.** Both twins use exact MCP SDK 2.0.0 and Zod 4.4.3,
+a reachable stdio launcher, one same-file lookup helper, and an in-memory
+`DatabaseSync`. The exploit interpolates a fixed tool value into prepared SQL
+and executes `statement.get()`, exposing one fixed internal role. The control
+prepares fixed `?` SQL and passes the identical value to `statement.get(name)`,
+returning no row. Both pass on Windows Node 24.15.0 and WSL Node 22.23.1 with
+no filesystem, network, subprocess, credential, or persistent-database effect.
+Windows Node 24.15 does not expose `StatementSync.close()`, despite that method
+appearing in newer Node documentation; the source-identical fixtures therefore
+do not assume it, while the detector conservatively treats an explicit
+pre-execution close or disposal as counterevidence on runtimes that provide it.
+The strict MCP lane now has 20 cases/ten pairs, and the canonical corpus has
+166 pairs, 332 cases, and 996 repeated positions.
+
+**Acceptance evidence.** The compiled exploit inventory contains one exact
+CWE-89 row at `src/server.mjs:20`, with `database.prepare:sql[0]` and
+`statement.get:prepared-sql[0]`; the independently rooted control contains no
+structured row. Two full product-root inventories are byte-identical at
+584,350 bytes and SHA-256
+`d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`
+after 20.068 and 19.161 seconds, matching the previous accepted 256-row
+checkpoint. Focused Windows and WSL lanes each pass 79 tests and 3,021
+assertions. The wider Windows model/benchmark/inventory lane passes 146 tests
+and 4,084 assertions with one intentional symlink skip. The complete clean
+Windows run selects 2,025 tests across 210 files: 1,996 pass and 27
+intentionally skip under the managed shell; its two permission-sensitive cases
+then pass in an exact 48/48 host-permission rerun. Generated-model drift,
+TypeScript, formatting, build, and production audit are clean. The rebuilt
+299-entry, 2,351,834-byte package at SHA-256
+`1436bccff878d919e80621cbd77890863b692337e21491af3ee12153d6485538`
+passes isolated install, public import, CLI, and all 79 bundled-plugin checks.
+
 ## 2026-08-28 — Preserve structured findings beyond the old source-discovery prefix
 
 **Self-review counterexample.** Exact-checkpoint review of the SQLite work

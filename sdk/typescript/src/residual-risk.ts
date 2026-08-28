@@ -4302,7 +4302,21 @@ const NODE_MCP_TOOL_SQL_FIELD_EVIDENCE_REQUIREMENTS = [
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
   ["inputSchema", "schema validation", "string schema"],
   ["node:sqlite", "built-in SQLite", "DatabaseSync"],
-  ["DatabaseSync.exec", "database.exec", "exec(sql)", "SQL execution"],
+  [
+    "DatabaseSync.exec",
+    "database.exec",
+    "DatabaseSync.prepare",
+    "database.prepare",
+    "SQL preparation",
+  ],
+  [
+    "DatabaseSync.exec",
+    "StatementSync.run",
+    "StatementSync.get",
+    "StatementSync.all",
+    "StatementSync.iterate",
+    "SQL execution",
+  ],
   ["SQL text", "query string", "argument zero", "sql[0]"],
   ["SQL injection", "query structure", "SQL grammar"],
   ["prepared statement", "bound parameter", "placeholder"],
@@ -46015,14 +46029,32 @@ function nodeMcpToolEvidenceRequirements(
       const binding = [symbol, "node:sqlite", "DatabaseSync"];
       validation.push(binding);
       attackPath.push(binding);
-    } else if (kind === "mcp-tool-sql-execution") {
-      const execution = [
+    } else if (kind === "mcp-tool-sql-preparation") {
+      const preparation = [
         symbol,
-        "DatabaseSync.exec",
-        "database.exec",
-        "exec(sql)",
-        "SQL execution",
+        "DatabaseSync.prepare",
+        "database.prepare",
+        "SQL preparation",
       ];
+      validation.push(preparation);
+      attackPath.push(preparation);
+    } else if (kind === "mcp-tool-sql-execution") {
+      const execution = symbol.includes("prepared-sql")
+        ? [
+            symbol,
+            "StatementSync.run",
+            "StatementSync.get",
+            "StatementSync.all",
+            "StatementSync.iterate",
+            "prepared statement execution",
+          ]
+        : [
+            symbol,
+            "DatabaseSync.exec",
+            "database.exec",
+            "exec(sql)",
+            "SQL execution",
+          ];
       validation.push(execution);
       attackPath.push(execution);
     } else if (kind === "mcp-tool-code-linking") {

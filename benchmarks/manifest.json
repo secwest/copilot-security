@@ -7236,6 +7236,76 @@
       "expected": []
     },
     {
+      "id": "node-mcp-v2-sqlite-prepared-sql-injection",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into argument zero of built-in node:sqlite DatabaseSync.prepare, and the returned StatementSync is executed with get(), allowing input to change the query predicate.",
+      "fixture": "fixtures/node-mcp-v2-sqlite-prepared-sql-injection",
+      "findingsPaths": [
+        "node-mcp-v2-sqlite-prepared-sql-injection/run-1/findings.json",
+        "node-mcp-v2-sqlite-prepared-sql-injection/run-2/findings.json",
+        "node-mcp-v2-sqlite-prepared-sql-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-sql-injection",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 20,
+              "endLine": 20,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["name", "tool input", "callback input"],
+            ["lookupRole", "same-file helper", "helper call"],
+            ["node:sqlite", "built-in SQLite", "DatabaseSync"],
+            ["DatabaseSync.prepare", "database.prepare", "prepare"],
+            ["StatementSync.get", "statement.get", "get()"],
+            ["argument zero", "sql[0]", "SQL text"],
+            ["interpolation", "query structure", "SQL grammar"],
+            ["bound parameter", "placeholder", "parameterized"],
+            ["CWE-89", "database confidentiality", "unauthorized read"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["lookup-role", "registerTool", "tool callback"],
+            ["lookupRole", "same-file helper", "helper call"],
+            ["node:sqlite", "built-in SQLite", "DatabaseSync"],
+            ["DatabaseSync.prepare", "database.prepare", "prepare"],
+            ["StatementSync.get", "statement.get", "execution"],
+            ["OR role", "query predicate", "query structure"],
+            ["internal role", "unauthorized read", "database confidentiality"],
+            ["bound parameter", "placeholder", "parameterized"]
+          ],
+          "forbiddenText": [
+            "string schema prevents SQL injection",
+            "every prepared statement is vulnerable",
+            "prepare alone executes the query",
+            "the witness read persistent data",
+            "proves the MCP server is publicly reachable",
+            "the host database is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-sqlite-prepared-bound-parameters",
+      "description": "The topology-matched MCP v2 control keeps prepared SQL fixed and passes the same tool input only to StatementSync.get as a bound parameter.",
+      "fixture": "fixtures/node-mcp-v2-sqlite-prepared-bound-parameters",
+      "findingsPaths": [
+        "node-mcp-v2-sqlite-prepared-bound-parameters/run-1/findings.json",
+        "node-mcp-v2-sqlite-prepared-bound-parameters/run-2/findings.json",
+        "node-mcp-v2-sqlite-prepared-bound-parameters/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "node-mcp-v2-regex-injection",
       "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into global RegExp pattern construction and later test execution against an independently supplied 4,096-character subject, permitting nonlinear matching to block the shared Node event loop.",
       "fixture": "fixtures/node-mcp-v2-regex-injection",

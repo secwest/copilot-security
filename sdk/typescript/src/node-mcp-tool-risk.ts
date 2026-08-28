@@ -14,6 +14,12 @@ const WORKER_THREAD_MODULES = new Set([
   "node:worker_threads",
 ]);
 const SQLITE_MODULES = new Set(["node:sqlite"]);
+const SQLITE_STATEMENT_EXECUTION_METHODS = new Set([
+  "all",
+  "get",
+  "iterate",
+  "run",
+]);
 const FS_MODULES = new Set([
   "fs",
   "fs/promises",
@@ -1139,6 +1145,7 @@ interface SqliteDatabaseBinding {
   constructionOffset: number;
   constructorSymbol: string;
   rootReceiver: string;
+  statementConstructorSymbols: readonly string[];
 }
 
 function constructedSqliteDatabases(
@@ -1146,6 +1153,7 @@ function constructedSqliteDatabases(
   structural: string,
   bindings: BindingSet,
 ): ReadonlyMap<string, SqliteDatabaseBinding> {
+  const statementConstructorSymbols = new Set<string>();
   const constructors: Array<{
     expression: string;
     symbol: string;
@@ -1159,6 +1167,8 @@ function constructedSqliteDatabases(
         symbol: local,
         bindingRoot: local,
       });
+    } else if (imported === "StatementSync") {
+      statementConstructorSymbols.add(local);
     }
   }
   for (const [namespace] of bindings.namespaces) {
@@ -1168,6 +1178,7 @@ function constructedSqliteDatabases(
       bindingRoot: namespace,
       member: "DatabaseSync",
     });
+    statementConstructorSymbols.add(`${namespace}.StatementSync`);
   }
 
   const databases = new Map<string, SqliteDatabaseBinding>();
@@ -1202,6 +1213,7 @@ function constructedSqliteDatabases(
         constructionOffset: offset,
         constructorSymbol: constructor.symbol,
         rootReceiver: receiver,
+        statementConstructorSymbols: [...statementConstructorSymbols],
       });
     }
   }
@@ -2466,6 +2478,195 @@ function callIsDirectlyAwaited(structural: string, offset: number): boolean {
   );
 }
 
+interface PreparedStatementBinding {
+  name: string;
+  definedAt: number;
+}
+
+function assignedPreparedStatementBinding(
+  structural: string,
+  body: Range,
+  prepareOffset: number,
+  prepareClose: number,
+): PreparedStatementBinding | undefined {
+  const prefixStart = Math.max(body.start, prepareOffset - 512);
+  const prefix = structural.slice(prefixStart, prepareOffset);
+  const declaration =
+    /(?:^|[;{}\n])\s*(?:(?:await\s+)?using|const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;\n]+)?\s*=\s*$/u.exec(
+      prefix,
+    );
+  if (declaration !== null)
+    return { name: declaration[1]!, definedAt: prepareClose + 1 };
+
+  const assignment = /(?:^|[;{}\n])\s*([A-Za-z_$][\w$]*)\s*=\s*$/u.exec(prefix);
+  const name = assignment?.[1];
+  if (name === undefined) return undefined;
+  const escaped = escapeRegularExpression(name);
+  const priorDeclaration = new RegExp(
+    String.raw`(?:^|[;{}\n])\s*(?:let|var)\s+${escaped}(?:\s*:[^=;\n]+)?(?:\s*=\s*[^;\n]*)?\s*(?:;|\n|$)`,
+    "u",
+  );
+  if (!priorDeclaration.test(structural.slice(body.start, prepareOffset)))
+    return undefined;
+  return { name, definedAt: prepareClose + 1 };
+}
+
+function preparedStatementBindings(
+  structural: string,
+  body: Range,
+  prepare: CallSite,
+): PreparedStatementBinding[] {
+  const root = assignedPreparedStatementBinding(
+    structural,
+    body,
+    prepare.offset,
+    prepare.close,
+  );
+  if (root === undefined) return [];
+  const bindings = [root];
+  const alias = new RegExp(
+    String.raw`(?:^|[;}\n])\s*(?:(?:await\s+)?using|const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:[^=;\n]+)?\s*=\s*${escapeRegularExpression(root.name)}\s*(?:;|\n|$)`,
+    "gu",
+  );
+  for (const match of structural
+    .slice(prepare.close + 1, body.end)
+    .matchAll(alias)) {
+    const offset = prepare.close + 1 + match.index!;
+    if (
+      constructedValueWasReplaced(
+        structural,
+        root.name,
+        root.definedAt,
+        offset,
+        SQLITE_STATEMENT_EXECUTION_METHODS,
+      ) ||
+      sqliteStatementWasFinalized(
+        structural,
+        [root.name],
+        root.definedAt,
+        offset,
+      )
+    ) {
+      continue;
+    }
+    bindings.push({ name: match[1]!, definedAt: offset + match[0].length });
+    break;
+  }
+  return bindings;
+}
+
+function sqliteStatementWasFinalized(
+  structural: string,
+  receivers: readonly string[],
+  start: number,
+  end: number,
+): boolean {
+  const alternatives = receivers.map(escapeRegularExpression).join("|");
+  if (alternatives === "") return false;
+  return new RegExp(
+    String.raw`(?<![.\w$])(?:${alternatives})\s*(?:\.\s*close|\[\s*Symbol\s*\.\s*dispose\s*\])\s*\(`,
+    "u",
+  ).test(structural.slice(start, end));
+}
+
+function immediatePreparedStatementExecution(
+  source: string,
+  structural: string,
+  body: Range,
+  prepare: CallSite,
+): CallSite | undefined {
+  const suffix = structural.slice(prepare.close + 1, body.end);
+  const match = /^\s*\.\s*(all|get|iterate|run)\s*\(/u.exec(suffix);
+  if (match === null) return undefined;
+  const offset = prepare.close + 1 + match.index! + match[0].indexOf(match[1]!);
+  const open = prepare.close + 1 + match.index! + match[0].lastIndexOf("(");
+  const close = matchingStructuralDelimiter(structural, open, "(", ")");
+  if (close < 0 || close > body.end) return undefined;
+  return {
+    method: match[1]!,
+    symbol: `${prepare.symbol}().${match[1]}`,
+    line: lineAt(source, offset),
+    offset,
+    close,
+    arguments: splitArgumentRanges(structural, open + 1, close).map((range) =>
+      trimSourceRange(source, range),
+    ),
+  };
+}
+
+function preparedStatementExecutions(
+  source: string,
+  structural: string,
+  body: Range,
+  prepare: CallSite,
+): CallSite[] {
+  const immediate = immediatePreparedStatementExecution(
+    source,
+    structural,
+    body,
+    prepare,
+  );
+  if (immediate !== undefined) return [immediate];
+
+  const bindings = preparedStatementBindings(structural, body, prepare);
+  if (bindings.length === 0) return [];
+  const statementBindings: BindingSet = {
+    direct: new Map(),
+    namespaces: new Map(bindings.map(({ name }) => [name, "node:sqlite"])),
+  };
+  const names = bindings.map(({ name }) => name);
+  return boundCalls(
+    source,
+    structural,
+    body,
+    statementBindings,
+    SQLITE_STATEMENT_EXECUTION_METHODS,
+  )
+    .filter((execution) => {
+      if (execution.offset <= prepare.close) return false;
+      const receiver = execution.symbol.split(".")[0];
+      const binding = bindings.find(({ name }) => name === receiver);
+      if (binding === undefined || binding.definedAt >= execution.offset)
+        return false;
+      if (
+        sqliteStatementWasFinalized(
+          structural,
+          names,
+          prepare.close + 1,
+          execution.offset,
+        )
+      ) {
+        return false;
+      }
+      return !bindings.some(
+        ({ name, definedAt }) =>
+          definedAt < execution.offset &&
+          constructedValueWasReplaced(
+            structural,
+            name,
+            definedAt,
+            execution.offset,
+            SQLITE_STATEMENT_EXECUTION_METHODS,
+          ),
+      );
+    })
+    .sort((left, right) => left.offset - right.offset);
+}
+
+function sqliteDatabaseInstanceBindings(
+  databases: ReadonlyMap<string, SqliteDatabaseBinding>,
+  database: SqliteDatabaseBinding,
+): BindingSet {
+  return {
+    direct: new Map(),
+    namespaces: new Map(
+      [...databases]
+        .filter(([, candidate]) => candidate === database)
+        .map(([receiver]) => [receiver, "node:sqlite"]),
+    ),
+  };
+}
+
 function sqliteSinks(
   source: string,
   structural: string,
@@ -2491,6 +2692,10 @@ function sqliteSinks(
     const receiver = call.symbol.split(".")[0];
     const database =
       receiver === undefined ? undefined : databases.get(receiver);
+    const instanceBindings =
+      database === undefined
+        ? databaseBindings
+        : sqliteDatabaseInstanceBindings(databases, database);
     const sql = call.arguments[0];
     if (
       database === undefined ||
@@ -2500,7 +2705,7 @@ function sqliteSinks(
         source,
         structural,
         registration,
-        databaseBindings,
+        instanceBindings,
         database,
         call.offset,
       ) ||
@@ -2542,6 +2747,103 @@ function sqliteSinks(
       },
     });
   }
+  for (const prepare of boundCalls(
+    source,
+    structural,
+    registration.body,
+    databaseBindings,
+    new Set(["prepare"]),
+  )) {
+    const receiver = prepare.symbol.split(".")[0];
+    const database =
+      receiver === undefined ? undefined : databases.get(receiver);
+    const instanceBindings =
+      database === undefined
+        ? databaseBindings
+        : sqliteDatabaseInstanceBindings(databases, database);
+    const sql = prepare.arguments[0];
+    if (
+      database === undefined ||
+      sql === undefined ||
+      !exactBindingCallIsLive(structural, registration.body, prepare) ||
+      sqliteDatabaseWasClosed(
+        source,
+        structural,
+        registration,
+        instanceBindings,
+        database,
+        prepare.offset,
+      ) ||
+      constructorPrototypeMethodWasReplaced(
+        structural,
+        database.constructorSymbol,
+        "prepare",
+        prepare.offset,
+      )
+    ) {
+      continue;
+    }
+    const sourceBinding = liveTaintForRange(
+      structural,
+      sql,
+      registration.body,
+      taint,
+    );
+    if (sourceBinding === undefined) continue;
+    for (const execution of preparedStatementExecutions(
+      source,
+      structural,
+      registration.body,
+      prepare,
+    )) {
+      if (
+        sqliteDatabaseWasClosed(
+          source,
+          structural,
+          registration,
+          instanceBindings,
+          database,
+          execution.offset,
+        ) ||
+        database.statementConstructorSymbols.some((constructor) =>
+          constructorPrototypeMethodWasReplaced(
+            structural,
+            constructor,
+            execution.method,
+            execution.offset,
+          ),
+        )
+      ) {
+        continue;
+      }
+      sinks.push({
+        kind: "mcp-tool-sql-query",
+        line: execution.line,
+        symbol: `${execution.symbol}:prepared-sql[0]`,
+        source: {
+          ...sourceBinding,
+          propagators: [
+            ...sourceBinding.propagators,
+            {
+              kind: "mcp-tool-sqlite-database",
+              line: database.constructionLine,
+              symbol: `${database.rootReceiver}=new ${database.constructorSymbol}`,
+            },
+            {
+              kind: "mcp-tool-sql-preparation",
+              line: prepare.line,
+              symbol: `${prepare.symbol}:sql[0]`,
+            },
+            {
+              kind: "mcp-tool-sql-execution",
+              line: execution.line,
+              symbol: `${execution.symbol}:prepared-sql[0]`,
+            },
+          ],
+        },
+      });
+    }
+  }
   return sinks;
 }
 
@@ -2566,9 +2868,24 @@ function sqliteDatabaseWasClosed(
   );
   if (handlerClose) return true;
 
+  const handlerPrefix = structural.slice(
+    registration.body.start,
+    Math.min(executionOffset, registration.body.end),
+  );
+  for (const receiver of bindings.namespaces.keys()) {
+    if (
+      new RegExp(
+        String.raw`(?<![.\w$])${escapeRegularExpression(receiver)}\s*\[\s*Symbol\s*\.\s*dispose\s*\]\s*\(`,
+        "u",
+      ).test(handlerPrefix)
+    ) {
+      return true;
+    }
+  }
+
   for (const receiver of bindings.namespaces.keys()) {
     const close = new RegExp(
-      String.raw`(?<![.\w$])${escapeRegularExpression(receiver)}\s*\.\s*close\s*\(`,
+      String.raw`(?<![.\w$])${escapeRegularExpression(receiver)}\s*(?:\.\s*close|\[\s*Symbol\s*\.\s*dispose\s*\])\s*\(`,
       "gu",
     );
     for (const match of structural
