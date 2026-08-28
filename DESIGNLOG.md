@@ -61,6 +61,46 @@ helper parameter positions, arrow/function-expression helpers, lookalikes,
 resource exclusions, residual integration, and model-specific quality
 closure.
 
+**Acceptance and immutable self-review.** Exact public implementation revision
+`e83a3ab7093e4769e8d9e74ed6dd68b8a1cc0c51` passes a strict live deep campaign
+over all four fixtures with two workers and the bounded ten-attempt recovery
+policy. Every case completes on attempt one with complete coverage and no
+authentication, allowance, rate-limit, classifier, timeout, or retry event.
+The command exploit reports one critical finding, the SSRF exploit reports one
+high finding, and both matched controls remain clean. Campaign
+`08542e73eb4a7e7c70b6416ab8db038159782698c1ac5e1f0961e0b0a795d09b`
+therefore records two true positives, no false positive or false negative, and
+`1` for precision, recall, F1, case and negative accuracy, stable detection,
+validation, attack path, code evidence, severity, and completion. It uses
+9,034,043 input tokens, including 7,969,610 cached tokens, and 175,618 output
+tokens in 37 minutes 58.812 seconds of cumulative worker time; concurrency
+reduces campaign wall time to 20 minutes 48.933 seconds.
+
+Two compiled inventories of a 3,530-file `git archive` extraction of that exact
+revision complete in 10,530.603 and 10,346.105 milliseconds and are
+byte-identical at the 256-record cap and 562,434 bytes, with SHA-256
+`e2ab8f32cd775358a89f5d30fcb437919285ef1a9dfcd9a7526612de84d4c0d5`.
+The archive SHA-256 is
+`2b89641c9e3a92859d0681e9c1a23b6f5edfd7f147ca497165db47f2072c82f3`.
+The repository-wide retained set contains 212 structured rows ahead of 44
+lexical leads, with 254 fixture and two non-fixture rows. Because its 256-row
+cap excludes the alphabetically later MCP fixtures, independent roots close
+that observability boundary: the SDK root has no MCP row, the command and SSRF
+exploits each have exactly one intended row at `src/server.mjs:9` and
+`src/server.mjs:7`, and the argv and fixed-origin controls have none.
+
+All eleven exact-source hosted workflows pass: [Node `33158601288`](https://github.com/secwest/copilot-security/actions/runs/33158601288),
+[container `33158601429`](https://github.com/secwest/copilot-security/actions/runs/33158601429),
+[Java `33158601213`](https://github.com/secwest/copilot-security/actions/runs/33158601213),
+[Kotlin `33158601263`](https://github.com/secwest/copilot-security/actions/runs/33158601263),
+[.NET `33158601242`](https://github.com/secwest/copilot-security/actions/runs/33158601242),
+[Go `33158601294`](https://github.com/secwest/copilot-security/actions/runs/33158601294),
+[Rust `33158601371`](https://github.com/secwest/copilot-security/actions/runs/33158601371),
+[Ruby `33158601280`](https://github.com/secwest/copilot-security/actions/runs/33158601280),
+[PHP `33158601190`](https://github.com/secwest/copilot-security/actions/runs/33158601190),
+[Windows GUI `33158601244`](https://github.com/secwest/copilot-security/actions/runs/33158601244),
+and [Linux GUI `33158601316`](https://github.com/secwest/copilot-security/actions/runs/33158601316).
+
 **Consequence.** MCP tool handlers now receive deterministic remote-capability
 attention without equating every tool input with an exploit. Future transport,
 cross-file, resource, prompt, sampling, or elicitation models should preserve

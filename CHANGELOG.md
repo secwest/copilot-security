@@ -45,6 +45,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
   the 2,290,059-byte native Ubuntu archive has SHA-1
   `29e11293445ee11c15e7cb61296302c1752bd9a4` and SHA-256
   `85f0973ba936b4786ee1ef8ef2040de047fcc34c42396e3c33073e1e6236b1df`.
+- Ran all four MCP exploit/control cases through strict live deep Copilot
+  scanning at exact public implementation revision
+  `e83a3ab7093e4769e8d9e74ed6dd68b8a1cc0c51`, with two workers and the
+  bounded ten-attempt recovery policy. Every case completed on attempt one
+  with complete coverage and no authentication, allowance, rate-limit,
+  classifier, timeout, or retry event. The command exploit produced one
+  critical finding, the SSRF exploit produced one high finding, and both
+  matched controls remained clean. Precision, recall, F1, case accuracy,
+  negative accuracy, stable detection, validation, attack path, code evidence,
+  severity, and completion are all `1`, with zero false positives and false
+  negatives. Campaign
+  `08542e73eb4a7e7c70b6416ab8db038159782698c1ac5e1f0961e0b0a795d09b`
+  used 9,034,043 input tokens, including 7,969,610 cached tokens, and 175,618
+  output tokens in 37 minutes 58.812 seconds of cumulative worker time and 20
+  minutes 48.933 seconds of campaign wall time.
+- Two deterministic production-build residual inventories of a 3,530-file
+  tracked-only archive of that exact revision are byte-identical at the
+  256-record cap and 562,434 bytes, with SHA-256
+  `e2ab8f32cd775358a89f5d30fcb437919285ef1a9dfcd9a7526612de84d4c0d5`.
+  The archive SHA-256 is
+  `2b89641c9e3a92859d0681e9c1a23b6f5edfd7f147ca497165db47f2072c82f3`.
+  An independently rooted SDK inventory emits no MCP tool-handler row. The
+  command and SSRF exploit fixtures each emit exactly their intended row at
+  sink lines 9 and 7 respectively, while the matched argv and fixed-origin
+  controls emit none.
+- All eleven hosted workflow families pass the exact implementation revision:
+  Node `33158601288`, container `33158601429`, Java `33158601213`, Kotlin
+  `33158601263`, .NET `33158601242`, Go `33158601294`, Rust `33158601371`,
+  Ruby `33158601280`, PHP `33158601190`, Windows GUI `33158601244`, and Linux
+  GUI `33158601316`.
 - Extended exact Java command-vector mutation through
   `java.util.Collections.copy` and `Collections.fill`. Copy overwrites only
   the destination prefix and rejects a source larger than the destination;
