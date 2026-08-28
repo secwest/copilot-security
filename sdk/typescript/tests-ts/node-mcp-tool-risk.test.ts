@@ -106,6 +106,23 @@ describe("Node MCP tool-input security model", () => {
     expect(manifest.cases[12]?.expected).toHaveLength(1);
     expect(manifest.cases[13]?.expected).toEqual([]);
 
+    for (const index of [6, 7]) {
+      const fixture = join(
+        benchmarkRoot,
+        "fixtures",
+        manifest.cases[index]!.id,
+      );
+      const packageJson = JSON.parse(
+        await readFile(join(fixture, "package.json"), "utf8"),
+      ) as { scripts?: { start?: string } };
+      expect(packageJson.scripts?.start).toBe("node src/stdio.mjs");
+      expect(await readFile(join(fixture, "src", "stdio.mjs"), "utf8")).toBe(
+        'import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";\n' +
+          'import { server } from "./server.mjs";\n\n' +
+          "await server.connect(new StdioServerTransport());\n",
+      );
+    }
+
     for (const [index, modelId] of [
       [0, "node-mcp-tool-command-injection"],
       [2, "node-mcp-tool-argument-injection"],

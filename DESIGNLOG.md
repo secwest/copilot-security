@@ -77,6 +77,21 @@ tolerance, so the evaluator counted the intended finding as both unexpected and
 missed. Ground truth now anchors the executable sink at line 8 in both manifests,
 and a direct specialized-manifest regression preserves that correspondence.
 
+Corrected campaign
+`726c337b84e1a39e106337b78647ef44908a4665e63c1698589fe191df28d44c`
+then supplied the missing counterexample. Both cases again completed on attempt
+one with complete coverage and no provider failure, but the scanner rejected the
+positive because the complete three-file fixture never connected its registered
+server to a transport and its only actual evaluator callers used fixed witness
+strings. That rejection is defensible source-level reachability analysis, not a
+reason to force a finding from a hypothetical deployment. Both twins therefore
+gain the same separate launcher importing the official MCP 2.0.0
+`StdioServerTransport` and awaiting `server.connect`; both package start scripts
+select it, while direct bounded witnesses remain isolated from transport startup.
+The exploit/control delta is still only tool-derived versus fixed Function
+source. Tests pin the identical launcher and start topology on both Windows and
+WSL.
+
 ## 2026-08-28 — Model executed MCP regular-expression patterns
 
 **Coverage gap and comparative evidence.** The exact MCP host pass covered

@@ -35,6 +35,13 @@ All notable scanner, application, benchmark, and operational changes are recorde
   finding as both unexpected and missed. A manifest regression now binds the
   specialized expectation to the execution line, and the canonical corpus uses
   the same anchor.
+- Strengthened that pair after a corrected live rerun exposed a separate fixture
+  flaw: registration alone was followed only by trusted direct witness calls,
+  with no connected transport in the complete source inventory. Both twins now
+  launch the registered server through the official MCP 2.0.0
+  `StdioServerTransport`; the evaluator remains their only security-relevant
+  delta. Regression tests pin the common start script and launcher, and both
+  Windows and WSL witnesses remain clean and bounded.
 - Added deterministic `node-mcp-tool-regex-injection` coverage for official MCP
   TypeScript SDK tool input used as argument zero of the live global `RegExp`
   and then actually executed through `test` or `exec`. The bounded source model
