@@ -27,7 +27,11 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
   The production-path owner intentionally excludes benchmark fixtures, so the
   root inventory emits no MCP SQLite row; the independently rooted matched
-  pair remains the positive/negative proof.
+  pair remains the positive/negative proof. All eleven hosted workflow families
+  pass at that implementation revision: Node `33211464346`, container
+  `33211464323`, Linux GUI `33211464275`, Windows GUI `33211464368`, Go
+  `33211464536`, Java `33211464288`, Kotlin `33211464260`, .NET `33211464311`,
+  Rust `33211464328`, Ruby `33211464258`, and PHP `33211464379`.
 - Added deterministic `node-mcp-tool-sql-injection` coverage for exact MCP tool
   input reaching argument zero of the official built-in `node:sqlite`
   `DatabaseSync.exec` API. Named, aliased, namespace, default, CommonJS, and
