@@ -82,6 +82,44 @@ zero false positives and false negatives. Campaign
 uses 5,807,967 input tokens, including 5,136,361 cached tokens, and 101,618
 output tokens across 22 minutes 42 seconds of wall-clock scan time.
 
+**Immutable stability, self-review, and hosted closure.** The canonical pair
+was then repeated three times against exact public implementation revision
+`b4d6b201d5874836d083a6a720e18e1c9bd55619`. All six deep scans complete on
+attempt one with complete coverage: all three exploit runs report the critical
+finding and all three topology-matched controls remain clean. Campaign
+`fd65882ed35a11a42dda843ac4cbab3c20c39791c1841176b7ec05e03e0926df`
+records three true positives, zero false positives or false negatives, and `1`
+for precision, recall, F1, case and negative accuracy, stable detection,
+validation, attack path, code evidence, severity, and completion. Two workers
+use 8,427,865 input tokens, including 6,803,429 cached tokens, and 186,043
+output tokens in 22 minutes 8 seconds of wall time. No run encounters an
+authentication, allowance, rate-limit, classifier, or retry event.
+
+Two production-build residual inventories of a 3,499-file tracked-only archive
+of that exact revision are byte-identical at the 256-record cap and 561,804
+bytes, with SHA-256
+`e4bc7a98a3fb5e3f0da9591860bcfd338460f34518092c5126ea36ddbe438231`;
+the archive SHA-256 is
+`78a2dff76ec77d7a14ca89fbbff6abcdc4c94db07120a2f642012144833c452c`.
+An independently rooted SDK inventory contains no Spring Java command row.
+The exploit inventory contains exactly one at
+`src/main/java/example/DiagnosticsController.java:19`, sourced at line 14,
+with `java-command-list-mutation`, `java-caller-command-list-binding`, and
+`java-process-execution`; the matched argv control contains none.
+
+All eleven hosted workflow families pass the exact implementation revision:
+[Node `33149476632`](https://github.com/secwest/copilot-security/actions/runs/33149476632),
+[container `33149476660`](https://github.com/secwest/copilot-security/actions/runs/33149476660),
+[Java `33149476717`](https://github.com/secwest/copilot-security/actions/runs/33149476717),
+[Kotlin `33149476675`](https://github.com/secwest/copilot-security/actions/runs/33149476675),
+[.NET `33149476641`](https://github.com/secwest/copilot-security/actions/runs/33149476641),
+[Go `33149476646`](https://github.com/secwest/copilot-security/actions/runs/33149476646),
+[Rust `33149476677`](https://github.com/secwest/copilot-security/actions/runs/33149476677),
+[Ruby `33149476630`](https://github.com/secwest/copilot-security/actions/runs/33149476630),
+[PHP `33149476628`](https://github.com/secwest/copilot-security/actions/runs/33149476628),
+[Windows GUI `33149476689`](https://github.com/secwest/copilot-security/actions/runs/33149476689),
+and [Linux GUI `33149476692`](https://github.com/secwest/copilot-security/actions/runs/33149476692).
+
 ## 2026-08-27 — Retain caller-owned Java command-list identity and capability
 
 **Observed gap and authoritative semantics.** The live-getter increment kept

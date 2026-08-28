@@ -49,6 +49,30 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `b6771b03f26c2e1d4424b75833b49619a6c0228567b95d1e363b61a464171fda`
   used 5,807,967 input tokens, including 5,136,361 cached tokens, and 101,618
   output tokens across 22 minutes 42 seconds of wall-clock scan time.
+- Repeated the canonical pair three times at exact public implementation
+  revision `b4d6b201d5874836d083a6a720e18e1c9bd55619`. All six deep scans
+  completed on attempt one with complete coverage: the exploit was detected
+  in all three runs and the control remained clean in all three. Campaign
+  `fd65882ed35a11a42dda843ac4cbab3c20c39791c1841176b7ec05e03e0926df`
+  has three true positives, zero false positives or false negatives, and `1`
+  for every strict quality and stability metric. Two concurrent workers used
+  8,427,865 input tokens, including 6,803,429 cached tokens, and 186,043 output
+  tokens in 22 minutes 8 seconds of wall time; no authentication, allowance,
+  rate-limit, or classifier event occurred.
+- Two deterministic residual reviews of a 3,499-file tracked-only archive of
+  that exact revision are byte-identical at the 256-record cap and 561,804
+  bytes, with SHA-256
+  `e4bc7a98a3fb5e3f0da9591860bcfd338460f34518092c5126ea36ddbe438231`.
+  The archive SHA-256 is
+  `78a2dff76ec77d7a14ca89fbbff6abcdc4c94db07120a2f642012144833c452c`.
+  The independently rooted SDK emits no Spring Java command row; the exploit
+  emits exactly one at line 19 with mutation, caller-list-binding, and process
+  execution provenance, while the matched argv control emits none.
+- All eleven hosted workflow families pass the exact implementation revision:
+  Node `33149476632`, container `33149476660`, Java `33149476717`, Kotlin
+  `33149476675`, .NET `33149476641`, Go `33149476646`, Rust `33149476677`,
+  Ruby `33149476630`, PHP `33149476628`, Windows GUI `33149476689`, and Linux
+  GUI `33149476692`.
 - Preserved caller-owned Java command-list identity through the documented
   no-copy `ProcessBuilder(List)` and `ProcessBuilder.command(List)` boundaries.
   Local `ArrayList` values and aliases now share one command-vector state with
