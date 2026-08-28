@@ -186,13 +186,14 @@ node ../../benchmarks/run-benchmark.mjs `
 
 ## Kotlin Ktor delegated-command benchmark
 
-`kotlin-ktor-command-injection-manifest.json` now holds fourteen strict cases.
+`kotlin-ktor-command-injection-manifest.json` now holds sixteen strict cases.
 Alongside direct shell, mutable command-list, inline pipeline, builder-factory,
-and command-helper boundaries, its newest pair preserves a typed Ktor Resource,
-`ProcessBuilder("env", "--", ...)`, process start, captured output, and HTTP
-response. In the positive, the Resource value occupies `env`'s delegated
-executable position. The control fixes `printf` in that position and passes the
-same value later as one ordinary argument.
+command-helper, and `ProcessBuilder` delegation boundaries, its newest pair
+preserves a typed Ktor Resource, `Runtime.getRuntime().exec(arrayOf("env",
+"--", ...))`, process execution, captured output, and HTTP response. In the
+positive, the Resource value occupies `env`'s delegated executable position.
+The control fixes `printf` in that position and passes the same value later as
+one ordinary argument.
 
 The deterministic model follows recognized `env` options, option arguments,
 `NAME=VALUE` assignments, and `--`; recursively classifies the first remaining
@@ -202,7 +203,10 @@ Regression also rejects assignment-only calls, tainted `--unset` operands,
 fixed delegated executables, unknown failing options, and fixed split commands
 whose later values remain argv. Both native witnesses substitute only fixed,
 harmless `printf` values, start one short-lived process, and perform no network
-or file I/O. Run the strict benchmark with:
+or file I/O. Runtime-specific regression additionally distinguishes the
+tokenized `exec(String)` overload from explicit array elements, tracks exact
+retained runtime instances and mutable arrays, and rejects local/imported
+lookalikes and unsupported `List` call shapes. Run the strict benchmark with:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `

@@ -4160,6 +4160,8 @@ const KOTLIN_KTOR_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
     "factory helper",
     "command helper",
     "mutator helper",
+    "Runtime.exec",
+    "java.lang.Runtime",
   ],
 ] as const;
 
@@ -4178,6 +4180,8 @@ const KOTLIN_KTOR_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
     "factory helper",
     "command helper",
     "helper call",
+    "Runtime.exec",
+    "java.lang.Runtime",
   ],
   ["stdout", "response", "respondText"],
 ] as const;
@@ -45782,12 +45786,18 @@ function kotlinProcessEvidenceRequirements(
       "split-string",
       "split command",
       "command string",
+      "Runtime.exec(String)",
+      "Runtime command string",
+      "StringTokenizer",
     ]);
     attackPath.push([
       "env -S",
       "split-string",
       "split command",
       "command string",
+      "Runtime.exec(String)",
+      "Runtime command string",
+      "StringTokenizer",
     ]);
   } else if (sinkKind === "kotlin-process-executable-selection") {
     validation.push([
@@ -45831,6 +45841,10 @@ function kotlinProcessEvidenceRequirements(
         "delegated launcher",
         "delegated executable",
       ]);
+      seenKinds.add(kind);
+    } else if (kind === "kotlin-runtime-exec") {
+      validation.push(["Runtime.exec", "java.lang.Runtime", "runtime exec"]);
+      attackPath.push(["Runtime.exec", "java.lang.Runtime", "runtime exec"]);
       seenKinds.add(kind);
     } else if (kind === "kotlin-process-builder-factory") {
       validation.push([

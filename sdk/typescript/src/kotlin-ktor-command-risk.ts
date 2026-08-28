@@ -43,6 +43,7 @@ interface KotlinPropagator {
     | "kotlin-process-pipeline-assembly"
     | "kotlin-process-pipeline-list-mutation"
     | "kotlin-process-command-replacement"
+    | "kotlin-runtime-exec"
     | "kotlin-string-concatenation"
     | "kotlin-string-interpolation";
   line: number;
@@ -64,9 +65,11 @@ interface ProcessArgument {
 
 interface ProcessBuilderState {
   arguments: ProcessArgument[];
+  commandString?: boolean;
   commandSetLine?: number;
   commandHelperPropagators?: KotlinPropagator[];
   constructorLine: number;
+  executionPropagators?: KotlinPropagator[];
   factoryPropagators?: KotlinPropagator[];
 }
 
@@ -105,6 +108,11 @@ interface KotlinProcessHelperSummaries {
 interface ProcessPipelineInvocation {
   builders: ProcessBuilderState[];
   line: number;
+}
+
+interface RuntimeExecInvocation {
+  line: number;
+  state: ProcessBuilderState;
 }
 
 interface ProcessBuilderListMutation {
@@ -1880,6 +1888,139 @@ function envCommandResolution(
   return {};
 }
 
+function exactRuntimeInstanceExpression(
+  tokens: readonly KotlinToken[],
+  aliases: ReadonlySet<string>,
+): boolean {
+  const expression = compact(meaningfulTokens(tokens));
+  if (expression === "java.lang.Runtime.getRuntime()") return true;
+  for (const alias of aliases) {
+    if (expression === `${alias}.getRuntime()`) return true;
+  }
+  return false;
+}
+
+function runtimeCommandArrayExpression(
+  tokens: readonly KotlinToken[],
+  commandArrays: ReadonlyMap<string, ProcessArgument[]>,
+  allowUnqualifiedArrayOf = true,
+): ProcessArgument[] | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  if (meaningful.length === 1 && meaningful[0]?.kind === "identifier")
+    return commandArrays.get(meaningful[0].value);
+  let openIndex: number | undefined;
+  if (
+    allowUnqualifiedArrayOf &&
+    meaningful[0]?.value === "arrayOf" &&
+    meaningful[1]?.value === "("
+  ) {
+    openIndex = 1;
+  } else if (
+    compact(meaningful.slice(0, 4)) === "kotlin.arrayOf(" &&
+    meaningful[3]?.value === "("
+  ) {
+    openIndex = 3;
+  }
+  if (openIndex === undefined) return undefined;
+  const close = matchingDelimiter(meaningful, openIndex);
+  if (close !== meaningful.length - 1) return undefined;
+  const arguments_ = splitArguments(meaningful.slice(openIndex + 1, close));
+  if (arguments_.length === 0) return undefined;
+  return arguments_.map((argument) => ({
+    tokens: argument,
+    line: argument[0]?.line ?? meaningful[openIndex]?.line ?? 1,
+  }));
+}
+
+function runtimeExecInvocation(
+  tokens: readonly KotlinToken[],
+  aliases: ReadonlySet<string>,
+  instances: ReadonlySet<string>,
+  commandArrays: ReadonlyMap<string, ProcessArgument[]>,
+  allowUnqualifiedArrayOf: boolean,
+): RuntimeExecInvocation | undefined {
+  const meaningful = meaningfulTokens(tokens);
+  for (let index = 0; index < meaningful.length; index += 1) {
+    let execIndex: number | undefined;
+    if (
+      instances.has(meaningful[index]?.value ?? "") &&
+      meaningful[index + 1]?.value === "." &&
+      meaningful[index + 2]?.value === "exec" &&
+      meaningful[index + 3]?.value === "("
+    ) {
+      execIndex = index + 2;
+    } else {
+      const aliasReceiver =
+        aliases.has(meaningful[index]?.value ?? "") &&
+        compact(meaningful.slice(index, index + 5)) ===
+          `${meaningful[index]?.value}.getRuntime()`;
+      const qualifiedReceiver =
+        compact(meaningful.slice(index, index + 9)) ===
+        "java.lang.Runtime.getRuntime()";
+      const receiverEnd = aliasReceiver
+        ? index + 5
+        : qualifiedReceiver
+          ? index + 9
+          : undefined;
+      if (
+        receiverEnd !== undefined &&
+        meaningful[receiverEnd]?.value === "." &&
+        meaningful[receiverEnd + 1]?.value === "exec" &&
+        meaningful[receiverEnd + 2]?.value === "("
+      ) {
+        execIndex = receiverEnd + 1;
+      }
+    }
+    if (execIndex === undefined) continue;
+    const openIndex = execIndex + 1;
+    const close = matchingDelimiter(meaningful, openIndex);
+    if (close === undefined) continue;
+    const methodArguments = splitArguments(
+      meaningful.slice(openIndex + 1, close),
+    );
+    if (methodArguments.length < 1 || methodArguments.length > 3) continue;
+    const command = methodArguments[0] ?? [];
+    const vector = runtimeCommandArrayExpression(
+      command,
+      commandArrays,
+      allowUnqualifiedArrayOf,
+    );
+    const commandTokens = meaningfulTokens(command);
+    if (
+      vector === undefined &&
+      (new Set(["arrayListOf", "listOf", "mutableListOf"]).has(
+        commandTokens[0]?.value ?? "",
+      ) ||
+        (!allowUnqualifiedArrayOf && commandTokens[0]?.value === "arrayOf")) &&
+      commandTokens[1]?.value === "("
+    ) {
+      continue;
+    }
+    const line = meaningful[execIndex]?.line ?? 1;
+    return {
+      line,
+      state: {
+        arguments: vector ?? [
+          {
+            tokens: command,
+            line: command[0]?.line ?? line,
+          },
+        ],
+        ...(vector === undefined ? { commandString: true } : {}),
+        constructorLine: line,
+        executionPropagators: [
+          {
+            kind: "kotlin-runtime-exec",
+            line,
+            symbol: "java.lang.Runtime.exec",
+          },
+        ],
+      },
+    };
+  }
+  return undefined;
+}
+
 function processRisk(
   state: ProcessBuilderState,
   taints: ReadonlyMap<string, KotlinTaint>,
@@ -1894,6 +2035,7 @@ function processRisk(
     if (taint === undefined) return undefined;
     const propagators = [
       ...taint.propagators,
+      ...(state.executionPropagators ?? []),
       ...(state.factoryPropagators ?? []),
       ...(state.commandHelperPropagators ?? []),
     ];
@@ -1911,6 +2053,16 @@ function processRisk(
     }
     return { ...taint, propagators };
   };
+  if (state.commandString === true) {
+    const taint = argumentTaint(state.arguments[0]);
+    return taint === undefined
+      ? undefined
+      : {
+          kind: "kotlin-process-split-command",
+          taint,
+          argumentIndex: 1,
+        };
+  }
   const programTaint = argumentTaint(state.arguments[0]);
   if (programTaint !== undefined) {
     return {
@@ -2062,6 +2214,7 @@ function recordForRisk(
   executionLine: number,
   risk: KotlinRisk,
   executionMethod = "start",
+  executionOwner = "java.lang.ProcessBuilder",
 ): KotlinKtorCommandInjectionRecord {
   const startLine_ = Math.max(1, executionLine - CONTEXT_LINES_BEFORE);
   const endLine = Math.min(lines.length, executionLine + CONTEXT_LINES_AFTER);
@@ -2095,7 +2248,7 @@ function recordForRisk(
         kind: risk.kind,
         path,
         line: executionLine,
-        symbol: `java.lang.ProcessBuilder;method=${executionMethod};argument=${risk.argumentIndex}`,
+        symbol: `${executionOwner};method=${executionMethod};argument=${risk.argumentIndex}`,
         cweIds: ["CWE-78", "CWE-88"],
       },
       propagators: risk.taint.propagators.map((propagator) => ({
@@ -2132,7 +2285,37 @@ export function kotlinKtorCommandInjectionRecords(
     aliases.add(match[1] ?? "ProcessBuilder");
   }
   const fullyQualified = /\bjava\.lang\.ProcessBuilder\s*\(/u.test(text);
-  if (aliases.size === 0 && !fullyQualified) return [];
+  const runtimeAliases = new Set<string>();
+  for (const match of text.matchAll(
+    /^\s*import\s+java\.lang\.Runtime(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?\s*$/gmu,
+  )) {
+    runtimeAliases.add(match[1] ?? "Runtime");
+  }
+  let conflictingRuntimeImport = false;
+  for (const match of text.matchAll(
+    /^\s*import\s+([A-Za-z_][A-Za-z0-9_.]*)(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?\s*$/gmu,
+  )) {
+    const importPath = match[1] ?? "";
+    const simpleName = match[2] ?? importPath.split(".").at(-1) ?? "";
+    if (simpleName === "Runtime" && importPath !== "java.lang.Runtime") {
+      conflictingRuntimeImport = true;
+    }
+  }
+  const runtimeShadow =
+    /\b(?:(?:class|interface|object|typealias|val|var)\s+Runtime\b|Runtime\s*:)/u.test(
+      text,
+    );
+  if (!conflictingRuntimeImport && !runtimeShadow)
+    runtimeAliases.add("Runtime");
+  const fullyQualifiedRuntime =
+    /\bjava\.lang\.Runtime\.getRuntime\s*\(\s*\)\s*\.\s*exec\s*\(/u.test(text);
+  if (
+    aliases.size === 0 &&
+    !fullyQualified &&
+    runtimeAliases.size === 0 &&
+    !fullyQualifiedRuntime
+  )
+    return [];
   for (const alias of aliases) {
     if (
       new RegExp(
@@ -2144,6 +2327,7 @@ export function kotlinKtorCommandInjectionRecords(
   }
   const tokens = kotlinTokens(text);
   if (tokens === undefined) return [];
+  const allowUnqualifiedArrayOf = !/\bfun\s+arrayOf\s*\(/u.test(text);
   const helperSummaries = processHelperSummaries(tokens, aliases);
   const records: KotlinKtorCommandInjectionRecord[] = [];
   const resourceTypes = typedResourceClassNames(text);
@@ -2168,6 +2352,8 @@ export function kotlinKtorCommandInjectionRecords(
       Map<ProcessBuilderState, number>
     >();
     const commandLists = new Map<string, ProcessArgument[]>();
+    const runtimeCommandArrays = new Map<string, ProcessArgument[]>();
+    const runtimeInstances = new Set<string>();
     let routeAborted = false;
     for (const statement of statementTokens(scope.body)) {
       const assigned = assignment(statement);
@@ -2212,6 +2398,28 @@ export function kotlinKtorCommandInjectionRecords(
         if (risk !== undefined)
           records.push(recordForRisk(path, lines, directStart, risk));
       }
+      const runtimeExecution = runtimeExecInvocation(
+        statement,
+        runtimeAliases,
+        runtimeInstances,
+        runtimeCommandArrays,
+        allowUnqualifiedArrayOf,
+      );
+      if (runtimeExecution !== undefined) {
+        const risk = processRisk(runtimeExecution.state, taints, literals);
+        if (risk !== undefined) {
+          records.push(
+            recordForRisk(
+              path,
+              lines,
+              runtimeExecution.line,
+              risk,
+              "exec",
+              "java.lang.Runtime",
+            ),
+          );
+        }
+      }
       if (assigned !== undefined) {
         const referencedBuilder =
           constructor === undefined
@@ -2235,6 +2443,22 @@ export function kotlinKtorCommandInjectionRecords(
         } else {
           commandLists.set(assigned.name, referencedCommandList);
         }
+        const runtimeCommandArray = runtimeCommandArrayExpression(
+          assigned.expression,
+          runtimeCommandArrays,
+          allowUnqualifiedArrayOf,
+        );
+        if (
+          runtimeCommandArray === undefined ||
+          referencedCommandList === undefined
+        ) {
+          runtimeCommandArrays.delete(assigned.name);
+        } else {
+          runtimeCommandArrays.set(assigned.name, referencedCommandList);
+        }
+        if (exactRuntimeInstanceExpression(assigned.expression, runtimeAliases))
+          runtimeInstances.add(assigned.name);
+        else runtimeInstances.delete(assigned.name);
         if (assignedBuilderList === undefined) {
           builderLists.delete(assigned.name);
         } else {

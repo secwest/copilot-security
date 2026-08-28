@@ -6,6 +6,27 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended the deterministic Kotlin/Ktor process model to exact
+  `java.lang.Runtime.exec` boundaries. The tokenized `exec(String)` overload is
+  a split-command sink; `exec(arrayOf(...))` preserves explicit command-vector
+  positions and reuses executable, shell, interpreter, batch, and delegated
+  `env` classification. Direct, imported-alias, fully qualified, and retained
+  runtime instances are recognized, as are exact array aliases and mutations.
+  Local/imported lookalikes, unsupported `List` call shapes, fixed commands,
+  and request values used only as ordinary argv remain negative.
+- Added a topology-matched typed-resource `Runtime.exec`/`env` exploit-control
+  pair pinned to Ktor 3.5.2, Kotlin 2.2.20, and Java 21. Both harmless witnesses
+  compile and pass on Ubuntu/WSL with one test and no failure, error, or skip
+  apiece. The specialized Kotlin manifest now has 16 cases; the canonical
+  corpus has 150 pairs, 300 cases, and 900 repeated scan positions. Focused
+  Kotlin and canonical regression passes 48 tests and 2,579 assertions with no
+  failure.
+- Made finding-quality closure require the real `Runtime.exec` edge in both
+  validation and attack-path fields. A regression proves that correct Ktor,
+  `env`, executable-selection, response, and witness prose still cannot close
+  a runtime row until both fields name the runtime launch boundary. The quality
+  correction prompt now distinguishes tokenized strings from explicit arrays
+  and explicitly rejects the claim that ordinary array argv is shell grammar.
 - Extended the deterministic Kotlin/JVM process model through POSIX `env`
   delegation. After recognized fixed options and `NAME=VALUE` assignments, the
   first remaining operand is recursively analyzed as the executable; nested

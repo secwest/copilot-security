@@ -2,6 +2,56 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Extend Kotlin command analysis through Runtime.exec
+
+**Why a second Java launch API matters.** The JVM exposes process creation
+through both `ProcessBuilder` and `java.lang.Runtime.exec`. Oracle documents
+`exec(String)` as a convenience overload that separates one command string
+into tokens, while `exec(String[])` directly supplies the program and argument
+vector. A public CodeQL issue uses the concrete missed shape
+`Runtime.exec(new String[]{"env", input})`: the second array element is not
+ordinary argv because `env` delegates it as another executable. Treating every
+post-zero array element as data consequently misses a real program-selection
+boundary. Sources: [Java Runtime][java-runtime] and
+[github/codeql#22262][codeql-runtime-env].
+
+**Exact overload and identity boundary.** A direct, imported-alias, fully
+qualified, or retained `Runtime.getRuntime()` instance may reach `exec` with
+one to three official method arguments. An exact `arrayOf`/`kotlin.arrayOf`
+value or retained exact array supplies the command vector; live constant-index
+mutation uses the existing bounded command-state semantics. Any other supported
+first argument is treated as the string overload only when request taint is
+actually present. The model rejects local `Runtime` declarations, conflicting
+unaliased imports, unsupported Kotlin `List` constructor shapes, malformed
+calls, fixed strings, and ordinary later argv. This is same-file syntax and
+binding evidence, not a compiler-wide type claim.
+
+**Shared command semantics, distinct provenance.** Explicit arrays reuse the
+existing classifier: element zero selects a program; shell and interpreter
+flags select command grammar; Windows batch files have their platform-specific
+boundary; and POSIX `env` recursively delegates its first non-assignment
+operand. The string overload is recorded as
+`kotlin-process-split-command`, while every runtime result carries a
+`kotlin-runtime-exec` propagator and a `java.lang.Runtime;method=exec` sink
+symbol. Reports therefore retain the real API instead of flattening it into a
+fictional `ProcessBuilder` call.
+
+**Executable and regression evidence.** The paired Ktor 3.5.2/Kotlin 2.2.20
+fixtures preserve typed Resource input, the `Runtime.exec` array overload,
+`env`, output capture, wait, and HTTP response. Only the request value's array
+position changes. Their Java 21 witnesses substitute fixed `printf` and
+`delegated-marker` strings, each execute one short-lived process, and pass on
+Ubuntu/WSL without network, file, credential, persistence, or privilege
+effects. The specialized manifest reaches 16 cases and the canonical corpus
+reaches 150 pairs, 300 cases, and 900 scan positions. Focused Kotlin/canonical
+regression passes 48 tests and 2,579 assertions; TypeScript and generated-model
+checks are clean. Sink-aware quality regression additionally refuses a finding
+that explains Ktor, `env`, executable selection, and returned output but omits
+`Runtime.exec` from validation and attack-path fields.
+
+[java-runtime]: https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/Runtime.html
+[codeql-runtime-env]: https://github.com/github/codeql/issues/22262
+
 ## 2026-08-27 — Model delegated executable selection through POSIX env
 
 **Why ordinary-argv reasoning was insufficient.** `ProcessBuilder` normally

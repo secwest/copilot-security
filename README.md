@@ -2191,9 +2191,12 @@ repaired release uses one pool per origin. The Echo pair then holds one
 middleware-protected admin wildcard, root static handler, operational server,
 and inert `httptest` marker constant while changing only Echo 4.15.2 to 4.15.3.
 The affected router/static decoding disagreement discloses the marker through
-an encoded separator; the repaired static handler returns 404. The complete
-149-pair, 298-case corpus produces 894 scans that measure both accuracy and
-model variance.
+an encoded separator; the repaired static handler returns 404. The Kotlin
+command family also now pairs `Runtime.exec(arrayOf("env", ...))` executable
+selection with a topology-matched fixed-`printf` argv control, covering a
+delegating-launcher false negative without pretending that `Runtime.exec`
+always invokes a shell. The complete 150-pair, 300-case corpus produces 900
+scans that measure both accuracy and model variance.
 Exact dependency evidence also respects the API lifetime: PyTorch 1.13.0 is
 the first supported `weights_only` boundary, so an exact older pin suppresses
 keyword-mode findings that could not reach the modeled loader branch.

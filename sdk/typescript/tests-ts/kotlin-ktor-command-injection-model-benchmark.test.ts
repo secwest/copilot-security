@@ -46,6 +46,8 @@ const caseIds = [
   "kotlin-ktor-resource-command-helper-argv",
   "kotlin-ktor-resource-env-executable-injection",
   "kotlin-ktor-resource-env-argv",
+  "kotlin-ktor-resource-runtime-env-executable-injection",
+  "kotlin-ktor-resource-runtime-env-argv",
 ] as const;
 const handlerPath = "src/main/kotlin/example/Diagnostics.kt";
 
@@ -175,6 +177,16 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
       benchmark.cases[12]?.expected[0]?.requiredAttackPathTextAnyOf?.[2],
     ).toContain("executable selection");
     expect(benchmark.cases[13]?.expected).toEqual([]);
+    expect(benchmark.cases[14]?.expected[0]).toMatchObject({
+      cwe: ["CWE-78", "CWE-88"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(
+      benchmark.cases[14]?.expected[0]?.requiredValidationTextAnyOf?.[3],
+    ).toContain("Runtime.exec");
+    expect(benchmark.cases[15]?.expected).toEqual([]);
   });
 
   test("preserves exact Ktor source, interpolation, ProcessBuilder, and start", async () => {
@@ -346,6 +358,12 @@ describe("Kotlin Ktor command-injection model benchmark", () => {
       "kotlin-ktor-resource-env-executable-injection/pom.xml verify",
     );
     expect(workflow).toContain("kotlin-ktor-resource-env-argv/pom.xml verify");
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-runtime-env-executable-injection/pom.xml verify",
+    );
+    expect(workflow).toContain(
+      "kotlin-ktor-resource-runtime-env-argv/pom.xml verify",
+    );
   });
 
   test("recognizes exact Ktor query, path, header, query-string, and body sources", () => {
@@ -955,6 +973,22 @@ fun routes() = routing {
         ),
       ),
     ).toEqual([]);
+    expect(
+      records(
+        ktor(
+          `        val value = call.receiveText()
+        Runtime.getRuntime().exec(arrayOf("sh", "-c", value))`,
+          "import example.ProcessApi as Runtime",
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        `${ktor(`        val value = call.receiveText()
+        Runtime.getRuntime().exec(arrayOf("sh", "-c", value))`)}
+fun arrayOf(vararg values: String): Array<String> = values as Array<String>`,
+      ),
+    ).toEqual([]);
   });
 
   test("keeps mutable-command witnesses harmless and paired", async () => {
@@ -1234,6 +1268,53 @@ fun routes() = routing {
     expect(safe).toContain('"printf", "%s", requestValue');
   });
 
+  test("keeps Runtime env fixtures executable, paired, and precisely modeled", async () => {
+    const vulnerableRecords = await fixtureRecords(caseIds[14]);
+    const safeRecords = await fixtureRecords(caseIds[15]);
+    expect(vulnerableRecords).toHaveLength(1);
+    expect(vulnerableRecords[0]?.frameworkModel.sink).toMatchObject({
+      kind: "kotlin-process-executable-selection",
+      symbol: "java.lang.Runtime;method=exec;argument=3",
+    });
+    expect(
+      vulnerableRecords[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual(
+      expect.arrayContaining([
+        "kotlin-runtime-exec",
+        "kotlin-process-delegated-launcher",
+      ]),
+    );
+    expect(safeRecords).toEqual([]);
+
+    const vulnerable = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        caseIds[14],
+        "src/test/kotlin/example/RuntimeEnvExecutableInjectionWitnessTest.kt",
+      ),
+      "utf8",
+    );
+    const safe = await readFile(
+      join(
+        benchmarkRoot,
+        "fixtures",
+        caseIds[15],
+        "src/test/kotlin/example/RuntimeEnvArgvWitnessTest.kt",
+      ),
+      "utf8",
+    );
+    for (const witness of [vulnerable, safe]) {
+      expect(witness).toContain("Runtime.getRuntime().exec(arrayOf(");
+      expect(witness).toContain("process.waitFor()");
+      expect(witness).toContain("delegated-marker");
+      expect(witness).not.toContain("java.io.File");
+      expect(witness).not.toContain("java.net");
+    }
+    expect(vulnerable).toContain("requestProgram");
+    expect(safe).toContain('"printf", "%s", requestValue');
+  });
+
   test("recognizes shell, interpreter, batch, and executable-selection boundaries", () => {
     const commands = [
       ['"/bin/sh"', '"-c"', "kotlin-process-shell-command"],
@@ -1322,6 +1403,107 @@ fun routes() = routing {
         ProcessBuilder("env", "-S", "printf %s", value).start()`,
     ];
     for (const body of safeBodies) expect(records(ktor(body))).toEqual([]);
+  });
+
+  test("models Runtime.exec command strings and exact command arrays", () => {
+    const stringCommand = records(
+      ktor(`        val value = call.receiveText()
+        Runtime.getRuntime().exec("printf fixed; $value")`),
+    );
+    expect(stringCommand).toHaveLength(1);
+    expect(stringCommand[0]?.frameworkModel.sink).toMatchObject({
+      kind: "kotlin-process-split-command",
+      symbol: "java.lang.Runtime;method=exec;argument=1",
+    });
+    expect(stringCommand[0]?.frameworkModel.propagators).toContainEqual(
+      expect.objectContaining({
+        kind: "kotlin-runtime-exec",
+        symbol: "java.lang.Runtime.exec",
+      }),
+    );
+
+    const delegated = records(
+      ktor(`        val program = call.parameters["program"]!!
+        Runtime.getRuntime().exec(arrayOf("env", "--", program))`),
+    );
+    expect(delegated).toHaveLength(1);
+    expect(delegated[0]?.frameworkModel.sink).toMatchObject({
+      kind: "kotlin-process-executable-selection",
+      symbol: "java.lang.Runtime;method=exec;argument=3",
+    });
+    expect(
+      delegated[0]?.frameworkModel.propagators.map(({ kind }) => kind),
+    ).toEqual(
+      expect.arrayContaining([
+        "kotlin-runtime-exec",
+        "kotlin-process-delegated-launcher",
+      ]),
+    );
+
+    const retained = records(
+      ktor(`        val runtime = Runtime.getRuntime()
+        val program = call.parameters["program"]!!
+        val command = arrayOf("env", "--", "printf")
+        command[2] = program
+        runtime.exec(command)`),
+    );
+    expect(retained).toHaveLength(1);
+    expect(retained[0]?.frameworkModel.sink.symbol).toBe(
+      "java.lang.Runtime;method=exec;argument=3",
+    );
+    expect(retained[0]?.frameworkModel.propagators).toContainEqual(
+      expect.objectContaining({ kind: "kotlin-command-list-mutation" }),
+    );
+
+    const aliased = records(
+      ktor(
+        `        val commandLine = call.receiveText()
+        RuntimeApi.getRuntime().exec(kotlin.arrayOf("sh", "-c", commandLine))`,
+        "import java.lang.Runtime as RuntimeApi",
+      ),
+    );
+    expect(aliased).toHaveLength(1);
+    expect(aliased[0]?.frameworkModel.sink.kind).toBe(
+      "kotlin-process-shell-command",
+    );
+
+    const qualified = records(
+      ktor(`        val program = call.parameters["program"]!!
+        java.lang.Runtime.getRuntime().exec(arrayOf(program))`),
+    );
+    expect(qualified).toHaveLength(1);
+    expect(qualified[0]?.frameworkModel.sink.kind).toBe(
+      "kotlin-process-executable-selection",
+    );
+
+    const safeBodies = [
+      `        val value = call.receiveText()
+        Runtime.getRuntime().exec(arrayOf("printf", "%s", value))`,
+      `        val value = call.receiveText()
+        Runtime.getRuntime().exec(listOf("sh", "-c", value))`,
+      `        val value = call.receiveText()
+        Runtime.getRuntime().exec(arrayOf("env", "printf", "%s", value))`,
+    ];
+    for (const body of safeBodies) expect(records(ktor(body))).toEqual([]);
+
+    expect(
+      records(
+        ktor(
+          `        val value = call.receiveText()
+        Runtime.getRuntime().exec(arrayOf("sh", "-c", value))`,
+          "class Runtime { fun exec(command: Array<String>) = Unit; companion object { fun getRuntime() = Runtime() } }",
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        ktor(
+          `        val value = call.receiveText()
+        Runtime.getRuntime().exec(arrayOf("sh", "-c", value))`,
+          "import example.Runtime",
+        ),
+      ),
+    ).toEqual([]);
   });
 
   test("rejects literal argv, inert or reassigned builders, numeric normalization, and lookalikes", () => {
@@ -1421,6 +1603,8 @@ fun routes() = routing {
     expect(prompt).toContain(
       "--split-string value as env-parsed command grammar",
     );
+    expect(prompt).toContain("Runtime.getRuntime().exec overload");
+    expect(prompt).toContain("unsupported List call shapes");
   });
 
   test("forces incomplete Kotlin evidence through host-audited correction", async () => {
@@ -1822,6 +2006,114 @@ fun routes() = routing {
         " The env delegating launcher uses input.target for executable selection.";
       finding.attackPath.summary +=
         " The env delegated executable is selected by the target value, creating executable selection.";
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      expect(
+        await buildFindingQualityGapInventory(
+          scanDirectory,
+          repository,
+          residualRiskInventory,
+        ),
+      ).toBe("");
+    } finally {
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("requires Runtime exec evidence at the recorded launch boundary", async () => {
+    const repository = join(benchmarkRoot, "fixtures", caseIds[14]);
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "copilot-security-kotlin-runtime-quality-"),
+    );
+    try {
+      const finding = {
+        findingId: "occ_kotlin_runtime_quality",
+        taxonomy: { cwe: ["CWE-78", "CWE-88"] },
+        locations: [
+          { path: handlerPath, startLine: 9, endLine: 10, role: "source" },
+          { path: handlerPath, startLine: 16, endLine: 16, role: "sink" },
+        ],
+        codeEvidence: [
+          {
+            id: "runtime-resource-source",
+            path: handlerPath,
+            startLine: 9,
+            endLine: 10,
+            role: "source",
+            code: '@Resource("/diagnostics/{target}")\ndata class DiagnosticResource(val target: String)',
+            explanation: "The typed route value contains remote input.",
+          },
+          {
+            id: "runtime-process-start",
+            path: handlerPath,
+            startLine: 16,
+            endLine: 16,
+            role: "sink",
+            code: 'val process = Runtime.getRuntime().exec(arrayOf("env", "--", input.target))',
+            explanation: "The runtime process launcher executes the array.",
+          },
+        ],
+        validation: {
+          method: "static_source_trace",
+          summary:
+            "The typed Ktor resource input.target reaches env as a delegating launcher and controls executable selection.",
+          exploitWitness:
+            "A fixed harmless printf witness occupies the selected program position.",
+          negativeControl:
+            "The paired control fixes printf before the same value in ordinary argv.",
+          evidence: ["runtime-resource-source", "runtime-process-start"],
+          counterEvidence: "No shell is needed for executable selection.",
+          remainingUncertainty: "Deployment reachability remains unknown.",
+        },
+        attackPath: {
+          summary:
+            "The target resource value reaches the env delegated executable-selection position and stdout reaches respondText in the response.",
+          dataflow: {
+            source: "The target resource value.",
+            sink: "The delegated program-selection boundary.",
+            outcome: "A child process may start.",
+          },
+          reachability: {
+            attacker: "A remote HTTP caller.",
+            entrypoint: "The typed diagnostics route.",
+            outcome: "Process output is returned.",
+          },
+          brokenControls: ["No fixed executable at the delegated boundary"],
+          evidenceRefs: ["runtime-resource-source", "runtime-process-start"],
+        },
+      };
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const residualRiskInventory =
+        await buildResidualRiskInventory(repository);
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        residualRiskInventory,
+      );
+      const gap = incomplete
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))[1];
+      expect(gap).toMatchObject({
+        findingId: "occ_kotlin_runtime_quality",
+        frameworkModelId: "kotlin-ktor-command-injection",
+        reasons: [
+          "missing_model_specific_validation_evidence",
+          "missing_model_specific_attack_path_evidence",
+        ],
+      });
+      expect(gap.missingValidationTextAnyOf.flat()).toContain("Runtime.exec");
+      expect(gap.missingAttackPathTextAnyOf.flat()).toContain("Runtime.exec");
+
+      finding.validation.summary +=
+        " java.lang.Runtime.exec executes the exact command array.";
+      finding.attackPath.summary +=
+        " Runtime.exec carries that array into the executable selection and child-process boundary.";
       await writeFile(
         join(scanDirectory, "findings.json"),
         JSON.stringify({ findings: [finding] }),
