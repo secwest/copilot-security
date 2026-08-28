@@ -49,10 +49,65 @@ attack-path data called it CWE-94 code evaluation without explicitly stating
 code execution or code injection. The Worker propagator now adds those exact
 binding and impact groups independently to validation and attack path. An
 adversarial regression reproduces the two omissions and the fully explicit
-closure. Windows and native WSL each pass the resulting 118-test lane with
-1,555 assertions and no failure; TypeScript, formatting, and the fresh build
-are clean. No allowance, authentication, rate-limit, classifier, transport,
-timeout, or retry event occurred in either live campaign.
+closure. Windows passes 117 tests and 1,554 assertions with the one intentional
+symlink skip; native WSL passes all 118 tests and 1,555 assertions. TypeScript,
+formatting, and the fresh build are clean. No allowance, authentication,
+rate-limit, classifier, transport, timeout, or retry event occurred in either
+live campaign.
+
+**Accepted live closure.** Campaign
+`a2402dced948e29fdd993a9c4df207a6dac68ca467a94ef4b3570317ee86dc16`
+binds public revision `ac58ca7e16bd61768c7dda750c24a81b5db1c7bd`, corpus
+`50a590fdb979e0f85c7dc1d1ae4c2ab977d19d7b80468f516033f358d49f1eb2`,
+comparison policy
+`e4db2ca57992f1ed2cf881dc6a0a0ee28c84064611ed5537d3814a1d3cd11cab`,
+manifest SHA-256
+`3fc3b7f27f3b7ccfabc3635a04db2afa120d9b4773bdc837f35b96877eda5ee2`,
+and scanner-package SHA-256
+`8e57024ee06ee98d10e0eb1507f67ccc67958f7049b6988b5dc60aa67547b0ce`.
+Both stored-credential `gpt-5.6-terra` high-effort deep scans complete on the
+first process attempt. The fixed-source/structured-clone control completes in
+3m58s with no finding. The reachable Worker-eval case completes in 6m17s with
+one high CWE-94/CWE-95 finding; immutable repository bytes benignly re-anchor
+one excerpt. Every completion, precision, recall, F1, case, negative-case,
+stability, validation, attack-path, code-evidence, and severity metric is 1.0,
+with one true positive and no false positive or false negative. Finalize-only
+revalidation accepts both sealed receipts and artifact hashes without a model
+call.
+
+The accepted pair consumes 2,168,768 input, 1,905,473 cached, and 50,410 output
+tokens at an estimated $2.0552345. No artificial credit cap is configured, and
+none of the six scans across the three Worker campaigns records an allowance,
+credit-limit, authentication, authorization, rate-limit, classifier-refusal,
+transport, timeout, or retry event. The claimed account-exhaustion hypothesis is
+therefore not supported by the observed provider behavior.
+
+**Exact-revision acceptance.** The authoritative Windows suite passes 1,987
+tests and 15,074 assertions across 210 files in 495.04 seconds, with 27
+intentional platform/environment skips and zero failures. Production dependency
+audit reports no known vulnerability. The final 299-entry, 2,343,423-byte npm
+archive has SHA-256
+`e1ff376d91b32a83f2124470eddd00bc0d4091d975949bcaccd6e3cca2be453b`
+and passes isolated Windows and WSL public-import, CLI, and all 79 bundled-plugin
+checks.
+
+An exact 3,594-file Git archive is 20,039,680 bytes at SHA-256
+`37f892b42c09484dd3fe4c08d683ba8f40442c0eeedd89fda9ef7f511274cff9`.
+Two independently computed whole-repository inventories take 29,011.779 and
+11,268.947 ms and are byte-identical: 256 rows, 551,013 bytes, 204 structured
+models, 52 lexical leads, and SHA-256
+`744969455b26d83168e1932a69936a170eb853acfb242adf7696a6531d498a7b`.
+The benchmark corpus accounts for 254 rows; only two are non-fixture leads.
+Independent roots reproduce the Worker boundary twice: the exploit emits one
+2,118-byte structured row at `src/server.mjs:12`, SHA-256
+`9d7bc1498645d0fd44d559f73702b58d95f8d6ca3186afaaafe0667416ba3c9b`,
+while the control emits zero structured rows and one harmless 615-byte lexical
+lead, SHA-256
+`dc9f837127e5ecc541b8121849b5b0f2a4dcb548a1518a2e1c46398657ed7baf`.
+All eleven exact-source hosted workflows pass: Node `33201380299`, container
+`33201380334`, Windows GUI `33201380323`, Linux GUI `33201380288`, Java
+`33201380332`, Kotlin `33201380295`, .NET `33201380270`, Go `33201380271`,
+Rust `33201380281`, Ruby `33201380292`, and PHP `33201380327`.
 
 ## 2026-08-28 — Treat MCP Worker eval mode as an immediate execution lifecycle
 

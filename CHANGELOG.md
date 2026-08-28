@@ -22,6 +22,44 @@ All notable scanner, application, benchmark, and operational changes are recorde
   boundary and explicitly state code execution or code injection. General
   Worker/evaluation prose and CWE-94 alone no longer satisfy those two proof
   obligations.
+- Accepted live campaign
+  `a2402dced948e29fdd993a9c4df207a6dac68ca467a94ef4b3570317ee86dc16`
+  at public implementation revision
+  `ac58ca7e16bd61768c7dda750c24a81b5db1c7bd`. Both stored-credential
+  `gpt-5.6-terra` high-effort deep scans complete on attempt one: the reachable
+  Worker-eval case produces one high CWE-94/CWE-95 finding in 6m17s and the
+  fixed-source/structured-clone control produces none in 3m58s. Completion,
+  precision, recall, F1, case and negative-case pass, stable detection,
+  validation, attack path, code evidence, and severity are all 1.0, with zero
+  false positives or negatives. Finalize-only revalidation accepts the sealed
+  receipts without another model call.
+- The accepted campaign consumes 2,168,768 input, 1,905,473 cached, and 50,410
+  output tokens at an estimated $2.0552345. One positive excerpt is benignly
+  re-anchored from immutable repository bytes. Across all six deep scans in the
+  three Worker campaigns there is no allowance, credit-limit, authentication,
+  authorization, rate-limit, classifier-refusal, transport, timeout, or retry
+  event; the configured account imposed no observed credit ceiling.
+- Final implementation acceptance passes 1,987 tests and 15,074 assertions
+  across 210 files in 495.04 seconds, with 27 intentional Windows/platform
+  skips and zero failures. Production audit reports no known vulnerabilities.
+  A 299-entry, 2,343,423-byte npm archive with SHA-256
+  `e1ff376d91b32a83f2124470eddd00bc0d4091d975949bcaccd6e3cca2be453b`
+  passes isolated Windows and WSL public-import, executable-CLI, and all
+  79-bundled-plugin checks.
+- Exact-head tracked-only self-review covers 3,594 files from a 20,039,680-byte
+  Git archive with SHA-256
+  `37f892b42c09484dd3fe4c08d683ba8f40442c0eeedd89fda9ef7f511274cff9`.
+  Two production inventories are byte-identical at 256 rows and 551,013 bytes,
+  with 204 structured and 52 lexical records and SHA-256
+  `744969455b26d83168e1932a69936a170eb853acfb242adf7696a6531d498a7b`.
+  Independently rooted runs twice emit exactly one structured Worker row at
+  `src/server.mjs:12` for the exploit and no structured row for the control.
+- All eleven hosted workflow families pass at the same implementation revision:
+  Node `33201380299`, container `33201380334`, Windows GUI `33201380323`,
+  Linux GUI `33201380288`, Java `33201380332`, Kotlin `33201380295`, .NET
+  `33201380270`, Go `33201380271`, Rust `33201380281`, Ruby `33201380292`,
+  and PHP `33201380327`. GitHub reports the repository public on default branch
+  `main`.
 - Added deterministic MCP code-injection coverage for tool input reaching
   argument zero of the exact Node `worker_threads` or `node:worker_threads`
   `Worker` constructor with an object-literal `eval: true` option. The model
