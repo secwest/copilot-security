@@ -43,6 +43,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   provenance. Focused Windows and native WSL lanes each pass 49 tests and 2,622
   assertions after this second-order correction; TypeScript and a clean
   production build pass on Windows.
+- Exact-revision campaign
+  `77aba49e309013f79ff7c324f25d1d5558f774adfa500126d260a57deabb9fbe`
+  confirms the correction at public commit
+  `59a17928c10b6f5195d3c5ffb69a2b7a3a5797cb`. The argument-injection and
+  SSRF positives both completed on attempt one with one high finding, complete
+  coverage, and accepted field-local validation, attack path, code evidence,
+  severity, and content semantics. The selected campaign passes every perfect
+  gate: two true positives, zero false positives or misses, and 1.0 precision,
+  recall, F1, case pass, stability, validation, attack-path, code-evidence, and
+  severity rates. It consumed 2,737,904 input, 2,046,464 cached, and 69,580
+  output tokens over 10 minutes 21 seconds of cumulative worker time and about
+  5 minutes 53 seconds of wall time, with no classifier, allowance,
+  rate-limit, authentication, timeout, or retry event.
 - Added `node-mcp-tool-argument-injection` with schema 1.2 source, sink,
   helper, registration, and control provenance plus CWE-88/CWE-94. Exact
   `execFile` or `spawn` calls using `process.execPath` now split literal argv,
@@ -100,6 +113,24 @@ All notable scanner, application, benchmark, and operational changes are recorde
   input line 27, with `execFile:argv[2]`, CWE-88/CWE-94, registration, and
   `runCommand` helper provenance. The independently rooted `--` control emits
   no structured row.
+- The final field-local provenance checkpoint
+  `59a17928c10b6f5195d3c5ffb69a2b7a3a5797cb` retains 3,550 tracked files.
+  Its 5,425,222-byte tracked-only archive has SHA-256
+  `1d2b4a043a450337d4e0ae41e955d2e2ac79c3825e2fbe4abed60d82a5d3d2e3`.
+  Two inventories complete in 10,182.611 and 10,458.618 ms and remain
+  byte-identical at 256 rows, 557,948 bytes, 210 structured rows, 46 lexical
+  rows, and SHA-256
+  `d90bcb95b7bfe0557e9e7d5ce122a295fb3a986b333ea553e3514634744dceab`.
+  The exact independently rooted exploit/control sources still produce one
+  structured interpreter-option row versus zero.
+- All eleven hosted workflows pass at exact correction commit
+  `59a17928c10b6f5195d3c5ffb69a2b7a3a5797cb`. Node run `33169917602`
+  completes 23 jobs across supported Windows, Ubuntu, and macOS runtimes,
+  package checks, and all eight MCP witnesses on Windows and Ubuntu. Windows
+  GUI `33169917654`, Linux GUI `33169917700`, container `33169917715`, .NET
+  `33169917616`, Go `33169917609`, Java `33169917642`, Kotlin `33169917691`,
+  PHP `33169917659`, Ruby `33169917640`, and Rust `33169917606` also complete
+  successfully with no failed workflow.
 - Extended the standalone JavaScript/TypeScript MCP tool-handler model from
   process and network capabilities to Node filesystem authority. Exact
   `node:fs`, `node:fs/promises`, legacy `fs`, and `fs/promises` named,

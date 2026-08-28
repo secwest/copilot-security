@@ -110,6 +110,46 @@ fixture-specific prompt prose. Windows and native WSL each pass the resulting
 49-test focused lane with 2,622 assertions; Windows TypeScript and a clean
 production build are green.
 
+**Accepted semantic rerun.** Public correction commit
+`59a17928c10b6f5195d3c5ffb69a2b7a3a5797cb` is the source revision sealed in
+campaign
+`77aba49e309013f79ff7c324f25d1d5558f774adfa500126d260a57deabb9fbe`.
+Both affected positives completed deep/high analysis on attempt one with one
+high finding and complete coverage. Every strict rate is 1.0: completion,
+precision, recall, F1, case pass, stability, validation, attack path, code
+evidence, and severity; there are two true positives and no false positive or
+false negative. Both reports accept all field-local content semantics. The
+campaign consumed 2,737,904 input, 2,046,464 cached, and 69,580 output tokens
+over 10 minutes 21 seconds of cumulative worker time and roughly 5 minutes 53
+seconds wall time. Neither scan produced a classifier, allowance, rate,
+authentication, timeout, or retry event. Repository-byte evidence re-anchoring
+and endpoint-role alignment repaired model formatting without weakening the
+semantic contract.
+
+**Exact correction-checkpoint self-scan.** The 3,550-file tracked-only archive
+of `59a17928c10b6f5195d3c5ffb69a2b7a3a5797cb` is 5,425,222 bytes with
+SHA-256
+`1d2b4a043a450337d4e0ae41e955d2e2ac79c3825e2fbe4abed60d82a5d3d2e3`.
+Two production inventories take 10,182.611 and 10,458.618 ms and are
+byte-identical at 256 rows, 557,948 bytes, 210 structured rows, 46 lexical
+rows, and SHA-256
+`d90bcb95b7bfe0557e9e7d5ce122a295fb3a986b333ea553e3514634744dceab`.
+The rooted exact exploit still emits one `execFile:argv[2]` row at
+`server.mjs:9`, sourced from tool input line 27 with CWE-88/CWE-94 and
+`runCommand` provenance; the rooted exact control emits no structured row.
+
+**Hosted acceptance.** All eleven workflows conclude successfully at the
+exact correction commit. Node run `33169917602` completes 23 jobs spanning
+supported Ubuntu, Windows, and macOS Node runtimes, typecheck, the full suite,
+formatting, build, audit, pack/inspection/smoke checks, and all eight bounded
+MCP witnesses on both Windows and Ubuntu. The remaining successful workflow
+runs are Windows GUI `33169917654`, Linux GUI `33169917700`, container
+`33169917715`, .NET `33169917616`, Go `33169917609`, Java `33169917642`,
+Kotlin `33169917691`, PHP `33169917659`, Ruby `33169917640`, and Rust
+`33169917606`. GitHub reported one already-successful Ubuntu witness job as
+internally `in_progress` after the parent Node workflow reached completed
+success; no job or workflow concluded failure.
+
 ## 2026-08-28 — Extend MCP capability modeling to filesystem authority
 
 **Observed gap and primary evidence.** MCP tool callbacks already received
