@@ -612,6 +612,23 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
+The Node MCP tool-handler lane uses the real stable TypeScript server package
+and separates two remote-capability boundaries. One pair contrasts a tool
+field reaching a shell command with the identical value kept in a fixed
+executable's argv. The other contrasts a tool-selected fetch destination with
+a fixed loopback origin whose request body alone contains tool data. Both
+exploit and control witnesses are bounded, and the strict manifest requires
+perfect discovery, validation, attack-path, evidence, severity, stability,
+and negative accuracy:
+
+```powershell
+node benchmarks/run-benchmark.mjs `
+  --manifest benchmarks/node-mcp-tool-security-manifest.json `
+  --results-dir C:\security-benchmarks\node-mcp-tools `
+  --runs 1 --selection-only `
+  --auth github --model auto --effort high --mode deep
+```
+
 The Python relative-import lane measures cross-file command and SQL wrappers
 against shell-free and multiline parameter-bound negative controls:
 

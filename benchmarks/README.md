@@ -277,7 +277,30 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-spring-java-command
 ```
 
-The versioned corpus currently contains 156 vulnerable/control pairs:
+## Node MCP tool-handler security benchmark
+
+`node-mcp-tool-security-manifest.json` measures tool input at two distinct
+capability boundaries under perfect selected-run gates. The command pair uses
+the real stable `@modelcontextprotocol/server` 2.0.0 API: the exploit carries a
+tool field through an arrow helper into `child_process.exec`, while its
+topology-matched control keeps the identical separator-bearing marker in one
+`execFile` argv element. The SSRF pair carries a tool URL through a helper into
+global `fetch`; its control fixes a disposable loopback origin before loading
+the server and places tool data only in the request body.
+
+Each fixture pins exact dependencies and supplies a bounded witness. The
+process witness emits only an inert fixed marker. The network witnesses use a
+random-port loopback listener, close it in all paths, and never contact an
+external or metadata address. Node CI executes all four witnesses on Windows
+and Linux. Run the focused scanner benchmark with:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/node-mcp-tool-security-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-node-mcp-tools
+```
+
+The versioned corpus currently contains 158 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

@@ -169,6 +169,7 @@ const distFiles = new Set(
     "knowledge-base",
     "kubernetes-risk",
     "kotlin-ktor-command-risk",
+    "node-mcp-tool-risk",
     "model-draft-recovery",
     "models",
     "multiscan",

@@ -40,6 +40,7 @@ import {
   javaSpringCommandInjectionRecords,
   javaSpringCommandModelOwnsFile,
 } from "./java-spring-command-risk.js";
+import { nodeMcpToolRiskRecords } from "./node-mcp-tool-risk.js";
 
 const MAX_FILES = 2_000;
 const MAX_FILE_BYTES = 256 * 1024;
@@ -4224,10 +4225,46 @@ const SPRING_JAVA_COMMAND_ATTACK_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
   ["start", "Runtime.exec", "process execution"],
 ] as const;
 
+const NODE_MCP_TOOL_COMMAND_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["MCP tool", "registerTool", "server.tool", "tool callback"],
+  ["tool input", "callback input", "LLM-controlled", "client-controlled"],
+  [
+    "child_process",
+    "exec",
+    "execSync",
+    "spawn",
+    "spawnSync",
+    "execFile",
+    "shell",
+    "executable selection",
+  ],
+] as const;
+
+const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["MCP tool", "registerTool", "server.tool", "tool callback"],
+  ["tool input", "callback input", "LLM-controlled", "client-controlled"],
+  ["fetch", "axios", "http.request", "https.request", "network destination"],
+  ["SSRF", "internal service", "metadata", "destination", "host"],
+] as const;
+
 const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
   string,
   ModelSpecificFindingRequirements
 > = new Map([
+  [
+    "node-mcp-tool-command-injection",
+    {
+      validation: NODE_MCP_TOOL_COMMAND_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_MCP_TOOL_COMMAND_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-mcp-tool-ssrf",
+    {
+      validation: NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
   [
     "python-web-joblib-unsafe-load",
     {
@@ -4536,6 +4573,7 @@ export async function buildResidualRiskInventory(
       ...rustCommandInjectionRecords(file.path, file.lines, file.text),
       ...kotlinKtorCommandInjectionRecords(file.path, file.lines, file.text),
       ...javaSpringCommandInjectionRecords(file.path, file.lines, file.text),
+      ...nodeMcpToolRiskRecords(file.path, file.lines, file.text),
       ...githubActionsPrivilegeRecords(file.path, file.lines, file.text),
       ...githubActionsSelfHostedPrRecords(file.path, file.lines, file.text),
       ...githubActionsWorkflowInjectionRecords(

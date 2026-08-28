@@ -6,6 +6,45 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added a standalone JavaScript/TypeScript MCP tool-handler model for the
+  stable `@modelcontextprotocol/server` API and the legacy
+  `@modelcontextprotocol/sdk/server/mcp.js` API. Exact `McpServer`
+  registrations, schema-bearing v2 `registerTool` callbacks, schema-bearing
+  v1 `tool` callbacks, destructured and object callback inputs, local
+  assignments, same-file function/arrow/function-expression helpers, ESM and
+  CommonJS bindings, and server aliases now feed command-injection and SSRF
+  candidates into deterministic discovery.
+- Distinguished shell command strings, shell-enabled spawn, interpreter
+  commands, and attacker-selected executables from fixed executable plus
+  separate argv data. Network modeling covers global and imported `fetch`,
+  Undici, Node HTTP/HTTPS, and Axios destinations while excluding body-only
+  data, same-host paths, fixed destinations, fixed argv, reassigned inputs,
+  schema-less context callbacks, tests, comments, strings, shadows, and SDK or
+  process lookalikes.
+- Added host-enforced MCP-specific validation and attack-path proof
+  obligations, bounded loopback validation guidance, a strict four-case
+  specialized manifest, and four real `@modelcontextprotocol/server` 2.0.0
+  fixtures. Exploit witnesses demonstrate only inert process output or a
+  disposable loopback request; matched controls prove argv and fixed-origin
+  boundaries. The canonical corpus now has 158 vulnerable/control pairs, 316
+  cases, and 948 repeated scan positions. Node CI executes every witness on
+  Windows and Linux.
+- Completed authoritative Windows acceptance for the MCP tool-handler
+  increment: 1,957 tests pass with 27 intentional platform/integration skips,
+  no failure, and 14,591 assertions across 210 files in 490.11 seconds.
+  Formatting, generated-model drift, TypeScript checking, the clean production
+  build, and the production dependency audit are clean; the audit reports no
+  known vulnerabilities. Focused Windows and native Ubuntu gates each pass 39
+  tests and 2,393 assertions, and all four package-backed witnesses pass on
+  both systems.
+- Validated independently packed Windows and native Ubuntu archives through
+  isolated installation, public import, CLI execution, and all 79 bundled
+  plugin files. Both contain 299 entries. The 2,321,304-byte Windows archive
+  has SHA-1 `201cafc71ec8bb7797ae2a548feb2467ff3f3aed` and SHA-256
+  `3f0185a430fae0a0a29f03580f1e2d100a02dd690d5461f2f468115fed344005`;
+  the 2,290,059-byte native Ubuntu archive has SHA-1
+  `29e11293445ee11c15e7cb61296302c1752bd9a4` and SHA-256
+  `85f0973ba936b4786ee1ef8ef2040de047fcc34c42396e3c33073e1e6236b1df`.
 - Extended exact Java command-vector mutation through
   `java.util.Collections.copy` and `Collections.fill`. Copy overwrites only
   the destination prefix and rejects a source larger than the destination;

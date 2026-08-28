@@ -2,6 +2,71 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Model MCP tool callbacks as remote-capability boundaries
+
+**Observed gap and primary evidence.** General JavaScript and TypeScript MCP
+servers were left to probabilistic review even though tool parameters can
+select process and network capabilities. The stable TypeScript SDK v2 exposes
+`McpServer.registerTool` with an `inputSchema`; the v1 compatibility API uses
+`McpServer.tool`. Node documents that `exec` uses a shell while `execFile`
+normally executes directly, and CodeQL separately models command strings,
+executable selection, and shell-enabled process calls. Semgrep's public rule
+tracker records TypeScript MCP command-injection and SSRF coverage as a gap.
+Sources: [MCP TypeScript v2 migration guide](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/migration/upgrade-to-v2.md),
+[MCP server implementation](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/packages/server/src/server/mcp.ts),
+[Node child-process documentation](https://nodejs.org/api/child_process.html),
+[CodeQL JavaScript command-line injection help](https://codeql.github.com/codeql-query-help/javascript/js-command-line-injection/),
+and [Semgrep MCP rule request](https://github.com/semgrep/semgrep-rules/issues/3873).
+
+**Decision.** Add two deterministic same-file models:
+`node-mcp-tool-command-injection` and `node-mcp-tool-ssrf`. Activate only from
+exact official SDK imports, an exact `McpServer` instance or alias, and a
+schema-bearing registration whose inline callback exposes tool input. Follow
+that input through bounded assignments and named, arrow, or function-expression
+helpers. Accept only exact Node child-process, global/imported Fetch, Undici,
+Node HTTP/HTTPS, and Axios bindings. Preserve source, propagator, control, sink,
+and scope provenance in schema 1.2 residual rows.
+
+**Precision boundary.** An input schema proves callback shape, not command or
+destination authorization. Conversely, a fixed executable with input in a
+separate argv element is not shell injection, and request bodies or same-host
+paths are not SSRF destinations. The model therefore distinguishes shell
+commands, `shell: true`, interpreter command positions, executable selection,
+and network authority fields. Fixed argv, fixed origins, overwritten values,
+object property names, unrelated helper parameters, schema-less context
+callbacks, test paths, comments, strings, local shadows, wrong SDKs, and
+ambiguous callback references fail closed. Dynamic cross-file callback
+resolution remains an AI-review responsibility rather than an excuse to emit
+an ungrounded deterministic row.
+
+**Validation and safety boundary.** Host re-audit requires the final finding's
+validation and attack path to name the MCP registration, client-controlled tool
+input, exact process or destination sink, and relevant impact boundary. The
+correction prompt treats authentication, transport exposure, approval policy,
+container boundaries, egress policy, redirects, DNS rebinding, and cloud
+metadata reachability as evidence questions. Dynamic checks must use only an
+inert fixed process marker or a disposable loopback listener; they must not
+probe metadata, internal services, arbitrary destinations, or destructive
+commands.
+
+**Evidence.** Four fixtures pin the real stable server package at 2.0.0 and
+Zod at 4.4.3. One tool passes an inert marker through an arrow helper to
+`exec`; its matched control passes the same separator-bearing marker as one
+`execFile` argv element. A second tool passes a URL through a helper to global
+`fetch`; its control fixes a loopback origin before module import and places
+the tool value only in a POST body. Windows and native WSL witnesses pass.
+Focused tests cover both SDK generations, ESM/CommonJS aliases, all modeled
+process and HTTP clients, destination-field isolation, reassignment, exact
+helper parameter positions, arrow/function-expression helpers, lookalikes,
+resource exclusions, residual integration, and model-specific quality
+closure.
+
+**Consequence.** MCP tool handlers now receive deterministic remote-capability
+attention without equating every tool input with an exploit. Future transport,
+cross-file, resource, prompt, sampling, or elicitation models should preserve
+official API ownership, role-specific input positions, explicit effect
+boundaries, bounded validation, and matched negative controls.
+
 ## 2026-08-28 — Model static Java command-prefix and fill rewrites
 
 **Observed gap and primary evidence.** The caller-list state machine could

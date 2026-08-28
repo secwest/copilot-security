@@ -505,6 +505,8 @@ describe("effectiveness benchmark", () => {
         "node-contentful-mcp-management-token-host-redirect",
         "node-contentful-mcp-management-token-host-pinned",
       ],
+      ["node-mcp-v2-command-injection", "node-mcp-v2-command-argv"],
+      ["node-mcp-v2-ssrf", "node-mcp-v2-fixed-destination"],
       [
         "python-asyncssh-scp-download-path-traversal",
         "python-asyncssh-scp-repaired-control",
