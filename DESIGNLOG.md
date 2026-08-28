@@ -2,6 +2,60 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Retain caller-owned Java command-list identity and capability
+
+**Observed gap and authoritative semantics.** The live-getter increment kept
+identity for lists returned by `ProcessBuilder.command()`, but it still
+flattened a caller's list into an anonymous argument array at
+`ProcessBuilder(List)` or `command(List)`. That loses later mutation through the
+original variable and cannot distinguish mutations that succeed from ones that
+throw. Oracle documents that both list-taking ProcessBuilder APIs do not copy
+their argument and that subsequent list updates are reflected in the builder.
+Oracle also documents three materially different contracts: `ArrayList` is
+resizable and implements all optional list operations, `Arrays.asList` is
+fixed-size and backed by its array, and `List.of` is unmodifiable, including
+`set`. GitHub's current CodeQL Java command-argument library independently
+models mutable command-list additions as command arguments. Sources:
+[Oracle Java 26 `ProcessBuilder`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/ProcessBuilder.html),
+[Oracle Java 26 `ArrayList`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/ArrayList.html),
+[Oracle Java 26 `Arrays.asList`](<https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/Arrays.html#asList(T...)>),
+[Oracle Java 26 `List`](<https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/List.html#of()>),
+and [CodeQL `CommandArguments.qll`](https://github.com/github/codeql/blob/main/java/ql/lib/semmle/code/java/security/CommandArguments.qll).
+
+**Shared state instead of snapshots.** A command vector is now one shared
+object carrying ordered arguments, origin, and mutation capability. Exact
+local `List.of`, `Arrays.asList`, and imported or fully qualified `ArrayList`
+construction creates the appropriate state. List aliases and list-taking
+ProcessBuilder calls preserve object identity. `new ArrayList<>(knownList)`
+copies current elements into a new resizable state, while a numeric capacity
+constructor begins empty. Varargs and inline `String[]` ProcessBuilder calls
+remain builder-owned mutable vectors. A later `command(...)` replacement swaps
+the builder to a new state without corrupting retained aliases to the old one.
+
+**Exceptional control flow and false-positive resistance.** `set` is legal on
+resizable and fixed-size states; exact single and bulk additions can consume
+inline or known list state; size-changing operations are legal only on
+resizable states; no recognized mutation is legal on an unmodifiable state.
+Unknown effects, bad indices, fixed-size changes, and immutable mutations abort
+the method's still-unexecuted candidate because real execution would throw or
+cannot be proved. Read-only calls leave state intact. Exact pre-dispatch repairs
+and mutations of a list detached by later replacement remain negative. Local
+or imported lookalikes do not acquire `java.util` semantics.
+
+**Evidence closure and executable benchmark.** Findings that depend on a
+caller list carry `java-caller-command-list-binding`, naming either
+`ProcessBuilder(List)` or `ProcessBuilder.command(List)`, as well as mutation
+and execution provenance when applicable. Host-audited validation and attack
+paths must explain the caller-owned/shared/no-copy edge. The correction prompt
+now requires collection-specific capability reasoning. The new matched Spring
+7.0.9/Java 21 pair creates a caller-owned `ArrayList`, binds it through the
+constructor, mutates a retained alias, starts one bounded process, captures
+stdout, checks exit and timeout, and returns the result. The positive rebuilds
+`sh -c <target>` and uses only a fixed-string `printf` witness; the control
+rebuilds `printf %s <target>` and proves metacharacters remain data. Both Maven
+witnesses pass on Ubuntu. The focused manifest grows to six strict cases, and
+the canonical corpus grows to 154 pairs, 308 cases, and 924 repeated positions.
+
 ## 2026-08-27 — Preserve Java ProcessBuilder live command-list identity
 
 **Observed gap and authoritative semantics.** The first exact Spring Java

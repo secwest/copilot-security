@@ -6645,6 +6645,76 @@
         "spring-java-live-command-list-argv/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "spring-java-caller-command-list-injection",
+      "description": "A Spring MVC request parameter reaches sh -c after an alias mutates a caller-owned ArrayList retained without copying by ProcessBuilder(List), followed by start dispatch.",
+      "fixture": "fixtures/spring-java-caller-command-list-injection",
+      "findingsPaths": [
+        "spring-java-caller-command-list-injection/run-1/findings.json",
+        "spring-java-caller-command-list-injection/run-2/findings.json",
+        "spring-java-caller-command-list-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "spring-java-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/main/java/example/DiagnosticsController.java",
+              "startLine": 22,
+              "endLine": 22,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["RequestParam", "Spring request parameter", "request parameter"],
+            [
+              "caller-owned command list",
+              "ProcessBuilder(List)",
+              "shared command list",
+              "no-copy command list"
+            ],
+            ["ArrayList", "mutable list", "list alias"],
+            ["sh -c", "shell grammar", "shell command"],
+            ["ProcessBuilder.start", "start", "process execution"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["target", "request parameter"],
+            [
+              "caller-owned command list",
+              "ProcessBuilder(List)",
+              "shared command list",
+              "no-copy command list"
+            ],
+            ["alias.clear", "alias.add", "list mutation", "ArrayList"],
+            ["sh -c", "shell grammar", "command string"],
+            ["ProcessBuilder", "process execution", "start"],
+            ["stdout", "response", "returned"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spring-java-caller-command-list-argv",
+      "description": "The topology-matched Spring control retains caller-owned ArrayList construction, no-copy ProcessBuilder(List) binding, alias mutations, and start dispatch but rebuilds fixed printf argv.",
+      "fixture": "fixtures/spring-java-caller-command-list-argv",
+      "findingsPaths": [
+        "spring-java-caller-command-list-argv/run-1/findings.json",
+        "spring-java-caller-command-list-argv/run-2/findings.json",
+        "spring-java-caller-command-list-argv/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

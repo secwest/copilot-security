@@ -45891,6 +45891,22 @@ function javaProcessEvidenceRequirements(
       validation.push(["Runtime.exec", "java.lang.Runtime", "runtime exec"]);
       attackPath.push(["Runtime.exec", "java.lang.Runtime", "runtime exec"]);
       seenKinds.add(kind);
+    } else if (kind === "java-caller-command-list-binding") {
+      validation.push([
+        "caller-owned command list",
+        "ProcessBuilder(List)",
+        "ProcessBuilder.command(List)",
+        "shared command list",
+        "no-copy command list",
+      ]);
+      attackPath.push([
+        "caller-owned command list",
+        "ProcessBuilder(List)",
+        "ProcessBuilder.command(List)",
+        "shared command list",
+        "no-copy command list",
+      ]);
+      seenKinds.add(kind);
     } else if (kind === "java-command-list-mutation") {
       validation.push([
         "ProcessBuilder.command()",
@@ -45898,6 +45914,7 @@ function javaProcessEvidenceRequirements(
         "command list mutation",
         "List.set",
         "List.add",
+        "List.addAll",
       ]);
       attackPath.push([
         "ProcessBuilder.command()",
@@ -45905,6 +45922,7 @@ function javaProcessEvidenceRequirements(
         "command list mutation",
         "List.set",
         "List.add",
+        "List.addAll",
       ]);
       seenKinds.add(kind);
     }

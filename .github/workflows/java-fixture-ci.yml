@@ -54,6 +54,8 @@ jobs:
             benchmarks/fixtures/spring-java-fluent-process-builder-argv/pom.xml
             benchmarks/fixtures/spring-java-live-command-list-injection/pom.xml
             benchmarks/fixtures/spring-java-live-command-list-argv/pom.xml
+            benchmarks/fixtures/spring-java-caller-command-list-injection/pom.xml
+            benchmarks/fixtures/spring-java-caller-command-list-argv/pom.xml
             benchmarks/witnesses/java-webclient-ssrf/pom.xml
             benchmarks/witnesses/java-webclient-safe-fetch/pom.xml
             benchmarks/witnesses/java-okhttp-ssrf/pom.xml
@@ -85,6 +87,8 @@ jobs:
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/spring-java-fluent-process-builder-argv/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/spring-java-live-command-list-injection/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/spring-java-live-command-list-argv/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/spring-java-caller-command-list-injection/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/spring-java-caller-command-list-argv/pom.xml verify
 
       - name: Prove vulnerable and safe path behavior
         shell: bash

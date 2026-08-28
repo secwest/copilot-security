@@ -6,6 +6,28 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Preserved caller-owned Java command-list identity through the documented
+  no-copy `ProcessBuilder(List)` and `ProcessBuilder.command(List)` boundaries.
+  Local `ArrayList` values and aliases now share one command-vector state with
+  every bound builder until replacement; copied `ArrayList` values receive a
+  distinct vector, and later builder replacement detaches the earlier caller
+  list. Tainted post-binding changes can no longer disappear into an anonymous
+  argument-array snapshot.
+- Added collection capability semantics to the Spring Java process model.
+  Resizable `ArrayList` supports `set`, `add`, exact `addAll`, indexed
+  insertion/removal, and `clear`; fixed-size `Arrays.asList` supports `set` but
+  rejects size-changing
+  operations; unmodifiable `List.of` rejects every mutation. Unsupported,
+  impossible, immutable, and fixed-size-changing operations fail closed, while
+  exact repairs and detached-list mutations remain negative controls.
+- Added `java-caller-command-list-binding` provenance, matching validation and
+  attack-path obligations, and correction guidance for caller-owned no-copy
+  lists and their capabilities. A third Spring 7.0.9/Java 21 exploit/control
+  pair executes the same `ArrayList`, alias, process, timeout, stdout, and
+  response topology; only `sh -c` versus fixed `printf` argv differs. Both
+  native Ubuntu witnesses pass. The specialized manifest now has six strict
+  cases, and the canonical corpus has 154 pairs, 308 cases, and 924 repeated
+  scan positions.
 - Extended the exact Spring Java command model through the documented live
   identity of `ProcessBuilder.command()`. Direct and aliased `set`, `add`,
   indexed insertion, `remove`, and `clear` now update the effective command;

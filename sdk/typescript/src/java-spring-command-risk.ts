@@ -21,6 +21,7 @@ interface JavaSource {
 
 interface JavaPropagator {
   kind:
+    | "java-caller-command-list-binding"
     | "java-command-list-mutation"
     | "java-local-assignment"
     | "java-process-command-replacement"
@@ -45,16 +46,33 @@ interface ProcessArgument {
   taint?: JavaTaint;
 }
 
-interface ProcessState {
+type CommandListCapability = "fixed-size" | "mutable" | "unmodifiable";
+
+interface CommandListState {
   arguments: ProcessArgument[];
+  capability: CommandListCapability;
+  origin: "builder-owned" | "caller-owned";
+}
+
+interface ProcessState {
+  command: CommandListState;
   commandSetKind: "constructor" | "replacement";
   commandSetLine: number;
+  commandSourceKind: "builder-owned" | "caller-list";
 }
 
 interface CommandListMutation {
   argument?: ProcessArgument;
+  arguments?: ProcessArgument[];
   index?: number;
-  kind: "append" | "clear" | "insert" | "remove" | "set";
+  kind:
+    | "append"
+    | "append-many"
+    | "clear"
+    | "insert"
+    | "insert-many"
+    | "remove"
+    | "set";
   line: number;
 }
 
@@ -68,13 +86,27 @@ type CommandListMutationResult =
   | UnsupportedCommandListMutation;
 
 interface JavaCollectionFactories {
+  arrayList: boolean;
   arraysAsList: boolean;
   listOf: boolean;
 }
 
 type InlineListFactory =
+  | {
+      arguments: JavaToken[][];
+      capability: "fixed-size" | "unmodifiable";
+      kind: "owned";
+    }
+  | { kind: "foreign" };
+
+type ArrayListConstructor =
   | { arguments: JavaToken[][]; kind: "owned" }
   | { kind: "foreign" };
+
+interface ProcessCommandResolution {
+  command: CommandListState;
+  sourceKind: "builder-owned" | "caller-list";
+}
 
 type JavaProcessSinkKind =
   | "java-process-executable-selection"
@@ -521,30 +553,77 @@ function inlineListFactoryArguments(
   const call = callArgumentsAt(tokens, method + 1);
   if (call === undefined || call.closeParen !== tokens.length - 1)
     return undefined;
-  return { arguments: call.arguments, kind: "owned" };
+  return {
+    arguments: call.arguments,
+    capability:
+      qualifiedArrays || unqualifiedArrays ? "fixed-size" : "unmodifiable",
+    kind: "owned",
+  };
 }
 
-function processCommandArguments(
+function commandListState(
+  arguments_: ProcessArgument[],
+  capability: CommandListCapability,
+  origin: CommandListState["origin"],
+): CommandListState {
+  return { arguments: arguments_, capability, origin };
+}
+
+function cloneProcessArgument(argument: ProcessArgument): ProcessArgument {
+  return {
+    ...argument,
+    taint:
+      argument.taint === undefined ? undefined : cloneTaint(argument.taint),
+  };
+}
+
+function processCommandState(
   arguments_: readonly (readonly JavaToken[])[],
   taints: ReadonlyMap<string, JavaTaint>,
   factories: JavaCollectionFactories,
-  commandLists?: ReadonlyMap<string, ProcessArgument[]>,
-): ProcessArgument[] {
+  commandLists?: ReadonlyMap<string, CommandListState>,
+): ProcessCommandResolution {
   if (arguments_.length === 1 && arguments_[0] !== undefined) {
     const only = arguments_[0];
     if (only.length === 1 && only[0]?.kind === "identifier") {
       const referenced = commandLists?.get(only[0].value);
-      if (referenced !== undefined) return referenced;
+      if (referenced !== undefined)
+        return { command: referenced, sourceKind: "caller-list" };
     }
     const arrayArguments = inlineStringArrayArguments(arguments_[0]);
     if (arrayArguments !== undefined)
-      return processArguments(arrayArguments, taints);
+      return {
+        command: commandListState(
+          processArguments(arrayArguments, taints),
+          "mutable",
+          "builder-owned",
+        ),
+        sourceKind: "builder-owned",
+      };
     const listFactory = inlineListFactoryArguments(arguments_[0], factories);
     if (listFactory?.kind === "owned")
-      return processArguments(listFactory.arguments, taints);
-    if (listFactory?.kind === "foreign") return [];
+      return {
+        command: commandListState(
+          processArguments(listFactory.arguments, taints),
+          listFactory.capability,
+          "caller-owned",
+        ),
+        sourceKind: "caller-list",
+      };
+    if (listFactory?.kind === "foreign")
+      return {
+        command: commandListState([], "unmodifiable", "caller-owned"),
+        sourceKind: "caller-list",
+      };
   }
-  return processArguments(arguments_, taints);
+  return {
+    command: commandListState(
+      processArguments(arguments_, taints),
+      "mutable",
+      "builder-owned",
+    ),
+    sourceKind: "builder-owned",
+  };
 }
 
 function callArgumentsAt(
@@ -591,8 +670,8 @@ function singleIdentifier(tokens: readonly JavaToken[]): string | undefined {
 function commandListExpression(
   tokens: readonly JavaToken[],
   builders: ReadonlyMap<string, ProcessState>,
-  commandLists: ReadonlyMap<string, ProcessArgument[]>,
-): ProcessArgument[] | undefined {
+  commandLists: ReadonlyMap<string, CommandListState>,
+): CommandListState | undefined {
   const alias = singleIdentifier(tokens);
   if (alias !== undefined) return commandLists.get(alias);
   if (
@@ -603,7 +682,86 @@ function commandListExpression(
     tokens[3]?.value === "(" &&
     tokens[4]?.value === ")"
   ) {
-    return builders.get(tokens[0].value)?.arguments;
+    return builders.get(tokens[0].value)?.command;
+  }
+  return undefined;
+}
+
+function arrayListConstructorArguments(
+  tokens: readonly JavaToken[],
+  factories: JavaCollectionFactories,
+): ArrayListConstructor | undefined {
+  if (tokens[0]?.value !== "new") return undefined;
+  let cursor: number;
+  if (
+    tokens[1]?.value === "java" &&
+    tokens[2]?.value === "." &&
+    tokens[3]?.value === "util" &&
+    tokens[4]?.value === "." &&
+    tokens[5]?.value === "ArrayList"
+  ) {
+    cursor = 6;
+  } else if (tokens[1]?.value === "ArrayList") {
+    if (!factories.arrayList) return { kind: "foreign" };
+    cursor = 2;
+  } else {
+    return undefined;
+  }
+  if (tokens[cursor]?.value === "<") {
+    const closeType = matchingForward(tokens, cursor, "<", ">");
+    if (closeType === undefined) return undefined;
+    cursor = closeType + 1;
+  }
+  if (tokens[cursor]?.value !== "(") return undefined;
+  const call = callArgumentsAt(tokens, cursor);
+  if (call === undefined || call.closeParen !== tokens.length - 1)
+    return undefined;
+  return { arguments: call.arguments, kind: "owned" };
+}
+
+function localCommandListExpression(
+  tokens: readonly JavaToken[],
+  taints: ReadonlyMap<string, JavaTaint>,
+  factories: JavaCollectionFactories,
+  builders: ReadonlyMap<string, ProcessState>,
+  commandLists: ReadonlyMap<string, CommandListState>,
+): CommandListState | undefined {
+  const alias = commandListExpression(tokens, builders, commandLists);
+  if (alias !== undefined) return alias;
+  const listFactory = inlineListFactoryArguments(tokens, factories);
+  if (listFactory?.kind === "owned") {
+    return commandListState(
+      processArguments(listFactory.arguments, taints),
+      listFactory.capability,
+      "caller-owned",
+    );
+  }
+  if (listFactory?.kind === "foreign") return undefined;
+  const constructor = arrayListConstructorArguments(tokens, factories);
+  if (constructor?.kind !== "owned") return undefined;
+  if (constructor.arguments.length === 0) {
+    return commandListState([], "mutable", "caller-owned");
+  }
+  if (constructor.arguments.length !== 1) return undefined;
+  const argument = constructor.arguments[0] ?? [];
+  if (commandIndex(argument) !== undefined) {
+    return commandListState([], "mutable", "caller-owned");
+  }
+  const source = commandListExpression(argument, builders, commandLists);
+  if (source !== undefined) {
+    return commandListState(
+      source.arguments.map(cloneProcessArgument),
+      "mutable",
+      "caller-owned",
+    );
+  }
+  const inline = inlineListFactoryArguments(argument, factories);
+  if (inline?.kind === "owned") {
+    return commandListState(
+      processArguments(inline.arguments, taints),
+      "mutable",
+      "caller-owned",
+    );
   }
   return undefined;
 }
@@ -626,6 +784,29 @@ function mutatedArgument(
   if (tokens.length === 0) return undefined;
   const argument = processArguments([tokens], taints)[0];
   return argument === undefined ? undefined : { ...argument, mutationLine };
+}
+
+function mutatedArguments(
+  tokens: readonly JavaToken[],
+  taints: ReadonlyMap<string, JavaTaint>,
+  factories: JavaCollectionFactories,
+  commandLists: ReadonlyMap<string, CommandListState>,
+  mutationLine: number,
+): ProcessArgument[] | undefined {
+  const alias = singleIdentifier(tokens);
+  const known = alias === undefined ? undefined : commandLists.get(alias);
+  if (known !== undefined) {
+    return known.arguments.map((argument) => ({
+      ...cloneProcessArgument(argument),
+      mutationLine,
+    }));
+  }
+  const inline = inlineListFactoryArguments(tokens, factories);
+  if (inline?.kind !== "owned") return undefined;
+  return processArguments(inline.arguments, taints).map((argument) => ({
+    ...argument,
+    mutationLine,
+  }));
 }
 
 const READ_ONLY_LIST_METHODS = new Set([
@@ -653,6 +834,8 @@ function mutationAfterPrefix(
   tokens: readonly JavaToken[],
   prefixLength: number,
   taints: ReadonlyMap<string, JavaTaint>,
+  factories: JavaCollectionFactories,
+  commandLists: ReadonlyMap<string, CommandListState>,
 ): CommandListMutationResult | undefined {
   const suffix = tokens.slice(prefixLength);
   if (
@@ -690,6 +873,31 @@ function mutationAfterPrefix(
       ? { kind: "unsupported", line }
       : { argument, index, kind: "insert", line };
   }
+  if (method === "addAll" && arguments_.length === 1) {
+    const values = mutatedArguments(
+      arguments_[0] ?? [],
+      taints,
+      factories,
+      commandLists,
+      line,
+    );
+    return values === undefined
+      ? { kind: "unsupported", line }
+      : { arguments: values, kind: "append-many", line };
+  }
+  if (method === "addAll" && arguments_.length === 2) {
+    const index = commandIndex(arguments_[0] ?? []);
+    const values = mutatedArguments(
+      arguments_[1] ?? [],
+      taints,
+      factories,
+      commandLists,
+      line,
+    );
+    return index === undefined || values === undefined
+      ? { kind: "unsupported", line }
+      : { arguments: values, index, kind: "insert-many", line };
+  }
   if (method === "remove" && arguments_.length === 1) {
     const index = commandIndex(arguments_[0] ?? []);
     return index === undefined
@@ -703,15 +911,19 @@ function commandListMutation(
   tokens: readonly JavaToken[],
   receiver: string,
   taints: ReadonlyMap<string, JavaTaint>,
+  factories: JavaCollectionFactories,
+  commandLists: ReadonlyMap<string, CommandListState>,
 ): CommandListMutationResult | undefined {
   if (tokens[0]?.value !== receiver) return undefined;
-  return mutationAfterPrefix(tokens, 1, taints);
+  return mutationAfterPrefix(tokens, 1, taints, factories, commandLists);
 }
 
 function builderCommandListMutation(
   tokens: readonly JavaToken[],
   receiver: string,
   taints: ReadonlyMap<string, JavaTaint>,
+  factories: JavaCollectionFactories,
+  commandLists: ReadonlyMap<string, CommandListState>,
 ): CommandListMutationResult | undefined {
   if (
     tokens[0]?.value !== receiver ||
@@ -722,20 +934,28 @@ function builderCommandListMutation(
   ) {
     return undefined;
   }
-  return mutationAfterPrefix(tokens, 5, taints);
+  return mutationAfterPrefix(tokens, 5, taints, factories, commandLists);
 }
 
 function applyCommandListMutation(
-  arguments_: ProcessArgument[],
+  command: CommandListState,
   mutation: CommandListMutationResult,
 ): boolean {
   if (mutation.kind === "unsupported") return false;
+  if (command.capability === "unmodifiable") return false;
+  if (command.capability === "fixed-size" && mutation.kind !== "set")
+    return false;
+  const arguments_ = command.arguments;
   if (mutation.kind === "clear") {
     arguments_.splice(0, arguments_.length);
     return true;
   }
   if (mutation.kind === "append" && mutation.argument !== undefined) {
     arguments_.push(mutation.argument);
+    return true;
+  }
+  if (mutation.kind === "append-many" && mutation.arguments !== undefined) {
+    arguments_.push(...mutation.arguments);
     return true;
   }
   if (
@@ -745,6 +965,16 @@ function applyCommandListMutation(
     mutation.index <= arguments_.length
   ) {
     arguments_.splice(mutation.index, 0, mutation.argument);
+    for (const argument of arguments_) argument.mutationLine = mutation.line;
+    return true;
+  }
+  if (
+    mutation.kind === "insert-many" &&
+    mutation.arguments !== undefined &&
+    mutation.index !== undefined &&
+    mutation.index <= arguments_.length
+  ) {
+    arguments_.splice(mutation.index, 0, ...mutation.arguments);
     for (const argument of arguments_) argument.mutationLine = mutation.line;
     return true;
   }
@@ -844,6 +1074,7 @@ function executableBase(value: string): string {
 function taintedArgumentRisk(
   arguments_: readonly ProcessArgument[],
   commandString = false,
+  mutationSymbol = "ProcessBuilder.command live list",
 ): JavaRisk | undefined {
   if (arguments_.length === 0) return undefined;
   const argumentTaint = (
@@ -862,7 +1093,7 @@ function taintedArgumentRisk(
       taint.propagators.push({
         kind: "java-command-list-mutation",
         line: argument.mutationLine,
-        symbol: "ProcessBuilder.command live list",
+        symbol: mutationSymbol,
       });
     }
     return taint;
@@ -951,7 +1182,11 @@ function taintedArgumentRisk(
         };
       }
       if (literal === undefined) return undefined;
-      const nested = taintedArgumentRisk(arguments_.slice(index));
+      const nested = taintedArgumentRisk(
+        arguments_.slice(index),
+        false,
+        mutationSymbol,
+      );
       if (nested !== undefined) {
         nested.argumentIndex += index;
         nested.delegated = "env";
@@ -1005,6 +1240,35 @@ function taintedArgumentRisk(
     }
   }
   return undefined;
+}
+
+function processStateRisk(state: ProcessState): JavaRisk | undefined {
+  const risk = taintedArgumentRisk(
+    state.command.arguments,
+    false,
+    state.command.origin === "caller-owned"
+      ? "caller-owned command list"
+      : "ProcessBuilder.command live list",
+  );
+  if (risk === undefined) return undefined;
+  if (state.commandSetKind === "replacement") {
+    risk.taint.propagators.push({
+      kind: "java-process-command-replacement",
+      line: state.commandSetLine,
+      symbol: "effective command",
+    });
+  }
+  if (state.commandSourceKind === "caller-list") {
+    risk.taint.propagators.push({
+      kind: "java-caller-command-list-binding",
+      line: state.commandSetLine,
+      symbol:
+        state.commandSetKind === "constructor"
+          ? "ProcessBuilder(List) shared command list"
+          : "ProcessBuilder.command(List) shared command list",
+    });
+  }
+  return risk;
 }
 
 function boundedLine(value: string): string {
@@ -1119,7 +1383,10 @@ function shadowsJavaLangType(
   return local || conflictingImport;
 }
 
-function importedJavaUtilType(text: string, name: "Arrays" | "List"): boolean {
+function importedJavaUtilType(
+  text: string,
+  name: "ArrayList" | "Arrays" | "List",
+): boolean {
   const exactOrWildcardImport = new RegExp(
     `^\\s*import\\s+java\\.util\\.(?:${name}|\\*)\\s*;`,
     "mu",
@@ -1158,6 +1425,7 @@ export function javaSpringCommandInjectionRecords(
   const runtimeAvailable = !shadowsJavaLangType(text, "Runtime");
   if (!processBuilderAvailable && !runtimeAvailable) return [];
   const collectionFactories: JavaCollectionFactories = {
+    arrayList: importedJavaUtilType(text, "ArrayList"),
     arraysAsList: importedJavaUtilType(text, "Arrays"),
     listOf: importedJavaUtilType(text, "List"),
   };
@@ -1183,7 +1451,7 @@ export function javaSpringCommandInjectionRecords(
         taints.set(name, { source, propagators: [], controls: [] });
     }
     const builders = new Map<string, ProcessState>();
-    const commandLists = new Map<string, ProcessArgument[]>();
+    const commandLists = new Map<string, CommandListState>();
     let scopeAborted = false;
     for (const statement of statementSlices(scope.body)) {
       const target = assignmentTarget(statement);
@@ -1196,15 +1464,17 @@ export function javaSpringCommandInjectionRecords(
           constructor.openParen,
         );
         if (constructorCall !== undefined) {
+          const initial = processCommandState(
+            constructorCall.arguments,
+            taints,
+            collectionFactories,
+            commandLists,
+          );
           let state: ProcessState = {
-            arguments: processCommandArguments(
-              constructorCall.arguments,
-              taints,
-              collectionFactories,
-              commandLists,
-            ),
+            command: initial.command,
             commandSetKind: "constructor",
             commandSetLine: statement[constructor.index]?.line ?? 1,
+            commandSourceKind: initial.sourceKind,
           };
           let cursor = constructorCall.closeParen + 1;
           while (cursor < statement.length) {
@@ -1217,15 +1487,17 @@ export function javaSpringCommandInjectionRecords(
               cursor = commandCall.closeParen + 1;
               break;
             }
+            const replacement = processCommandState(
+              commandCall.arguments,
+              taints,
+              collectionFactories,
+              commandLists,
+            );
             state = {
-              arguments: processCommandArguments(
-                commandCall.arguments,
-                taints,
-                collectionFactories,
-                commandLists,
-              ),
+              command: replacement.command,
               commandSetKind: "replacement",
               commandSetLine: statement[command]?.line ?? state.commandSetLine,
+              commandSourceKind: replacement.sourceKind,
             };
             cursor = commandCall.closeParen + 1;
           }
@@ -1236,15 +1508,8 @@ export function javaSpringCommandInjectionRecords(
             constructorCall.closeParen + 1,
           );
           if (start !== undefined && statement[start - 1]?.value === ".") {
-            const risk = taintedArgumentRisk(state.arguments);
+            const risk = processStateRisk(state);
             if (risk !== undefined) {
-              if (state.commandSetKind === "replacement") {
-                risk.taint.propagators.push({
-                  kind: "java-process-command-replacement",
-                  line: state.commandSetLine,
-                  symbol: "effective command",
-                });
-              }
               risk.taint.propagators.push({
                 kind: "java-process-execution",
                 line: statement[start]?.line ?? 1,
@@ -1275,30 +1540,44 @@ export function javaSpringCommandInjectionRecords(
             builders.has(receiver)
           ) {
             const state = builders.get(receiver)!;
-            state.arguments = processCommandArguments(
+            const replacement = processCommandState(
               commandCall.arguments,
               taints,
               collectionFactories,
               commandLists,
             );
+            state.command = replacement.command;
+            state.commandSourceKind = replacement.sourceKind;
             state.commandSetKind = "replacement";
             state.commandSetLine = statement[command]?.line ?? 1;
           }
         }
         const leadingReceiver = statement[0]?.value ?? "";
         const builderState = builders.get(leadingReceiver);
-        const liveArguments = commandLists.get(leadingReceiver);
+        const liveCommand = commandLists.get(leadingReceiver);
         const mutation =
           builderState !== undefined
-            ? builderCommandListMutation(statement, leadingReceiver, taints)
-            : liveArguments !== undefined
-              ? commandListMutation(statement, leadingReceiver, taints)
+            ? builderCommandListMutation(
+                statement,
+                leadingReceiver,
+                taints,
+                collectionFactories,
+                commandLists,
+              )
+            : liveCommand !== undefined
+              ? commandListMutation(
+                  statement,
+                  leadingReceiver,
+                  taints,
+                  collectionFactories,
+                  commandLists,
+                )
               : undefined;
         if (mutation !== undefined) {
-          const arguments_ = builderState?.arguments ?? liveArguments;
+          const commandState = builderState?.command ?? liveCommand;
           if (
-            arguments_ === undefined ||
-            !applyCommandListMutation(arguments_, mutation)
+            commandState === undefined ||
+            !applyCommandListMutation(commandState, mutation)
           ) {
             scopeAborted = true;
           }
@@ -1310,17 +1589,8 @@ export function javaSpringCommandInjectionRecords(
           const state =
             receiver === undefined ? undefined : builders.get(receiver);
           const risk =
-            state === undefined
-              ? undefined
-              : taintedArgumentRisk(state.arguments);
+            state === undefined ? undefined : processStateRisk(state);
           if (risk !== undefined && state !== undefined) {
-            if (state.commandSetKind === "replacement") {
-              risk.taint.propagators.push({
-                kind: "java-process-command-replacement",
-                line: state.commandSetLine,
-                symbol: "effective command",
-              });
-            }
             risk.taint.propagators.push({
               kind: "java-process-execution",
               line: statement[start]?.line ?? 1,
@@ -1387,7 +1657,13 @@ export function javaSpringCommandInjectionRecords(
             : undefined;
         const commandListAlias =
           constructor === undefined && builderAlias === undefined
-            ? commandListExpression(expression, builders, commandLists)
+            ? localCommandListExpression(
+                expression,
+                taints,
+                collectionFactories,
+                builders,
+                commandLists,
+              )
             : undefined;
         if (constructor !== undefined) {
           commandLists.delete(target);
