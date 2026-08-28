@@ -46,6 +46,43 @@ pairs, 302 cases, and 906 scan positions. Focused model and quality tests cover
 direct, fully qualified, retained, snapshot, live-array repair, argv, and
 shadowed lookalike cases.
 
+**Exact-source acceptance.** Public revision
+`d690f9238ecebe63aa260c5e5be4909c12e3d280` passes 1,903 tests and 14,286
+assertions across 208 files on Windows in 497.60 seconds, with 27 intentional
+platform/integration skips and no failure. The focused Ubuntu/WSL lane passes
+163 tests and 3,908 assertions across five files in 19.20 seconds, with one
+Windows-launcher skip and no failure. The first sandboxed Windows attempt was
+stopped after the benchmark freshness guard correctly rejected stale compiled
+output and the credential-home test correctly rejected insufficient ACL
+authority. A clean production rebuild and the normal ACL-capable test boundary
+passed without weakening either guard. Formatting, generated-model drift,
+TypeScript, the production build, both new Maven fixtures, and the production
+dependency audit are clean; the audit reports no known vulnerabilities.
+
+The exact-head Ubuntu package has 291 entries. Windows and POSIX-strict
+inspection plus isolated installs on both operating systems validate the public
+import, executable CLI, and all 79 bundled plugin files. The archive occupied
+2,261,617 packed and 11,679,982 unpacked bytes, retained `-rwxr-xr-x` on the
+launcher, and had SHA-1 `09924fad29e2af35997ab66579c4185b60c6172a`
+and SHA-256
+`4155baa7d9f1132b93cb73c7f189e54016071d00f1527f47a57a2b12113deaa9`.
+It was removed after validation.
+
+Two inventories of a disposable tracked-only archive are byte-identical at the
+256-record cap and 552,767 bytes, with SHA-256
+`dd5e1b7418249e6586321677ee737f542b35b78fbb57aa1c31e7ade666e7a23f`.
+Scanner and test source produce no Kotlin command or Runtime framework row.
+Independently rooting the same build at the converted-list exploit produces one
+row with `kotlin-runtime-exec`, `kotlin-runtime-array-conversion`, and
+`kotlin-process-delegated-launcher`; the matched argv control produces zero.
+The archive and inventories were removed.
+
+All eleven hosted families pass the exact implementation revision: Node
+`33133856990`, container `33133856944`, Kotlin `33133857042`, Java
+`33133856817`, .NET `33133856971`, Go `33133857034`, Rust `33133856861`, Ruby
+`33133856855`, PHP `33133856821`, Windows GUI `33133856956`, and Linux GUI
+`33133856880`.
+
 [kotlin-typed-array]: https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/to-typed-array.html
 
 ## 2026-08-27 — Extend Kotlin command analysis through Runtime.exec

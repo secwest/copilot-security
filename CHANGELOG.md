@@ -30,6 +30,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
   cases, and 906 repeated scan positions. Focused Kotlin and canonical gates
   pass 50 tests and 2,641 assertions; formatting, generated-model drift, and
   TypeScript checks are clean.
+- Completed exact-source acceptance for revision
+  `d690f9238ecebe63aa260c5e5be4909c12e3d280`. The rebuilt Windows suite
+  passes 1,903 tests and 14,286 assertions across 208 files in 497.60 seconds,
+  with 27 intentional platform/integration skips and no failure. Ubuntu/WSL
+  passes 163 tests and 3,908 assertions across the focused Kotlin, canonical
+  corpus, residual-inventory, Copilot transport, and package-provenance lanes
+  in 19.20 seconds, with one Windows-launcher skip and no failure. The
+  production dependency audit reports no known vulnerabilities.
+- Validated the exact-head package on Windows and Ubuntu. POSIX-strict and
+  Windows inspection accept all 291 entries, and isolated installs validate
+  the public import, executable CLI, and all 79 bundled plugin files. The
+  archive occupied 2,261,617 packed and 11,679,982 unpacked bytes, retained
+  `-rwxr-xr-x` on `bin/copilot-security.mjs`, and had SHA-1
+  `09924fad29e2af35997ab66579c4185b60c6172a` and SHA-256
+  `4155baa7d9f1132b93cb73c7f189e54016071d00f1527f47a57a2b12113deaa9`.
+  The validated archive was removed.
+- Repeated deterministic self-review against a disposable tracked-only archive
+  of the exact revision. Both inventories are byte-identical at the 256-record
+  cap and 552,767 bytes, with SHA-256
+  `dd5e1b7418249e6586321677ee737f542b35b78fbb57aa1c31e7ade666e7a23f`.
+  Scanner and test source emit no Kotlin command or Runtime row. Independently
+  rooting the build at the converted-list exploit produces exactly one row
+  with runtime, conversion, and delegated-launcher provenance; its matched
+  argv control produces none. The temporary archive and inventories were
+  removed.
+- All eleven hosted workflow families pass the exact implementation revision:
+  Node `33133856990`, container `33133856944`, Kotlin `33133857042`, Java
+  `33133856817`, .NET `33133856971`, Go `33133857034`, Rust `33133856861`,
+  Ruby `33133856855`, PHP `33133856821`, Windows GUI `33133856956`, and Linux
+  GUI `33133856880`.
 - Extended the deterministic Kotlin/Ktor process model to exact
   `java.lang.Runtime.exec` boundaries. The tokenized `exec(String)` overload is
   a split-command sink; `exec(arrayOf(...))` preserves explicit command-vector
