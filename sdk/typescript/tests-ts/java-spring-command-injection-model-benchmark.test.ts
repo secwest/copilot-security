@@ -70,6 +70,8 @@ describe("Spring Java command-injection model", () => {
       "spring-java-live-command-list-argv",
       "spring-java-caller-command-list-injection",
       "spring-java-caller-command-list-argv",
+      "spring-java-collections-addall-injection",
+      "spring-java-collections-addall-argv",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toHaveLength(0);
@@ -77,6 +79,8 @@ describe("Spring Java command-injection model", () => {
     expect(manifest.cases[3]?.expected).toHaveLength(0);
     expect(manifest.cases[4]?.expected).toHaveLength(1);
     expect(manifest.cases[5]?.expected).toHaveLength(0);
+    expect(manifest.cases[6]?.expected).toHaveLength(1);
+    expect(manifest.cases[7]?.expected).toHaveLength(0);
 
     const vulnerable = await buildResidualRiskInventory(
       join(benchmarkRoot, "fixtures", manifest.cases[0]!.id),
@@ -116,6 +120,16 @@ describe("Spring Java command-injection model", () => {
     expect(callerListVulnerable).toContain("java-caller-command-list-binding");
     expect(callerListVulnerable).toContain("caller-owned command list");
     expect(callerListSafe).not.toContain("spring-java-command-injection");
+
+    const collectionsVulnerable = await buildResidualRiskInventory(
+      join(benchmarkRoot, "fixtures", manifest.cases[6]!.id),
+    );
+    const collectionsSafe = await buildResidualRiskInventory(
+      join(benchmarkRoot, "fixtures", manifest.cases[7]!.id),
+    );
+    expect(collectionsVulnerable).toContain("java-caller-command-list-binding");
+    expect(collectionsVulnerable).toContain("java-command-list-mutation");
+    expect(collectionsSafe).not.toContain("spring-java-command-injection");
   });
 
   test("detects a fluent ProcessBuilder shell command including login flags", () => {
@@ -491,6 +505,161 @@ describe("Spring Java command-injection model", () => {
     ).toEqual([]);
   });
 
+  test("models exact Collections.addAll mutations and exception boundaries", () => {
+    const imported = (body: string): string =>
+      spring(body).replace(
+        "import org.springframework.web.bind.annotation.RequestParam;",
+        "import org.springframework.web.bind.annotation.RequestParam;\nimport java.util.ArrayList;\nimport java.util.Arrays;\nimport java.util.Collections;\nimport java.util.List;",
+      );
+    expect(
+      records(
+        imported(`        List<String> command = new ArrayList<>();
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.addAll(command, "sh", "-c", target);
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        spring(`        java.util.List<String> command = new java.util.ArrayList<>();
+        ProcessBuilder builder = new ProcessBuilder(command);
+        java.util.Collections.addAll(command, "printf", "%s", target);
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        spring(`        ProcessBuilder builder = new ProcessBuilder();
+        java.util.Collections.addAll(builder.command(), "sh", "-c", target);
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        imported(`        List<String> command = Arrays.asList("sh", "-c", target);
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.addAll(command, "fixed");
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        imported(`        List<String> command = List.of("sh", "-c", target);
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.addAll(command);
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+
+    const lookalike =
+      imported(`        List<String> command = new ArrayList<>();
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Collections.addAll(command, "sh", "-c", target);
+        builder.start();`).replace(
+        "import java.util.Collections;",
+        "import example.Collections;",
+      );
+    expect(records(lookalike)).toEqual([]);
+  });
+
+  test("preserves exact LinkedList construction, copies, and ownership", () => {
+    const imported = (body: string): string =>
+      spring(body).replace(
+        "import org.springframework.web.bind.annotation.RequestParam;",
+        "import org.springframework.web.bind.annotation.RequestParam;\nimport java.util.LinkedList;\nimport java.util.List;",
+      );
+    expect(
+      records(
+        imported(`        List<String> command = new LinkedList<>(List.of("printf", "%s", "fixed"));
+        ProcessBuilder builder = new ProcessBuilder(command);
+        command.clear();
+        command.add("sh");
+        command.add("-c");
+        command.add(target);
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        spring(`        java.util.List<String> original = java.util.List.of("sh", "-c", target);
+        java.util.LinkedList<String> command = new java.util.LinkedList<>(original);
+        ProcessBuilder builder = new ProcessBuilder(command);
+        command.set(0, "printf");
+        command.set(1, "%s");
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        imported(`        List<String> command = new LinkedList<>(8);
+        ProcessBuilder builder = new ProcessBuilder(command);
+        command.add("sh");
+        command.add("-c");
+        command.add(target);
+        builder.start();`),
+      ),
+    ).toEqual([]);
+
+    const lookalike =
+      imported(`        List<String> command = new LinkedList<>();
+        ProcessBuilder builder = new ProcessBuilder(command);
+        command.add("sh");
+        command.add("-c");
+        command.add(target);
+        builder.start();`).replace(
+        "import java.util.LinkedList;",
+        "import example.LinkedList;",
+      );
+    expect(records(lookalike)).toEqual([]);
+  });
+
+  test("models sequenced-list mutations for mutable list implementations", () => {
+    expect(
+      records(
+        spring(`        java.util.List<String> command = new java.util.ArrayList<>(java.util.List.of("-c", target));
+        ProcessBuilder builder = new ProcessBuilder(command);
+        command.addFirst("sh");
+        command.getFirst();
+        command.getLast();
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        spring(`        java.util.LinkedList<String> command = new java.util.LinkedList<>();
+        ProcessBuilder builder = new ProcessBuilder(command);
+        command.addLast("sh");
+        command.addLast("-c");
+        command.addLast(target);
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        spring(`        java.util.LinkedList<String> command = new java.util.LinkedList<>(java.util.List.of("printf", "sh", "-c", target));
+        ProcessBuilder builder = new ProcessBuilder(command);
+        command.removeFirst();
+        builder.start();`),
+      ),
+    ).toHaveLength(1);
+    expect(
+      records(
+        spring(`        java.util.LinkedList<String> command = new java.util.LinkedList<>(java.util.List.of("sh", "-c", target));
+        ProcessBuilder builder = new ProcessBuilder(command);
+        command.removeLast();
+        builder.start();`),
+      ),
+    ).toEqual([]);
+    expect(
+      records(
+        spring(`        java.util.List<String> command = new java.util.LinkedList<>(java.util.List.of("-c", target));
+        ProcessBuilder builder = new ProcessBuilder(command);
+        command.push("sh");
+        builder.start();`),
+      ),
+    ).toEqual([]);
+  });
+
   test("models empty capacity lists and copied command vectors", () => {
     const source =
       spring(`        java.util.ArrayList<String> command = new java.util.ArrayList<>(8);
@@ -696,6 +865,9 @@ class ProcessBuilder {
       "Arrays.asList permits set but rejects size changes",
     );
     expect(prompt).toContain("List.of rejects every mutation");
+    expect(prompt).toContain("ArrayList and LinkedList are resizable");
+    expect(prompt).toContain("Collections.addAll calls add");
+    expect(prompt).toContain("addFirst/addLast/removeFirst/removeLast");
   });
 
   test("requires Java process semantics in finding-quality closure", async () => {
@@ -897,6 +1069,9 @@ class ProcessBuilder {
             "List.set",
             "List.add",
             "List.addAll",
+            "Collections.addAll",
+            "LinkedList",
+            "addFirst",
           ],
         ],
         missingAttackPathTextAnyOf: [
@@ -907,6 +1082,9 @@ class ProcessBuilder {
             "List.set",
             "List.add",
             "List.addAll",
+            "Collections.addAll",
+            "LinkedList",
+            "addFirst",
           ],
         ],
       });

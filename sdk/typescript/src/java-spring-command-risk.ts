@@ -72,8 +72,11 @@ interface CommandListMutation {
     | "insert"
     | "insert-many"
     | "remove"
+    | "remove-first"
+    | "remove-last"
     | "set";
   line: number;
+  noOpOnEmpty?: boolean;
 }
 
 interface UnsupportedCommandListMutation {
@@ -88,6 +91,8 @@ type CommandListMutationResult =
 interface JavaCollectionFactories {
   arrayList: boolean;
   arraysAsList: boolean;
+  collections: boolean;
+  linkedList: boolean;
   listOf: boolean;
 }
 
@@ -99,9 +104,18 @@ type InlineListFactory =
     }
   | { kind: "foreign" };
 
-type ArrayListConstructor =
-  | { arguments: JavaToken[][]; kind: "owned" }
+type MutableListConstructor =
+  | {
+      arguments: JavaToken[][];
+      capacityArgument: boolean;
+      kind: "owned";
+    }
   | { kind: "foreign" };
+
+interface BoundCommandListMutation {
+  command: CommandListState;
+  mutation: CommandListMutationResult;
+}
 
 interface ProcessCommandResolution {
   command: CommandListState;
@@ -687,22 +701,32 @@ function commandListExpression(
   return undefined;
 }
 
-function arrayListConstructorArguments(
+function mutableListConstructorArguments(
   tokens: readonly JavaToken[],
   factories: JavaCollectionFactories,
-): ArrayListConstructor | undefined {
+): MutableListConstructor | undefined {
   if (tokens[0]?.value !== "new") return undefined;
   let cursor: number;
+  let capacityArgument: boolean;
   if (
     tokens[1]?.value === "java" &&
     tokens[2]?.value === "." &&
     tokens[3]?.value === "util" &&
     tokens[4]?.value === "." &&
-    tokens[5]?.value === "ArrayList"
+    (tokens[5]?.value === "ArrayList" || tokens[5]?.value === "LinkedList")
   ) {
+    capacityArgument = tokens[5]?.value === "ArrayList";
     cursor = 6;
-  } else if (tokens[1]?.value === "ArrayList") {
-    if (!factories.arrayList) return { kind: "foreign" };
+  } else if (
+    tokens[1]?.value === "ArrayList" ||
+    tokens[1]?.value === "LinkedList"
+  ) {
+    capacityArgument = tokens[1]?.value === "ArrayList";
+    if (
+      (capacityArgument && !factories.arrayList) ||
+      (!capacityArgument && !factories.linkedList)
+    )
+      return { kind: "foreign" };
     cursor = 2;
   } else {
     return undefined;
@@ -716,7 +740,7 @@ function arrayListConstructorArguments(
   const call = callArgumentsAt(tokens, cursor);
   if (call === undefined || call.closeParen !== tokens.length - 1)
     return undefined;
-  return { arguments: call.arguments, kind: "owned" };
+  return { arguments: call.arguments, capacityArgument, kind: "owned" };
 }
 
 function localCommandListExpression(
@@ -737,14 +761,14 @@ function localCommandListExpression(
     );
   }
   if (listFactory?.kind === "foreign") return undefined;
-  const constructor = arrayListConstructorArguments(tokens, factories);
+  const constructor = mutableListConstructorArguments(tokens, factories);
   if (constructor?.kind !== "owned") return undefined;
   if (constructor.arguments.length === 0) {
     return commandListState([], "mutable", "caller-owned");
   }
   if (constructor.arguments.length !== 1) return undefined;
   const argument = constructor.arguments[0] ?? [];
-  if (commandIndex(argument) !== undefined) {
+  if (constructor.capacityArgument && commandIndex(argument) !== undefined) {
     return commandListState([], "mutable", "caller-owned");
   }
   const source = commandListExpression(argument, builders, commandLists);
@@ -815,6 +839,8 @@ const READ_ONLY_LIST_METHODS = new Set([
   "equals",
   "forEach",
   "get",
+  "getFirst",
+  "getLast",
   "hashCode",
   "indexOf",
   "isEmpty",
@@ -866,6 +892,18 @@ function mutationAfterPrefix(
       ? { kind: "unsupported", line }
       : { argument, kind: "append", line };
   }
+  if (method === "addLast" && arguments_.length === 1) {
+    const argument = mutatedArgument(arguments_[0] ?? [], taints, line);
+    return argument === undefined
+      ? { kind: "unsupported", line }
+      : { argument, kind: "append", line };
+  }
+  if (method === "addFirst" && arguments_.length === 1) {
+    const argument = mutatedArgument(arguments_[0] ?? [], taints, line);
+    return argument === undefined
+      ? { kind: "unsupported", line }
+      : { argument, index: 0, kind: "insert", line };
+  }
   if (method === "add" && arguments_.length === 2) {
     const index = commandIndex(arguments_[0] ?? []);
     const argument = mutatedArgument(arguments_[1] ?? [], taints, line);
@@ -904,6 +942,12 @@ function mutationAfterPrefix(
       ? { kind: "unsupported", line }
       : { index, kind: "remove", line };
   }
+  if (method === "removeFirst" && arguments_.length === 0) {
+    return { kind: "remove-first", line };
+  }
+  if (method === "removeLast" && arguments_.length === 0) {
+    return { kind: "remove-last", line };
+  }
   return { kind: "unsupported", line };
 }
 
@@ -937,11 +981,74 @@ function builderCommandListMutation(
   return mutationAfterPrefix(tokens, 5, taints, factories, commandLists);
 }
 
+function collectionsAddAllMutation(
+  tokens: readonly JavaToken[],
+  taints: ReadonlyMap<string, JavaTaint>,
+  factories: JavaCollectionFactories,
+  builders: ReadonlyMap<string, ProcessState>,
+  commandLists: ReadonlyMap<string, CommandListState>,
+): BoundCommandListMutation | undefined {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const qualified =
+      tokens[index]?.value === "java" &&
+      tokens[index + 1]?.value === "." &&
+      tokens[index + 2]?.value === "util" &&
+      tokens[index + 3]?.value === "." &&
+      tokens[index + 4]?.value === "Collections" &&
+      tokens[index + 5]?.value === "." &&
+      tokens[index + 6]?.value === "addAll" &&
+      tokens[index + 7]?.value === "(";
+    const unqualified =
+      tokens[index]?.value === "Collections" &&
+      tokens[index + 1]?.value === "." &&
+      tokens[index + 2]?.value === "addAll" &&
+      tokens[index + 3]?.value === "(";
+    if (!qualified && !unqualified) continue;
+    const methodIndex = index + (qualified ? 6 : 2);
+    const call = callArgumentsAt(tokens, methodIndex + 1);
+    if (
+      call === undefined ||
+      call.closeParen !== tokens.length - 1 ||
+      call.arguments.length === 0
+    )
+      return undefined;
+    const command = commandListExpression(
+      call.arguments[0] ?? [],
+      builders,
+      commandLists,
+    );
+    if (command === undefined) return undefined;
+    const line = tokens[methodIndex]?.line ?? 1;
+    if (unqualified && !factories.collections) {
+      return { command, mutation: { kind: "unsupported", line } };
+    }
+    const arguments_ = processArguments(call.arguments.slice(1), taints).map(
+      (argument) => ({ ...argument, mutationLine: line }),
+    );
+    return {
+      command,
+      mutation: {
+        arguments: arguments_,
+        kind: "append-many",
+        line,
+        noOpOnEmpty: true,
+      },
+    };
+  }
+  return undefined;
+}
+
 function applyCommandListMutation(
   command: CommandListState,
   mutation: CommandListMutationResult,
 ): boolean {
   if (mutation.kind === "unsupported") return false;
+  if (
+    mutation.noOpOnEmpty === true &&
+    mutation.kind === "append-many" &&
+    mutation.arguments?.length === 0
+  )
+    return true;
   if (command.capability === "unmodifiable") return false;
   if (command.capability === "fixed-size" && mutation.kind !== "set")
     return false;
@@ -984,6 +1091,16 @@ function applyCommandListMutation(
     mutation.index < arguments_.length
   ) {
     arguments_.splice(mutation.index, 1);
+    for (const argument of arguments_) argument.mutationLine = mutation.line;
+    return true;
+  }
+  if (mutation.kind === "remove-first" && arguments_.length > 0) {
+    arguments_.splice(0, 1);
+    for (const argument of arguments_) argument.mutationLine = mutation.line;
+    return true;
+  }
+  if (mutation.kind === "remove-last" && arguments_.length > 0) {
+    arguments_.splice(arguments_.length - 1, 1);
     for (const argument of arguments_) argument.mutationLine = mutation.line;
     return true;
   }
@@ -1385,7 +1502,7 @@ function shadowsJavaLangType(
 
 function importedJavaUtilType(
   text: string,
-  name: "ArrayList" | "Arrays" | "List",
+  name: "ArrayList" | "Arrays" | "Collections" | "LinkedList" | "List",
 ): boolean {
   const exactOrWildcardImport = new RegExp(
     `^\\s*import\\s+java\\.util\\.(?:${name}|\\*)\\s*;`,
@@ -1427,6 +1544,8 @@ export function javaSpringCommandInjectionRecords(
   const collectionFactories: JavaCollectionFactories = {
     arrayList: importedJavaUtilType(text, "ArrayList"),
     arraysAsList: importedJavaUtilType(text, "Arrays"),
+    collections: importedJavaUtilType(text, "Collections"),
+    linkedList: importedJavaUtilType(text, "LinkedList"),
     listOf: importedJavaUtilType(text, "List"),
   };
   const tokens = javaTokens(text);
@@ -1573,6 +1692,13 @@ export function javaSpringCommandInjectionRecords(
                   commandLists,
                 )
               : undefined;
+        const staticMutation = collectionsAddAllMutation(
+          statement,
+          taints,
+          collectionFactories,
+          builders,
+          commandLists,
+        );
         if (mutation !== undefined) {
           const commandState = builderState?.command ?? liveCommand;
           if (
@@ -1581,6 +1707,15 @@ export function javaSpringCommandInjectionRecords(
           ) {
             scopeAborted = true;
           }
+        }
+        if (
+          staticMutation !== undefined &&
+          !applyCommandListMutation(
+            staticMutation.command,
+            staticMutation.mutation,
+          )
+        ) {
+          scopeAborted = true;
         }
         if (scopeAborted) break;
         const start = invocationIndex(statement, "start");

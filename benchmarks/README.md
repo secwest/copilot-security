@@ -258,8 +258,12 @@ starts from a caller-owned `ArrayList`, passes its exact identity through the
 documented no-copy `ProcessBuilder(List)` boundary, and mutates a retained
 caller alias after binding. The positive rebuilds `sh -c`; the control rebuilds
 ordinary `printf` argv. Regression distinguishes resizable `ArrayList`,
-fixed-size `Arrays.asList`, and unmodifiable `List.of` operations. Run the strict
-benchmark with:
+fixed-size `Arrays.asList`, and unmodifiable `List.of` operations. A fourth
+pair retains an exact mutable `LinkedList` through `ProcessBuilder(List)` and
+uses `Collections.addAll` for the command transition. The positive supplies
+`sh`, `-c`, and the request value; the control supplies `printf`, `%s`, and the
+same value. Regression also covers import lookalikes, empty-varargs no-ops,
+and Java 21 sequenced-list end mutations. Run the strict benchmark with:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -267,7 +271,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-spring-java-command
 ```
 
-The versioned corpus currently contains 154 vulnerable/control pairs:
+The versioned corpus currently contains 155 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

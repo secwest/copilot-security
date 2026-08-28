@@ -156,6 +156,61 @@
       "id": "spring-java-caller-command-list-argv",
       "fixture": "fixtures/spring-java-caller-command-list-argv",
       "expected": []
+    },
+    {
+      "id": "spring-java-collections-addall-injection",
+      "fixture": "fixtures/spring-java-collections-addall-injection",
+      "expected": [
+        {
+          "title": "Spring request parameter reaches a shell through Collections.addAll command mutation",
+          "cwe": ["CWE-78", "CWE-88"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/main/java/example/DiagnosticsController.java",
+          "line": 19,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["RequestParam", "Spring request parameter", "request parameter"],
+            ["LinkedList", "mutable list", "caller-owned command list"],
+            [
+              "Collections.addAll",
+              "static bulk mutation",
+              "command list mutation"
+            ],
+            ["sh -c", "shell grammar", "shell command"],
+            ["ProcessBuilder.start", "start", "process execution"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["target", "request parameter"],
+            [
+              "ProcessBuilder(List)",
+              "shared command list",
+              "no-copy command list"
+            ],
+            [
+              "Collections.addAll",
+              "static bulk mutation",
+              "command list mutation"
+            ],
+            ["sh -c", "shell grammar", "command string"],
+            ["ProcessBuilder", "process execution", "start"],
+            ["stdout", "response", "returned"]
+          ],
+          "forbiddenText": [
+            "ProcessBuilder always invokes a shell",
+            "proves the route is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spring-java-collections-addall-argv",
+      "fixture": "fixtures/spring-java-collections-addall-argv",
+      "expected": []
     }
   ]
 }

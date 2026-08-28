@@ -45915,6 +45915,9 @@ function javaProcessEvidenceRequirements(
         "List.set",
         "List.add",
         "List.addAll",
+        "Collections.addAll",
+        "LinkedList",
+        "addFirst",
       ]);
       attackPath.push([
         "ProcessBuilder.command()",
@@ -45923,6 +45926,9 @@ function javaProcessEvidenceRequirements(
         "List.set",
         "List.add",
         "List.addAll",
+        "Collections.addAll",
+        "LinkedList",
+        "addFirst",
       ]);
       seenKinds.add(kind);
     }

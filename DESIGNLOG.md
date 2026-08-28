@@ -2,6 +2,86 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-27 — Model static and sequenced Java command-list mutation
+
+**Observed gap and primary evidence.** The caller-list state machine recognized
+`ArrayList` and instance `List.addAll`, but a common JDK-only construction still
+disappeared: create a mutable `LinkedList`, bind that list to
+`ProcessBuilder(List)`, then populate it with `Collections.addAll`. The current
+OpenJDK implementation stores list-taking ProcessBuilder arguments by identity
+and returns the same live list from `command()`. `Collections.addAll` iterates
+the supplied varargs and invokes `Collection.add` once per element. Oracle's
+Java 26 API defines `LinkedList` as an ordered implementation of all optional
+list operations and defines Java 21's `List.addFirst`, `addLast`, `removeFirst`,
+and `removeLast` in terms of exact end positions. Sources:
+[OpenJDK `ProcessBuilder.java`](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/lang/ProcessBuilder.java),
+[OpenJDK `Collections.java`](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/Collections.java),
+[Oracle Java 26 `LinkedList`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/LinkedList.html),
+[Oracle Java 26 `List`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/List.html),
+and [CodeQL's Java command-argument library](https://github.com/github/codeql/blob/main/java/ql/lib/semmle/code/java/security/CommandArguments.qll).
+
+**Exact state transitions.** Imported or fully qualified `LinkedList()` creates
+an empty mutable command vector; `LinkedList(knownCollection)` creates an
+independent ordered copy. Unlike `ArrayList`, a numeric `LinkedList` constructor
+is invalid and gains no state. Exact `Collections.addAll(destination, values…)`
+resolves only a known caller list or live `builder.command()` destination and
+appends each value in order. Java 21 `List.addFirst` inserts at zero,
+`List.addLast` appends, and `List.removeFirst`/`removeLast` remove the exact end.
+The scanner deliberately does not infer deque-only methods from runtime list
+identity: accepting `poll` or `push` would require compile-time alias type
+tracking to exclude non-compiling calls through `List` or `ArrayList`. These
+transitions reuse the same capability and mutation-provenance machinery as
+ordinary list operations.
+
+**Exceptional and ownership boundaries.** A non-empty static bulk addition to
+`Arrays.asList` or `List.of` cannot reach the later process start because the
+required size change throws. The OpenJDK loop performs no call for empty
+varargs, so that exact form is a proven no-op even for an unmodifiable
+destination. Bad indices, removals from a known empty list, unresolved
+arguments, unsupported rewrites, and unknown ownership abort the candidate.
+Unqualified `Collections` and `LinkedList` names require an unshadowed
+`java.util` import; fully qualified forms remain exact. This avoids granting JDK
+semantics to project-local lookalikes or preserving stale dangerous state after
+an operation that would really stop execution.
+
+**Regression and executable closure.** New adversarial tests cover qualified
+and imported ownership, conflicting imports, independent copies, the invalid
+numeric constructor, mutable/fixed-size/unmodifiable destinations, empty
+varargs, front/back additions and removals, exact repair, invalid deque-only
+calls, and ordinary-argv controls. The correction prompt and model-specific quality gate
+now require static/list mutation evidence when applicable. A fourth matched
+Spring 7.0.9/Java 21 pair retains a caller-owned `LinkedList` through the
+no-copy ProcessBuilder boundary and calls `Collections.addAll`; only `sh -c`
+versus `printf %s` differs. Both bounded Maven witnesses pass on native Ubuntu.
+The focused manifest grows to eight strict cases and the canonical benchmark to
+155 pairs, 310 cases, and 930 repeated positions.
+
+**Local, package, and live acceptance.** The authoritative elevated Windows
+suite passes 1,934 tests and 14,459 assertions across 209 files in 506.01
+seconds, with 27 intentional platform/integration skips and no failure. The
+focused native Ubuntu compiler and scanner slice passes 116 tests and 3,470
+assertions; both new Java 21 Maven witnesses pass. Formatting, generated-model
+drift, TypeScript checking, a clean production build, and the production audit
+are green, with no known production dependency vulnerability. Isolated
+Windows and POSIX-strict Ubuntu installs accept their independently produced
+295-entry archives through public import, CLI execution, and all 79 plugin
+files. The 2,264,401-byte Windows archive has SHA-1
+`4643279b18f0dd5ed53780eba3eb53b0c06ad4e8` and SHA-256
+`912d9f7d296aa5690a2b2089908ed647fe96b24afbc4643e9baccc4e3bca04a4`;
+the 2,264,425-byte native Ubuntu archive has SHA-1
+`589f52a2f98012f1f12a601a06ff3ab06a0137b2`.
+
+The new pair also passes strict live deep Copilot scanning with two concurrent
+workers and a bounded ten-attempt retry policy. Both scans complete on their
+first attempt, with no authentication, allowance, rate-limit, or classifier
+failure. The exploit produces one critical validated finding and the control
+none, yielding `1` for precision, recall, F1, case and negative accuracy,
+validation, attack-path, code-evidence, severity, and stability scores, with
+zero false positives and false negatives. Campaign
+`b6771b03f26c2e1d4424b75833b49619a6c0228567b95d1e363b61a464171fda`
+uses 5,807,967 input tokens, including 5,136,361 cached tokens, and 101,618
+output tokens across 22 minutes 42 seconds of wall-clock scan time.
+
 ## 2026-08-27 — Retain caller-owned Java command-list identity and capability
 
 **Observed gap and authoritative semantics.** The live-getter increment kept

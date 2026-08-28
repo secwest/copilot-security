@@ -554,6 +554,10 @@ describe("effectiveness benchmark", () => {
         "spring-java-caller-command-list-argv",
       ],
       [
+        "spring-java-collections-addall-injection",
+        "spring-java-collections-addall-argv",
+      ],
+      [
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],

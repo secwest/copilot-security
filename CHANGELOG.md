@@ -6,6 +6,49 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended caller-owned Java command state to exact imported and fully
+  qualified `java.util.LinkedList` construction, including independent
+  collection-copy construction. The model now handles Java 21
+  `List.addFirst`/`addLast`/`removeFirst`/`removeLast` operations without losing
+  ordered command identity.
+- Added exact `java.util.Collections.addAll` mutation through command-list
+  aliases and `ProcessBuilder.command()` getter expressions. Non-empty calls
+  append each vararg through the destination's capability; empty calls are
+  proven no-ops; fixed-size and unmodifiable failures, invalid constructors,
+  unresolved operations, and local or imported lookalikes fail closed.
+- Strengthened Java correction and finding-quality guidance with `LinkedList`,
+  static bulk mutation, and sequenced-list evidence. A fourth Spring
+  7.0.9/Java 21 pair preserves a caller-owned linked list, no-copy builder
+  binding, static mutation, execution, timeout, stdout, and response topology
+  while contrasting `sh -c` with fixed `printf` argv. Both native Ubuntu
+  witnesses pass. The specialized manifest now has eight strict cases, and
+  the canonical corpus has 155 pairs, 310 cases, and 930 repeated scan
+  positions.
+- Completed authoritative Windows acceptance for the static/sequenced-list
+  increment: 1,934 tests pass with 27 intentional platform/integration skips,
+  no failure, and 14,459 assertions across 209 files in 506.01 seconds.
+  Formatting, generated-model drift, TypeScript checking, a clean production
+  build, and the production dependency audit are clean; the audit reports no
+  known vulnerabilities. Focused native Ubuntu gates pass 116 tests and 3,470
+  assertions, and both new Java 21 Maven witnesses pass.
+- Validated independently packed Windows and POSIX-strict Ubuntu archives
+  through isolated installation, public import, CLI execution, and all 79
+  bundled plugin files. The 295-entry, 2,264,401-byte Windows archive has
+  SHA-1 `4643279b18f0dd5ed53780eba3eb53b0c06ad4e8` and SHA-256
+  `912d9f7d296aa5690a2b2089908ed647fe96b24afbc4643e9baccc4e3bca04a4`;
+  the native Ubuntu archive has 295 entries, is 2,264,425 bytes, and has SHA-1
+  `589f52a2f98012f1f12a601a06ff3ab06a0137b2`.
+- Ran the new exploit/control pair through strict live deep Copilot scanning
+  with two concurrent workers and bounded ten-attempt retry policy. Both scans
+  completed on attempt one with complete coverage and no authentication,
+  allowance, rate-limit, or classifier failure. The exploit produced one
+  critical validated finding and the control produced none: precision, recall,
+  F1, case accuracy, negative accuracy, validation, attack-path, code-evidence,
+  severity, and stability scores are all `1`, with zero false positives and
+  false negatives. Campaign
+  `b6771b03f26c2e1d4424b75833b49619a6c0228567b95d1e363b61a464171fda`
+  used 5,807,967 input tokens, including 5,136,361 cached tokens, and 101,618
+  output tokens across 22 minutes 42 seconds of wall-clock scan time.
 - Preserved caller-owned Java command-list identity through the documented
   no-copy `ProcessBuilder(List)` and `ProcessBuilder.command(List)` boundaries.
   Local `ArrayList` values and aliases now share one command-vector state with
