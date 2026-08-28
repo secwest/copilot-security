@@ -49,7 +49,14 @@ describe("Node MCP tool-input security model", () => {
     ) as {
       schemaVersion: string;
       thresholds: Record<string, number>;
-      cases: Array<{ id: string; expected: unknown[] }>;
+      cases: Array<{
+        id: string;
+        expected: Array<{
+          path?: string;
+          line?: number;
+          lineTolerance?: number;
+        }>;
+      }>;
     };
     expect(manifest.schemaVersion).toBe("1.0");
     expect(
@@ -80,6 +87,11 @@ describe("Node MCP tool-input security model", () => {
     expect(manifest.cases[4]?.expected).toHaveLength(1);
     expect(manifest.cases[5]?.expected).toEqual([]);
     expect(manifest.cases[6]?.expected).toHaveLength(1);
+    expect(manifest.cases[6]?.expected[0]).toMatchObject({
+      path: "src/server.mjs",
+      line: 8,
+      lineTolerance: 1,
+    });
     expect(manifest.cases[7]?.expected).toEqual([]);
     expect(manifest.cases[8]?.expected).toHaveLength(1);
     expect(manifest.cases[8]?.expected[0]).toMatchObject({

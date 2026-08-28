@@ -65,6 +65,18 @@ network, credential, persistence, privilege, or destructive effects. The
 strict lane advances to fourteen cases; the canonical corpus advances to 163
 pairs, 326 cases, and 978 repeated scan positions.
 
+**Live ground-truth counterexample.** Campaign
+`776c16d2e965d22fddd3a7458913eeed7f4f63fc046a79d3c9ad2f1c267e3300`
+completed both deep high-effort cases on attempt one with complete coverage and
+no provider failure. The scanner produced exactly one high CWE-94 finding for
+the exploit and none for the fixed-grammar control. Its report independently
+located source construction at line 7 and retained-result invocation at line 8,
+and passed validation, attack-path, code-evidence, and severity gates. The
+manifest still anchored the expectation at stale line 10, outside its one-line
+tolerance, so the evaluator counted the intended finding as both unexpected and
+missed. Ground truth now anchors the executable sink at line 8 in both manifests,
+and a direct specialized-manifest regression preserves that correspondence.
+
 ## 2026-08-28 — Model executed MCP regular-expression patterns
 
 **Coverage gap and comparative evidence.** The exact MCP host pass covered

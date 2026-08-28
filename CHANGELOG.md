@@ -28,6 +28,13 @@ All notable scanner, application, benchmark, and operational changes are recorde
   allowlisted operator as data. Both bounded witnesses pass. The strict MCP
   corpus now contains fourteen cases and witnesses; the canonical corpus
   contains 163 pairs, 326 cases, and 978 repeated scan positions.
+- Corrected the new Function-constructor benchmark's ground-truth location from
+  stale line 10 to the actual retained-result execution at line 8. The first
+  live campaign found exactly the intended high CWE-94 lifecycle defect and
+  kept the fixed-grammar control clean, but the old anchor counted that true
+  finding as both unexpected and missed. A manifest regression now binds the
+  specialized expectation to the execution line, and the canonical corpus uses
+  the same anchor.
 - Added deterministic `node-mcp-tool-regex-injection` coverage for official MCP
   TypeScript SDK tool input used as argument zero of the live global `RegExp`
   and then actually executed through `test` or `exec`. The bounded source model
