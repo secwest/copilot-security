@@ -7834,6 +7834,150 @@
         "node-mcp-v2-fork-fixed-executable/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-fork-relative-cwd-module-hijack",
+      "description": "Official MCP TypeScript SDK v2 tool input selects child_process.fork's working directory while a fixed relative entry point is resolved from that directory.",
+      "fixture": "fixtures/node-mcp-v2-fork-relative-cwd-module-hijack",
+      "findingsPaths": [
+        "node-mcp-v2-fork-relative-cwd-module-hijack/run-1/findings.json",
+        "node-mcp-v2-fork-relative-cwd-module-hijack/run-2/findings.json",
+        "node-mcp-v2-fork-relative-cwd-module-hijack/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-untrusted-module-load",
+          "cwe": ["CWE-426", "CWE-829"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["cwd", "tool input", "callback input"],
+            ["runFromDirectory", "same-file helper", "helper call"],
+            [
+              "fork:options.cwd->relative-modulePath",
+              "options.cwd",
+              "relative entry point"
+            ],
+            ["relative modulePath", "relative child module", "child module"],
+            ["untrusted search path", "CWE-426", "CWE-829"],
+            ["absolute modulePath", "file URL", "fixed working directory"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-from-directory", "registerTool", "tool callback"],
+            ["runFromDirectory", "same-file helper", "helper call"],
+            [
+              "fork:options.cwd->relative-modulePath",
+              "options.cwd",
+              "relative entry point"
+            ],
+            ["relative modulePath", "relative child module", "child module"],
+            ["untrusted module load", "untrusted search path", "CWE-426"],
+            ["absolute modulePath", "file URL", "fixed working directory"]
+          ],
+          "forbiddenText": [
+            "cwd is itself JavaScript source",
+            "every fork cwd is vulnerable",
+            "the witness created attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fork-absolute-module",
+      "description": "The topology-matched MCP v2 control preserves tool-controlled cwd but uses a fixed file URL for the child module, even with a same-named alternate child in the requested directory.",
+      "fixture": "fixtures/node-mcp-v2-fork-absolute-module",
+      "findingsPaths": [
+        "node-mcp-v2-fork-absolute-module/run-1/findings.json",
+        "node-mcp-v2-fork-absolute-module/run-2/findings.json",
+        "node-mcp-v2-fork-absolute-module/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "node-mcp-v2-fork-node-options-injection",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into child_process.fork's exact NODE_OPTIONS environment property while the executable and module remain fixed.",
+      "fixture": "fixtures/node-mcp-v2-fork-node-options-injection",
+      "findingsPaths": [
+        "node-mcp-v2-fork-node-options-injection/run-1/findings.json",
+        "node-mcp-v2-fork-node-options-injection/run-2/findings.json",
+        "node-mcp-v2-fork-node-options-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-argument-injection",
+          "cwe": ["CWE-88", "CWE-94"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["nodeOptions", "tool input", "callback input"],
+            ["runWithNodeOptions", "same-file helper", "helper call"],
+            ["fork:options.env.NODE_OPTIONS", "options.env.NODE_OPTIONS"],
+            ["Node interpreter", "NODE_OPTIONS", "runtime environment"],
+            ["argument injection", "CWE-88", "CWE-94"],
+            [
+              "fixed NODE_OPTIONS",
+              "ordinary environment data",
+              "non-special environment variable"
+            ]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-with-node-options", "registerTool", "tool callback"],
+            ["runWithNodeOptions", "same-file helper", "helper call"],
+            ["fork:options.env.NODE_OPTIONS", "options.env.NODE_OPTIONS"],
+            ["Node interpreter", "NODE_OPTIONS", "runtime environment"],
+            ["argument injection", "code execution", "CWE-94"],
+            [
+              "fixed NODE_OPTIONS",
+              "ordinary environment data",
+              "non-special environment variable"
+            ]
+          ],
+          "forbiddenText": [
+            "every environment variable is a Node option",
+            "ordinary environment data executes code",
+            "the witness loaded external attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fork-environment-data",
+      "description": "The topology-matched MCP v2 control keeps the same option-looking tool value in a non-special environment variable while the module, executable, execArgv, and NODE_OPTIONS remain fixed.",
+      "fixture": "fixtures/node-mcp-v2-fork-environment-data",
+      "findingsPaths": [
+        "node-mcp-v2-fork-environment-data/run-1/findings.json",
+        "node-mcp-v2-fork-environment-data/run-2/findings.json",
+        "node-mcp-v2-fork-environment-data/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

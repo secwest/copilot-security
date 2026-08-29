@@ -4251,16 +4251,38 @@ const NODE_MCP_TOOL_ARGUMENT_FIELD_EVIDENCE_REQUIREMENTS = [
     "spawn",
     "fork",
     "execArgv",
+    "NODE_OPTIONS",
   ],
-  ["option region", "end-of-options", "execArgv", "argument injection"],
+  [
+    "option region",
+    "end-of-options",
+    "execArgv",
+    "NODE_OPTIONS",
+    "runtime environment",
+    "argument injection",
+  ],
   ["CWE-88", "CWE-94", "interpreter option", "code execution"],
 ] as const;
 
 const NODE_MCP_TOOL_MODULE_LOAD_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
-  ["child_process.fork", "fork modulePath", "modulePath", "child module"],
-  ["untrusted module load", "untrusted code", "executable module", "CWE-829"],
+  [
+    "child_process.fork",
+    "fork modulePath",
+    "modulePath",
+    "child module",
+    "relative entry point",
+    "options.cwd",
+  ],
+  [
+    "untrusted module load",
+    "untrusted search path",
+    "untrusted code",
+    "executable module",
+    "CWE-426",
+    "CWE-829",
+  ],
 ] as const;
 
 const NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS = [
@@ -46051,6 +46073,35 @@ function nodeMcpToolEvidenceRequirements(
         "fixed execPath",
         "process.execPath",
         "ordinary child argument",
+      ];
+      validation.push(boundary, control);
+      attackPath.push(boundary, control);
+    } else if (kind === "mcp-tool-fork-relative-cwd") {
+      const boundary = [
+        symbol,
+        "options.cwd",
+        "relative modulePath",
+        "relative entry point",
+      ];
+      const control = [
+        "absolute modulePath",
+        "file URL",
+        "fixed working directory",
+        "allowlisted working directory",
+      ];
+      validation.push(boundary, control);
+      attackPath.push(boundary, control);
+    } else if (kind === "mcp-tool-fork-node-options") {
+      const boundary = [
+        symbol,
+        "options.env.NODE_OPTIONS",
+        "NODE_OPTIONS",
+        "runtime environment",
+      ];
+      const control = [
+        "fixed NODE_OPTIONS",
+        "ordinary environment data",
+        "non-special environment variable",
       ];
       validation.push(boundary, control);
       attackPath.push(boundary, control);

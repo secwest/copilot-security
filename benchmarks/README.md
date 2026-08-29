@@ -279,8 +279,8 @@ node ../../benchmarks/run-benchmark.mjs `
 
 ## Node MCP tool-handler security benchmark
 
-`node-mcp-tool-security-manifest.json` measures tool input across nine distinct
-model families and fifteen matched pairs under perfect selected-run
+`node-mcp-tool-security-manifest.json` measures tool input across seventeen
+distinct modeled boundaries and seventeen matched pairs under perfect selected-run
 gates. The command pair uses
 the real stable `@modelcontextprotocol/server` 2.0.0 API: the exploit carries a
 tool field through an arrow helper into `child_process.exec`, while its
@@ -311,6 +311,15 @@ executable to `process.execPath`, preserving the identical module- or
 executable-looking value only as ordinary child data. The module row reports
 CWE-829 without overclaiming attacker code placement; the executable row
 reports CWE-78 without confusing program selection with argument injection.
+Two execution-context pairs then cover indirect redirection. One preserves a
+fixed relative child entry point while tool input selects `options.cwd`; its
+file-URL control includes a same-named alternate child but proves the fixed
+module still runs. The other places tool input in exact
+`options.env.NODE_OPTIONS` under the default Node runtime; its control passes
+the same option-looking text through a non-special environment key. The model
+accepts a preceding `process.env` spread whose value is overwritten by the
+explicit final `NODE_OPTIONS`, but rejects following spreads, computed or
+duplicate relevant properties, dynamic options, and unknown custom runtimes.
 The code-evaluation pair carries an expression through a same-file
 helper into direct JavaScript `eval`; its control preserves expression input,
 the helper, arithmetic results, and the MCP response while an explicit numeric
@@ -347,9 +356,11 @@ load-generating patterns. The network witnesses use a
 random-port loopback listener, close it in all paths, and never contact an
 external or metadata address. The filesystem witnesses create and remove only
 fresh temporary trees containing synthetic marker data. Both SQLite pairs use
-only in-memory databases and fixed inert rows. The fork pair uses only the
+only in-memory databases and fixed inert rows. The fork pairs use only the
 inert `--stack-trace-limit=77` runtime option and private IPC; it never loads an
-external module or enables an inspector. Node CI executes all twenty-six
+external module or enables an inspector. The execution-context witnesses add
+only checked-in inert child modules and one checked-in preload that sets an
+in-memory marker. Node CI executes all thirty-four
 witnesses on Windows and Linux. Run the focused scanner benchmark with:
 
 ```powershell
@@ -358,7 +369,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-node-mcp-tools
 ```
 
-The versioned corpus currently contains 169 vulnerable/control pairs:
+The versioned corpus currently contains 173 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

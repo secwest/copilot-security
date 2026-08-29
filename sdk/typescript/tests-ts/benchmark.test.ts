@@ -545,6 +545,14 @@ describe("effectiveness benchmark", () => {
         "node-mcp-v2-fork-fixed-executable",
       ],
       [
+        "node-mcp-v2-fork-relative-cwd-module-hijack",
+        "node-mcp-v2-fork-absolute-module",
+      ],
+      [
+        "node-mcp-v2-fork-node-options-injection",
+        "node-mcp-v2-fork-environment-data",
+      ],
+      [
         "python-asyncssh-scp-download-path-traversal",
         "python-asyncssh-scp-repaired-control",
       ],

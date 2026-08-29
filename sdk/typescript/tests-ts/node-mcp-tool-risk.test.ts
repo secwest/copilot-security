@@ -103,6 +103,10 @@ describe("Node MCP tool-input security model", () => {
       "node-mcp-v2-fork-fixed-module",
       "node-mcp-v2-fork-exec-path-selection",
       "node-mcp-v2-fork-fixed-executable",
+      "node-mcp-v2-fork-relative-cwd-module-hijack",
+      "node-mcp-v2-fork-absolute-module",
+      "node-mcp-v2-fork-node-options-injection",
+      "node-mcp-v2-fork-environment-data",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -199,6 +203,22 @@ describe("Node MCP tool-input security model", () => {
       lineTolerance: 1,
     });
     expect(manifest.cases[29]?.expected).toEqual([]);
+    expect(manifest.cases[30]?.expected[0]).toMatchObject({
+      cwe: ["CWE-426", "CWE-829"],
+      acceptableSeverities: ["high", "medium"],
+      path: "src/server.mjs",
+      line: 9,
+      lineTolerance: 1,
+    });
+    expect(manifest.cases[31]?.expected).toEqual([]);
+    expect(manifest.cases[32]?.expected[0]).toMatchObject({
+      cwe: ["CWE-88", "CWE-94"],
+      acceptableSeverities: ["critical", "high"],
+      path: "src/server.mjs",
+      line: 11,
+      lineTolerance: 1,
+    });
+    expect(manifest.cases[33]?.expected).toEqual([]);
 
     const canonical = JSON.parse(
       await readFile(join(benchmarkRoot, "manifest.json"), "utf8"),
@@ -215,7 +235,7 @@ describe("Node MCP tool-input security model", () => {
         }>;
       }>;
     };
-    for (const index of [8, 10, 12, 20, 22, 24, 26, 28]) {
+    for (const index of [8, 10, 12, 20, 22, 24, 26, 28, 30, 32]) {
       const specializedCase = manifest.cases[index]!;
       const canonicalCase = canonical.cases.find(
         ({ id }) => id === specializedCase.id,
@@ -229,7 +249,8 @@ describe("Node MCP tool-input security model", () => {
     }
 
     for (const index of [
-      6, 7, 8, 9, 10, 11, 12, 13, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+      6, 7, 8, 9, 10, 11, 12, 13, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+      31, 32, 33,
     ]) {
       const fixture = join(
         benchmarkRoot,
@@ -263,6 +284,8 @@ describe("Node MCP tool-input security model", () => {
       [24, "node-mcp-tool-argument-injection"],
       [26, "node-mcp-tool-untrusted-module-load"],
       [28, "node-mcp-tool-command-injection"],
+      [30, "node-mcp-tool-untrusted-module-load"],
+      [32, "node-mcp-tool-argument-injection"],
     ] as const) {
       const vulnerable = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index]!.id),
@@ -331,6 +354,20 @@ describe("Node MCP tool-input security model", () => {
         expect(vulnerable).toContain("mcp-tool-fork-exec-path");
         expect(vulnerable).toContain("fork:options.execPath");
         expect(vulnerable).toContain("CWE-78");
+      }
+      if (index === 30) {
+        expect(vulnerable).toContain("mcp-tool-fork-relative-cwd");
+        expect(vulnerable).toContain(
+          "fork:options.cwd->relative-modulePath[0]",
+        );
+        expect(vulnerable).toContain("CWE-426");
+        expect(vulnerable).toContain("CWE-829");
+      }
+      if (index === 32) {
+        expect(vulnerable).toContain("mcp-tool-fork-node-options");
+        expect(vulnerable).toContain("fork:options.env.NODE_OPTIONS");
+        expect(vulnerable).toContain("CWE-88");
+        expect(vulnerable).toContain("CWE-94");
       }
       const control = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index + 1]!.id),
@@ -619,6 +656,142 @@ describe("Node MCP tool-input security model", () => {
     ];
     for (const body of rejectedExecPaths)
       expect(records(direct(body))).toEqual([]);
+  });
+
+  test("detects relative fork entry-point resolution through tool-controlled cwd", () => {
+    const direct = (body: string) =>
+      v2(body).replace(
+        'import { exec, execFile, spawn } from "node:child_process";',
+        'import { fork } from "node:child_process";',
+      );
+    const found = records(
+      direct(
+        '    return fork("./child.mjs", [], { cwd: command, execArgv: [] });',
+      ),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel).toMatchObject({
+      id: "node-mcp-tool-untrusted-module-load",
+      sink: {
+        kind: "mcp-tool-fork-relative-cwd",
+        symbol: "fork:options.cwd->relative-modulePath[0]",
+        cweIds: ["CWE-426", "CWE-829"],
+      },
+    });
+    expect(found[0]?.categories).toContain(
+      "broken-control:mcp-tool-fork-relative-module-cwd-not-fixed",
+    );
+
+    const positives = [
+      direct(
+        '    const cwd = command;\n    return fork("child.mjs", { "cwd": cwd, execArgv: [] });',
+      ),
+      v2(
+        '    return cp.fork("../child.cjs", [], { cwd: command, execArgv: [] });',
+      ).replace(
+        'import { exec, execFile, spawn } from "node:child_process";',
+        'import * as cp from "node:child_process";',
+      ),
+      v2(
+        '    return cp.fork(".\\\\child.cjs", [], { cwd: command, execArgv: [] });',
+      ).replace(
+        'import { exec, execFile, spawn } from "node:child_process";',
+        'const cp = require("child_process");',
+      ),
+      direct(
+        '    return fork("./child.mjs", [], { cwd: command, execPath: process.execPath, execArgv: [] });',
+      ),
+    ];
+    for (const source of positives) {
+      const rows = records(source);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.frameworkModel.sink.kind).toBe(
+        "mcp-tool-fork-relative-cwd",
+      );
+    }
+
+    const controls = [
+      '    return fork("/srv/child.mjs", [], { cwd: command, execArgv: [] });',
+      '    return fork("C:\\\\app\\\\child.mjs", [], { cwd: command, execArgv: [] });',
+      '    return fork("file:///srv/child.mjs", [], { cwd: command, execArgv: [] });',
+      '    return fork("node:fs", [], { cwd: command, execArgv: [] });',
+      '    return fork("https://example.invalid/child.mjs", [], { cwd: command, execArgv: [] });',
+      '    return fork(new URL("./child.mjs", import.meta.url), [], { cwd: command, execArgv: [] });',
+      '    return fork("./child.mjs", [command], { cwd: "/srv/app", execArgv: [] });',
+      '    return fork("./child.mjs", [], { cwd: command, execPath: "/usr/bin/custom", execArgv: [] });',
+      '    return fork("./child.mjs", [], { cwd: command, execPath: process.execPath, execPath: "/usr/bin/custom", execArgv: [] });',
+      '    return fork("./child.mjs", [], { cwd: command, get execPath() { return process.execPath; }, execArgv: [] });',
+      '    return fork("./child.mjs", [], { cwd: command, /* custom runtime */ "execPath": "/usr/bin/custom", execArgv: [] });',
+      '    const options = { cwd: command, execArgv: [] };\n    return fork("./child.mjs", [], options);',
+      '    return fork("./child.mjs", [], { ...options, cwd: command, execArgv: [] });',
+      '    return fork("./child.mjs", command, { cwd: command, execArgv: [] });',
+    ];
+    for (const body of controls) expect(records(direct(body))).toEqual([]);
+  });
+
+  test("detects tool-controlled NODE_OPTIONS in an exact fork environment", () => {
+    const direct = (body: string) =>
+      v2(body).replace(
+        'import { exec, execFile, spawn } from "node:child_process";',
+        'import { fork } from "node:child_process";',
+      );
+    const found = records(
+      direct(
+        '    return fork(new URL("./child.mjs", import.meta.url), [], { env: { ...process.env, NODE_OPTIONS: command }, execArgv: [] });',
+      ),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel).toMatchObject({
+      id: "node-mcp-tool-argument-injection",
+      sink: {
+        kind: "mcp-tool-fork-node-options",
+        symbol: "fork:options.env.NODE_OPTIONS",
+        cweIds: ["CWE-88", "CWE-94"],
+      },
+    });
+    expect(found[0]?.categories).toContain(
+      "broken-control:mcp-tool-fork-node-options-not-fixed",
+    );
+
+    const positives = [
+      direct(
+        '    return fork(new URL("./child.mjs", import.meta.url), { env: { "NODE_OPTIONS": command }, execArgv: [] });',
+      ),
+      direct(
+        '    const NODE_OPTIONS = command;\n    return fork(new URL("./child.mjs", import.meta.url), [], { env: { NODE_OPTIONS }, execArgv: [] });',
+      ),
+      direct(
+        '    return fork(new URL("./child.mjs", import.meta.url), [], { execPath: process.execPath, env: { NODE_OPTIONS: command }, execArgv: [] });',
+      ),
+      v2(
+        '    return cp.fork(new URL("./child.mjs", import.meta.url), [], { env: { NODE_OPTIONS: command }, execArgv: [] });',
+      ).replace(
+        'import { exec, execFile, spawn } from "node:child_process";',
+        'const cp = require("node:child_process");',
+      ),
+    ];
+    for (const source of positives) {
+      const rows = records(source);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.frameworkModel.sink.kind).toBe(
+        "mcp-tool-fork-node-options",
+      );
+    }
+
+    const controls = [
+      '    return fork(new URL("./child.mjs", import.meta.url), [], { env: { TOOL_INPUT: command }, execArgv: [] });',
+      '    return fork(new URL("./child.mjs", import.meta.url), [command], { env: { NODE_OPTIONS: "--no-warnings" }, execArgv: [] });',
+      '    return fork(new URL("./child.mjs", import.meta.url), [], { execPath: "/usr/bin/custom", env: { NODE_OPTIONS: command }, execArgv: [] });',
+      '    return fork(new URL("./child.mjs", import.meta.url), [], { execPath: process.execPath, execPath: "/usr/bin/custom", env: { NODE_OPTIONS: command }, execArgv: [] });',
+      '    return fork(new URL("./child.mjs", import.meta.url), [], { get execPath() { return process.execPath; }, env: { NODE_OPTIONS: command }, execArgv: [] });',
+      '    return fork(new URL("./child.mjs", import.meta.url), [], { /* custom runtime */ "execPath": "/usr/bin/custom", env: { NODE_OPTIONS: command }, execArgv: [] });',
+      '    const env = { NODE_OPTIONS: command };\n    return fork(new URL("./child.mjs", import.meta.url), [], { env, execArgv: [] });',
+      '    return fork(new URL("./child.mjs", import.meta.url), [], { env: { NODE_OPTIONS: command, ...process.env }, execArgv: [] });',
+      '    return fork(new URL("./child.mjs", import.meta.url), [], { env: { [name]: fixed, NODE_OPTIONS: command }, execArgv: [] });',
+      '    return fork(new URL("./child.mjs", import.meta.url), [], { env: { NODE_OPTIONS: fixed, NODE_OPTIONS: command }, execArgv: [] });',
+      '    return fork(new URL("./child.mjs", import.meta.url), [], { ...options, env: { NODE_OPTIONS: command }, execArgv: [] });',
+    ];
+    for (const body of controls) expect(records(direct(body))).toEqual([]);
   });
 
   test("preserves Node interpreter-option injection through a stable runtime alias", () => {
@@ -2680,7 +2853,7 @@ function runFork(option: string) {
     }
   });
 
-  test("requires fork modulePath and execPath role-specific closure", async () => {
+  test("requires fork role and execution-context-specific closure", async () => {
     const cases = [
       {
         id: "module",
@@ -2697,6 +2870,25 @@ function runFork(option: string) {
         missing: ["fork:options.execPath", "fixed execPath"],
         closure:
           "An MCP client supplies tool input command through an inputSchema-validated registerTool tool callback. Exact child_process.fork performs executable selection through fork:options.execPath in options.execPath, so the value selects the child executable under CWE-78. The matched control uses fixed execPath equal to process.execPath and keeps the same value only as an ordinary child argument.",
+      },
+      {
+        id: "relative-cwd",
+        body: '    return fork("./child.mjs", [], { cwd: command, execArgv: [] });',
+        cwe: ["CWE-426", "CWE-829"],
+        missing: [
+          "fork:options.cwd->relative-modulePath[0]",
+          "absolute modulePath",
+        ],
+        closure:
+          "An MCP client supplies tool input command through an inputSchema-validated registerTool tool callback. Exact child_process.fork receives that tool input in fork:options.cwd->relative-modulePath[0] options.cwd, which resolves the fixed relative modulePath child module as a relative entry point through an untrusted search path and untrusted module load under CWE-426 and CWE-829. The matched control uses an absolute modulePath file URL or a fixed allowlisted working directory.",
+      },
+      {
+        id: "node-options",
+        body: '    return fork(new URL("./child.mjs", import.meta.url), [], { env: { ...process.env, NODE_OPTIONS: command }, execArgv: [] });',
+        cwe: ["CWE-88", "CWE-94"],
+        missing: ["fork:options.env.NODE_OPTIONS", "fixed NODE_OPTIONS"],
+        closure:
+          "An MCP client supplies tool input command through an inputSchema-validated registerTool tool callback. Exact child_process.fork starts the Node interpreter with fork:options.env.NODE_OPTIONS in options.env.NODE_OPTIONS. That runtime environment remains in the Node option region and permits NODE_OPTIONS argument injection and code execution under CWE-88 and CWE-94. The matched control uses fixed NODE_OPTIONS or keeps the same value only as ordinary environment data in a non-special environment variable.",
       },
     ] as const;
     for (const testCase of cases) {
@@ -3377,6 +3569,13 @@ function runFork(option: string) {
     expect(prompt).toContain("fork:options.execPath symbol");
     expect(prompt).toContain("report CWE-78 without CWE-88");
     expect(prompt).toContain("current process.execPath");
+    expect(prompt).toContain("mcp-tool-fork-relative-cwd");
+    expect(prompt).toContain("options.cwd->relative-modulePath symbol");
+    expect(prompt).toContain("CWE-426 and CWE-829");
+    expect(prompt).toContain("mcp-tool-fork-node-options");
+    expect(prompt).toContain("options.env.NODE_OPTIONS symbol");
+    expect(prompt).toContain("preceding process.env spread");
+    expect(prompt).toContain("following spread is ambiguous");
     expect(prompt).toContain("end-of-options");
     expect(prompt).toContain("node:vm is not a security mechanism");
     expect(prompt).toContain("inert construction");

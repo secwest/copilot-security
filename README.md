@@ -617,8 +617,8 @@ node benchmarks/run-benchmark.mjs `
 ```
 
 The Node MCP tool-handler lane uses the real stable TypeScript server package
-and separates nine tool-controlled model families across fifteen matched
-pairs. One pair contrasts a tool
+and separates seventeen tool-controlled execution and data boundaries across
+seventeen matched pairs. One pair contrasts a tool
 field reaching a shell command with an explicit end-of-options argv control.
 A second proves that fixed `process.execPath` is still unsafe when a
 dash-prefixed tool value appears before `--`, then preserves it as data in the
@@ -639,7 +639,18 @@ object-literal `options.execPath`. Their controls keep the module fixed or
 allowlisted, pin the executable to `process.execPath`, and pass the same
 module- or executable-looking bytes only as ordinary child arguments. The
 module boundary is CWE-829; executable selection is CWE-78 and not an
-`execArgv`/CWE-88 finding. A third contrasts direct
+`execArgv`/CWE-88 finding. Two execution-context pairs cover fixed-looking fork
+calls that remain redirectable. The first requires a fixed relative
+`modulePath` and tool-controlled `options.cwd`, reporting the resulting
+untrusted search path/module load as CWE-426/CWE-829; its control uses a file
+URL and proves that a same-named alternate child in the selected directory is
+not loaded. The second requires tool input in exact
+`options.env.NODE_OPTIONS` with the default or a proved `process.execPath`
+runtime, reporting CWE-88/CWE-94; its control preserves identical
+option-looking text in a non-special environment variable. A preceding
+`process.env` spread is accepted only when the explicit `NODE_OPTIONS` value
+wins, while following spreads, dynamic options, duplicate relevant properties,
+and unknown custom executables remain unresolved. A third contrasts direct
 JavaScript evaluation with a fixed arithmetic
 grammar that preserves useful calculation without treating the tool string as
 source. A fourth preserves compiled-Function invocation on both sides while

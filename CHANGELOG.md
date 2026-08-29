@@ -6,6 +6,38 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed two indirect `child_process.fork` execution-context gaps for official
+  MCP tool-input flows. A fixed non-absolute `modulePath` combined with
+  tool-controlled exact `options.cwd` now emits
+  `mcp-tool-fork-relative-cwd` as
+  `node-mcp-tool-untrusted-module-load` with CWE-426/CWE-829. Exact
+  `options.env.NODE_OPTIONS` under fork's default Node executable or a proved
+  `process.execPath` now emits `mcp-tool-fork-node-options` as
+  `node-mcp-tool-argument-injection` with CWE-88/CWE-94. These paths expose
+  fixed-looking calls whose child code can still be redirected without
+  tainting `modulePath`, `execPath`, or `execArgv` directly.
+- Kept both context models role- and identity-sensitive. Absolute paths, file
+  URLs, fixed working directories, ordinary environment values, fixed
+  `NODE_OPTIONS`, and unknown custom executables remain controls. Exact
+  options objects are required; aliases, unsupported overloads, computed or
+  duplicate relevant properties, and ambiguous executable identity suppress
+  the structured row. An inner `env` literal may spread `process.env` before
+  an explicit `NODE_OPTIONS` because the latter wins, but a following spread
+  remains ambiguous. Explicit Node-runtime bindings retain their exact
+  `node:process` and runtime-alias provenance.
+- Added two frozen MCP SDK 2.0.0/Zod 4.4.3 exploit/control pairs. The cwd
+  witness selects one checked-in inert child through a relative entry point;
+  its file-URL control includes a same-named alternate child in the selected
+  directory and still runs the fixed module. The `NODE_OPTIONS` witness loads
+  one checked-in inert preload that sets only an in-memory child marker; its
+  control preserves the same option-looking bytes in a non-special
+  environment variable. All four witnesses pass on Windows and WSL without a
+  shell, external code, network, credentials, persistence, or privileged
+  effects. The focused model/benchmark gate passes 93 tests and 3,416
+  assertions. The strict MCP lane now contains 34 cases across 17 pairs; the
+  canonical corpus contains 173 pairs, 346 cases, and 1,038 repeated
+  positions. Hosted Node CI schedules all 34 MCP witnesses on Ubuntu and
+  Windows, expanding the matrix from 67 to 75 jobs.
 - Made `child_process.fork` role-aware for official MCP tool-input flows.
   Argument zero now emits `node-mcp-tool-untrusted-module-load` at the exact
   `fork:modulePath[0]` boundary with CWE-829, while exact object-literal

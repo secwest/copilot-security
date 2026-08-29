@@ -742,6 +742,116 @@
       "id": "node-mcp-v2-fork-fixed-executable",
       "fixture": "fixtures/node-mcp-v2-fork-fixed-executable",
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-fork-relative-cwd-module-hijack",
+      "fixture": "fixtures/node-mcp-v2-fork-relative-cwd-module-hijack",
+      "expected": [
+        {
+          "title": "MCP tool input redirects a relative fork module through options.cwd",
+          "cwe": ["CWE-426", "CWE-829"],
+          "acceptableSeverities": ["high", "medium"],
+          "path": "src/server.mjs",
+          "line": 9,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["cwd", "tool input", "callback input"],
+            ["runFromDirectory", "same-file helper", "helper call"],
+            [
+              "fork:options.cwd->relative-modulePath",
+              "options.cwd",
+              "relative entry point"
+            ],
+            ["relative modulePath", "relative child module", "child module"],
+            ["untrusted search path", "CWE-426", "CWE-829"],
+            ["absolute modulePath", "file URL", "fixed working directory"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-from-directory", "registerTool", "tool callback"],
+            ["runFromDirectory", "same-file helper", "helper call"],
+            [
+              "fork:options.cwd->relative-modulePath",
+              "options.cwd",
+              "relative entry point"
+            ],
+            ["relative modulePath", "relative child module", "child module"],
+            ["untrusted module load", "untrusted search path", "CWE-426"],
+            ["absolute modulePath", "file URL", "fixed working directory"]
+          ],
+          "forbiddenText": [
+            "cwd is itself JavaScript source",
+            "every fork cwd is vulnerable",
+            "the witness created attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fork-absolute-module",
+      "fixture": "fixtures/node-mcp-v2-fork-absolute-module",
+      "expected": []
+    },
+    {
+      "id": "node-mcp-v2-fork-node-options-injection",
+      "fixture": "fixtures/node-mcp-v2-fork-node-options-injection",
+      "expected": [
+        {
+          "title": "MCP tool input reaches the forked Node runtime through NODE_OPTIONS",
+          "cwe": ["CWE-88", "CWE-94"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/server.mjs",
+          "line": 11,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["nodeOptions", "tool input", "callback input"],
+            ["runWithNodeOptions", "same-file helper", "helper call"],
+            ["fork:options.env.NODE_OPTIONS", "options.env.NODE_OPTIONS"],
+            ["Node interpreter", "NODE_OPTIONS", "runtime environment"],
+            ["argument injection", "CWE-88", "CWE-94"],
+            [
+              "fixed NODE_OPTIONS",
+              "ordinary environment data",
+              "non-special environment variable"
+            ]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-with-node-options", "registerTool", "tool callback"],
+            ["runWithNodeOptions", "same-file helper", "helper call"],
+            ["fork:options.env.NODE_OPTIONS", "options.env.NODE_OPTIONS"],
+            ["Node interpreter", "NODE_OPTIONS", "runtime environment"],
+            ["argument injection", "code execution", "CWE-94"],
+            [
+              "fixed NODE_OPTIONS",
+              "ordinary environment data",
+              "non-special environment variable"
+            ]
+          ],
+          "forbiddenText": [
+            "every environment variable is a Node option",
+            "ordinary environment data executes code",
+            "the witness loaded external attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fork-environment-data",
+      "fixture": "fixtures/node-mcp-v2-fork-environment-data",
+      "expected": []
     }
   ]
 }

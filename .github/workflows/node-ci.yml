@@ -169,6 +169,10 @@ jobs:
           - node-mcp-v2-fork-fixed-module
           - node-mcp-v2-fork-exec-path-selection
           - node-mcp-v2-fork-fixed-executable
+          - node-mcp-v2-fork-relative-cwd-module-hijack
+          - node-mcp-v2-fork-absolute-module
+          - node-mcp-v2-fork-node-options-injection
+          - node-mcp-v2-fork-environment-data
 
     steps:
       - name: Checkout repository

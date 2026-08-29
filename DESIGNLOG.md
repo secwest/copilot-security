@@ -2,6 +2,89 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Model fork execution-context redirection
+
+**Counterexample and authoritative semantics.** The direct-role model made a
+fixed `modulePath`, fixed `execPath`, and fixed `execArgv` look sufficient, but
+two executable counterexamples remained. Node documents `options.cwd` as the
+child working directory and separately states that a non-absolute program
+entry point is resolved relative to the current working directory. A caller
+that controls `cwd` can therefore select a different same-named child while
+argument zero remains a fixed relative string. Node also documents
+`NODE_OPTIONS` as a space-separated set of runtime options, including
+repeatable `--require` and `--import` preloads, processed before command-line
+options. Supplying tool input through the fork environment can therefore alter
+the Node runtime before the fixed module starts.
+
+The relevant primary references are Node's
+[`child_process.fork`](https://nodejs.org/api/child_process.html#child_processforkmodulepath-args-options),
+[`program entry point`](https://nodejs.org/api/cli.html#program-entry-point), and
+[`NODE_OPTIONS`](https://nodejs.org/api/cli.html#node_optionsoptions) contracts.
+Current CodeQL documentation describes generic JavaScript
+[command-line injection](https://codeql.github.com/codeql-query-help/javascript/js-command-line-injection/)
+and [indirect command-line injection](https://codeql.github.com/codeql-query-help/javascript/js-indirect-command-line-injection/),
+but does not document either fork-specific context composition. The current
+public Semgrep MCP [rule request](https://github.com/semgrep/semgrep-rules/issues/3873)
+similarly asks for generic MCP command-injection and SSRF coverage. This is a
+documented comparison boundary, not a claim that no configurable query can
+ever infer the path.
+
+**Classification.** Tool-controlled `cwd` is not itself executable content.
+The reportable condition requires the conjunction of a live official fork,
+the default or a proved Node executable, a fixed non-absolute program entry
+point, and tool input in exact `options.cwd`. The resulting
+`mcp-tool-fork-relative-cwd` row retains
+`node-mcp-tool-untrusted-module-load`: [CWE-426](https://cwe.mitre.org/data/definitions/426.html)
+captures externally supplied search-path control, while CWE-829 captures the
+selected executable child module. It does not claim that the caller created a
+module or that an arbitrary attacker payload already exists.
+
+Tool-controlled exact `options.env.NODE_OPTIONS` emits
+`mcp-tool-fork-node-options` in `node-mcp-tool-argument-injection` with
+CWE-88/CWE-94. This classification records control of Node's option grammar
+and its documented code-preload capability. It does not treat every
+environment variable as executable, and concrete filesystem, network,
+credential, persistence, privilege, or deployment effects still require
+separate evidence.
+
+**Structural and precision boundary.** Both paths require a live direct or
+namespace binding from exactly `node:child_process` or `child_process`, a
+supported fork overload, and exact object-literal options. Cwd inference
+accepts quoted relative entry points including slash- and backslash-oriented
+forms but rejects POSIX absolute paths, drive-absolute paths, UNC paths, file
+URLs, scheme URLs, and nonliteral expressions. NODE_OPTIONS inference accepts
+plain, quoted, or shorthand exact properties in an exact inner `env` literal.
+A spread before explicit `NODE_OPTIONS` is safe to model because the explicit
+property deterministically overwrites it; any following spread, computed
+property, duplicate target, getter/setter target, env alias, or dynamic
+options object remains unresolved. If `execPath` is present, the model
+requires the same exact live `process.execPath` proof used by the direct
+runtime lane. Duplicate or accessor-style `execPath` cannot masquerade as an
+absent property, and explicit runtime provenance is retained in the path.
+
+**Host closure and safe witnesses.** Validation and attack-path enforcement
+requires the exact `options.cwd->relative-modulePath` or
+`options.env.NODE_OPTIONS` symbol in both fields plus its topology-matched
+control. Cwd review must distinguish an absolute file URL or fixed allowlisted
+working directory. Runtime-environment review must distinguish fixed
+NODE_OPTIONS and the identical value in a non-special environment variable.
+The cwd positive runs one checked-in inert child from a selected fixture
+directory; the control places a same-named alternate child there but runs a
+fixed file-URL module. The NODE_OPTIONS positive uses only a checked-in inert
+preload that sets an in-memory marker; its control carries the same text as
+ordinary environment data. Every fork uses private IPC and a two-second
+timeout. No shell, external module, network endpoint, credential, persistence
+mechanism, or privileged effect participates.
+
+**Initial acceptance.** All four witnesses pass on Windows and WSL. The
+combined MCP model and benchmark regression passes 93 tests and 3,416
+assertions. Independent host inventory assertions retain only the two positive
+rows and no `node-mcp-tool-*` row for either control. The strict MCP corpus now
+contains 34 cases across 17 pairs; the canonical corpus contains 173 pairs,
+346 cases, and 1,038 repeated positions. Hosted Node CI schedules the four new
+witnesses on Ubuntu and Windows, expanding the expected matrix from 67 to 75
+jobs.
+
 ## 2026-08-28 — Model every child_process.fork execution role
 
 **Comparative gap.** Node documents
