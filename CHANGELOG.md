@@ -55,6 +55,13 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `benchmark.test.ts` block. The Prettier-only change retains all 18 benchmark
   tests and 2,556 assertions; generated-model drift, TypeScript, and the clean
   build pass again before the corrective checkpoint.
+- All eleven hosted workflow families pass corrective checkpoint `5289134`:
+  Node `33261879992`, container `33261880000`, Windows GUI `33261879987`,
+  Linux GUI `33261880049`, Java `33261879990`, Kotlin `33261879983`, .NET
+  `33261880036`, Go `33261880017`, Rust `33261880105`, Ruby `33261879965`,
+  and PHP `33261880064`. All 91 Node jobs pass; every core Windows, macOS, and
+  Ubuntu job passes formatting, build, package inspection, and isolated CLI
+  smoke after its complete scanner suite.
 - Added a lower-level Java R2DBC SPI SQL model for all six official grammar
   boundaries: `Connection.createStatement`, `Batch.add`, the three
   savepoint-name operations, and `Statement.returnGeneratedValues`. Exact

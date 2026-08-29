@@ -83,6 +83,15 @@ assertions; generated-model drift, TypeScript checking, and the clean build
 pass before the corrective checkpoint. This is presentation-only and does not
 change the measured implementation checkpoint or its inventory evidence.
 
+All hosted workflow families pass against corrective checkpoint
+`52891344203f1cc491eb61c8757beb7b0055650d`: Node `33261879992`, container
+`33261880000`, Windows GUI `33261879987`, Linux GUI `33261880049`, Java
+`33261879990`, Kotlin `33261879983`, .NET `33261880036`, Go `33261880017`,
+Rust `33261880105`, Ruby `33261879965`, and PHP `33261880064`. All 91 Node
+jobs pass. Each of the seven core Windows, macOS, and supported Ubuntu/Node
+jobs passes its complete scanner suite followed by formatting, clean build,
+package inspection, and isolated installed-CLI smoke validation.
+
 ## 2026-08-29 — Close lower-level R2DBC SPI grammar through execution
 
 **Measured miss and authoritative boundary.** The previously compiled scanner
