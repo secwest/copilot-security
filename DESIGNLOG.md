@@ -69,6 +69,12 @@ Production audit finds no known vulnerability. Strict package inspection
 accepts 299 entries and an isolated install validates the public import, CLI,
 and all 79 bundled-plugin files. The archive is 2,355,981 bytes with SHA-256
 `bbf920709c8f2597899c0768389e9016d76dc28a6403a0848e2bec91781754bd`.
+All eleven hosted workflow families pass at implementation revision
+`f5edfe61d3a1017bdf39195cd1577b09c9234986`: Node `33226781592`, container
+`33226781570`, Linux GUI `33226781584`, Windows GUI `33226781586`, Go
+`33226781569`, Java `33226781583`, Kotlin `33226781575`, .NET `33226781600`,
+Rust `33226781589`, Ruby `33226781576`, and PHP `33226781573`. Node CI passes
+all 55 jobs, including both new witnesses on Ubuntu and Windows.
 
 ## 2026-08-28 — Preserve exact Node runtime identity through one stable alias
 
