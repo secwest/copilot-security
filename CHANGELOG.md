@@ -25,6 +25,30 @@ All notable scanner, application, benchmark, and operational changes are recorde
   The canonical benchmark advances to 177 pairs, 354 cases, and 1,062 repeated
   positions. Four additional Ubuntu/Windows witness jobs expand the expected
   hosted Node matrix to 91 jobs.
+- Completed local routed-wrapper acceptance. The focused Windows lane passes 94
+  tests and 3,644 assertions with one intentional symlink skip; WSL passes all
+  95 tests and 3,645 assertions, and both hosts pass both executable witnesses.
+  The managed aggregate selects 2,045 tests: 2,016 pass, 27 intentionally skip,
+  and only the two established temporary-Git and private-ACL operations are
+  denied; their exact native reruns pass 2/2 with seven assertions. Formatting,
+  generated-model drift, TypeScript, the clean build, and the production audit
+  pass.
+- Two compiled inventories of exact implementation checkpoint
+  `c6ff1836041bf0f48d452a60c409e016d3c5f38c` are byte-identical at 256 records,
+  587,051 bytes, and SHA-256
+  `c416874bd0aaa662344779fcf7fa83368c141f319d4a99bd112ba13654054185`.
+  The 245 structured records include exactly the original same-file and new
+  wrapper Sails rows; the fixed wrapper emits none. Windows and Linux validate
+  the same 299-entry, 2,379,258-byte package with SHA-256
+  `20beb699c62923f899cd892a1166157fab2fe001992e42eecc45d35db2048189`,
+  fresh public import, CLI execution, and all 79 bundled plugin files.
+- All eleven hosted workflow families pass at implementation checkpoint
+  `c6ff183`: Node `33247742943`, container `33247742932`, Linux GUI
+  `33247742994`, Windows GUI `33247742976`, Go `33247743005`, Java
+  `33247742968`, Kotlin `33247742929`, .NET `33247742971`, Rust `33247742962`,
+  Ruby `33247742939`, and PHP `33247742977`. All 91 Node jobs pass, including
+  the original and wrapper Sails exploit/control witnesses on Ubuntu and
+  Windows.
 - Closed the Sails.js Action2 request-source false negative for Node filesystem
   paths. Exported action objects under `api/controllers` now treat only reads
   of properties declared by the same object-valued `inputs` block from the

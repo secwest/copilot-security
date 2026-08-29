@@ -53,9 +53,41 @@ checked-in `SAILS_ACTION2_WRAPPER_VICTIM_MARKER`; the control wrapper selects
 only `cover-256.jpg`. Both are dependency-free, read-only, network-free, and
 cross-platform. Direct regressions additionally cover direct and object-valued
 custom routes, literal blueprint enablement, false and dynamic exposure,
-unexposed controllers, helper lookalikes, and a two-relay path. The canonical
-corpus is now 177 pairs, 354 cases, and 1,062 repeated positions; hosted Node CI
-adds four Ubuntu/Windows wrapper witness jobs.
+unexposed controllers, helper lookalikes, a conflicting `.js`/`.cjs`
+configuration pair, and a two-relay path. The canonical corpus is now 177
+pairs, 354 cases, and 1,062 repeated positions; hosted Node CI adds four
+Ubuntu/Windows wrapper witness jobs.
+
+**Acceptance evidence.** The focused model, canonical benchmark, and residual-
+risk lane passes 94 tests and 3,644 assertions on Windows with one intentional
+symlink skip; native WSL passes all 95 tests and 3,645 assertions. Both hosts
+pass the positive and fixed executable witnesses. The complete managed Windows
+run selects 2,045 tests across 210 files: 2,016 pass, 27 intentionally skip,
+and only the two established temporary-Git and private-ACL operations are
+denied by the managed boundary. Those exact tests pass 2/2 with seven
+assertions under their intended native filesystem permissions. Formatting,
+generated-model drift, TypeScript checking, the clean production build, and
+the production advisory audit are green.
+
+Two compiled inventories of an exact `c6ff1836041bf0f48d452a60c409e016d3c5f38c`
+archive are byte-identical: 256 JSONL records, 587,051 bytes, SHA-256
+`c416874bd0aaa662344779fcf7fa83368c141f319d4a99bd112ba13654054185`.
+All 245 structured rows survive ahead of 11 lexical leads, with 223 fixture and
+33 non-fixture rows. Exactly two routed Sails records remain: the original
+same-file case and the new cross-file wrapper with its route, import, argument,
+and parameter provenance; the fixed wrapper emits none. Windows and Linux
+strictly validate the same 299-entry, 2,379,258-byte npm archive with SHA-256
+`20beb699c62923f899cd892a1166157fab2fe001992e42eecc45d35db2048189`,
+including fresh installed public import, CLI execution, and all 79 bundled
+plugin files.
+
+Hosted acceptance is fully green at implementation checkpoint `c6ff183`: Node
+`33247742943`, container `33247742932`, Linux GUI `33247742994`, Windows GUI
+`33247742976`, Go `33247743005`, Java `33247742968`, Kotlin `33247742929`,
+.NET `33247742971`, Rust `33247742962`, Ruby `33247742939`, and PHP
+`33247742977`. The Node matrix completes all 91 jobs with zero failures,
+including the original and wrapper Sails exploit/control witnesses on Ubuntu
+and Windows.
 
 ## 2026-08-29 — Model declared Sails Action2 request inputs
 
