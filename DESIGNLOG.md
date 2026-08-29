@@ -2,6 +2,63 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Distinguish stale SARIF locations from unreadable evidence
+
+**Audit result.** After making deterministic source discovery fail closed, a
+repository-wide review of production `readdir`, `readFile`, `lstat`, and
+`realpath` recovery paths found one remaining scan-relevant catch that could
+convert a host failure into reduced coverage. External SARIF normalization
+used to map every `lstat` failure for a referenced repository path to `null`.
+The caller then counted that analyzer result as ignored. An inaccessible file
+was therefore indistinguishable from a stale finding whose file had actually
+been deleted.
+
+This is the external-enrichment analogue of extractor health. GitHub's
+[CodeQL extraction diagnostics guidance](https://docs.github.com/en/code-security/reference/code-scanning/troubleshoot-analysis-errors/extraction-errors-in-the-database)
+states that extraction failures indicate which source files could not be
+scanned, and its
+[SARIF support contract](https://docs.github.com/en/enterprise-cloud@latest/code-security/reference/code-scanning/sarif-files/sarif-support)
+uses physical artifact locations to associate results with repository code.
+The local policy below is an inference for Copilot Security's enrichment
+pipeline, not a claim that GitHub rejects every stale SARIF location.
+
+**Accepted boundary.** An exact `ENOENT` at the first metadata lookup remains
+non-fatal. SARIF is often generated against a nearby checkout or commit, so a
+deleted location can legitimately be unavailable while other seeds remain
+useful. Every other metadata failure now raises `SourceDiscoveryError` with
+operation `inspect`, a bounded repository-relative path, and the original
+filesystem failure as its cause. Symlinks, non-files, out-of-root locations,
+invalid URI shapes, and out-of-range lines retain their existing deliberate
+rejection behavior. Later canonicalization and content-read failures already
+propagated and remain fatal.
+
+**Differential evidence.** The portable control adds a missing location beside
+a valid seed and verifies that the valid candidate survives while the stale
+row is counted as ignored. The POSIX fault injects mode `000` on the parent of
+a referenced source file beside an accessible peer and runs only as a non-root
+process; the old scanner completed with only the accessible seed and counted
+the blocked row as ignored, while the revised scanner returns the typed
+incomplete-coverage error for `blocked/handler.ts`. Windows
+passes the focused SARIF and candidate-normalization lane with 10 tests and two
+intentional platform skips. Ubuntu/WSL executes both POSIX cases and passes all
+12 tests with 35 assertions. The canonical vulnerability corpus is unchanged
+at 182 exploit/control pairs because this increment hardens evidence ingestion
+rather than adding a vulnerability model.
+
+**Acceptance and distribution.** The authoritative real-user Windows suite
+passes 2,062 tests and 16,056 assertions across 214 files in 713.50 seconds,
+with 30 intentional platform/environment skips and zero failures. A preceding
+restricted-sandbox run reached 2,060 passes; its benchmark Git fixture could
+not retain the injected `safe.directory` when replacing its environment, and
+its Copilot-home test could not read the host profile. Both owner-dependent
+tests pass outside that sandbox. Formatting, generated-model drift,
+TypeScript, and the production build pass. The 299-entry npm archive is
+2,376,862 bytes with SHA-256
+`8e417b502778c6b52e886c9d2cece6b312ae9eb4740a49053f7b85f27fe8c4c3`;
+strict archive inspection and isolated installation validate the public
+import, executable CLI, and all 79 bundled plugin files. The production
+dependency audit reports no known vulnerabilities.
+
 ## 2026-08-29 — Make source loss an explicit incomplete scan
 
 **Measured failure and comparator signal.** A real Ubuntu/WSL reproduction ran

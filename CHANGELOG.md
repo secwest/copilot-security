@@ -6,6 +6,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed the remaining scan-relevant filesystem swallow found by a
+  repository-wide ingestion audit. External SARIF enrichment now treats only
+  an exact `ENOENT` as an expected stale/deleted artifact location. Permission,
+  device, and transient metadata failures raise a path-specific
+  `SourceDiscoveryError` instead of silently discarding an analyzer seed and
+  making reduced coverage look clean.
+- Preserved interoperability for SARIF produced against a changing checkout:
+  a genuinely absent referenced file remains an ignored result, while an
+  unobservable file fails the scan as incomplete. The cross-platform control
+  adds an absent location beside a valid seed; an unprivileged Ubuntu/WSL
+  fault-injection test removes traversal permission from a referenced source
+  directory and verifies the typed `inspect` failure. The focused Windows lane
+  passes 10 tests with two intentional platform skips and the Linux lane passes
+  all 12 tests with 35 assertions.
+- Completed the authoritative Windows acceptance pass with 2,062 tests and
+  16,056 assertions passing across 214 files in 713.50 seconds, 30 intentional
+  platform/environment skips, and zero failures. A restricted-sandbox pass
+  separately confirmed 2,060 tests before its two expected owner/profile
+  constraints; both pass in the authoritative real-user lane. The release
+  archive retains 299 entries, validates isolated public import, CLI execution,
+  and all 79 bundled plugin files, and is 2,376,862 bytes with SHA-256
+  `8e417b502778c6b52e886c9d2cece6b312ae9eb4740a49053f7b85f27fe8c4c3`.
+  The production dependency audit reports no known vulnerabilities.
 - Closed a clean-looking partial-scan failure mode in deterministic source
   discovery. Repository directory enumeration and reads of selected source
   files now fail closed with a bounded, path-specific incomplete-scan error

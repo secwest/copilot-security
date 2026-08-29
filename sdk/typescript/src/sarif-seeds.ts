@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SourceDiscoveryError } from "./errors.js";
 
 const MAX_SARIF_BYTES = 20 * 1024 * 1024;
 const MAX_SARIF_FILES = 32;
@@ -549,7 +550,14 @@ async function normalizeLocation(
     return null;
   const repositoryPath = sarifUriToRepositoryPath(uri, context);
   if (repositoryPath === null) return null;
-  const metadata = await lstat(repositoryPath).catch(() => null);
+  const metadata = await lstat(repositoryPath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new SourceDiscoveryError(
+      "inspect",
+      repositoryRelativePath(context.repository, repositoryPath),
+      { cause: error },
+    );
+  });
   if (metadata === null || metadata.isSymbolicLink() || !metadata.isFile())
     return null;
   const canonical = await realpath(repositoryPath);
@@ -577,6 +585,11 @@ async function normalizeLocation(
   }
   if (startLine > lineCount || endLine > lineCount) return null;
   return { path: relativePath, start_line: startLine, end_line: endLine, role };
+}
+
+function repositoryRelativePath(repository: string, path: string): string {
+  const repositoryPath = relative(repository, path).split(sep).join("/");
+  return repositoryPath || ".";
 }
 
 function sarifUriToRepositoryPath(

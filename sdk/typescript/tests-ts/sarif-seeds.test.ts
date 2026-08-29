@@ -1,4 +1,5 @@
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -17,6 +18,7 @@ import {
   prepareSarifSeeds,
   writePreparedSarifSeeds,
 } from "../src/sarif-seeds.js";
+import { SourceDiscoveryError } from "../src/errors.js";
 
 const temporaryDirectories: string[] = [];
 const testPosix = process.platform === "win32" ? test.skip : test;
@@ -193,6 +195,10 @@ describe("external SARIF candidate seeds", () => {
           },
           {
             ruleIndex: 0,
+            locations: [location("src/deleted.ts", 1)],
+          },
+          {
+            ruleIndex: 0,
             locations: [location("src/server.ts", 2)],
           },
         ]),
@@ -201,13 +207,55 @@ describe("external SARIF candidate seeds", () => {
 
     const prepared = await prepareSarifSeeds([sarif], repository);
     expect(prepared.candidates).toHaveLength(1);
-    expect(prepared.ignoredResultCount).toBe(3);
+    expect(prepared.ignoredResultCount).toBe(4);
     expect(prepared.sourceRecords[0]).toMatchObject({
-      resultCount: 4,
+      resultCount: 5,
       importedCount: 1,
-      ignoredCount: 3,
+      ignoredCount: 4,
     });
   });
+
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "fails closed when a SARIF location cannot be inspected",
+    async () => {
+      const { repository, sarif } = await fixture();
+      const blockedDirectory = join(repository, "blocked");
+      await mkdir(blockedDirectory);
+      await writeFile(join(blockedDirectory, "handler.ts"), "exec(input);\n");
+      await writeFile(
+        sarif,
+        JSON.stringify(
+          document([
+            {
+              ruleIndex: 0,
+              locations: [location("src/server.ts", 1)],
+            },
+            {
+              ruleIndex: 0,
+              locations: [location("blocked/handler.ts", 1)],
+            },
+          ]),
+        ),
+      );
+      await chmod(blockedDirectory, 0o000);
+      try {
+        const error = await prepareSarifSeeds([sarif], repository).then(
+          () => null,
+          (reason: unknown) => reason,
+        );
+        expect(error).toBeInstanceOf(SourceDiscoveryError);
+        expect(error).toMatchObject({
+          operation: "inspect",
+          repositoryPath: "blocked/handler.ts",
+        });
+        expect((error as Error).message).toContain(
+          "scan coverage is incomplete",
+        );
+      } finally {
+        await chmod(blockedDirectory, 0o700);
+      }
+    },
+  );
 
   test("maps absolute SARIF paths from an explicit source root", async () => {
     const { root, repository, sarif } = await fixture();
