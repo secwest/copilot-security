@@ -852,6 +852,108 @@
       "id": "node-mcp-v2-fork-environment-data",
       "fixture": "fixtures/node-mcp-v2-fork-environment-data",
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-node-options-injection",
+      "fixture": "fixtures/node-mcp-v2-node-options-injection",
+      "expected": [
+        {
+          "title": "MCP tool input reaches a spawned Node runtime through NODE_OPTIONS",
+          "cwe": ["CWE-88", "CWE-94"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/server.mjs",
+          "line": 13,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["nodeOptions", "tool input", "callback input"],
+            ["runWithNodeOptions", "same-file helper", "helper call"],
+            ["spawn:options.env.NODE_OPTIONS", "options.env.NODE_OPTIONS"],
+            ["Node interpreter", "process.execPath", "runtime environment"],
+            ["argument injection", "CWE-88", "CWE-94"],
+            [
+              "fixed NODE_OPTIONS",
+              "ordinary environment data",
+              "non-special environment variable"
+            ]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-with-node-options", "registerTool", "tool callback"],
+            ["runWithNodeOptions", "same-file helper", "helper call"],
+            ["spawn:options.env.NODE_OPTIONS", "options.env.NODE_OPTIONS"],
+            ["Node interpreter", "process.execPath", "runtime environment"],
+            ["argument injection", "code execution", "CWE-94"],
+            [
+              "fixed NODE_OPTIONS",
+              "ordinary environment data",
+              "non-special environment variable"
+            ]
+          ],
+          "forbiddenText": [
+            "every environment variable is a Node option",
+            "ordinary environment data executes code",
+            "the witness loaded external attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-node-options-data",
+      "fixture": "fixtures/node-mcp-v2-node-options-data",
+      "expected": []
+    },
+    {
+      "id": "node-mcp-v2-executable-search-path",
+      "fixture": "fixtures/node-mcp-v2-executable-search-path",
+      "expected": [
+        {
+          "title": "MCP tool input controls executable lookup through options.env.PATH",
+          "cwe": ["CWE-426"],
+          "acceptableSeverities": ["high", "medium"],
+          "path": "src/server.mjs",
+          "line": 9,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["searchPath", "tool input", "callback input"],
+            ["probeSearchPath", "same-file helper", "helper call"],
+            ["execFile:options.env.PATH->command[0]", "options.env.PATH"],
+            ["fixed bare node", "bare executable", "command lookup"],
+            ["untrusted search path", "CWE-426"],
+            ["absolute executable", "fixed PATH", "ordinary environment data"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["probe-search-path", "registerTool", "tool callback"],
+            ["probeSearchPath", "same-file helper", "helper call"],
+            ["execFile:options.env.PATH->command[0]", "options.env.PATH"],
+            ["fixed bare node", "bare executable", "command lookup"],
+            ["attacker-writable directory", "shadow executable", "CWE-426"],
+            ["absolute executable", "fixed PATH", "ordinary environment data"]
+          ],
+          "forbiddenText": [
+            "PATH is itself command source",
+            "every PATH assignment is vulnerable",
+            "the witness ran an attacker executable",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fixed-executable-search",
+      "fixture": "fixtures/node-mcp-v2-fixed-executable-search",
+      "expected": []
     }
   ]
 }

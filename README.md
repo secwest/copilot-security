@@ -617,8 +617,8 @@ node benchmarks/run-benchmark.mjs `
 ```
 
 The Node MCP tool-handler lane uses the real stable TypeScript server package
-and separates seventeen tool-controlled execution and data boundaries across
-seventeen matched pairs. One pair contrasts a tool
+and separates nineteen tool-controlled execution and data boundaries across
+nineteen matched pairs. One pair contrasts a tool
 field reaching a shell command with an explicit end-of-options argv control.
 A second proves that fixed `process.execPath` is still unsafe when a
 dash-prefixed tool value appears before `--`, then preserves it as data in the
@@ -650,7 +650,18 @@ runtime, reporting CWE-88/CWE-94; its control preserves identical
 option-looking text in a non-special environment variable. A preceding
 `process.env` spread is accepted only when the explicit `NODE_OPTIONS` value
 wins, while following spreads, dynamic options, duplicate relevant properties,
-and unknown custom executables remain unresolved. A third contrasts direct
+and unknown custom executables remain unresolved. A process-launch pair extends
+that exact `NODE_OPTIONS` boundary to non-shell `spawn`, `spawnSync`,
+`execFile`, and `execFileSync` calls when the executable is proved to be the
+Node runtime. Its control keeps `NODE_OPTIONS` fixed and carries identical text
+only in a non-special environment key. A separate executable-search pair
+models tool-controlled exact `options.env.PATH` only when those APIs launch a
+fixed bare executable name. It reports CWE-426 search-path control without
+claiming that PATH is command source or that attacker code exists; its control
+fixes PATH to the current Node directory and keeps the same bytes as ordinary
+environment data. Both models reject shell-enabled calls, path-qualified
+executables, options aliases, unsupported overloads, and ambiguous property
+writes. A third contrasts direct
 JavaScript evaluation with a fixed arithmetic
 grammar that preserves useful calculation without treating the tool string as
 source. A fourth preserves compiled-Function invocation on both sides while

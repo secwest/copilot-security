@@ -7978,6 +7978,142 @@
         "node-mcp-v2-fork-environment-data/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-node-options-injection",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into spawn's exact NODE_OPTIONS environment property for process.execPath while the child module remains fixed.",
+      "fixture": "fixtures/node-mcp-v2-node-options-injection",
+      "findingsPaths": [
+        "node-mcp-v2-node-options-injection/run-1/findings.json",
+        "node-mcp-v2-node-options-injection/run-2/findings.json",
+        "node-mcp-v2-node-options-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-argument-injection",
+          "cwe": ["CWE-88", "CWE-94"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 13,
+              "endLine": 13,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["nodeOptions", "tool input", "callback input"],
+            ["runWithNodeOptions", "same-file helper", "helper call"],
+            ["spawn:options.env.NODE_OPTIONS", "options.env.NODE_OPTIONS"],
+            ["Node interpreter", "process.execPath", "runtime environment"],
+            ["argument injection", "CWE-88", "CWE-94"],
+            [
+              "fixed NODE_OPTIONS",
+              "ordinary environment data",
+              "non-special environment variable"
+            ]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-with-node-options", "registerTool", "tool callback"],
+            ["runWithNodeOptions", "same-file helper", "helper call"],
+            ["spawn:options.env.NODE_OPTIONS", "options.env.NODE_OPTIONS"],
+            ["Node interpreter", "process.execPath", "runtime environment"],
+            ["argument injection", "code execution", "CWE-94"],
+            [
+              "fixed NODE_OPTIONS",
+              "ordinary environment data",
+              "non-special environment variable"
+            ]
+          ],
+          "forbiddenText": [
+            "every environment variable is a Node option",
+            "ordinary environment data executes code",
+            "the witness loaded external attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-node-options-data",
+      "description": "The topology-matched MCP v2 control keeps NODE_OPTIONS fixed and passes the same option-looking tool value only through a non-special child environment variable.",
+      "fixture": "fixtures/node-mcp-v2-node-options-data",
+      "findingsPaths": [
+        "node-mcp-v2-node-options-data/run-1/findings.json",
+        "node-mcp-v2-node-options-data/run-2/findings.json",
+        "node-mcp-v2-node-options-data/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "node-mcp-v2-executable-search-path",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into execFile's exact PATH environment property while the command remains a fixed bare executable name.",
+      "fixture": "fixtures/node-mcp-v2-executable-search-path",
+      "findingsPaths": [
+        "node-mcp-v2-executable-search-path/run-1/findings.json",
+        "node-mcp-v2-executable-search-path/run-2/findings.json",
+        "node-mcp-v2-executable-search-path/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-untrusted-executable-search",
+          "cwe": ["CWE-426"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["searchPath", "tool input", "callback input"],
+            ["probeSearchPath", "same-file helper", "helper call"],
+            ["execFile:options.env.PATH->command[0]", "options.env.PATH"],
+            ["fixed bare node", "bare executable", "command lookup"],
+            ["untrusted search path", "CWE-426"],
+            ["absolute executable", "fixed PATH", "ordinary environment data"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["probe-search-path", "registerTool", "tool callback"],
+            ["probeSearchPath", "same-file helper", "helper call"],
+            ["execFile:options.env.PATH->command[0]", "options.env.PATH"],
+            ["fixed bare node", "bare executable", "command lookup"],
+            ["attacker-writable directory", "shadow executable", "CWE-426"],
+            ["absolute executable", "fixed PATH", "ordinary environment data"]
+          ],
+          "forbiddenText": [
+            "PATH is itself command source",
+            "every PATH assignment is vulnerable",
+            "the witness ran an attacker executable",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fixed-executable-search",
+      "description": "The topology-matched MCP v2 control fixes PATH to the current Node executable directory and passes the same path-looking tool value only through a non-special child environment variable.",
+      "fixture": "fixtures/node-mcp-v2-fixed-executable-search",
+      "findingsPaths": [
+        "node-mcp-v2-fixed-executable-search/run-1/findings.json",
+        "node-mcp-v2-fixed-executable-search/run-2/findings.json",
+        "node-mcp-v2-fixed-executable-search/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

@@ -107,6 +107,10 @@ describe("Node MCP tool-input security model", () => {
       "node-mcp-v2-fork-absolute-module",
       "node-mcp-v2-fork-node-options-injection",
       "node-mcp-v2-fork-environment-data",
+      "node-mcp-v2-node-options-injection",
+      "node-mcp-v2-node-options-data",
+      "node-mcp-v2-executable-search-path",
+      "node-mcp-v2-fixed-executable-search",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -219,6 +223,22 @@ describe("Node MCP tool-input security model", () => {
       lineTolerance: 1,
     });
     expect(manifest.cases[33]?.expected).toEqual([]);
+    expect(manifest.cases[34]?.expected[0]).toMatchObject({
+      cwe: ["CWE-88", "CWE-94"],
+      acceptableSeverities: ["critical", "high"],
+      path: "src/server.mjs",
+      line: 13,
+      lineTolerance: 1,
+    });
+    expect(manifest.cases[35]?.expected).toEqual([]);
+    expect(manifest.cases[36]?.expected[0]).toMatchObject({
+      cwe: ["CWE-426"],
+      acceptableSeverities: ["high", "medium"],
+      path: "src/server.mjs",
+      line: 9,
+      lineTolerance: 1,
+    });
+    expect(manifest.cases[37]?.expected).toEqual([]);
 
     const canonical = JSON.parse(
       await readFile(join(benchmarkRoot, "manifest.json"), "utf8"),
@@ -235,7 +255,7 @@ describe("Node MCP tool-input security model", () => {
         }>;
       }>;
     };
-    for (const index of [8, 10, 12, 20, 22, 24, 26, 28, 30, 32]) {
+    for (const index of [8, 10, 12, 20, 22, 24, 26, 28, 30, 32, 34, 36]) {
       const specializedCase = manifest.cases[index]!;
       const canonicalCase = canonical.cases.find(
         ({ id }) => id === specializedCase.id,
@@ -250,7 +270,7 @@ describe("Node MCP tool-input security model", () => {
 
     for (const index of [
       6, 7, 8, 9, 10, 11, 12, 13, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
-      31, 32, 33,
+      31, 32, 33, 34, 35, 36, 37,
     ]) {
       const fixture = join(
         benchmarkRoot,
@@ -286,6 +306,8 @@ describe("Node MCP tool-input security model", () => {
       [28, "node-mcp-tool-command-injection"],
       [30, "node-mcp-tool-untrusted-module-load"],
       [32, "node-mcp-tool-argument-injection"],
+      [34, "node-mcp-tool-argument-injection"],
+      [36, "node-mcp-tool-untrusted-executable-search"],
     ] as const) {
       const vulnerable = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index]!.id),
@@ -368,6 +390,18 @@ describe("Node MCP tool-input security model", () => {
         expect(vulnerable).toContain("fork:options.env.NODE_OPTIONS");
         expect(vulnerable).toContain("CWE-88");
         expect(vulnerable).toContain("CWE-94");
+      }
+      if (index === 34) {
+        expect(vulnerable).toContain("mcp-tool-node-options");
+        expect(vulnerable).toContain("spawn:options.env.NODE_OPTIONS");
+        expect(vulnerable).toContain("execPath<-node:process.execPath");
+        expect(vulnerable).toContain("CWE-88");
+        expect(vulnerable).toContain("CWE-94");
+      }
+      if (index === 36) {
+        expect(vulnerable).toContain("mcp-tool-executable-search-path");
+        expect(vulnerable).toContain("execFile:options.env.PATH->command[0]");
+        expect(vulnerable).toContain("CWE-426");
       }
       const control = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index + 1]!.id),
@@ -792,6 +826,150 @@ describe("Node MCP tool-input security model", () => {
       '    return fork(new URL("./child.mjs", import.meta.url), [], { ...options, env: { NODE_OPTIONS: command }, execArgv: [] });',
     ];
     for (const body of controls) expect(records(direct(body))).toEqual([]);
+  });
+
+  test("detects NODE_OPTIONS on exact non-shell Node process launches", () => {
+    const positiveBodies = [
+      '    return spawn(process.execPath, ["./child.mjs"], { env: { ...process.env, NODE_OPTIONS: command }, shell: false });',
+      "    return spawn(process.execPath, { env: { NODE_OPTIONS: command } });",
+      '    return execFile(process.execPath, ["./child.mjs"], { env: { "NODE_OPTIONS": command } }, () => undefined);',
+      "    return execFile(process.execPath, { env: { NODE_OPTIONS: command } }, () => undefined);",
+    ];
+    for (const body of positiveBodies) {
+      const found = records(v2(body));
+      expect(found).toHaveLength(1);
+      expect(found[0]?.frameworkModel).toMatchObject({
+        id: "node-mcp-tool-argument-injection",
+        sink: {
+          kind: "mcp-tool-node-options",
+          cweIds: ["CWE-88", "CWE-94"],
+        },
+      });
+      expect(found[0]?.frameworkModel.sink.symbol).toContain(
+        "options.env.NODE_OPTIONS",
+      );
+      expect(found[0]?.categories).toContain(
+        "broken-control:mcp-tool-node-options-not-fixed",
+      );
+    }
+
+    for (const method of ["spawnSync", "execFileSync"] as const) {
+      const source = v2(
+        `    return ${method}(process.execPath, ["./child.mjs"], { env: { NODE_OPTIONS: command } });`,
+      ).replace(
+        'import { exec, execFile, spawn } from "node:child_process";',
+        `import { ${method} } from "node:child_process";`,
+      );
+      expect(records(source)[0]?.frameworkModel.sink.kind).toBe(
+        "mcp-tool-node-options",
+      );
+    }
+
+    const importedRuntime = v2(
+      '    return spawn(execPath, ["./child.mjs"], { env: { NODE_OPTIONS: command } });',
+    ).replace(
+      'import { exec, execFile, spawn } from "node:child_process";',
+      'import { spawn } from "node:child_process";\nimport { execPath } from "node:process";',
+    );
+    const imported = records(importedRuntime);
+    expect(imported).toHaveLength(1);
+    expect(imported[0]?.frameworkModel.propagators).toContainEqual(
+      expect.objectContaining({
+        kind: "mcp-tool-node-process-binding",
+        symbol: "execPath<-node:process.execPath",
+      }),
+    );
+
+    const controls = [
+      '    return spawn("node", ["./child.mjs"], { env: { NODE_OPTIONS: command } });',
+      '    return spawn("/usr/bin/custom", ["./child.mjs"], { env: { NODE_OPTIONS: command } });',
+      '    return spawn(process.execPath, ["./child.mjs", command], { env: { NODE_OPTIONS: "--no-warnings" } });',
+      '    return spawn(process.execPath, ["./child.mjs"], { env: { TOOL_DATA: command } });',
+      '    const env = { NODE_OPTIONS: command };\n    return spawn(process.execPath, ["./child.mjs"], { env });',
+      '    return spawn(process.execPath, ["./child.mjs"], { env: { NODE_OPTIONS: command, ...process.env } });',
+      '    return spawn(process.execPath, ["./child.mjs"], { env: { [name]: fixed, NODE_OPTIONS: command } });',
+      '    return spawn(process.execPath, ["./child.mjs"], { env: { NODE_OPTIONS: fixed, NODE_OPTIONS: command } });',
+      '    return spawn(process.execPath, ["./child.mjs"], { ...options, env: { NODE_OPTIONS: command } });',
+      '    return spawn(process.execPath, ["./child.mjs"], { env: { NODE_OPTIONS: command }, shell: true });',
+      '    return spawn(process.execPath, ["./child.mjs"], { env: { NODE_OPTIONS: command }, shell: "/bin/sh" });',
+      '    const options = { env: { NODE_OPTIONS: command } };\n    return spawn(process.execPath, ["./child.mjs"], options);',
+      '    return spawn(process.execPath, ["./child.mjs"], { env: { NODE_OPTIONS: command } }, extra);',
+      "    return execFile(process.execPath, { env: { NODE_OPTIONS: command } }, () => undefined, extra);",
+    ];
+    for (const body of controls) {
+      expect(
+        records(v2(body)).filter(
+          (record) =>
+            record.frameworkModel.sink.kind === "mcp-tool-node-options",
+        ),
+      ).toEqual([]);
+    }
+  });
+
+  test("detects a tool-controlled executable search path for fixed bare commands", () => {
+    const positives = [
+      '    return spawn("node", ["--version"], { env: { ...process.env, PATH: command }, shell: false });',
+      '    return spawn("node", { env: { PATH: command } });',
+      '    return execFile("node", ["--version"], { env: { "PATH": command } }, () => undefined);',
+      '    return execFile("node", { env: { PATH: command } }, () => undefined);',
+    ];
+    for (const body of positives) {
+      const found = records(v2(body));
+      expect(found).toHaveLength(1);
+      expect(found[0]?.frameworkModel).toMatchObject({
+        id: "node-mcp-tool-untrusted-executable-search",
+        sink: {
+          kind: "mcp-tool-executable-search-path",
+          cweIds: ["CWE-426"],
+        },
+      });
+      expect(found[0]?.frameworkModel.sink.symbol).toContain(
+        "options.env.PATH->command[0]",
+      );
+      expect(found[0]?.categories).toContain(
+        "broken-control:mcp-tool-executable-search-path-not-fixed",
+      );
+    }
+
+    for (const method of ["spawnSync", "execFileSync"] as const) {
+      const source = v2(
+        `    return ${method}("node", ["--version"], { env: { PATH: command } });`,
+      ).replace(
+        'import { exec, execFile, spawn } from "node:child_process";',
+        `import { ${method} } from "node:child_process";`,
+      );
+      expect(records(source)[0]?.frameworkModel.sink.kind).toBe(
+        "mcp-tool-executable-search-path",
+      );
+    }
+
+    const namespace = v2(
+      '    return cp.spawn("node", ["--version"], { env: { PATH: command } });',
+    ).replace(
+      'import { exec, execFile, spawn } from "node:child_process";',
+      'import * as cp from "node:child_process";',
+    );
+    expect(records(namespace)[0]?.frameworkModel.id).toBe(
+      "node-mcp-tool-untrusted-executable-search",
+    );
+
+    const controls = [
+      '    return spawn("/usr/bin/node", ["--version"], { env: { PATH: command } });',
+      '    return spawn("C:\\\\Node\\\\node.exe", ["--version"], { env: { PATH: command } });',
+      '    return spawn("./node", ["--version"], { env: { PATH: command } });',
+      '    return spawn("file:///usr/bin/node", ["--version"], { env: { PATH: command } });',
+      '    return spawn("node", ["--version"], { env: { PATH: "/usr/bin", TOOL_DATA: command } });',
+      '    const env = { PATH: command };\n    return spawn("node", ["--version"], { env });',
+      '    return spawn("node", ["--version"], { env: { PATH: command, ...process.env } });',
+      '    return spawn("node", ["--version"], { env: { [name]: fixed, PATH: command } });',
+      '    return spawn("node", ["--version"], { env: { PATH: fixed, PATH: command } });',
+      '    return spawn("node", ["--version"], { ...options, env: { PATH: command } });',
+      '    return spawn("node", ["--version"], { env: { PATH: command }, shell: true });',
+      '    const options = { env: { PATH: command } };\n    return spawn("node", ["--version"], options);',
+      '    return spawn("node", ["--version"], { env: { PATH: command } }, extra);',
+      '    return execFile("node", { env: { PATH: command } }, () => undefined, extra);',
+    ];
+    for (const body of controls) expect(records(v2(body))).toEqual([]);
   });
 
   test("preserves Node interpreter-option injection through a stable runtime alias", () => {
@@ -2853,10 +3031,11 @@ function runFork(option: string) {
     }
   });
 
-  test("requires fork role and execution-context-specific closure", async () => {
+  test("requires process role and execution-context-specific closure", async () => {
     const cases = [
       {
         id: "module",
+        method: "fork",
         body: "    return fork(command, [], { execArgv: [] });",
         cwe: ["CWE-829"],
         missing: ["fork:modulePath[0]", "fixed modulePath"],
@@ -2865,6 +3044,7 @@ function runFork(option: string) {
       },
       {
         id: "executable",
+        method: "fork",
         body: '    return fork(new URL("./child.mjs", import.meta.url), [], { execPath: command, execArgv: [] });',
         cwe: ["CWE-78"],
         missing: ["fork:options.execPath", "fixed execPath"],
@@ -2873,6 +3053,7 @@ function runFork(option: string) {
       },
       {
         id: "relative-cwd",
+        method: "fork",
         body: '    return fork("./child.mjs", [], { cwd: command, execArgv: [] });',
         cwe: ["CWE-426", "CWE-829"],
         missing: [
@@ -2884,69 +3065,94 @@ function runFork(option: string) {
       },
       {
         id: "node-options",
+        method: "fork",
         body: '    return fork(new URL("./child.mjs", import.meta.url), [], { env: { ...process.env, NODE_OPTIONS: command }, execArgv: [] });',
         cwe: ["CWE-88", "CWE-94"],
         missing: ["fork:options.env.NODE_OPTIONS", "fixed NODE_OPTIONS"],
         closure:
           "An MCP client supplies tool input command through an inputSchema-validated registerTool tool callback. Exact child_process.fork starts the Node interpreter with fork:options.env.NODE_OPTIONS in options.env.NODE_OPTIONS. That runtime environment remains in the Node option region and permits NODE_OPTIONS argument injection and code execution under CWE-88 and CWE-94. The matched control uses fixed NODE_OPTIONS or keeps the same value only as ordinary environment data in a non-special environment variable.",
       },
+      {
+        id: "spawn-node-options",
+        method: "spawn",
+        body: '    return spawn(process.execPath, ["./child.mjs"], { env: { ...process.env, NODE_OPTIONS: command }, shell: false });',
+        cwe: ["CWE-88", "CWE-94"],
+        missing: ["spawn:options.env.NODE_OPTIONS", "fixed NODE_OPTIONS"],
+        closure:
+          "An MCP client supplies tool input command through an inputSchema-validated registerTool tool callback. Exact child_process.spawn starts the process.execPath Node interpreter with spawn:options.env.NODE_OPTIONS in options.env.NODE_OPTIONS. That runtime environment remains in the Node option region and permits NODE_OPTIONS argument injection and code execution under CWE-88 and CWE-94. The matched control uses fixed NODE_OPTIONS or keeps the same bytes only as ordinary environment data in a non-special environment variable.",
+      },
+      {
+        id: "spawn-search-path",
+        method: "spawn",
+        body: '    return spawn("node", ["--version"], { env: { ...process.env, PATH: command }, shell: false });',
+        cwe: ["CWE-426"],
+        missing: ["spawn:options.env.PATH->command[0]", "absolute executable"],
+        closure:
+          "An MCP client supplies tool input command through an inputSchema-validated registerTool tool callback. Exact child_process.spawn receives the value in spawn:options.env.PATH->command[0] options.env.PATH and uses that executable search path for command lookup of the fixed bare executable node. This creates untrusted search path executable selection under CWE-426. The matched control uses an absolute executable or fixed PATH allowlisted executable directory and keeps the same value only as ordinary environment data.",
+      },
     ] as const;
     for (const testCase of cases) {
       const repository = await mkdtemp(
         join(
           tmpdir(),
-          `copilot-security-node-mcp-fork-${testCase.id}-repository-`,
+          `copilot-security-node-mcp-process-${testCase.id}-repository-`,
         ),
       );
       const scanDirectory = await mkdtemp(
-        join(tmpdir(), `copilot-security-node-mcp-fork-${testCase.id}-scan-`),
+        join(
+          tmpdir(),
+          `copilot-security-node-mcp-process-${testCase.id}-scan-`,
+        ),
       );
       try {
         const application = v2(testCase.body).replace(
           'import { exec, execFile, spawn } from "node:child_process";',
-          'import { fork } from "node:child_process";',
+          `import { ${testCase.method} } from "node:child_process";`,
         );
         await writeFile(join(repository, "server.ts"), application, "utf8");
         const sourceLines = application.split(/\r?\n/u);
         const sinkLine =
-          sourceLines.findIndex((line) => line.includes("return fork(")) + 1;
+          sourceLines.findIndex((line) =>
+            line.includes(`return ${testCase.method}(`),
+          ) + 1;
         const finding = {
-          occurrenceId: `occ_node_mcp_fork_${testCase.id}_quality`,
+          occurrenceId: `occ_node_mcp_process_${testCase.id}_quality`,
           taxonomy: { cwe: [...testCase.cwe] },
           locations: [{ path: "server.ts", startLine: sinkLine, role: "sink" }],
           codeEvidence: [
             {
-              id: "mcp-fork-role-sink",
+              id: "mcp-process-role-sink",
               path: "server.ts",
               startLine: sinkLine,
               code: sourceLines[sinkLine - 1],
-              explanation: "The MCP tool input reaches one fork role.",
+              explanation:
+                "The MCP tool input reaches one child-process execution role.",
               role: "sink",
             },
           ],
           validation: {
-            summary: "The MCP tool input reaches child_process fork.",
+            summary: "The MCP tool input reaches a child-process boundary.",
             method: "source review and bounded inert witness",
             exploitWitness: "A fixture-local value selects the recorded role.",
             negativeControl: "A fixed boundary keeps that value as data.",
-            evidence: ["mcp-fork-role-sink"],
-            counterEvidence: "Other fork roles remain fixed.",
+            evidence: ["mcp-process-role-sink"],
+            counterEvidence: "Other process roles remain fixed.",
             remainingUncertainty: "Deployment reachability remains unproved.",
           },
           attackPath: {
-            summary: "The MCP tool input reaches child_process fork.",
+            summary: "The MCP tool input reaches a child-process boundary.",
             dataflow: {
-              source: "mcp-fork-role-sink",
-              sink: "mcp-fork-role-sink",
-              outcome: "fork role selection",
+              source: "mcp-process-role-sink",
+              sink: "mcp-process-role-sink",
+              outcome: "child-process execution-context selection",
             },
             reachability: {
               attacker: "MCP client",
               entrypoint: "tool invocation",
               outcome: "child process selection",
             },
-            brokenControls: ["Tool input enters a fork role"],
-            evidenceRefs: ["mcp-fork-role-sink"],
+            brokenControls: ["Tool input enters a process execution role"],
+            evidenceRefs: ["mcp-process-role-sink"],
           },
         };
         await writeFile(

@@ -6,6 +6,56 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed two process-environment blind spots in official MCP tool-input flows.
+  Exact `options.env.NODE_OPTIONS` now reaches the existing argument-injection
+  model for non-shell `spawn`, `spawnSync`, `execFile`, and `execFileSync`
+  calls when the target is proved to be `process.execPath` or an exact official
+  `node:process` binding. Tool-controlled exact `options.env.PATH` now emits
+  `node-mcp-tool-untrusted-executable-search` with CWE-426 when those APIs use
+  a fixed bare executable name. This covers runtime-option interpretation and
+  executable lookup even though the command, argv, and shell setting remain
+  fixed.
+- Kept both models role- and identity-sensitive. NODE_OPTIONS requires a
+  proved Node runtime; PATH requires a nonempty bare literal without a path,
+  drive, URL, or dot-segment qualifier. Both require exact supported overloads
+  and exact options/environment objects, permit a preceding environment spread
+  only when an explicit relevant property wins, and reject following spreads,
+  computed or duplicate target properties, options aliases, shell-enabled
+  launches, replaced bindings, and ambiguous executable identity. PATH is not
+  described as command source, and attacker code execution requires separate
+  evidence of an attacker-writable directory and a shadow executable.
+- Added two frozen MCP SDK 2.0.0/Zod 4.4.3 exploit/control pairs. The bounded
+  NODE_OPTIONS witness loads only a checked-in inert preload; its control keeps
+  the same text in a non-special environment field. The PATH witness supplies
+  an empty search path and observes `ENOENT` without executing any program; its
+  control pins PATH to the current Node directory and runs only that Node
+  executable. All four pass on Windows and WSL. The focused model/benchmark
+  gate passes 95 tests and 3,539 assertions on each platform. The strict MCP lane now contains 38 cases
+  across 19 pairs; the canonical corpus contains 175 pairs, 350 cases, and
+  1,050 repeated positions. Hosted Node CI schedules all 38 MCP witnesses on
+  Ubuntu and Windows, expanding the expected matrix from 75 to 83 jobs.
+- Completed local process-environment acceptance. The managed Windows
+  aggregate selects 2,041 tests across 210 files: 2,012 pass, 27 intentionally
+  skip, and only the established temporary-Git and private-Windows-ACL cases
+  fail at their host boundaries. Their exact native rerun passes 48/48 with
+  242 assertions. The focused Windows and WSL model/benchmark lanes each pass
+  95 tests with 3,539 assertions. Formatting, generated-model drift,
+  TypeScript, the clean production build, and the whitespace audit pass, and
+  the production advisory audit reports no known vulnerabilities.
+- Two compiled repository-root inventories complete in 20.014 and 21.333
+  seconds and are byte-identical at 256 rows, 584,350 bytes, 243 structured
+  records, 13 lexical leads, and SHA-256
+  `d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+  Direct compiled fixture inspection retains exactly the NODE_OPTIONS and PATH
+  models and no structured row for either control. Windows and WSL strict
+  package inspection each validate 299 entries, fresh installed public import,
+  CLI execution, and all 79 bundled-plugin files. The Windows archive is
+  2,337,999 bytes with SHA-256
+  `9ebd1b613cd36c822fccfd5c4527b0f18f204e381cb9f923b8b0ab357c65d7d3`;
+  the Linux-native executable-mode archive is 2,337,993 bytes with SHA-256
+  `c95c43e7e4c897e53544c2361047003f33900894f8c3554dca8212fef450e7be`.
+  Linux correctly rejects the Windows-mode archive before the native package
+  is built, preventing a cross-platform launcher-permission false pass.
 - Closed two indirect `child_process.fork` execution-context gaps for official
   MCP tool-input flows. A fixed non-absolute `modulePath` combined with
   tool-controlled exact `options.cwd` now emits

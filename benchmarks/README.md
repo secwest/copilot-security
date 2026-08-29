@@ -279,8 +279,8 @@ node ../../benchmarks/run-benchmark.mjs `
 
 ## Node MCP tool-handler security benchmark
 
-`node-mcp-tool-security-manifest.json` measures tool input across seventeen
-distinct modeled boundaries and seventeen matched pairs under perfect selected-run
+`node-mcp-tool-security-manifest.json` measures tool input across nineteen
+distinct modeled boundaries and nineteen matched pairs under perfect selected-run
 gates. The command pair uses
 the real stable `@modelcontextprotocol/server` 2.0.0 API: the exploit carries a
 tool field through an arrow helper into `child_process.exec`, while its
@@ -320,6 +320,16 @@ the same option-looking text through a non-special environment key. The model
 accepts a preceding `process.env` spread whose value is overwritten by the
 explicit final `NODE_OPTIONS`, but rejects following spreads, computed or
 duplicate relevant properties, dynamic options, and unknown custom runtimes.
+Another pair applies that same exact runtime-environment boundary to non-shell
+`spawn`, `spawnSync`, `execFile`, and `execFileSync` calls whose executable is
+proved to be Node. Its control keeps `NODE_OPTIONS` fixed and preserves the
+same option-looking value only as ordinary environment data. The executable-
+search pair instead holds a bare command literal fixed while tool input reaches
+exact `options.env.PATH`, reporting CWE-426 only for command lookup. Its control
+pins PATH to the current Node executable directory and uses the tool value only
+as a non-special environment field. Shell-enabled calls, path-qualified
+executables, options aliases, unsupported overloads, and ambiguous properties
+remain negative.
 The code-evaluation pair carries an expression through a same-file
 helper into direct JavaScript `eval`; its control preserves expression input,
 the helper, arithmetic results, and the MCP response while an explicit numeric
@@ -360,8 +370,10 @@ only in-memory databases and fixed inert rows. The fork pairs use only the
 inert `--stack-trace-limit=77` runtime option and private IPC; it never loads an
 external module or enables an inspector. The execution-context witnesses add
 only checked-in inert child modules and one checked-in preload that sets an
-in-memory marker. Node CI executes all thirty-four
-witnesses on Windows and Linux. Run the focused scanner benchmark with:
+in-memory marker. The new process witnesses either load that same inert preload
+or prove PATH participation through a bounded `ENOENT`; no attacker executable
+is created or run. Node CI executes all thirty-eight witnesses on Windows and
+Linux. Run the focused scanner benchmark with:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -369,7 +381,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-node-mcp-tools
 ```
 
-The versioned corpus currently contains 173 vulnerable/control pairs:
+The versioned corpus currently contains 175 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

@@ -4285,6 +4285,15 @@ const NODE_MCP_TOOL_MODULE_LOAD_FIELD_EVIDENCE_REQUIREMENTS = [
   ],
 ] as const;
 
+const NODE_MCP_TOOL_EXECUTABLE_SEARCH_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["MCP tool", "registerTool", "server.tool", "tool callback"],
+  ["tool input", "callback input", "LLM-controlled", "client-controlled"],
+  ["child_process", "spawn", "spawnSync", "execFile", "execFileSync"],
+  ["options.env.PATH", "PATH", "executable search path", "command lookup"],
+  ["fixed bare executable", "bare command", "command name"],
+  ["untrusted search path", "CWE-426", "executable selection"],
+] as const;
+
 const NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4402,6 +4411,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_MCP_TOOL_MODULE_LOAD_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_MCP_TOOL_MODULE_LOAD_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-mcp-tool-untrusted-executable-search",
+    {
+      validation: NODE_MCP_TOOL_EXECUTABLE_SEARCH_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_MCP_TOOL_EXECUTABLE_SEARCH_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -46102,6 +46118,35 @@ function nodeMcpToolEvidenceRequirements(
         "fixed NODE_OPTIONS",
         "ordinary environment data",
         "non-special environment variable",
+      ];
+      validation.push(boundary, control);
+      attackPath.push(boundary, control);
+    } else if (kind === "mcp-tool-node-options") {
+      const boundary = [
+        symbol,
+        "options.env.NODE_OPTIONS",
+        "NODE_OPTIONS",
+        "runtime environment",
+      ];
+      const control = [
+        "fixed NODE_OPTIONS",
+        "ordinary environment data",
+        "non-special environment variable",
+      ];
+      validation.push(boundary, control);
+      attackPath.push(boundary, control);
+    } else if (kind === "mcp-tool-executable-search-path") {
+      const boundary = [
+        symbol,
+        "options.env.PATH",
+        "executable search path",
+        "command lookup",
+      ];
+      const control = [
+        "absolute executable",
+        "fixed PATH",
+        "allowlisted executable directory",
+        "ordinary environment data",
       ];
       validation.push(boundary, control);
       attackPath.push(boundary, control);

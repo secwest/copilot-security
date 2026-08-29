@@ -2,6 +2,138 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Model process runtime options and executable search paths
+
+**Counterexamples and authoritative semantics.** Fixed command and argv values
+do not fully close a child-process execution boundary. Node documents that
+[`spawn`](https://nodejs.org/api/child_process.html#child_processspawncommand-args-options)
+and
+[`execFile`](https://nodejs.org/api/child_process.html#child_processexecfilefile-args-options-callback)
+use `options.env` as the child environment. Its child-process contract also
+states that executable lookup uses `options.env.PATH` when an environment is
+supplied, otherwise the parent PATH; Unix falls back to `/usr/bin:/bin` when
+the supplied environment omits PATH, while Windows falls back to the current
+process PATH. Windows environment keys are case-insensitive and Node sorts
+keys lexicographically before passing the first matching key. Separately,
+Node's
+[`NODE_OPTIONS`](https://nodejs.org/api/cli.html#node_optionsoptions) contract
+defines a space-separated runtime-option channel processed before ordinary
+command-line options, including allowed preload flags. Consequently, a tool
+caller can alter a proved Node runtime through exact `NODE_OPTIONS`, or alter
+which program a fixed bare name resolves to through exact PATH, while command,
+argv, and `shell: false` all remain fixed.
+
+Current CodeQL documentation describes generic JavaScript
+[indirect command-line injection](https://codeql.github.com/codeql-query-help/javascript/js-indirect-command-line-injection/)
+and
+[shell command construction from environment values](https://codeql.github.com/codeql-query-help/javascript/js-shell-command-injection-from-environment/),
+but does not document these exact process-environment roles. Authenticated
+source searches on 2026-08-28 found one unrelated `NODE_OPTIONS` occurrence in
+CodeQL's JavaScript tree, no corresponding Semgrep source occurrence, and no
+`options.env.PATH` occurrence in either JavaScript implementation. These are
+comparison results for the visible revisions, not a claim that configurable
+dataflow or a future rule cannot infer either path.
+
+**Classification and impact boundary.** Exact tool-controlled NODE_OPTIONS for
+a proved Node executable emits `mcp-tool-node-options` under the existing
+`node-mcp-tool-argument-injection` family with CWE-88/CWE-94. This records
+control of the runtime option grammar and its documented preload capability;
+it does not classify every environment value as executable or assert a
+specific filesystem, network, credential, persistence, or privilege effect.
+
+Exact tool-controlled PATH for a fixed bare executable emits
+`mcp-tool-executable-search-path` under the new
+`node-mcp-tool-untrusted-executable-search` family with
+[CWE-426](https://cwe.mitre.org/data/definitions/426.html). PATH is a lookup
+context, not command source. A concrete arbitrary-code-execution claim needs
+additional evidence that a searched directory is attacker-writable and
+contains or can receive a shadow executable. A bare fixed program name is
+necessary because an absolute, drive-qualified, slash- or backslash-qualified,
+URL-like, empty, `.` or `..` executable does not establish this modeled search
+condition.
+
+**Accepted structural proof.** Both paths require a live direct or namespace
+binding from exactly `node:child_process` or `child_process` and one of
+`spawn`, `spawnSync`, `execFile`, or `execFileSync`. The accepted overloads are
+the exact two-argument command/options form, exact three-argument
+command/literal-args/options form, and the documented four-argument
+`execFile` args/options/callback form. Options and nested environment values
+must be object literals. An environment spread may precede the explicit target
+property because the explicit value deterministically wins; a following
+spread, computed property, duplicate target, accessor, options alias, or
+unsupported overload remains unresolved. Any truthy string, `true`, or dynamic
+shell setting suppresses these non-shell rows.
+
+NODE_OPTIONS additionally requires the executable expression to retain exact
+`process.execPath` identity, including a live official `node:process` ESM,
+CommonJS, or TypeScript binding already accepted by the runtime model. A custom
+executable is not assumed to interpret Node's environment grammar. PATH instead
+requires a fixed bare literal and exact uppercase `PATH`; uppercase is the
+portable proof boundary even though Windows itself treats environment names as
+case-insensitive. This avoids platform-dependent duplicate-key inference and
+leaves mixed-case or dynamically assembled environments for review.
+
+**Host closure and safe witnesses.** Validation and attack-path enforcement
+requires the exact `spawn:options.env.NODE_OPTIONS` or
+`execFile:options.env.PATH->command[0]` role in both fields. NODE_OPTIONS review
+must identify the proved Node process and distinguish fixed NODE_OPTIONS or the
+same bytes in a non-special environment value. PATH review must identify the
+fixed bare command, describe lookup rather than source interpretation, state
+the missing attacker-writable-directory/shadow-executable evidence when it is
+absent, and compare an absolute executable or fixed PATH control.
+
+The NODE_OPTIONS positive launches only `process.execPath`, a fixed checked-in
+child module, and a checked-in preload whose sole effect is an in-memory marker;
+the matched control fixes NODE_OPTIONS to empty and carries identical text as
+ordinary environment data. The PATH positive supplies an empty search path for
+the fixed bare `node` command and safely proves lookup participation by
+observing bounded `ENOENT`, so no program starts. Its control fixes PATH to the
+current Node executable directory and runs only `node --version`, while the
+tool value remains ordinary environment data. Every witness has a two-second
+process bound and small output limits. None uses a shell, external executable,
+network, credential, persistence mechanism, privileged operation, or attacker
+payload.
+
+**Initial acceptance.** All four witnesses pass after clean exact-lockfile
+installs on Windows and WSL. The focused model/benchmark gate passes 95 tests
+and 3,539 assertions on each platform; TypeScript compilation and the whitespace
+audit pass. Direct
+inventory assertions retain the exact NODE_OPTIONS and PATH rows through
+same-file helpers and emit no `node-mcp-tool-*` row for either topology-matched
+control. The strict MCP corpus advances to 38 cases across 19 pairs; the
+canonical corpus advances to 175 pairs, 350 cases, and 1,050 repeated
+positions. Hosted Node CI schedules the four new witnesses on Ubuntu and
+Windows, expanding the expected matrix from 75 to 83 jobs.
+
+**Local acceptance.** The complete managed Windows aggregate selects 2,041
+tests across 210 files: 2,012 pass, 27 intentionally skip, and only the
+established temporary-Git and private-Windows-ACL operations fail at their
+managed-host boundaries. The same two files pass 48/48 with 242 assertions
+when rerun with native Git-metadata and ACL access. The focused Windows and WSL
+lanes each pass 95 tests and 3,539 assertions. Formatting, generated-model
+drift, TypeScript checking, the clean production build, and the whitespace
+audit pass. The production dependency audit reports no known vulnerabilities.
+
+Two compiled repository-root inventories complete in 20.014 and 21.333 seconds
+and are byte-identical at 256 rows, 584,350 bytes, 243 structured records, 13
+lexical leads, and SHA-256
+`d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+Direct fixture inventory retains exactly one NODE_OPTIONS CWE-88/CWE-94 row and
+one executable-search CWE-426 row, while both controls remain structurally
+negative.
+
+Windows strict package inspection validates a 299-entry, 2,337,999-byte archive
+with SHA-256
+`9ebd1b613cd36c822fccfd5c4527b0f18f204e381cb9f923b8b0ab357c65d7d3`;
+fresh installs validate public import, CLI behavior, and all 79 bundled plugin
+files. Linux correctly rejects that Windows-created archive because its CLI
+member lacks a POSIX execute bit. A separate WSL-native 299-entry,
+2,337,993-byte archive with SHA-256
+`c95c43e7e4c897e53544c2361047003f33900894f8c3554dca8212fef450e7be`
+passes strict executable-mode inspection, fresh installation, public import,
+CLI behavior, and the same 79 plugin files. Both generated archives and all
+fixture-local dependency trees are removed after validation.
+
 ## 2026-08-28 — Model fork execution-context redirection
 
 **Counterexample and authoritative semantics.** The direct-role model made a

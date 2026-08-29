@@ -173,6 +173,10 @@ jobs:
           - node-mcp-v2-fork-absolute-module
           - node-mcp-v2-fork-node-options-injection
           - node-mcp-v2-fork-environment-data
+          - node-mcp-v2-node-options-injection
+          - node-mcp-v2-node-options-data
+          - node-mcp-v2-executable-search-path
+          - node-mcp-v2-fixed-executable-search
 
     steps:
       - name: Checkout repository

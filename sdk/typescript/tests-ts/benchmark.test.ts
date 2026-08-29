@@ -552,6 +552,11 @@ describe("effectiveness benchmark", () => {
         "node-mcp-v2-fork-node-options-injection",
         "node-mcp-v2-fork-environment-data",
       ],
+      ["node-mcp-v2-node-options-injection", "node-mcp-v2-node-options-data"],
+      [
+        "node-mcp-v2-executable-search-path",
+        "node-mcp-v2-fixed-executable-search",
+      ],
       [
         "python-asyncssh-scp-download-path-traversal",
         "python-asyncssh-scp-repaired-control",

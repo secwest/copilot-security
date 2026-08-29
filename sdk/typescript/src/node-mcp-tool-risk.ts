@@ -164,6 +164,7 @@ type McpModelId =
   | "node-mcp-tool-regex-injection"
   | "node-mcp-tool-sql-injection"
   | "node-mcp-tool-ssrf"
+  | "node-mcp-tool-untrusted-executable-search"
   | "node-mcp-tool-untrusted-module-load";
 type McpSinkKind =
   | "mcp-tool-code-evaluation"
@@ -176,11 +177,13 @@ type McpSinkKind =
   | "mcp-tool-fork-relative-cwd"
   | "mcp-tool-fork-module-path"
   | "mcp-tool-interpreter-option"
+  | "mcp-tool-node-options"
   | "mcp-tool-network-destination"
   | "mcp-tool-regular-expression"
   | "mcp-tool-sql-query"
   | "mcp-tool-shell-command"
-  | "mcp-tool-shell-enabled-spawn";
+  | "mcp-tool-shell-enabled-spawn"
+  | "mcp-tool-executable-search-path";
 
 interface BindingSet {
   direct: Map<string, string>;
@@ -253,6 +256,7 @@ export interface NodeMcpToolRiskRecord {
         | readonly ["CWE-89"]
         | readonly ["CWE-94", "CWE-95"]
         | readonly ["CWE-400", "CWE-730"]
+        | readonly ["CWE-426"]
         | readonly ["CWE-426", "CWE-829"]
         | readonly ["CWE-829"]
         | readonly ["CWE-918"];
@@ -391,20 +395,23 @@ export function nodeMcpToolRiskRecords(
             ? "node-mcp-tool-untrusted-module-load"
             : sink.kind === "mcp-tool-fork-relative-cwd"
               ? "node-mcp-tool-untrusted-module-load"
-              : sink.kind === "mcp-tool-code-evaluation" ||
-                  sink.kind === "mcp-tool-worker-code-evaluation"
-                ? "node-mcp-tool-code-injection"
-                : sink.kind === "mcp-tool-regular-expression"
-                  ? "node-mcp-tool-regex-injection"
-                  : sink.kind === "mcp-tool-sql-query"
-                    ? "node-mcp-tool-sql-injection"
-                    : sink.kind === "mcp-tool-filesystem-path"
-                      ? "node-mcp-tool-path-traversal"
-                      : sink.kind === "mcp-tool-interpreter-option" ||
-                          sink.kind === "mcp-tool-fork-exec-argv" ||
-                          sink.kind === "mcp-tool-fork-node-options"
-                        ? "node-mcp-tool-argument-injection"
-                        : "node-mcp-tool-command-injection";
+              : sink.kind === "mcp-tool-executable-search-path"
+                ? "node-mcp-tool-untrusted-executable-search"
+                : sink.kind === "mcp-tool-code-evaluation" ||
+                    sink.kind === "mcp-tool-worker-code-evaluation"
+                  ? "node-mcp-tool-code-injection"
+                  : sink.kind === "mcp-tool-regular-expression"
+                    ? "node-mcp-tool-regex-injection"
+                    : sink.kind === "mcp-tool-sql-query"
+                      ? "node-mcp-tool-sql-injection"
+                      : sink.kind === "mcp-tool-filesystem-path"
+                        ? "node-mcp-tool-path-traversal"
+                        : sink.kind === "mcp-tool-interpreter-option" ||
+                            sink.kind === "mcp-tool-fork-exec-argv" ||
+                            sink.kind === "mcp-tool-fork-node-options" ||
+                            sink.kind === "mcp-tool-node-options"
+                          ? "node-mcp-tool-argument-injection"
+                          : "node-mcp-tool-command-injection";
       const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(lines.length, sink.line + CONTEXT_LINES_AFTER);
       const sourceStart = Math.max(1, registration.line - 2);
@@ -422,27 +429,32 @@ export function nodeMcpToolRiskRecords(
               ? sink.kind === "mcp-tool-fork-relative-cwd"
                 ? "broken-control:mcp-tool-fork-relative-module-cwd-not-fixed"
                 : "broken-control:mcp-tool-fork-module-path-not-fixed-or-allowlisted"
-              : modelId === "node-mcp-tool-code-injection"
-                ? "broken-control:mcp-tool-code-data-boundary"
-                : modelId === "node-mcp-tool-regex-injection"
-                  ? "broken-control:mcp-tool-regex-pattern-boundary"
-                  : modelId === "node-mcp-tool-sql-injection"
-                    ? "broken-control:mcp-tool-sql-data-boundary"
-                    : modelId === "node-mcp-tool-path-traversal"
-                      ? "broken-control:mcp-tool-filesystem-path-not-confined"
-                      : modelId === "node-mcp-tool-argument-injection"
-                        ? sink.kind === "mcp-tool-fork-node-options"
-                          ? "broken-control:mcp-tool-fork-node-options-not-fixed"
-                          : sink.kind === "mcp-tool-fork-exec-argv"
-                            ? "broken-control:mcp-tool-fork-exec-argv-not-fixed"
-                            : "broken-control:mcp-tool-interpreter-end-of-options-missing"
-                        : sink.kind === "mcp-tool-fork-exec-path"
-                          ? "broken-control:mcp-tool-fork-exec-path-not-fixed"
-                          : "broken-control:mcp-tool-command-data-boundary",
+              : modelId === "node-mcp-tool-untrusted-executable-search"
+                ? "broken-control:mcp-tool-executable-search-path-not-fixed"
+                : modelId === "node-mcp-tool-code-injection"
+                  ? "broken-control:mcp-tool-code-data-boundary"
+                  : modelId === "node-mcp-tool-regex-injection"
+                    ? "broken-control:mcp-tool-regex-pattern-boundary"
+                    : modelId === "node-mcp-tool-sql-injection"
+                      ? "broken-control:mcp-tool-sql-data-boundary"
+                      : modelId === "node-mcp-tool-path-traversal"
+                        ? "broken-control:mcp-tool-filesystem-path-not-confined"
+                        : modelId === "node-mcp-tool-argument-injection"
+                          ? sink.kind === "mcp-tool-node-options"
+                            ? "broken-control:mcp-tool-node-options-not-fixed"
+                            : sink.kind === "mcp-tool-fork-node-options"
+                              ? "broken-control:mcp-tool-fork-node-options-not-fixed"
+                              : sink.kind === "mcp-tool-fork-exec-argv"
+                                ? "broken-control:mcp-tool-fork-exec-argv-not-fixed"
+                                : "broken-control:mcp-tool-interpreter-end-of-options-missing"
+                          : sink.kind === "mcp-tool-fork-exec-path"
+                            ? "broken-control:mcp-tool-fork-exec-path-not-fixed"
+                            : "broken-control:mcp-tool-command-data-boundary",
         ],
         priority:
           modelId === "node-mcp-tool-code-injection" ||
-          modelId === "node-mcp-tool-untrusted-module-load"
+          modelId === "node-mcp-tool-untrusted-module-load" ||
+          modelId === "node-mcp-tool-untrusted-executable-search"
             ? 129
             : modelId === "node-mcp-tool-regex-injection"
               ? 125
@@ -482,19 +494,21 @@ export function nodeMcpToolRiskRecords(
                   ? sink.kind === "mcp-tool-fork-relative-cwd"
                     ? (["CWE-426", "CWE-829"] as const)
                     : (["CWE-829"] as const)
-                  : modelId === "node-mcp-tool-code-injection"
-                    ? (["CWE-94", "CWE-95"] as const)
-                    : modelId === "node-mcp-tool-regex-injection"
-                      ? (["CWE-400", "CWE-730"] as const)
-                      : modelId === "node-mcp-tool-sql-injection"
-                        ? (["CWE-89"] as const)
-                        : modelId === "node-mcp-tool-path-traversal"
-                          ? (["CWE-22", "CWE-73"] as const)
-                          : modelId === "node-mcp-tool-argument-injection"
-                            ? (["CWE-88", "CWE-94"] as const)
-                            : sink.kind === "mcp-tool-fork-exec-path"
-                              ? (["CWE-78"] as const)
-                              : (["CWE-78", "CWE-88"] as const),
+                  : modelId === "node-mcp-tool-untrusted-executable-search"
+                    ? (["CWE-426"] as const)
+                    : modelId === "node-mcp-tool-code-injection"
+                      ? (["CWE-94", "CWE-95"] as const)
+                      : modelId === "node-mcp-tool-regex-injection"
+                        ? (["CWE-400", "CWE-730"] as const)
+                        : modelId === "node-mcp-tool-sql-injection"
+                          ? (["CWE-89"] as const)
+                          : modelId === "node-mcp-tool-path-traversal"
+                            ? (["CWE-22", "CWE-73"] as const)
+                            : modelId === "node-mcp-tool-argument-injection"
+                              ? (["CWE-88", "CWE-94"] as const)
+                              : sink.kind === "mcp-tool-fork-exec-path"
+                                ? (["CWE-78"] as const)
+                                : (["CWE-78", "CWE-88"] as const),
           },
           propagators: [
             {
@@ -2016,6 +2030,103 @@ function commandSinks(
       first,
       processBindings,
     );
+    const exactOptions = exactArrayCommandOptions(structural, call);
+    const shell =
+      exactOptions === undefined
+        ? undefined
+        : exactObjectLiteralPropertyRange(
+            source,
+            structural,
+            exactOptions,
+            "shell",
+          );
+    const shellSpecified =
+      exactOptions !== undefined &&
+      objectLiteralDefinesProperty(source, structural, exactOptions, "shell");
+    const exactNonShellOptions =
+      exactOptions !== undefined &&
+      (!shellSpecified ||
+        (shell !== undefined &&
+          source.slice(shell.start, shell.end).trim() === "false"));
+    const environment =
+      !exactNonShellOptions || exactOptions === undefined
+        ? undefined
+        : exactObjectLiteralPropertyRange(
+            source,
+            structural,
+            exactOptions,
+            "env",
+          );
+    const nodeOptions =
+      environment === undefined
+        ? undefined
+        : finalObjectLiteralPropertyRange(
+            source,
+            structural,
+            environment,
+            "NODE_OPTIONS",
+          );
+    const nodeOptionsTaint =
+      nodeOptions === undefined
+        ? undefined
+        : liveTaintForRange(structural, nodeOptions, registration.body, taint);
+    if (nodeRuntime !== undefined && nodeOptionsTaint !== undefined) {
+      const symbol = `${call.symbol}:options.env.NODE_OPTIONS`;
+      sinks.push({
+        kind: "mcp-tool-node-options",
+        line: call.line,
+        symbol,
+        source: {
+          ...nodeOptionsTaint,
+          propagators: [
+            ...nodeOptionsTaint.propagators,
+            ...nodeRuntime.propagators,
+            {
+              kind: "mcp-tool-node-options",
+              line: call.line,
+              symbol,
+            },
+          ],
+        },
+      });
+    }
+    const searchPath =
+      environment === undefined
+        ? undefined
+        : finalObjectLiteralPropertyRange(
+            source,
+            structural,
+            environment,
+            "PATH",
+          );
+    const searchPathTaint =
+      searchPath === undefined
+        ? undefined
+        : liveTaintForRange(structural, searchPath, registration.body, taint);
+    const fixedExecutable = literalValue(source.slice(first.start, first.end));
+    if (
+      searchPathTaint !== undefined &&
+      fixedExecutable !== undefined &&
+      isBareExecutableName(fixedExecutable)
+    ) {
+      const symbol = `${call.symbol}:options.env.PATH->command[0]`;
+      sinks.push({
+        kind: "mcp-tool-executable-search-path",
+        line: call.line,
+        symbol,
+        source: {
+          ...searchPathTaint,
+          propagators: [
+            ...searchPathTaint.propagators,
+            {
+              kind: "mcp-tool-executable-search-path",
+              line: call.line,
+              symbol,
+            },
+          ],
+        },
+      });
+    }
     const interpreterOption =
       second === undefined || nodeRuntime === undefined
         ? undefined
@@ -2184,6 +2295,51 @@ function exactForkOptions(
     if (close === args.end - 1) return call.arguments[2];
   }
   return undefined;
+}
+
+function exactArrayCommandOptions(
+  structural: string,
+  call: CallSite,
+): Range | undefined {
+  const maximumArguments = call.method === "execFile" ? 4 : 3;
+  if (call.arguments.length < 2 || call.arguments.length > maximumArguments) {
+    return undefined;
+  }
+  const second = trimRange(structural, call.arguments[1]!);
+  if (structural[second.start] === "{") {
+    if (
+      (call.method === "execFile" && call.arguments.length > 3) ||
+      (call.method !== "execFile" && call.arguments.length > 2)
+    ) {
+      return undefined;
+    }
+    const close = matchingStructuralDelimiter(
+      structural,
+      second.start,
+      "{",
+      "}",
+    );
+    return close === second.end - 1 ? second : undefined;
+  }
+  if (structural[second.start] !== "[") return undefined;
+  const argsClose = matchingStructuralDelimiter(
+    structural,
+    second.start,
+    "[",
+    "]",
+  );
+  if (argsClose !== second.end - 1) return undefined;
+  const third = call.arguments[2];
+  if (third === undefined) return undefined;
+  const options = trimRange(structural, third);
+  if (structural[options.start] !== "{") return undefined;
+  const close = matchingStructuralDelimiter(
+    structural,
+    options.start,
+    "{",
+    "}",
+  );
+  return close === options.end - 1 ? options : undefined;
 }
 
 function forkExecArgvInput(
@@ -3872,6 +4028,18 @@ function isRelativeNodeEntryPoint(value: string): boolean {
   if (/^[A-Za-z]:[\\/]/u.test(value)) return false;
   if (/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(value)) return false;
   return true;
+}
+
+function isBareExecutableName(value: string): boolean {
+  return (
+    value !== "" &&
+    value !== "." &&
+    value !== ".." &&
+    !value.includes("/") &&
+    !value.includes("\\") &&
+    !value.includes(":") &&
+    !value.includes("\0")
+  );
 }
 
 function literalValue(value: string): string | undefined {
