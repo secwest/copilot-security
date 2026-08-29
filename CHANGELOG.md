@@ -38,6 +38,31 @@ All notable scanner, application, benchmark, and operational changes are recorde
   canonical corpus contains 173 pairs, 346 cases, and 1,038 repeated
   positions. Hosted Node CI schedules all 34 MCP witnesses on Ubuntu and
   Windows, expanding the matrix from 67 to 75 jobs.
+- Completed fork execution-context acceptance at implementation checkpoint
+  `3bfd9f45dd78da9014cf3cc667606551f2a0e68a`. The managed Windows aggregate
+  selects 2,039 tests across 210 files: 2,010 pass, 27 intentionally skip, and
+  only the established temporary-Git and private-Windows-ACL permission cases
+  fail at their host boundaries; the exact two-file native rerun passes 48/48
+  with 242 assertions. The focused Windows and WSL model/benchmark lane passes
+  93 tests with 3,416 assertions on each platform. Independent compiled
+  inventory checks retain exactly the cwd and NODE_OPTIONS structured rows and
+  no structured row for either topology-matched control.
+- Two compiled repository-root inventories complete in 20.318 and 19.632
+  seconds and are byte-identical at 256 rows, 584,350 bytes, 243 structured
+  records, 13 lexical leads, and SHA-256
+  `d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+  The production audit reports no known vulnerabilities. Strict Windows and
+  WSL package inspection validates the same 299-entry archive, executable CLI,
+  public import, and all 79 bundled-plugin files through fresh isolated
+  installs; the 2,366,525-byte archive has SHA-256
+  `cc037b1eb31e5e57eb03205cad2924c40951b8e9d49f371e5d758740a3a1c06f`.
+- All eleven exact-implementation hosted workflows pass: Node `33236439739`,
+  container `33236439742`, Linux GUI `33236439754`, Windows GUI `33236439774`,
+  Go `33236439772`, Java `33236439755`, Kotlin `33236439831`, .NET
+  `33236439725`, Rust `33236439740`, Ruby `33236439744`, and PHP
+  `33236439727`. All 75 Node jobs pass, including the eight new cwd,
+  absolute-module, NODE_OPTIONS, and ordinary-environment-data witnesses on
+  Ubuntu and Windows.
 - Made `child_process.fork` role-aware for official MCP tool-input flows.
   Argument zero now emits `node-mcp-tool-untrusted-module-load` at the exact
   `fork:modulePath[0]` boundary with CWE-829, while exact object-literal

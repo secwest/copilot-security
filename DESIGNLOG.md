@@ -85,6 +85,28 @@ contains 34 cases across 17 pairs; the canonical corpus contains 173 pairs,
 witnesses on Ubuntu and Windows, expanding the expected matrix from 67 to 75
 jobs.
 
+**Final acceptance.** Implementation checkpoint
+`3bfd9f45dd78da9014cf3cc667606551f2a0e68a` passes the complete managed
+Windows aggregate with 2,010 passes, 27 intentional skips, and only the two
+established host-permission failures among 2,039 selected tests across 210
+files and 15,613 assertions. The exact temporary-Git and Windows-ACL files pass
+48/48 with 242 assertions when rerun natively. The focused Windows and WSL
+lanes each pass 93 tests and 3,416 assertions, and direct compiled inventory
+inspection produces only the expected cwd and NODE_OPTIONS models for the
+positive fixtures while both controls remain structurally negative.
+
+Two compiled repository-root inventories are byte-identical at 256 rows,
+584,350 bytes, 243 structured records, 13 lexical leads, and SHA-256
+`d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+The production audit is clean. Windows and WSL independently validate the same
+299-entry, 2,366,525-byte npm archive with SHA-256
+`cc037b1eb31e5e57eb03205cad2924c40951b8e9d49f371e5d758740a3a1c06f`,
+including fresh installed public import, CLI execution, and all 79 bundled
+plugin files. All eleven hosted workflow families pass at the implementation
+checkpoint. Node run `33236439739` passes all 75 jobs; the eight newly added
+Ubuntu and Windows witness jobs cover the vulnerable and controlled cwd and
+environment topologies without broadening their effects.
+
 ## 2026-08-28 — Model every child_process.fork execution role
 
 **Comparative gap.** Node documents
