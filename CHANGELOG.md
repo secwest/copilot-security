@@ -34,6 +34,23 @@ All notable scanner, application, benchmark, and operational changes are recorde
   exploit/control regression and a whole-repository cap regression preserve
   the R2DBC positive while excluding the bound control; the affected Windows
   lane passes 107 tests and 2,961 assertions.
+- Two inventories of exact repair checkpoint
+  `7ae5fd60c318c1a1e40aff5468adeb39f41db9e5` are byte-identical at 256
+  structured rows, 614,431 bytes, and SHA-256
+  `71bba544bbd1fd4d0fa4cd9069626d568b3392149e0cc3a407de22efe5dc991a`.
+  Exactly one row retains the vulnerable R2DBC controller-to-SQL path and the
+  bound twin retains none. Windows and WSL each validate the same 299-entry,
+  2,384,043-byte package with SHA-256
+  `2a01d7868264072b7a22bfcf683dff2756f2892c5552de9b8cb2eddf469f52a7`
+  through two fresh installs, public import, CLI execution, and all 79 bundled
+  plugin files; the generated archive is removed afterward.
+- All eleven hosted workflow families pass at repair checkpoint `7ae5fd6`:
+  Node `33252379667`, container `33252379632`, Windows GUI `33252379630`,
+  Linux GUI `33252379643`, Java `33252379666`, Kotlin `33252379674`, .NET
+  `33252379680`, Go `33252379684`, Rust `33252379668`, Ruby `33252379677`,
+  and PHP `33252379651`. All 91 Node jobs pass, including the complete scanner
+  suite and package inspection/smoke on Windows, macOS, and supported Node
+  releases on Ubuntu.
 - Completed pre-checkpoint product acceptance. The managed Windows aggregate
   selects 2,051 tests: 2,022 pass, 27 intentionally skip, and only the two
   established temporary-Git and private-ACL operations are denied; their exact

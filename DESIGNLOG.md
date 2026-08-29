@@ -90,6 +90,33 @@ import, CLI, and all 79 bundled plugin files. The local package and Maven build
 trees are removed after validation. Exact-checkpoint self-review and hosted
 acceptance follow after the implementation commit is pushed.
 
+**Repair-checkpoint evidence.** The project-scoped fix is committed and public
+as `7ae5fd60c318c1a1e40aff5468adeb39f41db9e5`. Two scans of an isolated
+`git archive` of that exact revision each emit 256 structured records totaling
+614,431 bytes with SHA-256
+`71bba544bbd1fd4d0fa4cd9069626d568b3392149e0cc3a407de22efe5dc991a`.
+Both retain exactly one `spring-r2dbc-sql` record from controller line 16 to
+SQL-grammar line 17 with CWE-89; the bound sibling retains none. The affected
+107-test set passes on Windows with 2,961 assertions and passes under WSL after
+the whole-repository integration check receives a dedicated 120-second budget
+for `/mnt/c` latency; that check completes in 102.15 seconds while Windows
+completes it in 28.72 seconds. Formatting, generated-model drift, TypeScript,
+and a clean production build remain green.
+
+Strict package inspection accepts the exact repair build at 299 entries,
+2,384,043 bytes, and SHA-256
+`2a01d7868264072b7a22bfcf683dff2756f2892c5552de9b8cb2eddf469f52a7`.
+Two isolated Windows installs add 67 packages each and two WSL installs add 75
+packages each; every install validates the public import, CLI, and all 79
+bundled plugin files. The generated package is removed after validation.
+
+All eleven hosted workflow families pass against the exact repair checkpoint:
+Node `33252379667`, container `33252379632`, Windows GUI `33252379630`, Linux
+GUI `33252379643`, Java `33252379666`, Kotlin `33252379674`, .NET
+`33252379680`, Go `33252379684`, Rust `33252379668`, Ruby `33252379677`, and
+PHP `33252379651`. All 91 Node jobs pass, including complete suites and package
+inspection/smoke across Windows, macOS, and the supported Ubuntu Node matrix.
+
 ## 2026-08-29 — Require routed Action2 sources across relative wrappers
 
 **Measured miss and comparator boundary.** The first Sails increment modeled a
