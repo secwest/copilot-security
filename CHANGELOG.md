@@ -56,6 +56,14 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `c95c43e7e4c897e53544c2361047003f33900894f8c3554dca8212fef450e7be`.
   Linux correctly rejects the Windows-mode archive before the native package
   is built, preventing a cross-platform launcher-permission false pass.
+- All eleven hosted workflow families pass at implementation checkpoint
+  `090b9fb6e8157f717be038203b3a39dd5d347b33`: Node `33240769402`,
+  container `33240769388`, Linux GUI `33240769407`, Windows GUI
+  `33240769419`, Go `33240769396`, Java `33240769410`, Kotlin
+  `33240769398`, .NET `33240769395`, Rust `33240769405`, Ruby
+  `33240769420`, and PHP `33240769397`. All 83 Node jobs pass with zero
+  failures, including the NODE_OPTIONS positive/control and executable-search
+  positive/control witnesses on both Ubuntu and Windows.
 - Closed two indirect `child_process.fork` execution-context gaps for official
   MCP tool-input flows. A fixed non-absolute `modulePath` combined with
   tool-controlled exact `options.cwd` now emits

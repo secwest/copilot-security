@@ -134,6 +134,16 @@ passes strict executable-mode inspection, fresh installation, public import,
 CLI behavior, and the same 79 plugin files. Both generated archives and all
 fixture-local dependency trees are removed after validation.
 
+**Hosted acceptance.** Exact implementation checkpoint
+`090b9fb6e8157f717be038203b3a39dd5d347b33` passes every hosted workflow
+family: Node `33240769402`, container `33240769388`, Linux GUI `33240769407`,
+Windows GUI `33240769419`, Go `33240769396`, Java `33240769410`, Kotlin
+`33240769398`, .NET `33240769395`, Rust `33240769405`, Ruby `33240769420`,
+and PHP `33240769397`. Node CI passes all 83 jobs with zero failures. Its eight
+new jobs execute each positive and matched control on Ubuntu and Windows; all
+eight pass, as do the seven full SDK matrices across supported Node releases
+and operating systems.
+
 ## 2026-08-28 — Model fork execution-context redirection
 
 **Counterexample and authoritative semantics.** The direct-role model made a
