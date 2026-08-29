@@ -635,6 +635,10 @@ describe("effectiveness benchmark", () => {
       ],
       ["python-asyncpg-sql-injection", "python-asyncpg-bound-parameter"],
       [
+        "python-asyncpg-unicode-source-sql-injection",
+        "python-asyncpg-unicode-source-bound-parameter",
+      ],
+      [
         "rust-axum-tokio-shell-command-injection",
         "rust-axum-tokio-argv-command",
       ],

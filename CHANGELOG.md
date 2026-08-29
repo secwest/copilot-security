@@ -6,6 +6,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a clean-looking partial-scan failure mode in deterministic source
+  discovery. Repository directory enumeration and reads of selected source
+  files now fail closed with a bounded, path-specific incomplete-scan error
+  instead of silently producing an empty or reduced residual-risk inventory.
+  Missing selected secret-scanning inputs and enumeration, metadata,
+  canonicalization, or read failures likewise remain fatal through the
+  existing secret-scanner boundary. Intentional exclusions for symlinks,
+  non-files, oversized files, generated trees, binary data, and out-of-root
+  canonical paths remain unchanged.
+- Preserved source-discovery incompleteness through both orchestration swallow
+  points: the optional residual-inventory fallback may still tolerate an
+  unrelated model-building failure, but never a `SourceDiscoveryError`, and a
+  correction turn may no longer treat that error as recoverable merely because
+  draft artifacts exist. Operations are classified as `enumerate`, `inspect`,
+  `canonicalize`, or `read`; repository-controlled path text is normalized,
+  JSON-delimited, and capped at 512 code points in the error message.
+- Reproduced the old behavior under an unprivileged Ubuntu/WSL account: a
+  mode-`000` source directory containing a valid modeled sink completed with
+  zero bytes and zero rows. The revised scanner instead rejects incomplete
+  coverage, and the Linux-only residual and secret regressions pass alongside
+  missing-selected-file, Unicode-source, and orchestration propagation tests.
+- Audited this boundary after CodeQL's August 2026
+  [silent Python file-loss repair](https://github.com/github/codeql/pull/22443).
+  Copilot Security does not use that Rust/Python escape bridge, but now carries
+  a strict source-retention pair containing Python 3.12 PEP 695 syntax, a
+  variation selector, `%s`, zero-width joiner, combining mark, and soft hyphen.
+  The vulnerable FastAPI-to-asyncpg fixture emits one exact SQL-grammar edge at
+  `src/accounts.py:11`; its otherwise identical `$1` bound-parameter control
+  emits none. The canonical benchmark advances to 182 pairs, 364 cases, and
+  1,092 repeated positions.
 - Extended the exact Rust web command model from `std::process::Command` to
   current `tokio::process::Command`. Direct, aliased, grouped, nested-grouped,
   module-qualified, and fully qualified Tokio bindings now retain the runtime

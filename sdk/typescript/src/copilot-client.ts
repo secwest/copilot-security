@@ -21,6 +21,7 @@ import {
   ModelTransportInterruptedError,
   ModelTurnDeadlineExceededError,
   ScanClosureIncompleteError,
+  SourceDiscoveryError,
 } from "./errors.js";
 import { hostRuntimeValuesPrompt } from "./runtime-prompt.js";
 import {
@@ -61,6 +62,21 @@ const HOST_OWNED_SCAN_INPUTS = new Set([
   "artifacts/02_discovery/in_scope_files.txt",
   "artifacts/02_discovery/security_guidance_paths.json",
 ]);
+
+export function residualRiskInventoryFallback(error: unknown): string {
+  if (error instanceof SourceDiscoveryError) throw error;
+  return "";
+}
+
+export function mustPropagateCorrectionError(error: unknown): boolean {
+  return (
+    error instanceof CompleteDraftArtifactsError ||
+    freshSessionRetryReason(error) !== null ||
+    error instanceof SourceDiscoveryError ||
+    error instanceof ScanClosureIncompleteError ||
+    error instanceof SecretScanningError
+  );
+}
 
 type ScannerSessionHooks = NonNullable<SessionConfig["hooks"]>;
 type ScannerPostToolUseInput = Parameters<
@@ -694,7 +710,7 @@ class CopilotThread implements CopilotScannerThread {
                 const residualRiskInventory = await buildResidualRiskInventory(
                   this.#workingDirectory,
                   scanDirectory,
-                ).catch(() => "");
+                ).catch(residualRiskInventoryFallback);
                 const [coverageGapInventory, findingQualityGapInventory] =
                   await Promise.all([
                     buildCoverageGapInventory(
@@ -744,10 +760,7 @@ class CopilotThread implements CopilotScannerThread {
                   }),
                 });
               } catch (error) {
-                if (error instanceof CompleteDraftArtifactsError) throw error;
-                if (freshSessionRetryReason(error) !== null) throw error;
-                if (error instanceof ScanClosureIncompleteError) throw error;
-                if (error instanceof SecretScanningError) throw error;
+                if (mustPropagateCorrectionError(error)) throw error;
                 if (!(await hasDraftArtifacts(this.#options.environment))) {
                   throw error;
                 }

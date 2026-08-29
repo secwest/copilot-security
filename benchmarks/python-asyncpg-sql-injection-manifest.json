@@ -82,6 +82,74 @@
         "python-asyncpg-bound-parameter/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "python-asyncpg-unicode-source-sql-injection",
+      "description": "A Python 3.12 source file with PEP 695 syntax and difficult Unicode/log-format characters retains a FastAPI value-to-asyncpg SQL grammar edge.",
+      "fixture": "fixtures/python-asyncpg-unicode-source-sql-injection",
+      "findingsPaths": [
+        "python-asyncpg-unicode-source-sql-injection/run-1/findings.json",
+        "python-asyncpg-unicode-source-sql-injection/run-2/findings.json",
+        "python-asyncpg-unicode-source-sql-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-asyncpg-unicode-source-sql-injection",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "src/accounts.py",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["asyncpg", "Connection", "official receiver"],
+            ["FastAPI", "Query", "username"],
+            ["accounts.lookup", "typed wrapper", "query_copy"],
+            ["argument zero", "query argument", "SQL grammar"],
+            ["await", "fetch", "coroutine"],
+            ["Python 3.12", "PEP 695", "type alias"],
+            ["Unicode", "source retention", "variation selector"],
+            ["$1", "bound parameter", "protocol value"],
+            ["CWE-89", "SQL injection", "unauthorized read"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["HTTP request", "FastAPI", "Query parameter"],
+            ["username", "server.account", "lookup"],
+            ["query_copy", "copied variable", "alias"],
+            ["Connection.fetch", "argument zero", "SQL grammar"],
+            ["await", "database round trip", "executed"],
+            ["OR role", "predicate", "administrator"],
+            ["database role", "authorization", "account row"],
+            ["fixed SQL", "$1", "negative control"]
+          ],
+          "forbiddenText": [
+            "every asyncpg call is vulnerable",
+            "bound values become SQL grammar",
+            "calling fetch without await executes the query",
+            "the recording witness contacts PostgreSQL",
+            "unusual Unicode is itself a vulnerability",
+            "the database server is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-asyncpg-unicode-source-bound-parameter",
+      "description": "The source-retention control keeps the same Python 3.12 and Unicode shapes while sending the hostile value only as a $1 protocol-bound argument.",
+      "fixture": "fixtures/python-asyncpg-unicode-source-bound-parameter",
+      "findingsPaths": [
+        "python-asyncpg-unicode-source-bound-parameter/run-1/findings.json",
+        "python-asyncpg-unicode-source-bound-parameter/run-2/findings.json",
+        "python-asyncpg-unicode-source-bound-parameter/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

@@ -57,6 +57,33 @@ export class ScanClosureIncompleteError extends IncompleteScanError {
   }
 }
 export class ContractValidationError extends CopilotSecurityError {}
+export type SourceDiscoveryOperation =
+  | "enumerate"
+  | "inspect"
+  | "canonicalize"
+  | "read";
+
+export class SourceDiscoveryError extends IncompleteScanError {
+  public readonly repositoryPath: string;
+
+  public constructor(
+    public readonly operation: SourceDiscoveryOperation,
+    repositoryPath: string,
+    options?: ErrorOptions,
+  ) {
+    const normalizedPath = repositoryPath.replaceAll("\\", "/") || ".";
+    const codePoints = [...normalizedPath];
+    const boundedPath =
+      codePoints.length <= 512
+        ? normalizedPath
+        : `${codePoints.slice(0, 512).join("")}…`;
+    super(
+      `Source discovery could not ${operation} repository path ${JSON.stringify(boundedPath)}; scan coverage is incomplete.`,
+      options,
+    );
+    this.repositoryPath = boundedPath;
+  }
+}
 export class ScanInterruptedError extends CopilotSecurityError {
   public readonly scanDir: string;
 

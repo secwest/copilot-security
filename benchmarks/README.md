@@ -368,6 +368,13 @@ SQL and supplies the identical hostile bytes only as the later bound value.
 Both identical recording witnesses are deliberately socket-free: they prove
 the query-grammar versus protocol-value boundary, not PostgreSQL impact.
 
+The same strict manifest also contains a source-retention pair. Both fixtures
+carry Python 3.12 PEP 695 syntax, a variation selector, `%s`, a zero-width
+joiner, a combining mark, and a soft hyphen. The positive must retain the exact
+SQL-grammar edge at `src/accounts.py:11`; the otherwise identical `$1` control
+must remain negative. This catches both silent source loss and false positives
+caused merely by unusual valid source text.
+
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
   --manifest ../../benchmarks/python-asyncpg-sql-injection-manifest.json `
@@ -382,6 +389,8 @@ node ../../benchmarks/run-benchmark.mjs `
 
 python ../../benchmarks/fixtures/python-asyncpg-sql-injection/examples/witness.py
 python ../../benchmarks/fixtures/python-asyncpg-bound-parameter/examples/witness.py
+python ../../benchmarks/fixtures/python-asyncpg-unicode-source-sql-injection/examples/witness.py
+python ../../benchmarks/fixtures/python-asyncpg-unicode-source-bound-parameter/examples/witness.py
 ```
 
 ## Node MCP tool-handler security benchmark

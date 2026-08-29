@@ -18,7 +18,12 @@ import {
   relative,
   resolve,
 } from "node:path";
-import { ConfigurationError, CopilotSecurityError } from "./errors.js";
+import {
+  ConfigurationError,
+  CopilotSecurityError,
+  SourceDiscoveryError,
+  type SourceDiscoveryOperation,
+} from "./errors.js";
 import type { TrustedExecutable } from "./trusted-executable.js";
 
 const FINGERPRINT_KEY_BYTES = 32;
@@ -395,7 +400,9 @@ export async function buildSecretCandidateInventory(
   for (const path of paths) {
     if (candidates.length >= MAX_CANDIDATES) break;
     const absolutePath = resolve(canonicalRepository, path);
-    const metadata = await lstat(absolutePath).catch(() => null);
+    const metadata = await lstat(absolutePath).catch((error: unknown) => {
+      throw secretSourceDiscoveryError("inspect", path, error);
+    });
     if (
       metadata === null ||
       !metadata.isFile() ||
@@ -409,15 +416,21 @@ export async function buildSecretCandidateInventory(
       truncated = true;
       break;
     }
-    const canonicalPath = await realpath(absolutePath).catch(() => null);
+    const canonicalPath = await realpath(absolutePath).catch(
+      (error: unknown) => {
+        throw secretSourceDiscoveryError("canonicalize", path, error);
+      },
+    );
     if (
       canonicalPath === null ||
       !isContainedPath(canonicalRepository, canonicalPath)
     ) {
       continue;
     }
-    const bytes = await readFile(canonicalPath).catch(() => null);
-    if (bytes === null || bytes.includes(0)) continue;
+    const bytes = await readFile(canonicalPath).catch((error: unknown) => {
+      throw secretSourceDiscoveryError("read", path, error);
+    });
+    if (bytes.includes(0)) continue;
     const text = bytes.toString("utf8");
     if (replacementCharacterRatio(text) > 0.01) continue;
     scannedFileCount += 1;
@@ -1221,7 +1234,13 @@ async function discoverCandidatePaths(repository: string): Promise<string[]> {
     const directory = pending.pop();
     if (directory === undefined) break;
     const entries = await readdir(directory, { withFileTypes: true }).catch(
-      () => [],
+      (error: unknown) => {
+        throw secretSourceDiscoveryError(
+          "enumerate",
+          relative(repository, directory),
+          error,
+        );
+      },
     );
     entries.sort((left, right) => right.name.localeCompare(left.name));
     for (const entry of entries) {
@@ -1243,6 +1262,19 @@ async function discoverCandidatePaths(repository: string): Promise<string[]> {
     }
   }
   return paths.sort((left, right) => left.localeCompare(right));
+}
+
+function secretSourceDiscoveryError(
+  operation: SourceDiscoveryOperation,
+  repositoryPath: string,
+  cause: unknown,
+): SecretScanningError {
+  const discoveryError = new SourceDiscoveryError(operation, repositoryPath, {
+    cause,
+  });
+  return new SecretScanningError(discoveryError.message, {
+    cause: discoveryError,
+  });
 }
 
 async function preparePrivateDirectory(

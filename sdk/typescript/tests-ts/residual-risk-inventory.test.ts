@@ -1,11 +1,21 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  mustPropagateCorrectionError,
+  residualRiskInventoryFallback,
   scanClosureRepairPrompt,
   scanQualityGatePrompt,
 } from "../src/copilot-client.js";
+import { SourceDiscoveryError } from "../src/errors.js";
 import {
   buildCoverageGapInventory,
   buildFindingQualityGapInventory,
@@ -2212,4 +2222,104 @@ describe("residual risk inventory", () => {
       expect(await buildCoverageGapInventory(scanDirectory)).toBe("");
     },
   );
+
+  test("fails closed when an immutable selected source disappears", async () => {
+    const root = await mkdtemp(
+      join(tmpdir(), "copilot-security-source-discovery-"),
+    );
+    temporaryPaths.push(root);
+    const repository = join(root, "repository");
+    const scanDirectory = join(root, "scan");
+    const discoveryDirectory = join(scanDirectory, "artifacts", "02_discovery");
+    await mkdir(repository, { recursive: true });
+    await mkdir(discoveryDirectory, { recursive: true });
+    await writeFile(
+      join(discoveryDirectory, "in_scope_files.txt"),
+      "src/disappeared.py\n",
+    );
+
+    const error = await buildRawResidualRiskInventory(
+      repository,
+      scanDirectory,
+    ).then(
+      () => null,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(SourceDiscoveryError);
+    expect(error).toMatchObject({
+      operation: "inspect",
+      repositoryPath: "src/disappeared.py",
+    });
+    expect((error as Error).message).toContain("scan coverage is incomplete");
+  });
+
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "fails closed when a source directory cannot be enumerated",
+    async () => {
+      const repository = await mkdtemp(
+        join(tmpdir(), "copilot-security-source-permission-"),
+      );
+      temporaryPaths.push(repository);
+      const blockedDirectory = join(repository, "blocked");
+      await mkdir(blockedDirectory);
+      await writeFile(
+        join(blockedDirectory, "handler.py"),
+        'eval(request.args["code"])\n',
+      );
+      await chmod(blockedDirectory, 0o000);
+      try {
+        const error = await buildRawResidualRiskInventory(repository).then(
+          () => null,
+          (reason: unknown) => reason,
+        );
+        expect(error).toBeInstanceOf(SourceDiscoveryError);
+        expect(error).toMatchObject({
+          operation: "enumerate",
+          repositoryPath: "blocked",
+        });
+      } finally {
+        await chmod(blockedDirectory, 0o700);
+      }
+    },
+  );
+
+  test("retains Python findings across modern syntax and Unicode escape shapes", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-unicode-source-"),
+    );
+    temporaryPaths.push(repository);
+    const unicodeText = `selector\uFE0F percent %s joiner\u200D accent e\u0301 soft\u00ADhyphen`;
+    await writeFile(
+      join(repository, "service.py"),
+      [
+        "from typing import Annotated",
+        "import asyncpg",
+        "from fastapi import Query",
+        "type Alias[T] = list[T]",
+        `NOTE = ${JSON.stringify(unicodeText)}`,
+        "async def lookup(value: Annotated[str, Query()], connection: asyncpg.Connection):",
+        "    query = f\"SELECT role FROM accounts WHERE username = '{value}'\"",
+        "    return await connection.fetch(query)",
+        "",
+      ].join("\n"),
+    );
+
+    const inventory = await buildRawResidualRiskInventory(repository);
+    expect(inventory).toContain('"id":"python-asyncpg-sql"');
+    expect(inventory).toContain('"path":"service.py"');
+    expect(inventory).toContain('"kind":"asyncpg-fetch-sql-grammar"');
+  });
+
+  test("never converts source-discovery incompleteness into an empty correction inventory", () => {
+    const error = new SourceDiscoveryError("enumerate", "src/private\nname");
+    expect(() => residualRiskInventoryFallback(error)).toThrow(error);
+    expect(error.message).toContain('"src/private\\nname"');
+    expect(mustPropagateCorrectionError(error)).toBeTrue();
+    expect(
+      mustPropagateCorrectionError(new Error("draft repair failed")),
+    ).toBeFalse();
+    expect(
+      residualRiskInventoryFallback(new Error("optional model failed")),
+    ).toBe("");
+  });
 });

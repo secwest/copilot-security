@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -9,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ConfigurationError } from "../src/errors.js";
+import { ConfigurationError, SourceDiscoveryError } from "../src/errors.js";
 import {
   buildSecretCandidateInventory,
   prepareSecretScanning,
@@ -409,7 +410,7 @@ describe("local secret candidates", () => {
       prepared,
       "scan-scoped",
       new Date(),
-      ["included.env", "../escape.env", "missing.env"],
+      ["included.env", "../escape.env"],
     );
     const broad = await buildSecretCandidateInventory(
       repository,
@@ -424,5 +425,94 @@ describe("local secret candidates", () => {
       "excluded.env",
       "included.env",
     ]);
+  });
+
+  test("fails closed when an immutable secret source disappears", async () => {
+    const { repository, credentialHome } = await temporaryScanner();
+    const prepared = await prepareSecretScanning({
+      credentialHome,
+      repositoryScope: repository,
+    });
+
+    const error = await buildSecretCandidateInventory(
+      repository,
+      prepared,
+      "scan-missing-source",
+      new Date(),
+      ["missing.env"],
+    ).then(
+      () => null,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(SecretScanningError);
+    expect((error as Error).message).toContain(
+      'could not inspect repository path "missing.env"',
+    );
+    expect((error as Error & { cause?: unknown }).cause).toBeInstanceOf(
+      SourceDiscoveryError,
+    );
+  });
+
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "fails closed when a secret source directory is unreadable",
+    async () => {
+      const { repository, credentialHome } = await temporaryScanner();
+      const blockedDirectory = join(repository, "blocked");
+      await mkdir(blockedDirectory);
+      await writeFile(
+        join(blockedDirectory, "secret.env"),
+        `token="${["Q7wE3rT9", "yU5iO2pA", "6sD8fG4h"].join("")}"\n`,
+      );
+      const prepared = await prepareSecretScanning({
+        credentialHome,
+        repositoryScope: repository,
+      });
+      await chmod(blockedDirectory, 0o000);
+      try {
+        const error = await buildSecretCandidateInventory(
+          repository,
+          prepared,
+          "scan-unreadable-source",
+        ).then(
+          () => null,
+          (reason: unknown) => reason,
+        );
+        expect(error).toBeInstanceOf(SecretScanningError);
+        expect((error as Error).message).toContain(
+          'could not enumerate repository path "blocked"',
+        );
+      } finally {
+        await chmod(blockedDirectory, 0o700);
+      }
+    },
+  );
+
+  test("retains secret candidates beside modern Unicode escape shapes", async () => {
+    const { repository, credentialHome } = await temporaryScanner();
+    const value = `ghp_${"A1b2".repeat(9)}`;
+    const unicodeText = `selector\uFE0F percent %s joiner\u200D accent e\u0301 soft\u00ADhyphen`;
+    await writeFile(
+      join(repository, ".env.unicode"),
+      `# ${unicodeText}\nGITHUB_TOKEN=${value}\n`,
+    );
+    const prepared = await prepareSecretScanning({
+      credentialHome,
+      repositoryScope: repository,
+    });
+
+    const result = await buildSecretCandidateInventory(
+      repository,
+      prepared,
+      "scan-unicode-source",
+    );
+    const rows = candidateRows(result.inventory);
+    expect(result.scannedFileCount).toBe(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      path: ".env.unicode",
+      line: 2,
+      ruleId: "github-token",
+    });
+    expect(result.inventory).not.toContain(value);
   });
 });

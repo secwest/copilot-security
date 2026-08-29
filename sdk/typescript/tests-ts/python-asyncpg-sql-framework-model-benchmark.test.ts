@@ -349,6 +349,8 @@ describe("Python asyncpg SQL-injection framework model", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([
       "python-asyncpg-sql-injection",
       "python-asyncpg-bound-parameter",
+      "python-asyncpg-unicode-source-sql-injection",
+      "python-asyncpg-unicode-source-bound-parameter",
     ]);
     expect(manifest.cases[0]?.expected[0]?.cwe).toEqual(["CWE-89"]);
     expect(
@@ -359,6 +361,8 @@ describe("Python asyncpg SQL-injection framework model", () => {
     ).toHaveLength(8);
     expect(manifest.cases[0]?.expected[0]?.forbiddenText).toHaveLength(6);
     expect(manifest.cases[1]?.expected).toEqual([]);
+    expect(manifest.cases[2]?.expected[0]?.cwe).toEqual(["CWE-89"]);
+    expect(manifest.cases[3]?.expected).toEqual([]);
 
     const canonical = JSON.parse(
       await readFile(join(benchmarkRoot, "manifest.json"), "utf8"),
@@ -367,7 +371,7 @@ describe("Python asyncpg SQL-injection framework model", () => {
       ({ id }) => id === manifest.cases[0]?.id,
     );
     expect(canonicalIndex).toBeGreaterThanOrEqual(0);
-    expect(canonical.cases.slice(canonicalIndex, canonicalIndex + 2)).toEqual(
+    expect(canonical.cases.slice(canonicalIndex, canonicalIndex + 4)).toEqual(
       manifest.cases,
     );
     for (const relativePath of [
@@ -428,6 +432,51 @@ describe("Python asyncpg SQL-injection framework model", () => {
         },
       },
     });
+  });
+
+  test("retains the exact SQL grammar edge across Python 3.12 and Unicode source shapes", async () => {
+    const affectedFixture = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-asyncpg-unicode-source-sql-injection",
+    );
+    const controlFixture = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-asyncpg-unicode-source-bound-parameter",
+    );
+    const affected = asyncpgRecords(
+      await buildResidualRiskInventory(affectedFixture),
+    );
+    const control = asyncpgRecords(
+      await buildResidualRiskInventory(controlFixture),
+    );
+    expect(control).toEqual([]);
+    expect(affected).toHaveLength(1);
+    expect(affected[0]).toMatchObject({
+      path: "src/accounts.py",
+      line: 11,
+      frameworkModel: {
+        id: "python-asyncpg-sql",
+        scope: "cross-file-wrapper",
+        source: { kind: "fastapi-bound-parameter", path: "src/server.py" },
+        sink: {
+          kind: "asyncpg-fetch-sql-grammar",
+          path: "src/accounts.py",
+          line: 11,
+          cweIds: ["CWE-89"],
+        },
+      },
+    });
+
+    const [affectedSource, controlSource] = await Promise.all([
+      readFile(join(affectedFixture, "src", "accounts.py"), "utf8"),
+      readFile(join(controlFixture, "src", "accounts.py"), "utf8"),
+    ]);
+    for (const sourceShape of ["type Alias[T]", "️", "%s", "‍", "́", "­"]) {
+      expect(affectedSource).toContain(sourceShape);
+      expect(controlSource).toContain(sourceShape);
+    }
   });
 
   test("quality guidance preserves the asyncpg proof boundary", () => {

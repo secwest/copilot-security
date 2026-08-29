@@ -1,0 +1,2 @@
+asyncpg==0.31.0
+fastapi==0.116.1

@@ -7,6 +7,7 @@ import {
   isSubstantiveValidation,
   type EvidenceLocation,
 } from "./evidence-quality.js";
+import { SourceDiscoveryError } from "./errors.js";
 import {
   githubActionsArtifactPoisoningRecords,
   githubActionsCompositeActionInjectionRecords,
@@ -4838,6 +4839,8 @@ export async function buildResidualRiskInventory(
     const source = await readBoundedRepositoryFile(
       canonicalRepository,
       candidatePath,
+      MAX_FILE_BYTES,
+      true,
     );
     if (source === null) continue;
     totalBytes += source.byteLength;
@@ -49548,7 +49551,13 @@ async function discoverSourcePaths(repository: string): Promise<string[]> {
     const directory = pending.pop();
     if (directory === undefined) break;
     const entries = await readdir(directory, { withFileTypes: true }).catch(
-      () => [],
+      (error: unknown) => {
+        throw new SourceDiscoveryError(
+          "enumerate",
+          relative(repository, directory),
+          { cause: error },
+        );
+      },
     );
     entries.sort((left, right) => right.name.localeCompare(left.name));
     for (const entry of entries) {
@@ -49860,10 +49869,16 @@ async function readBoundedRepositoryFile(
   repository: string,
   relativePath: string,
   maximumBytes = MAX_FILE_BYTES,
+  required = false,
 ): Promise<Buffer | null> {
   const candidate = resolve(repository, relativePath);
   if (!isContainedRelativePath(relative(repository, candidate))) return null;
-  const metadata = await lstat(candidate).catch(() => null);
+  const metadata = await lstat(candidate).catch((error: unknown) => {
+    if (required) {
+      throw new SourceDiscoveryError("inspect", relativePath, { cause: error });
+    }
+    return null;
+  });
   if (
     metadata === null ||
     !metadata.isFile() ||
@@ -49872,14 +49887,30 @@ async function readBoundedRepositoryFile(
   ) {
     return null;
   }
-  const canonicalCandidate = await realpath(candidate).catch(() => null);
+  const canonicalCandidate = await realpath(candidate).catch(
+    (error: unknown) => {
+      if (required) {
+        throw new SourceDiscoveryError("canonicalize", relativePath, {
+          cause: error,
+        });
+      }
+      return null;
+    },
+  );
   if (
     canonicalCandidate === null ||
     !isContainedRelativePath(relative(repository, canonicalCandidate))
   ) {
     return null;
   }
-  return await readFile(canonicalCandidate);
+  try {
+    return await readFile(canonicalCandidate);
+  } catch (error) {
+    if (required) {
+      throw new SourceDiscoveryError("read", relativePath, { cause: error });
+    }
+    throw error;
+  }
 }
 
 async function readBoundedScanFile(

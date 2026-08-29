@@ -2,6 +2,67 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Make source loss an explicit incomplete scan
+
+**Measured failure and comparator signal.** A real Ubuntu/WSL reproduction ran
+the previously compiled scanner as unprivileged user `dr` against a repository
+whose modeled source directory had mode `000`. Directory enumeration was
+reduced to an empty list, the scan completed successfully, and its output was
+exactly zero bytes and zero rows. This is more dangerous than a visible crash:
+a caller can interpret incomplete coverage as a clean result. The audit was
+prompted by CodeQL's merged
+[`Python: fix files being silently dropped over Rust/Python escape mismatch`](https://github.com/github/codeql/pull/22443),
+which found a different implementation defect with the same external failure
+shape. CodeQL's bridge could reject or misdecode otherwise valid Python source
+containing modern syntax and difficult escape/log-format characters without
+making the extraction failure reliably visible. Copilot Security does not use
+that bridge; the relevant analogous risk was its own fail-open filesystem error
+handling. This relationship is an inference from the two implementations, not
+a claim that they share a parser.
+
+**Accepted completeness contract.** Introduce `SourceDiscoveryError` as an
+`IncompleteScanError` with one of four stable operations: `enumerate`,
+`inspect`, `canonicalize`, or `read`. A failure to enumerate any in-scope source
+directory is fatal. Once deterministic discovery or immutable scan selection
+names a source file, an inability to inspect, canonicalize, or read it is also
+fatal. Preserve intentional policy decisions as non-errors: do not follow
+symlinks, do not cross the canonical repository root, and continue skipping
+non-files, explicitly generated/excluded trees, oversized inputs, binary
+content, and unsupported text. The distinction is between deliberately
+excluded coverage and coverage lost because the host could not observe an
+input it had selected.
+
+Error messages normalize separators, cap the repository-relative path at 512
+Unicode code points, and JSON-delimit it so newlines, quotes, and ASCII control
+characters cannot forge adjacent log lines. The original filesystem error is
+retained as `cause`. Secret scanning wraps the same discovery error inside its
+existing `SecretScanningError` boundary, preserving the established fatal
+secret-path handling while leaving a typed cause for diagnosis.
+
+**Orchestration boundary.** The residual-risk inventory remains an optional
+corrective signal only when its model construction fails for an unrelated
+reason. Its fallback must rethrow `SourceDiscoveryError`. The correction-turn
+catch must also propagate that error even when all draft artifacts already
+exist; otherwise the outer catch would recreate the same partial-success bug.
+No model retry can repair unreadable local input, so this condition bypasses
+aggressive model/safety recovery and ends the run as incomplete. Missing model
+output and transient model transport retain their separate recovery policies.
+
+**Adversarial regression and benchmark.** POSIX-only tests create real
+mode-`000` directories and run only when the process is neither Windows nor
+root; `finally` restores permissions before cleanup. Cross-platform tests race
+away an immutable selected path and verify inspect-stage failure. A permanent
+asyncpg exploit/control pair contains Python 3.12 PEP 695 syntax plus the
+variation-selector, percent, zero-width-joiner, combining-mark, and soft-hyphen
+shapes implicated in the comparator's escape/logging audit. Both sides retain
+the exact unusual text. The positive still yields one cross-file
+FastAPI-to-`Connection.fetch` SQL-grammar model at `src/accounts.py:11`; the
+control changes only the boundary to fixed `$1` SQL and produces no model.
+Register both in the perfect-gate specialized manifest and canonical corpus.
+The corpus now contains 182 exploit/control pairs, 364 cases, and 1,092
+three-run positions. This increment improves scan completeness and its
+measurement; it does not close the standing effectiveness goal.
+
 ## 2026-08-29 — Preserve Tokio process identity without treating argv as shell grammar
 
 **Measured miss and comparator evidence.** The compiled scanner at

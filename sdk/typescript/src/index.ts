@@ -44,8 +44,12 @@ export {
   ScanClosureIncompleteError,
   ScanCostLimitExceededError,
   ScanInterruptedError,
+  SourceDiscoveryError,
 } from "./errors.js";
-export type { ProtectedScanPathKind } from "./errors.js";
+export type {
+  ProtectedScanPathKind,
+  SourceDiscoveryOperation,
+} from "./errors.js";
 export {
   DEFAULT_COPILOT_CONFIG,
   mergedCopilotConfig,
