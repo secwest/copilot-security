@@ -31,6 +31,30 @@ All notable scanner, application, benchmark, and operational changes are recorde
   protocol-value separation and explicitly do not claim a PostgreSQL exploit.
   The focused lane passes 9 tests and 37 assertions on Windows. The canonical
   benchmark advances to 180 pairs, 360 cases, and 1,080 repeated positions.
+- Two inventories of exact asyncpg implementation checkpoint
+  `c1028fa88c24709b2e5be16d62498d06a5133055` are byte-identical at 256
+  structured rows, 615,647 bytes, and SHA-256
+  `d32e6e93637c5cb540d1f7bdbca088f7eb5431959ffb6b761d14efed04e21b3c`.
+  Exactly one asyncpg row identifies the vulnerable fixture at line 11 and the
+  bound control remains absent from the saturated whole-repository inventory.
+- The widened Windows model lane passes 177 tests and 3,407 assertions with
+  seven expected symlink skips; WSL passes all 33 selected tests with 2,656
+  assertions and both Python witnesses. The complete managed Windows suite
+  selects 2,073 tests: 2,044 pass, 27 intentionally skip, and only the two
+  established temporary-Git and private-home ACL operations are denied by the
+  sandbox. The exact two affected files pass unchanged outside that boundary:
+  48 tests and 242 assertions. Formatting, generated-model drift, TypeScript,
+  the clean build, and the production dependency audit are green.
+- Windows and WSL both validate the same Linux-generated 299-entry,
+  2,372,709-byte package with SHA-256
+  `03552a8d7f93d41905b4f7a2e17ce22924245ca5668f25c74de3c0d87839995b`
+  through isolated installation, public import, CLI execution, and all 79
+  bundled plugin files; the generated archive is removed afterward.
+- Corrected the canonical paired-fixture list formatting after every hosted
+  core platform completed its tests but rejected the same unformatted
+  `benchmark.test.ts` block. The Prettier-only change retains all 18 benchmark
+  tests and 2,556 assertions; generated-model drift, TypeScript, and the clean
+  build pass again before the corrective checkpoint.
 - Added a lower-level Java R2DBC SPI SQL model for all six official grammar
   boundaries: `Connection.createStatement`, `Batch.add`, the three
   savepoint-name operations, and `Statement.returnGeneratedValues`. Exact

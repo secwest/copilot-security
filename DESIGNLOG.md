@@ -52,6 +52,37 @@ model emits exactly one cross-file positive at `src/accounts.py:11` and no
 control row. Nine focused tests pass 37 assertions. The canonical corpus now
 contains 180 exploit/control pairs, 360 cases, and 1,080 repeated positions.
 
+**Acceptance evidence.** The widened Windows framework, residual-risk, and
+canonical lane passes 177 tests and 3,407 assertions with seven intentional
+symlink skips. WSL passes all 33 selected tests and 2,656 assertions, including
+both socket-free Python witnesses. The managed Windows aggregate selects 2,073
+tests across 213 files: 2,044 pass, 27 intentionally skip, and only the two
+established temporary-Git and private-home ACL operations are denied by the
+sandbox. The exact two affected files pass unchanged with normal host access:
+48 tests and 242 assertions. Formatting, generated-model drift, TypeScript
+checking, the clean production build, and the production advisory audit pass.
+
+Two scans of an isolated `git archive` of exact checkpoint
+`c1028fa88c24709b2e5be16d62498d06a5133055` are byte-identical at 256
+structured records totaling 615,647 bytes with SHA-256
+`d32e6e93637c5cb540d1f7bdbca088f7eb5431959ffb6b761d14efed04e21b3c`.
+Exactly one `python-asyncpg-sql` row identifies
+`benchmarks/fixtures/python-asyncpg-sql-injection/src/accounts.py:11`; the
+parameter-bound twin remains absent. The Linux-generated npm package contains
+299 entries, totals 2,372,709 bytes, and has SHA-256
+`03552a8d7f93d41905b4f7a2e17ce22924245ca5668f25c74de3c0d87839995b`.
+Windows and WSL isolated installs validate its public import, executable CLI,
+and all 79 bundled plugin files; the generated archive is removed after
+validation.
+
+The first hosted core pass completed the full scanner suite on every supported
+platform but all seven matrix jobs then rejected the same unformatted paired-
+fixture addition in `tests-ts/benchmark.test.ts`. Apply only Prettier's layout
+change. The exact benchmark file still passes all 18 tests and 2,556
+assertions; generated-model drift, TypeScript checking, and the clean build
+pass before the corrective checkpoint. This is presentation-only and does not
+change the measured implementation checkpoint or its inventory evidence.
+
 ## 2026-08-29 — Close lower-level R2DBC SPI grammar through execution
 
 **Measured miss and authoritative boundary.** The previously compiled scanner
