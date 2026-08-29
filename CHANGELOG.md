@@ -23,9 +23,17 @@ All notable scanner, application, benchmark, and operational changes are recorde
   a query predicate and reads the seeded administrator row; the matched control
   passes the identical payload only as a bound value and returns no row. Both
   `mvn verify` witnesses pass under Ubuntu/WSL. The prior compiled scanner emits
-  zero specialized rows for both fixtures; the new focused lane passes 6 tests
-  and 21 assertions. The canonical benchmark advances to 178 pairs, 356 cases,
+  zero specialized rows for both fixtures; the new focused lane passes 8 tests
+  and 25 assertions. The canonical benchmark advances to 178 pairs, 356 cases,
   and 1,068 repeated positions.
+- Corrected typed Java wrapper resolution after exact-checkpoint self-review
+  found that sibling Maven applications with the same simple class name could
+  suppress both flows as repository-global ambiguity. Direct and bounded
+  multi-hop Java graphs now resolve one owner only within the caller's nearest
+  Maven/Gradle project plus exact declared project dependencies. A sibling
+  exploit/control regression and a whole-repository cap regression preserve
+  the R2DBC positive while excluding the bound control; the affected Windows
+  lane passes 107 tests and 2,961 assertions.
 - Completed pre-checkpoint product acceptance. The managed Windows aggregate
   selects 2,051 tests: 2,022 pass, 27 intentionally skip, and only the two
   established temporary-Git and private-ACL operations are denied; their exact

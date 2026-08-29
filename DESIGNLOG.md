@@ -49,11 +49,34 @@ The positive interpolates the username and demonstrates a predicate change
 that reads the administrator row. The control changes only the boundary to a
 fixed named placeholder plus `bind`, and the identical value returns no row.
 Both network-free `mvn verify` witnesses pass in Ubuntu/WSL. The focused model
-lane passes 6 tests and 21 assertions, including direct and Supplier forms,
+lane passes 8 tests and 25 assertions, including direct and Supplier forms,
 three execution methods, fully qualified typing, one- and two-boundary flow,
 and fixed/bound, inert, malformed, lookalike, and reassignment negatives. The
 strict three-run pair advances the canonical corpus to 178 pairs, 356 cases,
 and 1,068 repeated positions.
+
+**Exact-checkpoint self-review and project resolution.** Two inventories of the
+first implementation checkpoint were byte-identical but contained no R2DBC
+row. The 256-row final selector already reserves distinct framework model and
+sink families; the actual loss occurred earlier because the positive and
+control fixtures are separate Maven applications that intentionally reuse the
+simple type `AccountQueries`. Typed Java wrapper resolution treated all simple
+types as one repository-global namespace and rejected both projects as
+ambiguous.
+
+The repaired resolver indexes Java owners by the nearest `pom.xml`,
+`build.gradle`, or `build.gradle.kts` boundary. A caller may resolve exactly one
+owner in its own project or an exact direct Maven-reactor/Gradle-project compile
+dependency; multiple visible owners still fail closed. The same rule is used
+when building each relay and the final controller edge, so direct and bounded
+multi-hop graphs have one consistent visibility contract. A focused sibling-
+project regression gives the positive and control identical package and type
+names yet retains only the positive multi-hop SQL path. A second regression
+scans this complete repository and requires the committed vulnerable fixture
+to survive the global 256-row inventory while the bound twin remains absent.
+The focused R2DBC lane now passes 8 tests and 25 assertions; the affected Java,
+Spring, multi-hop, framework, and canonical benchmark lane passes 107 tests and
+2,961 assertions on Windows.
 
 **Pre-checkpoint product evidence.** The focused Windows and native WSL lanes
 each pass 30 tests and 2,578 assertions. The managed Windows aggregate selects

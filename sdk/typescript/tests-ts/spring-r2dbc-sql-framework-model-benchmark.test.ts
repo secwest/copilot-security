@@ -291,6 +291,80 @@ public final class AccountQueries {
     });
   });
 
+  test("separates identical Java type names in sibling Maven projects", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "copilot-security-r2dbc-project-scope-"),
+    );
+    temporaryPaths.push(repository);
+    for (const project of ["vulnerable", "control"]) {
+      await writeRepositoryFile(
+        repository,
+        `${project}/pom.xml`,
+        "<project />",
+      );
+      await writeRepositoryFile(
+        repository,
+        `${project}/src/main/java/example/AccountController.java`,
+        `package example;
+import org.springframework.web.bind.annotation.RequestParam;
+public final class AccountController {
+  private final AccountService service;
+  public Object lookup(@RequestParam String username) { return service.lookup(username); }
+}`,
+      );
+      await writeRepositoryFile(
+        repository,
+        `${project}/src/main/java/example/AccountService.java`,
+        `package example;
+public final class AccountService {
+  private final AccountQueries queries;
+  public Object lookup(String username) { return queries.lookup(username); }
+}`,
+      );
+      await writeRepositoryFile(
+        repository,
+        `${project}/src/main/java/example/AccountQueries.java`,
+        `package example;
+import org.springframework.r2dbc.core.DatabaseClient;
+public final class AccountQueries {
+  private final DatabaseClient client;
+  public Object lookup(String username) { return ${
+    project === "vulnerable"
+      ? "client.sql(username).fetch().one()"
+      : 'client.sql("SELECT * FROM accounts WHERE username = :username").bind("username", username).fetch().one()'
+  }; }
+}`,
+      );
+    }
+
+    const records = r2dbcRecords(await buildResidualRiskInventory(repository));
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      path: "vulnerable/src/main/java/example/AccountQueries.java",
+      frameworkModel: {
+        scope: "cross-file-multi-hop-wrapper",
+        source: {
+          path: "vulnerable/src/main/java/example/AccountController.java",
+        },
+      },
+    });
+  });
+
+  test("retains the vulnerable fixture under whole-repository saturation", async () => {
+    const records = r2dbcRecords(
+      await buildResidualRiskInventory(resolve(benchmarkRoot, "..")),
+    );
+
+    expect(records.map(({ path }) => path)).toEqual([
+      "benchmarks/fixtures/java-r2dbc-databaseclient-sql-injection/src/main/java/example/AccountQueries.java",
+    ]);
+    expect(
+      records.some(({ path }) =>
+        path.includes("java-r2dbc-databaseclient-bound-parameter"),
+      ),
+    ).toBeFalse();
+  }, 120_000);
+
   test("requires grammar, reactive-consumption, dialect, and impact validation", () => {
     const prompt = scanQualityGatePrompt("spring-r2dbc-sql");
     expect(prompt).toContain(

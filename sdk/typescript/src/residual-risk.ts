@@ -30564,26 +30564,29 @@ function frameworkDirectJavaDataflowRecords(
     summariesByOwnerAndMethod.set(key, existing);
   }
 
-  const ownerPaths = new Map<string, Set<string>>();
-  for (const file of files) {
-    if (file.extension !== ".java") continue;
-    const ownerType = javaOwnerType(file.lines);
-    if (ownerType === undefined) continue;
-    const paths = ownerPaths.get(ownerType) ?? new Set<string>();
-    paths.add(file.path);
-    ownerPaths.set(ownerType, paths);
-  }
+  const projectGraph = javaBasenameProjectGraph(files);
+  const ownerPaths = javaProjectOwnerPaths(files);
 
   const records: ResidualRiskRecord[] = [];
   const emitted = new Set<string>();
   for (const caller of files) {
     if (caller.extension !== ".java") continue;
+    const callerProjectRoot = javaBasenameProjectRootForPath(
+      files,
+      caller.path,
+    );
     const callerMethods = exportedJavaMethods(caller.lines);
     if (callerMethods.length === 0) continue;
     const receiverBindings = javaReceiverBindings(caller.lines);
     for (const [key, matchingSummaries] of summariesByOwnerAndMethod) {
       const [ownerType, method] = key.split("\0") as [string, string];
-      if (ownerPaths.get(ownerType)?.size !== 1) continue;
+      const visibleOwnerPaths = javaVisibleOwnerPaths(
+        projectGraph,
+        ownerPaths,
+        callerProjectRoot,
+        ownerType,
+      );
+      if (visibleOwnerPaths.size !== 1) continue;
       const bindings = [
         ...receiverBindings.filter(
           (binding) => binding.ownerType === ownerType,
@@ -30604,6 +30607,22 @@ function frameworkDirectJavaDataflowRecords(
           if (callerMethod === undefined) continue;
           for (const summary of matchingSummaries) {
             if (summary.file.path === caller.path) continue;
+            const summaryProjectRoot = javaBasenameProjectRootForPath(
+              files,
+              summary.file.path,
+            );
+            if (
+              !visibleOwnerPaths.has(summary.file.path) ||
+              !javaBasenameProjectCanRead(
+                projectGraph,
+                callerProjectRoot,
+                summaryProjectRoot,
+                caller.path,
+                summary.file.path,
+              )
+            ) {
+              continue;
+            }
             if (
               summary.parameterCount !== undefined &&
               call.arguments.length !== summary.parameterCount
@@ -31399,7 +31418,8 @@ function frameworkJavaMultiHopDataflowRecords(
   files: readonly SourceFileSnapshot[],
 ): ResidualRiskRecord[] {
   const sinkSummaries = javaFrameworkWrapperSummaries(files);
-  const ownerPaths = javaOwnerPaths(files);
+  const projectGraph = javaBasenameProjectGraph(files);
+  const ownerPaths = javaProjectOwnerPaths(files);
   const relaySummaries: JavaFrameworkRelaySummary[] = [];
   let downstreamSummaries: readonly (
     | FrameworkWrapperSummary
@@ -31409,6 +31429,7 @@ function frameworkJavaMultiHopDataflowRecords(
     const next = javaFrameworkRelaySummaries(
       files,
       downstreamSummaries,
+      projectGraph,
       ownerPaths,
     );
     relaySummaries.push(...next);
@@ -31434,7 +31455,6 @@ function frameworkJavaMultiHopDataflowRecords(
     const receiverBindings = javaReceiverBindings(caller.lines);
     for (const [key, matchingSummaries] of summariesByOwnerAndMethod) {
       const [ownerType, method] = key.split("\0") as [string, string];
-      if (ownerPaths.get(ownerType)?.size !== 1) continue;
       const bindings = [
         ...receiverBindings.filter(
           (binding) => binding.ownerType === ownerType,
@@ -31455,6 +31475,18 @@ function frameworkJavaMultiHopDataflowRecords(
           if (callerMethod === undefined) continue;
           for (const summary of matchingSummaries) {
             if (summary.file.path === caller.path) continue;
+            if (
+              !javaProjectCanResolveOwnerPath(
+                files,
+                projectGraph,
+                ownerPaths,
+                caller.path,
+                ownerType,
+                summary.file.path,
+              )
+            ) {
+              continue;
+            }
             const chain = typedFrameworkRelayChain(summary);
             if (chain === undefined || chain.relays.length === 0) continue;
             if (call.arguments.length !== summary.parameterCount) continue;
@@ -31876,6 +31908,7 @@ function javaFrameworkRelaySummaries(
     | FrameworkWrapperSummary
     | JavaFrameworkRelaySummary
   )[],
+  projectGraph: JavaBasenameProjectGraph,
   ownerPaths: ReadonlyMap<string, ReadonlySet<string>>,
 ): JavaFrameworkRelaySummary[] {
   const summariesByOwnerAndMethod = new Map<
@@ -31901,7 +31934,6 @@ function javaFrameworkRelaySummaries(
         string,
         string,
       ];
-      if (ownerPaths.get(downstreamOwnerType)?.size !== 1) continue;
       const bindings = [
         ...receiverBindings.filter(
           (binding) => binding.ownerType === downstreamOwnerType,
@@ -31927,7 +31959,15 @@ function javaFrameworkRelaySummaries(
             const downstreamPaths = typedFrameworkSummaryPaths(downstream);
             if (
               downstreamPaths === undefined ||
-              downstreamPaths.has(file.path)
+              downstreamPaths.has(file.path) ||
+              !javaProjectCanResolveOwnerPath(
+                files,
+                projectGraph,
+                ownerPaths,
+                file.path,
+                downstreamOwnerType,
+                downstream.file.path,
+              )
             ) {
               continue;
             }
@@ -32005,7 +32045,7 @@ function javaFrameworkRelaySummaries(
   return summaries;
 }
 
-function javaOwnerPaths(
+function javaProjectOwnerPaths(
   files: readonly SourceFileSnapshot[],
 ): Map<string, Set<string>> {
   const ownerPaths = new Map<string, Set<string>>();
@@ -32013,11 +32053,55 @@ function javaOwnerPaths(
     if (file.extension !== ".java") continue;
     const ownerType = javaOwnerType(file.lines);
     if (ownerType === undefined) continue;
-    const paths = ownerPaths.get(ownerType) ?? new Set<string>();
+    const projectRoot = javaBasenameProjectRootForPath(files, file.path);
+    const key = `${projectRoot}\0${ownerType}`;
+    const paths = ownerPaths.get(key) ?? new Set<string>();
     paths.add(file.path);
-    ownerPaths.set(ownerType, paths);
+    ownerPaths.set(key, paths);
   }
   return ownerPaths;
+}
+
+function javaVisibleOwnerPaths(
+  projectGraph: JavaBasenameProjectGraph,
+  ownerPaths: ReadonlyMap<string, ReadonlySet<string>>,
+  callerProjectRoot: string,
+  ownerType: string,
+): ReadonlySet<string> {
+  return new Set(
+    [
+      ...javaBasenameVisibleProjectRoots(projectGraph, callerProjectRoot),
+    ].flatMap((projectRoot) => [
+      ...(ownerPaths.get(`${projectRoot}\0${ownerType}`) ?? []),
+    ]),
+  );
+}
+
+function javaProjectCanResolveOwnerPath(
+  files: readonly SourceFileSnapshot[],
+  projectGraph: JavaBasenameProjectGraph,
+  ownerPaths: ReadonlyMap<string, ReadonlySet<string>>,
+  callerPath: string,
+  ownerType: string,
+  ownerPath: string,
+): boolean {
+  const callerProjectRoot = javaBasenameProjectRootForPath(files, callerPath);
+  const visibleOwnerPaths = javaVisibleOwnerPaths(
+    projectGraph,
+    ownerPaths,
+    callerProjectRoot,
+    ownerType,
+  );
+  if (visibleOwnerPaths.size !== 1 || !visibleOwnerPaths.has(ownerPath)) {
+    return false;
+  }
+  return javaBasenameProjectCanRead(
+    projectGraph,
+    callerProjectRoot,
+    javaBasenameProjectRootForPath(files, ownerPath),
+    callerPath,
+    ownerPath,
+  );
 }
 
 function dotnetFrameworkRelaySummaries(
