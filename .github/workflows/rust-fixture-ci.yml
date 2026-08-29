@@ -61,8 +61,6 @@ jobs:
     name: Axum Tokio command-injection fixtures
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      CARGO_TARGET_DIR: ${{ runner.temp }}/rust-tokio-target
 
     steps:
       - name: Checkout repository
@@ -80,6 +78,8 @@ jobs:
 
       - name: Format and compile locked Tokio witnesses
         shell: bash
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/rust-tokio-target
         run: |
           set -euo pipefail
           rustfmt --edition 2021 --check \
@@ -96,6 +96,8 @@ jobs:
 
       - name: Prove Tokio shell grammar and literal argument behavior
         shell: bash
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/rust-tokio-target
         run: |
           set -euo pipefail
           vulnerable="$(RUST_COMMAND_MARKER=rust-tokio-expanded cargo run --quiet --locked \
