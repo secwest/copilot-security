@@ -31,6 +31,25 @@ All notable scanner, application, benchmark, and operational changes are recorde
   canonical corpus contains 171 pairs, 342 cases, and 1,026 repeated
   positions. Hosted Node CI now schedules all 30 MCP witnesses on Ubuntu and
   Windows, expanding the matrix from 59 to 67 jobs.
+- Completed full acceptance at implementation revision
+  `7d4d9e9e65b5f62072bce93cd33e469ad73d18fe`. The managed Windows suite
+  selects 2,037 tests across 210 files: 2,008 pass, 27 intentionally skip, and
+  only the two established Git-metadata and Windows-ACL cases fail closed;
+  their exact native rerun passes 48/48 with 242 assertions. Two compiled
+  root inventories complete in 20.291 and 19.664 seconds and are
+  byte-identical at 256 rows, 584,350 bytes, 243 structured records, 13
+  lexical leads, and SHA-256
+  `d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+  The production audit is clean. Strict package inspection and a fresh
+  isolated installation validate 299 entries, the public import, CLI, and all
+  79 bundled-plugin files; the 2,330,647-byte archive has SHA-256
+  `8ed24e72635536b6f75ac9428aa3943a383ee27390c73b79a52c9b8520468203`.
+  All eleven hosted workflow families pass: Node `33233377811`, container
+  `33233377810`, Linux GUI `33233377877`, Windows GUI `33233377818`, Go
+  `33233377808`, Java `33233377876`, Kotlin `33233377812`, .NET
+  `33233377809`, Rust `33233377805`, Ruby `33233377806`, and PHP
+  `33233377842`. All 67 Node jobs pass, including the eight new fork-role
+  witnesses across Ubuntu and Windows.
 - Closed a deterministic MCP argument-injection false negative for
   tool-controlled entries in `child_process.fork(..., { execArgv: [...] })`.
   The model proves a live official `node:child_process` or `child_process`

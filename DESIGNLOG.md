@@ -70,6 +70,37 @@ cases and 15 pairs, and the canonical corpus to 171 pairs, 342 cases, and
 1,026 repeated positions. Hosted Node CI schedules all four new witnesses on
 both operating systems, producing a 67-job matrix.
 
+**Full acceptance.** The managed Windows suite selects 2,037 tests across 210
+files: 2,008 pass, 27 intentionally skip, and only the established
+Git-metadata and Windows-ACL operations are denied by the managed host. Their
+exact native rerun passes 48 tests and 242 assertions. Formatting,
+generated-model drift, TypeScript, the production build, and the production
+dependency audit are clean. Two compiled root inventories complete in 20.291
+and 19.664 seconds and remain byte-identical at 256 rows, 584,350 bytes, 243
+structured records, 13 lexical leads, and SHA-256
+`d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+Independent fixture roots produce exactly the CWE-829 module row and CWE-78
+executable row at lines 9 and 11; both controls produce no structured model.
+Strict package inspection and a fresh isolated npm installation validate 299
+entries, the public import, CLI, and all 79 bundled-plugin files. The
+2,330,647-byte archive has SHA-256
+`8ed24e72635536b6f75ac9428aa3943a383ee27390c73b79a52c9b8520468203`.
+All eleven hosted workflow families pass at exact implementation revision
+`7d4d9e9e65b5f62072bce93cd33e469ad73d18fe`: [Node
+`33233377811`](https://github.com/secwest/copilot-security/actions/runs/33233377811),
+[container `33233377810`](https://github.com/secwest/copilot-security/actions/runs/33233377810),
+[Linux GUI `33233377877`](https://github.com/secwest/copilot-security/actions/runs/33233377877),
+[Windows GUI `33233377818`](https://github.com/secwest/copilot-security/actions/runs/33233377818),
+[Go `33233377808`](https://github.com/secwest/copilot-security/actions/runs/33233377808),
+[Java `33233377876`](https://github.com/secwest/copilot-security/actions/runs/33233377876),
+[Kotlin `33233377812`](https://github.com/secwest/copilot-security/actions/runs/33233377812),
+[.NET `33233377809`](https://github.com/secwest/copilot-security/actions/runs/33233377809),
+[Rust `33233377805`](https://github.com/secwest/copilot-security/actions/runs/33233377805),
+[Ruby `33233377806`](https://github.com/secwest/copilot-security/actions/runs/33233377806),
+and [PHP `33233377842`](https://github.com/secwest/copilot-security/actions/runs/33233377842).
+The Node run has 67 successful jobs, including all eight new fork-role witness
+jobs on Ubuntu and Windows.
+
 ## 2026-08-28 — Distinguish fork execArgv from ordinary module arguments
 
 **Comparative gap.** Node documents
