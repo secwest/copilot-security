@@ -2,6 +2,57 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Close lower-level R2DBC SPI grammar through execution
+
+**Measured miss and authoritative boundary.** The previously compiled scanner
+emits no `java-r2dbc-spi-sql` rows for either member of a real lower-level SPI
+pair. CodeQL's merged
+[`Java: Add R2DBC SQL injection models`](https://github.com/github/codeql/pull/22279)
+adds sinks for `Batch.add(String)`, `Connection.createStatement(String)`, all
+three savepoint-name methods, and `Statement.returnGeneratedValues(String...)`.
+The official R2DBC
+[`Connection`](https://javadoc.io/static/io.r2dbc/r2dbc-spi/1.0.0.RELEASE/io/r2dbc/spi/Connection.html),
+[`Statement`](https://r2dbc.io/spec/1.0.0.RELEASE/api/io/r2dbc/spi/Statement.html),
+and [`Batch`](https://r2dbc.io/spec/1.0.0.RELEASE/api/io/r2dbc/spi/Batch.html)
+APIs establish the exact receiver, arity, and grammar roles. The
+[`statement execution` specification](https://r2dbc.io/spec/1.0.0.RELEASE/spec/html/#statements)
+also makes execution reactive and requires every `Result` to be consumed.
+
+**Accepted boundary beyond signature parity.** Add a Java-only SPI model for
+the six exact official grammar positions, but require an execution closure:
+`Statement` and `Batch` must reach `execute` through the same fluent or assigned
+value, while a savepoint Publisher must be returned or subscribed. Support
+inline `Connection.createBatch().add(...).execute()` and
+`createStatement(...).returnGeneratedValues(...).execute()` chains, including
+both sink kinds on one source line. `Statement.add()` is parameterless and is
+never treated as batch SQL. The typed Java graph continues to retain the
+request source, wrapper edges, local grammar construction, receiver binding,
+and execution transition.
+
+**Scope and false-positive controls.** Resolve only imported, wildcard-imported,
+or fully qualified `io.r2dbc.spi` types. Exact arity, receiver liveness, and
+execution identity fail closed on lookalikes, competing imports, malformed
+calls, receiver replacement, assigned-value replacement, and inert operations.
+A constructor parameter with the same name as a final field is discarded once
+out of scope, rather than causing the legitimate constructor assignment to
+erase the field receiver. Fixed SQL plus request data only in `bind` or
+`bindNull` remains counterevidence. Savepoint and generated-column identifiers
+remain review hypotheses until the actual driver proves hostile syntax changes
+SQL or database behavior.
+
+**Executable evidence.** The Java 21 fixtures use identical Spring request,
+typed wrapper, H2 R2DBC 1.0.0, schema, rows, payload, execute Publisher, and
+Result consumer topology. The positive interpolates the username into
+`Connection.createStatement` and reads the seeded administrator row. The
+control changes only the boundary to fixed `$1` SQL plus `Statement.bind` and
+returns no row. Both `mvn verify` witnesses pass on Ubuntu/WSL. The prior build
+emits zero specialized rows for both; the new build emits one exact positive at
+`AccountQueries.java:17` and none for the control. The strict pair advances the
+canonical corpus to 179 exploit/control pairs, 358 cases, and 1,074 repeated
+positions. Reviewer gates require exact SPI identity, grammar, wrapper,
+execution and Result consumption, driver/dialect, parameterization
+counterevidence, and concrete unauthorized-read proof.
+
 ## 2026-08-29 — Bind Spring R2DBC SQL grammar to reactive execution
 
 **Measured miss and comparator evidence.** The previously compiled scanner

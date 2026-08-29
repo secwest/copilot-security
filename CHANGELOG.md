@@ -6,6 +6,28 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added a lower-level Java R2DBC SPI SQL model for all six official grammar
+  boundaries: `Connection.createStatement`, `Batch.add`, the three
+  savepoint-name operations, and `Statement.returnGeneratedValues`. Exact
+  `io.r2dbc.spi` receiver proof, argument arity, fluent or assigned execution,
+  and returned/subscribed Publisher evidence replace name-only matching.
+- Closed realistic Java shapes beyond the comparator signature pack. The host
+  distinguishes `Statement.add()` from `Batch.add(String)`, sees fluent
+  `Connection.createBatch().add(...).execute()` and
+  `createStatement(...).returnGeneratedValues(...).execute()` chains, retains
+  multiple grammar boundaries on one line, follows local SQL variables, and
+  resolves constructor-initialized final SPI fields without confusing an
+  out-of-scope constructor parameter for the live receiver. Local/competing
+  types, wrong arity, inert operations, mutable reassignment, unconsumed
+  savepoint Publishers, and fixed SQL with request data only in `bind` remain
+  negative.
+- Added a strict executable R2DBC SPI exploit/control pair. The prior compiled
+  scanner emits zero specialized rows for both fixtures; the new scanner emits
+  one exact CWE-89 controller-to-`Connection.createStatement` path at line 17
+  and none for the bound twin. Both Java 21/H2 R2DBC witnesses pass under WSL,
+  proving the positive reads the seeded administrator row and the identical
+  bound payload returns no row. The canonical benchmark advances to 179 pairs,
+  358 cases, and 1,074 repeated positions.
 - Added high-confidence Spring R2DBC SQL-injection discovery for the official
   `org.springframework.r2dbc.core.DatabaseClient`. The host traces Spring or
   servlet input only into the `sql` grammar argument, unwraps a simple

@@ -629,6 +629,10 @@ describe("effectiveness benchmark", () => {
         "java-r2dbc-databaseclient-sql-injection",
         "java-r2dbc-databaseclient-bound-parameter",
       ],
+      [
+        "java-r2dbc-spi-statement-sql-injection",
+        "java-r2dbc-spi-statement-bound-parameter",
+      ],
     ] as const;
     const cases = new Map(manifest.cases.map((item) => [item.id, item]));
 

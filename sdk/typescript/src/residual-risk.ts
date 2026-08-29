@@ -2796,6 +2796,68 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "java-r2dbc-spi-sql",
+    language: "java",
+    extensions: JAVA_SOURCE_EXTENSIONS,
+    activation: [
+      /\b(?:io\s*\.\s*r2dbc\s*\.\s*spi\s*\.\s*)?(?:Batch|Connection|Statement)\b/u,
+    ],
+    sources: [
+      {
+        kind: "spring-bound-parameter",
+        expression:
+          /@(?:CookieValue|PathVariable|RequestBody|RequestHeader|RequestParam)\b/iu,
+      },
+      {
+        kind: "servlet-request-parameter",
+        expression: /\b(?:getHeader|getParameter|getParameterValues)\s*\(/iu,
+      },
+    ],
+    sinks: [
+      {
+        kind: "r2dbc-connection-statement-sql-grammar",
+        expression: /\.\s*createStatement\s*\(/u,
+        cweIds: ["CWE-89"],
+      },
+      {
+        kind: "r2dbc-batch-sql-grammar",
+        expression: /\.\s*add\s*\(/u,
+        cweIds: ["CWE-89"],
+      },
+      {
+        kind: "r2dbc-connection-create-savepoint-identifier",
+        expression: /\.\s*createSavepoint\s*\(/u,
+        cweIds: ["CWE-89"],
+      },
+      {
+        kind: "r2dbc-connection-release-savepoint-identifier",
+        expression: /\.\s*releaseSavepoint\s*\(/u,
+        cweIds: ["CWE-89"],
+      },
+      {
+        kind: "r2dbc-connection-rollback-savepoint-identifier",
+        expression: /\.\s*rollbackTransactionToSavepoint\s*\(/u,
+        cweIds: ["CWE-89"],
+      },
+      {
+        kind: "r2dbc-statement-generated-column-identifier",
+        expression: /\.\s*returnGeneratedValues\s*\(/u,
+        cweIds: ["CWE-89"],
+      },
+    ],
+    controls: [
+      {
+        kind: "r2dbc-statement-bound-parameter",
+        expression: /\.\s*bind(?:Null)?\s*\(/u,
+      },
+      {
+        kind: "bounded-allowlist-or-validation",
+        expression:
+          /\b(?:allowedColumns?|allowedSavepoints?|isValid|validate)\b|\.matches\s*\(/iu,
+      },
+    ],
+  },
+  {
     id: "spring-http-template-injection",
     language: "java-kotlin",
     extensions: JAVA_EXTENSIONS,
@@ -18459,7 +18521,12 @@ function frameworkDataflowRecords(
                                 isPythonTypedSinkModel(model.id) ? 64 : 8,
                               )
             : extension === ".java" || extension === ".cs"
-              ? matchingJavaModelLines(lines, model.sinks, 8)
+              ? matchingJavaModelLines(
+                  lines,
+                  model.sinks,
+                  8,
+                  model.id === "java-r2dbc-spi-sql",
+                )
               : matchingModelLines(lines, model.sinks, 8);
     if (sources.length === 0 || sinks.length === 0) continue;
     const controls = JAVASCRIPT_EXTENSIONS.has(extension)
@@ -18756,6 +18823,10 @@ function frameworkDataflowRecords(
       const javaR2dbcSink =
         model.id === "spring-r2dbc-sql"
           ? javaR2dbcDatabaseClientSink(lines, sink.line)
+          : undefined;
+      const javaR2dbcSpi =
+        model.id === "java-r2dbc-spi-sql"
+          ? javaR2dbcSpiSink(lines, sink.line, lines.length, sink.kind)
           : undefined;
       const javaJpaDomainType =
         javaJpaSink === undefined
@@ -19073,6 +19144,9 @@ function frameworkDataflowRecords(
       if (model.id === "spring-r2dbc-sql" && javaR2dbcSink === undefined) {
         continue;
       }
+      if (model.id === "java-r2dbc-spi-sql" && javaR2dbcSpi === undefined) {
+        continue;
+      }
       if (
         nodeHttpSink?.axiosReceiver !== undefined &&
         javascriptAxiosReceiverShadowedInExport(
@@ -19347,79 +19421,89 @@ function frameworkDataflowRecords(
                                           model.sources,
                                         )
                                       : extension === ".java" &&
-                                          model.id ===
-                                            "spring-mvc-jpa-mass-assignment" &&
-                                          javaJpaSink !== undefined &&
-                                          javaJpaDomainType !== undefined
-                                        ? (() => {
-                                            const method = exportedJavaMethods(
-                                              lines,
-                                            ).find(
-                                              (candidate) =>
-                                                sink.line >=
-                                                  candidate.startLine &&
-                                                sink.line <= candidate.endLine,
-                                            );
-                                            return method === undefined
-                                              ? undefined
-                                              : modeledJavaMassAssignmentSource(
-                                                  lines,
-                                                  method,
-                                                  sink.line,
-                                                  javaJpaSink.argument,
-                                                  javaJpaDomainType,
-                                                );
-                                          })()
+                                          model.id === "java-r2dbc-spi-sql" &&
+                                          javaR2dbcSpi !== undefined
+                                        ? modeledSameFileJavaObjectSource(
+                                            lines,
+                                            sink.line,
+                                            javaR2dbcSpi.grammarExpression,
+                                            model.sources,
+                                          )
                                         : extension === ".java" &&
-                                            (model.id === "spring-http-ssrf" ||
-                                              model.id === "spring-http-path")
-                                          ? modeledSameFileJavaSource(
-                                              lines,
-                                              sink.line,
-                                              model.id,
-                                              model.sources,
-                                            )
-                                          : extension === ".cs" &&
-                                              model.id ===
-                                                "aspnet-http-template-injection"
-                                            ? modeledSameFileDotnetTemplateSource(
+                                            model.id ===
+                                              "spring-mvc-jpa-mass-assignment" &&
+                                            javaJpaSink !== undefined &&
+                                            javaJpaDomainType !== undefined
+                                          ? (() => {
+                                              const method =
+                                                exportedJavaMethods(lines).find(
+                                                  (candidate) =>
+                                                    sink.line >=
+                                                      candidate.startLine &&
+                                                    sink.line <=
+                                                      candidate.endLine,
+                                                );
+                                              return method === undefined
+                                                ? undefined
+                                                : modeledJavaMassAssignmentSource(
+                                                    lines,
+                                                    method,
+                                                    sink.line,
+                                                    javaJpaSink.argument,
+                                                    javaJpaDomainType,
+                                                  );
+                                            })()
+                                          : extension === ".java" &&
+                                              (model.id ===
+                                                "spring-http-ssrf" ||
+                                                model.id === "spring-http-path")
+                                            ? modeledSameFileJavaSource(
                                                 lines,
                                                 sink.line,
+                                                model.id,
                                                 model.sources,
-                                                files,
-                                                path,
                                               )
                                             : extension === ".cs" &&
                                                 model.id ===
-                                                  "aspnet-http-object-authorization" &&
-                                                dotnetObjectSink !== undefined
-                                              ? modeledSameFileDotnetObjectSource(
+                                                  "aspnet-http-template-injection"
+                                              ? modeledSameFileDotnetTemplateSource(
                                                   lines,
                                                   sink.line,
-                                                  dotnetObjectSink.argument,
                                                   model.sources,
                                                   files,
                                                   path,
                                                 )
                                               : extension === ".cs" &&
-                                                  model.id.startsWith(
-                                                    "aspnet-http-",
-                                                  )
-                                                ? modeledSameFileDotnetSource(
+                                                  model.id ===
+                                                    "aspnet-http-object-authorization" &&
+                                                  dotnetObjectSink !== undefined
+                                                ? modeledSameFileDotnetObjectSource(
                                                     lines,
                                                     sink.line,
+                                                    dotnetObjectSink.argument,
                                                     model.sources,
                                                     files,
                                                     path,
-                                                  ) ??
-                                                  nearestModeledSource(
-                                                    matchedSources,
-                                                    sink.line,
                                                   )
-                                                : nearestModeledSource(
-                                                    sources,
-                                                    sink.line,
-                                                  );
+                                                : extension === ".cs" &&
+                                                    model.id.startsWith(
+                                                      "aspnet-http-",
+                                                    )
+                                                  ? modeledSameFileDotnetSource(
+                                                      lines,
+                                                      sink.line,
+                                                      model.sources,
+                                                      files,
+                                                      path,
+                                                    ) ??
+                                                    nearestModeledSource(
+                                                      matchedSources,
+                                                      sink.line,
+                                                    )
+                                                  : nearestModeledSource(
+                                                      sources,
+                                                      sink.line,
+                                                    );
       const source =
         model.id === "node-http-fastify-static-route-guard-bypass"
           ? nodeFastifyStatic?.source
@@ -19612,6 +19696,7 @@ function frameworkDataflowRecords(
         nodeJsToml?.kind ??
         nodePrototypeMerge?.kind ??
         pythonTypedSink?.kind ??
+        javaR2dbcSpi?.kind ??
         sink.kind;
       const startLine = Math.max(1, effectiveSinkLine - CONTEXT_LINES_BEFORE);
       const endLine = Math.min(
@@ -19666,6 +19751,10 @@ function frameworkDataflowRecords(
                     symbol: javaR2dbcSink.executionKind,
                   },
                 ]),
+            ...(javaR2dbcSpi?.propagators.map((propagator) => ({
+              ...propagator,
+              path,
+            })) ?? []),
             ...(source.kind !== "sails-action2-declared-input" ||
             sailsAction2Exposure === undefined
               ? []
@@ -33878,7 +33967,12 @@ function javaFrameworkWrapperSummaries(
       ) {
         continue;
       }
-      const sinks = matchingJavaModelLines(file.lines, model.sinks, 32);
+      const sinks = matchingJavaModelLines(
+        file.lines,
+        model.sinks,
+        32,
+        model.id === "java-r2dbc-spi-sql",
+      );
       const controls =
         model.id === "spring-http-object-authorization" ||
         model.id === "spring-mvc-jpa-mass-assignment"
@@ -33902,6 +33996,15 @@ function javaFrameworkWrapperSummaries(
                   method.endLine,
                 )
               : undefined;
+          const r2dbcSpi =
+            model.id === "java-r2dbc-spi-sql"
+              ? javaR2dbcSpiSink(
+                  file.lines,
+                  sink.line,
+                  method.endLine,
+                  sink.kind,
+                )
+              : undefined;
           const parameterSinkExpression =
             model.id === "spring-http-ssrf"
               ? javaOutboundDestinationArgument(
@@ -33911,7 +34014,9 @@ function javaFrameworkWrapperSummaries(
                     method.endLine,
                   ),
                 )
-              : r2dbcSink?.queryExpression ?? sinkExpression;
+              : r2dbcSink?.queryExpression ??
+                r2dbcSpi?.grammarExpression ??
+                sinkExpression;
           if (
             model.id === "spring-http-ssrf" &&
             !javaOutboundHttpSinkHasTypedReceiver(file.lines, sink.line)
@@ -33925,6 +34030,9 @@ function javaFrameworkWrapperSummaries(
             continue;
           }
           if (model.id === "spring-r2dbc-sql" && r2dbcSink === undefined) {
+            continue;
+          }
+          if (model.id === "java-r2dbc-spi-sql" && r2dbcSpi === undefined) {
             continue;
           }
           const objectAuthorizationSink =
@@ -33990,7 +34098,8 @@ function javaFrameworkWrapperSummaries(
                   )
                 : model.id === "spring-http-path" ||
                     model.id === "spring-http-ssrf" ||
-                    model.id === "spring-r2dbc-sql"
+                    model.id === "spring-r2dbc-sql" ||
+                    model.id === "java-r2dbc-spi-sql"
                   ? javaMethodParameterIndexesReachingSink(
                       file.lines,
                       method,
@@ -34055,10 +34164,21 @@ function javaFrameworkWrapperSummaries(
                 ? {}
                 : { valueType: persistedDomainType }),
               declarationLine: method.startLine,
-              sink: { ...sink, cweIds: sinkPattern.cweIds },
+              sink: {
+                ...sink,
+                kind: r2dbcSpi?.kind ?? sink.kind,
+                cweIds: sinkPattern.cweIds,
+              },
               controls: methodControls.slice(0, 8),
               ...(r2dbcSink === undefined
-                ? {}
+                ? r2dbcSpi === undefined
+                  ? {}
+                  : {
+                      propagators: r2dbcSpi.propagators.map((propagator) => ({
+                        ...propagator,
+                        path: file.path,
+                      })),
+                    }
                 : {
                     propagators: [
                       {
@@ -42080,6 +42200,510 @@ interface JavaR2dbcDatabaseClientSink {
     | "mapProperties";
 }
 
+type JavaR2dbcSpiReceiverType = "Batch" | "Connection" | "Statement";
+
+type JavaR2dbcSpiSinkKind =
+  | "r2dbc-connection-statement-sql-grammar"
+  | "r2dbc-batch-sql-grammar"
+  | "r2dbc-connection-create-savepoint-identifier"
+  | "r2dbc-connection-release-savepoint-identifier"
+  | "r2dbc-connection-rollback-savepoint-identifier"
+  | "r2dbc-statement-generated-column-identifier";
+
+interface JavaR2dbcSpiSink {
+  receiver: string;
+  grammarExpression: string;
+  callStartLine: number;
+  callEndLine: number;
+  kind: JavaR2dbcSpiSinkKind;
+  propagators: Array<{ kind: string; line: number; symbol: string }>;
+}
+
+function javaR2dbcSpiSink(
+  lines: readonly string[],
+  sinkLine: number,
+  methodEndLine = lines.length,
+  expectedKind?: string,
+): JavaR2dbcSpiSink | undefined {
+  const inlineSink = javaR2dbcSpiInlineSink(
+    lines,
+    sinkLine,
+    methodEndLine,
+    expectedKind,
+  );
+  if (inlineSink !== undefined) return inlineSink;
+  const operations = [
+    {
+      receiverType: "Connection",
+      method: "createStatement",
+      kind: "r2dbc-connection-statement-sql-grammar",
+      executionKind: "r2dbc-spi-statement-execution-stage",
+      executionSymbol: "Statement.execute",
+      argumentCount: "one",
+      execution: "statement",
+    },
+    {
+      receiverType: "Batch",
+      method: "add",
+      kind: "r2dbc-batch-sql-grammar",
+      executionKind: "r2dbc-spi-batch-execution-stage",
+      executionSymbol: "Batch.execute",
+      argumentCount: "one",
+      execution: "receiver",
+    },
+    {
+      receiverType: "Connection",
+      method: "createSavepoint",
+      kind: "r2dbc-connection-create-savepoint-identifier",
+      executionKind: "r2dbc-spi-savepoint-publisher-stage",
+      executionSymbol: "Connection.createSavepoint:return",
+      argumentCount: "one",
+      execution: "publisher",
+    },
+    {
+      receiverType: "Connection",
+      method: "releaseSavepoint",
+      kind: "r2dbc-connection-release-savepoint-identifier",
+      executionKind: "r2dbc-spi-savepoint-publisher-stage",
+      executionSymbol: "Connection.releaseSavepoint:return",
+      argumentCount: "one",
+      execution: "publisher",
+    },
+    {
+      receiverType: "Connection",
+      method: "rollbackTransactionToSavepoint",
+      kind: "r2dbc-connection-rollback-savepoint-identifier",
+      executionKind: "r2dbc-spi-savepoint-publisher-stage",
+      executionSymbol: "Connection.rollbackTransactionToSavepoint:return",
+      argumentCount: "one",
+      execution: "publisher",
+    },
+    {
+      receiverType: "Statement",
+      method: "returnGeneratedValues",
+      kind: "r2dbc-statement-generated-column-identifier",
+      executionKind: "r2dbc-spi-generated-values-execution-stage",
+      executionSymbol: "Statement.execute",
+      argumentCount: "one-or-more",
+      execution: "receiver",
+    },
+  ] as const;
+  const baseLine = Math.max(1, sinkLine - 2);
+  const endLine = Math.min(methodEndLine, sinkLine + 24);
+  const callLines = lines.slice(baseLine - 1, endLine);
+  const original = callLines.join("\n");
+  const structural = cFamilyStructuralLines(callLines).join("\n");
+
+  for (const operation of operations) {
+    if (expectedKind !== undefined && operation.kind !== expectedKind) continue;
+    const callPattern = new RegExp(
+      `\\b(?:this\\s*\\.\\s*)?([A-Za-z_$][\\w$]*)\\s*\\.\\s*${operation.method}\\s*\\(`,
+      "gu",
+    );
+    let call: RegExpExecArray | null;
+    while ((call = callPattern.exec(structural)) !== null) {
+      const methodOffset =
+        call.index +
+        Math.max(
+          0,
+          call[0].search(new RegExp(`\\.\\s*${operation.method}\\s*\\(`, "u")),
+        );
+      const callStartLine =
+        baseLine +
+        (structural.slice(0, methodOffset).match(/\n/gu)?.length ?? 0);
+      if (callStartLine !== sinkLine) continue;
+      const open = structural.indexOf("(", call.index);
+      const close = matchingCallParenthesis(structural, open);
+      if (open < 0 || close < 0) return undefined;
+      const argumentsList = splitJavascriptArguments(
+        original.slice(open + 1, close),
+      ).map((argument) => argument.trim());
+      if (
+        argumentsList.some(
+          (argument) => argument === "" || argument.startsWith("..."),
+        ) ||
+        (operation.argumentCount === "one" && argumentsList.length !== 1) ||
+        (operation.argumentCount === "one-or-more" &&
+          argumentsList.length === 0)
+      ) {
+        return undefined;
+      }
+      const receiver = call[1]!;
+      const callLineStart = structural.lastIndexOf("\n", call.index) + 1;
+      const sameLinePrefix = structural.slice(callLineStart, call.index);
+      const receiverAssignment = new RegExp(
+        `(?:^|[^.\\w$])${escapeRegularExpression(receiver)}\\s*(?:[+\\-*/%&|^]?=|\\+\\+|--)`,
+        "u",
+      );
+      if (receiverAssignment.test(sameLinePrefix)) return undefined;
+      const bindingLine = javaR2dbcSpiReceiverBindingLine(
+        lines,
+        receiver,
+        operation.receiverType,
+        callStartLine,
+      );
+      if (bindingLine === undefined) return undefined;
+      const callEndLine =
+        baseLine + (structural.slice(0, close).match(/\n/gu)?.length ?? 0);
+      const statementEnd = structural.indexOf(";", close + 1);
+      const suffixEnd = statementEnd < 0 ? structural.length : statementEnd;
+      const suffix = structural.slice(close + 1, suffixEnd);
+      let executionLine: number | undefined;
+      let executionSymbol: string = operation.executionSymbol;
+
+      if (operation.execution === "publisher") {
+        const statementStart = Math.max(
+          structural.lastIndexOf(";", call.index),
+          structural.lastIndexOf("{", call.index),
+          structural.lastIndexOf("\n", call.index),
+        );
+        const prefix = structural.slice(statementStart + 1, call.index);
+        const subscribe = /\.\s*subscribe\s*\(/u.exec(suffix);
+        if (/\breturn\b/u.test(prefix)) {
+          executionLine = callEndLine;
+        } else if (subscribe !== null) {
+          executionLine =
+            baseLine +
+            (structural.slice(0, close + 1 + subscribe.index).match(/\n/gu)
+              ?.length ?? 0);
+          executionSymbol = `${operation.receiverType}.${operation.method}:subscribe`;
+        }
+      } else {
+        const directExecution = /\.\s*execute\s*\(/u.exec(suffix);
+        if (directExecution !== null) {
+          executionLine =
+            baseLine +
+            (structural
+              .slice(0, close + 1 + directExecution.index)
+              .match(/\n/gu)?.length ?? 0);
+        } else {
+          const executionReceiver =
+            operation.execution === "statement"
+              ? /\b(?:Statement|var)\s+([A-Za-z_$][\w$]*)\s*=\s*$/u.exec(
+                  sameLinePrefix,
+                )?.[1]
+              : receiver;
+          if (executionReceiver !== undefined) {
+            const executionPattern = new RegExp(
+              `\\b${escapeRegularExpression(executionReceiver)}\\s*\\.\\s*execute\\s*\\(`,
+              "u",
+            );
+            for (
+              let index = Math.max(0, callEndLine - 1);
+              index < Math.min(lines.length, methodEndLine);
+              index += 1
+            ) {
+              if (
+                !executionPattern.test(
+                  cFamilyStructuralLines([lines[index] ?? ""])[0] ?? "",
+                )
+              ) {
+                continue;
+              }
+              const candidateLine = index + 1;
+              if (
+                javaIdentifierReassignedBetween(
+                  lines,
+                  executionReceiver,
+                  callEndLine,
+                  candidateLine,
+                )
+              ) {
+                break;
+              }
+              if (candidateLine === callEndLine) {
+                const candidateStructural =
+                  cFamilyStructuralLines([lines[index] ?? ""])[0] ?? "";
+                const executionMatch =
+                  executionPattern.exec(candidateStructural);
+                const closeColumn =
+                  close - (structural.lastIndexOf("\n", close) + 1);
+                const intervening = candidateStructural.slice(
+                  closeColumn + 1,
+                  executionMatch?.index ?? candidateStructural.length,
+                );
+                const sameLineReassignment = new RegExp(
+                  `(?:\\b${escapeRegularExpression(executionReceiver)}\\s*(?:[+\\-*/%&|^]?=|\\+\\+|--)|(?:\\+\\+|--)\\s*${escapeRegularExpression(executionReceiver)}\\b)`,
+                  "u",
+                );
+                if (sameLineReassignment.test(intervening)) break;
+              }
+              executionLine = candidateLine;
+              break;
+            }
+          }
+        }
+      }
+      if (executionLine === undefined) return undefined;
+      return {
+        receiver,
+        grammarExpression: argumentsList.join("\n"),
+        callStartLine,
+        callEndLine,
+        kind: operation.kind,
+        propagators: [
+          {
+            kind: "r2dbc-spi-receiver-binding",
+            line: bindingLine,
+            symbol: `${operation.receiverType} ${receiver}`,
+          },
+          {
+            kind: operation.executionKind,
+            line: executionLine,
+            symbol: executionSymbol,
+          },
+        ],
+      };
+    }
+  }
+  return undefined;
+}
+
+function javaR2dbcSpiInlineSink(
+  lines: readonly string[],
+  sinkLine: number,
+  methodEndLine: number,
+  expectedKind?: string,
+): JavaR2dbcSpiSink | undefined {
+  if (
+    expectedKind !== "r2dbc-batch-sql-grammar" &&
+    expectedKind !== "r2dbc-statement-generated-column-identifier"
+  ) {
+    return undefined;
+  }
+  const baseLine = Math.max(1, sinkLine - 2);
+  const endLine = Math.min(methodEndLine, sinkLine + 24);
+  const callLines = lines.slice(baseLine - 1, endLine);
+  const original = callLines.join("\n");
+  const structural = cFamilyStructuralLines(callLines).join("\n");
+
+  if (expectedKind === "r2dbc-batch-sql-grammar") {
+    const pattern =
+      /\b(?:this\s*\.\s*)?([A-Za-z_$][\w$]*)\s*\.\s*createBatch\s*\(\s*\)\s*\.\s*add\s*\(/gu;
+    let call: RegExpExecArray | null;
+    while ((call = pattern.exec(structural)) !== null) {
+      const addOffset = call.index + call[0].lastIndexOf("add");
+      const callStartLine =
+        baseLine + (structural.slice(0, addOffset).match(/\n/gu)?.length ?? 0);
+      if (callStartLine !== sinkLine) continue;
+      const open = structural.indexOf("(", addOffset);
+      const close = matchingCallParenthesis(structural, open);
+      if (open < 0 || close < 0) return undefined;
+      const argumentsList = splitJavascriptArguments(
+        original.slice(open + 1, close),
+      ).map((argument) => argument.trim());
+      if (
+        argumentsList.length !== 1 ||
+        argumentsList[0] === "" ||
+        argumentsList[0]!.startsWith("...")
+      ) {
+        return undefined;
+      }
+      const receiver = call[1]!;
+      const bindingLine = javaR2dbcSpiReceiverBindingLine(
+        lines,
+        receiver,
+        "Connection",
+        callStartLine,
+      );
+      if (bindingLine === undefined) return undefined;
+      const statementEnd = structural.indexOf(";", close + 1);
+      const suffix = structural.slice(
+        close + 1,
+        statementEnd < 0 ? structural.length : statementEnd,
+      );
+      const execute = /\.\s*execute\s*\(/u.exec(suffix);
+      if (execute === null) return undefined;
+      const callEndLine =
+        baseLine + (structural.slice(0, close).match(/\n/gu)?.length ?? 0);
+      const executionLine =
+        baseLine +
+        (structural.slice(0, close + 1 + execute.index).match(/\n/gu)?.length ??
+          0);
+      return {
+        receiver,
+        grammarExpression: argumentsList[0]!,
+        callStartLine,
+        callEndLine,
+        kind: "r2dbc-batch-sql-grammar",
+        propagators: [
+          {
+            kind: "r2dbc-spi-receiver-binding",
+            line: bindingLine,
+            symbol: `Connection ${receiver}`,
+          },
+          {
+            kind: "r2dbc-spi-batch-execution-stage",
+            line: executionLine,
+            symbol: "Batch.execute",
+          },
+        ],
+      };
+    }
+    return undefined;
+  }
+
+  const statementPattern =
+    /\b(?:this\s*\.\s*)?([A-Za-z_$][\w$]*)\s*\.\s*createStatement\s*\(/gu;
+  let statementCall: RegExpExecArray | null;
+  while ((statementCall = statementPattern.exec(structural)) !== null) {
+    const statementOpen = structural.indexOf("(", statementCall.index);
+    const statementClose = matchingCallParenthesis(structural, statementOpen);
+    if (statementOpen < 0 || statementClose < 0) return undefined;
+    const generated = /^\s*\.\s*returnGeneratedValues\s*\(/u.exec(
+      structural.slice(statementClose + 1),
+    );
+    if (generated === null) continue;
+    const generatedOffset = statementClose + 1 + generated.index;
+    const methodOffset =
+      generatedOffset + generated[0].search(/returnGeneratedValues/u);
+    const callStartLine =
+      baseLine + (structural.slice(0, methodOffset).match(/\n/gu)?.length ?? 0);
+    if (callStartLine !== sinkLine) continue;
+    const open = structural.indexOf("(", methodOffset);
+    const close = matchingCallParenthesis(structural, open);
+    if (open < 0 || close < 0) return undefined;
+    const argumentsList = splitJavascriptArguments(
+      original.slice(open + 1, close),
+    ).map((argument) => argument.trim());
+    if (
+      argumentsList.length === 0 ||
+      argumentsList.some(
+        (argument) => argument === "" || argument.startsWith("..."),
+      )
+    ) {
+      return undefined;
+    }
+    const receiver = statementCall[1]!;
+    const bindingLine = javaR2dbcSpiReceiverBindingLine(
+      lines,
+      receiver,
+      "Connection",
+      callStartLine,
+    );
+    if (bindingLine === undefined) return undefined;
+    const statementEnd = structural.indexOf(";", close + 1);
+    const suffix = structural.slice(
+      close + 1,
+      statementEnd < 0 ? structural.length : statementEnd,
+    );
+    const execute = /\.\s*execute\s*\(/u.exec(suffix);
+    if (execute === null) return undefined;
+    const callEndLine =
+      baseLine + (structural.slice(0, close).match(/\n/gu)?.length ?? 0);
+    const executionLine =
+      baseLine +
+      (structural.slice(0, close + 1 + execute.index).match(/\n/gu)?.length ??
+        0);
+    return {
+      receiver,
+      grammarExpression: argumentsList.join("\n"),
+      callStartLine,
+      callEndLine,
+      kind: "r2dbc-statement-generated-column-identifier",
+      propagators: [
+        {
+          kind: "r2dbc-spi-receiver-binding",
+          line: bindingLine,
+          symbol: `Connection ${receiver}`,
+        },
+        {
+          kind: "r2dbc-spi-generated-values-execution-stage",
+          line: executionLine,
+          symbol: "Statement.execute",
+        },
+      ],
+    };
+  }
+  return undefined;
+}
+
+function javaR2dbcSpiReceiverBindingLine(
+  lines: readonly string[],
+  receiver: string,
+  receiverType: JavaR2dbcSpiReceiverType,
+  sinkLine: number,
+): number | undefined {
+  const structuralLines = cFamilyStructuralLines(lines);
+  const structuralText = structuralLines.join("\n");
+  const escapedType = escapeRegularExpression(receiverType);
+  if (
+    new RegExp(
+      `\\b(?:class|interface|record|enum)\\s+${escapedType}\\b`,
+      "u",
+    ).test(structuralText)
+  ) {
+    return undefined;
+  }
+  const officialPackage = `io.r2dbc.spi.${receiverType}`;
+  const hasOfficialSimpleImport = new RegExp(
+    `^\\s*import\\s+${escapeRegularExpression(officialPackage)}\\s*;`,
+    "mu",
+  ).test(structuralText);
+  const hasOfficialWildcardImport =
+    /^\s*import\s+io\.r2dbc\.spi\.\*\s*;/mu.test(structuralText);
+  const hasCompetingSimpleImport = new RegExp(
+    `^\\s*import\\s+(?!${escapeRegularExpression(officialPackage)}\\s*;)[A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*\\.${escapedType}\\s*;`,
+    "mu",
+  ).test(structuralText);
+  if (
+    (!(hasOfficialSimpleImport || hasOfficialWildcardImport) &&
+      !new RegExp(
+        `\\bio\\s*\\.\\s*r2dbc\\s*\\.\\s*spi\\s*\\.\\s*${escapedType}\\b`,
+        "u",
+      ).test(structuralText)) ||
+    hasCompetingSimpleImport
+  ) {
+    return undefined;
+  }
+  const escapedReceiver = escapeRegularExpression(receiver);
+  const simpleDeclaration = new RegExp(
+    `\\b${escapedType}\\s+${escapedReceiver}\\b`,
+    "u",
+  );
+  const qualifiedDeclaration = new RegExp(
+    `\\bio\\s*\\.\\s*r2dbc\\s*\\.\\s*spi\\s*\\.\\s*${escapedType}\\s+${escapedReceiver}\\b`,
+    "u",
+  );
+  const sinkMethod = exportedJavaMethods(lines).find(
+    (method) => sinkLine >= method.startLine && sinkLine <= method.endLine,
+  );
+  const candidates: number[] = [];
+  for (let index = 0; index < Math.min(lines.length, sinkLine); index += 1) {
+    const line = structuralLines[index] ?? "";
+    const declaration =
+      qualifiedDeclaration.exec(line) ??
+      (hasOfficialSimpleImport || hasOfficialWildcardImport
+        ? simpleDeclaration.exec(line)
+        : null);
+    if (declaration === null) continue;
+    const parameterLike = line.slice(0, declaration.index).includes("(");
+    if (
+      parameterLike &&
+      (sinkMethod === undefined ||
+        index + 1 < sinkMethod.startLine ||
+        index + 1 > sinkMethod.endLine)
+    ) {
+      continue;
+    }
+    candidates.push(index + 1);
+  }
+  const bindingLine = candidates.at(-1);
+  if (bindingLine === undefined) return undefined;
+  const bindingDeclaration = structuralLines[bindingLine - 1] ?? "";
+  const finalReceiver = new RegExp(
+    `\\bfinal\\s+(?:(?:io\\s*\\.\\s*r2dbc\\s*\\.\\s*spi\\s*\\.\\s*)?${escapedType})\\s+${escapedReceiver}\\b`,
+    "u",
+  ).test(bindingDeclaration);
+  if (
+    !finalReceiver &&
+    javaIdentifierReassignedBetween(lines, receiver, bindingLine, sinkLine)
+  ) {
+    return undefined;
+  }
+  return bindingLine;
+}
+
 function javaR2dbcDatabaseClientSink(
   lines: readonly string[],
   sinkLine: number,
@@ -46472,6 +47096,7 @@ function matchingJavaModelLines(
   lines: readonly string[],
   patterns: readonly FrameworkModelPattern[],
   limit: number,
+  allPatternsPerLine = false,
 ): Array<{ kind: string; line: number }> {
   const matches: Array<{ kind: string; line: number }> = [];
   const structuralLines = cFamilyStructuralLines(lines);
@@ -46480,7 +47105,8 @@ function matchingJavaModelLines(
     for (const pattern of patterns) {
       if (pattern.expression.test(structuralLine)) {
         matches.push({ kind: pattern.kind, line: index + 1 });
-        break;
+        if (!allPatternsPerLine) break;
+        if (matches.length >= limit) return matches;
       }
     }
   }

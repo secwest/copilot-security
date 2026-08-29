@@ -102,7 +102,13 @@ official `DatabaseClient`, request control of the `sql` grammar argument, and
 a documented `fetch`/`then`/mapping execution stage. A fixed statement with
 the same value only in `bind` is counterevidence; reviewer validation still
 closes reactive consumption, driver/dialect behavior, database authority, and
-concrete impact. For C#, the host likewise resolves one uniquely named
+concrete impact. The lower-level Java R2DBC SPI model separately proves exact
+official `Connection`, `Statement`, or `Batch` receivers at statement SQL,
+batch SQL, savepoint-name, and generated-column grammar positions. It requires
+the same fluent object or assigned value to reach `execute`, or a savepoint
+Publisher to be returned or subscribed, while rejecting `Statement.add`,
+lookalikes, reassignment, inert operations, wrong arity, and request values
+used only through `Statement.bind`. For C#, the host likewise resolves one uniquely named
 class, record, or struct from an ASP.NET
 controller field or static receiver, binds the exact service-call argument to
 the public, protected, or internal wrapper parameter, and preserves either an

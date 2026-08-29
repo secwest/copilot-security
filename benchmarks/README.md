@@ -303,6 +303,33 @@ wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users
 wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-r2dbc-databaseclient-bound-parameter/pom.xml verify
 ```
 
+## Java R2DBC SPI SQL-injection benchmark
+
+`java-r2dbc-spi-sql-injection-manifest.json` applies the same perfect
+three-run gates to the lower-level official R2DBC SPI. The positive carries an
+annotated username through a typed controller-to-query wrapper, interpolates
+it into the sole `Connection.createStatement(String)` SQL-grammar argument,
+and returns `Statement.execute()` for reactive consumption. Its private H2
+witness proves the predicate change reads the seeded administrator row. The
+matched control keeps SQL fixed and supplies the identical hostile bytes only
+through `Statement.bind`, producing no row.
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/java-r2dbc-spi-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-java-r2dbc-spi `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-r2dbc-spi-statement-sql-injection/pom.xml verify
+wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-r2dbc-spi-statement-bound-parameter/pom.xml verify
+```
+
 ## Node MCP tool-handler security benchmark
 
 `node-mcp-tool-security-manifest.json` measures tool input across nineteen

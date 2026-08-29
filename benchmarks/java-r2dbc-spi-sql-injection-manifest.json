@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "java-r2dbc-spi-statement-sql-injection",
+      "description": "A Spring request parameter crosses an exact typed Java wrapper into interpolated SQL accepted by io.r2dbc.spi.Connection.createStatement, reaches Statement.execute, and is consumed by the caller's reactive chain.",
+      "fixture": "fixtures/java-r2dbc-spi-statement-sql-injection",
+      "findingsPaths": [
+        "java-r2dbc-spi-statement-sql-injection/run-1/findings.json",
+        "java-r2dbc-spi-statement-sql-injection/run-2/findings.json",
+        "java-r2dbc-spi-statement-sql-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "java-r2dbc-spi-statement-sql-injection",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "src/main/java/example/AccountQueries.java",
+              "startLine": 17,
+              "endLine": 17,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["io.r2dbc.spi", "Connection", "Statement"],
+            ["@RequestParam", "username", "request parameter"],
+            ["AccountController", "queries.lookup", "wrapper"],
+            ["createStatement", "SQL grammar", "interpolated SQL"],
+            ["Statement.execute", "execute", "Publisher"],
+            ["Result", "consume", "reactive chain"],
+            ["H2", "R2DBC driver", "database dialect"],
+            ["bind", "bound parameter", "parameterized"],
+            ["CWE-89", "SQL injection", "unauthorized read"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["HTTP request", "request parameter", "@RequestParam"],
+            ["username", "AccountController", "queries.lookup"],
+            ["AccountQueries", "wrapper parameter", "lookup"],
+            ["interpolated SQL", "SQL grammar", "createStatement"],
+            ["Statement.execute", "Publisher", "Result"],
+            ["OR role", "predicate", "administrator"],
+            ["database read", "account row", "confidentiality"],
+            ["fixed SQL", "Statement.bind", "control"]
+          ],
+          "forbiddenText": [
+            "every createStatement call is vulnerable",
+            "bind values become SQL grammar",
+            "execute alone proves Result consumption",
+            "the witness accesses a production database",
+            "proves the endpoint is publicly reachable",
+            "the database server is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java-r2dbc-spi-statement-bound-parameter",
+      "description": "The topology-matched R2DBC SPI control keeps SQL grammar fixed and sends the same hostile request value only through Statement.bind before the same execute and reactive consumption path.",
+      "fixture": "fixtures/java-r2dbc-spi-statement-bound-parameter",
+      "findingsPaths": [
+        "java-r2dbc-spi-statement-bound-parameter/run-1/findings.json",
+        "java-r2dbc-spi-statement-bound-parameter/run-2/findings.json",
+        "java-r2dbc-spi-statement-bound-parameter/run-3/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

@@ -52,6 +52,8 @@ jobs:
             benchmarks/fixtures/java-cross-file-safe-binding/pom.xml
             benchmarks/fixtures/java-r2dbc-databaseclient-sql-injection/pom.xml
             benchmarks/fixtures/java-r2dbc-databaseclient-bound-parameter/pom.xml
+            benchmarks/fixtures/java-r2dbc-spi-statement-sql-injection/pom.xml
+            benchmarks/fixtures/java-r2dbc-spi-statement-bound-parameter/pom.xml
             benchmarks/fixtures/spring-java-fluent-process-builder-injection/pom.xml
             benchmarks/fixtures/spring-java-fluent-process-builder-argv/pom.xml
             benchmarks/fixtures/spring-java-live-command-list-injection/pom.xml
@@ -87,6 +89,8 @@ jobs:
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-cross-file-safe-binding/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-r2dbc-databaseclient-sql-injection/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-r2dbc-databaseclient-bound-parameter/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-r2dbc-spi-statement-sql-injection/pom.xml verify
+          mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/java-r2dbc-spi-statement-bound-parameter/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/spring-java-fluent-process-builder-injection/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/spring-java-fluent-process-builder-argv/pom.xml verify
           mvn --batch-mode --no-transfer-progress --file benchmarks/fixtures/spring-java-live-command-list-injection/pom.xml verify
