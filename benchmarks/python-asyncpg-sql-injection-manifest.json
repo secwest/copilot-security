@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-asyncpg-sql-injection",
+      "description": "A FastAPI query parameter crosses an exact typed Python wrapper and copied local variable into SQL grammar in argument zero of an awaited official asyncpg Connection.fetch call.",
+      "fixture": "fixtures/python-asyncpg-sql-injection",
+      "findingsPaths": [
+        "python-asyncpg-sql-injection/run-1/findings.json",
+        "python-asyncpg-sql-injection/run-2/findings.json",
+        "python-asyncpg-sql-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-asyncpg-sql-injection",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "src/accounts.py",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["asyncpg", "Connection", "official receiver"],
+            ["FastAPI", "Query", "username"],
+            ["accounts.lookup", "typed wrapper", "query_copy"],
+            ["argument zero", "query argument", "SQL grammar"],
+            ["await", "fetch", "coroutine"],
+            ["PostgreSQL", "driver", "server version"],
+            ["$1", "bound parameter", "protocol value"],
+            ["statement policy", "multiple commands", "prepared statement"],
+            ["CWE-89", "SQL injection", "unauthorized read"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["HTTP request", "FastAPI", "Query parameter"],
+            ["username", "server.account", "lookup"],
+            ["query_copy", "copied variable", "alias"],
+            ["Connection.fetch", "argument zero", "SQL grammar"],
+            ["await", "database round trip", "executed"],
+            ["OR role", "predicate", "administrator"],
+            ["database role", "authorization", "account row"],
+            ["fixed SQL", "$1", "negative control"]
+          ],
+          "forbiddenText": [
+            "every asyncpg call is vulnerable",
+            "bound values become SQL grammar",
+            "calling fetch without await executes the query",
+            "the recording witness contacts PostgreSQL",
+            "proves the endpoint is publicly reachable",
+            "the database server is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-asyncpg-bound-parameter",
+      "description": "The topology-matched asyncpg control keeps SQL grammar fixed and sends the same hostile FastAPI value only as a later $1 protocol-bound argument.",
+      "fixture": "fixtures/python-asyncpg-bound-parameter",
+      "findingsPaths": [
+        "python-asyncpg-bound-parameter/run-1/findings.json",
+        "python-asyncpg-bound-parameter/run-2/findings.json",
+        "python-asyncpg-bound-parameter/run-3/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

@@ -2,6 +2,56 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Bind asyncpg query grammar to real async execution
+
+**Measured miss and comparator evidence.** The previously compiled scanner
+emits no `python-asyncpg-sql` row for either member of the new pair because its
+generic Python SQL lane activates only for Django, psycopg, SQLAlchemy, and
+sqlite. Semgrep's open
+[`asyncpg-sqli` taint-mode repair](https://github.com/semgrep/semgrep-rules/pull/4014)
+demonstrates the concrete alias false negative: a tainted query copied into a
+second local variable is lost by its earlier pattern rule. The official
+[`asyncpg Connection API`](https://magicstack.github.io/asyncpg/current/api/index.html#connection)
+defines nine query-bearing methods and makes later arguments protocol-bound
+values. The comparator proposal spells `copy_from_query` without underscores
+and omits current `fetchmany`; it also does not require the returned coroutine
+or cursor factory to execute.
+
+**Accepted boundary beyond comparator parity.** Add a Python-only typed sink
+for the correctly spelled `copy_from_query`, plus `cursor`, `execute`,
+`executemany`, `fetch`, `fetchmany`, `fetchrow`, `fetchval`, and `prepare`.
+Require an exact live `asyncpg.Connection` or compatible `Pool` proven by
+annotation, `connect`, `create_pool`, awaited `Pool.acquire`, or their async
+context-manager forms. `Pool.cursor` and `Pool.prepare` are invalid surfaces
+and fail closed. The first `query` or `command` argument is the only SQL
+grammar input; method-specific required `args` and `output` shapes are checked.
+The call must be awaited, or a cursor must be consumed by `async for`.
+
+**Flow and noise controls.** Resolve up to eight non-reassigned local query
+copies, preserve FastAPI `Annotated` sources, and carry the exact argument
+through one-wrapper or two-relay relative Python paths. General Python function
+summaries now balance nested parentheses in annotations and retain multiline
+function headers; their body range starts after the complete header. This
+closes the real `Annotated[str, Query()]` form without weakening lookalike
+handling. Reject a local `asyncpg.py` or package shadow, unproved receivers,
+reassigned imports, factory members, receivers or query methods, starred and
+malformed calls, unawaited coroutines, fixed SQL, and remote data used only in
+later bound positions.
+
+**Evidence and benchmark contract.** The positive fixture carries a FastAPI
+query parameter through `accounts.lookup`, interpolates it into SQL, copies the
+query, and awaits official `Connection.fetch`. The matched control changes
+only the query boundary to fixed `$1` SQL plus the same later value. Their
+identical recording witnesses open no socket and prove only argument mutation
+versus separation. The scanner's quality prompt and deterministic re-audit
+therefore require exact asyncpg identity, remote source, query role, execution,
+asyncpg/Python/PostgreSQL/protocol behavior, parameterization counterevidence,
+database role and authorization, concrete impact, and CWE-89 before a lead can
+be retained as a finding. The prior build emits zero specialized rows; the new
+model emits exactly one cross-file positive at `src/accounts.py:11` and no
+control row. Nine focused tests pass 37 assertions. The canonical corpus now
+contains 180 exploit/control pairs, 360 cases, and 1,080 repeated positions.
+
 ## 2026-08-29 — Close lower-level R2DBC SPI grammar through execution
 
 **Measured miss and authoritative boundary.** The previously compiled scanner

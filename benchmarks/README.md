@@ -330,6 +330,32 @@ wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users
 wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-r2dbc-spi-statement-bound-parameter/pom.xml verify
 ```
 
+## Python asyncpg SQL-injection benchmark
+
+`python-asyncpg-sql-injection-manifest.json` applies perfect three-run gates to
+an official asyncpg/FastAPI wrapper path. The positive carries a FastAPI query
+parameter through `accounts.lookup`, copies the constructed SQL, and awaits
+`Connection.fetch(query_copy)`. Its topology-matched control keeps fixed `$1`
+SQL and supplies the identical hostile bytes only as the later bound value.
+Both identical recording witnesses are deliberately socket-free: they prove
+the query-grammar versus protocol-value boundary, not PostgreSQL impact.
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/python-asyncpg-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-python-asyncpg `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+python ../../benchmarks/fixtures/python-asyncpg-sql-injection/examples/witness.py
+python ../../benchmarks/fixtures/python-asyncpg-bound-parameter/examples/witness.py
+```
+
 ## Node MCP tool-handler security benchmark
 
 `node-mcp-tool-security-manifest.json` measures tool input across nineteen

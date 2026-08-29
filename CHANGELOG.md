@@ -6,6 +6,31 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added execution-aware Python `asyncpg` SQL-injection discovery for every
+  query-bearing current API boundary: `copy_from_query`, `cursor`, `execute`,
+  `executemany`, `fetch`, `fetchmany`, `fetchrow`, `fetchval`, and `prepare`.
+  The model requires a live official `Connection` or compatible `Pool`, exact
+  grammar-bearing query/command argument, and `await` or async cursor
+  consumption. It follows copied query variables, direct or aliased
+  `connect`/`create_pool` factories, acquired connections, context managers,
+  FastAPI `Annotated` parameters, and one- or two-relay Python wrappers.
+- Closed false-positive paths beyond the pending Semgrep asyncpg taint-rule
+  repair: later protocol-bound values, unawaited coroutine creation, invalid
+  Pool `cursor`/`prepare` calls, local modules and lookalikes, reassigned
+  imports/factory/method/receiver bindings, starred or malformed calls, and
+  fixed SQL remain negative. The scanner covers the official underscored
+  `copy_from_query` spelling and `fetchmany`, neither covered by that comparator
+  proposal. Host re-audit now requires source, receiver, argument role,
+  execution, PostgreSQL/protocol behavior, `$1` counterevidence, database
+  authority, concrete impact, and CWE-89 in both validation and attack path.
+- Added a perfect-gate asyncpg exploit/control benchmark. The prior compiled
+  scanner emits zero specialized rows; the new model emits one exact
+  FastAPI-to-copied-query-to-awaited-`Connection.fetch` row at
+  `src/accounts.py:11` and none for its topology-matched `$1` control. Identical
+  socket-free witnesses prove only first-query-argument mutation versus later
+  protocol-value separation and explicitly do not claim a PostgreSQL exploit.
+  The focused lane passes 9 tests and 37 assertions on Windows. The canonical
+  benchmark advances to 180 pairs, 360 cases, and 1,080 repeated positions.
 - Added a lower-level Java R2DBC SPI SQL model for all six official grammar
   boundaries: `Connection.createStatement`, `Batch.add`, the three
   savepoint-name operations, and `Statement.returnGeneratedValues`. Exact

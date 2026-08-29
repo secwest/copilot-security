@@ -633,6 +633,10 @@ describe("effectiveness benchmark", () => {
         "java-r2dbc-spi-statement-sql-injection",
         "java-r2dbc-spi-statement-bound-parameter",
       ],
+      [
+        "python-asyncpg-sql-injection",
+        "python-asyncpg-bound-parameter",
+      ],
     ] as const;
     const cases = new Map(manifest.cases.map((item) => [item.id, item]));
 

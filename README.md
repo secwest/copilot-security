@@ -92,6 +92,17 @@ pickle execution, and an `.npz` archive must actually access its lazy member.
 The paired witness proves bounded `__reduce__` callable execution while the
 otherwise identical `allow_pickle=False` control fails closed before the
 callable runs.
+For Python `asyncpg`, the host recognizes the official `Connection` and
+compatible `Pool` query APIs only after proving a live annotation, factory, or
+pool-acquisition origin. It traces request data through copied query variables
+and up to two relative Python wrapper relays into the first SQL query/command
+argument, and requires `await` or async cursor consumption. The model covers
+`copy_from_query`, `cursor`, `execute`, `executemany`, `fetch`, `fetchmany`,
+`fetchrow`, `fetchval`, and `prepare`. Later variadic values remain distinct
+PostgreSQL protocol-bound data, so fixed `$1` SQL plus a remote later argument
+is counterevidence. Reviewer validation must still prove exact PostgreSQL and
+asyncpg behavior, reachability, database authority, and a concrete
+unauthorized effect; the bounded benchmark witness opens no socket.
 For Java, the host resolves uniquely named service types
 from controller fields, confines calls to parsed public or protected method
 bodies, and preserves annotated Spring or servlet-assigned request values

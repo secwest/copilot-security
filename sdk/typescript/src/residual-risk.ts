@@ -2497,6 +2497,39 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-asyncpg-sql",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\bimport\s+asyncpg(?:\s+as\s+[A-Za-z_]\w*)?\b|\bfrom\s+asyncpg(?:\.(?:connection|pool))?\s+import\b/u,
+    ],
+    sources: [
+      {
+        kind: "framework-request-field",
+        expression:
+          /\brequest\.(?:args|cookies|form|GET|json|POST|values)\b|\brequest\.(?:get_data|get_json)\s*\(/iu,
+      },
+      {
+        kind: "fastapi-bound-parameter",
+        expression: /\b(?:Body|Cookie|Form|Header|Path|Query)\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "asyncpg-query-sql-grammar",
+        expression:
+          /\.\s*(?:copy_from_query|cursor|execute|executemany|fetch|fetchmany|fetchrow|fetchval|prepare)\s*\(/u,
+        cweIds: ["CWE-89"],
+      },
+    ],
+    controls: [
+      {
+        kind: "bounded-allowlist-or-validation",
+        expression: /\b(?:allowlist|is_valid|validate)\b|\.fullmatch\s*\(/iu,
+      },
+    ],
+  },
+  {
     id: "python-web-sql",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3646,6 +3679,7 @@ interface PythonTypedSink {
 
 function isPythonTypedSinkModel(modelId: string): boolean {
   return (
+    modelId === "python-asyncpg-sql" ||
     modelId === "python-web-pickle-unsafe-load" ||
     modelId === "python-web-pyyaml-unsafe-load" ||
     modelId === "python-web-numpy-allow-pickle-load" ||
@@ -4467,6 +4501,17 @@ const NODE_MCP_TOOL_SQL_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-89", "database confidentiality", "database integrity"],
 ] as const;
 
+const PYTHON_ASYNCPG_SQL_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["asyncpg", "Connection", "Pool", "official receiver"],
+  ["request", "FastAPI", "Query parameter", "remote input"],
+  ["query argument", "command argument", "argument zero", "SQL grammar"],
+  ["await", "async for", "cursor consumption", "query execution"],
+  ["PostgreSQL", "server version", "database driver", "protocol"],
+  ["$1", "bound parameter", "protocol value", "parameterized"],
+  ["database role", "authorization", "unauthorized read", "unauthorized write"],
+  ["CWE-89", "SQL injection"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4559,6 +4604,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: JOBLIB_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: JOBLIB_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-asyncpg-sql",
+    {
+      validation: PYTHON_ASYNCPG_SQL_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: PYTHON_ASYNCPG_SQL_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -18747,67 +18799,84 @@ function frameworkDataflowRecords(
           ? pythonFilesystemPathSink(lines, sink.line)
           : undefined;
       const pythonTypedSink =
-        model.id === "python-web-pyyaml-unsafe-load"
-          ? pythonPyyamlUnsafeSink(files, path, lines, sink.line)
-          : model.id === "python-web-pickle-unsafe-load"
-            ? pythonPickleUnsafeSink(files, path, lines, sink.line)
-            : model.id === "python-web-numpy-allow-pickle-load"
-              ? pythonNumpyAllowPickleUnsafeSink(files, path, lines, sink.line)
-              : model.id === "python-web-joblib-unsafe-load"
-                ? pythonJoblibUnsafeSink(files, path, lines, sink.line)
-                : model.id === "python-web-torch-unsafe-load"
-                  ? pythonTorchUnsafeSink(files, path, lines, sink.line)
-                  : model.id === "python-web-lxml-iterparse-xxe"
-                    ? pythonLxmlIterparseXxeSink(files, path, lines, sink.line)
-                    : model.id === "python-web-lxml-etcompat-xxe"
-                      ? pythonLxmlEtCompatXxeSink(files, path, lines, sink.line)
-                      : model.id === "python-web-tarfile-unsafe-extraction"
-                        ? pythonTarfileUnsafeExtractionSink(
+        model.id === "python-asyncpg-sql"
+          ? pythonAsyncpgSqlSink(files, path, lines, sink.line)
+          : model.id === "python-web-pyyaml-unsafe-load"
+            ? pythonPyyamlUnsafeSink(files, path, lines, sink.line)
+            : model.id === "python-web-pickle-unsafe-load"
+              ? pythonPickleUnsafeSink(files, path, lines, sink.line)
+              : model.id === "python-web-numpy-allow-pickle-load"
+                ? pythonNumpyAllowPickleUnsafeSink(
+                    files,
+                    path,
+                    lines,
+                    sink.line,
+                  )
+                : model.id === "python-web-joblib-unsafe-load"
+                  ? pythonJoblibUnsafeSink(files, path, lines, sink.line)
+                  : model.id === "python-web-torch-unsafe-load"
+                    ? pythonTorchUnsafeSink(files, path, lines, sink.line)
+                    : model.id === "python-web-lxml-iterparse-xxe"
+                      ? pythonLxmlIterparseXxeSink(
+                          files,
+                          path,
+                          lines,
+                          sink.line,
+                        )
+                      : model.id === "python-web-lxml-etcompat-xxe"
+                        ? pythonLxmlEtCompatXxeSink(
                             files,
                             path,
                             lines,
                             sink.line,
                           )
-                        : model.id === "python-web-hydra-unsafe-instantiate"
-                          ? pythonHydraUnsafeInstantiateSink(
+                        : model.id === "python-web-tarfile-unsafe-extraction"
+                          ? pythonTarfileUnsafeExtractionSink(
                               files,
                               path,
                               lines,
                               sink.line,
                             )
-                          : model.id ===
-                              "python-web-statemachine-unsafe-scxml-eval"
-                            ? pythonStatemachineUnsafeScxmlSink(
+                          : model.id === "python-web-hydra-unsafe-instantiate"
+                            ? pythonHydraUnsafeInstantiateSink(
                                 files,
                                 path,
                                 lines,
                                 sink.line,
                               )
                             : model.id ===
-                                "python-asyncssh-scp-download-path-traversal"
-                              ? pythonAsyncSshScpDownloadSink(
+                                "python-web-statemachine-unsafe-scxml-eval"
+                              ? pythonStatemachineUnsafeScxmlSink(
                                   files,
                                   path,
                                   lines,
                                   sink.line,
                                 )
                               : model.id ===
-                                  "python-web-datamodel-codegen-import-injection"
-                                ? pythonDatamodelCodegenImportInjectionSink(
+                                  "python-asyncssh-scp-download-path-traversal"
+                                ? pythonAsyncSshScpDownloadSink(
                                     files,
                                     path,
                                     lines,
                                     sink.line,
                                   )
                                 : model.id ===
-                                    "python-web-sympy-unsafe-parse-expr"
-                                  ? pythonSympyUnsafeParseExprSink(
+                                    "python-web-datamodel-codegen-import-injection"
+                                  ? pythonDatamodelCodegenImportInjectionSink(
                                       files,
                                       path,
                                       lines,
                                       sink.line,
                                     )
-                                  : undefined;
+                                  : model.id ===
+                                      "python-web-sympy-unsafe-parse-expr"
+                                    ? pythonSympyUnsafeParseExprSink(
+                                        files,
+                                        path,
+                                        lines,
+                                        sink.line,
+                                      )
+                                    : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -19365,21 +19434,30 @@ function frameworkDataflowRecords(
                               .find((candidate) => candidate !== undefined)
                           : isPythonTypedSinkModel(model.id) &&
                               pythonTypedSink !== undefined
-                            ? model.id === "python-web-sympy-unsafe-parse-expr"
-                              ? modeledPythonSympyObjectSource(
+                            ? model.id === "python-asyncpg-sql"
+                              ? modeledPythonAsyncpgSource(
                                   lines,
                                   sources,
                                   sink.line,
                                   pythonTypedSink.sourceExpression,
                                   model.sources,
                                 )
-                              : modeledPythonObjectSource(
-                                  lines,
-                                  sources,
-                                  sink.line,
-                                  pythonTypedSink.sourceExpression,
-                                  model.sources,
-                                )
+                              : model.id ===
+                                  "python-web-sympy-unsafe-parse-expr"
+                                ? modeledPythonSympyObjectSource(
+                                    lines,
+                                    sources,
+                                    sink.line,
+                                    pythonTypedSink.sourceExpression,
+                                    model.sources,
+                                  )
+                                : modeledPythonObjectSource(
+                                    lines,
+                                    sources,
+                                    sink.line,
+                                    pythonTypedSink.sourceExpression,
+                                    model.sources,
+                                  )
                             : model.id === "node-http-object-authorization" &&
                                 nodeObjectSink !== undefined
                               ? modeledObjectLookupSource(
@@ -33788,89 +33866,98 @@ function pythonFrameworkWrapperSummaries(
               ? pythonFilesystemPathSink(file.lines, sink.line)
               : undefined;
           const pythonTypedSink =
-            model.id === "python-web-pyyaml-unsafe-load"
-              ? pythonPyyamlUnsafeSink(files, file.path, file.lines, sink.line)
-              : model.id === "python-web-pickle-unsafe-load"
-                ? pythonPickleUnsafeSink(
+            model.id === "python-asyncpg-sql"
+              ? pythonAsyncpgSqlSink(files, file.path, file.lines, sink.line)
+              : model.id === "python-web-pyyaml-unsafe-load"
+                ? pythonPyyamlUnsafeSink(
                     files,
                     file.path,
                     file.lines,
                     sink.line,
                   )
-                : model.id === "python-web-numpy-allow-pickle-load"
-                  ? pythonNumpyAllowPickleUnsafeSink(
+                : model.id === "python-web-pickle-unsafe-load"
+                  ? pythonPickleUnsafeSink(
                       files,
                       file.path,
                       file.lines,
                       sink.line,
                     )
-                  : model.id === "python-web-joblib-unsafe-load"
-                    ? pythonJoblibUnsafeSink(
+                  : model.id === "python-web-numpy-allow-pickle-load"
+                    ? pythonNumpyAllowPickleUnsafeSink(
                         files,
                         file.path,
                         file.lines,
                         sink.line,
                       )
-                    : model.id === "python-web-torch-unsafe-load"
-                      ? pythonTorchUnsafeSink(
+                    : model.id === "python-web-joblib-unsafe-load"
+                      ? pythonJoblibUnsafeSink(
                           files,
                           file.path,
                           file.lines,
                           sink.line,
                         )
-                      : model.id === "python-web-lxml-iterparse-xxe"
-                        ? pythonLxmlIterparseXxeSink(
+                      : model.id === "python-web-torch-unsafe-load"
+                        ? pythonTorchUnsafeSink(
                             files,
                             file.path,
                             file.lines,
                             sink.line,
                           )
-                        : model.id === "python-web-lxml-etcompat-xxe"
-                          ? pythonLxmlEtCompatXxeSink(
+                        : model.id === "python-web-lxml-iterparse-xxe"
+                          ? pythonLxmlIterparseXxeSink(
                               files,
                               file.path,
                               file.lines,
                               sink.line,
                             )
-                          : model.id === "python-web-tarfile-unsafe-extraction"
-                            ? pythonTarfileUnsafeExtractionSink(
+                          : model.id === "python-web-lxml-etcompat-xxe"
+                            ? pythonLxmlEtCompatXxeSink(
                                 files,
                                 file.path,
                                 file.lines,
                                 sink.line,
                               )
-                            : model.id === "python-web-hydra-unsafe-instantiate"
-                              ? pythonHydraUnsafeInstantiateSink(
+                            : model.id ===
+                                "python-web-tarfile-unsafe-extraction"
+                              ? pythonTarfileUnsafeExtractionSink(
                                   files,
                                   file.path,
                                   file.lines,
                                   sink.line,
                                 )
                               : model.id ===
-                                  "python-web-statemachine-unsafe-scxml-eval"
-                                ? pythonStatemachineUnsafeScxmlSink(
+                                  "python-web-hydra-unsafe-instantiate"
+                                ? pythonHydraUnsafeInstantiateSink(
                                     files,
                                     file.path,
                                     file.lines,
                                     sink.line,
                                   )
                                 : model.id ===
-                                    "python-web-datamodel-codegen-import-injection"
-                                  ? pythonDatamodelCodegenImportInjectionSink(
+                                    "python-web-statemachine-unsafe-scxml-eval"
+                                  ? pythonStatemachineUnsafeScxmlSink(
                                       files,
                                       file.path,
                                       file.lines,
                                       sink.line,
                                     )
                                   : model.id ===
-                                      "python-web-sympy-unsafe-parse-expr"
-                                    ? pythonSympyUnsafeParseExprSink(
+                                      "python-web-datamodel-codegen-import-injection"
+                                    ? pythonDatamodelCodegenImportInjectionSink(
                                         files,
                                         file.path,
                                         file.lines,
                                         sink.line,
                                       )
-                                    : undefined;
+                                    : model.id ===
+                                        "python-web-sympy-unsafe-parse-expr"
+                                      ? pythonSympyUnsafeParseExprSink(
+                                          files,
+                                          file.path,
+                                          file.lines,
+                                          sink.line,
+                                        )
+                                      : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
@@ -34689,14 +34776,25 @@ function exportedPythonFunctions(
   if (cached !== undefined) return cached;
   const functions: ExportedPythonFunction[] = [];
   const structuralLines = pythonStructuralLines(lines);
-  const expression =
-    /^(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*(?:->\s*[^:]+)?\s*:/u;
+  const expression = /^(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/u;
   for (let index = 0; index < lines.length; index += 1) {
     const line = structuralLines[index] ?? "";
     if (/^\s/u.test(line)) continue;
     const match = expression.exec(line);
-    if (match === null || match[1]!.startsWith("_")) continue;
-    const parameters = splitPythonArguments(match[2] ?? "")
+    if (match?.[1] === undefined || match[1].startsWith("_")) continue;
+    const declarationLines = lines.slice(
+      index,
+      Math.min(lines.length, index + 13),
+    );
+    const declaration = declarationLines.join("\n");
+    const structuralDeclaration =
+      pythonStructuralLines(declarationLines).join("\n");
+    const declarationMatch = expression.exec(structuralDeclaration);
+    if (declarationMatch === null) continue;
+    const open = structuralDeclaration.indexOf("(", declarationMatch.index);
+    const close = matchingCallParenthesis(declaration, open);
+    if (open < 0 || close < 0) continue;
+    const parameters = splitPythonArguments(declaration.slice(open + 1, close))
       .map((parameter) =>
         parameter
           .trim()
@@ -34726,8 +34824,22 @@ function pythonFunctionEndLine(
     lines.length,
     startIndex + MAX_WRAPPER_FUNCTION_LINES,
   );
-  let lastBodyLine = startIndex + 1;
-  for (let index = startIndex + 1; index < maximum; index += 1) {
+  const declarationLines = lines.slice(
+    startIndex,
+    Math.min(lines.length, startIndex + 13),
+  );
+  const declaration = declarationLines.join("\n");
+  const structuralDeclaration =
+    pythonStructuralLines(declarationLines).join("\n");
+  const open = structuralDeclaration.indexOf("(");
+  const close = matchingCallParenthesis(declaration, open);
+  const headerLineOffset =
+    open >= 0 && close >= 0
+      ? declaration.slice(0, close + 1).match(/\n/gu)?.length ?? 0
+      : 0;
+  const bodyStartIndex = startIndex + headerLineOffset + 1;
+  let lastBodyLine = startIndex + headerLineOffset + 1;
+  for (let index = bodyStartIndex; index < maximum; index += 1) {
     const line = lines[index] ?? "";
     const code = pythonCodeBeforeComment(line);
     if (code.trim() === "") continue;
@@ -36370,6 +36482,550 @@ function pythonPositionalArguments(arguments_: readonly string[]): string[] {
         !/^[A-Za-z_]\w*\s*=/u.test(argument) &&
         !argument.startsWith("**"),
     );
+}
+
+const PYTHON_ASYNCPG_QUERY_METHODS = new Set([
+  "copy_from_query",
+  "cursor",
+  "execute",
+  "executemany",
+  "fetch",
+  "fetchmany",
+  "fetchrow",
+  "fetchval",
+  "prepare",
+]);
+
+interface PythonAsyncpgBindingContext {
+  modules: PythonModuleImportBinding[];
+  connectFunctions: PythonModuleImportBinding[];
+  createPoolFunctions: PythonModuleImportBinding[];
+  connectionTypes: PythonModuleImportBinding[];
+  poolTypes: PythonModuleImportBinding[];
+}
+
+interface PythonAsyncpgReceiverProof {
+  kind: string;
+  line: number;
+  symbol: string;
+  receiverType: "connection" | "pool";
+}
+
+interface PythonAsyncpgQueryCall {
+  receiver: string;
+  method: string;
+  arguments: string[];
+  executionKind: string;
+}
+
+function pythonAsyncpgBindings(
+  lines: readonly string[],
+): PythonAsyncpgBindingContext {
+  const modules: PythonModuleImportBinding[] = [];
+  const connectFunctions: PythonModuleImportBinding[] = [];
+  const createPoolFunctions: PythonModuleImportBinding[] = [];
+  const connectionTypes: PythonModuleImportBinding[] = [];
+  const poolTypes: PythonModuleImportBinding[] = [];
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const moduleImport =
+      /^\s*import\s+asyncpg(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(structural);
+    if (moduleImport !== null) {
+      modules.push({
+        imported: "asyncpg",
+        local: moduleImport[1] ?? "asyncpg",
+        line: index + 1,
+      });
+      continue;
+    }
+    const fromImport =
+      /^\s*from\s+(asyncpg(?:\.(?:connection|pool))?)\s+import\s+(.+?)\s*$/u.exec(
+        structural,
+      );
+    if (fromImport?.[2] === undefined) continue;
+    for (const rawBinding of splitPythonArguments(fromImport[2])) {
+      const parsed = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+        rawBinding
+          .trim()
+          .replace(/^\(|\)$/gu, "")
+          .trim(),
+      );
+      if (parsed === null) continue;
+      const entry = {
+        imported: parsed[1]!,
+        local: parsed[2] ?? parsed[1]!,
+        line: index + 1,
+      };
+      if (entry.imported === "connect" && fromImport[1] === "asyncpg") {
+        connectFunctions.push(entry);
+      } else if (
+        entry.imported === "create_pool" &&
+        fromImport[1] === "asyncpg"
+      ) {
+        createPoolFunctions.push(entry);
+      } else if (
+        entry.imported === "Connection" &&
+        (fromImport[1] === "asyncpg" || fromImport[1] === "asyncpg.connection")
+      ) {
+        connectionTypes.push(entry);
+      } else if (
+        entry.imported === "Pool" &&
+        (fromImport[1] === "asyncpg" || fromImport[1] === "asyncpg.pool")
+      ) {
+        poolTypes.push(entry);
+      }
+    }
+  }
+  return {
+    modules,
+    connectFunctions,
+    createPoolFunctions,
+    connectionTypes,
+    poolTypes,
+  };
+}
+
+function pythonAsyncpgLiveFactory(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+  context: PythonAsyncpgBindingContext,
+  allowContextManager = false,
+): { kind: "connection" | "pool"; symbol: string } | undefined {
+  const structural = pythonStructuralLines(expression.split("\n"))
+    .join(" ")
+    .trim()
+    .replace(/^\(+\s*/u, "")
+    .replace(/\s*\)+$/u, "");
+  const awaited = /^await\s+([\s\S]+)$/u.exec(structural)?.[1]?.trim();
+  const factoryExpression =
+    awaited ?? (allowContextManager ? structural : undefined);
+  if (factoryExpression === undefined) return undefined;
+  for (const binding of context.modules) {
+    if (
+      binding.line >= line ||
+      pythonImportedBindingReassigned(lines, binding, undefined, line)
+    ) {
+      continue;
+    }
+    for (const [member, kind] of [
+      ["connect", "connection"],
+      ["create_pool", "pool"],
+    ] as const) {
+      if (
+        new RegExp(
+          `^${escapeRegularExpression(binding.local)}\\s*\\.\\s*${member}\\s*\\(`,
+          "u",
+        ).test(factoryExpression) &&
+        !pythonImportedBindingReassigned(lines, binding, member, line)
+      ) {
+        return { kind, symbol: `${binding.local}.${member}` };
+      }
+    }
+  }
+  for (const [bindings, kind] of [
+    [context.connectFunctions, "connection"],
+    [context.createPoolFunctions, "pool"],
+  ] as const) {
+    for (const binding of bindings) {
+      if (
+        binding.line < line &&
+        !pythonImportedBindingReassigned(lines, binding, undefined, line) &&
+        new RegExp(
+          `^${escapeRegularExpression(binding.local)}\\s*\\(`,
+          "u",
+        ).test(factoryExpression)
+      ) {
+        return { kind, symbol: binding.local };
+      }
+    }
+  }
+  return undefined;
+}
+
+function pythonAsyncpgIndentedContextContains(
+  lines: readonly string[],
+  contextLine: number,
+  sinkLine: number,
+): boolean {
+  const contextText = lines[contextLine - 1] ?? "";
+  const contextIndent = /^\s*/u.exec(contextText)?.[0].length ?? 0;
+  for (let line = contextLine + 1; line <= sinkLine; line += 1) {
+    const text = pythonCodeBeforeComment(lines[line - 1] ?? "");
+    if (text.trim() === "") continue;
+    const indent = /^\s*/u.exec(text)?.[0].length ?? 0;
+    if (indent <= contextIndent) return false;
+  }
+  return true;
+}
+
+function pythonFunctionDeclarationParameters(
+  lines: readonly string[],
+  startLine: number,
+): string[] {
+  const declarationLines = lines.slice(
+    startLine - 1,
+    Math.min(lines.length, startLine + 12),
+  );
+  const original = declarationLines.join("\n");
+  const structural = pythonStructuralLines(declarationLines).join("\n");
+  const functionMatch = /^\s*(?:async\s+)?def\s+[A-Za-z_]\w*\s*\(/u.exec(
+    structural,
+  );
+  if (functionMatch === null) return [];
+  const open = structural.indexOf("(", functionMatch.index);
+  const close = matchingCallParenthesis(original, open);
+  return open < 0 || close < 0
+    ? []
+    : splitPythonArguments(original.slice(open + 1, close));
+}
+
+function pythonAsyncpgAnnotatedReceiver(
+  lines: readonly string[],
+  receiver: string,
+  beforeLine: number,
+  wrapper: ExportedPythonFunction | undefined,
+  context: PythonAsyncpgBindingContext,
+): PythonAsyncpgReceiverProof | undefined {
+  if (wrapper === undefined || !wrapper.parameters.includes(receiver)) {
+    return undefined;
+  }
+  if (
+    pythonIdentifierReassignedBetween(
+      lines,
+      receiver,
+      wrapper.startLine,
+      beforeLine,
+    )
+  ) {
+    return undefined;
+  }
+  const parameter = pythonFunctionDeclarationParameters(
+    lines,
+    wrapper.startLine,
+  ).find((candidate) =>
+    new RegExp(`^\\s*${escapeRegularExpression(receiver)}\\s*:`, "u").test(
+      candidate,
+    ),
+  );
+  if (parameter === undefined) return undefined;
+  for (const binding of context.modules) {
+    if (
+      binding.line < wrapper.startLine &&
+      !pythonImportedBindingReassigned(
+        lines,
+        binding,
+        undefined,
+        wrapper.startLine,
+      )
+    ) {
+      const match = new RegExp(
+        `:\\s*(?:[A-Za-z_]\\w*\\s*\\[\\s*)?${escapeRegularExpression(binding.local)}\\s*\\.\\s*(Connection|Pool)\\b`,
+        "u",
+      ).exec(parameter);
+      if (match?.[1] !== undefined) {
+        return {
+          kind: "asyncpg-annotated-receiver",
+          line: wrapper.startLine,
+          symbol: `${receiver}:${binding.local}.${match[1]}`,
+          receiverType: match[1] === "Pool" ? "pool" : "connection",
+        };
+      }
+    }
+  }
+  for (const binding of [...context.connectionTypes, ...context.poolTypes]) {
+    if (
+      binding.line < wrapper.startLine &&
+      !pythonImportedBindingReassigned(
+        lines,
+        binding,
+        undefined,
+        wrapper.startLine,
+      ) &&
+      new RegExp(
+        `:\\s*(?:[A-Za-z_]\\w*\\s*\\[\\s*)?${escapeRegularExpression(binding.local)}\\b`,
+        "u",
+      ).test(parameter)
+    ) {
+      return {
+        kind: "asyncpg-annotated-receiver",
+        line: wrapper.startLine,
+        symbol: `${receiver}:${binding.local}`,
+        receiverType: context.poolTypes.includes(binding)
+          ? "pool"
+          : "connection",
+      };
+    }
+  }
+  return undefined;
+}
+
+function pythonAsyncpgReceiverProof(
+  lines: readonly string[],
+  receiver: string,
+  beforeLine: number,
+  wrapper: ExportedPythonFunction | undefined,
+  context: PythonAsyncpgBindingContext,
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+): PythonAsyncpgReceiverProof | undefined {
+  if (depth > 4 || seen.has(receiver)) return undefined;
+  const annotated = pythonAsyncpgAnnotatedReceiver(
+    lines,
+    receiver,
+    beforeLine,
+    wrapper,
+    context,
+  );
+  if (annotated !== undefined) return annotated;
+  const earliest = Math.max(wrapper?.startLine ?? 1, beforeLine - 64);
+  const structuralLines = pythonStructuralLines(lines);
+  const contextManager = new RegExp(
+    `^\\s*async\\s+with\\s+(.+?)\\s+as\\s+${escapeRegularExpression(receiver)}\\s*:`,
+    "u",
+  );
+  for (
+    let candidateLine = beforeLine - 1;
+    candidateLine >= earliest;
+    candidateLine -= 1
+  ) {
+    const contextMatch = contextManager.exec(
+      structuralLines[candidateLine - 1] ?? "",
+    );
+    if (
+      contextMatch?.[1] === undefined ||
+      !pythonAsyncpgIndentedContextContains(lines, candidateLine, beforeLine)
+    ) {
+      continue;
+    }
+    const factory = pythonAsyncpgLiveFactory(
+      lines,
+      contextMatch[1],
+      candidateLine,
+      context,
+      true,
+    );
+    if (factory !== undefined) {
+      return {
+        kind: `asyncpg-${factory.kind}-context-manager`,
+        line: candidateLine,
+        symbol: `${receiver}=${factory.symbol}`,
+        receiverType: factory.kind,
+      };
+    }
+    const acquired = /^([A-Za-z_]\w*)\s*\.\s*acquire\s*\(/u.exec(
+      contextMatch[1].trim(),
+    );
+    if (acquired?.[1] === undefined) continue;
+    const pool = pythonAsyncpgReceiverProof(
+      lines,
+      acquired[1],
+      candidateLine,
+      wrapper,
+      context,
+      depth + 1,
+      new Set([...seen, receiver]),
+    );
+    if (pool !== undefined) {
+      return {
+        kind: "asyncpg-pool-acquired-connection-context-manager",
+        line: candidateLine,
+        symbol: `${receiver}=${acquired[1]}.acquire`,
+        receiverType: "connection",
+      };
+    }
+  }
+  const assignment = new RegExp(
+    `^\\s*${escapeRegularExpression(receiver)}\\s*(?::[^=]+)?=`,
+    "u",
+  );
+  for (
+    let candidateLine = beforeLine - 1;
+    candidateLine >= earliest;
+    candidateLine -= 1
+  ) {
+    if (!assignment.test(structuralLines[candidateLine - 1] ?? "")) continue;
+    if (
+      pythonIdentifierReassignedBetween(
+        lines,
+        receiver,
+        candidateLine,
+        beforeLine,
+      )
+    ) {
+      return undefined;
+    }
+    const value = pythonAssignmentValueAtLine(lines, candidateLine);
+    if (value === undefined) return undefined;
+    const factory = pythonAsyncpgLiveFactory(
+      lines,
+      value,
+      candidateLine,
+      context,
+    );
+    if (factory !== undefined) {
+      return {
+        kind: `asyncpg-${factory.kind}-factory`,
+        line: candidateLine,
+        symbol: `${receiver}=${factory.symbol}`,
+        receiverType: factory.kind,
+      };
+    }
+    const acquired = /^await\s+([A-Za-z_]\w*)\s*\.\s*acquire\s*\(/u.exec(
+      pythonStructuralLines(value.split("\n")).join(" ").trim(),
+    );
+    if (acquired?.[1] === undefined) return undefined;
+    const pool = pythonAsyncpgReceiverProof(
+      lines,
+      acquired[1],
+      candidateLine,
+      wrapper,
+      context,
+      depth + 1,
+      new Set([...seen, receiver]),
+    );
+    return pool === undefined
+      ? undefined
+      : {
+          kind: "asyncpg-pool-acquired-connection",
+          line: candidateLine,
+          symbol: `${receiver}=${acquired[1]}.acquire`,
+          receiverType: "connection",
+        };
+  }
+  return undefined;
+}
+
+function pythonAsyncpgQueryCallAtLine(
+  lines: readonly string[],
+  line: number,
+): PythonAsyncpgQueryCall | undefined {
+  const callLines = lines.slice(line - 1, Math.min(lines.length, line + 12));
+  const original = callLines.join("\n");
+  const structural = pythonStructuralLines(callLines).join("\n");
+  const match =
+    /\b([A-Za-z_]\w*)\s*\.\s*(copy_from_query|cursor|execute|executemany|fetch|fetchmany|fetchrow|fetchval|prepare)\s*\(/u.exec(
+      structural,
+    );
+  if (match?.[1] === undefined || match[2] === undefined) return undefined;
+  const firstLineEnd = structural.indexOf("\n");
+  if (firstLineEnd >= 0 && match.index >= firstLineEnd) return undefined;
+  const open = structural.indexOf("(", match.index);
+  const close = matchingCallParenthesis(original, open);
+  if (open < 0 || close < 0) return undefined;
+  const prefix = structural.slice(0, match.index);
+  const executionKind = /\bawait\s*$/u.test(prefix)
+    ? "asyncpg-awaited-query-execution"
+    : match[2] === "cursor" && /\basync\s+for\b[\s\S]*\bin\s*$/u.test(prefix)
+      ? "asyncpg-consumed-cursor"
+      : "";
+  if (executionKind === "" || !PYTHON_ASYNCPG_QUERY_METHODS.has(match[2])) {
+    return undefined;
+  }
+  return {
+    receiver: match[1],
+    method: match[2],
+    arguments: splitPythonArguments(original.slice(open + 1, close)),
+    executionKind,
+  };
+}
+
+function pythonAsyncpgSqlSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "asyncpg")) {
+    return undefined;
+  }
+  const call = pythonAsyncpgQueryCallAtLine(lines, line);
+  if (
+    call === undefined ||
+    call.arguments.some((argument) => argument.trim().startsWith("*"))
+  ) {
+    return undefined;
+  }
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  const context = pythonAsyncpgBindings(lines);
+  const receiver = pythonAsyncpgReceiverProof(
+    lines,
+    call.receiver,
+    line,
+    wrapper,
+    context,
+  );
+  if (receiver === undefined) return undefined;
+  if (
+    pythonImportedBindingReassigned(
+      lines,
+      {
+        imported: call.receiver,
+        local: call.receiver,
+        line: receiver.line,
+      },
+      call.method,
+      line,
+    )
+  ) {
+    return undefined;
+  }
+  if (
+    receiver.receiverType === "pool" &&
+    (call.method === "cursor" || call.method === "prepare")
+  ) {
+    return undefined;
+  }
+  const positional = pythonPositionalArguments(call.arguments);
+  const queryKeyword = pythonKeywordArgument(
+    call.arguments,
+    call.method === "executemany" ? "command" : "query",
+  );
+  if (queryKeyword !== undefined && positional.length > 0) return undefined;
+  const queryExpression = queryKeyword ?? positional[0];
+  if (queryExpression === undefined) return undefined;
+  if (
+    (call.method === "executemany" || call.method === "fetchmany") &&
+    pythonKeywordArgument(call.arguments, "args") === undefined &&
+    positional.length < 2
+  ) {
+    return undefined;
+  }
+  if (
+    call.method === "copy_from_query" &&
+    pythonKeywordArgument(call.arguments, "output") === undefined
+  ) {
+    return undefined;
+  }
+  const tracedExpression =
+    resolvePythonExpression(lines, queryExpression, line) ?? queryExpression;
+  return {
+    sourceExpression: tracedExpression,
+    kind: `asyncpg-${call.method}-sql-grammar`,
+    propagators: [
+      {
+        kind: receiver.kind,
+        path: sourcePath,
+        line: receiver.line,
+        symbol: receiver.symbol,
+      },
+      {
+        kind: "asyncpg-query-grammar-argument",
+        path: sourcePath,
+        line,
+        symbol: `${call.method}:query`,
+      },
+      {
+        kind: call.executionKind,
+        path: sourcePath,
+        line,
+        symbol: `${call.receiver}.${call.method}`,
+      },
+    ],
+  };
 }
 
 function pythonNumpyAllowPickleUnsafeSink(
@@ -41944,6 +42600,37 @@ function modeledPythonCallSource(
       return source;
     }
   }
+  if (!pythonFastApiParameterSourceHasOfficialBinding(lines)) return undefined;
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) =>
+      callLine >= candidate.startLine && callLine <= candidate.endLine,
+  );
+  if (wrapper === undefined) return undefined;
+  const declarations = pythonFunctionDeclarationParameters(
+    lines,
+    wrapper.startLine,
+  );
+  for (const parameter of wrapper.parameters) {
+    if (!pythonLineReferencesIdentifier(argument, parameter)) continue;
+    const declaration = declarations.find((candidate) =>
+      new RegExp(`^\\s*${escapeRegularExpression(parameter)}\\b`, "u").test(
+        candidate,
+      ),
+    );
+    if (
+      declaration === undefined ||
+      !/\b(?:Body|Cookie|Form|Header|Path|Query)\s*\(/u.test(declaration)
+    ) {
+      continue;
+    }
+    const source = sources.find(
+      (candidate) =>
+        candidate.kind === "fastapi-bound-parameter" &&
+        candidate.line >= wrapper.startLine &&
+        candidate.line <= Math.min(wrapper.endLine, wrapper.startLine + 12),
+    );
+    if (source !== undefined) return source;
+  }
   return undefined;
 }
 
@@ -41975,6 +42662,54 @@ function modeledPythonObjectSource(
       continue;
     }
     return source;
+  }
+  return undefined;
+}
+
+function modeledPythonAsyncpgSource(
+  lines: readonly string[],
+  sources: readonly { kind: string; line: number }[],
+  callLine: number,
+  argument: string,
+  sourcePatterns: readonly FrameworkModelPattern[],
+): { kind: string; line: number } | undefined {
+  const ordinary = modeledPythonObjectSource(
+    lines,
+    sources,
+    callLine,
+    argument,
+    sourcePatterns,
+  );
+  if (ordinary !== undefined) return ordinary;
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) =>
+      callLine >= candidate.startLine && callLine <= candidate.endLine,
+  );
+  if (wrapper === undefined) return undefined;
+  const parameters = pythonFunctionDeclarationParameters(
+    lines,
+    wrapper.startLine,
+  );
+  for (const parameter of wrapper.parameters) {
+    if (!pythonLineReferencesIdentifier(argument, parameter)) continue;
+    const declarationPart = parameters.find((candidate) =>
+      new RegExp(`^\\s*${escapeRegularExpression(parameter)}\\b`, "u").test(
+        candidate,
+      ),
+    );
+    if (
+      declarationPart === undefined ||
+      !/\b(?:Body|Cookie|Form|Header|Path|Query)\s*\(/u.test(declarationPart)
+    ) {
+      continue;
+    }
+    const source = sources.find(
+      (candidate) =>
+        candidate.kind === "fastapi-bound-parameter" &&
+        candidate.line >= wrapper.startLine &&
+        candidate.line <= Math.min(wrapper.endLine, wrapper.startLine + 7),
+    );
+    if (source !== undefined) return source;
   }
   return undefined;
 }
