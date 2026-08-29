@@ -28,6 +28,10 @@ const vulnerableId = "rust-axum-tokio-shell-command-injection";
 const controlId = "rust-axum-tokio-argv-command";
 const handlerPath = "src/handlers/diagnostics.rs";
 
+async function readUtf8(path: string): Promise<string> {
+  return (await readFile(path, "utf8")).replace(/\r\n/g, "\n");
+}
+
 async function fixtureRecords(
   id: string,
 ): Promise<RustCommandInjectionRecord[]> {
@@ -46,9 +50,8 @@ async function fixtureRecords(
 describe("Rust Tokio command-injection model benchmark", () => {
   test("keeps the Tokio exploit and literal-argv control under perfect gates", async () => {
     const manifest = JSON.parse(
-      await readFile(
+      await readUtf8(
         join(benchmarkRoot, "rust-tokio-command-injection-manifest.json"),
-        "utf8",
       ),
     ) as BenchmarkManifest;
     expect(manifest.schemaVersion).toBe("1.0");
@@ -116,7 +119,7 @@ describe("Rust Tokio command-injection model benchmark", () => {
   test("keeps source, builder, execution, and response topology aligned", async () => {
     const sources = await Promise.all(
       [vulnerableId, controlId].map((id) =>
-        readFile(
+        readUtf8(
           join(
             benchmarkRoot,
             "fixtures",
@@ -125,7 +128,6 @@ describe("Rust Tokio command-injection model benchmark", () => {
             "handlers",
             "diagnostics.rs",
           ),
-          "utf8",
         ),
       ),
     );
@@ -148,17 +150,12 @@ describe("Rust Tokio command-injection model benchmark", () => {
   test("pins a Cargo-1.75-compatible current Tokio runtime", async () => {
     const fixtureData = await Promise.all(
       [vulnerableId, controlId].map(async (id) => ({
-        manifest: await readFile(
+        manifest: await readUtf8(
           join(benchmarkRoot, "fixtures", id, "Cargo.toml"),
-          "utf8",
         ),
-        lock: await readFile(
-          join(benchmarkRoot, "fixtures", id, "Cargo.lock"),
-          "utf8",
-        ),
-        witness: await readFile(
+        lock: await readUtf8(join(benchmarkRoot, "fixtures", id, "Cargo.lock")),
+        witness: await readUtf8(
           join(benchmarkRoot, "fixtures", id, "examples", "witness.rs"),
-          "utf8",
         ),
       })),
     );
@@ -177,7 +174,7 @@ describe("Rust Tokio command-injection model benchmark", () => {
   });
 
   test("adds a locked hosted Tokio witness differential", async () => {
-    const workflow = await readFile(
+    const workflow = await readUtf8(
       resolve(
         benchmarkRoot,
         "..",
@@ -185,7 +182,6 @@ describe("Rust Tokio command-injection model benchmark", () => {
         "workflows",
         "rust-fixture-ci.yml",
       ),
-      "utf8",
     );
     expect(workflow).toContain("axum-tokio-command-fixtures:");
     expect(workflow).toContain("cargo check --locked");
@@ -222,7 +218,7 @@ describe("Rust Tokio command-injection model benchmark", () => {
 
   test("keeps the canonical corpus paired at 181 exploit/control pairs", async () => {
     const manifest = JSON.parse(
-      await readFile(join(benchmarkRoot, "manifest.json"), "utf8"),
+      await readUtf8(join(benchmarkRoot, "manifest.json")),
     ) as BenchmarkManifest;
     const cases = new Map(manifest.cases.map((item) => [item.id, item]));
     expect(manifest.cases).toHaveLength(362);
