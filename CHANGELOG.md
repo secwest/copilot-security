@@ -43,6 +43,13 @@ All notable scanner, application, benchmark, and operational changes are recorde
   public import, CLI execution, and all 79 bundled-plugin files. The final
   Linux-native archive is 2,375,997 bytes with SHA-256
   `1a9fbc434a268bf100028d2e8f587ed22ada5a11158b65d06561cc3c92a2eecd`.
+- All eleven hosted workflow families pass at Sails implementation checkpoint
+  `2a7f6f02b53376c8c270aef512f23e4e36201066`: Node `33244376872`,
+  container `33244376875`, Linux GUI `33244376917`, Windows GUI
+  `33244376903`, Go `33244376887`, Java `33244376893`, Kotlin
+  `33244376881`, .NET `33244376891`, Rust `33244376912`, Ruby
+  `33244376898`, and PHP `33244376920`. All 87 Node jobs pass, including the
+  four Sails exploit/control witnesses on Ubuntu and Windows.
 - Closed two process-environment blind spots in official MCP tool-input flows.
   Exact `options.env.NODE_OPTIONS` now reaches the existing argument-injection
   model for non-shell `spawn`, `spawnSync`, `execFile`, and `execFileSync`

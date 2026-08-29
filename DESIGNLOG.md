@@ -80,6 +80,15 @@ known vulnerabilities. Windows and Linux installed-package checks each validate
 files. The Linux-native package is 2,375,997 bytes with SHA-256
 `1a9fbc434a268bf100028d2e8f587ed22ada5a11158b65d06561cc3c92a2eecd`.
 
+Hosted evidence at implementation checkpoint
+`2a7f6f02b53376c8c270aef512f23e4e36201066` is fully green: Node
+`33244376872`, container `33244376875`, Linux GUI `33244376917`, Windows GUI
+`33244376903`, Go `33244376887`, Java `33244376893`, Kotlin `33244376881`,
+.NET `33244376891`, Rust `33244376912`, Ruby `33244376898`, and PHP
+`33244376920`. The Node matrix completes all 87 jobs with zero failures. Its
+four Sails jobs separately prove the vulnerable and fixed witnesses on Ubuntu
+and Windows.
+
 ## 2026-08-28 — Model process runtime options and executable search paths
 
 **Counterexamples and authoritative semantics.** Fixed command and argv values
