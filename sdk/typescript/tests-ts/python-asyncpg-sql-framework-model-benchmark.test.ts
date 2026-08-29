@@ -363,7 +363,13 @@ describe("Python asyncpg SQL-injection framework model", () => {
     const canonical = JSON.parse(
       await readFile(join(benchmarkRoot, "manifest.json"), "utf8"),
     ) as { cases: Array<{ id: string }> };
-    expect(canonical.cases.slice(-2)).toEqual(manifest.cases);
+    const canonicalIndex = canonical.cases.findIndex(
+      ({ id }) => id === manifest.cases[0]?.id,
+    );
+    expect(canonicalIndex).toBeGreaterThanOrEqual(0);
+    expect(canonical.cases.slice(canonicalIndex, canonicalIndex + 2)).toEqual(
+      manifest.cases,
+    );
     for (const relativePath of [
       ".python-version",
       "requirements.txt",
