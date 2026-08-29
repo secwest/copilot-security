@@ -30,6 +30,36 @@ All notable scanner, application, benchmark, and operational changes are recorde
   exact line-15 positive with no control row. The focused Rust and canonical
   lanes pass 43 tests and 2,756 assertions. The canonical benchmark advances
   to 181 pairs, 362 cases, and 1,086 repeated positions.
+- Completed the authoritative Tokio acceptance pass. The full Windows suite
+  passes 2,056 tests and 16,010 assertions across 214 files, with 27 intentional
+  platform/environment skips and zero failures. Ubuntu/WSL passes all 113
+  selected Rust, framework, residual-risk, and canonical tests with 3,834
+  assertions. An initial aggregate run exposed an older asyncpg test that
+  assumed its pair would remain last forever; its canonical registration check
+  is now ID-located and append-safe. Hosted Windows Node 22 then exposed two
+  fixture assertions that compared raw LF text after a CRLF checkout; all text
+  fixtures in that test now pass through explicit newline normalization.
+- Two inventories of exact corrective checkpoint `d11a5f4` are byte-identical
+  at 256 structured rows, 615,647 bytes, and SHA-256
+  `d32e6e93637c5cb540d1f7bdbca088f7eb5431959ffb6b761d14efed04e21b3c`.
+  The saturated whole-repository inventory is unchanged, as expected because
+  production-path filtering excludes benchmark fixtures. A separate exact
+  fixture-root scan emits one line-15 Tokio shell row with source, formatting,
+  execution, and CWE-78/CWE-88 evidence; the literal-argv control emits none.
+- Windows and WSL validate the same Linux-generated 299-entry,
+  2,374,484-byte package with SHA-256
+  `95a7c9b5440ddb8caec3cc4ec8fc6932278c7e88429887194bc50ef071b18ed7`
+  through strict archive inspection, isolated installation, public import,
+  CLI execution, and all 79 bundled plugin files. Repacking exact corrective
+  head `d11a5f4` is byte-identical. Formatting, generated-model drift,
+  TypeScript, the clean build, and the production high-severity audit pass.
+- All eleven hosted workflow families pass exact corrective checkpoint
+  `d11a5f4`: Node `33267512070`, container `33267511996`, Windows GUI
+  `33267512065`, Linux GUI `33267512152`, Java `33267512074`, Kotlin
+  `33267512035`, .NET `33267512055`, Go `33267512013`, Rust `33267512063`,
+  Ruby `33267512059`, and PHP `33267512079`. All 91 Node jobs pass. The Rust
+  family runs both the prior synchronous witness and the locked Tokio compile
+  and marker-differential job.
 - Added execution-aware Python `asyncpg` SQL-injection discovery for every
   query-bearing current API boundary: `copy_from_query`, `cursor`, `execute`,
   `executemany`, `fetch`, `fetchmany`, `fetchrow`, `fetchval`, and `prepare`.

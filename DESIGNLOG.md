@@ -53,6 +53,60 @@ control row. The focused Rust plus canonical lane passes 43 tests and 2,756
 assertions, and the corpus advances to 181 pairs, 362 cases, and 1,086 repeated
 positions.
 
+**Regression and cross-platform acceptance.** The first authoritative Windows
+aggregate exposed one stale assertion in the preceding asyncpg benchmark: it
+correctly registered its pair but assumed it would remain the canonical
+manifest's final two cases. Locate that pair by its exact ID instead, retain its
+adjacency check, and rerun the complete aggregate. The corrected suite passes
+2,056 tests and 16,010 assertions across 214 files in 781.64 seconds, with 27
+intentional platform/environment skips and zero failures. Ubuntu/WSL passes all
+113 selected Rust, framework, residual-risk, and canonical tests with 3,834
+assertions in 18.45 seconds. Formatting, generated-model drift, TypeScript, a
+clean build, both locked Windows Cargo checks, the WSL Cargo 1.75 witnesses, and
+the production high-severity advisory audit pass.
+
+Hosted Windows Node 22 then found two test-only newline assumptions: Git's CRLF
+checkout made exact `output`/`await` and Cargo-v3 header text comparisons fail,
+while the Rust model and all other Tokio tests passed. Route fixture, lock,
+workflow, witness, and manifest reads through one explicit CRLF-to-LF helper.
+The adjacent Rust lane passes 25 tests and 189 assertions locally, and the
+hosted rerun exercises the same complete matrix. The Rust workflow had also
+revealed that `runner.temp` is unavailable in a job-level `env` expression;
+move the isolated Cargo target setting to each execution step. The corrected
+hosted Rust workflow runs both the synchronous and Tokio jobs successfully.
+
+**Exact self-scan and distribution evidence.** Two independent scans of a
+tracked-only archive of exact corrective checkpoint
+`d11a5f4e84ac2a7b20d6267aa262de47f46c16cd` are byte-identical at the
+repository cap: 256 structured records, 615,647 bytes, and SHA-256
+`d32e6e93637c5cb540d1f7bdbca088f7eb5431959ffb6b761d14efed04e21b3c`.
+The unchanged whole-repository inventory is expected because benchmark
+fixtures are outside production paths. An exact targeted scan of the archived
+positive emits one `rust-web-command-injection` row at
+`src/handlers/diagnostics.rs:15`, with `axum::Query(input)`, the local
+`command_line` assignment, `format!`, exact
+`tokio::process::Command;method=output;argument=2`, and CWE-78/CWE-88. The
+archived literal-argv control emits zero rows.
+
+The Linux-generated npm package contains 299 entries, totals 2,374,484 bytes,
+and has SHA-256
+`95a7c9b5440ddb8caec3cc4ec8fc6932278c7e88429887194bc50ef071b18ed7`.
+Windows and WSL both pass strict archive inspection and isolated installed
+validation of the public import, executable CLI, and all 79 bundled plugin
+files. Repacking exact corrective head `d11a5f4` produces the same bytes, so
+the test-only portability correction does not perturb the distribution.
+
+**Hosted closure.** All eleven workflow families pass exact corrective
+checkpoint `d11a5f4`: Node `33267512070`, container `33267511996`, Windows GUI
+`33267512065`, Linux GUI `33267512152`, Java `33267512074`, Kotlin
+`33267512035`, .NET `33267512055`, Go `33267512013`, Rust `33267512063`, Ruby
+`33267512059`, and PHP `33267512079`. All 91 Node jobs pass, including the
+authoritative Windows Node 22 CRLF checkout. Rust runs two jobs: the existing
+synchronous witness and the locked Tokio format, compile, and marker
+differential. Disposable package archives, exact-commit scan trees, and
+inventory outputs are removed after their measurements are recorded. This
+closes the Tokio increment, not the standing scanner-effectiveness goal.
+
 ## 2026-08-29 — Bind asyncpg query grammar to real async execution
 
 **Measured miss and comparator evidence.** The previously compiled scanner
