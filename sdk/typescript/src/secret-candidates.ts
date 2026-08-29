@@ -384,6 +384,9 @@ export async function buildSecretCandidateInventory(
   const candidates: SecretCandidateRecord[] = [];
   const uniqueIncludedPaths =
     includePaths === undefined ? undefined : [...new Set(includePaths)];
+  const allowMissingHistoryOnlyPath =
+    uniqueIncludedPaths !== undefined &&
+    secretHistoryDepth(historyOptions?.depth ?? 0) > 0;
   const paths =
     uniqueIncludedPaths === undefined
       ? await discoverCandidatePaths(canonicalRepository)
@@ -401,6 +404,9 @@ export async function buildSecretCandidateInventory(
     if (candidates.length >= MAX_CANDIDATES) break;
     const absolutePath = resolve(canonicalRepository, path);
     const metadata = await lstat(absolutePath).catch((error: unknown) => {
+      if (allowMissingHistoryOnlyPath && nodeErrorCode(error) === "ENOENT") {
+        return null;
+      }
       throw secretSourceDiscoveryError("inspect", path, error);
     });
     if (

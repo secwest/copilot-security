@@ -10,9 +10,11 @@ All notable scanner, application, benchmark, and operational changes are recorde
   discovery. Repository directory enumeration and reads of selected source
   files now fail closed with a bounded, path-specific incomplete-scan error
   instead of silently producing an empty or reduced residual-risk inventory.
-  Missing selected secret-scanning inputs and enumeration, metadata,
-  canonicalization, or read failures likewise remain fatal through the
-  existing secret-scanner boundary. Intentional exclusions for symlinks,
+  Missing selected current-tree secret-scanning inputs and enumeration,
+  metadata, canonicalization, or read failures likewise remain fatal through
+  the existing secret-scanner boundary. An exact path already absent when a
+  positive Git-history scan starts remains eligible as history-only input; a
+  file that disappears after inspection still fails closed. Intentional exclusions for symlinks,
   non-files, oversized files, generated trees, binary data, and out-of-root
   canonical paths remain unchanged.
 - Preserved source-discovery incompleteness through both orchestration swallow

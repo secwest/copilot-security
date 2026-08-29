@@ -32,6 +32,15 @@ content, and unsupported text. The distinction is between deliberately
 excluded coverage and coverage lost because the host could not observe an
 input it had selected.
 
+Git secret-history scope is the one explicit absence exception. When callers
+provide an immutable path list and request a positive history depth, a path
+that is already absent at the first metadata lookup may be historical-only and
+is left for the bounded reachable-object scan. If metadata succeeded and
+canonicalization or reading then fails, the path represented current content
+and the run fails closed. With history disabled, an absent exact selected path
+is also fatal. This preserves deleted-secret discovery without restoring the
+general current-tree race.
+
 Error messages normalize separators, cap the repository-relative path at 512
 Unicode code points, and JSON-delimit it so newlines, quotes, and ASCII control
 characters cannot forge adjacent log lines. The original filesystem error is
