@@ -79,9 +79,18 @@ high-severity dependency audit pass. The final validation archive has 299
 entries, is 2,413,314 bytes, and has SHA-256
 `1cf828978a95528162dd1cac450bfb50b843937b586037d8fb5a43cc1b151b4f`.
 Isolated Windows and Ubuntu installs both validate its public import, CLI, and
-all 79 bundled plugin files. Two independent compiled whole-worktree
-inventories are byte-identical at the 256-row cap: 616,777 bytes with SHA-256
+all 79 bundled plugin files. Two independent compiled inventories of a
+disposable tracked-only archive at exact implementation
+checkpoint `40ab9a7f20963952f17b190a7e95dc1aca7952f6` are byte-identical at the
+256-row cap: 616,777 bytes with SHA-256
 `9e48bfd1fb0e53b8b7f018765b41fc79c7a435ca87e478be5afef864ecc51fc4`.
+
+**Hosted closure.** All eleven workflow families pass exact implementation
+checkpoint `40ab9a7`: Node `33280747436`, container `33280747437`, Windows GUI
+`33280747410`, Linux GUI `33280747448`, Java `33280747520`, Kotlin
+`33280747415`, .NET `33280747488`, Go `33280747455`, Rust `33280747399`, Ruby
+`33280747406`, and PHP `33280747456`. Node CI completes all 91 jobs with no
+failure or cancellation.
 
 This closes one collection-flow increment, not the standing scanner-
 effectiveness goal.

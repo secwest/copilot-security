@@ -45,9 +45,16 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `1cf828978a95528162dd1cac450bfb50b843937b586037d8fb5a43cc1b151b4f`
   through isolated installation, public import, CLI execution, and all 79
   bundled plugin files. The production dependency audit reports no known
-  vulnerabilities. Independent compiled self-inventories are byte-identical at
-  the 256-row cap: 616,777 bytes and SHA-256
+  vulnerabilities. Independent compiled self-inventories of a disposable
+  tracked-only archive at exact implementation checkpoint
+  `40ab9a7f20963952f17b190a7e95dc1aca7952f6` are byte-identical at the 256-row
+  cap: 616,777 bytes and SHA-256
   `9e48bfd1fb0e53b8b7f018765b41fc79c7a435ca87e478be5afef864ecc51fc4`.
+- All eleven hosted workflow families pass exact implementation checkpoint
+  `40ab9a7`: Node `33280747436` (91/91 jobs), container `33280747437`, Windows
+  GUI `33280747410`, Linux GUI `33280747448`, Java `33280747520`, Kotlin
+  `33280747415`, .NET `33280747488`, Go `33280747455`, Rust `33280747399`,
+  Ruby `33280747406`, and PHP `33280747456`.
 - Closed the remaining scan-relevant filesystem swallow found by a
   repository-wide ingestion audit. External SARIF enrichment now treats only
   an exact `ENOENT` as an expected stale/deleted artifact location. Permission,
