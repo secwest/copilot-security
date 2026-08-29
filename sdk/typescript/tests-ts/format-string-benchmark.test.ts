@@ -8,8 +8,8 @@ const temporaryPaths: string[] = [];
 const compiler = findCompiler();
 const nativeTest = compiler === null ? test.skip : test;
 const COMPILER_TIMEOUT_MS = 45_000;
-const EXECUTABLE_TIMEOUT_MS = 10_000;
-const NATIVE_TEST_TIMEOUT_MS = 120_000;
+const EXECUTABLE_TIMEOUT_MS = 30_000;
+const NATIVE_TEST_TIMEOUT_MS = 180_000;
 
 afterEach(async () => {
   await Promise.all(

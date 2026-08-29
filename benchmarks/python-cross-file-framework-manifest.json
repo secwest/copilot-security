@@ -49,6 +49,41 @@
       "expected": []
     },
     {
+      "id": "python-cross-file-list-iadd-command-injection",
+      "description": "A Flask request value crosses a relative Python import, enters an empty command list through +=, and is selected as shell grammar.",
+      "fixture": "fixtures/python-cross-file-list-iadd-command-injection",
+      "findingsPaths": [
+        "python-cross-file-list-iadd-command-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-cross-file-list-iadd-command-injection",
+          "cwe": ["CWE-78"],
+          "locations": [
+            {
+              "path": "src/runner.py",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-cross-file-list-iadd-safe-command",
+      "description": "The topology-matched control sends the same hostile value through += only as literal argv to fixed printf with shell=False.",
+      "fixture": "fixtures/python-cross-file-list-iadd-safe-command",
+      "findingsPaths": [
+        "python-cross-file-list-iadd-safe-command/run-1/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-cross-file-sql-injection",
       "description": "A Flask request value crosses a relative Python import into an interpolated sqlite query.",
       "fixture": "fixtures/python-cross-file-sql-injection",

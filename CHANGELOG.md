@@ -6,6 +6,48 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a reproduced Python cross-file command-injection false negative where
+  a Flask request value entered an initially empty list through `append`,
+  `extend`, `insert`, or `+=` and only the selected indexed element later
+  reached `subprocess.run(..., shell=True)`. The host now records the exact
+  mutation and selected index as a typed propagator while rejecting dynamic
+  indexes, nonempty or unknown collections, wrong-element flows, parameter or
+  collection reassignment, later mutation, comments, strings, and literal argv
+  with `shell=False`.
+- Improved beyond the collection flow added by CodeQL's August 2026
+  [Python list-content repair](https://github.com/github/codeql/pull/22310):
+  that change added `extend` and `insert` beside existing `append` coverage and
+  explicitly retained `+=` as an unresolved limitation. Copilot Security models
+  bounded literal `+=` as well, and requires validation and attack-path fields
+  to name the list operation, constant selected element, exact shell boundary,
+  and absence of an intervening overwrite.
+- Added a topology-matched executable exploit/control pair. Both fixtures keep
+  the Flask source, relative import, hostile payload, empty-list initialization,
+  and `+=`; the positive selects `commands[0]` as a shell string while the
+  control passes the same value only as literal argv to fixed `printf` with
+  `shell=False`. Ubuntu/WSL proves marker creation only on the vulnerable side.
+  The focused model and canonical lanes pass 32 tests and 2,717 assertions on
+  Windows with the one intentional POSIX witness skip. The canonical corpus now
+  contains 183 pairs, 366 cases, and 1,098 repeated positions.
+- Completed the authoritative Windows acceptance pass with 2,066 tests and
+  16,112 assertions passing across 214 files in 785.00 seconds, 31 intentional
+  platform/environment skips, and zero failures. The first aggregate run
+  exposed an unrelated native format-string executable killed at its old
+  10-second deadline under load; it passed alone in 2.36 seconds, so the
+  executable allowance is now 30 seconds and the enclosing test allowance 180
+  seconds. The complete rerun passes, while retaining the same exit-status and
+  output assertions. Ubuntu/WSL passes all 105 applicable Python list-flow,
+  canonical-corpus, residual-risk, and Tokio tests with 3,798 assertions and no
+  skips, including the live exploit/control differential.
+- Formatting, generated-model drift, TypeScript, and the clean production build
+  pass. Windows and Ubuntu validate the same 299-entry, 2,413,314-byte npm
+  archive with SHA-256
+  `1cf828978a95528162dd1cac450bfb50b843937b586037d8fb5a43cc1b151b4f`
+  through isolated installation, public import, CLI execution, and all 79
+  bundled plugin files. The production dependency audit reports no known
+  vulnerabilities. Independent compiled self-inventories are byte-identical at
+  the 256-row cap: 616,777 bytes and SHA-256
+  `9e48bfd1fb0e53b8b7f018765b41fc79c7a435ca87e478be5afef864ecc51fc4`.
 - Closed the remaining scan-relevant filesystem swallow found by a
   repository-wide ingestion audit. External SARIF enrichment now treats only
   an exact `ENOENT` as an expected stale/deleted artifact location. Permission,

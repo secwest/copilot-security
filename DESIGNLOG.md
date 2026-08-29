@@ -2,6 +2,90 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Preserve exact Python list elements into shell grammar
+
+**Measured miss and comparator evidence.** The previously compiled scanner
+emitted zero inventory rows for a Flask request parameter passed across a
+relative import into a wrapper that initialized `commands = []`, applied
+`commands += [f"...{report_name}"]`, and executed `commands[0]` through
+`subprocess.run(..., shell=True)`. Direct parameter use in the sink was already
+covered; storing the value in a collection severed the bounded syntactic flow.
+GitHub's merged CodeQL
+[`Python: Add more models for flow through list methods`](https://github.com/github/codeql/pull/22310)
+documents the analogous gap in its Python content-flow library. It added
+`list.extend` and `list.insert` beside existing `append` tracking, while the PR
+explicitly left `+=` unresolved because the underlying concatenation/content
+read relation was not yet available. This scanner implements that remaining
+case in addition to all three named methods.
+
+**Accepted bounded semantics.** This is not general collection taint. A shell
+sink must select `name[constant]`, where the index is between -64 and 63. The
+same wrapper must contain an exact earlier `name = []` or `name = list()` and
+exactly one supported one-line mutation before the sink. `append` contributes
+one value; `extend` and `+=` contribute at most 64 exact list-literal values;
+`insert` into the proven empty list contributes its inserted value at index
+zero because Python clamps every insertion position into that empty sequence.
+Negative indexes are resolved against the known bounded values. One identifier
+alias may be resolved through the existing bounded Python assignment logic.
+
+Reject the edge if the source parameter is reassigned before the mutation, the
+collection is reassigned or mutated before or after the selected operation,
+the selected element does not reference that parameter, the list starts
+nonempty or is unknown, the index is dynamic or outside the bound, or the code
+shape appears only in a comment, string, comprehension, iterable expansion, or
+unsupported multiline mutation. The shell model remains the outer boundary:
+fixed executable plus literal argv and `shell=False` is not promoted merely
+because a list contains attacker data.
+
+**Evidence closure.** A retained row adds exactly one typed propagator:
+`python-list-append-element`, `python-list-extend-element`,
+`python-list-insert-element`, or `python-list-iadd-element`, with the mutation
+line and selected symbol such as `commands[0]`. Host re-audit now requires both
+validation and attack-path prose to preserve the framework request source,
+shell interpreter boundary, CWE-78, exact mutation, constant selected element,
+and initially empty/no-intervening-overwrite invariant. The review prompt
+explains the supported semantics and explicit negative boundaries so the model
+cannot turn this precise host hypothesis into generic “lists are vulnerable”
+reasoning.
+
+**Executable differential.** The canonical pair keeps identical Flask route
+source and relative imports. Both sides initialize the same list, use `+=`, and
+receive a payload containing POSIX metacharacters. The vulnerable wrapper
+formats the payload into one command string and selects `commands[0]` with
+`shell=True`; the control constructs fixed `/usr/bin/printf` argv and uses
+`shell=False`. Each witness operates only in an automatically removed temporary
+directory. Ubuntu/WSL records `shell_expanded_marker=1` for the exploit and `0`
+for the control. Windows runs the host model, false-positive controls, strict
+manifest, quality-closure, and canonical-pair tests: 32 pass with 2,717
+assertions and one intentional POSIX witness skip. The corpus advances to 183
+exploit/control pairs, 366 cases, and 1,098 repeated scan positions.
+
+**Acceptance and regression reliability.** The first real-user Windows
+aggregate passed the new model, benchmark, closure, and manifest checks but
+exposed an unrelated native format-string witness terminated at its fixed
+10-second executable deadline under aggregate load. The exact test passed alone
+in 2.36 seconds. Increase only that child-executable deadline to 30 seconds and
+the enclosing test deadline from 120 to 180 seconds; compiler limits, expected
+exit status, signal, stdout, stderr, and both exploit/control assertions remain
+unchanged. The authoritative full rerun then passes 2,066 tests and 16,112
+assertions across 214 files in 785.00 seconds, with 31 intentional platform or
+environment skips and zero failures.
+
+Ubuntu/WSL passes all 105 selected Python list-flow, canonical benchmark,
+residual-risk, and Tokio tests with 3,798 assertions and no skips. This executes
+the new Python witnesses rather than merely parsing their source. Formatting,
+generated models, TypeScript, clean production build, and the production
+high-severity dependency audit pass. The final validation archive has 299
+entries, is 2,413,314 bytes, and has SHA-256
+`1cf828978a95528162dd1cac450bfb50b843937b586037d8fb5a43cc1b151b4f`.
+Isolated Windows and Ubuntu installs both validate its public import, CLI, and
+all 79 bundled plugin files. Two independent compiled whole-worktree
+inventories are byte-identical at the 256-row cap: 616,777 bytes with SHA-256
+`9e48bfd1fb0e53b8b7f018765b41fc79c7a435ca87e478be5afef864ecc51fc4`.
+
+This closes one collection-flow increment, not the standing scanner-
+effectiveness goal.
+
 ## 2026-08-29 — Distinguish stale SARIF locations from unreadable evidence
 
 **Audit result.** After making deterministic source discovery fail closed, a

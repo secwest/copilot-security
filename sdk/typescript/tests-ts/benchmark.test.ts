@@ -639,6 +639,10 @@ describe("effectiveness benchmark", () => {
         "python-asyncpg-unicode-source-bound-parameter",
       ],
       [
+        "python-cross-file-list-iadd-command-injection",
+        "python-cross-file-list-iadd-safe-command",
+      ],
+      [
         "rust-axum-tokio-shell-command-injection",
         "rust-axum-tokio-argv-command",
       ],

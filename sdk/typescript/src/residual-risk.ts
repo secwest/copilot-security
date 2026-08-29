@@ -4513,6 +4513,13 @@ const PYTHON_ASYNCPG_SQL_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-89", "SQL injection"],
 ] as const;
 
+const PYTHON_WEB_COMMAND_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Flask", "FastAPI", "Django", "framework request", "remote request"],
+  ["os.system", "os.popen", "subprocess", "shell command"],
+  ["shell=True", "shell grammar", "command string", "shell interpretation"],
+  ["CWE-78", "command injection"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4612,6 +4619,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: PYTHON_ASYNCPG_SQL_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: PYTHON_ASYNCPG_SQL_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-web-command",
+    {
+      validation: PYTHON_WEB_COMMAND_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: PYTHON_WEB_COMMAND_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -33980,9 +33994,25 @@ function pythonFrameworkWrapperSummaries(
               )
               .join("\n") ??
             sinkExpression;
+          const listElementFlows =
+            model.id === "python-web-command"
+              ? wrapper.parameters.flatMap((parameter, parameterIndex) => {
+                  const flow = pythonListElementFlowToSink(
+                    file.lines,
+                    wrapper,
+                    sink.line,
+                    tracedSinkExpression,
+                    parameter,
+                  );
+                  return flow === undefined ? [] : [{ parameterIndex, flow }];
+                })
+              : [];
           const parameterIndexes = wrapper.parameters.flatMap(
             (parameter, parameterIndex) =>
-              pythonLineReferencesIdentifier(tracedSinkExpression, parameter)
+              pythonLineReferencesIdentifier(tracedSinkExpression, parameter) ||
+              listElementFlows.some(
+                (candidate) => candidate.parameterIndex === parameterIndex,
+              )
                 ? [parameterIndex]
                 : [],
           );
@@ -34014,6 +34044,9 @@ function pythonFrameworkWrapperSummaries(
               ) === index,
           );
           for (const parameterIndex of parameterIndexes) {
+            const listElementFlow = listElementFlows.find(
+              (candidate) => candidate.parameterIndex === parameterIndex,
+            )?.flow;
             summaries.push({
               model,
               file,
@@ -34027,10 +34060,22 @@ function pythonFrameworkWrapperSummaries(
                 cweIds: sinkPattern.cweIds,
               },
               controls: wrapperControls.slice(0, 8),
-              ...(pythonTypedSink === undefined
+              ...(pythonTypedSink === undefined && listElementFlow === undefined
                 ? {}
                 : {
-                    propagators: pythonTypedSink.propagators,
+                    propagators: [
+                      ...(pythonTypedSink?.propagators ?? []),
+                      ...(listElementFlow === undefined
+                        ? []
+                        : [
+                            {
+                              kind: listElementFlow.kind,
+                              path: file.path,
+                              line: listElementFlow.line,
+                              symbol: listElementFlow.symbol,
+                            },
+                          ]),
+                    ],
                   }),
             });
           }
@@ -42791,6 +42836,180 @@ function resolvePythonExpression(
   return value;
 }
 
+interface PythonListElementFlow {
+  kind:
+    | "python-list-append-element"
+    | "python-list-extend-element"
+    | "python-list-iadd-element"
+    | "python-list-insert-element";
+  line: number;
+  symbol: string;
+}
+
+function pythonListElementFlowToSink(
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  sinkLine: number,
+  sinkExpression: string,
+  parameter: string,
+): PythonListElementFlow | undefined {
+  const references = [
+    ...sinkExpression.matchAll(/\b([A-Za-z_]\w*)\s*\[\s*(-?\d+)\s*\]/gu),
+  ];
+  for (const reference of references) {
+    const container = reference[1];
+    const requestedIndex = Number(reference[2]);
+    if (
+      container === undefined ||
+      !Number.isSafeInteger(requestedIndex) ||
+      requestedIndex < -64 ||
+      requestedIndex > 63
+    ) {
+      continue;
+    }
+    for (
+      let mutationLine = sinkLine - 1;
+      mutationLine > wrapper.startLine;
+      mutationLine -= 1
+    ) {
+      const mutation = pythonListMutationAtLine(lines, mutationLine, container);
+      if (mutation === undefined) continue;
+      const initializedLine = pythonEmptyListInitializationBefore(
+        lines,
+        wrapper,
+        mutationLine,
+        container,
+      );
+      if (
+        initializedLine === undefined ||
+        pythonListChangedBetween(
+          lines,
+          container,
+          initializedLine,
+          mutationLine,
+        ) ||
+        pythonListChangedBetween(lines, container, mutationLine, sinkLine) ||
+        pythonIdentifierReassignedBetween(
+          lines,
+          parameter,
+          wrapper.startLine,
+          mutationLine,
+        )
+      ) {
+        continue;
+      }
+      const effectiveIndex =
+        requestedIndex < 0
+          ? mutation.values.length + requestedIndex
+          : requestedIndex;
+      const selected = mutation.values[effectiveIndex];
+      if (selected === undefined) continue;
+      const resolved = resolvePythonExpression(lines, selected, mutationLine);
+      if (
+        !pythonLineReferencesIdentifier(selected, parameter) &&
+        (resolved === undefined ||
+          !pythonLineReferencesIdentifier(resolved, parameter))
+      ) {
+        continue;
+      }
+      return {
+        kind: mutation.kind,
+        line: mutationLine,
+        symbol: `${container}[${requestedIndex}]`,
+      };
+    }
+  }
+  return undefined;
+}
+
+function pythonListMutationAtLine(
+  lines: readonly string[],
+  line: number,
+  container: string,
+): { kind: PythonListElementFlow["kind"]; values: string[] } | undefined {
+  const code = pythonCodeBeforeComment(lines[line - 1] ?? "").trim();
+  const escaped = escapeRegularExpression(container);
+  const iadd = new RegExp(
+    `^${escaped}\\s*\\+=\\s*(\\[[\\s\\S]*\\])$`,
+    "u",
+  ).exec(code);
+  if (iadd?.[1] !== undefined) {
+    const values = pythonListLiteralValues(iadd[1]);
+    return values === undefined
+      ? undefined
+      : { kind: "python-list-iadd-element", values };
+  }
+  const call = new RegExp(
+    `^${escaped}\\s*\\.\\s*(append|extend|insert)\\s*\\(([\\s\\S]*)\\)$`,
+    "u",
+  ).exec(code);
+  if (call?.[1] === undefined || call[2] === undefined) return undefined;
+  const argumentsList = splitPythonArguments(call[2]);
+  if (call[1] === "append" && argumentsList.length === 1) {
+    return { kind: "python-list-append-element", values: argumentsList };
+  }
+  if (call[1] === "insert" && argumentsList.length === 2) {
+    return {
+      kind: "python-list-insert-element",
+      values: [argumentsList[1]!],
+    };
+  }
+  if (call[1] === "extend" && argumentsList.length === 1) {
+    const values = pythonListLiteralValues(argumentsList[0]!);
+    return values === undefined
+      ? undefined
+      : { kind: "python-list-extend-element", values };
+  }
+  return undefined;
+}
+
+function pythonListLiteralValues(expression: string): string[] | undefined {
+  const value = expression.trim();
+  if (!value.startsWith("[") || !value.endsWith("]")) return undefined;
+  const values = splitPythonArguments(value.slice(1, -1));
+  return values.length <= 64 ? values : undefined;
+}
+
+function pythonEmptyListInitializationBefore(
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  mutationLine: number,
+  container: string,
+): number | undefined {
+  const escaped = escapeRegularExpression(container);
+  const empty = new RegExp(
+    `^\\s*${escaped}\\s*(?::[^=]+)?=\\s*(?:\\[\\s*\\]|list\\s*\\(\\s*\\))\\s*$`,
+    "u",
+  );
+  const assignment = new RegExp(
+    `^\\s*${escaped}\\s*(?::[^=]+)?(?:[+\\-*/%&|^]?=|:=)`,
+    "u",
+  );
+  for (let line = mutationLine - 1; line > wrapper.startLine; line -= 1) {
+    const code = pythonCodeBeforeComment(lines[line - 1] ?? "");
+    if (empty.test(code)) return line;
+    if (assignment.test(pythonStructuralCode(code))) return undefined;
+  }
+  return undefined;
+}
+
+function pythonListChangedBetween(
+  lines: readonly string[],
+  container: string,
+  afterLine: number,
+  beforeLine: number,
+): boolean {
+  const escaped = escapeRegularExpression(container);
+  const mutation = new RegExp(
+    `(?:^\\s*${escaped}\\s*(?:\\[[^\\]]+\\]\\s*)?(?:[+\\-*/%&|^]?=|:=)|\\b${escaped}\\s*\\.\\s*(?:append|clear|extend|insert|pop|remove|reverse|sort)\\s*\\()`,
+    "u",
+  );
+  const structuralLines = pythonStructuralLines(lines);
+  return structuralLines
+    .slice(afterLine, Math.max(afterLine, beforeLine - 1))
+    .some((candidate) => mutation.test(candidate));
+}
+
 function modeledJavaCallSource(
   lines: readonly string[],
   method: ExportedJavaMethod,
@@ -48206,11 +48425,13 @@ function modelSpecificSinkLocations(
     }
     const variantRequirements = frameworkModelId.startsWith("node-mcp-tool-")
       ? nodeMcpToolEvidenceRequirements(frameworkModel)
-      : frameworkModelId === "kotlin-ktor-command-injection"
-        ? kotlinProcessEvidenceRequirements(frameworkModel)
-        : frameworkModelId === "spring-java-command-injection"
-          ? javaProcessEvidenceRequirements(frameworkModel)
-          : { validation: [], attackPath: [] };
+      : frameworkModelId === "python-web-command"
+        ? pythonWebCommandEvidenceRequirements(frameworkModel)
+        : frameworkModelId === "kotlin-ktor-command-injection"
+          ? kotlinProcessEvidenceRequirements(frameworkModel)
+          : frameworkModelId === "spring-java-command-injection"
+            ? javaProcessEvidenceRequirements(frameworkModel)
+            : { validation: [], attackPath: [] };
     locations.push({
       frameworkModelId,
       location: {
@@ -48226,6 +48447,49 @@ function modelSpecificSinkLocations(
     });
   }
   return locations;
+}
+
+function pythonWebCommandEvidenceRequirements(
+  frameworkModel: Record<string, unknown>,
+): ModelSpecificFindingRequirements {
+  const propagators = Array.isArray(frameworkModel["propagators"])
+    ? frameworkModel["propagators"]
+    : [];
+  const listFlow = propagators.find(
+    (propagator) =>
+      isRecord(propagator) &&
+      typeof propagator["kind"] === "string" &&
+      propagator["kind"].startsWith("python-list-") &&
+      propagator["kind"].endsWith("-element"),
+  );
+  if (!isRecord(listFlow)) return { validation: [], attackPath: [] };
+  const kind = String(listFlow["kind"]);
+  const symbol =
+    typeof listFlow["symbol"] === "string" ? listFlow["symbol"] : "";
+  const mutation =
+    kind === "python-list-append-element"
+      ? ["list append", ".append(", "python-list-append-element"]
+      : kind === "python-list-extend-element"
+        ? ["list extend", ".extend(", "python-list-extend-element"]
+        : kind === "python-list-insert-element"
+          ? ["list insert", ".insert(", "python-list-insert-element"]
+          : ["list +=", "in-place add", "python-list-iadd-element"];
+  const selected = [
+    ...(symbol === "" ? [] : [symbol]),
+    "selected list element",
+    "constant index",
+    "indexed shell operand",
+  ];
+  const exactFlow = [
+    "initially empty list",
+    "empty list initialization",
+    "no intervening mutation",
+    "no overwrite",
+  ];
+  return {
+    validation: [mutation, selected, exactFlow],
+    attackPath: [mutation, selected, exactFlow],
+  };
 }
 
 function nodeMcpToolEvidenceRequirements(
