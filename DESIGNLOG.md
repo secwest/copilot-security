@@ -76,8 +76,13 @@ build, and production audit are clean. The rebuilt 299-entry package is
 2,353,336 bytes with SHA-256
 `79b36a83b30fa5126e13795e7523a2fb4669938d312a50a6ffb1dd1d252f2d8e`
 and passes isolated install, public import, CLI, and all 79 bundled-plugin
-checks. Hosted workflow evidence is recorded separately after the exact
-implementation revision runs.
+checks. All eleven hosted workflow families pass at implementation revision
+`3a3ded79b08393d5657fe10b46e35f195a806a6f`: Node `33221929778`, container
+`33221929807`, Linux GUI `33221929867`, Windows GUI `33221929747`, Go
+`33221929866`, Java `33221929761`, Kotlin `33221929812`, .NET `33221929861`,
+Rust `33221929805`, Ruby `33221929848`, and PHP `33221929817`. The Node run
+passes its complete OS/runtime matrix and all four new Ubuntu/Windows
+aliased-runtime exploit/control witness jobs.
 
 ## 2026-08-28 — Require execution of the exact prepared built-in SQLite statement
 

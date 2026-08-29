@@ -50,7 +50,14 @@ All notable scanner, application, benchmark, and operational changes are recorde
   are clean. The rebuilt 299-entry, 2,353,336-byte package at SHA-256
   `79b36a83b30fa5126e13795e7523a2fb4669938d312a50a6ffb1dd1d252f2d8e`
   passes isolated install, public import, CLI, and all 79 bundled-plugin
-  checks.
+  checks. All eleven hosted workflow families pass at implementation revision
+  `3a3ded79b08393d5657fe10b46e35f195a806a6f`: Node `33221929778`,
+  container `33221929807`, Linux GUI `33221929867`, Windows GUI
+  `33221929747`, Go `33221929866`, Java `33221929761`, Kotlin
+  `33221929812`, .NET `33221929861`, Rust `33221929805`, Ruby
+  `33221929848`, and PHP `33221929817`. The Node run includes successful
+  Ubuntu and Windows jobs for both the aliased-runtime exploit and its exact
+  end-of-options control.
 - Closed a deterministic MCP SQL-injection false negative for tool-controlled
   SQL compiled by the official built-in `node:sqlite`
   `DatabaseSync.prepare` API and then executed through the exact returned
