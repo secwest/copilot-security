@@ -74,6 +74,21 @@ package inspection plus a fresh isolated installation validates 299 entries,
 public import, CLI, and all 79 bundled-plugin files. The temporary archive is
 2,359,970 bytes with SHA-256
 `88c4fd26468fc70c580cac864f687f66710e35836f0bcfadee1c4b7fa56b996e`.
+All eleven hosted workflow families pass at exact implementation revision
+`57db2c5b70df2391f8d53fa87feda81040aad1a0`: [Node `33230452192`](https://github.com/secwest/copilot-security/actions/runs/33230452192),
+[container `33230452188`](https://github.com/secwest/copilot-security/actions/runs/33230452188),
+[Linux GUI `33230452176`](https://github.com/secwest/copilot-security/actions/runs/33230452176),
+[Windows GUI `33230452202`](https://github.com/secwest/copilot-security/actions/runs/33230452202),
+[Go `33230452163`](https://github.com/secwest/copilot-security/actions/runs/33230452163),
+[Java `33230452179`](https://github.com/secwest/copilot-security/actions/runs/33230452179),
+[Kotlin `33230452172`](https://github.com/secwest/copilot-security/actions/runs/33230452172),
+[.NET `33230452162`](https://github.com/secwest/copilot-security/actions/runs/33230452162),
+[Rust `33230452165`](https://github.com/secwest/copilot-security/actions/runs/33230452165),
+[Ruby `33230452238`](https://github.com/secwest/copilot-security/actions/runs/33230452238),
+and [PHP `33230452169`](https://github.com/secwest/copilot-security/actions/runs/33230452169).
+Node CI passes all 59 jobs, including the new exploit and control witnesses on
+Ubuntu and Windows. GitHub reports the repository public with `main` as its
+default branch.
 
 ## 2026-08-28 — Prove official imported Node runtime bindings
 

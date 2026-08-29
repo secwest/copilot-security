@@ -44,6 +44,14 @@ All notable scanner, application, benchmark, and operational changes are recorde
   import, CLI, all 79 bundled-plugin files, and a 299-entry, 2,359,970-byte
   archive with SHA-256
   `88c4fd26468fc70c580cac864f687f66710e35836f0bcfadee1c4b7fa56b996e`.
+  All eleven hosted workflow families pass at implementation revision
+  `57db2c5b70df2391f8d53fa87feda81040aad1a0`: Node `33230452192`,
+  container `33230452188`, Linux GUI `33230452176`, Windows GUI
+  `33230452202`, Go `33230452163`, Java `33230452179`, Kotlin
+  `33230452172`, .NET `33230452162`, Rust `33230452165`, Ruby
+  `33230452238`, and PHP `33230452169`. All 59 Node jobs pass, including
+  the fork `execArgv` exploit and ordinary-module-argument control on both
+  Ubuntu and Windows.
 - Closed the remaining deterministic MCP Node interpreter-option false
   negative when the runtime comes from an exact official `node:process`
   binding. The detector now proves ESM default, namespace, and named
