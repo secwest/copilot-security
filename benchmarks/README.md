@@ -279,8 +279,8 @@ node ../../benchmarks/run-benchmark.mjs `
 
 ## Node MCP tool-handler security benchmark
 
-`node-mcp-tool-security-manifest.json` measures tool input at eight distinct
-capability boundaries across thirteen matched pairs under perfect selected-run
+`node-mcp-tool-security-manifest.json` measures tool input across nine distinct
+model families and fifteen matched pairs under perfect selected-run
 gates. The command pair uses
 the real stable `@modelcontextprotocol/server` 2.0.0 API: the exploit carries a
 tool field through an arrow helper into `child_process.exec`, while its
@@ -304,7 +304,14 @@ object-literal `execArgv` array. Its matched control keeps `execArgv` fixed and
 passes the identical option-looking value only as an ordinary module argument.
 The detector rejects dynamic or aliased options, spreads, computed or duplicate
 `execArgv` properties, replaced fork bindings, and unsupported overloads rather
-than inventing provenance. The code-evaluation pair carries an expression through a same-file
+than inventing provenance. Two further fork pairs separately model argument
+zero as the executable child module and exact object-literal `options.execPath`
+as the child executable. Their controls fix or allowlist the module and pin the
+executable to `process.execPath`, preserving the identical module- or
+executable-looking value only as ordinary child data. The module row reports
+CWE-829 without overclaiming attacker code placement; the executable row
+reports CWE-78 without confusing program selection with argument injection.
+The code-evaluation pair carries an expression through a same-file
 helper into direct JavaScript `eval`; its control preserves expression input,
 the helper, arithmetic results, and the MCP response while an explicit numeric
 `+`/`*` grammar never evaluates the tool string as source. A second

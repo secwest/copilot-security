@@ -617,7 +617,7 @@ node benchmarks/run-benchmark.mjs `
 ```
 
 The Node MCP tool-handler lane uses the real stable TypeScript server package
-and separates eight tool-controlled capability boundaries across thirteen matched
+and separates nine tool-controlled model families across fifteen matched
 pairs. One pair contrasts a tool
 field reaching a shell command with an explicit end-of-options argv control.
 A second proves that fixed `process.execPath` is still unsafe when a
@@ -633,7 +633,13 @@ contrasting tool input in `child_process.fork`'s Node-interpreter `execArgv`
 array with the same value passed only as an ordinary module argument. It
 accepts only exact official bindings and object-literal options, and rejects
 replaced bindings, options aliases, spreads, computed or duplicate
-`execArgv` properties, and unsupported overloads. A third contrasts direct
+`execArgv` properties, and unsupported overloads. Two role-specific fork pairs
+then distinguish a tool-selected `modulePath` from a tool-selected exact
+object-literal `options.execPath`. Their controls keep the module fixed or
+allowlisted, pin the executable to `process.execPath`, and pass the same
+module- or executable-looking bytes only as ordinary child arguments. The
+module boundary is CWE-829; executable selection is CWE-78 and not an
+`execArgv`/CWE-88 finding. A third contrasts direct
 JavaScript evaluation with a fixed arithmetic
 grammar that preserves useful calculation without treating the tool string as
 source. A fourth preserves compiled-Function invocation on both sides while

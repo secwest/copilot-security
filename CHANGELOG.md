@@ -6,6 +6,31 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Made `child_process.fork` role-aware for official MCP tool-input flows.
+  Argument zero now emits `node-mcp-tool-untrusted-module-load` at the exact
+  `fork:modulePath[0]` boundary with CWE-829, while exact object-literal
+  `options.execPath` emits command/executable selection at
+  `fork:options.execPath` with CWE-78. Existing `options.execArgv` remains
+  CWE-88/CWE-94 interpreter-option injection, and ordinary `args` remain
+  module data. One call can retain all independently tainted roles instead of
+  collapsing them into one generic command row.
+- Added exact shorthand-property support for `{ execPath }` and preserved
+  fail-closed rejection of dynamic or aliased options objects, nonliteral
+  module-argument lists, spreads, computed or duplicate properties,
+  unsupported overloads, replaced bindings or namespace members, and
+  lookalike modules. Host-enforced finding closure now requires the exact
+  module or executable role plus its fixed/allowlisted-module or fixed
+  `process.execPath` matched control in both validation and attack-path text.
+- Added two frozen MCP SDK 2.0.0/Zod 4.4.3 exploit/control pairs. The bounded
+  module witness selects only a checked-in inert child; the executable witness
+  supplies only the current Node binary. Both pairs pass on Windows and WSL
+  without a shell, dynamic code, filesystem writes, network access,
+  credentials, persistence, or an external executable. The focused model and
+  benchmark regression passes 91 tests and 3,306 assertions on each platform.
+  The strict MCP lane now contains 30 cases across 15 matched pairs; the
+  canonical corpus contains 171 pairs, 342 cases, and 1,026 repeated
+  positions. Hosted Node CI now schedules all 30 MCP witnesses on Ubuntu and
+  Windows, expanding the matrix from 59 to 67 jobs.
 - Closed a deterministic MCP argument-injection false negative for
   tool-controlled entries in `child_process.fork(..., { execArgv: [...] })`.
   The model proves a live official `node:child_process` or `child_process`

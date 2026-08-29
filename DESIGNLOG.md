@@ -2,6 +2,74 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Model every child_process.fork execution role
+
+**Comparative gap.** Node documents
+[`fork(modulePath[, args][, options])`](https://nodejs.org/api/child_process.html#child_processforkmodulepath-args-options)
+with four materially different channels: `modulePath` is the module to execute,
+`args` are strings passed to that module, `options.execPath` is the executable
+used to create the child, and `options.execArgv` are strings passed to that
+executable. The previous model handled `execArgv` precisely but treated a
+tainted `modulePath` as generic executable selection and omitted `execPath`.
+Current CodeQL documentation provides generic
+[command-line injection](https://codeql.github.com/codeql-query-help/javascript/js-command-line-injection/),
+[code injection](https://codeql.github.com/codeql-query-help/javascript/js-code-injection/),
+and [path injection](https://codeql.github.com/codeql-query-help/javascript/js-path-injection/)
+queries without documenting this fork-specific role split. The public
+[`mcpaudit`](https://github.com/allenwu-blip/mcpaudit) implementation similarly
+groups nonliteral fork argument zero into a broad command rule. This scanner
+therefore keeps four separate role semantics instead of inheriting that
+conflation.
+
+**Classification decision.** Tool control of `modulePath` emits the dedicated
+`node-mcp-tool-untrusted-module-load` model and
+`mcp-tool-fork-module-path` sink. [CWE-829](https://cwe.mitre.org/data/definitions/829.html)
+is the directly proven weakness because an existing module is selected across
+an untrusted control boundary. The row deliberately does not claim CWE-94,
+attacker code placement, or arbitrary code execution unless another evidence
+chain proves that stronger condition. Tool control of `options.execPath` emits
+`mcp-tool-fork-exec-path` in the command family with
+[CWE-78](https://cwe.mitre.org/data/definitions/78.html); it omits CWE-88
+because this role selects the program rather than supplying arguments. The
+existing `execArgv` row remains CWE-88/CWE-94, and ordinary `args` remain data.
+If several roles are independently tainted in one call, all distinct
+boundaries survive rather than stopping at the first match.
+
+**Accepted structural proof.** Argument zero is accepted for a live direct or
+namespace `fork` binding from exactly `node:child_process` or `child_process`,
+including the one-, two-, and three-argument forms. Options roles require the
+official two-argument `(modulePath, options)` form with an exact object literal
+or the three-argument form with an exact module-argument array followed by an
+exact object literal. Plain, quoted, and exact shorthand `execPath` properties
+are accepted. Dynamic or aliased options, nonliteral argument lists, spreads,
+computed or duplicate properties, unsupported overloads, reassigned direct
+bindings, replaced namespace members, shadows, and lookalike modules remain
+unresolved. Accepting shorthand closed a false negative exposed by the
+executable benchmark without weakening the ambiguity rules; shorthand
+`execArgv` still fails because its value is not a proved literal array.
+
+**Review and witness policy.** Validation and attack-path text must repeat the
+recorded `fork:modulePath` or `fork:options.execPath` symbol and distinguish
+all four fork roles. A module finding must compare a fixed or explicit
+allowlisted child module with the same value used only as an ordinary child
+argument. An executable finding must compare fixed `process.execPath` with the
+same value used only as ordinary child data. The module witness selects only a
+checked-in inert child module; the executable witness supplies only the
+currently running Node binary. Both communicate over private IPC with a
+two-second timeout. No shell, dynamic source, external module or executable,
+filesystem write, network endpoint, credential, persistence mechanism, or
+privileged effect participates.
+
+**Initial acceptance.** Both exploit/control pairs execute successfully on
+Windows and WSL. The exact host inventory retains the CWE-829 module row and
+CWE-78 executable row through same-file helpers while emitting neither row for
+their controls. The combined MCP model and benchmark regression passes 91
+tests and 3,306 assertions on each platform; TypeScript compilation and the
+canonical pair/source-anchor audit pass. The strict MCP corpus advances to 30
+cases and 15 pairs, and the canonical corpus to 171 pairs, 342 cases, and
+1,026 repeated positions. Hosted Node CI schedules all four new witnesses on
+both operating systems, producing a 67-job matrix.
+
 ## 2026-08-28 — Distinguish fork execArgv from ordinary module arguments
 
 **Comparative gap.** Node documents

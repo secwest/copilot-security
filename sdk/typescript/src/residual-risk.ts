@@ -4256,6 +4256,13 @@ const NODE_MCP_TOOL_ARGUMENT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-88", "CWE-94", "interpreter option", "code execution"],
 ] as const;
 
+const NODE_MCP_TOOL_MODULE_LOAD_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["MCP tool", "registerTool", "server.tool", "tool callback"],
+  ["tool input", "callback input", "LLM-controlled", "client-controlled"],
+  ["child_process.fork", "fork modulePath", "modulePath", "child module"],
+  ["untrusted module load", "untrusted code", "executable module", "CWE-829"],
+] as const;
+
 const NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4366,6 +4373,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: NODE_MCP_TOOL_CODE_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "node-mcp-tool-untrusted-module-load",
+    {
+      validation: NODE_MCP_TOOL_MODULE_LOAD_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: NODE_MCP_TOOL_MODULE_LOAD_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -46019,6 +46033,24 @@ function nodeMcpToolEvidenceRequirements(
         "fixed execArgv",
         "ordinary child argument",
         "module argument",
+      ];
+      validation.push(boundary, control);
+      attackPath.push(boundary, control);
+    } else if (kind === "mcp-tool-fork-module-path") {
+      const boundary = [symbol, "fork modulePath", "child module"];
+      const control = [
+        "fixed modulePath",
+        "allowlisted child module",
+        "ordinary child argument",
+      ];
+      validation.push(boundary, control);
+      attackPath.push(boundary, control);
+    } else if (kind === "mcp-tool-fork-exec-path") {
+      const boundary = [symbol, "options.execPath", "child executable"];
+      const control = [
+        "fixed execPath",
+        "process.execPath",
+        "ordinary child argument",
       ];
       validation.push(boundary, control);
       attackPath.push(boundary, control);

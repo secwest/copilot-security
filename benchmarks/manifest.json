@@ -7702,6 +7702,138 @@
         "node-mcp-v2-fork-argument-data/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-fork-module-path-injection",
+      "description": "Official MCP TypeScript SDK v2 tool input selects child_process.fork's modulePath through a same-file helper while the executable and runtime options remain fixed.",
+      "fixture": "fixtures/node-mcp-v2-fork-module-path-injection",
+      "findingsPaths": [
+        "node-mcp-v2-fork-module-path-injection/run-1/findings.json",
+        "node-mcp-v2-fork-module-path-injection/run-2/findings.json",
+        "node-mcp-v2-fork-module-path-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-untrusted-module-load",
+          "cwe": ["CWE-829"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 9,
+              "endLine": 9,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["modulePath", "tool input", "callback input"],
+            ["runModule", "same-file helper", "helper call"],
+            ["fork:modulePath", "fork modulePath", "child module"],
+            ["untrusted module load", "executable module", "CWE-829"],
+            [
+              "fixed modulePath",
+              "allowlisted child module",
+              "ordinary child argument"
+            ]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-module", "registerTool", "tool callback"],
+            ["runModule", "same-file helper", "helper call"],
+            ["fork:modulePath", "fork modulePath", "child module"],
+            ["untrusted module load", "executable module", "CWE-829"],
+            [
+              "fixed modulePath",
+              "allowlisted child module",
+              "ordinary child argument"
+            ]
+          ],
+          "forbiddenText": [
+            "fork always uses a shell",
+            "ordinary fork arguments select the child module",
+            "the witness created attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fork-fixed-module",
+      "description": "The topology-matched MCP v2 control fixes the child module and passes the same module-looking tool value only as ordinary module data.",
+      "fixture": "fixtures/node-mcp-v2-fork-fixed-module",
+      "findingsPaths": [
+        "node-mcp-v2-fork-fixed-module/run-1/findings.json",
+        "node-mcp-v2-fork-fixed-module/run-2/findings.json",
+        "node-mcp-v2-fork-fixed-module/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "node-mcp-v2-fork-exec-path-selection",
+      "description": "Official MCP TypeScript SDK v2 tool input selects child_process.fork's options.execPath through a same-file helper while the module and runtime options remain fixed.",
+      "fixture": "fixtures/node-mcp-v2-fork-exec-path-selection",
+      "findingsPaths": [
+        "node-mcp-v2-fork-exec-path-selection/run-1/findings.json",
+        "node-mcp-v2-fork-exec-path-selection/run-2/findings.json",
+        "node-mcp-v2-fork-exec-path-selection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-command-injection",
+          "cwe": ["CWE-78"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["execPath", "tool input", "callback input"],
+            ["runWithExecutable", "same-file helper", "helper call"],
+            ["fork:options.execPath", "options.execPath", "child executable"],
+            ["executable selection", "child_process.fork", "CWE-78"],
+            ["fixed execPath", "process.execPath", "ordinary child argument"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-executable", "registerTool", "tool callback"],
+            ["runWithExecutable", "same-file helper", "helper call"],
+            ["fork:options.execPath", "options.execPath", "child executable"],
+            ["executable selection", "child_process.fork", "CWE-78"],
+            ["fixed execPath", "process.execPath", "ordinary child argument"]
+          ],
+          "forbiddenText": [
+            "fork always uses a shell",
+            "ordinary fork arguments select the child executable",
+            "the witness ran an arbitrary executable",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fork-fixed-executable",
+      "description": "The topology-matched MCP v2 control fixes options.execPath to process.execPath and passes the same executable-looking tool value only as ordinary module data.",
+      "fixture": "fixtures/node-mcp-v2-fork-fixed-executable",
+      "findingsPaths": [
+        "node-mcp-v2-fork-fixed-executable/run-1/findings.json",
+        "node-mcp-v2-fork-fixed-executable/run-2/findings.json",
+        "node-mcp-v2-fork-fixed-executable/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

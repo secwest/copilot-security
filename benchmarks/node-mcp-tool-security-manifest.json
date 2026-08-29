@@ -644,6 +644,104 @@
       "id": "node-mcp-v2-fork-argument-data",
       "fixture": "fixtures/node-mcp-v2-fork-argument-data",
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-fork-module-path-injection",
+      "fixture": "fixtures/node-mcp-v2-fork-module-path-injection",
+      "expected": [
+        {
+          "title": "MCP tool input selects the module loaded by child_process.fork",
+          "cwe": ["CWE-829"],
+          "acceptableSeverities": ["high", "medium"],
+          "path": "src/server.mjs",
+          "line": 9,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["modulePath", "tool input", "callback input"],
+            ["runModule", "same-file helper", "helper call"],
+            ["fork:modulePath", "fork modulePath", "child module"],
+            ["untrusted module load", "executable module", "CWE-829"],
+            [
+              "fixed modulePath",
+              "allowlisted child module",
+              "ordinary child argument"
+            ]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-module", "registerTool", "tool callback"],
+            ["runModule", "same-file helper", "helper call"],
+            ["fork:modulePath", "fork modulePath", "child module"],
+            ["untrusted module load", "executable module", "CWE-829"],
+            [
+              "fixed modulePath",
+              "allowlisted child module",
+              "ordinary child argument"
+            ]
+          ],
+          "forbiddenText": [
+            "fork always uses a shell",
+            "ordinary fork arguments select the child module",
+            "the witness created attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fork-fixed-module",
+      "fixture": "fixtures/node-mcp-v2-fork-fixed-module",
+      "expected": []
+    },
+    {
+      "id": "node-mcp-v2-fork-exec-path-selection",
+      "fixture": "fixtures/node-mcp-v2-fork-exec-path-selection",
+      "expected": [
+        {
+          "title": "MCP tool input selects child_process.fork's executable",
+          "cwe": ["CWE-78"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/server.mjs",
+          "line": 11,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["execPath", "tool input", "callback input"],
+            ["runWithExecutable", "same-file helper", "helper call"],
+            ["fork:options.execPath", "options.execPath", "child executable"],
+            ["executable selection", "child_process.fork", "CWE-78"],
+            ["fixed execPath", "process.execPath", "ordinary child argument"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-executable", "registerTool", "tool callback"],
+            ["runWithExecutable", "same-file helper", "helper call"],
+            ["fork:options.execPath", "options.execPath", "child executable"],
+            ["executable selection", "child_process.fork", "CWE-78"],
+            ["fixed execPath", "process.execPath", "ordinary child argument"]
+          ],
+          "forbiddenText": [
+            "fork always uses a shell",
+            "ordinary fork arguments select the child executable",
+            "the witness ran an arbitrary executable",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fork-fixed-executable",
+      "fixture": "fixtures/node-mcp-v2-fork-fixed-executable",
+      "expected": []
     }
   ]
 }
