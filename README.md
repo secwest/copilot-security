@@ -97,7 +97,12 @@ from controller fields, confines calls to parsed public or protected method
 bodies, and preserves annotated Spring or servlet-assigned request values
 through the exact call argument and wrapper parameter. Java can follow one
 direct service wrapper or up to two additional uniquely typed service relays
-before a typed sink. For C#, the host likewise resolves one uniquely named
+before a typed sink. Spring R2DBC SQL rows additionally require an exact
+official `DatabaseClient`, request control of the `sql` grammar argument, and
+a documented `fetch`/`then`/mapping execution stage. A fixed statement with
+the same value only in `bind` is counterevidence; reviewer validation still
+closes reactive consumption, driver/dialect behavior, database authority, and
+concrete impact. For C#, the host likewise resolves one uniquely named
 class, record, or struct from an ASP.NET
 controller field or static receiver, binds the exact service-call argument to
 the public, protected, or internal wrapper parameter, and preserves either an

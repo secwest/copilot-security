@@ -2,6 +2,71 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Bind Spring R2DBC SQL grammar to reactive execution
+
+**Measured miss and comparator evidence.** The previously compiled scanner
+emits zero `spring-r2dbc-sql` rows for both members of a new real Spring R2DBC
+pair because its Java SQL model recognizes JDBC/JPA names but not
+`DatabaseClient`. CodeQL merged
+[`Java: Add R2DBC SQL injection models`](https://github.com/github/codeql/pull/22279)
+on 2026-08-10, adding `DatabaseClient.sql(String)`, its Supplier overload, and
+the execution-stage receivers `fetch`, `then`, `map`, `flatMap`, `mapValue`,
+and `mapProperties`, together with lower-level R2DBC SPI sinks. Spring's
+[`DatabaseClient` reference](https://docs.spring.io/spring-framework/reference/data-access/r2dbc.html)
+documents direct and Supplier SQL, those execution stages, and binding as the
+parameterized alternative. The
+[`GenericExecuteSpec` API](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/r2dbc/core/DatabaseClient.GenericExecuteSpec.html)
+confirms the exact terminal transition methods. The R2DBC
+[`Statement execution` specification](https://r2dbc.io/spec/1.0.0.RELEASE/spec/html/#statements)
+keeps statement creation and execution distinct.
+
+**Accepted deterministic boundary.** Add a Java-only `spring-r2dbc-sql` model
+for an exact imported or fully qualified
+`org.springframework.r2dbc.core.DatabaseClient` receiver. The tainted value
+must occupy the sole `sql` argument; a simple zero-argument Supplier lambda is
+unwrapped to its result. The same fluent statement must subsequently enter one
+documented execution stage. This transition is retained as a structured
+propagator in same-file, direct-wrapper, and bounded multi-hop records. The
+generic typed Java graph still proves every controller source, receiver type,
+call argument, and wrapper parameter.
+
+**Precision and review boundary.** A fixed query with request data only in
+`bind` or `bindNull` is negative because the value does not enter SQL grammar.
+Local or competing simple types, receiver reassignment including a same-line
+assignment, wrong arity, nested/unresolved Supplier shapes, and `sql` calls
+that do not reach an execution stage fail closed. Entering an execution stage
+does not prove subscription or completion; review must show that the Publisher
+is consumed or returned into an active chain, then establish the driver and
+dialect, quoting/comment and multiple-statement behavior, database role,
+transaction outcome, tenant/object authorization, returned data, and concrete
+impact. Lower-level `Connection`, `Statement`, and `Batch` SPI calls remain the
+next extension rather than being approximated with name-only matching.
+
+**Executable benchmark.** The matched Spring 7.0.8 fixtures use the same
+annotated controller, typed query wrapper, H2 R2DBC 1.0.0 driver, schema,
+seeded rows, hostile value, `fetch().one()` chain, and blocking JUnit consumer.
+The positive interpolates the username and demonstrates a predicate change
+that reads the administrator row. The control changes only the boundary to a
+fixed named placeholder plus `bind`, and the identical value returns no row.
+Both network-free `mvn verify` witnesses pass in Ubuntu/WSL. The focused model
+lane passes 6 tests and 21 assertions, including direct and Supplier forms,
+three execution methods, fully qualified typing, one- and two-boundary flow,
+and fixed/bound, inert, malformed, lookalike, and reassignment negatives. The
+strict three-run pair advances the canonical corpus to 178 pairs, 356 cases,
+and 1,068 repeated positions.
+
+**Pre-checkpoint product evidence.** The focused Windows and native WSL lanes
+each pass 30 tests and 2,578 assertions. The managed Windows aggregate selects
+2,051 tests across 211 files: 2,022 pass, 27 intentionally skip, and only the
+two established temporary-Git and private-ACL operations are denied by the
+managed boundary. Their exact native rerun passes 2/2 with seven assertions.
+Formatting, generated-model drift, TypeScript checking, the clean production
+build, and the production advisory query are green. Strict package inspection
+accepts 299 entries; fresh Windows and Linux installs validate the public
+import, CLI, and all 79 bundled plugin files. The local package and Maven build
+trees are removed after validation. Exact-checkpoint self-review and hosted
+acceptance follow after the implementation commit is pushed.
+
 ## 2026-08-29 — Require routed Action2 sources across relative wrappers
 
 **Measured miss and comparator boundary.** The first Sails increment modeled a

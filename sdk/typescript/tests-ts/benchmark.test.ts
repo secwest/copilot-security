@@ -625,6 +625,10 @@ describe("effectiveness benchmark", () => {
         "javascript-adversarial-command-injection",
         "javascript-adversarial-safe-command",
       ],
+      [
+        "java-r2dbc-databaseclient-sql-injection",
+        "java-r2dbc-databaseclient-bound-parameter",
+      ],
     ] as const;
     const cases = new Map(manifest.cases.map((item) => [item.id, item]));
 

@@ -277,6 +277,32 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-spring-java-command
 ```
 
+## Spring R2DBC SQL-injection benchmark
+
+`java-r2dbc-sql-injection-manifest.json` applies perfect three-run gates to a
+real Spring 7.0.8 `DatabaseClient` pair. Both fixtures carry the same annotated
+username through a typed controller-to-query wrapper and consume the same
+`fetch().one()` Publisher against an in-memory H2 R2DBC database. The positive
+interpolates the value into SQL grammar and proves an unauthorized
+administrator-row read; the control changes only the boundary to fixed SQL and
+`bind`, where the identical hostile value returns no row.
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/java-r2dbc-sql-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-java-r2dbc `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+
+wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-r2dbc-databaseclient-sql-injection/pom.xml verify
+wsl.exe -d Ubuntu -- mvn --batch-mode --no-transfer-progress --file /mnt/c/Users/dr/Documents/copilot-security/benchmarks/fixtures/java-r2dbc-databaseclient-bound-parameter/pom.xml verify
+```
+
 ## Node MCP tool-handler security benchmark
 
 `node-mcp-tool-security-manifest.json` measures tool input across nineteen

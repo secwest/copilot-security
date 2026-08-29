@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "java-r2dbc-databaseclient-sql-injection",
+      "description": "A Spring request parameter crosses an exact typed Java wrapper into interpolated SQL accepted by the official Spring R2DBC DatabaseClient, enters fetch(), and is consumed by the returned reactive chain.",
+      "fixture": "fixtures/java-r2dbc-databaseclient-sql-injection",
+      "findingsPaths": [
+        "java-r2dbc-databaseclient-sql-injection/run-1/findings.json",
+        "java-r2dbc-databaseclient-sql-injection/run-2/findings.json",
+        "java-r2dbc-databaseclient-sql-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "java-r2dbc-databaseclient-sql-injection",
+          "cwe": ["CWE-89"],
+          "locations": [
+            {
+              "path": "src/main/java/example/AccountQueries.java",
+              "startLine": 17,
+              "endLine": 17,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Spring R2DBC", "DatabaseClient"],
+            ["@RequestParam", "username", "request parameter"],
+            ["AccountController", "queries.lookup", "wrapper"],
+            ["DatabaseClient.sql", "SQL grammar", "sql(sql)"],
+            ["fetch", "Publisher", "reactive chain"],
+            ["H2", "R2DBC driver", "database dialect"],
+            ["bind", "bound parameter", "parameterized"],
+            ["CWE-89", "SQL injection", "unauthorized read"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["HTTP request", "request parameter", "@RequestParam"],
+            ["username", "AccountController", "queries.lookup"],
+            ["AccountQueries", "wrapper parameter", "lookup"],
+            ["interpolated SQL", "SQL grammar", "DatabaseClient.sql"],
+            ["fetch", "one", "reactive"],
+            ["OR role", "predicate", "administrator"],
+            ["database read", "account row", "confidentiality"],
+            ["fixed SQL", "bind", "control"]
+          ],
+          "forbiddenText": [
+            "every DatabaseClient.sql call is vulnerable",
+            "bind values become SQL grammar",
+            "fetch alone proves subscription",
+            "the witness accesses a production database",
+            "proves the endpoint is publicly reachable",
+            "the database server is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java-r2dbc-databaseclient-bound-parameter",
+      "description": "The topology-matched Spring R2DBC control keeps SQL fixed and sends the same hostile request value only through DatabaseClient.bind before the same fetch/one reactive consumption.",
+      "fixture": "fixtures/java-r2dbc-databaseclient-bound-parameter",
+      "findingsPaths": [
+        "java-r2dbc-databaseclient-bound-parameter/run-1/findings.json",
+        "java-r2dbc-databaseclient-bound-parameter/run-2/findings.json",
+        "java-r2dbc-databaseclient-bound-parameter/run-3/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

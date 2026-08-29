@@ -6,6 +6,34 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added high-confidence Spring R2DBC SQL-injection discovery for the official
+  `org.springframework.r2dbc.core.DatabaseClient`. The host traces Spring or
+  servlet input only into the `sql` grammar argument, unwraps a simple
+  `Supplier<String>` lambda, requires `fetch`, `then`, `map`, `flatMap`,
+  `mapValue`, or `mapProperties`, and retains that execution-stage transition
+  as structured evidence across same-file, one-wrapper, and two-relay Java
+  paths.
+- Kept the model fail closed on local or competing `DatabaseClient` types,
+  receiver reassignment, wrong arity, malformed Supplier shapes, inert `sql`
+  specifications, and request values used only by `bind` or `bindNull`. The
+  quality gate separately requires reactive consumption, driver/dialect and
+  statement behavior, database authority, tenant/object authorization, and a
+  concrete read, write, or availability effect before accepting CWE-89.
+- Added a real Spring 7.0.8/R2DBC H2 exploit-control pair. The positive changes
+  a query predicate and reads the seeded administrator row; the matched control
+  passes the identical payload only as a bound value and returns no row. Both
+  `mvn verify` witnesses pass under Ubuntu/WSL. The prior compiled scanner emits
+  zero specialized rows for both fixtures; the new focused lane passes 6 tests
+  and 21 assertions. The canonical benchmark advances to 178 pairs, 356 cases,
+  and 1,068 repeated positions.
+- Completed pre-checkpoint product acceptance. The managed Windows aggregate
+  selects 2,051 tests: 2,022 pass, 27 intentionally skip, and only the two
+  established temporary-Git and private-ACL operations are denied; their exact
+  native rerun passes 2/2 with seven assertions. The focused Windows and WSL
+  lanes each pass 30 tests and 2,578 assertions. Formatting, generated-model
+  drift, TypeScript, the clean build, and the production audit pass. Windows
+  and Linux each validate the same 299-entry package through a fresh install,
+  public import, CLI execution, and all 79 bundled plugin files.
 - Closed the routed Sails.js Action2 cross-file false negative measured by the
   new executable fixture: the previous compiled scanner emitted zero Node path
   rows when a declared controller input crossed one relative module call. The
