@@ -8441,6 +8441,70 @@
         "python-asyncpg-bound-parameter/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "rust-axum-tokio-shell-command-injection",
+      "description": "An Axum query parameter is formatted into POSIX shell grammar and executed through an official Tokio process Command output call.",
+      "fixture": "fixtures/rust-axum-tokio-shell-command-injection",
+      "findingsPaths": [
+        "rust-axum-tokio-shell-command-injection/run-1/findings.json",
+        "rust-axum-tokio-shell-command-injection/run-2/findings.json",
+        "rust-axum-tokio-shell-command-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "rust-axum-tokio-shell-command-injection",
+          "cwe": ["CWE-78", "CWE-88"],
+          "locations": [
+            {
+              "path": "src/handlers/diagnostics.rs",
+              "startLine": 15,
+              "endLine": 15,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Query", "Axum query", "request query"],
+            ["tokio::process::Command", "Tokio Command", "official Tokio"],
+            ["format!", "command_line", "formatted"],
+            ["sh -c", "shell grammar", "-c"],
+            ["output", "spawn", "process creation"],
+            ["ordinary argv", "literal argument", "negative control"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "query value", "request value"],
+            ["format!", "command string", "shell grammar"],
+            ["tokio::process::Command", "Tokio process", "Tokio Command"],
+            ["sh", "process", "Command"],
+            ["output", "await", "child process"],
+            ["stdout", "response", "returned"],
+            ["printf", "literal argv", "paired control"]
+          ],
+          "forbiddenText": [
+            "every Tokio argument invokes a shell",
+            "await is required to start the child",
+            "CodeQL proves the command executes",
+            "proves the handler is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rust-axum-tokio-argv-command",
+      "description": "The topology-matched Tokio control executes the same remote value only as one literal argument to fixed printf, with no shell or interpreter grammar.",
+      "fixture": "fixtures/rust-axum-tokio-argv-command",
+      "findingsPaths": [
+        "rust-axum-tokio-argv-command/run-1/findings.json",
+        "rust-axum-tokio-argv-command/run-2/findings.json",
+        "rust-axum-tokio-argv-command/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

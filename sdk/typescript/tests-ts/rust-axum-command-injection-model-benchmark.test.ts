@@ -387,6 +387,111 @@ async fn handler(Path(input): Path<String>) {
     ).toHaveLength(1);
   });
 
+  test("recognizes official Tokio Command identities and execution", () => {
+    const direct = records(
+      axum(
+        '    Command::new("sh").arg("-c").arg(input.value).output().await;',
+        "Query(input): Query<Payload>",
+        "Query",
+        "use tokio::process::Command;",
+      ),
+    );
+    expect(direct).toHaveLength(1);
+    expect(direct[0]?.frameworkModel.sink).toMatchObject({
+      kind: "rust-process-shell-command",
+      symbol: "tokio::process::Command;method=output;argument=2",
+    });
+
+    const shapes = [
+      `use axum::extract::Path;
+async fn handler(Path(input): Path<String>) {
+    tokio::process::Command::new("sh").arg("-c").arg(input).status().await;
+}
+`,
+      `use axum::extract::Path;
+use tokio::process as async_process;
+async fn handler(Path(input): Path<String>) {
+    async_process::Command::new("sh").args(["-c", &input]).spawn();
+}
+`,
+      `use axum::extract::Path;
+use tokio::process::{Command as AsyncCommand, Child};
+async fn handler(Path(input): Path<String>) {
+    let _ = std::mem::size_of::<Option<Child>>();
+    AsyncCommand::new("sh").arg("-c").arg(input).output().await;
+}
+`,
+      `use axum::extract::Path;
+use tokio::{process::{self as async_process, Command}, time};
+async fn handler(Path(input): Path<String>) {
+    let _ = std::mem::size_of::<time::Instant>();
+    async_process::Command::new("sh").arg("-c").arg(input).spawn();
+    let _ = Command::new("printf");
+}
+`,
+    ];
+    for (const source of shapes) {
+      expect(records(source)).toHaveLength(1);
+      expect(records(source)[0]?.frameworkModel.sink.symbol).toStartWith(
+        "tokio::process::Command;",
+      );
+    }
+  });
+
+  test("keeps Tokio literal argv, inert builders, and lookalikes negative", () => {
+    const safeBodies = [
+      '    Command::new("printf").arg("%s").arg(input.value).output().await;',
+      "    let _process = Command::new(input.value);",
+      '    Command::new("printf").arg(input.value).exec();',
+    ];
+    for (const body of safeBodies) {
+      expect(
+        records(
+          axum(
+            body,
+            "Query(input): Query<Payload>",
+            "Query",
+            "use tokio::process::Command;",
+          ),
+        ),
+      ).toEqual([]);
+    }
+
+    expect(
+      records(`use axum::extract::Query;
+mod tokio { pub mod process { pub struct Command; } }
+use tokio::process::Command;
+async fn handler(Query(input): Query<Payload>) {
+    Command::new("sh").arg("-c").arg(input.value).spawn();
+}
+`),
+    ).toEqual([]);
+    expect(
+      records(`use axum::extract::Query;
+extern crate lookalike as tokio;
+use tokio::process::Command;
+async fn handler(Query(input): Query<Payload>) {
+    Command::new("sh").arg("-c").arg(input.value).spawn();
+}
+`),
+    ).toEqual([]);
+  });
+
+  test("retains Tokio calls that spawn before an output future is awaited", () => {
+    const found = records(
+      axum(
+        '    let _future = Command::new("sh").arg("-c").arg(input.value).output();',
+        "Query(input): Query<Payload>",
+        "Query",
+        "use tokio::process::Command;",
+      ),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel.sink.symbol).toBe(
+      "tokio::process::Command;method=output;argument=2",
+    );
+  });
+
   test("rejects literal argv data, inert builders, numeric normalization, and reassignment", () => {
     const safeBodies = [
       '    Command::new("printf").arg("%s").arg(input.value).output();',

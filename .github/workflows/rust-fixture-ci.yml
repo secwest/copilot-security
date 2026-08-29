@@ -56,3 +56,53 @@ jobs:
           control="$(RUST_COMMAND_MARKER=rust-shell-expanded "$RUNNER_TEMP/rust-argv-command-witness")"
           test "$vulnerable" = "shell_expanded_marker=1"
           test "$control" = "shell_expanded_marker=0"
+
+  axum-tokio-command-fixtures:
+    name: Axum Tokio command-injection fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CARGO_TARGET_DIR: ${{ runner.temp }}/rust-tokio-target
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Inspect Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --version
+          cargo --version
+          rustfmt --version
+
+      - name: Format and compile locked Tokio witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check \
+            benchmarks/fixtures/rust-axum-tokio-shell-command-injection/src/handlers/diagnostics.rs \
+            benchmarks/fixtures/rust-axum-tokio-shell-command-injection/examples/witness.rs \
+            benchmarks/fixtures/rust-axum-tokio-argv-command/src/handlers/diagnostics.rs \
+            benchmarks/fixtures/rust-axum-tokio-argv-command/examples/witness.rs
+          cargo check --locked \
+            --manifest-path benchmarks/fixtures/rust-axum-tokio-shell-command-injection/Cargo.toml \
+            --examples
+          cargo check --locked \
+            --manifest-path benchmarks/fixtures/rust-axum-tokio-argv-command/Cargo.toml \
+            --examples
+
+      - name: Prove Tokio shell grammar and literal argument behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          vulnerable="$(RUST_COMMAND_MARKER=rust-tokio-expanded cargo run --quiet --locked \
+            --manifest-path benchmarks/fixtures/rust-axum-tokio-shell-command-injection/Cargo.toml \
+            --example witness)"
+          control="$(RUST_COMMAND_MARKER=rust-tokio-expanded cargo run --quiet --locked \
+            --manifest-path benchmarks/fixtures/rust-axum-tokio-argv-command/Cargo.toml \
+            --example witness)"
+          test "$vulnerable" = "shell_expanded_marker=1"
+          test "$control" = "shell_expanded_marker=0"

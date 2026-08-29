@@ -92,6 +92,17 @@ pickle execution, and an `.npz` archive must actually access its lazy member.
 The paired witness proves bounded `__reduce__` callable execution while the
 otherwise identical `allow_pickle=False` control fails closed before the
 callable runs.
+For Rust command execution, the host recognizes exact Axum and Actix Web
+extractors and both `std::process::Command` and `tokio::process::Command`.
+It follows direct, aliased, grouped, module-qualified, and fully qualified
+builders through `arg`/`args` state into an actual execution call, while
+distinguishing executable selection, shell/interpreter/batch/raw grammar, and
+ordinary literal argv. A fixed executable with request data only in one normal
+argument is counterevidence. Tokio `status()` and `output()` currently spawn
+before returning their Future, so review treats missing `await` as a lifecycle
+and observable-effect question rather than proof that no process started.
+Local Tokio lookalikes, inert builders, unavailable Tokio `exec`, and replaced
+command state fail closed.
 For Python `asyncpg`, the host recognizes the official `Connection` and
 compatible `Pool` query APIs only after proving a live annotation, factory, or
 pool-acquisition origin. It traces request data through copied query variables

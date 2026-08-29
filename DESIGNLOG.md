@@ -2,6 +2,57 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Preserve Tokio process identity without treating argv as shell grammar
+
+**Measured miss and comparator evidence.** The compiled scanner at
+`29c040f55f8301487566647c55b69cdc5d8e9652` emits zero Rust command rows for
+an Axum `Query` value formatted into `sh -c` when the builder is imported from
+`tokio::process::Command`. CodeQL's merged
+[`Rust command-injection query`](https://github.com/github/codeql/pull/22323)
+adds model-as-data sinks for `Command::new`, `arg`, and `args` on both `std`
+and Tokio. Its test corpus alerts on a remote ordinary argument to fixed
+`grep`, while its query help separately recommends individual arguments as the
+way to avoid shell interpretation. That is useful broad taint coverage but
+does not preserve the execution consumer or the command-versus-data boundary.
+
+**Accepted boundary beyond comparator parity.** Carry an explicit `std` or
+`tokio` runtime identity from direct, aliased, grouped, nested-grouped, module,
+or fully qualified imports into the existing Rust command state machine. Keep
+the stronger existing classification: argument zero to `Command::new` selects
+the executable; later request data is reportable only when an exact POSIX
+shell, CMD, PowerShell, interpreter, Windows batch, or raw-command-line
+consumer restores grammar. A fixed ordinary executable with the same remote
+value in one `arg` or `args` element remains negative. Continue requiring an
+actual `spawn`, `status`, or `output` dispatch, rather than reporting an inert
+constructor or builder merely because CodeQL's sink map names it.
+
+**Tokio execution semantics.** Current official
+[`Tokio 1.53.1 process source`](https://github.com/tokio-rs/tokio/blob/tokio-1.53.1/tokio/src/process/mod.rs)
+implements `status()` and `output()` by calling `self.spawn()` before it
+constructs and returns the Future that waits for the child. A missing `await`
+therefore does not prevent process creation, though it can change child
+lifetime, standard-stream handling, completion, and the observable effect.
+`spawn()` is immediate, Tokio has no direct `exec`, and its inherent Windows
+`raw_arg` remains a raw command-line boundary. Reviewer guidance must retain
+the exact runtime/version and these lifecycle distinctions instead of
+borrowing synchronous-`std` or generic-async assumptions.
+
+**Precision and benchmark contract.** Reject local `mod tokio` definitions,
+foreign `extern crate ... as tokio` lookalikes, unsupported Tokio `exec`, inert
+builders, numeric normalization, reassigned command state, malformed source,
+and request data used only as literal argv. The matched Axum fixtures pin Tokio
+1.53.1 with Cargo lock format v3 so both Cargo 1.75 and current Cargo can
+reproduce them. The positive formats `input.target` into `sh -c`; the control
+changes only the command/data boundary to fixed `printf` and one literal
+argument. Their real Tokio witnesses expand an inert environment marker only
+in the positive and perform no filesystem, network, credential, persistence,
+or privilege operation. Windows compiles both locked examples; Ubuntu/WSL
+prints `shell_expanded_marker=1` and then `shell_expanded_marker=0`. The new
+model emits one exact positive at `src/handlers/diagnostics.rs:15` and no
+control row. The focused Rust plus canonical lane passes 43 tests and 2,756
+assertions, and the corpus advances to 181 pairs, 362 cases, and 1,086 repeated
+positions.
+
 ## 2026-08-29 — Bind asyncpg query grammar to real async execution
 
 **Measured miss and comparator evidence.** The previously compiled scanner

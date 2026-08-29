@@ -232,12 +232,40 @@ mutable process builders; `arg` and `args`; POSIX, CMD, PowerShell, interpreter,
 Windows batch, `raw_arg`, and executable-selection boundaries; fixed argv,
 numeric normalization, reassignment, inert construction, local lookalikes,
 escape/control evidence, LF/CRLF provenance, malformed source, and lexer
-resource bounds. Run the focused model benchmark with:
+resource bounds.
+
+`rust-tokio-command-injection-manifest.json` adds a second strict pair for the
+official Tokio process builder. Both fixtures pin Tokio 1.53.1 with Cargo lock
+format v3, retain the same Axum source, `output().await`, captured stdout, and
+response topology, and differ only at the command/data boundary. The positive
+formats the request value into `sh -c`; the control gives it to fixed `printf`
+as one literal argument. The witnesses use a current-thread Tokio runtime and
+expand only a fixed inert environment marker. Regression covers direct,
+aliased, grouped, nested-grouped, module, and fully qualified Tokio identities,
+assigned and fluent builders, local-module and foreign-crate shadows, inert
+construction, unavailable Tokio `exec`, and the current fact that `status()`
+and `output()` spawn before returning their Future. Run the focused model
+benchmarks with:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
   --manifest ../../benchmarks/rust-axum-command-injection-manifest.json `
   --results-dir C:\security-benchmarks\copilot-security-rust-command
+
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/rust-tokio-command-injection-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-rust-tokio-command
+```
+
+Run the Tokio witnesses on Linux or WSL with:
+
+```bash
+RUST_COMMAND_MARKER=rust-tokio-expanded cargo run --quiet --locked \
+  --manifest-path ../../benchmarks/fixtures/rust-axum-tokio-shell-command-injection/Cargo.toml \
+  --example witness
+RUST_COMMAND_MARKER=rust-tokio-expanded cargo run --quiet --locked \
+  --manifest-path ../../benchmarks/fixtures/rust-axum-tokio-argv-command/Cargo.toml \
+  --example witness
 ```
 
 ## Spring Java command-state benchmark

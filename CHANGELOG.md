@@ -6,6 +6,30 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Extended the exact Rust web command model from `std::process::Command` to
+  current `tokio::process::Command`. Direct, aliased, grouped, nested-grouped,
+  module-qualified, and fully qualified Tokio bindings now retain the runtime
+  identity through chained or assigned builders and exact `arg`/`args` state
+  into `spawn`, `status`, or `output`. Local `tokio` modules, foreign crates
+  aliased as `tokio`, unavailable Tokio `exec`, inert builders, and ordinary
+  fixed-executable argv remain negative.
+- Improved on CodeQL's merged August 2026 Rust command-injection model rather
+  than copying its broad sink map. CodeQL marks `Command::new`, `arg`, and
+  `args` for both runtimes and its tests alert on a remote ordinary `grep`
+  argument, even though its help recommends separate arguments to avoid shell
+  interpretation. Copilot Security still requires actual process dispatch and
+  distinguishes executable selection or shell/interpreter/batch/raw grammar
+  from literal argv. It also records Tokio's current implementation detail:
+  `status()` and `output()` call `spawn()` before returning their Future, so a
+  missing `await` is not treated as execution prevention.
+- Added a strict Tokio 1.53.1 Axum exploit/control pair with Cargo-v3 locks
+  compatible with Rust/Cargo 1.75. The positive formats the query value into
+  `sh -c`; the identical control passes it as one argument to fixed `printf`.
+  Both Windows compilation and the Ubuntu/WSL marker differential pass, the
+  previous compiled scanner emits zero Tokio rows, and the new host emits one
+  exact line-15 positive with no control row. The focused Rust and canonical
+  lanes pass 43 tests and 2,756 assertions. The canonical benchmark advances
+  to 181 pairs, 362 cases, and 1,086 repeated positions.
 - Added execution-aware Python `asyncpg` SQL-injection discovery for every
   query-bearing current API boundary: `copy_from_query`, `cursor`, `execute`,
   `executemany`, `fetch`, `fetchmany`, `fetchrow`, `fetchval`, and `prepare`.

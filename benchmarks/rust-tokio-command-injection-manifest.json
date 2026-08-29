@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "completionRate": 1,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1,
+    "casePassRate": 1,
+    "negativeControlPassRate": 1,
+    "stableDetectionRate": 1,
+    "validationCoverage": 1,
+    "attackPathCoverage": 1,
+    "codeEvidenceCoverage": 1,
+    "severityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "rust-axum-tokio-shell-command-injection",
+      "fixture": "fixtures/rust-axum-tokio-shell-command-injection",
+      "expected": [
+        {
+          "title": "Axum query value reaches a Tokio shell command string",
+          "cwe": ["CWE-78", "CWE-88"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/handlers/diagnostics.rs",
+          "line": 15,
+          "lineTolerance": 2,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Query", "Axum query", "request query"],
+            ["tokio::process::Command", "Tokio Command", "official Tokio"],
+            ["format!", "command_line", "formatted"],
+            ["sh -c", "shell grammar", "-c"],
+            ["output", "spawn", "process creation"],
+            ["ordinary argv", "literal argument", "negative control"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["input.target", "query value", "request value"],
+            ["format!", "command string", "shell grammar"],
+            ["tokio::process::Command", "Tokio process", "Tokio Command"],
+            ["sh", "process", "Command"],
+            ["output", "await", "child process"],
+            ["stdout", "response", "returned"],
+            ["printf", "literal argv", "paired control"]
+          ],
+          "forbiddenText": [
+            "every Tokio argument invokes a shell",
+            "await is required to start the child",
+            "CodeQL proves the command executes",
+            "proves the handler is publicly reachable",
+            "the host is fully compromised",
+            "all server data is exposed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rust-axum-tokio-argv-command",
+      "fixture": "fixtures/rust-axum-tokio-argv-command",
+      "expected": []
+    }
+  ]
+}

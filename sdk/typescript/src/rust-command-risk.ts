@@ -51,6 +51,7 @@ interface RustArgument {
 }
 
 interface RustCommandState {
+  runtime: "std" | "tokio";
   program: RustToken[];
   constructorLine: number;
   arguments: RustArgument[];
@@ -62,8 +63,8 @@ interface RustExecution extends RustCommandState {
 }
 
 interface RustImports {
-  commandAliases: Set<string>;
-  processAliases: Set<string>;
+  commandAliases: Map<string, RustCommandState["runtime"]>;
+  processAliases: Map<string, RustCommandState["runtime"]>;
   unixCommandExt: boolean;
   windowsCommandExt: boolean;
   extractorAliases: Map<
@@ -432,8 +433,8 @@ function aliasAfter(text: string, name: string): string {
 
 function parseImports(tokens: readonly RustToken[]): RustImports {
   const result: RustImports = {
-    commandAliases: new Set<string>(),
-    processAliases: new Set<string>(),
+    commandAliases: new Map<string, RustCommandState["runtime"]>(),
+    processAliases: new Map<string, RustCommandState["runtime"]>(),
     unixCommandExt: false,
     windowsCommandExt: false,
     extractorAliases: new Map(),
@@ -441,31 +442,47 @@ function parseImports(tokens: readonly RustToken[]): RustImports {
   };
   for (const statement of importStatements(tokens)) {
     const text = compact(statement);
-    if (/^usestd::process::Command(?:as[A-Za-z_]\w*)?;$/u.test(text)) {
-      result.commandAliases.add(aliasAfter(text, "Command"));
-    }
-    if (
-      /^usestd::process::\{[^}]*Command(?:as[A-Za-z_]\w*)?[^}]*\};$/u.test(text)
-    ) {
-      result.commandAliases.add(aliasAfter(text, "Command"));
-    }
-    const groupedCommand =
-      /(?:^|[,{])process::(?:\{[^}]*?Command(?:as([A-Za-z_]\w*))?(?=[,}])|Command(?:as([A-Za-z_]\w*))?(?=[,}]))/u.exec(
-        text,
-      );
-    if (groupedCommand !== null) {
-      result.commandAliases.add(
-        groupedCommand[1] ?? groupedCommand[2] ?? "Command",
-      );
-    }
-    const processMatch = /^usestd::process(?:as([A-Za-z_]\w*))?;$/u.exec(text);
-    if (processMatch !== null) {
-      result.processAliases.add(processMatch[1] ?? "process");
-    }
-    const groupedProcess =
-      /^usestd::process::\{[^}]*self(?:as([A-Za-z_]\w*))?[^}]*\};$/u.exec(text);
-    if (groupedProcess !== null) {
-      result.processAliases.add(groupedProcess[1] ?? "process");
+    for (const runtime of ["std", "tokio"] as const) {
+      if (
+        new RegExp(
+          `^use${runtime}::process::Command(?:as[A-Za-z_]\\w*)?;$`,
+          "u",
+        ).test(text)
+      ) {
+        result.commandAliases.set(aliasAfter(text, "Command"), runtime);
+      }
+      if (
+        new RegExp(
+          `^use${runtime}::process::\\{[^}]*Command(?:as[A-Za-z_]\\w*)?[^}]*\\};$`,
+          "u",
+        ).test(text)
+      ) {
+        result.commandAliases.set(aliasAfter(text, "Command"), runtime);
+      }
+      const groupedCommand = new RegExp(
+        `(?:^|[,{])process::(?:\\{[^}]*?Command(?:as([A-Za-z_]\\w*))?(?=[,}])|Command(?:as([A-Za-z_]\\w*))?(?=[,}]))`,
+        "u",
+      ).exec(text.startsWith(`use${runtime}`) ? text : "");
+      if (groupedCommand !== null) {
+        result.commandAliases.set(
+          groupedCommand[1] ?? groupedCommand[2] ?? "Command",
+          runtime,
+        );
+      }
+      const processMatch = new RegExp(
+        `^use${runtime}::process(?:as([A-Za-z_]\\w*))?;$`,
+        "u",
+      ).exec(text);
+      if (processMatch !== null) {
+        result.processAliases.set(processMatch[1] ?? "process", runtime);
+      }
+      const groupedProcess = new RegExp(
+        `(?:^|[,{])process::\\{[^}]*self(?:as([A-Za-z_]\\w*))?[^}]*\\}`,
+        "u",
+      ).exec(text.startsWith(`use${runtime}`) ? text : "");
+      if (groupedProcess !== null) {
+        result.processAliases.set(groupedProcess[1] ?? "process", runtime);
+      }
     }
     if (
       /^usestd::os::unix::process::CommandExt(?:as[A-Za-z_]\w*)?;$/u.test(text)
@@ -534,6 +551,16 @@ function parseImports(tokens: readonly RustToken[]): RustImports {
     }
   }
   return result;
+}
+
+function hasLocalTokioShadow(tokens: readonly RustToken[]): boolean {
+  const text = compact(tokens);
+  return (
+    /(?:^|[;{}])modtokio(?:;|\{)/u.test(text) ||
+    /(?:^|[;{}])externcrate(?!tokio(?:as[A-Za-z_]\w*)?;)[A-Za-z_]\w*astokio;/u.test(
+      text,
+    )
+  );
 }
 
 function rustFunctions(tokens: readonly RustToken[]): RustFunction[] {
@@ -777,12 +804,12 @@ function isCommandConstructor(
   tokens: readonly RustToken[],
   newIndex: number,
   imports: RustImports,
-): boolean {
+): RustCommandState["runtime"] | undefined {
   if (
     tokens[newIndex]?.value !== "new" ||
     tokens[newIndex - 1]?.value !== "::"
   ) {
-    return false;
+    return undefined;
   }
   const segments: string[] = [];
   let index = newIndex - 2;
@@ -792,13 +819,17 @@ function isCommandConstructor(
     index -= 2;
   }
   const path = segments.join("::");
-  if (path === "std::process::Command") return true;
-  if (segments.length === 1 && imports.commandAliases.has(path)) return true;
-  return (
+  if (path === "std::process::Command") return "std";
+  if (path === "tokio::process::Command") return "tokio";
+  if (segments.length === 1) return imports.commandAliases.get(path);
+  if (
     segments.length === 2 &&
     segments[1] === "Command" &&
     imports.processAliases.has(segments[0] ?? "")
-  );
+  ) {
+    return imports.processAliases.get(segments[0] ?? "");
+  }
+  return undefined;
 }
 
 function expandArguments(tokens: readonly RustToken[]): RustToken[][] {
@@ -838,7 +869,8 @@ function methodChain(
     const callArguments = tokens.slice(index + 3, close);
     if (
       method.value === "arg" ||
-      (method.value === "raw_arg" && windowsCommandExt)
+      (method.value === "raw_arg" &&
+        (state.runtime === "tokio" || windowsCommandExt))
     ) {
       state.arguments.push({
         tokens: callArguments,
@@ -855,8 +887,10 @@ function methodChain(
       }
     } else if (
       EXECUTION_METHODS.has(method.value) &&
-      (method.value !== "exec" || unixCommandExt)
+      (method.value !== "exec" || (state.runtime === "std" && unixCommandExt))
     ) {
+      // Tokio status() and output() call spawn() before returning their future;
+      // dropping that future does not make process creation inert.
       execution = {
         ...state,
         arguments: [...state.arguments],
@@ -874,7 +908,8 @@ function commandConstructor(
   imports: RustImports,
 ): { state: RustCommandState; execution?: RustExecution } | undefined {
   for (let index = 0; index < tokens.length; index += 1) {
-    if (!isCommandConstructor(tokens, index, imports)) continue;
+    const runtime = isCommandConstructor(tokens, index, imports);
+    if (runtime === undefined) continue;
     if (tokens[index + 1]?.value !== "(") continue;
     const close = matchingDelimiter(tokens, index + 1);
     if (close === undefined) return undefined;
@@ -883,7 +918,12 @@ function commandConstructor(
     return methodChain(
       tokens,
       close + 1,
-      { program, constructorLine: tokens[index]?.line ?? 1, arguments: [] },
+      {
+        runtime,
+        program,
+        constructorLine: tokens[index]?.line ?? 1,
+        arguments: [],
+      },
       imports.unixCommandExt,
       imports.windowsCommandExt,
     );
@@ -1102,7 +1142,7 @@ function recordForRisk(
         kind: risk.kind,
         path,
         line: execution.line,
-        symbol: `std::process::Command;method=${execution.method};argument=${risk.argumentIndex}`,
+        symbol: `${execution.runtime}::process::Command;method=${execution.method};argument=${risk.argumentIndex}`,
         cweIds: ["CWE-78", "CWE-88"],
       },
       propagators: risk.taint.propagators.map((propagator) => ({
@@ -1126,10 +1166,16 @@ export function rustCommandInjectionRecords(
   const tokens = rustTokens(text);
   if (tokens === undefined) return [];
   const imports = parseImports(tokens);
+  const usesTokio =
+    [...imports.commandAliases.values()].includes("tokio") ||
+    [...imports.processAliases.values()].includes("tokio") ||
+    compact(tokens).includes("tokio::process::Command::new");
+  if (usesTokio && hasLocalTokioShadow(tokens)) return [];
   if (
     imports.commandAliases.size === 0 &&
     imports.processAliases.size === 0 &&
-    !compact(tokens).includes("std::process::Command::new")
+    !compact(tokens).includes("std::process::Command::new") &&
+    !compact(tokens).includes("tokio::process::Command::new")
   ) {
     return [];
   }

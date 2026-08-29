@@ -4267,7 +4267,7 @@ const TRAEFIK_REPLACE_PATH_FIELD_EVIDENCE_REQUIREMENTS = [
 const RUST_COMMAND_VALIDATION_FIELD_EVIDENCE_REQUIREMENTS = [
   ["Query", "Axum query", "request query"],
   ["format!", "command_line", "formatted"],
-  ["Command::new", "std::process::Command"],
+  ["Command::new", "std::process::Command", "tokio::process::Command"],
   ["sh -c", "shell", "-c"],
 ] as const;
 

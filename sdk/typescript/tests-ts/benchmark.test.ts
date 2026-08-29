@@ -634,6 +634,10 @@ describe("effectiveness benchmark", () => {
         "java-r2dbc-spi-statement-bound-parameter",
       ],
       ["python-asyncpg-sql-injection", "python-asyncpg-bound-parameter"],
+      [
+        "rust-axum-tokio-shell-command-injection",
+        "rust-axum-tokio-argv-command",
+      ],
     ] as const;
     const cases = new Map(manifest.cases.map((item) => [item.id, item]));
 
