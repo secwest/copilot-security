@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "node-sails-action2-path-traversal",
+      "description": "A declared Sails Action2 filename input in api/controllers reaches an exact node:fs readFileSync path after path.join.",
+      "fixture": "fixtures/node-sails-action2-path-traversal",
+      "findingsPaths": [
+        "node-sails-action2-path-traversal/run-1/findings.json",
+        "node-sails-action2-path-traversal/run-2/findings.json",
+        "node-sails-action2-path-traversal/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-sails-action2-path-traversal",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "api/controllers/attachments/download-thumbnail.js",
+              "startLine": 15,
+              "endLine": 15,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Sails", "Action2", "api/controllers"],
+            ["declared input", "inputs.filename", "filename"],
+            ["path.join", "filePath", "thumbnail"],
+            ["readFileSync", "filesystem path", "node:fs"],
+            ["path traversal", "CWE-22"],
+            ["fixed path", "allowlist", "containment"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["HTTP request", "route parameter", "Action2 input"],
+            ["inputs.filename", "declared filename", "validated inputs"],
+            ["path.join", "filePath", "thumbnail directory"],
+            ["readFileSync", "file read", "filesystem sink"],
+            ["parent segment", "directory escape", "CWE-22"],
+            ["fixed thumbnail", "allowlist", "component-aware containment"]
+          ],
+          "forbiddenText": [
+            "every Sails helper input is an HTTP request",
+            "undeclared inputs are validated Action2 parameters",
+            "path.join prevents traversal",
+            "the witness writes outside the repository",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-sails-action2-fixed-thumbnail",
+      "description": "The topology-matched Action2 control receives the same traversal-shaped filename but reads one fixed server-owned thumbnail.",
+      "fixture": "fixtures/node-sails-action2-fixed-thumbnail",
+      "findingsPaths": [
+        "node-sails-action2-fixed-thumbnail/run-1/findings.json",
+        "node-sails-action2-fixed-thumbnail/run-2/findings.json",
+        "node-sails-action2-fixed-thumbnail/run-3/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

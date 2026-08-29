@@ -208,6 +208,58 @@ describe("Node and Python filesystem-path framework models", () => {
     });
   });
 
+  test("keeps the Sails Action2 exploit/control pair under perfect gates", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(benchmarkRoot, "node-sails-action2-path-manifest.json"),
+        "utf8",
+      ),
+    ) as BenchmarkManifest;
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(manifest.cases.map(({ id }) => id)).toEqual([
+      "node-sails-action2-path-traversal",
+      "node-sails-action2-fixed-thumbnail",
+    ]);
+    expect(manifest.cases[0]?.findingsPaths).toHaveLength(3);
+    expect(manifest.cases[0]?.expected[0]).toMatchObject({
+      cwe: ["CWE-22"],
+      acceptableSeverities: ["high", "medium"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[1]?.expected).toEqual([]);
+
+    const vulnerable = pathRecords(
+      await buildResidualRiskInventory(
+        join(benchmarkRoot, "fixtures", "node-sails-action2-path-traversal"),
+      ),
+    );
+    const control = pathRecords(
+      await buildResidualRiskInventory(
+        join(benchmarkRoot, "fixtures", "node-sails-action2-fixed-thumbnail"),
+      ),
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]?.frameworkModel).toMatchObject({
+      id: "node-http-path",
+      scope: "same-file",
+      source: {
+        kind: "sails-action2-declared-input",
+        path: "api/controllers/attachments/download-thumbnail.js",
+        line: 13,
+      },
+      sink: {
+        kind: "filesystem-path",
+        path: "api/controllers/attachments/download-thumbnail.js",
+        line: 15,
+        cweIds: ["CWE-22"],
+      },
+      candidateControls: [],
+    });
+    expect(control).toEqual([]);
+  });
+
   test("accepts exact Node filesystem bindings and only path positions", async () => {
     const repository = await temporaryRepository();
     const cases: Array<[string, string]> = [
@@ -306,11 +358,85 @@ describe("Node and Python filesystem-path framework models", () => {
     ).toBeFalse();
   });
 
+  test("models only declared Sails Action2 controller inputs", async () => {
+    const repository = await temporaryRepository();
+    const cases: Array<[string, string]> = [
+      [
+        "api/controllers/attachments/direct.js",
+        'const fs = require("node:fs");\nconst path = require("node:path");\nmodule.exports = {\n  inputs: { filename: { type: "string", required: true } },\n  async fn(inputs, exits) {\n    const filePath = path.join("attachments", inputs.filename);\n    return exits.success(fs.readFileSync(filePath));\n  },\n};\n',
+      ],
+      [
+        "api/controllers/attachments/assigned.js",
+        'const fs = require("node:fs");\nconst action = {\n  inputs: { filename: { type: "string", required: true } },\n  fn(inputs, exits) {\n    const selected = inputs.filename;\n    const filePath = `attachments/${selected}`;\n    return exits.success(fs.readFileSync(filePath));\n  },\n};\nmodule.exports = action;\n',
+      ],
+      [
+        "api/controllers/attachments/destructured.js",
+        'import { readFileSync } from "node:fs";\nexport default {\n  inputs: { filename: { type: "string", required: true } },\n  async fn({ filename: selected }, exits) {\n    return exits.success(readFileSync(selected));\n  },\n};\n',
+      ],
+      [
+        "api/controllers/attachments/arrow.js",
+        'import { readFileSync } from "node:fs";\nmodule.exports = {\n  inputs: { filename: { type: "string", required: true } },\n  fn: async (inputs, exits) => {\n    return exits.success(readFileSync(inputs["filename"]));\n  },\n};\n',
+      ],
+      [
+        "api/helpers/read-thumbnail.js",
+        'const fs = require("node:fs");\nmodule.exports = { inputs: { filename: { type: "string" } }, fn(inputs) { return fs.readFileSync(inputs.filename); } };\n',
+      ],
+      [
+        "api/controllers/attachments/undeclared.js",
+        'const fs = require("node:fs");\nmodule.exports = { inputs: { id: { type: "string" } }, fn(inputs) { return fs.readFileSync(inputs.filename); } };\n',
+      ],
+      [
+        "api/controllers/attachments/reassigned.js",
+        'const fs = require("node:fs");\nmodule.exports = { inputs: { filename: { type: "string" } }, fn(inputs) { let selected = inputs.filename; selected = "welcome.txt"; return fs.readFileSync(selected); } };\n',
+      ],
+      [
+        "api/controllers/attachments/fixed-map.js",
+        'const fs = require("node:fs");\nmodule.exports = { inputs: { filename: { type: "string" } }, fn(inputs) { const selected = { welcome: "welcome.txt" }[inputs.filename]; return fs.readFileSync("welcome.txt"); } };\n',
+      ],
+      [
+        "api/controllers/attachments/string-lookalike.js",
+        'const fs = require("node:fs");\nmodule.exports = { inputs: { filename: { type: "string" } }, fn(inputs) { return fs.readFileSync("inputs.filename"); } };\n',
+      ],
+      [
+        "lib/machine.js",
+        'const fs = require("node:fs");\nmodule.exports = { inputs: { filename: { type: "string" } }, fn(inputs) { return fs.readFileSync(inputs.filename); } };\n',
+      ],
+    ];
+    for (const [path, contents] of cases) {
+      await writeRepositoryFile(repository, path, contents);
+    }
+
+    const records = pathRecords(await buildResidualRiskInventory(repository));
+    const sails = records.filter(
+      (record) =>
+        record.frameworkModel?.source.kind === "sails-action2-declared-input",
+    );
+    expect(sails.map(({ path }) => path).sort()).toEqual([
+      "api/controllers/attachments/arrow.js",
+      "api/controllers/attachments/assigned.js",
+      "api/controllers/attachments/destructured.js",
+      "api/controllers/attachments/direct.js",
+    ]);
+    expect(
+      sails.every(
+        (record) =>
+          record.frameworkModel?.id === "node-http-path" &&
+          record.frameworkModel.scope === "same-file" &&
+          record.frameworkModel.sink.cweIds.join() === "CWE-22",
+      ),
+    ).toBeTrue();
+  });
+
   test("teaches exact path arguments and containment limits", () => {
     const prompt = scanQualityGatePrompt(
       JSON.stringify({ frameworkModel: { id: "node-http-path" } }),
     );
     expect(prompt).toContain("For node-http-path and python-web-path rows");
+    expect(prompt).toContain("sails-action2-declared-input");
+    expect(prompt).toContain("helper/machine modules");
+    expect(prompt).toContain(
+      "explicit route or enabled blueprint action route",
+    );
     expect(prompt).toContain("file contents or encoding arguments");
     expect(prompt).toContain("path.isAbsolute alone");
     expect(prompt).toContain("os.path.commonprefix is not component-aware");

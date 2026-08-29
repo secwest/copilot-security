@@ -198,3 +198,30 @@ jobs:
       - name: Execute bounded exploit or negative-control witness
         working-directory: benchmarks/fixtures/${{ matrix.fixture }}
         run: npm run witness
+
+  sails-action2-fixtures:
+    name: Sails Action2 witness / ${{ matrix.os }} / ${{ matrix.fixture }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        fixture:
+          - node-sails-action2-path-traversal
+          - node-sails-action2-fixed-thumbnail
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "22"
+
+      - name: Execute bounded exploit or fixed-path control witness
+        working-directory: benchmarks/fixtures/${{ matrix.fixture }}
+        run: npm run witness

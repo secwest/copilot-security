@@ -2,6 +2,84 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Model declared Sails Action2 request inputs
+
+**Comparator evidence.** A current CodeQL gap report used the pre-fix Planka
+thumbnail flow for CVE-2022-2653 to show that `js/path-injection` recognized
+the filesystem sink but missed Sails Action2 request data exposed as
+`inputs.filename`. CodeQL merged
+[`JS: Model Sails Action2 inputs as remote sources`](https://github.com/github/codeql/pull/22142)
+on 2026-07-29. Its implementation deliberately requires a bulk-exported action
+object below `api/controllers`, an object-valued `inputs` declaration, an `fn`
+function, and a property read from the first parameter whose name is declared
+by that same action. Helper-shaped modules and undeclared reads are controls.
+Sails' official
+[`Actions and controllers`](https://sailsjs.com/documentation/concepts/actions-and-controllers)
+documentation confirms that Action2 definitions live below `api/controllers`,
+declare automatically validated request parameters in `inputs`, and consume
+them in `fn`. Its separate routing documentation confirms that route binding or
+enabled blueprint action routing is still required for public reachability.
+
+**Accepted source boundary.** Copilot Security adopts that narrow source for
+the existing exact `node-http-path` family. The file must use a supported
+JavaScript or TypeScript extension below `api/controllers`; exactly one
+`module.exports` or default export must resolve to an unambiguous object; the
+object must contain literal, non-spread `inputs` and one supported `fn`; and the
+accessed input must be declared by that object. Method shorthand, function
+properties, arrow properties, an assigned action export, a plain first
+parameter, and an exact destructured alias are supported. Computed declarations,
+spreads, duplicate exports, defaults, rest bindings, undeclared reads, helper
+and machine paths, and unresolved shapes remain unmodeled.
+
+The source tracker preserves direct and bracket reads plus bounded straight-
+line declaration propagation, including multiline `path.join` construction.
+A later assignment that no longer depends on the declared input kills that
+identifier. The sink remains an exact live official `node:fs`, `fs`, or
+filesystem-promises binding in one of the API's documented path argument
+positions; contents, encoding, lookalikes, shadows, and replaced bindings do
+not become path sinks. This is a local high-confidence source extension, not a
+claim that every object named `inputs` is remote or that helpers are request
+handlers.
+
+**Validation and impact boundary.** The structured source kind is
+`sails-action2-declared-input`; the model remains `node-http-path` with CWE-22.
+Review must prove an exact route or enabled blueprint exposure for concrete
+remote reachability and then apply the existing decoding, absolute/reset,
+component containment, link, race, permission, tenant, and unauthorized-effect
+checks. `path.join` is construction rather than confinement. A fixed server-
+owned complete path, an exact allowlist, or component-aware canonical
+containment remains counterevidence.
+
+**Safe benchmark.** The strict positive and control both include the same
+explicit Sails route and Action2 declaration. The positive lets
+`../../private/deployment-secret.txt` cross `path.join` into exact
+`readFileSync`; its witness reads only `SAILS_ACTION2_VICTIM_MARKER` committed
+inside the fixture. The control accepts the same bytes but reads only
+`cover-256.jpg`. Neither witness writes, starts a listener, contacts a network,
+uses credentials, or leaves the fixture. Direct regressions cover four accepted
+handler/export forms and five controls. The canonical corpus is now 176 pairs,
+352 cases, and 1,056 repeated positions; the hosted Node matrix gains four
+Ubuntu/Windows witness jobs.
+
+**Acceptance evidence.** The focused Sails lane passes 25 tests and 2,557
+assertions on Windows and native WSL, including both witnesses. The full managed
+Windows run selects 2,043 tests across 210 files, with 2,013 passes and 27
+intentional skips. Two known Git/ACL tests cannot cross the managed host
+boundary but pass all 48 cases with native access. One unrelated repository-cap
+stress case exceeded its 60-second budget only under aggregate load and passes
+all eight cases alone in 27.66 seconds. This separates environmental and load
+pressure from the new source model instead of treating a red aggregate as
+acceptance.
+
+Two compiled self-inventories are byte-identical: 256 JSONL records, 585,125
+bytes, SHA-256
+`159f2d148694e8436a673475e9f288b4b2afddef0e9c732c5a8158030f7b678a`,
+and one structured Sails record. The production dependency audit reports no
+known vulnerabilities. Windows and Linux installed-package checks each validate
+299 archive entries, public import, CLI execution, and all 79 bundled plugin
+files. The Linux-native package is 2,375,997 bytes with SHA-256
+`1a9fbc434a268bf100028d2e8f587ed22ada5a11158b65d06561cc3c92a2eecd`.
+
 ## 2026-08-28 — Model process runtime options and executable search paths
 
 **Counterexamples and authoritative semantics.** Fixed command and argv values

@@ -558,6 +558,10 @@ describe("effectiveness benchmark", () => {
         "node-mcp-v2-fixed-executable-search",
       ],
       [
+        "node-sails-action2-path-traversal",
+        "node-sails-action2-fixed-thumbnail",
+      ],
+      [
         "python-asyncssh-scp-download-path-traversal",
         "python-asyncssh-scp-repaired-control",
       ],

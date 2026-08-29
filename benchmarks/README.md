@@ -2804,6 +2804,38 @@ while each control rejects that key and still returns the public `welcome`
 document. These witnesses exercise actual Node and Linux Python filesystem
 semantics without network access or third-party services.
 
+`node-sails-action2-path-manifest.json` adds a strict framework-source pair to
+the same exact Node filesystem sink discipline. The positive exports an
+Action2 object from `api/controllers`, declares `filename`, binds an explicit
+route, and carries `inputs.filename` through multiline `path.join` into
+`readFileSync`. The control retains the route, declaration, handler, and
+traversal-shaped input but reads the fixed `cover-256.jpg` path. Helpers,
+machine-shaped files outside `api/controllers`, undeclared properties,
+reassignment, assigned exports, destructuring, function/arrow properties, and
+bracket access have direct regression coverage. Concrete findings must prove
+route or blueprint exposure rather than assuming it from a filename.
+
+Run the strict Sails pair with:
+
+```powershell
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/node-sails-action2-path-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-sails-action2-path `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
+
+The dependency-free witnesses run with `npm run witness` in each fixture. The
+positive reads only its checked-in victim marker; the control proves the same
+parent-segment string cannot influence the fixed path. Neither writes or uses
+the network.
+
 Run the live scanner lane with an inner model-turn deadline below the outer
 process deadline:
 

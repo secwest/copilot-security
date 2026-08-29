@@ -1,0 +1,8 @@
+{
+  "name": "node-sails-action2-path-traversal",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "witness": "node witness.mjs"
+  }
+}

@@ -616,6 +616,18 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model gpt-5.6-terra --effort high --mode deep
 ```
 
+The Node filesystem model also recognizes declared Sails.js Action2 inputs as
+request data, but only for an unambiguous exported action object below
+`api/controllers` whose object-valued `inputs` declaration and `fn` first
+parameter agree on the exact property. Helper/machine modules, undeclared or
+computed inputs, spreads, ambiguous exports, unsupported handlers, and
+overwritten values remain controls. Route or blueprint exposure must still be
+validated before claiming remote reachability. The strict
+`benchmarks/node-sails-action2-path-manifest.json` pair contrasts a declared
+filename reaching exact `node:fs` `readFileSync` with the same input ignored in
+favor of one fixed server-owned thumbnail; both witnesses are local, bounded,
+read-only, and run on Windows and Linux.
+
 The Node MCP tool-handler lane uses the real stable TypeScript server package
 and separates nineteen tool-controlled execution and data boundaries across
 nineteen matched pairs. One pair contrasts a tool

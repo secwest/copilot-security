@@ -6,6 +6,43 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed the Sails.js Action2 request-source false negative for Node filesystem
+  paths. Exported action objects under `api/controllers` now treat only reads
+  of properties declared by the same object-valued `inputs` block from the
+  `fn` handler's first parameter as `sails-action2-declared-input`. The source
+  reaches only exact official `node:fs` path positions and retains the existing
+  CWE-22 path model, controls, and finding-quality obligations.
+- Kept the model fail closed on helper and machine modules, files outside
+  `api/controllers`, undeclared or computed input properties, spread or
+  ambiguous action objects, multiple exports, unsupported handler shapes,
+  and values overwritten before the sink. Direct, assigned-export, ordinary
+  parameter, destructured-alias, function-property, arrow-property, bracket,
+  multiline, and bounded straight-line propagation forms are covered. Route
+  or blueprint exposure remains an independent validation obligation rather
+  than being inferred from the action filename.
+- Added a strict three-run exploit/control benchmark and executable Windows/
+  Linux witnesses. The positive's declared `filename` crosses `path.join` into
+  `readFileSync` and reads only a checked-in inert marker outside the thumbnail
+  directory. The topology-matched control receives the same traversal-shaped
+  value but reads one fixed server-owned thumbnail. The canonical benchmark
+  advances to 176 pairs, 352 cases, and 1,056 repeated positions; Node CI adds
+  four dedicated Sails witness jobs.
+- Completed local Sails acceptance. The focused model and benchmark lane passes
+  25 tests with 2,557 assertions on both Windows and native WSL. The managed
+  Windows aggregate selects 2,043 tests across 210 files: 2,013 pass and 27
+  intentionally skip; its two established Git/ACL sandbox cases pass 48/48
+  with native Windows access, and an unrelated candidate-cap stress test that
+  timed out under aggregate load passes 8/8 alone in 27.66 seconds. Formatting,
+  generated-model drift, TypeScript, the clean build, both executable
+  witnesses, and the production advisory audit pass.
+- Two compiled repository self-inventories are byte-identical at 256 records,
+  585,125 bytes, and SHA-256
+  `159f2d148694e8436a673475e9f288b4b2afddef0e9c732c5a8158030f7b678a`;
+  exactly one structured Sails Action2 record survives the repository cap.
+  Windows and Linux package checks each validate 299 entries, fresh installed
+  public import, CLI execution, and all 79 bundled-plugin files. The final
+  Linux-native archive is 2,375,997 bytes with SHA-256
+  `1a9fbc434a268bf100028d2e8f587ed22ada5a11158b65d06561cc3c92a2eecd`.
 - Closed two process-environment blind spots in official MCP tool-input flows.
   Exact `options.env.NODE_OPTIONS` now reaches the existing argument-injection
   model for non-shell `spawn`, `spawnSync`, `execFile`, and `execFileSync`

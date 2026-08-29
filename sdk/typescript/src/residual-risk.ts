@@ -17798,6 +17798,276 @@ function nodePrototypeCopySink(
   return { targetExpression, sourceExpressions, controls };
 }
 
+interface NodeSailsAction2Handler {
+  startLine: number;
+  endLine: number;
+  inputReceiver?: string;
+  destructuredInputs: ReadonlyMap<string, string>;
+  declaredInputs: ReadonlySet<string>;
+}
+
+function nodeSailsAction2ControllerPath(path: string): boolean {
+  return /(?:^|\/)api\/controllers\/.+\.(?:cjs|js|jsx|mjs|ts|tsx)$/iu.test(
+    path.replaceAll("\\", "/"),
+  );
+}
+
+function nodeSailsAction2ExportedObject(
+  lines: readonly string[],
+): JavascriptResolvedExpression | undefined {
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const candidates: JavascriptResolvedExpression[] = [];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const prefix =
+      /^\s*module\s*\.\s*exports\s*=\s*/u.exec(structural) ??
+      /^\s*export\s+default\s+/u.exec(structural);
+    if (prefix === null) continue;
+    const original = codeLines
+      .slice(index, Math.min(lines.length, index + 128))
+      .join("\n");
+    const originalPrefix =
+      /^\s*module\s*\.\s*exports\s*=\s*/u.exec(original) ??
+      /^\s*export\s+default\s+/u.exec(original);
+    if (originalPrefix === null) continue;
+    const expressionStart = originalPrefix[0].length;
+    const expressionEnd = javascriptExpressionEnd(original, expressionStart);
+    const expression = original.slice(expressionStart, expressionEnd).trim();
+    if (expression === "") continue;
+    const resolved = resolveJavascriptExpression(lines, expression, index + 1);
+    if (
+      resolved !== undefined &&
+      javascriptCompositePrefix(resolved.value, "{", "}") !== undefined
+    ) {
+      candidates.push(resolved);
+    }
+  }
+  const unique = candidates.filter(
+    (candidate, index, all) =>
+      all.findIndex(
+        (other) =>
+          other.line === candidate.line && other.value === candidate.value,
+      ) === index,
+  );
+  return unique.length === 1 ? unique[0] : undefined;
+}
+
+function nodeSailsAction2Handler(
+  path: string,
+  lines: readonly string[],
+): NodeSailsAction2Handler | undefined {
+  if (!nodeSailsAction2ControllerPath(path)) return undefined;
+  const action = nodeSailsAction2ExportedObject(lines);
+  if (action === undefined) return undefined;
+  const object = javascriptCompositePrefix(action.value, "{", "}");
+  if (object === undefined) return undefined;
+  const entries = javascriptDelimitedEntries(object.slice(1, -1));
+  if (entries.some((entry) => /^\.\.\.|^\s*\[/u.test(entry.value))) {
+    return undefined;
+  }
+  const inputEntries = entries.filter((entry) =>
+    /^\s*(?:inputs|["']inputs["'])\s*:/u.test(entry.value),
+  );
+  const functionEntries = entries.filter((entry) =>
+    /^\s*(?:(?:async\s+)?fn\s*\(|(?:fn|["']fn["'])\s*:)/u.test(entry.value),
+  );
+  if (inputEntries.length !== 1 || functionEntries.length !== 1) {
+    return undefined;
+  }
+  const inputEntry = inputEntries[0]!;
+  const inputValue = inputEntry.value.replace(
+    /^\s*(?:inputs|["']inputs["'])\s*:\s*/u,
+    "",
+  );
+  const inputObject = javascriptCompositePrefix(inputValue, "{", "}");
+  if (inputObject === undefined) return undefined;
+  const inputProperties = javascriptDelimitedEntries(inputObject.slice(1, -1));
+  if (
+    inputProperties.length === 0 ||
+    inputProperties.some(
+      (entry) =>
+        /^\.\.\.|^\s*\[/u.test(entry.value) ||
+        !/^\s*(?:[A-Za-z_$][\w$]*|["'][^"']+["'])\s*:/u.test(entry.value),
+    )
+  ) {
+    return undefined;
+  }
+  const declaredInputs = new Set(
+    inputProperties.flatMap((entry) => {
+      const property =
+        /^\s*([A-Za-z_$][\w$]*)\s*:/u.exec(entry.value) ??
+        /^\s*["']([^"']+)["']\s*:/u.exec(entry.value);
+      return property?.[1] === undefined ? [] : [property[1]];
+    }),
+  );
+  if (declaredInputs.size !== inputProperties.length) return undefined;
+
+  const functionEntry = functionEntries[0]!;
+  const method =
+    /^\s*(?:async\s+)?fn\s*\(([^)]*)\)\s*\{/u.exec(functionEntry.value) ??
+    /^\s*(?:fn|["']fn["'])\s*:\s*(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(([^)]*)\)\s*\{/u.exec(
+      functionEntry.value,
+    ) ??
+    /^\s*(?:fn|["']fn["'])\s*:\s*(?:async\s*)?\(([^)]*)\)\s*=>\s*\{/u.exec(
+      functionEntry.value,
+    );
+  if (method?.[1] === undefined) return undefined;
+  const parameters = splitJavascriptArguments(method[1]);
+  const firstParameter = parameters[0]?.trim();
+  if (firstParameter === undefined || firstParameter === "") return undefined;
+  const startLine =
+    action.line +
+    (object.slice(0, functionEntry.offset + 1).match(/\n/gu)?.length ?? 0);
+  const endLine = startLine + (functionEntry.value.match(/\n/gu)?.length ?? 0);
+  if (/^[A-Za-z_$][\w$]*$/u.test(firstParameter)) {
+    return {
+      startLine,
+      endLine,
+      inputReceiver: firstParameter,
+      destructuredInputs: new Map(),
+      declaredInputs,
+    };
+  }
+  const destructured = javascriptCompositePrefix(firstParameter, "{", "}");
+  if (destructured === undefined) return undefined;
+  const bindings = javascriptDelimitedEntries(destructured.slice(1, -1));
+  const destructuredInputs = new Map<string, string>();
+  for (const binding of bindings) {
+    if (/\.\.\.|=|\[/u.test(binding.value)) return undefined;
+    const parsed =
+      /^\s*([A-Za-z_$][\w$]*)\s*$/u.exec(binding.value) ??
+      /^\s*([A-Za-z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)\s*$/u.exec(
+        binding.value,
+      );
+    const declared = parsed?.[1];
+    const local = parsed?.[2] ?? parsed?.[1];
+    if (
+      declared === undefined ||
+      local === undefined ||
+      !declaredInputs.has(declared) ||
+      destructuredInputs.has(local)
+    ) {
+      return undefined;
+    }
+    destructuredInputs.set(local, declared);
+  }
+  return destructuredInputs.size === 0
+    ? undefined
+    : {
+        startLine,
+        endLine,
+        destructuredInputs,
+        declaredInputs,
+      };
+}
+
+function nodeSailsAction2DeclaredInputOffset(
+  expression: string,
+  handler: NodeSailsAction2Handler,
+): number | undefined {
+  const structural = javascriptStructuralLines(expression.split(/\r?\n/u)).join(
+    "\n",
+  );
+  if (handler.inputReceiver !== undefined) {
+    const receiver = escapeRegularExpression(handler.inputReceiver);
+    for (const input of handler.declaredInputs) {
+      const property = escapeRegularExpression(input);
+      const dot = new RegExp(
+        `\\b${receiver}\\s*(?:\\?\\.)?\\s*\\.\\s*${property}\\b`,
+        "u",
+      ).exec(structural);
+      if (dot?.index !== undefined) return dot.index;
+      const bracket = new RegExp(
+        `\\b${receiver}\\s*\\[\\s*(["'])${property}\\1\\s*\\]`,
+        "gu",
+      );
+      for (const match of expression.matchAll(bracket)) {
+        if (match.index === undefined || match[1] === undefined) continue;
+        const quotedKey = match[0].indexOf(match[1]);
+        const prefix = structural.slice(match.index, match.index + quotedKey);
+        if (new RegExp(`\\b${receiver}\\s*\\[\\s*$`, "u").test(prefix)) {
+          return match.index;
+        }
+      }
+    }
+  }
+  for (const local of handler.destructuredInputs.keys()) {
+    const match = new RegExp(
+      `\\b${escapeRegularExpression(local)}\\b`,
+      "u",
+    ).exec(structural);
+    if (match?.index !== undefined) return match.index;
+  }
+  return undefined;
+}
+
+function nodeSailsAction2ExpressionUsesDeclaredInput(
+  expression: string,
+  handler: NodeSailsAction2Handler,
+): boolean {
+  return nodeSailsAction2DeclaredInputOffset(expression, handler) !== undefined;
+}
+
+function nodeSailsAction2DeclaredInputSource(
+  path: string,
+  lines: readonly string[],
+  sinkLine: number,
+  sinkExpression: string,
+): { kind: string; line: number } | undefined {
+  const handler = nodeSailsAction2Handler(path, lines);
+  if (
+    handler === undefined ||
+    sinkLine < handler.startLine ||
+    sinkLine > handler.endLine
+  ) {
+    return undefined;
+  }
+  if (nodeSailsAction2ExpressionUsesDeclaredInput(sinkExpression, handler)) {
+    return { kind: "sails-action2-declared-input", line: sinkLine };
+  }
+  const beforeSink = javascriptCodeLinesWithoutComments(
+    lines.slice(handler.startLine - 1, sinkLine - 1),
+  ).join("\n");
+  const reaching = new Map<string, number>();
+  for (const local of handler.destructuredInputs.keys()) {
+    reaching.set(local, handler.startLine);
+  }
+  const assignments = [
+    ...beforeSink.matchAll(
+      /\b(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*=(?!=|>)\s*([^;]+);/gu,
+    ),
+  ];
+  for (const assignment of assignments) {
+    const target = assignment[1];
+    const value = assignment[2];
+    if (target === undefined || value === undefined) continue;
+    const preceding = beforeSink[(assignment.index ?? 0) - 1] ?? "";
+    if (preceding === "." || preceding === "?") continue;
+    const assignmentLine =
+      handler.startLine +
+      (beforeSink.slice(0, assignment.index ?? 0).match(/\n/gu)?.length ?? 0);
+    const directOffset = nodeSailsAction2DeclaredInputOffset(value, handler);
+    const propagated = [...reaching.entries()].find(([identifier]) =>
+      lineReferencesIdentifier(value, identifier),
+    );
+    if (directOffset !== undefined) {
+      reaching.set(
+        target,
+        assignmentLine +
+          (value.slice(0, directOffset).match(/\n/gu)?.length ?? 0),
+      );
+    } else if (propagated !== undefined) reaching.set(target, propagated[1]);
+    else reaching.delete(target);
+  }
+  const source = [...reaching.entries()].find(([identifier]) =>
+    lineReferencesIdentifier(sinkExpression, identifier),
+  );
+  return source === undefined
+    ? undefined
+    : { kind: "sails-action2-declared-input", line: source[1] };
+}
+
 function frameworkDataflowRecords(
   path: string,
   lines: readonly string[],
@@ -17871,6 +18141,10 @@ function frameworkDataflowRecords(
             pythonFastApiParameterSourceHasOfficialBinding(lines),
         )
       : rawMatchedSources;
+    const sailsAction2Source =
+      model.id === "node-http-path"
+        ? nodeSailsAction2Handler(path, lines)
+        : undefined;
     const sources =
       extension === ".cs" && model.id.startsWith("aspnet-http-")
         ? [...matchedSources, ...dotnetRazorPageSources(files, path, lines)]
@@ -17883,7 +18157,15 @@ function frameworkDataflowRecords(
                 ) === index,
             )
             .slice(0, 16)
-        : matchedSources;
+        : sailsAction2Source === undefined
+          ? matchedSources
+          : [
+              ...matchedSources,
+              {
+                kind: "sails-action2-declared-input",
+                line: sailsAction2Source.startLine,
+              },
+            ];
     const sinks =
       model.id === "node-http-path" || model.id === "python-web-path"
         ? exactFilesystemPathSinkLines(lines, model.id, 32)
@@ -18699,6 +18981,15 @@ function frameworkDataflowRecords(
         nodeTarLink?.sourceExpressions.join("\n") ??
         nodeTarMemberSelection?.sourceExpressions.join("\n") ??
         nodeTarDecompressionDos?.sourceExpressions.join("\n");
+      const nodeSailsAction2PathSource =
+        model.id === "node-http-path" && nodePathSink !== undefined
+          ? nodeSailsAction2DeclaredInputSource(
+              path,
+              lines,
+              sink.line,
+              nodePathSink.expressions.join("\n"),
+            )
+          : undefined;
       const nonDsetSource =
         nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -18750,7 +19041,8 @@ function frameworkDataflowRecords(
                         )
                       : model.id === "node-http-path" &&
                           nodePathSink !== undefined
-                        ? nodePathSink.expressions
+                        ? nodeSailsAction2PathSource ??
+                          nodePathSink.expressions
                             .map((expression) =>
                               modeledObjectLookupSource(
                                 lines,
