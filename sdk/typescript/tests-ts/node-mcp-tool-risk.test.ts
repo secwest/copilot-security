@@ -95,6 +95,8 @@ describe("Node MCP tool-input security model", () => {
       "node-mcp-v2-fixed-file",
       "node-mcp-v2-runtime-alias-argument-injection",
       "node-mcp-v2-runtime-alias-argument-data",
+      "node-mcp-v2-imported-runtime-argument-injection",
+      "node-mcp-v2-imported-runtime-argument-data",
     ]);
     expect(manifest.cases[0]?.expected).toHaveLength(1);
     expect(manifest.cases[1]?.expected).toEqual([]);
@@ -157,6 +159,15 @@ describe("Node MCP tool-input security model", () => {
       lineTolerance: 1,
     });
     expect(manifest.cases[21]?.expected).toEqual([]);
+    expect(manifest.cases[22]?.expected).toHaveLength(1);
+    expect(manifest.cases[22]?.expected[0]).toMatchObject({
+      cwe: ["CWE-88", "CWE-94"],
+      acceptableSeverities: ["critical", "high"],
+      path: "src/server.mjs",
+      line: 12,
+      lineTolerance: 1,
+    });
+    expect(manifest.cases[23]?.expected).toEqual([]);
 
     const canonical = JSON.parse(
       await readFile(join(benchmarkRoot, "manifest.json"), "utf8"),
@@ -173,7 +184,7 @@ describe("Node MCP tool-input security model", () => {
         }>;
       }>;
     };
-    for (const index of [8, 10, 12]) {
+    for (const index of [8, 10, 12, 20, 22]) {
       const specializedCase = manifest.cases[index]!;
       const canonicalCase = canonical.cases.find(
         ({ id }) => id === specializedCase.id,
@@ -186,7 +197,7 @@ describe("Node MCP tool-input security model", () => {
       });
     }
 
-    for (const index of [6, 7, 8, 9, 10, 11, 12, 13]) {
+    for (const index of [6, 7, 8, 9, 10, 11, 12, 13, 20, 21, 22, 23]) {
       const fixture = join(
         benchmarkRoot,
         "fixtures",
@@ -214,6 +225,8 @@ describe("Node MCP tool-input security model", () => {
       [14, "node-mcp-tool-regex-injection"],
       [16, "node-mcp-tool-ssrf"],
       [18, "node-mcp-tool-path-traversal"],
+      [20, "node-mcp-tool-argument-injection"],
+      [22, "node-mcp-tool-argument-injection"],
     ] as const) {
       const vulnerable = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index]!.id),
@@ -261,6 +274,11 @@ describe("Node MCP tool-input security model", () => {
           path: manifest.cases[index]!.expected[0]!.path,
           line: manifest.cases[index]!.expected[0]!.line,
         });
+      }
+      if (index === 22) {
+        expect(vulnerable).toContain("mcp-tool-node-process-binding");
+        expect(vulnerable).toContain("nodeProcess<-node:process");
+        expect(vulnerable).toContain("runtime=nodeProcess.execPath");
       }
       const control = await buildResidualRiskInventory(
         join(benchmarkRoot, "fixtures", manifest.cases[index + 1]!.id),
@@ -321,6 +339,167 @@ describe("Node MCP tool-input security model", () => {
         symbol: "runtime=process.execPath",
       }),
     );
+  });
+
+  test("preserves Node interpreter-option injection through the official process module", () => {
+    const source = v2(
+      '    const runtime = nodeProcess.execPath;\n    return execFile(runtime, ["-e", "process.stdout.write(process.argv[1])", command]);',
+    ).replace(
+      'import { exec, execFile, spawn } from "node:child_process";',
+      'import { exec, execFile, spawn } from "node:child_process";\nimport nodeProcess from "node:process";',
+    );
+    const found = records(source);
+    expect(found).toHaveLength(1);
+    expect(found[0]?.frameworkModel.id).toBe(
+      "node-mcp-tool-argument-injection",
+    );
+    expect(found[0]?.frameworkModel.propagators).toContainEqual(
+      expect.objectContaining({
+        kind: "mcp-tool-node-process-binding",
+        symbol: "nodeProcess<-node:process",
+      }),
+    );
+    expect(found[0]?.frameworkModel.propagators).toContainEqual(
+      expect.objectContaining({
+        kind: "mcp-tool-node-runtime",
+        symbol: "runtime=nodeProcess.execPath",
+      }),
+    );
+  });
+
+  test("supports exact official node:process ESM, CommonJS, and TypeScript bindings", () => {
+    const args = '["-e", "process.stdout.write(process.argv[1])", command]';
+    const cases = [
+      {
+        declaration: 'import process from "node:process";',
+        body: `    return execFile(process.execPath, ${args});`,
+        binding: "process<-node:process",
+      },
+      {
+        declaration: 'import * as nodeProcess from "node:process";',
+        body: `    return execFile(nodeProcess.execPath, ${args});`,
+        binding: "nodeProcess<-node:process",
+      },
+      {
+        declaration:
+          'import { execPath as importedRuntime } from "node:process";',
+        body: `    return execFile(importedRuntime, ${args});`,
+        binding: "importedRuntime<-node:process.execPath",
+      },
+      {
+        declaration:
+          'import nodeProcess, { execPath as importedRuntime } from "node:process";',
+        body: `    return execFile(importedRuntime, ${args});`,
+        binding: "importedRuntime<-node:process.execPath",
+      },
+      {
+        declaration:
+          'import nodeProcess, * as processNamespace from "node:process";',
+        body: `    return execFile(processNamespace.execPath, ${args});`,
+        binding: "processNamespace<-node:process",
+      },
+      {
+        declaration: 'const nodeProcess = require("node:process");',
+        body: `    const runtime = nodeProcess.execPath;\n    return execFile(runtime, ${args});`,
+        binding: "nodeProcess<-node:process",
+      },
+      {
+        declaration:
+          'const { execPath: importedRuntime } = require("node:process");',
+        body: `    return execFile(importedRuntime, ${args});`,
+        binding: "importedRuntime<-node:process.execPath",
+      },
+      {
+        declaration: 'import nodeProcess = require("node:process");',
+        body: `    const runtime: string = nodeProcess.execPath;\n    return spawn(runtime, ${args});`,
+        binding: "nodeProcess<-node:process",
+      },
+    ];
+    for (const { declaration, body, binding } of cases) {
+      const source = v2(body).replace(
+        'import { exec, execFile, spawn } from "node:child_process";',
+        `import { exec, execFile, spawn } from "node:child_process";\n${declaration}`,
+      );
+      const found = records(source);
+      expect(found).toHaveLength(1);
+      expect(found[0]?.frameworkModel.id).toBe(
+        "node-mcp-tool-argument-injection",
+      );
+      expect(found[0]?.frameworkModel.propagators).toContainEqual(
+        expect.objectContaining({
+          kind: "mcp-tool-node-process-binding",
+          symbol: binding,
+        }),
+      );
+    }
+  });
+
+  test("requires a live exact node:process binding and end-of-options boundary", () => {
+    const args = '["-e", "process.stdout.write(process.argv[1])", command]';
+    const source = (declaration: string, body: string) =>
+      v2(body).replace(
+        'import { exec, execFile, spawn } from "node:child_process";',
+        `import { exec, execFile, spawn } from "node:child_process";\n${declaration}`,
+      );
+    const rejected = [
+      source(
+        'import nodeProcess from "process";',
+        `    return execFile(nodeProcess.execPath, ${args});`,
+      ),
+      source(
+        'import nodeProcess from "process-polyfill";',
+        `    return execFile(nodeProcess.execPath, ${args});`,
+      ),
+      source(
+        'import nodeProcess from "node:process";',
+        `    const nodeProcess = { execPath: "node" };\n    return execFile(nodeProcess.execPath, ${args});`,
+      ),
+      source(
+        'let nodeProcess = require("node:process");',
+        `    nodeProcess = { execPath: "node" };\n    return execFile(nodeProcess.execPath, ${args});`,
+      ),
+      source(
+        'const nodeProcess = require("node:process");',
+        `    nodeProcess.execPath = "node";\n    return execFile(nodeProcess.execPath, ${args});`,
+      ),
+      source(
+        'let nodeProcess = require("node:process");',
+        `    [nodeProcess] = [{ execPath: "node" }];\n    return execFile(nodeProcess.execPath, ${args});`,
+      ),
+      source(
+        'const nodeProcess = require("node:process");',
+        `    nodeProcess["execPath"] = "node";\n    return execFile(nodeProcess.execPath, ${args});`,
+      ),
+      source(
+        'const nodeProcess = require("node:process");',
+        `    delete nodeProcess.execPath;\n    return execFile(nodeProcess.execPath, ${args});`,
+      ),
+      source(
+        'const nodeProcess = require("node:process");',
+        `    Object.defineProperty(nodeProcess, "execPath", { value: "node" });\n    return execFile(nodeProcess.execPath, ${args});`,
+      ),
+      source(
+        'const nodeProcess = require("node:process");',
+        `    Object.assign(nodeProcess, { execPath: "node" });\n    return execFile(nodeProcess.execPath, ${args});`,
+      ),
+      source(
+        'let { execPath: importedRuntime } = require("node:process");',
+        `    [importedRuntime] = ["node"];\n    return execFile(importedRuntime, ${args});`,
+      ),
+      source(
+        'import nodeProcess from "node:process";',
+        `    const runtime = nodeProcess["execPath"];\n    return execFile(runtime, ${args});`,
+      ),
+      source(
+        'import nodeProcess from "node:process";',
+        `    const runtime = nodeProcess.execPath;\n    const forwarded = runtime;\n    return execFile(forwarded, ${args});`,
+      ),
+      source(
+        'import nodeProcess from "node:process";',
+        `    return execFile(nodeProcess.execPath, ["-e", "process.stdout.write(process.argv[1])", "--", command]);`,
+      ),
+    ];
+    for (const candidate of rejected) expect(records(candidate)).toEqual([]);
   });
 
   test("supports module-scope and typed Node runtime aliases", () => {
@@ -1916,8 +2095,11 @@ const example = "server.registerTool('run', { inputSchema: schema }, ({ command 
       join(tmpdir(), "copilot-security-node-mcp-argument-quality-scan-"),
     );
     try {
-      const application = `${v2("    return runCommand(command);")}
-const runtime = process.execPath;
+      const application = `${v2("    return runCommand(command);").replace(
+        'import { exec, execFile, spawn } from "node:child_process";',
+        'import { exec, execFile, spawn } from "node:child_process";\nimport nodeProcess from "node:process";',
+      )}
+const runtime = nodeProcess.execPath;
 function runCommand(value: string) {
   return execFile(runtime, ["-e", "process.stdout.write(process.argv[1])", value]);
 }
@@ -2023,14 +2205,24 @@ function runCommand(value: string) {
         "helper call",
       ]);
       expect(helperRows[1]?.missingValidationTextAnyOf).toContainEqual([
-        "runtime=process.execPath",
+        "runtime=nodeProcess.execPath",
         "stable runtime alias",
         "process.execPath alias",
       ]);
       expect(helperRows[1]?.missingAttackPathTextAnyOf).toContainEqual([
-        "runtime=process.execPath",
+        "runtime=nodeProcess.execPath",
         "stable runtime alias",
         "process.execPath alias",
+      ]);
+      expect(helperRows[1]?.missingValidationTextAnyOf).toContainEqual([
+        "nodeProcess<-node:process",
+        "node:process binding",
+        "official process module",
+      ]);
+      expect(helperRows[1]?.missingAttackPathTextAnyOf).toContainEqual([
+        "nodeProcess<-node:process",
+        "node:process binding",
+        "official process module",
       ]);
 
       const helperClosure = `${closure} The same-file helper call runCommand carries the value to the sink.`;
@@ -2046,9 +2238,25 @@ function runCommand(value: string) {
         repository,
         inventory,
       );
-      expect(missingRuntimeAlias).toContain("runtime=process.execPath");
+      expect(missingRuntimeAlias).toContain("runtime=nodeProcess.execPath");
+      expect(missingRuntimeAlias).toContain("nodeProcess<-node:process");
 
-      const completeClosure = `${helperClosure} The stable runtime alias runtime=process.execPath preserves the exact Node executable identity.`;
+      const runtimeClosure = `${helperClosure} The stable runtime alias runtime=nodeProcess.execPath preserves the exact Node executable identity.`;
+      finding.validation.summary = runtimeClosure;
+      finding.attackPath.summary = runtimeClosure;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+        "utf8",
+      );
+      const missingProcessBinding = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      expect(missingProcessBinding).toContain("nodeProcess<-node:process");
+
+      const completeClosure = `${runtimeClosure} The exact binding nodeProcess<-node:process comes from the official process module.`;
       finding.validation.summary = completeClosure;
       finding.attackPath.summary = completeClosure;
       await writeFile(
@@ -2639,6 +2847,10 @@ function runCommand(value: string) {
     expect(prompt).toContain("stable process.execPath alias");
     expect(prompt).toContain("runtime-alias symbol");
     expect(prompt).toContain("local process shadow");
+    expect(prompt).toContain("mcp-tool-node-process-binding");
+    expect(prompt).toContain("official node:process");
+    expect(prompt).toContain("official process module");
+    expect(prompt).toContain("exact binding symbol");
     expect(prompt).toContain("end-of-options");
     expect(prompt).toContain("node:vm is not a security mechanism");
     expect(prompt).toContain("inert construction");

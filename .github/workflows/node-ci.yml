@@ -161,6 +161,8 @@ jobs:
           - node-mcp-v2-fixed-file
           - node-mcp-v2-runtime-alias-argument-injection
           - node-mcp-v2-runtime-alias-argument-data
+          - node-mcp-v2-imported-runtime-argument-injection
+          - node-mcp-v2-imported-runtime-argument-data
 
     steps:
       - name: Checkout repository

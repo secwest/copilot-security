@@ -6,6 +6,47 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed the remaining deterministic MCP Node interpreter-option false
+  negative when the runtime comes from an exact official `node:process`
+  binding. The detector now proves ESM default, namespace, and named
+  `execPath` imports, including combined default-plus-named or namespace ESM
+  declarations; CommonJS namespace and destructured `execPath` requires; and
+  TypeScript import-equals bindings, either directly or through one stable
+  runtime alias. Positive rows preserve separate exact process-binding and
+  runtime-alias provenance edges.
+- Kept imported-runtime inference fail closed: only the unambiguous
+  `node:process` built-in specifier is accepted. The unprefixed `process`
+  package, other modules, local shadows, binding or member mutation, computed
+  access, duplicate bindings, destructuring assignment, reflective mutation,
+  alias chains, and nested ambiguous aliases suppress the row. Finding-quality
+  correction requires both validation and attack-path fields to repeat the
+  exact imported binding or explicitly identify the official `node:process`
+  binding, independently of any runtime alias and the Node option boundary.
+- Added a frozen MCP SDK 2.0.0/Zod 4.4.3 exploit/control pair with a reachable
+  stdio launcher, default `node:process` import, module-scope runtime alias, and
+  one same-file helper. The exploit proves that inert `--version` is consumed
+  in Node's option region; the control inserts exact `--` and preserves the
+  same values as data. Both witnesses and the 85-test/3,144-assertion focused
+  lane pass on Windows and WSL. The strict MCP lane now contains 24 cases
+  across 12 matched pairs, and the canonical corpus contains 168 pairs, 336
+  cases, and 1,008 repeated positions.
+- The complete managed-shell Windows suite selects 2,031 tests across 210
+  files: 2,002 pass, 27 intentionally skip, and two host-permission cases fail
+  closed. The exact permission-sensitive files pass 48/48 with host access.
+  Generated-model drift, TypeScript, and build checks are clean.
+- The compiled exploit emits exactly one
+  `node-mcp-tool-argument-injection` row at `src/server.mjs:12`, with
+  `execFile:argv[2]`, CWE-88/CWE-94, registration,
+  `nodeProcess<-node:process`, `runtime=nodeProcess.execPath`, and same-file
+  helper evidence; the independently rooted exact-`--` control emits no row.
+  Two root self-inventories complete in 20.074 and 20.144 seconds and are
+  byte-identical at 256 rows, 584,350 bytes, 243 structured records, 13 lexical
+  leads, and SHA-256
+  `d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+  Production audit reports no known vulnerability. The rebuilt 299-entry,
+  2,355,981-byte package at SHA-256
+  `bbf920709c8f2597899c0768389e9016d76dc28a6403a0848e2bec91781754bd`
+  passes isolated install, public import, CLI, and all 79 bundled-plugin checks.
 - Closed a deterministic MCP argument-injection false negative when a fixed
   Node executable is preserved through one stable local or module-scope alias,
   such as `const runtime = process.execPath`, before tool-controlled values

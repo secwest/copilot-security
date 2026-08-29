@@ -45998,6 +45998,14 @@ function nodeMcpToolEvidenceRequirements(
       ];
       validation.push(runtime);
       attackPath.push(runtime);
+    } else if (kind === "mcp-tool-node-process-binding") {
+      const binding = [
+        symbol,
+        "node:process binding",
+        "official process module",
+      ];
+      validation.push(binding);
+      attackPath.push(binding);
     } else if (kind === "mcp-tool-code-construction") {
       const construction = [
         symbol,

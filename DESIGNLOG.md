@@ -2,6 +2,74 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Prove official imported Node runtime bindings
+
+**Comparative gap.** The runtime-option model recognized the live global
+`process.execPath` and one stable alias, but not the equivalent runtime obtained
+from Node's official `node:process` module. Node documents both ESM and
+CommonJS access to that built-in and defines `process.execPath` as the resolved
+absolute executable that started the process. The CLI still parses values
+before exact `--` as Node options. A red regression using
+`import nodeProcess from "node:process"` and
+`const runtime = nodeProcess.execPath` therefore executed the same inert
+`--version` witness while the previous detector emitted no row.
+
+**Accepted provenance proof.** The model accepts only the exact
+`node:process` specifier and records a distinct
+`mcp-tool-node-process-binding` edge. Supported syntax comprises ESM default
+and namespace bindings, ESM named `execPath` bindings including local aliases,
+combined default-plus-named or namespace ESM declarations, CommonJS namespace
+and destructured `execPath` bindings, and TypeScript import-equals. The exact
+imported capability may be the executable directly or
+the initializer of one stable runtime alias. Direct global `process.execPath`
+and its existing one-alias form remain independent supported paths. Validation
+and attack-path correction must close the exact process binding separately
+from a recorded runtime alias, the MCP registration/helper path, and the Node
+option-region boundary.
+
+**Fail-closed boundaries.** The unprefixed `process` specifier is deliberately
+excluded because package/polyfill resolution does not provide the same
+unambiguous built-in identity. Other module lookalikes, duplicate local import
+bindings, local shadow declarations, binding reassignment, destructuring or
+member assignment, bracket mutation, deletion, `Object.defineProperty`,
+`Object.assign`, computed member access, alias chains, and nested ambiguous
+aliases suppress structured inference. Cross-file runtime storage,
+object-property storage, and arbitrary alias graphs remain unsupported rather
+than being treated as safe. An exact `--` must still precede every tainted
+option-region value.
+
+**Executable benchmark.** The new matched twins pin MCP SDK 2.0.0 and Zod
+4.4.3 with frozen npm locks, a reachable stdio server, default
+`node:process` binding, module-scope runtime alias, one same-file helper,
+bounded output, and a timeout. The exploit omits `--` and observes Node's
+version; the control inserts `--` and observes the same fixed option-looking
+values as script data. Windows and WSL pass both witnesses without shell,
+filesystem, network, credential, persistence, or attacker-code effects. WSL
+also independently proves that default, namespace, and named `execPath`
+bindings equal the live runtime. The specialized corpus now contains 24 cases
+and 12 matched pairs; the canonical corpus has 168 pairs, 336 cases, and 1,008
+repeated positions.
+
+**Regression evidence.** Focused Windows and native WSL acceptance each pass
+85 tests and 3,144 assertions. Generated-model checking, TypeScript, and build
+are clean. The complete managed-shell Windows suite selects 2,031 tests across
+210 files: 2,002 pass, 27 intentional skips, and two expected environment-only
+permission failures. Rerunning those exact repository-metadata and Windows ACL
+files with host permissions passes 48 tests and 242 assertions. The compiled
+exploit produces one exact
+`node-mcp-tool-argument-injection`/CWE-88/CWE-94 row at
+`src/server.mjs:12`; its `execFile:argv[2]` sink preserves registration at line
+24, `nodeProcess<-node:process` at line 3,
+`runtime=nodeProcess.execPath` at line 6, and `runCommand` at line 31. The
+control produces no row. Two root inventories complete in 20.074 and 20.144
+seconds and are byte-identical at 256 rows, 584,350 bytes, 243 structured
+records, 13 lexical leads, and SHA-256
+`d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+Production audit finds no known vulnerability. Strict package inspection
+accepts 299 entries and an isolated install validates the public import, CLI,
+and all 79 bundled-plugin files. The archive is 2,355,981 bytes with SHA-256
+`bbf920709c8f2597899c0768389e9016d76dc28a6403a0848e2bec91781754bd`.
+
 ## 2026-08-28 — Preserve exact Node runtime identity through one stable alias
 
 **Comparative gap.** The command model already distinguished shell grammar

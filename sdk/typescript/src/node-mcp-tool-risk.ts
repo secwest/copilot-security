@@ -8,6 +8,7 @@ const MCP_MODULES = new Set([
   "@modelcontextprotocol/sdk/server/mcp.js",
 ]);
 const CHILD_PROCESS_MODULES = new Set(["child_process", "node:child_process"]);
+const PROCESS_MODULES = new Set(["node:process"]);
 const VM_MODULES = new Set(["vm", "node:vm"]);
 const WORKER_THREAD_MODULES = new Set([
   "worker_threads",
@@ -282,6 +283,7 @@ export function nodeMcpToolRiskRecords(
   if (registrations.length === 0) return [];
 
   const commandBindings = bindingsForModules(imports, CHILD_PROCESS_MODULES);
+  const processBindings = nodeProcessRuntimeBindings(imports);
   const evaluationBindings = bindingsForModules(imports, VM_MODULES);
   for (const [local, imported] of evaluationBindings.direct) {
     if (imported === "default") {
@@ -322,6 +324,7 @@ export function nodeMcpToolRiskRecords(
     source,
     structural,
     commandBindings,
+    processBindings,
     evaluationBindings,
     workerBindings,
     sqliteDatabases,
@@ -335,7 +338,14 @@ export function nodeMcpToolRiskRecords(
   for (const registration of registrations) {
     const taint = propagatedBindings(source, structural, registration);
     const sinks = [
-      ...commandSinks(source, structural, registration, taint, commandBindings),
+      ...commandSinks(
+        source,
+        structural,
+        registration,
+        taint,
+        commandBindings,
+        processBindings,
+      ),
       ...evaluationSinks(
         source,
         structural,
@@ -637,14 +647,19 @@ function matchingOpeningStructuralDelimiter(
 }
 
 interface ImportBindings {
-  named: Array<{ module: string; imported: string; local: string }>;
-  namespaces: Array<{ module: string; local: string }>;
+  named: Array<{
+    module: string;
+    imported: string;
+    local: string;
+    line: number;
+  }>;
+  namespaces: Array<{ module: string; local: string; line: number }>;
 }
 
 function importBindings(source: string, structural: string): ImportBindings {
   const result: ImportBindings = { named: [], namespaces: [] };
   const namedImport =
-    /\bimport\s*\{([^}]{0,8192})\}\s*from\s*["']([^"'\r\n]+)["']/gu;
+    /\bimport(?:\s+[A-Za-z_$][\w$]*\s*,)?\s*\{([^}]{0,8192})\}\s*from\s*["']([^"'\r\n]+)["']/gu;
   for (const statement of source.matchAll(namedImport)) {
     if (!visibleKeywordAt(structural, statement.index!, "import")) continue;
     for (const binding of maskJavascript(statement[1]!).split(",")) {
@@ -657,29 +672,32 @@ function importBindings(source: string, structural: string): ImportBindings {
           module: statement[2]!,
           imported: match[1]!,
           local: match[2] ?? match[1]!,
+          line: lineAt(source, statement.index!),
         });
       }
     }
   }
 
   const namespaceImport =
-    /\bimport\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s*["']([^"'\r\n]+)["']/gu;
+    /\bimport(?:\s+[A-Za-z_$][\w$]*\s*,)?\s*\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s*["']([^"'\r\n]+)["']/gu;
   for (const statement of source.matchAll(namespaceImport)) {
     if (!visibleKeywordAt(structural, statement.index!, "import")) continue;
     result.namespaces.push({
       module: statement[2]!,
       local: statement[1]!,
+      line: lineAt(source, statement.index!),
     });
   }
 
   const defaultImport =
-    /\bimport\s+([A-Za-z_$][\w$]*)\s+from\s*["']([^"'\r\n]+)["']/gu;
+    /\bimport\s+([A-Za-z_$][\w$]*)(?:\s*,\s*(?:\{[^}]{0,8192}\}|\*\s+as\s+[A-Za-z_$][\w$]*))?\s+from\s*["']([^"'\r\n]+)["']/gu;
   for (const statement of source.matchAll(defaultImport)) {
     if (!visibleKeywordAt(structural, statement.index!, "import")) continue;
     result.named.push({
       module: statement[2]!,
       imported: "default",
       local: statement[1]!,
+      line: lineAt(source, statement.index!),
     });
   }
 
@@ -696,6 +714,7 @@ function importBindings(source: string, structural: string): ImportBindings {
           module: statement[2]!,
           imported: match[1]!,
           local: match[2] ?? match[1]!,
+          line: lineAt(source, statement.index!),
         });
       }
     }
@@ -708,6 +727,7 @@ function importBindings(source: string, structural: string): ImportBindings {
     result.namespaces.push({
       module: statement[2]!,
       local: statement[1]!,
+      line: lineAt(source, statement.index!),
     });
   }
 
@@ -718,6 +738,7 @@ function importBindings(source: string, structural: string): ImportBindings {
     result.namespaces.push({
       module: statement[2]!,
       local: statement[1]!,
+      line: lineAt(source, statement.index!),
     });
   }
   return result;
@@ -770,6 +791,48 @@ function bindingsForModules(
         .map((binding) => [binding.local, binding.module]),
     ),
   };
+}
+
+interface NodeProcessRuntimeBinding {
+  kind: "execPath" | "namespace";
+  line: number;
+  symbol: string;
+}
+
+function nodeProcessRuntimeBindings(
+  imports: ImportBindings,
+): ReadonlyMap<string, NodeProcessRuntimeBinding> {
+  const bindings = new Map<string, NodeProcessRuntimeBinding>();
+  const all = [...imports.named, ...imports.namespaces];
+  const uniqueLocal = (local: string): boolean =>
+    all.filter((binding) => binding.local === local).length === 1;
+  for (const binding of imports.named) {
+    if (!PROCESS_MODULES.has(binding.module) || !uniqueLocal(binding.local))
+      continue;
+    if (binding.imported === "default") {
+      bindings.set(binding.local, {
+        kind: "namespace",
+        line: binding.line,
+        symbol: `${binding.local}<-node:process`,
+      });
+    } else if (binding.imported === "execPath") {
+      bindings.set(binding.local, {
+        kind: "execPath",
+        line: binding.line,
+        symbol: `${binding.local}<-node:process.execPath`,
+      });
+    }
+  }
+  for (const binding of imports.namespaces) {
+    if (!PROCESS_MODULES.has(binding.module) || !uniqueLocal(binding.local))
+      continue;
+    bindings.set(binding.local, {
+      kind: "namespace",
+      line: binding.line,
+      symbol: `${binding.local}<-node:process`,
+    });
+  }
+  return bindings;
 }
 
 function constructedServers(
@@ -1281,6 +1344,7 @@ function helperSummaries(
   source: string,
   structural: string,
   commandBindings: BindingSet,
+  processBindings: ReadonlyMap<string, NodeProcessRuntimeBinding>,
   evaluationBindings: BindingSet,
   workerBindings: BindingSet,
   sqliteDatabases: ReadonlyMap<string, SqliteDatabaseBinding>,
@@ -1313,6 +1377,7 @@ function helperSummaries(
         splitArgumentRanges(structural, open + 1, close),
         { start: bodyOpen + 1, end: bodyClose },
         commandBindings,
+        processBindings,
         evaluationBindings,
         workerBindings,
         sqliteDatabases,
@@ -1361,6 +1426,7 @@ function helperSummaries(
         splitArgumentRanges(structural, open + 1, close),
         { start: bodyOpen + 1, end: bodyClose },
         commandBindings,
+        processBindings,
         evaluationBindings,
         workerBindings,
         sqliteDatabases,
@@ -1382,6 +1448,7 @@ function summarizeHelperBody(
   parameterRanges: readonly Range[],
   body: Range,
   commandBindings: BindingSet,
+  processBindings: ReadonlyMap<string, NodeProcessRuntimeBinding>,
   evaluationBindings: BindingSet,
   workerBindings: BindingSet,
   sqliteDatabases: ReadonlyMap<string, SqliteDatabaseBinding>,
@@ -1433,6 +1500,7 @@ function summarizeHelperBody(
         helperRegistration,
         taint,
         commandBindings,
+        processBindings,
       ),
       ...evaluationSinks(
         source,
@@ -1675,6 +1743,7 @@ function commandSinks(
   registration: Registration,
   taint: readonly TaintBinding[],
   bindings: BindingSet,
+  processBindings: ReadonlyMap<string, NodeProcessRuntimeBinding>,
 ): Sink[] {
   const sinks: Sink[] = [];
   for (const call of boundCalls(
@@ -1738,6 +1807,7 @@ function commandSinks(
       structural,
       registration.body,
       first,
+      processBindings,
     );
     const interpreterOption =
       second === undefined || nodeRuntime === undefined
@@ -1758,11 +1828,7 @@ function commandSinks(
           ...interpreterOption.source,
           propagators: [
             ...interpreterOption.source.propagators,
-            {
-              kind: "mcp-tool-node-runtime",
-              line: nodeRuntime.line,
-              symbol: nodeRuntime.symbol,
-            },
+            ...nodeRuntime.propagators,
           ],
         },
       });
@@ -3103,8 +3169,12 @@ function bodyHasNamedParameter(
 }
 
 interface NodeRuntimeIdentity {
-  line: number;
-  symbol: string;
+  propagators: Array<{ kind: string; line: number; symbol: string }>;
+}
+
+interface ExactNodeRuntimeSource {
+  expression: string;
+  binding?: NodeProcessRuntimeBinding;
 }
 
 function structuralBraceDepthAt(structural: string, offset: number): number {
@@ -3137,6 +3207,113 @@ function processExecPathIsLive(
   );
 }
 
+function destructuringAssignmentReassigns(
+  structural: string,
+  name: string,
+  offset: number,
+): boolean {
+  const escaped = escapeRegularExpression(name);
+  const expression = new RegExp(
+    String.raw`(?:\[[^\]\n;]*\b${escaped}\b[^\]\n;]*\]|\{[^}\n;]*\b${escaped}\b[^}\n;]*\})\s*=(?!=|>)`,
+    "gu",
+  );
+  for (const match of structural.slice(0, offset).matchAll(expression)) {
+    const prefix = structural.slice(
+      Math.max(0, match.index! - 32),
+      match.index!,
+    );
+    if (/\b(?:const|let|var)\s*$/u.test(prefix)) continue;
+    return true;
+  }
+  return false;
+}
+
+function importedNodeProcessBindingIsLive(
+  structural: string,
+  body: Range,
+  local: string,
+  offset: number,
+  member: boolean,
+): boolean {
+  if (
+    bodyHasNamedParameter(structural, body, local) ||
+    localDeclarationBefore(structural, body, local, offset) ||
+    identifierWasReassigned(structural, local, offset) ||
+    destructuringAssignmentReassigns(structural, local, offset)
+  ) {
+    return false;
+  }
+  if (!member) return true;
+  const escaped = escapeRegularExpression(local);
+  const prefix = structural.slice(0, offset);
+  return (
+    !memberWasReassigned(structural, local, "execPath", offset) &&
+    !new RegExp(String.raw`\bdelete\s+${escaped}\s*\.\s*execPath\b`, "u").test(
+      prefix,
+    ) &&
+    !new RegExp(
+      String.raw`(?<![.\w$])${escaped}\s*\[[^\]\n]{0,64}\]\s*(?:=(?!=|>)|\+\+|--)`,
+      "u",
+    ).test(prefix) &&
+    !new RegExp(
+      String.raw`(?<![.\w$])Object\s*\.\s*(?:defineProperty|assign)\s*\(\s*${escaped}\s*,`,
+      "u",
+    ).test(prefix)
+  );
+}
+
+function exactNodeRuntimeSource(
+  structural: string,
+  body: Range,
+  range: Range,
+  processBindings: ReadonlyMap<string, NodeProcessRuntimeBinding>,
+): ExactNodeRuntimeSource | undefined {
+  const expression = structural.slice(range.start, range.end).trim();
+  const canonical = expression.replaceAll(/\s/gu, "");
+  const direct = canonical.match(/^([A-Za-z_$][\w$]*)$/u)?.[1];
+  if (direct !== undefined) {
+    const binding = processBindings.get(direct);
+    if (
+      binding?.kind !== "execPath" ||
+      !importedNodeProcessBindingIsLive(
+        structural,
+        body,
+        direct,
+        range.start,
+        false,
+      )
+    ) {
+      return undefined;
+    }
+    return { expression: direct, binding };
+  }
+
+  const root = canonical.match(/^([A-Za-z_$][\w$]*)\.execPath$/u)?.[1];
+  if (root === undefined) return undefined;
+  const binding = processBindings.get(root);
+  if (binding !== undefined) {
+    if (
+      binding.kind !== "namespace" ||
+      !importedNodeProcessBindingIsLive(
+        structural,
+        body,
+        root,
+        range.start,
+        true,
+      )
+    ) {
+      return undefined;
+    }
+    return { expression: `${root}.execPath`, binding };
+  }
+  if (
+    root !== "process" ||
+    !processExecPathIsLive(structural, body, range.start)
+  )
+    return undefined;
+  return { expression: "process.execPath" };
+}
+
 function runtimeAliasWasReassigned(
   structural: string,
   alias: string,
@@ -3161,13 +3338,36 @@ function nodeRuntimeExecutable(
   structural: string,
   body: Range,
   range: Range,
+  processBindings: ReadonlyMap<string, NodeProcessRuntimeBinding>,
 ): NodeRuntimeIdentity | undefined {
-  const expression = structural.slice(range.start, range.end).trim();
-  if (expression.replaceAll(/\s/gu, "") === "process.execPath") {
-    if (!processExecPathIsLive(structural, body, range.start)) return undefined;
-    return { line: lineAt(source, range.start), symbol: "process.execPath" };
+  const exact = exactNodeRuntimeSource(
+    structural,
+    body,
+    range,
+    processBindings,
+  );
+  if (exact !== undefined) {
+    return {
+      propagators: [
+        ...(exact.binding === undefined
+          ? []
+          : [
+              {
+                kind: "mcp-tool-node-process-binding",
+                line: exact.binding.line,
+                symbol: exact.binding.symbol,
+              },
+            ]),
+        {
+          kind: "mcp-tool-node-runtime",
+          line: lineAt(source, range.start),
+          symbol: exact.expression,
+        },
+      ],
+    };
   }
 
+  const expression = structural.slice(range.start, range.end).trim();
   const alias = expression.match(/^([A-Za-z_$][\w$]*)$/u)?.[1];
   if (alias === undefined || bodyHasNamedParameter(structural, body, alias))
     return undefined;
@@ -3189,7 +3389,7 @@ function nodeRuntimeExecutable(
       .slice(0, range.start)
       .matchAll(
         new RegExp(
-          String.raw`(?:^|[;{}\n])\s*(const|let|var)\s+${escaped}(?:\s*:[^=;\n]+)?\s*=\s*process\s*\.\s*execPath\s*(?:;|\n|$)`,
+          String.raw`(?:^|[;{}\n])\s*(const|let|var)\s+${escaped}(?:\s*:[^=;\n]+)?\s*=\s*([A-Za-z_$][\w$]*(?:\s*\.\s*execPath)?)\s*(?:;|\n|$)`,
           "gu",
         ),
       ),
@@ -3209,17 +3409,40 @@ function nodeRuntimeExecutable(
     declarationOffset < body.end &&
     declarationDepth === bodyDepth;
   if (declarationDepth !== 0 && !isTopLevelBodyDeclaration) return undefined;
-  const processOffset =
-    assignment.index! + assignment[0].lastIndexOf("process");
+  const sourceOffset =
+    assignment.index! + assignment[0].lastIndexOf(assignment[2]!);
+  const runtimeSource = exactNodeRuntimeSource(
+    structural,
+    body,
+    {
+      start: sourceOffset,
+      end: sourceOffset + assignment[2]!.length,
+    },
+    processBindings,
+  );
   if (
-    !processExecPathIsLive(structural, body, processOffset) ||
+    runtimeSource === undefined ||
     runtimeAliasWasReassigned(structural, alias, definitionEnd, range.start)
   ) {
     return undefined;
   }
   return {
-    line: lineAt(source, processOffset),
-    symbol: `${alias}=process.execPath`,
+    propagators: [
+      ...(runtimeSource.binding === undefined
+        ? []
+        : [
+            {
+              kind: "mcp-tool-node-process-binding",
+              line: runtimeSource.binding.line,
+              symbol: runtimeSource.binding.symbol,
+            },
+          ]),
+      {
+        kind: "mcp-tool-node-runtime",
+        line: lineAt(source, sourceOffset),
+        symbol: `${alias}=${runtimeSource.expression}`,
+      },
+    ],
   };
 }
 
