@@ -7639,6 +7639,69 @@
         "node-mcp-v2-imported-runtime-argument-data/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-fork-exec-argv-injection",
+      "description": "Official MCP TypeScript SDK v2 tool input crosses a same-file helper into child_process.fork's exact object-literal execArgv array while the forked module remains fixed.",
+      "fixture": "fixtures/node-mcp-v2-fork-exec-argv-injection",
+      "findingsPaths": [
+        "node-mcp-v2-fork-exec-argv-injection/run-1/findings.json",
+        "node-mcp-v2-fork-exec-argv-injection/run-2/findings.json",
+        "node-mcp-v2-fork-exec-argv-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-mcp-tool-argument-injection",
+          "cwe": ["CWE-88", "CWE-94"],
+          "locations": [
+            {
+              "path": "src/server.mjs",
+              "startLine": 11,
+              "endLine": 11,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["option", "tool input", "callback input"],
+            ["runDiagnostic", "same-file helper", "helper call"],
+            ["fork:options.execArgv", "options.execArgv"],
+            ["Node interpreter", "execArgv", "argument injection"],
+            ["fixed execArgv", "ordinary child argument", "module argument"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-diagnostic", "registerTool", "tool callback"],
+            ["runDiagnostic", "same-file helper", "helper call"],
+            ["fork:options.execArgv", "options.execArgv"],
+            ["Node interpreter", "execArgv", "argument injection"],
+            ["fixed execArgv", "ordinary child argument", "module argument"]
+          ],
+          "forbiddenText": [
+            "fork always uses a shell",
+            "ordinary fork arguments are Node options",
+            "literal -- inside execArgv is a matched repair",
+            "the witness executed attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fork-argument-data",
+      "description": "The topology-matched MCP v2 control preserves the fixed module, helper, IPC lifecycle, timeout, schema, and response while execArgv stays fixed and tool input is only ordinary module data.",
+      "fixture": "fixtures/node-mcp-v2-fork-argument-data",
+      "findingsPaths": [
+        "node-mcp-v2-fork-argument-data/run-1/findings.json",
+        "node-mcp-v2-fork-argument-data/run-2/findings.json",
+        "node-mcp-v2-fork-argument-data/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

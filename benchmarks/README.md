@@ -279,8 +279,8 @@ node ../../benchmarks/run-benchmark.mjs `
 
 ## Node MCP tool-handler security benchmark
 
-`node-mcp-tool-security-manifest.json` measures tool input at seven distinct
-capability boundaries across twelve matched pairs under perfect selected-run
+`node-mcp-tool-security-manifest.json` measures tool input at eight distinct
+capability boundaries across thirteen matched pairs under perfect selected-run
 gates. The command pair uses
 the real stable `@modelcontextprotocol/server` 2.0.0 API: the exploit carries a
 tool field through an arrow helper into `child_process.exec`, while its
@@ -298,7 +298,13 @@ after it. ESM default, namespace, and named `execPath` (including combined ESM
 declarations), CommonJS namespace and destructured `execPath`, and TypeScript
 import-equals forms are covered;
 unprefixed package lookalikes, mutation, computed access, chains, and ambiguous
-nested aliases remain negative cases. The code-evaluation pair carries an expression through a same-file
+nested aliases remain negative cases. An additional argument pair fixes the
+forked module while placing tool input in `child_process.fork`'s exact
+object-literal `execArgv` array. Its matched control keeps `execArgv` fixed and
+passes the identical option-looking value only as an ordinary module argument.
+The detector rejects dynamic or aliased options, spreads, computed or duplicate
+`execArgv` properties, replaced fork bindings, and unsupported overloads rather
+than inventing provenance. The code-evaluation pair carries an expression through a same-file
 helper into direct JavaScript `eval`; its control preserves expression input,
 the helper, arithmetic results, and the MCP response while an explicit numeric
 `+`/`*` grammar never evaluates the tool string as source. A second
@@ -334,7 +340,9 @@ load-generating patterns. The network witnesses use a
 random-port loopback listener, close it in all paths, and never contact an
 external or metadata address. The filesystem witnesses create and remove only
 fresh temporary trees containing synthetic marker data. Both SQLite pairs use
-only in-memory databases and fixed inert rows. Node CI executes all twenty-four
+only in-memory databases and fixed inert rows. The fork pair uses only the
+inert `--stack-trace-limit=77` runtime option and private IPC; it never loads an
+external module or enables an inspector. Node CI executes all twenty-six
 witnesses on Windows and Linux. Run the focused scanner benchmark with:
 
 ```powershell
@@ -343,7 +351,7 @@ node ../../benchmarks/run-benchmark.mjs `
   --results-dir C:\security-benchmarks\copilot-security-node-mcp-tools
 ```
 
-The versioned corpus currently contains 168 vulnerable/control pairs:
+The versioned corpus currently contains 169 vulnerable/control pairs:
 command injection, path traversal, archive symlink/hardlink write pivots with
 link rejection and root-anchored no-follow writes as the control, executable
 file upload/content placement, raw-DEFLATE data amplification with actual

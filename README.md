@@ -617,7 +617,7 @@ node benchmarks/run-benchmark.mjs `
 ```
 
 The Node MCP tool-handler lane uses the real stable TypeScript server package
-and separates seven tool-controlled capability boundaries across twelve matched
+and separates eight tool-controlled capability boundaries across thirteen matched
 pairs. One pair contrasts a tool
 field reaching a shell command with an explicit end-of-options argv control.
 A second proves that fixed `process.execPath` is still unsafe when a
@@ -628,7 +628,13 @@ reassignment while retaining the exact `--` control. A second companion proves
 the same boundary when the executable comes from an exact official
 `node:process` default, namespace, named, CommonJS, or TypeScript import-equals
 binding, while failing closed on the unprefixed package and ambiguous or
-mutated bindings. A third contrasts direct JavaScript evaluation with a fixed arithmetic
+mutated bindings. Another argument pair keeps the forked module fixed while
+contrasting tool input in `child_process.fork`'s Node-interpreter `execArgv`
+array with the same value passed only as an ordinary module argument. It
+accepts only exact official bindings and object-literal options, and rejects
+replaced bindings, options aliases, spreads, computed or duplicate
+`execArgv` properties, and unsupported overloads. A third contrasts direct
+JavaScript evaluation with a fixed arithmetic
 grammar that preserves useful calculation without treating the tool string as
 source. A fourth preserves compiled-Function invocation on both sides while
 contrasting tool-derived source with parsed numeric and allowlisted-operator

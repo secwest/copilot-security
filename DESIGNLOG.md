@@ -2,6 +2,79 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-28 — Distinguish fork execArgv from ordinary module arguments
+
+**Comparative gap.** Node documents
+[`child_process.fork(modulePath[, args][, options])`](https://nodejs.org/api/child_process.html#child_processforkmodulepath-args-options)
+as creating a new Node process, with `options.execArgv` passed to that Node
+executable and `args` passed to the module. It separately defines
+[`process.execArgv`](https://nodejs.org/api/process.html#processexecargv) as
+Node-specific command-line options rather than script arguments. The existing
+MCP model distinguished interpreter options for `execFile(process.execPath,
+argv)` but did not inspect fork's separate `execArgv` channel. A red regression
+therefore placed schema-validated tool input in exact fork options, observed an
+inert runtime-state change, and emitted no row. CodeQL's current generic
+[command-line injection](https://codeql.github.com/codeql-query-help/javascript/js-command-line-injection/)
+and [indirect command-line injection](https://codeql.github.com/codeql-query-help/javascript/js-indirect-command-line-injection/)
+guidance does not encode this fork-specific distinction. The public
+[`mcpaudit`](https://github.com/allenwu-blip/mcpaudit) scanner treats fork as a
+broad command-injection sink; this implementation instead proves the exact
+interpreter-option field and leaves ordinary module arguments clean.
+
+**Accepted structural proof.** The model requires a live exact official
+`fork` binding or namespace member and an exact supported overload. The
+two-argument form must use an object-literal options value. The three-argument
+form must use an exact array literal for module arguments and an object-literal
+options value. Within options, exactly one plain or quoted `execArgv` property
+must contain an exact array; the first live tool-derived element becomes the
+`fork:options.execArgv[index]` sink. A separate
+`mcp-tool-fork-exec-argv` propagator makes this boundary independently
+reviewable. The model reuses the argument-injection family and CWE-88/CWE-94
+because the tool value enters Node's own option parser before the fixed module.
+
+**Precision and fail-closed limits.** Tool data confined to fork's ordinary
+`args` array is module data and is not reported by this model. Reassigned or
+shadowed direct bindings, replaced namespace members, lookalike modules,
+dynamic or aliased options, nonliteral module-argument arrays, spreads,
+computed or duplicate properties, non-array `execArgv`, and unsupported
+overloads remain unresolved rather than inferred. Rejecting ambiguous objects
+also avoids property-order and spread-precedence guesses. A literal `--`
+inside `execArgv` is not treated as a safe boundary: unlike the matched
+control, it leaves subsequent entries within the executable's option channel
+and can affect which module Node starts. Future work may safely expand exact
+options-object aliases and model tool-controlled `execPath`, but neither is
+claimed here.
+
+**Executable and review evidence.** The topology-matched MCP SDK 2.0.0/Zod
+4.4.3 twins preserve the fixed module, registration, helper, schema, IPC,
+timeout, and response. The exploit supplies only the inert
+`--stack-trace-limit=77` option and observes `Error.stackTraceLimit === 77` in
+the child; the control passes the same bytes only in ordinary module arguments
+and observes an unchanged runtime limit. Windows and WSL pass both witnesses.
+No shell, external module, inspector, filesystem, network, credential,
+persistence, or attacker-code effect is used. Finding correction requires the
+exact fork boundary and the matched fixed-`execArgv` ordinary-argument control
+in both validation and attack-path fields. The focused Windows and WSL lanes
+each pass 88 tests and 3,210 assertions; TypeScript and generated-model checks pass. The
+strict MCP corpus now contains 26 cases and 13 pairs, while the canonical
+corpus contains 169 pairs, 338 cases, and 1,014 repeated scan positions.
+
+**Local acceptance.** The full managed-shell Windows run selects 2,034 tests
+across 210 files: 2,005 pass, 27 intentionally skip, and only the established
+Windows ACL and Git-metadata operations are denied by the managed host. Their
+exact native rerun passes 48 tests and 242 assertions. Formatting, generated
+models, TypeScript, the production build, and the production advisory audit
+are green. Two compiled root inventories complete in 19.213 and 20.078 seconds
+and are byte-identical at 256 rows, 584,350 bytes, 243 structured records, 13
+lexical leads, and SHA-256
+`d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+The root inventory remains cap-stable; exact fixture inventory and the strict
+manifest test independently retain the new row and reject its twin. Strict
+package inspection plus a fresh isolated installation validates 299 entries,
+public import, CLI, and all 79 bundled-plugin files. The temporary archive is
+2,359,970 bytes with SHA-256
+`88c4fd26468fc70c580cac864f687f66710e35836f0bcfadee1c4b7fa56b996e`.
+
 ## 2026-08-28 — Prove official imported Node runtime bindings
 
 **Comparative gap.** The runtime-option model recognized the live global

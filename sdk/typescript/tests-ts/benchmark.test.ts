@@ -533,6 +533,10 @@ describe("effectiveness benchmark", () => {
         "node-mcp-v2-imported-runtime-argument-data",
       ],
       [
+        "node-mcp-v2-fork-exec-argv-injection",
+        "node-mcp-v2-fork-argument-data",
+      ],
+      [
         "python-asyncssh-scp-download-path-traversal",
         "python-asyncssh-scp-repaired-control",
       ],

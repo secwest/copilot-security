@@ -169,6 +169,7 @@ type McpSinkKind =
   | "mcp-tool-worker-code-evaluation"
   | "mcp-tool-executable-selection"
   | "mcp-tool-filesystem-path"
+  | "mcp-tool-fork-exec-argv"
   | "mcp-tool-interpreter-option"
   | "mcp-tool-network-destination"
   | "mcp-tool-regular-expression"
@@ -387,7 +388,8 @@ export function nodeMcpToolRiskRecords(
                 ? "node-mcp-tool-sql-injection"
                 : sink.kind === "mcp-tool-filesystem-path"
                   ? "node-mcp-tool-path-traversal"
-                  : sink.kind === "mcp-tool-interpreter-option"
+                  : sink.kind === "mcp-tool-interpreter-option" ||
+                      sink.kind === "mcp-tool-fork-exec-argv"
                     ? "node-mcp-tool-argument-injection"
                     : "node-mcp-tool-command-injection";
       const startLine = Math.max(1, sink.line - CONTEXT_LINES_BEFORE);
@@ -412,7 +414,9 @@ export function nodeMcpToolRiskRecords(
                   : modelId === "node-mcp-tool-path-traversal"
                     ? "broken-control:mcp-tool-filesystem-path-not-confined"
                     : modelId === "node-mcp-tool-argument-injection"
-                      ? "broken-control:mcp-tool-interpreter-end-of-options-missing"
+                      ? sink.kind === "mcp-tool-fork-exec-argv"
+                        ? "broken-control:mcp-tool-fork-exec-argv-not-fixed"
+                        : "broken-control:mcp-tool-interpreter-end-of-options-missing"
                       : "broken-control:mcp-tool-command-data-boundary",
         ],
         priority:
@@ -1753,6 +1757,7 @@ function commandSinks(
     bindings,
     COMMAND_METHODS,
   )) {
+    if (!exactBindingCallIsLive(structural, registration.body, call)) continue;
     const first = call.arguments[0];
     if (first === undefined) continue;
     const firstTaint = liveTaintForRange(
@@ -1777,6 +1782,34 @@ function commandSinks(
         symbol: call.symbol,
         source: firstTaint,
       });
+      continue;
+    }
+    if (call.method === "fork") {
+      const injected = forkExecArgvInput(
+        source,
+        structural,
+        call,
+        registration,
+        taint,
+      );
+      if (injected !== undefined) {
+        sinks.push({
+          kind: "mcp-tool-fork-exec-argv",
+          line: call.line,
+          symbol: `${call.symbol}:options.execArgv[${injected.index}]`,
+          source: {
+            ...injected.source,
+            propagators: [
+              ...injected.source.propagators,
+              {
+                kind: "mcp-tool-fork-exec-argv",
+                line: call.line,
+                symbol: `${call.symbol}:options.execArgv`,
+              },
+            ],
+          },
+        });
+      }
       continue;
     }
     if (!ARRAY_ARGUMENT_METHODS.has(call.method)) continue;
@@ -1849,6 +1882,92 @@ function commandSinks(
     }
   }
   return sinks;
+}
+
+function exactObjectLiteralPropertyRange(
+  source: string,
+  structural: string,
+  range: Range,
+  property: string,
+): Range | undefined {
+  const object = trimRange(structural, range);
+  if (structural[object.start] !== "{") return undefined;
+  const close = matchingStructuralDelimiter(structural, object.start, "{", "}");
+  if (close !== object.end - 1) return undefined;
+  const key = escapeRegularExpression(property);
+  const propertyPrefix = new RegExp(
+    String.raw`^\s*(?:${key}|["']${key}["'])\s*:`,
+    "u",
+  );
+  let value: Range | undefined;
+  for (const entry of splitArgumentRanges(
+    structural,
+    object.start + 1,
+    close,
+  )) {
+    const raw = source.slice(entry.start, entry.end);
+    const shape = structural.slice(entry.start, entry.end).trimStart();
+    if (shape.startsWith("...") || shape.startsWith("[")) return undefined;
+    const match = propertyPrefix.exec(raw);
+    if (match === null) continue;
+    if (value !== undefined) return undefined;
+    const colon = entry.start + match[0].lastIndexOf(":");
+    value = trimSourceRange(source, { start: colon + 1, end: entry.end });
+  }
+  return value;
+}
+
+function forkExecArgvInput(
+  source: string,
+  structural: string,
+  call: CallSite,
+  registration: Registration,
+  taint: readonly TaintBinding[],
+): { index: number; source: TaintBinding } | undefined {
+  let options: Range | undefined;
+  if (call.arguments.length === 2) {
+    const second = trimRange(structural, call.arguments[1]!);
+    if (structural[second.start] === "{") options = second;
+  } else if (call.arguments.length === 3) {
+    const args = trimRange(structural, call.arguments[1]!);
+    const close =
+      structural[args.start] === "["
+        ? matchingStructuralDelimiter(structural, args.start, "[", "]")
+        : -1;
+    if (close === args.end - 1) options = call.arguments[2];
+  }
+  if (options === undefined) return undefined;
+  const execArgv = exactObjectLiteralPropertyRange(
+    source,
+    structural,
+    options,
+    "execArgv",
+  );
+  if (execArgv === undefined) return undefined;
+  const array = trimRange(structural, execArgv);
+  if (structural[array.start] !== "[") return undefined;
+  const close = matchingStructuralDelimiter(structural, array.start, "[", "]");
+  if (close !== array.end - 1) return undefined;
+  for (const [index, element] of splitArgumentRanges(
+    structural,
+    array.start + 1,
+    close,
+  ).entries()) {
+    const candidate = trimSourceRange(source, element);
+    if (
+      source.slice(candidate.start, candidate.end).trimStart().startsWith("...")
+    ) {
+      continue;
+    }
+    const input = liveTaintForRange(
+      structural,
+      candidate,
+      registration.body,
+      taint,
+    );
+    if (input !== undefined) return { index, source: input };
+  }
+  return undefined;
 }
 
 function evaluationSinks(

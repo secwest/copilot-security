@@ -598,6 +598,52 @@
       "id": "node-mcp-v2-imported-runtime-argument-data",
       "fixture": "fixtures/node-mcp-v2-imported-runtime-argument-data",
       "expected": []
+    },
+    {
+      "id": "node-mcp-v2-fork-exec-argv-injection",
+      "fixture": "fixtures/node-mcp-v2-fork-exec-argv-injection",
+      "expected": [
+        {
+          "title": "MCP tool input reaches child_process.fork execArgv through a same-file helper",
+          "cwe": ["CWE-88", "CWE-94"],
+          "acceptableSeverities": ["critical", "high"],
+          "path": "src/server.mjs",
+          "line": 11,
+          "lineTolerance": 1,
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["MCP", "McpServer", "registerTool"],
+            ["option", "tool input", "callback input"],
+            ["runDiagnostic", "same-file helper", "helper call"],
+            ["fork:options.execArgv", "options.execArgv"],
+            ["Node interpreter", "execArgv", "argument injection"],
+            ["fixed execArgv", "ordinary child argument", "module argument"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["MCP client", "model", "tool caller", "tool invocation"],
+            ["run-diagnostic", "registerTool", "tool callback"],
+            ["runDiagnostic", "same-file helper", "helper call"],
+            ["fork:options.execArgv", "options.execArgv"],
+            ["Node interpreter", "execArgv", "argument injection"],
+            ["fixed execArgv", "ordinary child argument", "module argument"]
+          ],
+          "forbiddenText": [
+            "fork always uses a shell",
+            "ordinary fork arguments are Node options",
+            "literal -- inside execArgv is a matched repair",
+            "the witness executed attacker code",
+            "proves the MCP server is publicly reachable",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-mcp-v2-fork-argument-data",
+      "fixture": "fixtures/node-mcp-v2-fork-argument-data",
+      "expected": []
     }
   ]
 }

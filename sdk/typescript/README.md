@@ -41,7 +41,9 @@ The package is ESM-only and provides:
   module shadows; an ownership-sensitive MCP model that preserves exact tool
   input through same-file helpers into process, including one stable exact
   `process.execPath` runtime alias and exact official `node:process`
-  default/namespace/named/CommonJS/import-equals binding, code-evaluation, regular-
+  default/namespace/named/CommonJS/import-equals binding, plus exact
+  `child_process.fork` object-literal `execArgv` boundaries that distinguish
+  Node runtime options from ordinary module arguments, code-evaluation, regular-
   expression, built-in `node:sqlite` direct and prepared SQL execution,
   filesystem-path, and network sinks;
   and request-to-PyYAML unsafe-loader hypotheses that preserve

@@ -6,6 +6,44 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a deterministic MCP argument-injection false negative for
+  tool-controlled entries in `child_process.fork(..., { execArgv: [...] })`.
+  The model proves a live official `node:child_process` or `child_process`
+  fork binding, an exact supported two- or three-argument overload, and an
+  exact object-literal `execArgv` array while preserving the fixed module as
+  counterevidence. It emits `mcp-tool-fork-exec-argv` with the exact
+  `fork:options.execArgv[index]` sink and CWE-88/CWE-94, while ordinary fork
+  arguments remain data rather than generic command-injection findings.
+- Kept fork inference fail closed: dynamic or aliased options, nonliteral
+  argument arrays, spreads, computed or duplicate `execArgv` properties,
+  non-array values, replaced or shadowed bindings and namespace members,
+  lookalike modules, and unsupported overloads suppress structured inference.
+  A literal `--` within `execArgv` is not accepted as the matched repair,
+  because later Node options can still change module selection. Finding
+  correction requires both validation and attack-path fields to repeat the
+  exact `fork:options.execArgv` edge and the fixed-`execArgv`/ordinary-module-
+  argument control.
+- Added a frozen MCP SDK 2.0.0/Zod 4.4.3 exploit/control pair with a reachable
+  stdio launcher, fixed child module, same-file helper, private IPC, bounded
+  timeout, and an inert `--stack-trace-limit=77` witness. Both witnesses pass
+  on Windows and WSL without shell, external modules, inspector, filesystem,
+  network, credentials, persistence, or attacker code. The focused Windows
+  and WSL lanes each pass 88 tests and 3,210 assertions. The strict MCP lane now contains 26 cases
+  across 13 matched pairs, and the canonical corpus contains 169 pairs, 338
+  cases, and 1,014 repeated positions.
+- The complete managed-shell Windows suite selects 2,034 tests across 210
+  files: 2,005 pass, 27 intentionally skip, and the two established
+  host-permission cases fail closed; their exact native rerun passes 48/48 with
+  242 assertions. Formatting, generated-model drift, TypeScript, the clean
+  production build, and the production advisory audit are green. Two compiled
+  root self-inventories complete in 19.213 and 20.078 seconds and remain
+  byte-identical at 256 rows, 584,350 bytes, 243 structured records, 13 lexical
+  leads, and SHA-256
+  `d6e35ce2196ec63e445da0449fb56dae7672f160e768901c34c5857e2548fc89`.
+  Strict package inspection and a fresh isolated install validate the public
+  import, CLI, all 79 bundled-plugin files, and a 299-entry, 2,359,970-byte
+  archive with SHA-256
+  `88c4fd26468fc70c580cac864f687f66710e35836f0bcfadee1c4b7fa56b996e`.
 - Closed the remaining deterministic MCP Node interpreter-option false
   negative when the runtime comes from an exact official `node:process`
   binding. The detector now proves ESM default, namespace, and named

@@ -4244,8 +4244,15 @@ const NODE_MCP_TOOL_COMMAND_FIELD_EVIDENCE_REQUIREMENTS = [
 const NODE_MCP_TOOL_ARGUMENT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
-  ["process.execPath", "Node interpreter", "execFile", "spawn"],
-  ["option region", "end-of-options", "argument injection"],
+  [
+    "process.execPath",
+    "Node interpreter",
+    "execFile",
+    "spawn",
+    "fork",
+    "execArgv",
+  ],
+  ["option region", "end-of-options", "execArgv", "argument injection"],
   ["CWE-88", "CWE-94", "interpreter option", "code execution"],
 ] as const;
 
@@ -46006,6 +46013,15 @@ function nodeMcpToolEvidenceRequirements(
       ];
       validation.push(binding);
       attackPath.push(binding);
+    } else if (kind === "mcp-tool-fork-exec-argv") {
+      const boundary = [symbol, "options.execArgv"];
+      const control = [
+        "fixed execArgv",
+        "ordinary child argument",
+        "module argument",
+      ];
+      validation.push(boundary, control);
+      attackPath.push(boundary, control);
     } else if (kind === "mcp-tool-code-construction") {
       const construction = [
         symbol,

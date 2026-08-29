@@ -163,6 +163,8 @@ jobs:
           - node-mcp-v2-runtime-alias-argument-data
           - node-mcp-v2-imported-runtime-argument-injection
           - node-mcp-v2-imported-runtime-argument-data
+          - node-mcp-v2-fork-exec-argv-injection
+          - node-mcp-v2-fork-argument-data
 
     steps:
       - name: Checkout repository
