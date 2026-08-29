@@ -53,6 +53,35 @@ positions. Reviewer gates require exact SPI identity, grammar, wrapper,
 execution and Result consumption, driver/dialect, parameterization
 counterevidence, and concrete unauthorized-read proof.
 
+**Acceptance evidence.** The focused SPI lane passes 11 tests and 39
+assertions. The widened Windows Java/framework/residual/canonical lane passes
+129 tests and 3,790 assertions with one expected symlink skip; the matching WSL
+lane passes all 62 selected tests and 2,727 assertions. Its existing
+whole-repository Spring R2DBC saturation case completes in 101.6 seconds on
+`/mnt/c`. Formatting, generated-model drift, TypeScript, the clean production
+build, both executable Maven fixtures, and the production advisory audit are
+green.
+
+Two scans of an isolated `git archive` of exact implementation checkpoint
+`172fd2110e9a55673fd0c126d67fd16d922e605d` each emit 256 structured records
+totaling 615,203 bytes with SHA-256
+`6516fc7896cedbeb84d63fb10380031d972da1bc3ee32fe2452b5c8baa5a50b5`.
+Exactly one `java-r2dbc-spi-sql` row retains the vulnerable wrapper path at
+line 17 and the bound twin retains none. The Linux-generated package contains
+299 entries, totals 2,362,017 bytes, and has SHA-256
+`9e97dcf6ab3c50d412173eaf86effb16e9578facfbbed30c3f2a2f8b1bd361f1`.
+Windows and WSL isolated installs validate the public import, CLI, and all 79
+bundled plugin files; the archive and exact-source scan tree are removed after
+validation.
+
+All hosted workflow families pass against the exact checkpoint: Node
+`33256439091`, container `33256439137`, Windows GUI `33256439233`, Linux GUI
+`33256439131`, Java `33256439112`, Kotlin `33256439138`, .NET `33256439103`, Go
+`33256439099`, Rust `33256439243`, Ruby `33256439205`, and PHP `33256439093`.
+All 91 Node jobs pass, including complete suites and package inspection/smoke
+across Windows, macOS, and the supported Ubuntu Node matrix. The repository is
+public on default branch `main`.
+
 ## 2026-08-29 — Bind Spring R2DBC SQL grammar to reactive execution
 
 **Measured miss and comparator evidence.** The previously compiled scanner

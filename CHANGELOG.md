@@ -28,6 +28,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
   proving the positive reads the seeded administrator row and the identical
   bound payload returns no row. The canonical benchmark advances to 179 pairs,
   358 cases, and 1,074 repeated positions.
+- Exact-checkpoint self-review of
+  `172fd2110e9a55673fd0c126d67fd16d922e605d` is byte-identical across two
+  runs at 256 structured rows, 615,203 bytes, and SHA-256
+  `6516fc7896cedbeb84d63fb10380031d972da1bc3ee32fe2452b5c8baa5a50b5`.
+  The new SPI exploit survives the global cap with its exact sink and the bound
+  control remains absent. The widened Windows lane passes 129 tests with 3,790
+  assertions and one expected symlink skip; WSL passes all 62 selected tests
+  with 2,727 assertions, including the known 101.6-second `/mnt/c`
+  whole-repository saturation check.
+- Formatting, generated-model drift, TypeScript, the clean build, both Maven
+  witnesses, and the production dependency audit pass. Windows and WSL both
+  validate the same Linux-generated 299-entry, 2,362,017-byte package with
+  SHA-256
+  `9e97dcf6ab3c50d412173eaf86effb16e9578facfbbed30c3f2a2f8b1bd361f1`
+  through isolated installation, public import, CLI execution, and all 79
+  bundled plugin files; the generated archive is removed afterward.
+- All eleven hosted workflow families pass for the exact implementation
+  checkpoint: Node `33256439091`, container `33256439137`, Windows GUI
+  `33256439233`, Linux GUI `33256439131`, Java `33256439112`, Kotlin
+  `33256439138`, .NET `33256439103`, Go `33256439099`, Rust `33256439243`,
+  Ruby `33256439205`, and PHP `33256439093`. All 91 Node jobs pass, including
+  complete suites and package validation on Windows, macOS, and the supported
+  Ubuntu Node matrix.
 - Added high-confidence Spring R2DBC SQL-injection discovery for the official
   `org.springframework.r2dbc.core.DatabaseClient`. The host traces Spring or
   servlet input only into the `sql` grammar argument, unwraps a simple
