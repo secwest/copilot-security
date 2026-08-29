@@ -69,8 +69,48 @@ FastAPI-to-`Connection.fetch` SQL-grammar model at `src/accounts.py:11`; the
 control changes only the boundary to fixed `$1` SQL and produces no model.
 Register both in the perfect-gate specialized manifest and canonical corpus.
 The corpus now contains 182 exploit/control pairs, 364 cases, and 1,092
-three-run positions. This increment improves scan completeness and its
-measurement; it does not close the standing effectiveness goal.
+three-run positions.
+
+**Acceptance and regression findings.** The first sandboxed aggregate exposed
+two real compatibility assumptions and two host-sandbox constraints. The Tokio
+benchmark still hard-coded the preceding 181-pair corpus size; advance it to 182. An explicit missing secret path can intentionally name a deleted Git
+object, producing the history-only rule above. Separately, the offline sandbox
+cannot set a private Windows ACL, and a benchmark test's deliberate
+`GIT_CONFIG_COUNT` override replaces the sandbox-injected `safe.directory`, so
+Git correctly rejects the `dr`-owned workspace as dubious. Both host-sensitive
+tests pass as the real user. After rebuilding and holding source timestamps
+fixed, the authoritative Windows suite passes 2,062 tests and 16,056
+assertions across 214 files in 788.29 seconds, with 29 intentional skips and
+zero failures. Formatting, generated-model drift, TypeScript, and a clean
+production build pass.
+
+Ubuntu/WSL passes all 119 applicable residual-risk, secret-candidate,
+secret-history, asyncpg, canonical-benchmark, and Tokio tests with 3,835
+assertions and no skips. This includes both real mode-`000` directory
+regressions. An extra attempt to run the Windows-oriented benchmark-runner file
+through `/mnt/c` exceeded its fixed 25-second child-process timeout in two
+cases; the same complete file passes 6/6 as the Windows repository owner and is
+not counted as Linux evidence.
+
+**Exact self-review and distribution.** Two independent compiled inventories
+of a disposable tracked-only archive of exact checkpoint
+`799e50e40948e17b3d2cf5d4110b190760df7bb0` take 34.43 and 43.77 seconds and
+are byte-identical at the repository cap: 256 rows, 616,394 bytes, and SHA-256
+`340f05b263eb3ae24dc72935ae50a397ea121f96e47b029e1bdf82347560a971`.
+The final npm archive has 299 entries, is 2,408,542 bytes, and has SHA-256
+`ce8fe898c2ad09744e4cb67e39c50597c4d97f3cd2716c933ec6c38abf6474b9`.
+Windows installs 67 dependencies and Ubuntu installs 75 in isolated temporary
+trees; both validate strict archive structure, the public import, executable
+CLI, and all 79 bundled plugin files. The production high-severity advisory
+audit reports no known vulnerabilities.
+
+**Hosted closure.** All eleven workflow families pass exact implementation
+checkpoint `799e50e`: Node `33272818126`, container `33272818116`, Windows GUI
+`33272818154`, Linux GUI `33272818132`, Java `33272818106`, Kotlin
+`33272818145`, .NET `33272818110`, Go `33272818115`, Rust `33272818118`, Ruby
+`33272818138`, and PHP `33272818107`. The Node run completes all 91 jobs with
+no non-success conclusion. This closes the source-completeness increment, not
+the standing scanner-effectiveness goal.
 
 ## 2026-08-29 — Preserve Tokio process identity without treating argv as shell grammar
 

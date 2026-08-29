@@ -38,6 +38,27 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `src/accounts.py:11`; its otherwise identical `$1` bound-parameter control
   emits none. The canonical benchmark advances to 182 pairs, 364 cases, and
   1,092 repeated positions.
+- Completed the authoritative source-completeness acceptance pass at exact
+  implementation checkpoint `799e50e40948e17b3d2cf5d4110b190760df7bb0`.
+  The real-user Windows suite passes 2,062 tests and 16,056 assertions across
+  214 files in 788.29 seconds, with 29 intentional platform/environment skips
+  and zero failures. The Linux-applicable residual, secret, history, asyncpg,
+  canonical, and Tokio lane passes all 119 tests and 3,835 assertions,
+  including both mode-`000` regressions.
+- Two independent compiled inventories of a tracked-only exact-head archive
+  are byte-identical at the 256-row cap: 616,394 bytes and SHA-256
+  `340f05b263eb3ae24dc72935ae50a397ea121f96e47b029e1bdf82347560a971`.
+  Windows and Ubuntu validate the same 299-entry, 2,408,542-byte npm archive
+  with SHA-256
+  `ce8fe898c2ad09744e4cb67e39c50597c4d97f3cd2716c933ec6c38abf6474b9`
+  through strict inspection, isolated installation, public import, CLI
+  execution, and all 79 bundled plugin files. The production advisory audit
+  reports no known vulnerabilities.
+- All eleven hosted workflow families pass exact implementation checkpoint
+  `799e50e`: Node `33272818126`, container `33272818116`, Windows GUI
+  `33272818154`, Linux GUI `33272818132`, Java `33272818106`, Kotlin
+  `33272818145`, .NET `33272818110`, Go `33272818115`, Rust `33272818118`,
+  Ruby `33272818138`, and PHP `33272818107`. All 91 Node jobs pass.
 - Extended the exact Rust web command model from `std::process::Command` to
   current `tokio::process::Command`. Direct, aliased, grouped, nested-grouped,
   module-qualified, and fully qualified Tokio bindings now retain the runtime
