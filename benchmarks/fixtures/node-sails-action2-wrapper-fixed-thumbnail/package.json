@@ -1,0 +1,9 @@
+{
+  "name": "node-sails-action2-wrapper-fixed-thumbnail",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "witness": "node witness.mjs"
+  }
+}

@@ -2,6 +2,61 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Require routed Action2 sources across relative wrappers
+
+**Measured miss and comparator boundary.** The first Sails increment modeled a
+declared Action2 property only when the Node filesystem sink remained in the
+controller. A new executable fixture passes `inputs.filename` into an imported
+`readThumbnail` wrapper whose parameter reaches `readFileSync`; the compiled
+checkpoint scanner emitted zero `node-http-path` rows for that real path. The
+upstream CodeQL change models the Action2 property as a general remote-flow
+source, so its normal interprocedural engine can carry the value, but its Sails
+model does not bind a custom or implicit route. That is a useful source-model
+boundary, not sufficient deployed reachability proof.
+
+Sails' official blueprint configuration documents that implicit action routes
+default to `false`, that `actions: true` creates shadow routes for application
+actions, and that custom routes can target blueprint actions regardless of the
+implicit setting. Consequently, an Action2 file alone is not treated as a
+remote source here. The deterministic host requires either an exact custom
+route value naming the controller action or literal `blueprints.actions: true`
+in the nearest app. Direct `module.exports.routes`/`blueprints` assignments and
+unambiguous object exports are supported, as are a direct action string and an
+object-valued route with one literal `action`. Missing configuration, the false
+default, literal false, dynamic or unrelated targets, duplicate/ambiguous
+objects, and Action2-shaped helpers fail closed.
+
+**Interprocedural boundary.** A routed declared property may enter one exact
+exported relative wrapper or the existing bounded two-relay graph. Each edge
+must resolve one repository-relative import and retain the same exact argument
+and parameter position without reassignment. The terminal summary still
+requires an official live Node filesystem binding and a documented path role.
+The route becomes the first structured propagator, followed by controller
+import, wrapper call, intermediate parameter/import/call triples, and terminal
+parameter. This makes route and dataflow evidence independently auditable while
+reusing the generic wrapper engine instead of inventing a Sails-only call
+graph.
+
+**Precision and effect boundary.** Exact custom routing or literal blueprint
+enablement establishes a configured request edge, not proof that the deployed
+route is internet-facing or policy-free. Review still checks environment-
+specific overrides, route replacement, middleware and policies, decoding,
+canonical component containment, links and races, permissions, tenant/object
+authorization, and the concrete unauthorized filesystem effect. A fixed
+complete server path remains counterevidence even when the routed controller
+passes an attacker-shaped value into the same wrapper.
+
+**Safe benchmark.** The new positive and control have source-identical routed
+controllers and one relative `readThumbnail` call. The positive wrapper joins
+the declared filename beneath the thumbnail directory and reads only the
+checked-in `SAILS_ACTION2_WRAPPER_VICTIM_MARKER`; the control wrapper selects
+only `cover-256.jpg`. Both are dependency-free, read-only, network-free, and
+cross-platform. Direct regressions additionally cover direct and object-valued
+custom routes, literal blueprint enablement, false and dynamic exposure,
+unexposed controllers, helper lookalikes, and a two-relay path. The canonical
+corpus is now 177 pairs, 354 cases, and 1,062 repeated positions; hosted Node CI
+adds four Ubuntu/Windows wrapper witness jobs.
+
 ## 2026-08-29 — Model declared Sails Action2 request inputs
 
 **Comparator evidence.** A current CodeQL gap report used the pre-fix Planka
@@ -43,12 +98,12 @@ handlers.
 
 **Validation and impact boundary.** The structured source kind is
 `sails-action2-declared-input`; the model remains `node-http-path` with CWE-22.
-Review must prove an exact route or enabled blueprint exposure for concrete
-remote reachability and then apply the existing decoding, absolute/reset,
-component containment, link, race, permission, tenant, and unauthorized-effect
-checks. `path.join` is construction rather than confinement. A fixed server-
-owned complete path, an exact allowlist, or component-aware canonical
-containment remains counterevidence.
+The host now proves an exact route or literal blueprint action enablement before
+emitting this source; review rechecks deployed overrides and then applies the
+existing decoding, absolute/reset, component containment, link, race,
+permission, tenant, and unauthorized-effect checks. `path.join` is construction
+rather than confinement. A fixed server-owned complete path, an exact allowlist,
+or component-aware canonical containment remains counterevidence.
 
 **Safe benchmark.** The strict positive and control both include the same
 explicit Sails route and Action2 declaration. The positive lets

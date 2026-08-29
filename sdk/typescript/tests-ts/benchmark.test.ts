@@ -562,6 +562,10 @@ describe("effectiveness benchmark", () => {
         "node-sails-action2-fixed-thumbnail",
       ],
       [
+        "node-sails-action2-wrapper-path-traversal",
+        "node-sails-action2-wrapper-fixed-thumbnail",
+      ],
+      [
         "python-asyncssh-scp-download-path-traversal",
         "python-asyncssh-scp-repaired-control",
       ],

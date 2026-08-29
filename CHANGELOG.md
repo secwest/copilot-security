@@ -6,6 +6,25 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed the routed Sails.js Action2 cross-file false negative measured by the
+  new executable fixture: the previous compiled scanner emitted zero Node path
+  rows when a declared controller input crossed one relative module call. The
+  host now carries that source through one exact exported wrapper or two exact
+  relative relays, preserving every import, call argument, parameter, and
+  official Node filesystem sink position.
+- Tightened Sails source reachability beyond the source-only comparator. A
+  controller input is emitted only when an exact custom route targets that
+  action or the nearest app has literal `blueprints.actions: true`; the official
+  default is false. Direct and object-valued routes plus direct and object-valued
+  configuration exports are supported. Missing, false, dynamic, unrelated, or
+  ambiguous exposure, helpers, machines, undeclared values, reassignment, and
+  fixed complete paths remain negative.
+- Added a second strict three-run Sails exploit/control pair. The positive reads
+  only a checked-in inert marker through the real wrapper; the topology-matched
+  control ignores the same traversal-shaped input and reads a fixed thumbnail.
+  The canonical benchmark advances to 177 pairs, 354 cases, and 1,062 repeated
+  positions. Four additional Ubuntu/Windows witness jobs expand the expected
+  hosted Node matrix to 91 jobs.
 - Closed the Sails.js Action2 request-source false negative for Node filesystem
   paths. Exported action objects under `api/controllers` now treat only reads
   of properties declared by the same object-valued `inputs` block from the
@@ -17,9 +36,9 @@ All notable scanner, application, benchmark, and operational changes are recorde
   ambiguous action objects, multiple exports, unsupported handler shapes,
   and values overwritten before the sink. Direct, assigned-export, ordinary
   parameter, destructured-alias, function-property, arrow-property, bracket,
-  multiline, and bounded straight-line propagation forms are covered. Route
-  or blueprint exposure remains an independent validation obligation rather
-  than being inferred from the action filename.
+  multiline, and bounded straight-line propagation forms are covered. Exact
+  custom-route or enabled-blueprint evidence is now a deterministic host gate;
+  environment overrides and deployed policy remain reviewer obligations.
 - Added a strict three-run exploit/control benchmark and executable Windows/
   Linux witnesses. The positive's declared `filename` crosses `path.join` into
   `readFileSync` and reads only a checked-in inert marker outside the thumbnail

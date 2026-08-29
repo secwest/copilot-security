@@ -8176,6 +8176,68 @@
         "node-sails-action2-fixed-thumbnail/run-3/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "node-sails-action2-wrapper-path-traversal",
+      "description": "An explicitly routed declared Sails Action2 filename crosses one exact relative wrapper into a node:fs path sink.",
+      "fixture": "fixtures/node-sails-action2-wrapper-path-traversal",
+      "findingsPaths": [
+        "node-sails-action2-wrapper-path-traversal/run-1/findings.json",
+        "node-sails-action2-wrapper-path-traversal/run-2/findings.json",
+        "node-sails-action2-wrapper-path-traversal/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "node-sails-action2-wrapper-path-traversal",
+          "cwe": ["CWE-22"],
+          "locations": [
+            {
+              "path": "services/thumbnail-reader.js",
+              "startLine": 10,
+              "endLine": 10,
+              "lineTolerance": 2
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Sails", "Action2", "api/controllers"],
+            ["config/routes.js", "explicit route", "wrapped-thumbnails"],
+            ["declared input", "inputs.filename", "filename"],
+            ["relative module", "readThumbnail", "wrapper"],
+            ["readFileSync", "filesystem path", "node:fs"],
+            ["fixed path", "allowlist", "containment"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["HTTP request", "custom route", "Action2 input"],
+            ["inputs.filename", "declared filename", "validated inputs"],
+            ["readThumbnail", "relative import", "wrapper parameter"],
+            ["path.join", "filePath", "thumbnail directory"],
+            ["readFileSync", "file read", "filesystem sink"],
+            ["parent segment", "directory escape", "CWE-22"]
+          ],
+          "forbiddenText": [
+            "every Sails helper input is an HTTP request",
+            "an unexposed Action2 is remotely reachable",
+            "path.join prevents traversal",
+            "the witness writes outside the repository",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "node-sails-action2-wrapper-fixed-thumbnail",
+      "description": "The same explicitly routed Action2 and relative wrapper read one fixed server-owned thumbnail.",
+      "fixture": "fixtures/node-sails-action2-wrapper-fixed-thumbnail",
+      "findingsPaths": [
+        "node-sails-action2-wrapper-fixed-thumbnail/run-1/findings.json",
+        "node-sails-action2-wrapper-fixed-thumbnail/run-2/findings.json",
+        "node-sails-action2-wrapper-fixed-thumbnail/run-3/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

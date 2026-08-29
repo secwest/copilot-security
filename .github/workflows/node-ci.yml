@@ -210,6 +210,8 @@ jobs:
         fixture:
           - node-sails-action2-path-traversal
           - node-sails-action2-fixed-thumbnail
+          - node-sails-action2-wrapper-path-traversal
+          - node-sails-action2-wrapper-fixed-thumbnail
 
     steps:
       - name: Checkout repository

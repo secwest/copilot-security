@@ -621,12 +621,16 @@ request data, but only for an unambiguous exported action object below
 `api/controllers` whose object-valued `inputs` declaration and `fn` first
 parameter agree on the exact property. Helper/machine modules, undeclared or
 computed inputs, spreads, ambiguous exports, unsupported handlers, and
-overwritten values remain controls. Route or blueprint exposure must still be
-validated before claiming remote reachability. The strict
-`benchmarks/node-sails-action2-path-manifest.json` pair contrasts a declared
-filename reaching exact `node:fs` `readFileSync` with the same input ignored in
-favor of one fixed server-owned thumbnail; both witnesses are local, bounded,
-read-only, and run on Windows and Linux.
+overwritten values remain controls. The host also requires an exact custom
+route target or literal `blueprints.actions: true`; the documented blueprint
+action-route default is false, so missing, false, dynamic, unrelated, and
+ambiguous exposure does not become a request source. The source can remain in
+the controller, cross one relative wrapper, or traverse two exact exported
+relative relays while preserving each import, argument, and parameter position.
+The strict `benchmarks/node-sails-action2-path-manifest.json` and
+`benchmarks/node-sails-action2-wrapper-path-manifest.json` pairs contrast exact
+`node:fs` `readFileSync` reachability with fixed server-owned paths. All four
+witnesses are local, bounded, read-only, and run on Windows and Linux.
 
 The Node MCP tool-handler lane uses the real stable TypeScript server package
 and separates nineteen tool-controlled execution and data boundaries across

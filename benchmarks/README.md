@@ -2813,7 +2813,8 @@ traversal-shaped input but reads the fixed `cover-256.jpg` path. Helpers,
 machine-shaped files outside `api/controllers`, undeclared properties,
 reassignment, assigned exports, destructuring, function/arrow properties, and
 bracket access have direct regression coverage. Concrete findings must prove
-route or blueprint exposure rather than assuming it from a filename.
+the recorded exact custom route or literal blueprint action-route enablement
+rather than assuming exposure from a filename.
 
 Run the strict Sails pair with:
 
@@ -2835,6 +2836,33 @@ The dependency-free witnesses run with `npm run witness` in each fixture. The
 positive reads only its checked-in victim marker; the control proves the same
 parent-segment string cannot influence the fixed path. Neither writes or uses
 the network.
+
+`node-sails-action2-wrapper-path-manifest.json` extends that source across one
+exact relative module call. The controller's declared input reaches the
+exported `readThumbnail` parameter and then the same exact Node filesystem path
+position. The positive must preserve the custom route, controller property,
+relative import, call argument, wrapper parameter, path construction, and sink;
+the twin keeps the route and wrapper topology but selects one fixed thumbnail.
+Direct regressions also require literal `blueprints.actions: true` for implicit
+action routes, reject the documented false default plus false, dynamic,
+unrelated, and ambiguous configurations, reject Action2-shaped helpers, and
+preserve a two-relative-relay path.
+
+Run the strict routed-wrapper pair with:
+
+```powershell
+$env:COPILOT_SECURITY_MODEL_TURN_TIMEOUT_MS = '1200000'
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/node-sails-action2-wrapper-path-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-sails-action2-wrapper `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --workers 2 `
+  --mode deep
+```
 
 Run the live scanner lane with an inner model-turn deadline below the outer
 process deadline:

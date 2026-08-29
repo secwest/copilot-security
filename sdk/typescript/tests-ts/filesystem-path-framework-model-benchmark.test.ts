@@ -255,6 +255,95 @@ describe("Node and Python filesystem-path framework models", () => {
         line: 15,
         cweIds: ["CWE-22"],
       },
+      propagators: [
+        {
+          kind: "sails-action2-explicit-route",
+          path: "config/routes.js",
+          line: 2,
+        },
+      ],
+      candidateControls: [],
+    });
+    expect(control).toEqual([]);
+  });
+
+  test("keeps the routed Sails Action2 wrapper pair under perfect gates", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(benchmarkRoot, "node-sails-action2-wrapper-path-manifest.json"),
+        "utf8",
+      ),
+    ) as BenchmarkManifest;
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(manifest.cases.map(({ id }) => id)).toEqual([
+      "node-sails-action2-wrapper-path-traversal",
+      "node-sails-action2-wrapper-fixed-thumbnail",
+    ]);
+    expect(manifest.cases[0]?.findingsPaths).toHaveLength(3);
+    expect(manifest.cases[0]?.expected[0]).toMatchObject({
+      cwe: ["CWE-22"],
+      acceptableSeverities: ["high", "medium"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[1]?.expected).toEqual([]);
+
+    const vulnerable = pathRecords(
+      await buildResidualRiskInventory(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "node-sails-action2-wrapper-path-traversal",
+        ),
+      ),
+    );
+    const control = pathRecords(
+      await buildResidualRiskInventory(
+        join(
+          benchmarkRoot,
+          "fixtures",
+          "node-sails-action2-wrapper-fixed-thumbnail",
+        ),
+      ),
+    );
+    expect(vulnerable).toHaveLength(1);
+    expect(vulnerable[0]?.frameworkModel).toMatchObject({
+      id: "node-http-path",
+      scope: "cross-file-wrapper",
+      source: {
+        kind: "sails-action2-declared-input",
+        path: "api/controllers/attachments/download-wrapped-thumbnail.js",
+        line: 9,
+      },
+      sink: {
+        kind: "filesystem-path",
+        path: "services/thumbnail-reader.js",
+        line: 10,
+        cweIds: ["CWE-22"],
+      },
+      propagators: [
+        {
+          kind: "sails-action2-explicit-route",
+          path: "config/routes.js",
+          line: 2,
+        },
+        {
+          kind: "relative-module-import",
+          path: "api/controllers/attachments/download-wrapped-thumbnail.js",
+          line: 1,
+        },
+        {
+          kind: "wrapper-call-argument",
+          path: "api/controllers/attachments/download-wrapped-thumbnail.js",
+          line: 10,
+        },
+        {
+          kind: "wrapper-parameter",
+          path: "services/thumbnail-reader.js",
+          line: 4,
+        },
+      ],
       candidateControls: [],
     });
     expect(control).toEqual([]);
@@ -360,6 +449,11 @@ describe("Node and Python filesystem-path framework models", () => {
 
   test("models only declared Sails Action2 controller inputs", async () => {
     const repository = await temporaryRepository();
+    await writeRepositoryFile(
+      repository,
+      "config/routes.js",
+      'module.exports.routes = {\n  "GET /direct": "attachments/direct",\n  "GET /assigned": "attachments/assigned",\n  "GET /destructured": "attachments/destructured",\n  "GET /arrow": "attachments/arrow",\n  "GET /undeclared": "attachments/undeclared",\n  "GET /reassigned": "attachments/reassigned",\n  "GET /fixed-map": "attachments/fixed-map",\n  "GET /string-lookalike": "attachments/string-lookalike",\n};\n',
+    );
     const cases: Array<[string, string]> = [
       [
         "api/controllers/attachments/direct.js",
@@ -398,6 +492,10 @@ describe("Node and Python filesystem-path framework models", () => {
         'const fs = require("node:fs");\nmodule.exports = { inputs: { filename: { type: "string" } }, fn(inputs) { return fs.readFileSync("inputs.filename"); } };\n',
       ],
       [
+        "api/controllers/attachments/unexposed.js",
+        'const fs = require("node:fs");\nmodule.exports = { inputs: { filename: { type: "string" } }, fn(inputs) { return fs.readFileSync(inputs.filename); } };\n',
+      ],
+      [
         "lib/machine.js",
         'const fs = require("node:fs");\nmodule.exports = { inputs: { filename: { type: "string" } }, fn(inputs) { return fs.readFileSync(inputs.filename); } };\n',
       ],
@@ -427,6 +525,168 @@ describe("Node and Python filesystem-path framework models", () => {
     ).toBeTrue();
   });
 
+  test("requires exact Sails route exposure and preserves two relative relays", async () => {
+    const repository = await temporaryRepository();
+    const sink =
+      'import fs from "node:fs";\nexport function readPath(filename) { return fs.readFileSync(filename); }\n';
+    const controller = (importPath: string, imported = "readPath") =>
+      `import { ${imported} } from "${importPath}";\nexport default {\n  inputs: { filename: { type: "string", required: true } },\n  async fn(inputs, exits) { return exits.success(${imported}(inputs.filename)); },\n};\n`;
+
+    await writeRepositoryFile(
+      repository,
+      "explicit/config/routes.js",
+      'module.exports = { routes: {\n  "GET /direct/:filename": "direct",\n  "GET /object/:filename": { action: "object-route" },\n} };\n',
+    );
+    await writeRepositoryFile(
+      repository,
+      "explicit/api/controllers/direct.js",
+      controller("../../services/read.js"),
+    );
+    await writeRepositoryFile(
+      repository,
+      "explicit/api/controllers/object-route.js",
+      controller("../../services/read.js"),
+    );
+    await writeRepositoryFile(
+      repository,
+      "explicit/api/controllers/unexposed.js",
+      controller("../../services/read.js"),
+    );
+    await writeRepositoryFile(repository, "explicit/services/read.js", sink);
+
+    await writeRepositoryFile(
+      repository,
+      "blueprint/config/blueprints.js",
+      "module.exports.blueprints = { actions: true };\n",
+    );
+    await writeRepositoryFile(
+      repository,
+      "blueprint/api/controllers/download.js",
+      controller("../../services/read.js"),
+    );
+    await writeRepositoryFile(repository, "blueprint/services/read.js", sink);
+
+    await writeRepositoryFile(
+      repository,
+      "disabled/config/blueprints.js",
+      "module.exports.blueprints = { actions: false };\n",
+    );
+    await writeRepositoryFile(
+      repository,
+      "disabled/api/controllers/download.js",
+      controller("../../services/read.js"),
+    );
+    await writeRepositoryFile(repository, "disabled/services/read.js", sink);
+
+    await writeRepositoryFile(
+      repository,
+      "dynamic/config/blueprints.js",
+      "module.exports.blueprints = { actions: process.env.ACTION_ROUTES };\n",
+    );
+    await writeRepositoryFile(
+      repository,
+      "dynamic/api/controllers/download.js",
+      controller("../../services/read.js"),
+    );
+    await writeRepositoryFile(repository, "dynamic/services/read.js", sink);
+
+    await writeRepositoryFile(
+      repository,
+      "ambiguous/config/routes.js",
+      'module.exports.routes = { "GET /download/:filename": "download" };\n',
+    );
+    await writeRepositoryFile(
+      repository,
+      "ambiguous/config/routes.cjs",
+      'module.exports.routes = { "GET /download/:filename": "download" };\n',
+    );
+    await writeRepositoryFile(
+      repository,
+      "ambiguous/api/controllers/download.js",
+      controller("../../services/read.js"),
+    );
+    await writeRepositoryFile(repository, "ambiguous/services/read.js", sink);
+
+    await writeRepositoryFile(
+      repository,
+      "helper/config/routes.js",
+      'module.exports.routes = { "GET /helper/:filename": "read" };\n',
+    );
+    await writeRepositoryFile(
+      repository,
+      "helper/api/helpers/read.js",
+      controller("../../services/read.js"),
+    );
+    await writeRepositoryFile(repository, "helper/services/read.js", sink);
+
+    await writeRepositoryFile(
+      repository,
+      "multihop/config/routes.js",
+      'module.exports.routes = { "GET /multi/:filename": "download" };\n',
+    );
+    await writeRepositoryFile(
+      repository,
+      "multihop/api/controllers/download.js",
+      controller("../../lib/first.js", "first"),
+    );
+    await writeRepositoryFile(
+      repository,
+      "multihop/lib/first.js",
+      'import { second } from "./second.js";\nexport function first(value) {\n  return second(value);\n}\n',
+    );
+    await writeRepositoryFile(
+      repository,
+      "multihop/lib/second.js",
+      'import { readPath } from "../services/read.js";\nexport function second(value) {\n  return readPath(value);\n}\n',
+    );
+    await writeRepositoryFile(repository, "multihop/services/read.js", sink);
+
+    const records = pathRecords(await buildResidualRiskInventory(repository));
+    const sails = records.filter(
+      (record) =>
+        record.frameworkModel?.source.kind === "sails-action2-declared-input",
+    );
+    expect(
+      sails
+        .map((record) => ({
+          path: record.frameworkModel?.source.path,
+          scope: record.frameworkModel?.scope,
+          route: record.frameworkModel?.propagators[0]?.kind,
+        }))
+        .sort((left, right) => left.path!.localeCompare(right.path!)),
+    ).toEqual([
+      {
+        path: "blueprint/api/controllers/download.js",
+        scope: "cross-file-wrapper",
+        route: "sails-action2-blueprint-action-route",
+      },
+      {
+        path: "explicit/api/controllers/direct.js",
+        scope: "cross-file-wrapper",
+        route: "sails-action2-explicit-route",
+      },
+      {
+        path: "explicit/api/controllers/object-route.js",
+        scope: "cross-file-wrapper",
+        route: "sails-action2-explicit-route",
+      },
+      {
+        path: "multihop/api/controllers/download.js",
+        scope: "cross-file-multi-hop-wrapper",
+        route: "sails-action2-explicit-route",
+      },
+    ]);
+    expect(
+      sails.some((record) =>
+        record.frameworkModel?.propagators.some(
+          (propagator) =>
+            propagator.kind === "wrapper-call-argument" &&
+            propagator.path === "multihop/lib/second.js",
+        ),
+      ),
+    ).toBeTrue();
+  });
+
   test("teaches exact path arguments and containment limits", () => {
     const prompt = scanQualityGatePrompt(
       JSON.stringify({ frameworkModel: { id: "node-http-path" } }),
@@ -434,9 +694,10 @@ describe("Node and Python filesystem-path framework models", () => {
     expect(prompt).toContain("For node-http-path and python-web-path rows");
     expect(prompt).toContain("sails-action2-declared-input");
     expect(prompt).toContain("helper/machine modules");
-    expect(prompt).toContain(
-      "explicit route or enabled blueprint action route",
-    );
+    expect(prompt).toContain("sails-action2-explicit-route");
+    expect(prompt).toContain("sails-action2-blueprint-action-route");
+    expect(prompt).toContain("documented default is false");
+    expect(prompt).toContain("Relative wrapper and multi-hop rows");
     expect(prompt).toContain("file contents or encoding arguments");
     expect(prompt).toContain("path.isAbsolute alone");
     expect(prompt).toContain("os.path.commonprefix is not component-aware");

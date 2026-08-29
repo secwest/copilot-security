@@ -17806,10 +17806,35 @@ interface NodeSailsAction2Handler {
   declaredInputs: ReadonlySet<string>;
 }
 
+interface NodeSailsAction2Exposure {
+  kind: "sails-action2-blueprint-action-route" | "sails-action2-explicit-route";
+  path: string;
+  line: number;
+  symbol: string;
+}
+
+interface NodeSailsAction2Identity {
+  action: string;
+  root: string;
+}
+
 function nodeSailsAction2ControllerPath(path: string): boolean {
   return /(?:^|\/)api\/controllers\/.+\.(?:cjs|js|jsx|mjs|ts|tsx)$/iu.test(
     path.replaceAll("\\", "/"),
   );
+}
+
+function nodeSailsAction2Identity(
+  path: string,
+): NodeSailsAction2Identity | undefined {
+  const normalized = path.replaceAll("\\", "/");
+  const match =
+    /^(.*)api\/controllers\/(.+)\.(?:cjs|js|jsx|mjs|ts|tsx)$/iu.exec(
+      normalized,
+    );
+  if (match?.[1] === undefined || match[2] === undefined) return undefined;
+  const action = match[2].replace(/^\/+|\/+$/gu, "");
+  return action === "" ? undefined : { action, root: match[1] };
 }
 
 function nodeSailsAction2ExportedObject(
@@ -17851,6 +17876,154 @@ function nodeSailsAction2ExportedObject(
       ) === index,
   );
   return unique.length === 1 ? unique[0] : undefined;
+}
+
+function nodeSailsConfigurationObject(
+  lines: readonly string[],
+  property: "blueprints" | "routes",
+): JavascriptResolvedExpression | undefined {
+  const codeLines = javascriptCodeLinesWithoutComments(lines);
+  const structuralLines = javascriptStructuralLines(lines);
+  const direct = new RegExp(
+    `^\\s*module\\s*\\.\\s*exports\\s*\\.\\s*${property}\\s*=\\s*`,
+    "u",
+  );
+  const candidates: JavascriptResolvedExpression[] = [];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    if (!direct.test(structuralLines[index] ?? "")) continue;
+    const original = codeLines
+      .slice(index, Math.min(lines.length, index + 256))
+      .join("\n");
+    const prefix = direct.exec(original);
+    if (prefix === null) continue;
+    const expressionStart = prefix[0].length;
+    const expressionEnd = javascriptExpressionEnd(original, expressionStart);
+    const expression = original.slice(expressionStart, expressionEnd).trim();
+    if (expression === "") continue;
+    const resolved = resolveJavascriptExpression(lines, expression, index + 1);
+    if (
+      resolved !== undefined &&
+      javascriptCompositePrefix(resolved.value, "{", "}") !== undefined
+    ) {
+      candidates.push(resolved);
+    }
+  }
+
+  const exported = nodeSailsAction2ExportedObject(lines);
+  if (exported !== undefined) {
+    const properties = javascriptObjectEntries(exported).filter(
+      (entry) => entry.key === property,
+    );
+    if (properties.length === 1) {
+      const resolved = resolveJavascriptExpression(
+        lines,
+        properties[0]!.value,
+        properties[0]!.line,
+      );
+      if (
+        resolved !== undefined &&
+        javascriptCompositePrefix(resolved.value, "{", "}") !== undefined
+      ) {
+        candidates.push(resolved);
+      }
+    }
+  }
+
+  const unique = candidates.filter(
+    (candidate, index, all) =>
+      all.findIndex(
+        (other) =>
+          other.line === candidate.line && other.value === candidate.value,
+      ) === index,
+  );
+  return unique.length === 1 ? unique[0] : undefined;
+}
+
+function nodeSailsRouteTarget(
+  lines: readonly string[],
+  route: JavascriptPropertyEntry,
+): string | undefined {
+  const resolved = resolveJavascriptExpression(lines, route.value, route.line);
+  if (resolved === undefined) return undefined;
+  const direct = nodeStaticString(resolved.value);
+  if (direct !== undefined) return direct;
+  const object = javascriptObjectEntries(resolved);
+  const actions = object.filter((entry) => entry.key === "action");
+  if (actions.length !== 1) return undefined;
+  const action = resolveJavascriptExpression(
+    lines,
+    actions[0]!.value,
+    actions[0]!.line,
+  );
+  return action === undefined ? undefined : nodeStaticString(action.value);
+}
+
+function nodeSailsAction2Exposure(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+): NodeSailsAction2Exposure | undefined {
+  const identity = nodeSailsAction2Identity(path);
+  if (identity === undefined) return undefined;
+  const filesByPath = new Map(
+    files.map((file) => [modelPathComparisonKey(file.path), file]),
+  );
+  const configurationFile = (
+    name: "blueprints" | "routes",
+  ): SourceFileSnapshot | undefined => {
+    const candidates = ["js", "cjs"]
+      .map((extension) =>
+        filesByPath.get(
+          modelPathComparisonKey(`${identity.root}config/${name}.${extension}`),
+        ),
+      )
+      .filter((file): file is SourceFileSnapshot => file !== undefined);
+    return candidates.length === 1 ? candidates[0] : undefined;
+  };
+
+  const routesFile = configurationFile("routes");
+  if (routesFile !== undefined) {
+    const routes = nodeSailsConfigurationObject(routesFile.lines, "routes");
+    if (routes !== undefined) {
+      for (const route of javascriptObjectEntries(routes)) {
+        if (
+          route.key.includes("/") &&
+          nodeSailsRouteTarget(routesFile.lines, route) === identity.action
+        ) {
+          return {
+            kind: "sails-action2-explicit-route",
+            path: routesFile.path,
+            line: route.line,
+            symbol: `${route.key} -> ${identity.action}`,
+          };
+        }
+      }
+    }
+  }
+
+  const blueprintsFile = configurationFile("blueprints");
+  if (blueprintsFile === undefined) return undefined;
+  const blueprints = nodeSailsConfigurationObject(
+    blueprintsFile.lines,
+    "blueprints",
+  );
+  if (blueprints === undefined) return undefined;
+  const actions = javascriptObjectEntries(blueprints).filter(
+    (entry) => entry.key === "actions",
+  );
+  if (actions.length !== 1) return undefined;
+  const enabled = resolveJavascriptExpression(
+    blueprintsFile.lines,
+    actions[0]!.value,
+    actions[0]!.line,
+  );
+  return enabled?.value.trim() === "true"
+    ? {
+        kind: "sails-action2-blueprint-action-route",
+        path: blueprintsFile.path,
+        line: actions[0]!.line,
+        symbol: `${identity.action}:actions=true`,
+      }
+    : undefined;
 }
 
 function nodeSailsAction2Handler(
@@ -18145,6 +18318,10 @@ function frameworkDataflowRecords(
       model.id === "node-http-path"
         ? nodeSailsAction2Handler(path, lines)
         : undefined;
+    const sailsAction2Exposure =
+      sailsAction2Source === undefined
+        ? undefined
+        : nodeSailsAction2Exposure(files, path);
     const sources =
       extension === ".cs" && model.id.startsWith("aspnet-http-")
         ? [...matchedSources, ...dotnetRazorPageSources(files, path, lines)]
@@ -18157,7 +18334,7 @@ function frameworkDataflowRecords(
                 ) === index,
             )
             .slice(0, 16)
-        : sailsAction2Source === undefined
+        : sailsAction2Source === undefined || sailsAction2Exposure === undefined
           ? matchedSources
           : [
               ...matchedSources,
@@ -18982,7 +19159,9 @@ function frameworkDataflowRecords(
         nodeTarMemberSelection?.sourceExpressions.join("\n") ??
         nodeTarDecompressionDos?.sourceExpressions.join("\n");
       const nodeSailsAction2PathSource =
-        model.id === "node-http-path" && nodePathSink !== undefined
+        model.id === "node-http-path" &&
+        nodePathSink !== undefined &&
+        sailsAction2Exposure !== undefined
           ? nodeSailsAction2DeclaredInputSource(
               path,
               lines,
@@ -19424,6 +19603,10 @@ function frameworkDataflowRecords(
               sinkPattern.cweIds,
           },
           propagators: [
+            ...(source.kind !== "sails-action2-declared-input" ||
+            sailsAction2Exposure === undefined
+              ? []
+              : [sailsAction2Exposure]),
             ...(nodeVelocityTemplate === undefined
               ? []
               : [
@@ -30027,23 +30210,36 @@ function frameworkDirectCrossFileDataflowRecords(
         summariesByFileAndSymbol.get(`${importedPath}\0${imported.imported}`) ??
         [];
       for (const summary of matchingSummaries) {
+        const sailsExposure =
+          summary.model.id === "node-http-path"
+            ? nodeSailsAction2Exposure(files, caller.path)
+            : undefined;
         const sources = matchingJavascriptModelLines(
           caller.lines,
           summary.model.sources,
           32,
         );
-        if (sources.length === 0) continue;
+        if (sources.length === 0 && sailsExposure === undefined) continue;
         const calls = javascriptCallLines(caller.lines, imported.local);
         for (const call of calls) {
           const argument = call.arguments[summary.parameterIndex];
           if (argument === undefined) continue;
-          const source = modeledCallSource(
-            caller.lines,
-            sources,
-            call.line,
-            argument,
-            summary.model.sources,
-          );
+          const source =
+            (sailsExposure === undefined
+              ? undefined
+              : nodeSailsAction2DeclaredInputSource(
+                  caller.path,
+                  caller.lines,
+                  call.line,
+                  argument,
+                )) ??
+            modeledCallSource(
+              caller.lines,
+              sources,
+              call.line,
+              argument,
+              summary.model.sources,
+            );
           if (source === undefined) continue;
           const key = [
             summary.model.id,
@@ -30103,6 +30299,10 @@ function frameworkDirectCrossFileDataflowRecords(
                 cweIds: summary.sink.cweIds,
               },
               propagators: [
+                ...(source.kind !== "sails-action2-declared-input" ||
+                sailsExposure === undefined
+                  ? []
+                  : [sailsExposure]),
                 {
                   kind: "relative-module-import",
                   path: caller.path,
@@ -30742,22 +30942,35 @@ function frameworkMultiHopDataflowRecords(
       for (const summary of matchingSummaries) {
         const chain = importedFrameworkRelayChain(summary);
         if (chain === undefined || chain.relays.length === 0) continue;
+        const sailsExposure =
+          summary.model.id === "node-http-path"
+            ? nodeSailsAction2Exposure(files, caller.path)
+            : undefined;
         const sources = matchingJavascriptModelLines(
           caller.lines,
           summary.model.sources,
           32,
         );
-        if (sources.length === 0) continue;
+        if (sources.length === 0 && sailsExposure === undefined) continue;
         for (const call of javascriptCallLines(caller.lines, imported.local)) {
           const argument = call.arguments[summary.parameterIndex];
           if (argument === undefined) continue;
-          const source = modeledCallSource(
-            caller.lines,
-            sources,
-            call.line,
-            argument,
-            summary.model.sources,
-          );
+          const source =
+            (sailsExposure === undefined
+              ? undefined
+              : nodeSailsAction2DeclaredInputSource(
+                  caller.path,
+                  caller.lines,
+                  call.line,
+                  argument,
+                )) ??
+            modeledCallSource(
+              caller.lines,
+              sources,
+              call.line,
+              argument,
+              summary.model.sources,
+            );
           if (source === undefined) continue;
           const sinkSummary = chain.sink;
           const key = [
@@ -30835,6 +31048,10 @@ function frameworkMultiHopDataflowRecords(
                 cweIds: sinkSummary.sink.cweIds,
               },
               propagators: [
+                ...(source.kind !== "sails-action2-declared-input" ||
+                sailsExposure === undefined
+                  ? []
+                  : [sailsExposure]),
                 {
                   kind: "relative-module-import",
                   path: caller.path,
