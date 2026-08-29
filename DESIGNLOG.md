@@ -59,6 +59,24 @@ strict archive inspection and isolated installation validate the public
 import, executable CLI, and all 79 bundled plugin files. The production
 dependency audit reports no known vulnerabilities.
 
+Two independent compiled inventories of a disposable tracked-only archive at
+exact implementation checkpoint
+`6268852fdfc1895f9a0233e5bbe4409284585913` are byte-identical at the 256-row
+cap: 616,394 bytes with SHA-256
+`340f05b263eb3ae24dc72935ae50a397ea121f96e47b029e1bdf82347560a971`.
+Matching the previous saturated whole-repository result is expected: the
+changed SARIF ingestion source and its regressions are outside the production
+candidate paths modeled by this inventory. The disposable archive was removed
+after measurement.
+
+**Hosted closure.** All eleven workflow families pass exact implementation
+checkpoint `6268852`: Node `33276634454`, container `33276634445`, Windows GUI
+`33276634450`, Linux GUI `33276634443`, Java `33276634447`, Kotlin
+`33276634462`, .NET `33276634451`, Go `33276634440`, Rust `33276634442`, Ruby
+`33276634455`, and PHP `33276634471`. The Node matrix completes all 91 jobs
+successfully. This closes the SARIF-ingestion increment, not the standing
+scanner-effectiveness goal.
+
 ## 2026-08-29 — Make source loss an explicit incomplete scan
 
 **Measured failure and comparator signal.** A real Ubuntu/WSL reproduction ran

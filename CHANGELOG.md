@@ -29,6 +29,18 @@ All notable scanner, application, benchmark, and operational changes are recorde
   and all 79 bundled plugin files, and is 2,376,862 bytes with SHA-256
   `8e417b502778c6b52e886c9d2cece6b312ae9eb4740a49053f7b85f27fe8c4c3`.
   The production dependency audit reports no known vulnerabilities.
+- Two independent compiled inventories of a tracked-only archive at exact
+  implementation checkpoint `6268852fdfc1895f9a0233e5bbe4409284585913`
+  are byte-identical at the 256-row cap: 616,394 bytes and SHA-256
+  `340f05b263eb3ae24dc72935ae50a397ea121f96e47b029e1bdf82347560a971`.
+  This intentionally matches the preceding saturated whole-repository result:
+  SARIF ingestion code and regressions do not enter production-path model
+  candidates.
+- All eleven hosted workflow families pass exact implementation checkpoint
+  `6268852`: Node `33276634454` (91/91 jobs), container `33276634445`, Windows
+  GUI `33276634450`, Linux GUI `33276634443`, Java `33276634447`, Kotlin
+  `33276634462`, .NET `33276634451`, Go `33276634440`, Rust `33276634442`,
+  Ruby `33276634455`, and PHP `33276634471`.
 - Closed a clean-looking partial-scan failure mode in deterministic source
   discovery. Repository directory enumeration and reads of selected source
   files now fail closed with a bounded, path-specific incomplete-scan error
