@@ -94,6 +94,18 @@ The release archive contains 299 entries, is 2,399,022 bytes, and has SHA-256
 Strict inspection plus isolated Windows and Ubuntu installations validate the
 public import, CLI, and all 79 bundled plugin files.
 
+Two compiled inventories of the 3,889-file tracked-only archive at exact
+implementation checkpoint `c4c9b24da1f15f66c1d7395660d23047192a88a3`
+complete in 21,215.379 and 19,817.632 milliseconds. Both reach the 256-row cap,
+are byte-identical at 618,138 bytes, and have SHA-256
+`db1b4ad1e074059e8d0fb3017c4f8930ab4a430adda0395dab43646a4f7ee848`.
+Exactly one row retains source `src/server.py:10`, relative import and wrapper
+argument, wrapper parameter at `src/runner.py:11`, exact
+`python-dataclass-attribute-assignment` for `command.value` at line 13, shell
+sink at line 15, and CWE-78. The topology-matched safe control emits no row.
+The 5,822,526-byte exact-commit archive has SHA-256
+`21a211de40a828c4897368742bff637d55b39dba483309738d3f4ba866825a51`.
+
 This closes one exact generated-dataclass increment, not the standing scanner-
 effectiveness goal.
 

@@ -50,6 +50,18 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `03bdc619615d52d514892dc44b7d396f3e15e75044894f36924882687ffc50b1`.
   Strict archive inspection plus isolated Windows and Ubuntu installations
   validate the public import, CLI, and all 79 bundled plugin files.
+- Two compiled inventories of the 3,889-file tracked-only archive at exact
+  implementation checkpoint
+  `c4c9b24da1f15f66c1d7395660d23047192a88a3` complete in 21,215.379 and
+  19,817.632 milliseconds. Both reach the 256-row cap, are byte-identical at
+  618,138 bytes, and have SHA-256
+  `db1b4ad1e074059e8d0fb3017c4f8930ab4a430adda0395dab43646a4f7ee848`.
+  Exactly one row retains the new fixture's Flask source at `server.py:10`,
+  relative wrapper chain, `python-dataclass-attribute-assignment` for
+  `command.value` at `runner.py:13`, shell sink at line 15, and CWE-78; the
+  topology-matched safe control is absent. The 5,822,526-byte exact-commit
+  archive has SHA-256
+  `21a211de40a828c4897368742bff637d55b39dba483309738d3f4ba866825a51`.
 - Closed a reproduced Python cross-file command-injection false negative where
   a Flask request crossed a relative wrapper, was written to a fresh
   `types.SimpleNamespace` field, selected through dot or constant-name
