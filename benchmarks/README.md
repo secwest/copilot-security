@@ -3101,6 +3101,32 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The dedicated `python-django-open-redirect-manifest.json` applies the same
+perfect gates to a normal split Django application. Its exploit registers a
+relative-imported function view in a literal `urlpatterns` list, reads one
+`request.GET` field, prepends only `/`, and passes the result to the official
+shortcut; the hostile leading slash produces a scheme-relative
+`//attacker.invalid/...` Location. The topology-matched control percent-encodes
+the same bytes below `/continue/?next=`. Both fixtures pin Django 6.1, use the
+test client with `follow=False`, and make no external request. The typed model
+also recognizes exact `re_path`, `HttpResponseRedirect`, permanent response,
+qualified, aliased, named-target, subscript, repeated literal route, and
+relative-wrapper forms. It suppresses an exact official
+`url_has_allowed_host_and_scheme` guard with a static host set and otherwise
+fails closed on dynamic or unregistered routing, class-based views, shadows,
+rebindings, opaque calls, and ambiguous arguments:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/python-django-open-redirect-manifest.json `
+  --results ../../benchmark-results-django-redirect `
+  --runs 1 `
+  --auth github `
+  --model auto `
+  --effort high `
+  --mode deep
+```
+
 The Python multi-hop lane inserts public gateway and service relays between the
 registered Flask route and sink wrapper. It also exercises bounded multiline
 relay calls:

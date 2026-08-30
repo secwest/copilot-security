@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "minCompletionRate": 1,
+    "minPrecision": 1,
+    "minRecall": 1,
+    "minF1": 1,
+    "minCasePassRate": 1,
+    "minNegativeCasePassRate": 1,
+    "minStableDetectionRate": 1,
+    "minValidationRate": 1,
+    "minAttackPathRate": 1,
+    "minCodeEvidenceRate": 1,
+    "minSeverityAccuracy": 1,
+    "maxFalsePositivesPerRun": 0
+  },
+  "cases": [
+    {
+      "id": "python-django-open-redirect",
+      "description": "A registered Django function view adds only a root slash to request.GET data and sends the resulting scheme-relative authority through the official redirect helper.",
+      "fixture": "fixtures/python-django-open-redirect",
+      "findingsPaths": ["python-django-open-redirect/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "python-django-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/views.py",
+              "startLine": 7,
+              "endLine": 7,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["Django URL pattern", "urlpatterns", "path registration"],
+            ["request.GET", "query string", "query field"],
+            ["django.shortcuts.redirect", "official redirect"],
+            ["Location header", "redirect location"],
+            ["root-only prefix", "scheme-relative", "double slash"],
+            [
+              "url_has_allowed_host_and_scheme",
+              "fixed local prefix",
+              "allowlist"
+            ],
+            ["CWE-601", "open redirect"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["continue/", "Django URL pattern", "urlpatterns"],
+            ["request.GET", "next", "query value"],
+            ["root-only prefix", "\"/\" + target", "double slash"],
+            ["django.shortcuts.redirect", "redirect helper"],
+            ["Location", "redirect target"],
+            ["attacker.invalid", "attacker-selected origin", "external origin"],
+            ["follow=False", "does not follow", "no external request"]
+          ],
+          "forbiddenText": [
+            "the witness contacted attacker.invalid",
+            "proves the endpoint is publicly reachable",
+            "proves credentials were stolen",
+            "every Django redirect is vulnerable",
+            "a fixed local prefix is an open redirect",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-django-safe-local-redirect",
+      "description": "The topology-matched Django control percent-encodes the same hostile query value beneath a non-root fixed local redirect target.",
+      "fixture": "fixtures/python-django-safe-local-redirect",
+      "findingsPaths": [
+        "python-django-safe-local-redirect/run-1/findings.json"
+      ],
+      "expected": []
+    }
+  ]
+}

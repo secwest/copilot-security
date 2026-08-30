@@ -2200,6 +2200,28 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-django-open-redirect",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\b(?:from\s+django\.(?:http|shortcuts)\s+import|import\s+django\.(?:http|shortcuts)(?:\s+as\s+[A-Za-z_]\w*)?)\b/iu,
+    ],
+    sources: [
+      {
+        kind: "django-request-query-string",
+        expression: /\bGET\s*(?:\.|\[)/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "django-redirect-location",
+        expression: /\b[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)?\s*\(/u,
+        cweIds: ["CWE-601"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-pickle-unsafe-load",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3732,6 +3754,7 @@ function isPythonTypedSinkModel(modelId: string): boolean {
     modelId === "python-asyncpg-sql" ||
     modelId === "python-fastapi-open-redirect" ||
     modelId === "python-flask-open-redirect" ||
+    modelId === "python-django-open-redirect" ||
     modelId === "python-web-pickle-unsafe-load" ||
     modelId === "python-web-pyyaml-unsafe-load" ||
     modelId === "python-web-numpy-allow-pickle-load" ||
@@ -3751,7 +3774,8 @@ function isPythonTypedSinkModel(modelId: string): boolean {
 function isPythonOpenRedirectModel(modelId: string): boolean {
   return (
     modelId === "python-fastapi-open-redirect" ||
-    modelId === "python-flask-open-redirect"
+    modelId === "python-flask-open-redirect" ||
+    modelId === "python-django-open-redirect"
   );
 }
 
@@ -4596,6 +4620,25 @@ const PYTHON_FLASK_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-601", "open redirect", "URL redirection"],
 ] as const;
 
+const PYTHON_DJANGO_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Django", "urlpatterns", "django.urls.path", "registered view"],
+  ["request.GET", "query string", "remote input", "query field"],
+  [
+    "django.shortcuts.redirect",
+    "HttpResponseRedirect",
+    "Location header",
+    "redirect location",
+  ],
+  ["absolute URL", "origin", "scheme-relative", "attacker-selected host"],
+  [
+    "root-only prefix",
+    "url_has_allowed_host_and_scheme",
+    "allowlist",
+    "same-origin",
+  ],
+  ["CWE-601", "open redirect", "URL redirection"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4716,6 +4759,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: PYTHON_FLASK_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: PYTHON_FLASK_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-django-open-redirect",
+    {
+      validation: PYTHON_DJANGO_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: PYTHON_DJANGO_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -42117,6 +42167,664 @@ function pythonFlaskOpenRedirectSource(
   };
 }
 
+interface PythonDjangoRequestStringSource {
+  kind: "django-request-query-string";
+  line: number;
+  propagators: Array<{
+    kind: string;
+    path: string;
+    line: number;
+    symbol?: string;
+  }>;
+}
+
+function pythonDjangoUrlPatternLines(
+  lines: readonly string[],
+): ReadonlySet<number> {
+  const structuralLines = pythonStructuralLines(lines);
+  const ranges: number[][] = [];
+  for (let index = 0; index < structuralLines.length; index += 1) {
+    const structural = structuralLines[index] ?? "";
+    const assignment = /^urlpatterns\s*=\s*\[/u.exec(structural);
+    if (assignment === null) continue;
+    const opening = structural.indexOf("[", assignment.index);
+    let depth = 0;
+    let balanced = false;
+    const range: number[] = [];
+    for (
+      let offset = index;
+      offset < Math.min(structuralLines.length, index + 64);
+      offset += 1
+    ) {
+      const candidate = structuralLines[offset] ?? "";
+      const start = offset === index ? opening : 0;
+      range.push(offset + 1);
+      for (let column = start; column < candidate.length; column += 1) {
+        if (candidate[column] === "[") depth += 1;
+        else if (candidate[column] === "]") depth -= 1;
+        if (depth === 0) {
+          balanced = true;
+          break;
+        }
+      }
+      if (balanced) break;
+    }
+    if (balanced) ranges.push(range);
+  }
+  return ranges.length === 1 ? new Set(ranges[0]) : new Set();
+}
+
+function pythonDjangoRouteTargetsHandler(
+  files: readonly SourceFileSnapshot[],
+  routeFile: SourceFileSnapshot,
+  routeLine: number,
+  viewExpression: string,
+  viewPath: string,
+  wrapper: ExportedPythonFunction,
+): boolean {
+  const knownPaths = new Map(
+    files.map((candidate) => [
+      modelPathComparisonKey(candidate.path),
+      candidate.path,
+    ]),
+  );
+  const direct = /^([A-Za-z_]\w*)$/u.exec(viewExpression.trim())?.[1];
+  if (direct !== undefined) {
+    if (
+      routeFile.path === viewPath &&
+      direct === wrapper.symbol &&
+      !pythonIdentifierReassignedBetween(
+        routeFile.lines,
+        direct,
+        wrapper.startLine,
+        routeLine,
+      )
+    ) {
+      return true;
+    }
+    return importedPythonSymbols(routeFile.lines).some(
+      (imported) =>
+        imported.local === direct &&
+        imported.imported === wrapper.symbol &&
+        imported.line < routeLine &&
+        pythonImportedBindingUnchangedBetween(
+          routeFile.lines,
+          direct,
+          imported.line,
+          routeLine,
+        ) &&
+        resolveRelativePythonImport(
+          routeFile.path,
+          imported.moduleSpecifier,
+          knownPaths,
+        ) === viewPath,
+    );
+  }
+
+  const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(
+    viewExpression.replace(/\s+/gu, ""),
+  );
+  if (qualified?.[1] === undefined || qualified[2] !== wrapper.symbol) {
+    return false;
+  }
+  const structuralLines = pythonStructuralLines(routeFile.lines);
+  for (
+    let index = 0;
+    index < Math.min(routeLine - 1, structuralLines.length);
+    index += 1
+  ) {
+    const fromPackage =
+      /^from\s+(\.+)\s+import\s+([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+        structuralLines[index] ?? "",
+      );
+    if (
+      fromPackage?.[1] === undefined ||
+      fromPackage[2] === undefined ||
+      (fromPackage[3] ?? fromPackage[2]) !== qualified[1]
+    ) {
+      continue;
+    }
+    if (
+      pythonIdentifierReassignedBetween(
+        routeFile.lines,
+        qualified[1],
+        index + 1,
+        routeLine,
+      )
+    ) {
+      continue;
+    }
+    const moduleSpecifier = `${fromPackage[1]}${fromPackage[2]}`;
+    if (
+      resolveRelativePythonImport(
+        routeFile.path,
+        moduleSpecifier,
+        knownPaths,
+      ) === viewPath
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pythonDjangoRouteEvidence(
+  files: readonly SourceFileSnapshot[],
+  viewPath: string,
+  wrapper: ExportedPythonFunction,
+): PythonDjangoRequestStringSource["propagators"] | undefined {
+  const evidence: PythonDjangoRequestStringSource["propagators"] = [];
+  for (const routeFile of files) {
+    if (!PYTHON_EXTENSIONS.has(routeFile.extension)) continue;
+    const patternLines = pythonDjangoUrlPatternLines(routeFile.lines);
+    if (patternLines.size === 0) continue;
+    for (const line of patternLines) {
+      const structural = pythonStructuralLines([
+        routeFile.lines[line - 1] ?? "",
+      ])[0]!;
+      for (const match of structural.matchAll(
+        /\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(/gu,
+      )) {
+        const callee = match[1];
+        if (callee === undefined) continue;
+        if (
+          pythonLocalModuleCouldShadow(files, routeFile.path, "django.urls")
+        ) {
+          continue;
+        }
+        const routeBindings = (["path", "re_path"] as const)
+          .map((member) => ({
+            member,
+            binding: pythonOfficialImportedMemberBinding(
+              routeFile.lines,
+              "django.urls",
+              member,
+              callee,
+              line,
+            ),
+          }))
+          .filter((candidate) => candidate.binding !== undefined);
+        if (routeBindings.length !== 1) continue;
+        const { member, binding } = routeBindings[0]!;
+        const arguments_ = pythonCallArgumentsForCalleeAtLine(
+          routeFile.lines,
+          line,
+          new RegExp(`\\b${escapeRegularExpression(callee)}\\s*\\(`, "u"),
+        );
+        if (
+          arguments_ === undefined ||
+          arguments_.some((argument) => argument.trim().startsWith("*"))
+        ) {
+          continue;
+        }
+        const keywords = arguments_.flatMap((argument) => {
+          const name = /^([A-Za-z_]\w*)\s*=/u.exec(argument.trim())?.[1];
+          return name === undefined ? [] : [name];
+        });
+        if (
+          keywords.some((name) => !new Set(["kwargs", "name"]).has(name)) ||
+          new Set(keywords).size !== keywords.length
+        ) {
+          continue;
+        }
+        const positional = pythonPositionalArguments(arguments_);
+        if (positional.length < 2 || positional.length > 4) continue;
+        const route = pythonLiteralStringValue(positional[0]!);
+        if (route === undefined || route === "") continue;
+        if (
+          !pythonDjangoRouteTargetsHandler(
+            files,
+            routeFile,
+            line,
+            positional[1]!,
+            viewPath,
+            wrapper,
+          )
+        ) {
+          continue;
+        }
+        evidence.push(
+          {
+            kind: "django-official-url-pattern-binding",
+            path: routeFile.path,
+            line: binding!.line,
+            symbol: `django.urls.${member}`,
+          },
+          {
+            kind: "django-url-pattern",
+            path: routeFile.path,
+            line,
+            symbol: `${member}(${JSON.stringify(route)}, ${wrapper.symbol})`,
+          },
+        );
+      }
+    }
+  }
+  const unique = evidence.filter(
+    (candidate, index, all) =>
+      all.findIndex(
+        (existing) =>
+          existing.kind === candidate.kind &&
+          existing.path === candidate.path &&
+          existing.line === candidate.line &&
+          existing.symbol === candidate.symbol,
+      ) === index,
+  );
+  return unique.length === 0 ? undefined : unique.slice(0, 8);
+}
+
+function pythonDjangoStaticAllowedHosts(
+  lines: readonly string[],
+  expression: string,
+  line: number,
+): boolean {
+  const resolved =
+    resolvePythonExpression(lines, expression, line) ?? expression.trim();
+  if (resolved === "None" || resolved === "set()") return true;
+  if (pythonLiteralStringValue(resolved) !== undefined) return true;
+  const collection = /^([\[{(])([\s\S]*)([\]})])$/u.exec(resolved.trim());
+  if (collection?.[2] === undefined) return false;
+  const pairs = new Map([
+    ["[", "]"],
+    ["{", "}"],
+    ["(", ")"],
+  ]);
+  if (pairs.get(collection[1]!) !== collection[3]) return false;
+  const entries =
+    collection[2].trim() === "" ? [] : splitPythonArguments(collection[2]);
+  return entries.every(
+    (entry) => pythonLiteralStringValue(entry.trim()) !== undefined,
+  );
+}
+
+function pythonDjangoAllowedHostGuard(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  sinkLine: number,
+  sourceExpression: string,
+): boolean {
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) =>
+      sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+  );
+  if (wrapper === undefined) return false;
+  const structuralLines = pythonStructuralLines(lines);
+  const sinkIndent = /^(\s*)/u.exec(structuralLines[sinkLine - 1] ?? "")![1]!
+    .length;
+  for (let index = sinkLine - 2; index >= wrapper.startLine; index -= 1) {
+    const structural = structuralLines[index] ?? "";
+    const guard =
+      /^(\s*)if\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(([\s\S]*)\)\s*:\s*$/u.exec(
+        structural,
+      );
+    if (
+      guard?.[1] === undefined ||
+      guard[2] === undefined ||
+      guard[3] === undefined
+    ) {
+      continue;
+    }
+    const guardIndent = guard[1].length;
+    if (guardIndent >= sinkIndent) continue;
+    let containsSink = true;
+    for (let offset = index + 1; offset < sinkLine - 1; offset += 1) {
+      const candidate = structuralLines[offset] ?? "";
+      if (candidate.trim() === "") continue;
+      const indentation = /^(\s*)/u.exec(candidate)![1]!.length;
+      if (indentation <= guardIndent) {
+        containsSink = false;
+        break;
+      }
+    }
+    if (containsSink === false) continue;
+    if (pythonLocalModuleCouldShadow(files, path, "django.utils.http")) {
+      continue;
+    }
+    const binding = pythonOfficialImportedMemberBinding(
+      lines,
+      "django.utils.http",
+      "url_has_allowed_host_and_scheme",
+      guard[2],
+      index + 1,
+    );
+    if (binding === undefined) continue;
+    const arguments_ = splitPythonArguments(guard[3]);
+    if (arguments_.some((argument) => argument.trim().startsWith("*"))) {
+      continue;
+    }
+    const keywords = arguments_.flatMap((argument) => {
+      const name = /^([A-Za-z_]\w*)\s*=/u.exec(argument.trim())?.[1];
+      return name === undefined ? [] : [name];
+    });
+    if (
+      keywords.some(
+        (name) => !new Set(["url", "allowed_hosts", "require_https"]).has(name),
+      ) ||
+      new Set(keywords).size !== keywords.length
+    ) {
+      continue;
+    }
+    const positional = pythonPositionalArguments(arguments_);
+    const namedUrl = arguments_
+      .map((argument) => /^url\s*=\s*([\s\S]+)$/u.exec(argument.trim())?.[1])
+      .filter((candidate): candidate is string => candidate !== undefined);
+    const namedHosts = arguments_
+      .map(
+        (argument) =>
+          /^allowed_hosts\s*=\s*([\s\S]+)$/u.exec(argument.trim())?.[1],
+      )
+      .filter((candidate): candidate is string => candidate !== undefined);
+    if (
+      namedUrl.length > 1 ||
+      namedHosts.length > 1 ||
+      (namedUrl.length === 1 && positional.length > 0) ||
+      (namedHosts.length === 1 && positional.length > 1)
+    ) {
+      continue;
+    }
+    const checkedUrl = namedUrl[0] ?? positional[0];
+    const allowedHosts = namedHosts[0] ?? positional[1];
+    if (checkedUrl === undefined || allowedHosts === undefined) continue;
+    const resolvedChecked =
+      resolvePythonExpression(lines, checkedUrl, index + 1) ?? checkedUrl;
+    const normalizedChecked = resolvedChecked.replace(/\s+/gu, "");
+    const normalizedSource = sourceExpression.replace(/\s+/gu, "");
+    if (
+      normalizedChecked !== normalizedSource ||
+      !pythonDjangoStaticAllowedHosts(lines, allowedHosts, index + 1)
+    ) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+function pythonDjangoRedirectSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  const callText = pythonCallExpression(lines, line, lines.length);
+  for (const match of callText.matchAll(
+    /\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(/gu,
+  )) {
+    const callee = match[1];
+    if (callee === undefined) continue;
+    const sinkOptions = [
+      {
+        moduleName: "django.http",
+        member: "HttpResponsePermanentRedirect",
+        targetName: "redirect_to",
+        kind: "django-http-response-permanent-redirect-location",
+        allowedKeywords: new Set([
+          "redirect_to",
+          "preserve_request",
+          "max_length",
+          "content_type",
+          "status",
+          "reason",
+          "charset",
+          "headers",
+        ]),
+      },
+      {
+        moduleName: "django.http",
+        member: "HttpResponseRedirect",
+        targetName: "redirect_to",
+        kind: "django-http-response-redirect-location",
+        allowedKeywords: new Set([
+          "redirect_to",
+          "preserve_request",
+          "max_length",
+          "content_type",
+          "status",
+          "reason",
+          "charset",
+          "headers",
+        ]),
+      },
+      {
+        moduleName: "django.shortcuts",
+        member: "redirect",
+        targetName: "to",
+        kind: "django-shortcut-redirect-location",
+        allowedKeywords: new Set([
+          "to",
+          "permanent",
+          "preserve_request",
+          "max_length",
+        ]),
+      },
+    ] as const;
+    const sinkBindings = sinkOptions.flatMap((sink) => {
+      if (pythonLocalModuleCouldShadow(files, path, sink.moduleName)) return [];
+      const binding = pythonOfficialImportedMemberBinding(
+        lines,
+        sink.moduleName,
+        sink.member,
+        callee,
+        line,
+      );
+      return binding === undefined ? [] : [{ sink, binding }];
+    });
+    if (sinkBindings.length !== 1) continue;
+    const { sink, binding } = sinkBindings[0]!;
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(
+      lines,
+      line,
+      new RegExp(`\\b${escapeRegularExpression(callee)}\\s*\\(`, "u"),
+    );
+    if (
+      arguments_ === undefined ||
+      arguments_.some((argument) => argument.trim().startsWith("*"))
+    ) {
+      continue;
+    }
+    const keywordNames = arguments_.flatMap((argument) => {
+      const name = /^([A-Za-z_]\w*)\s*=/u.exec(argument.trim())?.[1];
+      return name === undefined ? [] : [name];
+    });
+    if (
+      keywordNames.some((name) => !sink.allowedKeywords.has(name)) ||
+      new Set(keywordNames).size !== keywordNames.length
+    ) {
+      continue;
+    }
+    const namedTargets = arguments_
+      .map(
+        (argument) =>
+          new RegExp(`^${sink.targetName}\\s*=\\s*([\\s\\S]+)$`, "u").exec(
+            argument.trim(),
+          )?.[1],
+      )
+      .filter((candidate): candidate is string => candidate !== undefined);
+    const positional = pythonPositionalArguments(arguments_);
+    if (
+      namedTargets.length > 1 ||
+      (namedTargets.length === 1 && positional.length > 0) ||
+      (namedTargets.length === 0 && positional.length !== 1)
+    ) {
+      continue;
+    }
+    const targetExpression = namedTargets[0] ?? positional[0];
+    if (targetExpression === undefined || targetExpression.trim() === "") {
+      continue;
+    }
+    const sourceExpression =
+      resolvePythonExpression(lines, targetExpression, line) ??
+      targetExpression.trim();
+    if (
+      pythonFixedLocalRedirectPrefix(sourceExpression) !== undefined ||
+      pythonDjangoAllowedHostGuard(files, path, lines, line, sourceExpression)
+    ) {
+      continue;
+    }
+    return {
+      sourceExpression,
+      kind: sink.kind,
+      propagators: [
+        {
+          kind: "django-official-redirect-binding",
+          path,
+          line: binding.line,
+          symbol: `${sink.moduleName}.${sink.member}`,
+        },
+        {
+          kind: "http-location-header-assignment",
+          path,
+          line,
+          symbol: `${sink.member}(redirect_to) -> Location`,
+        },
+      ],
+    };
+  }
+  return undefined;
+}
+
+function pythonDjangoRequestGetEvidence(
+  path: string,
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  origin: { expression: string; line: number },
+): PythonDjangoRequestStringSource | undefined {
+  const get =
+    /\b([A-Za-z_]\w*)\s*\.\s*GET\s*\.\s*get\s*\(([\s\S]*)\)\s*$/u.exec(
+      origin.expression,
+    );
+  const subscript =
+    /\b([A-Za-z_]\w*)\s*\.\s*GET\s*\[\s*([\s\S]+?)\s*\]\s*$/u.exec(
+      origin.expression,
+    );
+  let requestExpression: string;
+  let field: string | undefined;
+  if (get?.[1] !== undefined && get[2] !== undefined) {
+    const arguments_ = splitPythonArguments(get[2]);
+    if (
+      arguments_.length === 0 ||
+      arguments_.length > 2 ||
+      arguments_.some(
+        (argument) =>
+          argument.trim().startsWith("*") ||
+          /^[A-Za-z_]\w*\s*=/u.test(argument.trim()),
+      )
+    ) {
+      return undefined;
+    }
+    field = pythonLiteralStringValue(arguments_[0]!);
+    const defaultValue = arguments_[1]?.trim();
+    if (
+      field === undefined ||
+      field === "" ||
+      (defaultValue !== undefined &&
+        defaultValue !== "None" &&
+        pythonLiteralStringValue(defaultValue) === undefined)
+    ) {
+      return undefined;
+    }
+    requestExpression = get[1];
+  } else if (subscript?.[1] !== undefined && subscript[2] !== undefined) {
+    field = pythonLiteralStringValue(subscript[2]);
+    if (field === undefined || field === "") return undefined;
+    requestExpression = subscript[1];
+  } else {
+    return undefined;
+  }
+  if (
+    wrapper.parameters[0] !== requestExpression ||
+    pythonIdentifierReassignedBetween(
+      lines,
+      requestExpression,
+      wrapper.startLine,
+      origin.line,
+    )
+  ) {
+    return undefined;
+  }
+  return {
+    kind: "django-request-query-string",
+    line: origin.line,
+    propagators: [
+      {
+        kind: "django-view-request-parameter",
+        path,
+        line: wrapper.startLine,
+        symbol: requestExpression,
+      },
+      {
+        kind: "django-request-get-read",
+        path,
+        line: origin.line,
+        symbol: `${requestExpression}.GET[${JSON.stringify(field)}]`,
+      },
+    ],
+  };
+}
+
+function pythonDjangoOpenRedirectSource(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  callLine: number,
+  expression: string,
+): PythonDjangoRequestStringSource | undefined {
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) =>
+      callLine >= candidate.startLine && callLine <= candidate.endLine,
+  );
+  if (wrapper === undefined || wrapper.parameters.length === 0)
+    return undefined;
+  const routeEvidence = pythonDjangoRouteEvidence(files, path, wrapper);
+  if (routeEvidence === undefined) return undefined;
+  const resolved =
+    resolvePythonExpression(lines, expression, callLine) ?? expression;
+  if (pythonFixedLocalRedirectPrefix(resolved) !== undefined) return undefined;
+  const directRequestSource = pythonDjangoRequestGetEvidence(
+    path,
+    lines,
+    wrapper,
+    { expression: resolved, line: callLine },
+  );
+  if (
+    directRequestSource === undefined &&
+    /\b[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)?\s*\(/u.test(
+      resolved
+        .split(/\r?\n/u)
+        .map((line) => pythonCodeBeforeComment(line))
+        .join("\n"),
+    )
+  ) {
+    return undefined;
+  }
+  const sources = pythonPydanticExpressionOrigins(lines, resolved, callLine)
+    .filter(
+      (origin) => origin.line >= wrapper.startLine && origin.line <= callLine,
+    )
+    .flatMap((origin) => {
+      const source = pythonDjangoRequestGetEvidence(
+        path,
+        lines,
+        wrapper,
+        origin,
+      );
+      return source === undefined ? [] : [source];
+    })
+    .filter(
+      (source, index, all) =>
+        all.findIndex(
+          (candidate) =>
+            candidate.line === source.line && candidate.kind === source.kind,
+        ) === index,
+    );
+  if (sources.length !== 1) return undefined;
+  return {
+    ...sources[0]!,
+    propagators: [...routeEvidence, ...sources[0]!.propagators],
+  };
+}
+
 function pythonOpenRedirectSink(
   modelId: string,
   files: readonly SourceFileSnapshot[],
@@ -42128,7 +42836,9 @@ function pythonOpenRedirectSink(
     ? pythonFastApiRedirectSink(files, path, lines, line)
     : modelId === "python-flask-open-redirect"
       ? pythonFlaskRedirectSink(files, path, lines, line)
-      : undefined;
+      : modelId === "python-django-open-redirect"
+        ? pythonDjangoRedirectSink(files, path, lines, line)
+        : undefined;
 }
 
 function pythonOpenRedirectSource(
@@ -42141,12 +42851,21 @@ function pythonOpenRedirectSource(
 ):
   | PythonFastApiRequestStringSource
   | PythonFlaskRequestStringSource
+  | PythonDjangoRequestStringSource
   | undefined {
   return modelId === "python-fastapi-open-redirect"
     ? pythonFastApiOpenRedirectSource(files, path, lines, callLine, expression)
     : modelId === "python-flask-open-redirect"
       ? pythonFlaskOpenRedirectSource(files, path, lines, callLine, expression)
-      : undefined;
+      : modelId === "python-django-open-redirect"
+        ? pythonDjangoOpenRedirectSource(
+            files,
+            path,
+            lines,
+            callLine,
+            expression,
+          )
+        : undefined;
 }
 
 function pythonPydanticModelForEndpointType(

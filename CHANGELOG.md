@@ -6,6 +6,26 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added a fail-closed `python-django-open-redirect` model for CWE-601. It
+  requires an official `django.urls.path` or `re_path` call inside the sole
+  balanced `urlpatterns` list, an exact same-file or relative-imported function
+  view, one literal `request.GET` field, and an official
+  `django.shortcuts.redirect` or `django.http` redirect-response Location sink.
+  Direct, qualified, aliased, response-class, named-target, subscript, multiple-
+  route, and relative-wrapper forms retain typed evidence.
+- Closed a measured Django false negative for `"/" + target`, which can form a
+  scheme-relative attacker authority. A non-root local prefix and an enclosing
+  official `url_has_allowed_host_and_scheme` check over the exact value with a
+  static host set suppress the path. Unregistered and class-based views,
+  dynamic or ambiguous routing, local shadows, rebound symbols, non-query
+  collections, opaque transformations, and unknown arguments fail closed.
+- Added a strict Django 6.1 exploit/control pair. The no-follow test-client
+  witness resolves the exploit Location to `attacker.invalid`, while the
+  topology-matched encoded-local control remains below `/continue/?next=`;
+  neither performs an external request. The canonical corpus advances to 193
+  pairs, 386 cases, and 1,158 repeated scan positions. The focused Django,
+  Flask, FastAPI, Rust bookkeeping, and canonical lane passes 56 tests and
+  2,950 assertions.
 - Added a fail-closed `python-flask-open-redirect` model for CWE-601. It
   requires an official `flask.Flask` application, one literal route, an exact
   stable `flask.request.args` query-field read, and an official

@@ -7,8 +7,8 @@ that dissimilar products can be reduced to one score.
 
 The latest comparator adoption starts from CodeQL's maintained
 [`py/url-redirection` query](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
-and its Flask `request.args` example, but tightens one current sanitizer
-assumption. CodeQL's
+and its Django and Flask examples, but tightens one current sanitizer
+assumption and adds framework-registration proof. CodeQL's
 [`StringConcatAsSanitizer`](https://github.com/github/codeql/blob/main/python/ql/lib/semmle/python/security/dataflow/UrlRedirectCustomizations.qll)
 suppresses the right operand of string concatenation when the left operand
 controls the prefix. Copilot Security distinguishes a non-root fixed local
@@ -19,6 +19,22 @@ field, redirect, and Location evidence; rejects shadows, rebindings, Blueprint-
 only registration, ambiguous decorators or arguments, non-query collections,
 and opaque transformations; and proves the boundary with a pinned, no-follow
 Flask/Werkzeug exploit/control pair.
+
+The parallel typed Django model requires an official `path` or `re_path`
+binding inside one balanced `urlpatterns` list, a resolvable registered
+function view, its request parameter and literal `request.GET` field, and an
+official shortcut or response-class Location sink. This incorporates CodeQL's
+documented [`url_has_allowed_host_and_scheme`](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+countermeasure but only suppresses a path when the exact redirect expression is
+guarded by the official helper and a static allowed-host set. It deliberately
+rejects unregistered and class-based views, dynamic routing, shadows,
+rebindings, opaque transforms, and ambiguous calls. Django's own
+[`redirect` implementation](https://github.com/django/django/blob/main/django/shortcuts.py)
+selects an HTTP redirect response after resolving the target, and the response
+base assigns that target to
+[`Location`](https://github.com/django/django/blob/main/django/http/response.py).
+A pinned Django 6.1 no-follow pair proves the root-prefix authority switch and
+the encoded fixed-local control without external I/O.
 
 The latest comparator adoption is CodeQL's merged August 2026
 [`Rust command-injection query`](https://github.com/github/codeql/pull/22323),

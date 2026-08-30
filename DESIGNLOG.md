@@ -2,6 +2,67 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Require registered Django views at redirect Location sinks
+
+**Measured gap and comparator evidence.** CodeQL's maintained
+[`py/url-redirection` help](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+explicitly covers Django redirects and recommends
+`url_has_allowed_host_and_scheme`. Its current
+[`StringConcatAsSanitizer`](https://github.com/github/codeql/blob/main/python/ql/lib/semmle/python/security/dataflow/UrlRedirectCustomizations.qll)
+still treats the right operand of a concatenation as sanitized when the left
+operand supplies a prefix. The root-only case is different: `"/" +
+"/attacker.invalid/path"` creates a scheme-relative URL and changes authority.
+Before implementation, the unchanged host emitted zero rows for a normal split
+Django application with that flow, so the added regression failed exactly its
+one expected exploit assertion.
+
+**Typed application boundary.** `python-django-open-redirect` accepts an exact
+official `django.urls.path` or `re_path` binding only inside the sole balanced,
+bounded `urlpatterns` list. It resolves the registered target to a public
+same-file function or exact relative import, identifies that view's request
+parameter, and carries one literal `request.GET.get` or subscript value through
+same-file aliases, concatenation, and recorded relative wrappers. The sink must
+be a stable official `django.shortcuts.redirect`, `HttpResponseRedirect`, or
+`HttpResponsePermanentRedirect` target role. Structured propagators preserve
+the URL-pattern binding and registration, view request parameter, query read,
+redirect binding, and HTTP Location assignment.
+
+**Precision boundary.** A non-root fixed local prefix suppresses the path. So
+does an enclosing official
+[`url_has_allowed_host_and_scheme`](https://github.com/django/django/blob/main/django/utils/http.py)
+guard over the exact redirect expression with `None`, an empty set, or a
+literal static host collection. Repository-local Django packages, rebound
+imports or view symbols, multiple `urlpatterns` assignments, calls outside the
+list, dynamic routes, expanded or unknown arguments, request collections other
+than `GET`, opaque transformations, and multiple unresolved query fields fail
+closed. Class-based `as_view()` registration remains negative until its method
+dispatch and request binding are modeled explicitly.
+
+**Runtime semantics and benchmark.** Django's official
+[`redirect` shortcut](https://github.com/django/django/blob/main/django/shortcuts.py)
+delegates the resolved target to an HTTP redirect class, whose
+[`HttpResponseRedirectBase`](https://github.com/django/django/blob/main/django/http/response.py)
+sets the `Location` header. The paired fixtures pin
+[`Django 6.1`](https://pypi.org/project/Django/). A test-client request with
+`follow=False` proves the root-prefix exploit selects `attacker.invalid`; the
+topology-matched control percent-encodes the identical hostile value beneath
+`/continue/?next=` and remains local. Neither witness opens a listener or makes
+an external request.
+
+**Regression contract.** Direct tests cover split and same-file URL
+configuration, `path`, `re_path`, aliases, qualified imports, shortcut and both
+response classes, positional and named targets, `GET.get`, subscript access,
+multiple literal patterns, relative redirect wrappers, and the official safe
+guard. Negative tests preserve every fail-closed boundary above. Both review
+fields must independently name the Django registration, query source,
+redirect-to-Location edge, attacker-selected origin, root-prefix or missing
+host validation, and CWE-601. The strict pair advances the canonical corpus to
+193 pairs, 386 cases, and 1,158 repeated scan positions. The focused Django,
+Flask, FastAPI, canonical, and corpus-bookkeeping lane passes 56 tests and 2,950
+assertions. Full aggregate, self-review, package, desktop, and hosted evidence
+will be appended after the implementation checkpoint. The scanner-effectiveness
+goal remains active.
+
 ## 2026-08-30 — Model Flask redirects without trusting a root-only prefix
 
 **Measured comparator gap.** CodeQL's high-precision

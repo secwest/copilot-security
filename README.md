@@ -96,6 +96,18 @@ non-root fixed local prefix is a control; a root-only `"/" + value` is not,
 because a value beginning with slash becomes a scheme-relative
 `//attacker.invalid/...` redirect. The pinned Flask/Werkzeug fixture pair
 uses `follow_redirects=False` and inspects only the emitted Location.
+Registered Django function views now have the same typed treatment without
+collapsing the frameworks into a name-matched rule. The Django model requires
+an official `path` or `re_path` call inside the sole balanced `urlpatterns`
+list, the exact function view and request parameter, one literal `request.GET`
+field, and an official shortcut or `HttpResponseRedirect` Location boundary.
+It supports exact relative imports and bounded redirect wrappers, while local
+framework shadows, rebound symbols, dynamic route structures, unregistered or
+class-based views, ambiguous arguments, other request collections, and opaque
+transformations fail closed. An enclosing official
+`url_has_allowed_host_and_scheme` check with a static allowed-host set is
+counterevidence. The Django 6.1 pair uses `follow=False`, inspects only the
+Location, and proves why a root-only prefix is not same-origin confinement.
 It separately models request bodies reaching
 standard-library `pickle.load` or `pickle.loads`, NumPy `load` with literal
 `allow_pickle=True`, as well as PyYAML
