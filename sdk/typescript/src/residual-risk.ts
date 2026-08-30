@@ -2169,6 +2169,11 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         expression: /\b[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)?\s*\(/u,
         cweIds: ["CWE-601"],
       },
+      {
+        kind: "fastapi-response-class-redirect-location",
+        expression: /^\s*return\s+\S/u,
+        cweIds: ["CWE-601"],
+      },
     ],
     controls: [],
   },
@@ -20155,8 +20160,8 @@ function frameworkDataflowRecords(
                     symbol: `socket.io-parser@${nodeSocketIoServerDos.dependency.child.version}:${nodeSocketIoServerDos.dependency.child.proof}:${nodeSocketIoServerDos.dependency.childDeclaration}:zero-attachment-buffer-retention`,
                   },
                 ]),
-            ...(pythonTypedSink?.propagators ?? []),
             ...(pythonRedirectSource?.propagators ?? []),
+            ...(pythonTypedSink?.propagators ?? []),
             ...(pythonPydanticSource?.propagators ?? []),
             ...(nodeOpcuaServerDos === undefined
               ? []
@@ -41453,7 +41458,104 @@ function pythonFastApiRedirectSink(
       ],
     };
   }
-  return undefined;
+  return pythonFastApiResponseClassRedirectSink(files, path, lines, line);
+}
+
+function pythonFastApiResponseClassRedirectSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  if (wrapper === undefined) return undefined;
+  const routeEvidence = pythonFastApiRouteEvidence(
+    files,
+    path,
+    lines,
+    wrapper,
+    PYTHON_FASTAPI_REDIRECT_ROUTE_METHODS,
+    "fastapi-redirect-route",
+  );
+  const route = routeEvidence?.find(
+    (candidate) => candidate.kind === "fastapi-redirect-route",
+  );
+  if (route === undefined) return undefined;
+
+  const returnExpression = /^(?: {4}|\t)return\s+(.+)$/u.exec(
+    pythonCodeBeforeComment(lines[line - 1] ?? ""),
+  )?.[1];
+  if (returnExpression === undefined || returnExpression.trim() === "") {
+    return undefined;
+  }
+  const resolvedReturn =
+    resolvePythonExpression(lines, returnExpression, line) ??
+    returnExpression.trim();
+  if (pythonFixedLocalRedirectPrefix(resolvedReturn) !== undefined) {
+    return undefined;
+  }
+  if (/\b[A-Za-z_]\w*\s*\(/u.test(resolvedReturn)) return undefined;
+
+  const decorator = lines[route.line - 1] ?? "";
+  const structuralDecorator = pythonStructuralCode(decorator);
+  const routeCall =
+    /\.\s*(?:delete|get|head|options|patch|post|put)\s*\(/u.exec(
+      structuralDecorator,
+    );
+  if (routeCall === null) return undefined;
+  const open = structuralDecorator.indexOf("(", routeCall.index);
+  const close = matchingCallParenthesis(structuralDecorator, open);
+  if (open < 0 || close < 0) return undefined;
+  const arguments_ = splitPythonArguments(decorator.slice(open + 1, close));
+  if (arguments_.some((argument) => argument.trim().startsWith("*"))) {
+    return undefined;
+  }
+  const responseClasses = arguments_
+    .map(
+      (argument) =>
+        /^response_class\s*=\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*$/u.exec(
+          argument.trim(),
+        )?.[1],
+    )
+    .filter((candidate): candidate is string => candidate !== undefined);
+  if (responseClasses.length !== 1) return undefined;
+  const responseBindings = ["fastapi.responses", "starlette.responses"]
+    .filter(
+      (moduleName) => !pythonLocalModuleCouldShadow(files, path, moduleName),
+    )
+    .map((moduleName) => ({
+      binding: pythonOfficialImportedMemberBinding(
+        lines,
+        moduleName,
+        "RedirectResponse",
+        responseClasses[0]!,
+        route.line,
+      ),
+      moduleName,
+    }))
+    .filter((candidate) => candidate.binding !== undefined);
+  if (responseBindings.length !== 1) return undefined;
+  const response = responseBindings[0]!;
+  return {
+    sourceExpression: resolvedReturn,
+    kind: "fastapi-response-class-redirect-location",
+    propagators: [
+      {
+        kind: "fastapi-official-response-class-binding",
+        path,
+        line: response.binding!.line,
+        symbol: `${response.moduleName}.RedirectResponse`,
+      },
+      {
+        kind: "fastapi-response-class-location-assignment",
+        path,
+        line: route.line,
+        symbol: "response_class=RedirectResponse -> Location",
+      },
+    ],
+  };
 }
 
 function pythonFastApiOpenRedirectSource(

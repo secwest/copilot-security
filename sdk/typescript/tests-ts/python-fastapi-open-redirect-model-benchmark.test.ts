@@ -55,6 +55,28 @@ function directServer(
   ].join("\n");
 }
 
+function responseClassServer(
+  declaration: string,
+  destination = "next_url",
+  imports: readonly string[] = [
+    "from typing import Annotated",
+    "from fastapi import FastAPI, Query",
+    "from fastapi.responses import RedirectResponse",
+  ],
+  setup: readonly string[] = [],
+): string {
+  return [
+    ...imports,
+    "app = FastAPI()",
+    ...setup,
+    '@app.get("/login", response_class=RedirectResponse, status_code=307)',
+    `def login(${declaration}):`,
+    `    destination = ${destination}`,
+    "    return destination",
+    "",
+  ].join("\n");
+}
+
 describe("FastAPI open-redirect model", () => {
   test("keeps a strict executable exploit/control benchmark contract", async () => {
     const manifest = JSON.parse(
@@ -76,6 +98,8 @@ describe("FastAPI open-redirect model", () => {
     expect(manifest.cases.map(({ id }: { id: string }) => id)).toEqual([
       "python-fastapi-open-redirect",
       "python-fastapi-safe-local-redirect",
+      "python-fastapi-response-class-open-redirect",
+      "python-fastapi-response-class-safe-local-redirect",
     ]);
     expect(manifest.cases[0].expected[0]).toMatchObject({
       id: modelId,
@@ -94,6 +118,23 @@ describe("FastAPI open-redirect model", () => {
       0,
     );
     expect(manifest.cases[1].expected).toEqual([]);
+    expect(manifest.cases[2].expected[0]).toMatchObject({
+      id: modelId,
+      cwe: ["CWE-601"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(
+      manifest.cases[2].expected[0].requiredValidationTextAnyOf,
+    ).toHaveLength(9);
+    expect(
+      manifest.cases[2].expected[0].requiredAttackPathTextAnyOf,
+    ).toHaveLength(8);
+    expect(manifest.cases[2].expected[0].forbiddenText.length).toBeGreaterThan(
+      0,
+    );
+    expect(manifest.cases[3].expected).toEqual([]);
   });
 
   test("separates the executable absolute-origin exploit and local-prefix control", async () => {
@@ -429,6 +470,237 @@ describe("FastAPI open-redirect model", () => {
     }
   });
 
+  test("models an official response_class direct URL return without accepting its fixed-local twin", async () => {
+    const exploit = await mkdtemp(
+      join(tmpdir(), "fastapi-response-class-redirect-"),
+    );
+    const control = await mkdtemp(
+      join(tmpdir(), "fastapi-response-class-local-"),
+    );
+    try {
+      await writeRepository(exploit, {
+        "server.py": responseClassServer("next_url: Annotated[str, Query()]"),
+      });
+      await writeRepository(control, {
+        "server.py": responseClassServer(
+          "next_url: Annotated[str, Query()]",
+          '"/continue?next=" + next_url',
+        ),
+      });
+
+      const detected = models(await buildResidualRiskInventory(exploit));
+      expect(detected).toHaveLength(1);
+      expect(detected[0].scope).toBe("same-file");
+      expect(detected[0].sink).toMatchObject({
+        kind: "fastapi-response-class-redirect-location",
+        path: "server.py",
+        line: 8,
+        cweIds: ["CWE-601"],
+      });
+      expect(detected[0].propagators).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "fastapi-official-response-class-binding",
+          }),
+          expect.objectContaining({
+            kind: "fastapi-response-class-location-assignment",
+          }),
+        ]),
+      );
+      expect(models(await buildResidualRiskInventory(control))).toHaveLength(0);
+    } finally {
+      await rm(exploit, { recursive: true, force: true });
+      await rm(control, { recursive: true, force: true });
+    }
+  });
+
+  test("separates the executable response_class fixture pair", async () => {
+    const exploit = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-fastapi-response-class-open-redirect",
+    );
+    const control = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-fastapi-response-class-safe-local-redirect",
+    );
+    const exploitModels = models(await buildResidualRiskInventory(exploit));
+    const controlModels = models(await buildResidualRiskInventory(control));
+
+    expect(exploitModels).toHaveLength(1);
+    expect(exploitModels[0].scope).toBe("same-file");
+    expect(exploitModels[0].source).toMatchObject({
+      kind: "fastapi-request-string-parameter",
+      path: "src/server.py",
+      line: 11,
+    });
+    expect(exploitModels[0].sink).toEqual({
+      kind: "fastapi-response-class-redirect-location",
+      path: "src/server.py",
+      line: 13,
+      cweIds: ["CWE-601"],
+    });
+    expect(
+      exploitModels[0].propagators.map(
+        (propagator: { kind: string }) => propagator.kind,
+      ),
+    ).toEqual([
+      "fastapi-official-application-factory",
+      "fastapi-redirect-route",
+      "python-official-annotated-binding",
+      "fastapi-official-query-parameter",
+      "fastapi-request-parameter-flow",
+      "fastapi-official-response-class-binding",
+      "fastapi-response-class-location-assignment",
+    ]);
+    expect(controlModels).toHaveLength(0);
+  });
+
+  test("accepts aliased FastAPI and Starlette response_class bindings plus root-only prefixes", async () => {
+    const variants: ReadonlyArray<readonly [string, string]> = [
+      [
+        "aliased-starlette",
+        [
+          "import fastapi as api",
+          "import starlette.responses as responses",
+          "router = api.APIRouter()",
+          '@router.head("/login", response_class=responses.RedirectResponse)',
+          "async def login(next_url: str):",
+          "    return next_url",
+          "",
+        ].join("\n"),
+      ],
+      [
+        "legacy-query",
+        [
+          "from fastapi import FastAPI, Query as RequestQuery",
+          "from fastapi.responses import RedirectResponse as Redirect",
+          "app = FastAPI()",
+          '@app.post("/login", status_code=302, response_class=Redirect)',
+          "def login(next_url: str = RequestQuery()):",
+          "    destination = next_url",
+          "    return destination",
+          "",
+        ].join("\n"),
+      ],
+      [
+        "root-only-prefix",
+        responseClassServer("next_url: str", '"/" + next_url', [
+          "from fastapi import FastAPI",
+          "from fastapi.responses import RedirectResponse",
+        ]),
+      ],
+    ];
+
+    for (const [name, server] of variants) {
+      const root = await mkdtemp(
+        join(tmpdir(), `fastapi-response-class-${name}-`),
+      );
+      try {
+        await writeRepository(root, { "server.py": server });
+        const detected = models(await buildResidualRiskInventory(root));
+        expect(detected, name).toHaveLength(1);
+        expect(detected[0].sink.kind, name).toBe(
+          "fastapi-response-class-redirect-location",
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("fails closed on ambiguous or unproven response_class return boundaries", async () => {
+    const guarded = responseClassServer("next_url: str").replace(
+      "    return destination",
+      [
+        '    if destination.startswith("/"):',
+        "        return destination",
+        '    return "/"',
+      ].join("\n"),
+    );
+    const variants: ReadonlyArray<
+      readonly [string, string, Readonly<Record<string, string>>?]
+    > = [
+      [
+        "wrong-response-class",
+        responseClassServer("next_url: str", "next_url", [
+          "from fastapi import FastAPI",
+          "from fastapi.responses import HTMLResponse",
+        ]).replace(/RedirectResponse/gu, "HTMLResponse"),
+      ],
+      [
+        "rebound-response-class",
+        responseClassServer("next_url: str", "next_url", undefined, [
+          "RedirectResponse = object()",
+        ]),
+      ],
+      [
+        "local-starlette-shadow",
+        [
+          "from fastapi import FastAPI",
+          "from starlette.responses import RedirectResponse",
+          "app = FastAPI()",
+          '@app.get("/login", response_class=RedirectResponse)',
+          "def login(next_url: str):",
+          "    return next_url",
+          "",
+        ].join("\n"),
+        {
+          "starlette/__init__.py": "",
+          "starlette/responses.py": "class RedirectResponse: pass\n",
+        },
+      ],
+      [
+        "duplicate-response-class",
+        responseClassServer("next_url: str").replace(
+          "response_class=RedirectResponse, status_code=307",
+          "response_class=RedirectResponse, response_class=RedirectResponse",
+        ),
+      ],
+      [
+        "expanded-route-options",
+        responseClassServer("next_url: str").replace(
+          "response_class=RedirectResponse, status_code=307",
+          "response_class=RedirectResponse, **route_options",
+        ),
+      ],
+      [
+        "opaque-sanitizer",
+        responseClassServer("next_url: str", "sanitize(next_url)", undefined, [
+          "def sanitize(value): return value",
+        ]),
+      ],
+      ["guarded-return", guarded],
+      [
+        "multiple-request-inputs",
+        responseClassServer(
+          "next_url: str, fallback: str",
+          "next_url + fallback",
+          [
+            "from fastapi import FastAPI",
+            "from fastapi.responses import RedirectResponse",
+          ],
+        ),
+      ],
+    ];
+
+    for (const [name, server, extra = {}] of variants) {
+      const root = await mkdtemp(
+        join(tmpdir(), `fastapi-response-class-negative-${name}-`),
+      );
+      try {
+        await writeRepository(root, { "server.py": server, ...extra });
+        expect(
+          models(await buildResidualRiskInventory(root)),
+          name,
+        ).toHaveLength(0);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  });
+
   test("requires redirect-boundary and origin-control evidence in review fields", async () => {
     const repository = join(
       benchmarkRoot,
@@ -526,6 +798,8 @@ describe("FastAPI open-redirect model", () => {
     );
     expect(prompt).toContain("python-fastapi-open-redirect");
     expect(prompt).toContain("RedirectResponse");
+    expect(prompt).toContain("response_class=RedirectResponse");
+    expect(prompt).toContain("direct top-level URL return");
     expect(prompt).toContain("Location");
     expect(prompt).toContain("fixed local");
     expect(prompt).toContain("CWE-601");

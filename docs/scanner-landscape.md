@@ -419,6 +419,16 @@ unauthorized row selection or origin selection but deliberately do not invent
 authentication, credential theft, write, sensitive-column, or deployment
 impact.
 
+`benchmarks/python-fastapi-open-redirect-manifest.json` separately gates both
+official FastAPI redirect construction paths. In addition to a direct
+`RedirectResponse(url=...)`, it covers the documented
+`response_class=RedirectResponse` decorator form where the handler returns the
+URL string directly. The exact typed host requires an official non-shadowed
+response binding and an unconditional top-level return, while rejecting
+duplicate or wildcard route options, guarded returns, opaque helper calls,
+rebindings, and local framework shadows. This goes beyond a generic redirect
+sink name by preserving how FastAPI actually creates the `Location` header.
+
 `benchmarks/python-multi-hop-framework-manifest.json` adds a public Python
 service relay between each registered Flask route and its command or SQL sink
 wrapper. The host emits all six ordered import, call-argument, and parameter

@@ -2,6 +2,71 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Preserve FastAPI response-class redirect construction
+
+**Measured false negative.** FastAPI's official
+[`RedirectResponse` documentation](https://fastapi.tiangolo.com/advanced/custom-response/#redirectresponse)
+shows two distinct construction paths. A handler may return a
+`RedirectResponse` instance, or its path-operation decorator may declare
+`response_class=RedirectResponse` and the handler may return the URL string
+directly. The unchanged typed host modeled only the constructor. Against an
+executable direct-return contract, its existing eight tests passed while the
+new case emitted zero findings and failed exactly one assertion. CodeQL's
+current high-precision
+[`py/url-redirection`](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+guidance independently treats remote control of a redirect location as
+CWE-601 and recommends an authorized destination set or a robust same-origin
+check. This establishes a framework-semantic sink gap rather than a reason to
+promote arbitrary Python returns.
+
+**Typed boundary.** The new sink reuses the existing official FastAPI route and
+string Query source proof, then requires exactly one decorator
+`response_class=` value bound to non-shadowed
+`fastapi.responses.RedirectResponse` or
+`starlette.responses.RedirectResponse`. The handler must return at its
+top-level indentation, the resolved expression must preserve exactly one
+supported request parameter, and an opaque callable transformation is rejected
+because it might validate or replace the URL. Duplicate response-class roles,
+wildcard route options, wrong classes, import or member rebinding, local module
+shadows, nested guarded returns, multiple request strings, and fixed local
+destinations fail closed. Constructor and decorator sinks have distinct kinds
+and propagators so review can reconstruct the actual framework edge.
+
+**Executable differential and controls.** The source-matched pair pins FastAPI
+0.116.1, Starlette 0.47.3, Pydantic 2.11.7, and HTTPX 0.28.1. TestClient sends
+`https://attacker.invalid/capture?campaign=response-class` without following
+the response. The vulnerable handler returns that string under its official
+response class and observes attacker-origin selection `1`; the control
+percent-encodes the same string beneath `/continue?next=` and observes `0`.
+The disposable WSL environment was removed after exact-path verification. An
+initial command was rejected as evidence after PowerShell consumed an inner
+Bash variable and invoked Debian's system `pip`, which correctly failed closed
+under PEP 668; the corrected run uses one explicit venv path throughout.
+
+**Initial regression evidence.** Twelve focused tests pass 82 assertions,
+including aliased FastAPI/APIRouter and Starlette bindings, async handlers,
+legacy Query syntax, root-only prefixes, fixed-local controls, rebindings,
+shadows, duplicate and wildcard decorator roles, guarded returns, opaque calls,
+and multiple input ambiguity. The focused plus canonical manifest gate passes
+30 tests and 2,759 assertions with no failures. The strict corpus now contains
+191 exploit/control pairs, 382 cases, and 1,146 repeated positions. Broader
+regression, immutable self-review, package, and hosted evidence follows the
+implementation checkpoint; the standing effectiveness goal remains active.
+
+The authoritative managed Windows run covers 2,129 tests and 16,538
+assertions: 2,091 pass, 31 intentional platform/environment cases skip, and
+seven initially fail. One failure is the stale 190-pair corpus assertion and
+passes after its required 191-pair/382-case update. Five benchmark campaign
+tests correctly refuse source newer than built output; after rebuilding, four
+pass and only the managed temporary-Git initialization boundary remains. The
+other denial is the existing private Windows credential-home ACL boundary.
+Rerunning the two unchanged files natively passes all 48 tests and 242
+assertions, including both exact denied operations. The combined product result
+is therefore 2,098 passing outcomes and no product failure. The complete
+19-file Python model lane independently passes 196 tests and 1,285 assertions
+with eight expected platform skips. Generated-model drift, formatting,
+TypeScript, and the clean production build are green.
+
 ## 2026-08-30 — Model FastAPI redirect origin selection as a typed boundary
 
 **Measured miss and primary-source boundary.** The unchanged compiled host

@@ -81,6 +81,78 @@
         "python-fastapi-safe-local-redirect/run-1/findings.json"
       ],
       "expected": []
+    },
+    {
+      "id": "python-fastapi-response-class-open-redirect",
+      "description": "A FastAPI query string is returned directly from a route whose exact official response_class constructs an attacker-selected RedirectResponse Location.",
+      "fixture": "fixtures/python-fastapi-response-class-open-redirect",
+      "findingsPaths": [
+        "python-fastapi-response-class-open-redirect/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-fastapi-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/server.py",
+              "startLine": 13,
+              "endLine": 13,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["FastAPI path operation", "FastAPI route", "app.get"],
+            ["Annotated[str, Query()]", "Query parameter", "query string"],
+            ["response_class", "response class"],
+            ["RedirectResponse", "official redirect response"],
+            ["direct return", "returned URL", "return destination"],
+            ["Location header", "redirect location"],
+            [
+              "absolute URL",
+              "attacker-controlled origin",
+              "attacker-controlled host"
+            ],
+            ["fixed local prefix", "allowlist", "same-origin"],
+            ["CWE-601", "open redirect"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["GET /response-class", "FastAPI route", "app.get"],
+            ["next_url", "query parameter", "request query"],
+            ["destination", "local alias", "alias"],
+            ["return destination", "direct return", "returned URL"],
+            ["response_class=RedirectResponse", "response class"],
+            ["Location", "redirect target"],
+            [
+              "attacker.invalid",
+              "attacker-controlled origin",
+              "external origin"
+            ],
+            ["follow_redirects=False", "does not follow", "no external request"]
+          ],
+          "forbiddenText": [
+            "the witness contacted attacker.invalid",
+            "proves the endpoint is publicly reachable",
+            "proves credentials were stolen",
+            "every response_class is vulnerable",
+            "a fixed local prefix is an open redirect",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-fastapi-response-class-safe-local-redirect",
+      "description": "The topology-matched response_class control percent-encodes the hostile URL beneath a fixed local /continue target before returning it.",
+      "fixture": "fixtures/python-fastapi-response-class-safe-local-redirect",
+      "findingsPaths": [
+        "python-fastapi-response-class-safe-local-redirect/run-1/findings.json"
+      ],
+      "expected": []
     }
   ]
 }

@@ -3053,6 +3053,28 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The dedicated `python-fastapi-open-redirect-manifest.json` adds a second
+independent pair for FastAPI's documented decorator form. Its positive route
+declares `response_class=RedirectResponse` and returns the hostile query URL
+directly; its matched control returns the same bytes only after encoding them
+beneath `/continue?next=`. The host requires one exact official response-class
+binding, rejects duplicate or wildcard route options, and accepts only an
+unconditional top-level return without an opaque helper call. The pinned
+TestClient witnesses disable redirect following and observe attacker-origin
+selection values `1` and `0`:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/python-fastapi-open-redirect-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-python-fastapi-redirect `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --mode deep
+```
+
 The Python multi-hop lane inserts public gateway and service relays between the
 registered Flask route and sink wrapper. It also exercises bounded multiline
 relay calls:

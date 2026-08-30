@@ -71,16 +71,18 @@ distinguish hostile direct and embedded body fields from fixed `ClassVar`
 values excluded from Pydantic request data.
 The same pass independently models FastAPI open redirects. It requires one
 stable string query parameter on an official path operation and one exact
-non-shadowed FastAPI or Starlette `RedirectResponse` whose positional or
-`url=` location resolves from that parameter. It records the resulting HTTP
-`Location` boundary and carries the value through aliases, relative wrappers,
-and bounded relays. A fixed local prefix such as `/continue?next=` closes the
-origin-selection path when the remote value is encoded beneath it; a root-only
-`"/" + value` does not, because an input beginning with `/` can still produce
-a network-path reference. Configured or ambiguous `Query` calls, non-string or
-reassigned parameters, extra `Annotated` metadata, duplicate URL roles, star
-expansion, local package shadows, replaced response bindings, and lookalikes
-fail closed.
+non-shadowed FastAPI or Starlette `RedirectResponse`. The redirect boundary may
+be its positional or `url=` constructor argument, or the route's sole exact
+`response_class=RedirectResponse` role plus an unconditional top-level URL
+return. It records the resulting HTTP `Location` boundary and carries
+constructor values through aliases, relative wrappers, and bounded relays. A
+fixed local prefix such as `/continue?next=` closes the origin-selection path
+when the remote value is encoded beneath it; a root-only `"/" + value` does
+not, because an input beginning with `/` can still produce a network-path
+reference. Configured or ambiguous `Query` calls, non-string or reassigned
+parameters, extra `Annotated` metadata, duplicate URL or response-class roles,
+wildcard route options, guarded or opaque direct returns, star expansion,
+local package shadows, replaced response bindings, and lookalikes fail closed.
 It separately models request bodies reaching
 standard-library `pickle.load` or `pickle.loads`, NumPy `load` with literal
 `allow_pickle=True`, as well as PyYAML

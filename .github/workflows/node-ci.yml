@@ -166,6 +166,10 @@ jobs:
             benchmarks/fixtures/python-fastapi-open-redirect/examples/witness.py
           "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
             benchmarks/fixtures/python-fastapi-safe-local-redirect/examples/witness.py
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-fastapi-response-class-open-redirect/examples/witness.py
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-fastapi-response-class-safe-local-redirect/examples/witness.py
 
   mcp-tool-fixtures:
     name: MCP tool witness / ${{ matrix.os }} / ${{ matrix.fixture }}

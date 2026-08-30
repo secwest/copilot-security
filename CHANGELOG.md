@@ -6,6 +6,33 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed FastAPI's documented `response_class=RedirectResponse` direct-return
+  gap under the existing typed CWE-601 model. The new sink requires an exact
+  official FastAPI or Starlette response binding in the route decorator's sole
+  `response_class=` role and an unconditional top-level handler return that
+  preserves exactly one supported string query parameter. It emits distinct
+  response-class binding and FastAPI-to-`Location` propagators.
+- Preserved fail-closed precision for the new form. Wrong or rebound response
+  classes, local framework shadows, duplicate response-class roles, wildcard
+  route options, configured or ambiguous Query metadata, guarded nested
+  returns, opaque helper/sanitizer calls, fixed local destinations, and
+  multiple controlled parameters remain negative. Root-only `"/" + value`
+  remains reportable because it can form `//host`.
+- Added a separate source-matched TestClient pair on FastAPI 0.116.1, Starlette
+  0.47.3, Pydantic 2.11.7, and HTTPX 0.28.1. With redirect following disabled,
+  the direct return selects the inert attacker origin once while the encoded
+  fixed-local control selects it zero times. The dedicated strict manifest now
+  contains both constructor and response-class pairs; the canonical corpus
+  advances to 191 pairs, 382 cases, and 1,146 repeated scan positions.
+- The authoritative Windows aggregate exercises 2,129 tests: 2,091 pass, 31
+  intentional platform/environment cases skip, and seven initially fail. One
+  failure is the deliberately stale 190-pair invariant and passes at 191/382.
+  Five campaign tests first reject stale built output; rebuilding restores four
+  and leaves only the managed temporary-Git boundary. That case and the managed
+  private-ACL denial both pass in an unchanged native 48-test, 242-assertion
+  rerun. The effective product result is 2,098 passes and no failures. The
+  complete 19-file Python lane separately passes 196 tests and 1,285 assertions
+  with eight expected platform skips.
 - Added a fail-closed `python-fastapi-open-redirect` host model for CWE-601.
   One stable official FastAPI path operation and string query parameter must
   reach the positional or named URL of an exact non-shadowed FastAPI or
