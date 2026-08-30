@@ -70,6 +70,33 @@ with a clean type recheck. Self-scan, package, GUI, hosted, and immutable-
 checkpoint evidence follows at the acceptance checkpoint rather than being
 inferred from these local lanes.
 
+**Checkpoint evidence.** Exact implementation checkpoint
+`ac373b807fbfbe091357fae82f243c8d8d802e12` has a 5,963,412-byte tracked
+archive (SHA-256
+`a1b032ccd047a5a856e57e359ccae6b80706c95e6264d26df96383c543a3e1a6`).
+Two production npm packages are byte-identical at 2,477,744 bytes and 299
+entries (SHA-256
+`29edd56e9fda984cf54d11dd5caf907cc950815e1562ffd860122726104c8982`);
+a fresh 67-package install validates the public API, CLI, and all 79 bundled
+plugin files, and the production dependency audit is clean. Windows and
+Ubuntu/WSL GUI builds have zero warnings/errors. Windows passes 7/7 core and
+3/3 shared tests; Ubuntu passes those plus 2/2 Linux UI tests and both
+non-graphical and X11/Xvfb startup. The published Windows executable is 346,796
+bytes (SHA-256
+`c6a6e8ac4e6266c6c2104c8e50d4ebeaccdea8b68d82091844545e62ec9e5562`)
+and Linux is 72,568 bytes (SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`).
+All 11 hosted workflows pass, including all 92 Node jobs. Repository visibility
+is public and `main` remains the default branch.
+
+The isolated deep self-scan preflight also proves the exact target, external
+scanner-owned output, xhigh effort, and bounded three-session recovery policy.
+Removing the shell-injected `GH_TOKEN` changes auto-authentication from token
+selection to the intended stored Copilot credentials. The execution safety
+layer denied the production Copilot call as external source egress, so this
+checkpoint deliberately records no self-scan result until that egress is
+explicitly approved; a dry-run is not treated as scan completion.
+
 ## 2026-08-30 — Model registered Django class-view GET dispatch
 
 **Measured gap and maintained comparator.** The unchanged scanner emitted zero

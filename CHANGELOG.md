@@ -44,6 +44,33 @@ All notable scanner, application, benchmark, and operational changes are recorde
   deny-all method-decorator precision regression then passes in the complete
   19-test Django file (125 assertions), alongside a clean generated-model and
   TypeScript recheck.
+- Exact implementation checkpoint
+  `ac373b807fbfbe091357fae82f243c8d8d802e12` has a 5,963,412-byte tracked
+  source archive with SHA-256
+  `a1b032ccd047a5a856e57e359ccae6b80706c95e6264d26df96383c543a3e1a6`.
+  Its two independent 299-entry npm packages are byte-identical at 2,477,744
+  bytes with SHA-256
+  `29edd56e9fda984cf54d11dd5caf907cc950815e1562ffd860122726104c8982`;
+  a fresh 67-package install validates the public API, CLI, and all 79 bundled
+  plugin files. The production high-severity dependency audit is clean.
+- Windows GUI acceptance builds with zero warnings/errors, passes 7/7 core and
+  3/3 shared tests, and publishes a 346,796-byte executable with SHA-256
+  `c6a6e8ac4e6266c6c2104c8e50d4ebeaccdea8b68d82091844545e62ec9e5562`.
+  Ubuntu/WSL locked restore and build also have zero warnings/errors; 7/7 core,
+  3/3 shared, and 2/2 Linux UI tests pass, as do non-graphical and X11/Xvfb
+  startup. The 72,568-byte Linux executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- All 11 hosted workflow families pass at `ac373b8`: Node `33335556000`
+  (92/92 jobs), container `33335556028`, Windows GUI `33335555992`, Linux GUI
+  `33335556012`, Java `33335556007`, .NET `33335555991`, Go `33335556003`,
+  Kotlin `33335555986`, Rust `33335555984`, PHP `33335555987`, and Ruby
+  `33335555985`. The repository is public on default branch `main`.
+- An isolated deep self-scan dry-run validates the exact tracked target,
+  scanner-owned output path, xhigh effort, and three-session recovery budget.
+  Removing the ambient `GH_TOKEN` correctly selects stored Copilot credentials
+  instead of token authentication. The production self-scan itself remains
+  pending because the execution safety layer denied external Copilot source
+  egress; no self-scan finding or completion claim is inferred from preflight.
 - Closed a separately measured Django class-based-view false negative: the
   unchanged scanner emitted zero rows for an official `django.views.View`
   subclass registered through `ContinueView.as_view()`, while the typed model
