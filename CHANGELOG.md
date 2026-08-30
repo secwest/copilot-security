@@ -26,6 +26,32 @@ All notable scanner, application, benchmark, and operational changes are recorde
   pairs, 386 cases, and 1,158 repeated scan positions. The focused Django,
   Flask, FastAPI, Rust bookkeeping, and canonical lane passes 56 tests and
   2,950 assertions.
+- Final acceptance at implementation checkpoint
+  `b0d09b8e4fdf1e1dd5110f4fc697705bc05bb435` runs all 2,149 TypeScript tests:
+  2,116 pass, 31 intentional environment/platform cases skip, and the two
+  sandbox-denied Git/Windows-ACL cases pass in native reruns of their complete
+  six-test and 42-test files. Generated-model drift, formatting, TypeScript, a
+  clean build, and the production advisory audit are green.
+- Two exact-checkpoint self-inventories are byte-identical at the 256-row cap:
+  626,847 bytes with SHA-256
+  `7d7e0d86fa67ff1d61ee990af6a73f6a8b7b830d509038b7a02698215c4b7865`.
+  Each uniquely retains the Django source at `src/views.py:5`, redirect sink at
+  `src/views.py:7`, and CWE-601; the fixed-local twin is absent. The
+  21,739,520-byte tracked archive has SHA-256
+  `9f65a721453c04f396b6b39790a53bd7cfaf36a3ec69a81d83fa65051a5a2868`.
+- Two production package builds are byte-identical. Strict inspection validates
+  the 299-entry, 2,471,910-byte archive with SHA-256
+  `4a8253b1f73ce27e9da065ead7ee5f1f36b458de7cdf1501960a08d11b79e942`;
+  a fresh 67-package install validates the public import, CLI, and all 79
+  bundled plugin files. Windows and Ubuntu WSL builds have zero warnings or
+  errors; each passes the seven core and three shared tests, and Linux also
+  passes both headless/UI-smoke tests. All temporary archives are removed.
+- All eleven exact-source workflow families pass: Node `33324067745` passes 92
+  jobs including the Django witnesses; container `33324067792`, .NET
+  `33324067774`, Go `33324067760`, Java `33324067666`, Kotlin `33324067684`,
+  Linux GUI `33324067690`, PHP `33324067709`, Ruby `33324067688`, Rust
+  `33324067755`, and Windows GUI `33324067708` also pass. GitHub reports the
+  repository public on default branch `main`.
 - Added a fail-closed `python-flask-open-redirect` model for CWE-601. It
   requires an official `flask.Flask` application, one literal route, an exact
   stable `flask.request.args` query-field read, and an official

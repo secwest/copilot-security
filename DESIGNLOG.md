@@ -59,9 +59,51 @@ redirect-to-Location edge, attacker-selected origin, root-prefix or missing
 host validation, and CWE-601. The strict pair advances the canonical corpus to
 193 pairs, 386 cases, and 1,158 repeated scan positions. The focused Django,
 Flask, FastAPI, canonical, and corpus-bookkeeping lane passes 56 tests and 2,950
-assertions. Full aggregate, self-review, package, desktop, and hosted evidence
-will be appended after the implementation checkpoint. The scanner-effectiveness
-goal remains active.
+assertions.
+
+**Final scanner acceptance.** Exact implementation checkpoint
+`b0d09b8e4fdf1e1dd5110f4fc697705bc05bb435` runs all 2,149 TypeScript tests in
+822.43 seconds: 2,116 pass and 31 intentional environment/platform cases skip.
+The only two aggregate failures are the managed sandbox denying Git creation in
+a disposable SARIF fixture and denying private Windows ACL replacement. Their
+complete six-test benchmark-runner and 42-test Copilot-port files pass natively,
+including the exact `copilot-security-home` ACL contract. Generated-model drift,
+formatting, TypeScript checking, clean production build, and the production
+high-severity advisory audit are green.
+
+**Immutable self-review and distribution.** Two compiled inventories of an
+exact tracked archive take 22,146.934 and 22,291.123 milliseconds and are
+byte-identical at 256 rows and 626,847 bytes, with SHA-256
+`7d7e0d86fa67ff1d61ee990af6a73f6a8b7b830d509038b7a02698215c4b7865`.
+The Django row uniquely retains source `src/views.py:5`, sink `src/views.py:7`,
+and CWE-601, while the fixed-local twin is absent. The 21,739,520-byte tracked
+archive has SHA-256
+`9f65a721453c04f396b6b39790a53bd7cfaf36a3ec69a81d83fa65051a5a2868`.
+Two production packs are byte-identical. The strict inspector accepts 299
+entries in the 2,471,910-byte archive with SHA-256
+`4a8253b1f73ce27e9da065ead7ee5f1f36b458de7cdf1501960a08d11b79e942`;
+an isolated install adds 67 packages and validates the public import, executable
+CLI, and all 79 bundled plugin files. The archives and isolated self-review tree
+are removed.
+
+**Cross-platform and hosted closure.** Windows builds with zero warnings or
+errors and passes 7/7 scanner-core plus 3/3 shared desktop tests. Ubuntu WSL also
+builds with zero warnings or errors, passes those same 7/7 and 3/3 suites, and
+passes 2/2 non-graphical and UI-smoke tests. All eleven exact-source workflows
+pass: [Node `33324067745`](https://github.com/secwest/copilot-security/actions/runs/33324067745)
+has 92 successful jobs including the pinned Django witnesses; [container
+`33324067792`](https://github.com/secwest/copilot-security/actions/runs/33324067792),
+[.NET `33324067774`](https://github.com/secwest/copilot-security/actions/runs/33324067774),
+[Go `33324067760`](https://github.com/secwest/copilot-security/actions/runs/33324067760),
+[Java `33324067666`](https://github.com/secwest/copilot-security/actions/runs/33324067666),
+[Kotlin `33324067684`](https://github.com/secwest/copilot-security/actions/runs/33324067684),
+[Linux GUI `33324067690`](https://github.com/secwest/copilot-security/actions/runs/33324067690),
+[PHP `33324067709`](https://github.com/secwest/copilot-security/actions/runs/33324067709),
+[Ruby `33324067688`](https://github.com/secwest/copilot-security/actions/runs/33324067688),
+[Rust `33324067755`](https://github.com/secwest/copilot-security/actions/runs/33324067755),
+and [Windows GUI `33324067708`](https://github.com/secwest/copilot-security/actions/runs/33324067708)
+are green. GitHub reports the repository public on default branch `main`. The
+scanner-effectiveness goal remains active.
 
 ## 2026-08-30 — Model Flask redirects without trusting a root-only prefix
 
