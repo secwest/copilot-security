@@ -93,8 +93,23 @@ build, and the high-severity production advisory audit are green. The release
 archive has 299 entries, is 2,394,366 bytes, and has SHA-256
 `368f18557abc9910b76dbe55f50517bf07707810836fb755c8cd2308a2c45a77`.
 Strict inspection and isolated Windows and Ubuntu installs validate the public
-import, CLI, and all 79 bundled plugin files. Exact-commit self-scan and hosted
-workflow closure are recorded after the implementation checkpoint exists.
+import, CLI, and all 79 bundled plugin files.
+
+Two compiled inventories of a 3,877-file tracked-only archive at exact
+implementation checkpoint `431fcb17806541a3f425b3981e3c4a9eb765ff15`
+complete in 20,223.153 and 20,510.579 milliseconds. Both reach the 256-row cap,
+are byte-identical at 617,628 bytes, and have SHA-256
+`7dcd21d77c337b3f2bdc32c55a8e7c8772e770f1eeca37c423a92f0808934cd4`.
+Exactly one row retains the positive fixture: Flask source `src/server.py:10`,
+relative import and wrapper argument, wrapper parameter, exact
+`python-object-attribute-assignment` for `command.value` at `src/runner.py:7`,
+shell sink at line 9, and CWE-78. The topology-matched control emits no row.
+The disposable tree and archive are removed after comparison. Hosted closure is
+also clean: Node `33288798187` passes all 91 jobs, container `33288798141`,
+Windows GUI `33288798229`, Linux GUI `33288798154`, Java `33288798298`, Kotlin
+`33288798205`, .NET `33288798134`, Go `33288798164`, Rust `33288798150`, Ruby
+`33288798184`, and PHP `33288798139` all pass the exact implementation
+checkpoint. The repository remains public on default branch `main`.
 
 This closes one exact object-field increment, not the standing scanner-
 effectiveness goal.

@@ -44,6 +44,23 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `368f18557abc9910b76dbe55f50517bf07707810836fb755c8cd2308a2c45a77`.
   Strict archive inspection plus isolated Windows and Ubuntu installations
   validate the public import, CLI, and all 79 bundled plugin files.
+- Two compiled inventories of the 3,877-file tracked-only archive at exact
+  implementation checkpoint
+  `431fcb17806541a3f425b3981e3c4a9eb765ff15` complete in 20,223.153 and
+  20,510.579 milliseconds. Both reach the 256-row cap, are byte-identical at
+  617,628 bytes, and have SHA-256
+  `7dcd21d77c337b3f2bdc32c55a8e7c8772e770f1eeca37c423a92f0808934cd4`.
+  Exactly one row retains the new fixture's Flask source at `server.py:10`,
+  relative wrapper chain, `python-object-attribute-assignment` for
+  `command.value` at `runner.py:7`, shell sink at line 9, and CWE-78; the
+  topology-matched safe control is absent. The disposable tree and archive are
+  removed.
+- All eleven hosted workflow families pass exact implementation checkpoint
+  `431fcb1`: Node `33288798187` (91/91 jobs), container `33288798141`, Windows
+  GUI `33288798229`, Linux GUI `33288798154`, Java `33288798298`, Kotlin
+  `33288798205`, .NET `33288798134`, Go `33288798164`, Rust `33288798150`, Ruby
+  `33288798184`, and PHP `33288798139`. The repository remains public on
+  default branch `main`.
 - Closed a reproduced Python cross-file command-injection false negative where
   a Flask request value was stored under a constant dictionary key and later
   selected through bracket, `get`, or `pop` syntax as the command passed to
