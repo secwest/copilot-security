@@ -62,6 +62,13 @@ All notable scanner, application, benchmark, and operational changes are recorde
   topology-matched safe control is absent. The 5,822,526-byte exact-commit
   archive has SHA-256
   `21a211de40a828c4897368742bff637d55b39dba483309738d3f4ba866825a51`.
+- All eleven hosted workflow families pass exact implementation checkpoint
+  `c4c9b24`: Node `33292707290` (91/91 jobs), container `33292707267`, Windows
+  GUI `33292707315`, Linux GUI `33292707279`, Java `33292707281`, Kotlin
+  `33292707303`, .NET `33292707309`, Go `33292707280`, Rust `33292707291`, Ruby
+  `33292707277`, and PHP `33292707345`. The repository remains public on
+  default branch `main`; disposable package and exact-commit self-scan
+  artifacts are removed.
 - Closed a reproduced Python cross-file command-injection false negative where
   a Flask request crossed a relative wrapper, was written to a fresh
   `types.SimpleNamespace` field, selected through dot or constant-name

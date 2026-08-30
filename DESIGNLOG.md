@@ -106,6 +106,24 @@ sink at line 15, and CWE-78. The topology-matched safe control emits no row.
 The 5,822,526-byte exact-commit archive has SHA-256
 `21a211de40a828c4897368742bff637d55b39dba483309738d3f4ba866825a51`.
 
+Hosted closure is also clean at the exact implementation checkpoint: Node
+[`33292707290`](https://github.com/secwest/copilot-security/actions/runs/33292707290)
+passes all 91 jobs; container
+[`33292707267`](https://github.com/secwest/copilot-security/actions/runs/33292707267),
+Windows GUI
+[`33292707315`](https://github.com/secwest/copilot-security/actions/runs/33292707315),
+Linux GUI
+[`33292707279`](https://github.com/secwest/copilot-security/actions/runs/33292707279),
+Java [`33292707281`](https://github.com/secwest/copilot-security/actions/runs/33292707281),
+Kotlin [`33292707303`](https://github.com/secwest/copilot-security/actions/runs/33292707303),
+.NET [`33292707309`](https://github.com/secwest/copilot-security/actions/runs/33292707309),
+Go [`33292707280`](https://github.com/secwest/copilot-security/actions/runs/33292707280),
+Rust [`33292707291`](https://github.com/secwest/copilot-security/actions/runs/33292707291),
+Ruby [`33292707277`](https://github.com/secwest/copilot-security/actions/runs/33292707277),
+and PHP [`33292707345`](https://github.com/secwest/copilot-security/actions/runs/33292707345)
+all pass. GitHub reports the repository public on default branch `main`.
+Disposable package and exact-commit self-scan artifacts are removed.
+
 This closes one exact generated-dataclass increment, not the standing scanner-
 effectiveness goal.
 
