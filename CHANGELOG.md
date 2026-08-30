@@ -33,6 +33,28 @@ All notable scanner, application, benchmark, and operational changes are recorde
   rerun. The effective product result is 2,098 passes and no failures. The
   complete 19-file Python lane separately passes 196 tests and 1,285 assertions
   with eight expected platform skips.
+- Two compiled inventories of the 3,956-file exact implementation archive at
+  checkpoint `a2d3847799175b3f8e3ed71b05444696255ad421` are byte-identical.
+  Each reaches the 256-row cap with 256 structured records, is 626,013 bytes,
+  and has SHA-256
+  `202db65ff5ac8e1cf16f32b443c2ce6d5ef6aba5497128882eeef78034c4f76a`.
+  Exactly one response-class redirect row retains the request source at
+  `src/server.py:11`, direct-return sink at line 13, CWE-601, and all seven
+  ordered framework, Query, response-class, and Location transitions; its
+  fixed-local twin is absent.
+- Two production package builds are byte-identical. Strict inspection validates
+  the 299-entry, 2,454,697-byte archive with SHA-256
+  `f33c7358e1906e01d35e04b680f4eeee9b58d0a50d9239029ff0046fbbde281a`;
+  an isolated 67-package installation validates the public import, executable
+  CLI, and all 79 bundled plugin files. The production high-severity advisory
+  audit reports no known vulnerabilities.
+- All eleven exact-source workflow families pass. Node CI run `33312264502`
+  passes all 92 jobs, including the updated FastAPI exploit/control witness;
+  container `33312264470`, .NET `33312264494`, Go `33312264521`, Java
+  `33312264495`, Kotlin `33312264487`, Linux GUI `33312264473`, PHP
+  `33312264486`, Ruby `33312264503`, Rust `33312264520`, and Windows GUI
+  `33312264466` also pass. The repository is public on default branch `main`,
+  whose hosted head is the exact implementation checkpoint.
 - Added a fail-closed `python-fastapi-open-redirect` host model for CWE-601.
   One stable official FastAPI path operation and string query parameter must
   reach the positional or named URL of an exact non-shadowed FastAPI or

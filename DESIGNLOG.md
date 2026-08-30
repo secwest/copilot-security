@@ -48,7 +48,7 @@ including aliased FastAPI/APIRouter and Starlette bindings, async handlers,
 legacy Query syntax, root-only prefixes, fixed-local controls, rebindings,
 shadows, duplicate and wildcard decorator roles, guarded returns, opaque calls,
 and multiple input ambiguity. The focused plus canonical manifest gate passes
-30 tests and 2,759 assertions with no failures. The strict corpus now contains
+30 tests and 2,761 assertions with no failures. The strict corpus now contains
 191 exploit/control pairs, 382 cases, and 1,146 repeated positions. Broader
 regression, immutable self-review, package, and hosted evidence follows the
 implementation checkpoint; the standing effectiveness goal remains active.
@@ -66,6 +66,40 @@ is therefore 2,098 passing outcomes and no product failure. The complete
 19-file Python model lane independently passes 196 tests and 1,285 assertions
 with eight expected platform skips. Generated-model drift, formatting,
 TypeScript, and the clean production build are green.
+
+**Immutable self-review and distribution evidence.** Two compiled inventories
+of the repository-root `git archive` for exact implementation checkpoint
+`a2d3847799175b3f8e3ed71b05444696255ad421` take 40,684.687 and 21,459.208
+milliseconds. Both produce the same 256 structured rows, 626,013 bytes, and
+SHA-256
+`202db65ff5ac8e1cf16f32b443c2ce6d5ef6aba5497128882eeef78034c4f76a`;
+247 retained rows originate in benchmark fixtures. The one response-class
+FastAPI redirect row keeps source
+`benchmarks/fixtures/python-fastapi-response-class-open-redirect/src/server.py:11`,
+sink at line 13, CWE-601, same-file scope, and all seven ordered factory,
+route, Annotated, Query, request-flow, response-class-binding, and Location
+propagators. Its fixed-local twin is absent. The exact archive contains 3,956
+tracked files, is 21,575,680 bytes, and has SHA-256
+`a829ef1527aa58ec2c54d5c2b1c4db25ae4620c8b5e3310d932997b31bbee14a`;
+untracked workspace material is outside the input by construction.
+
+Two independent production package builds are byte-identical. Strict
+inspection validates the 299-entry, 2,454,697-byte archive with SHA-256
+`f33c7358e1906e01d35e04b680f4eeee9b58d0a50d9239029ff0046fbbde281a`.
+An isolated installation adds 67 packages and validates the public module
+import, executable CLI, and all 79 bundled plugin files. The production
+high-severity advisory audit is green with no known vulnerabilities.
+
+**Hosted closure.** The implementation checkpoint is public on
+`secwest/copilot-security` default branch `main`. Node CI run `33312264502`
+passes all 92 jobs, including the FastAPI executable witness containing both
+response-class cases. The remaining workflow families also pass: container
+`33312264470`, .NET `33312264494`, Go `33312264521`, Java `33312264495`,
+Kotlin `33312264487`, Linux GUI `33312264473`, PHP `33312264486`, Ruby
+`33312264503`, Rust `33312264520`, and Windows GUI `33312264466`. These
+immutable run IDs close hosted acceptance for checkpoint
+`a2d3847799175b3f8e3ed71b05444696255ad421`; the standing effectiveness goal
+remains active.
 
 ## 2026-08-30 — Model FastAPI redirect origin selection as a typed boundary
 
