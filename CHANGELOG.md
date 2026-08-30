@@ -33,6 +33,29 @@ All notable scanner, application, benchmark, and operational changes are recorde
   and has no failures across 2,131 tests in 216 files. Formatting, generated-
   model drift, TypeScript, the clean production build, and the production high-
   severity advisory audit are green.
+- Two compiled inventories of the 3,956-file exact implementation archive at
+  checkpoint `12e6b0b2d53d47f601e16bf170ec011cf9e0aa2f` are byte-identical.
+  Each reaches the 256-row cap, is 625,837 bytes, and has SHA-256
+  `31827ab6aefe37195f5fea1049ec5a1c8157710c22a048872dfd0de859334292`.
+  Exactly one response-class row retains the multiline route at line 10,
+  request source at line 15, direct-return sink at line 17, and CWE-601; the
+  fixed-local twin is absent. The 21,596,160-byte tracked archive has SHA-256
+  `b770ae65570a017b6bbbb9b39619b112c1f3056ab4c1e0304255579caf8fc813`.
+- Two production package builds are byte-identical. Strict inspection validates
+  the 299-entry, 2,421,669-byte archive with SHA-256
+  `290f78c26e72bd2c820643a6ed9d91f7c47ff3f4f2b00eb5d745fbc80f235fdb`;
+  an isolated 75-package installation validates the public import, executable
+  CLI, and all 79 bundled plugin files. A release-only provenance assertion
+  rejects the local pack because it correctly omits registry `gitHead`; hosted
+  exact-head workflows supply that evidence. Temporary archives, package
+  outputs, installs, and dependency junctions were removed after validation.
+- All eleven exact-source workflow families pass at the implementation
+  checkpoint. Node CI run `33315078040` passes all 92 jobs, including the
+  multiline FastAPI witness; container `33315078152`, .NET `33315078064`, Go
+  `33315078104`, Java `33315078093`, Kotlin `33315078151`, Linux GUI
+  `33315078092`, PHP `33315078134`, Ruby `33315078118`, Rust `33315078075`, and
+  Windows GUI `33315078130` also pass. The public default `main` branch hosts
+  the exact implementation checkpoint.
 - Closed FastAPI's documented `response_class=RedirectResponse` direct-return
   gap under the existing typed CWE-601 model. The new sink requires an exact
   official FastAPI or Starlette response binding in the route decorator's sole

@@ -55,8 +55,48 @@ generated-model drift, TypeScript, the clean production build, and the
 production high-severity advisory audit pass. The uninterrupted authoritative
 native aggregate passes 2,100 tests and 16,585 assertions, skips 31 intentional
 platform/environment cases, and reports no failures across 2,131 tests in 216
-files. Immutable self-review, package inspection, and hosted evidence follow
-the implementation checkpoint; the standing effectiveness goal remains active.
+files. Immutable self-review, package inspection, and hosted evidence are
+recorded below; the standing effectiveness goal remains active.
+
+**Immutable self-review.** The repository-root tracked archive for exact
+implementation checkpoint `12e6b0b2d53d47f601e16bf170ec011cf9e0aa2f`
+contains 3,956 files, totals 21,596,160 bytes, and has SHA-256
+`b770ae65570a017b6bbbb9b39619b112c1f3056ab4c1e0304255579caf8fc813`.
+Protected untracked workspace material is absent. An attempted offline package
+install correctly stops because its isolated store lacks the exact Copilot SDK
+tarball. The archive build therefore uses a temporary junction to the already
+accepted workspace dependency tree; `node_modules` is excluded from inventory,
+so source input remains the exact tracked archive. Two compiled inventories
+take 42,993.229 and 21,677.420 milliseconds and produce the same 256 structured
+rows, 625,837 bytes, and SHA-256
+`31827ab6aefe37195f5fea1049ec5a1c8157710c22a048872dfd0de859334292`.
+The one response-class row retains route line 10, request source line 15,
+direct-return sink line 17, CWE-601, and all seven ordered factory, route,
+Annotated, Query, request-flow, response-class, and Location transitions. The
+fixed-local twin is absent.
+
+**Distribution evidence.** Two production package builds are byte-identical.
+The standard strict inspector validates 299 entries in a 2,421,669-byte archive
+with SHA-256
+`290f78c26e72bd2c820643a6ed9d91f7c47ff3f4f2b00eb5d745fbc80f235fdb`.
+A fresh isolated installation adds 75 packages and validates the public SDK
+import, executable CLI, and all 79 bundled plugin files. A deliberately enabled
+release-only `gitHead` assertion rejects the local pack because local packaging
+correctly omits npm registry publication metadata; the standard contract then
+passes unchanged, while exact archive and hosted-head evidence supply
+provenance. The temporary dependency junction is removed before the explicit
+self-scan root is recursively deleted, and the real workspace dependency tree
+is verified intact. All temporary archives, package outputs, cache, and install
+material are removed and are not recoverable.
+
+**Hosted closure.** All eleven workflow families pass at the exact
+implementation checkpoint. Node CI run `33315078040` completes all 92 jobs,
+including the pinned FastAPI/Pydantic witness that now consumes the multiline
+fixture. Container `33315078152`, .NET `33315078064`, Go `33315078104`, Java
+`33315078093`, Kotlin `33315078151`, Linux GUI `33315078092`, PHP
+`33315078134`, Ruby `33315078118`, Rust `33315078075`, and Windows GUI
+`33315078130` also pass. The checkpoint is public on default branch `main`; the
+standing scanner-effectiveness goal remains active.
 
 ## 2026-08-30 — Preserve FastAPI response-class redirect construction
 
