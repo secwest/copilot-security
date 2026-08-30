@@ -6,6 +6,30 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Flask form-redirect false negative. Before the host change,
+  an official `@app.post` handler whose `request.form.get("next")` value reached
+  `flask.redirect` emitted zero rows while all eight previous Flask regressions
+  passed. The typed model now accepts literal `.get(...)` and subscript reads
+  from the stable official form collection.
+- Added exact route-method control instead of treating every Flask handler as
+  form-capable. Form evidence requires `app.post`, `app.put`, `app.patch`, or an
+  exact static literal `methods` list/tuple containing POST, PUT, or PATCH.
+  Default routes, GET, DELETE, empty collections, dynamic values, expanded
+  arguments, unstable bindings, and unsupported request collections fail
+  closed. Query-string evidence remains independent of the route method.
+- Added distinct `flask-request-form-string`, `flask-route-form-method`, and
+  `flask-request-form-read` evidence. The reviewer must name the exact route
+  method, form field, redirect-to-Location edge, origin switch, missing control,
+  and CWE-601.
+- Added a source-matched Flask 3.1.3 / Werkzeug 3.1.8 POST exploit/control pair
+  and strict `python-flask-post-open-redirect-manifest.json`. No-follow
+  TestClient witnesses prove attacker-origin selections of one and zero without
+  external I/O. The canonical corpus advances to 196 pairs, 392 cases, and
+  1,176 repeated scan positions.
+- Initial focused acceptance passes 36 Flask, canonical, and Rust bookkeeping
+  tests with 2,867 assertions; generated-model and TypeScript checks pass. Both
+  exact-version POST witnesses pass. Full aggregate, package, GUI, hosted, and
+  immutable-checkpoint evidence follows after the implementation checkpoint.
 - Closed a measured Django form-redirect false negative. Before the host change,
   a registered function view reading `request.POST` produced zero findings while
   all sixteen prior Django regressions passed. The typed model now accepts exact

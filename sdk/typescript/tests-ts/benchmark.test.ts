@@ -672,6 +672,10 @@ describe("effectiveness benchmark", () => {
         "python-fastapi-response-class-safe-local-redirect",
       ],
       ["python-flask-open-redirect", "python-flask-safe-local-redirect"],
+      [
+        "python-flask-post-open-redirect",
+        "python-flask-post-safe-local-redirect",
+      ],
       ["python-django-open-redirect", "python-django-safe-local-redirect"],
       [
         "python-django-class-view-open-redirect",

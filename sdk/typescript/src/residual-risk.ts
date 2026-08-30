@@ -2189,6 +2189,10 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         kind: "flask-request-query-string",
         expression: /\bargs\s*(?:\.|\[)/u,
       },
+      {
+        kind: "flask-request-form-string",
+        expression: /\bform\s*(?:\.|\[)/u,
+      },
     ],
     sinks: [
       {
@@ -4625,7 +4629,23 @@ const PYTHON_FASTAPI_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
 
 const PYTHON_FLASK_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["Flask", "application factory", "route decorator", "flask route"],
-  ["request.args", "query string", "remote input", "query field"],
+  [
+    "GET route",
+    "POST route",
+    "PUT route",
+    "PATCH route",
+    "route method",
+    "app.get",
+    "app.post",
+    "methods",
+  ],
+  [
+    "request.args",
+    "request.form",
+    "query string",
+    "form field",
+    "remote input",
+  ],
   ["flask.redirect", "Location header", "redirect location"],
   ["absolute URL", "origin", "scheme-relative", "attacker-selected host"],
   ["root-only prefix", "fixed local prefix", "allowlist", "same-origin"],
@@ -41827,7 +41847,19 @@ function pythonFastApiOpenRedirectSource(
 }
 
 interface PythonFlaskRequestStringSource {
-  kind: "flask-request-query-string";
+  kind: "flask-request-form-string" | "flask-request-query-string";
+  line: number;
+  propagators: Array<{
+    kind: string;
+    path: string;
+    line: number;
+    symbol?: string;
+  }>;
+}
+
+interface PythonFlaskRouteEvidence {
+  allowsForm: boolean;
+  formMethod?: string;
   line: number;
   propagators: Array<{
     kind: string;
@@ -41870,9 +41902,7 @@ function pythonFlaskRouteEvidence(
   path: string,
   lines: readonly string[],
   wrapper: ExportedPythonFunction,
-):
-  | Array<{ kind: string; path: string; line: number; symbol?: string }>
-  | undefined {
+): PythonFlaskRouteEvidence | undefined {
   if (pythonLocalModuleCouldShadow(files, path, "flask")) return undefined;
   const structuralLines = pythonStructuralLines(lines);
   const decorators = pythonDecoratorSpansBeforeFunction(
@@ -41895,9 +41925,52 @@ function pythonFlaskRouteEvidence(
   const arguments_ = splitPythonArguments(
     decorators[0]!.expression.slice(open + 1, close),
   );
-  if (
+  if (arguments_.some((argument) => argument.trim().startsWith("*"))) {
+    return undefined;
+  }
+  const routeMethod = route[2];
+  let allowsForm = ["patch", "post", "put"].includes(routeMethod);
+  let formMethod = allowsForm ? routeMethod.toUpperCase() : undefined;
+  if (routeMethod === "route") {
+    const positional = pythonPositionalArguments(arguments_);
+    const methodsArguments = arguments_
+      .map((argument) => /^methods\s*=\s*([\s\S]+)$/u.exec(argument.trim()))
+      .filter((candidate): candidate is RegExpExecArray => candidate !== null);
+    const keywordNames = arguments_.flatMap((argument) => {
+      const name = /^([A-Za-z_]\w*)\s*=/u.exec(argument.trim())?.[1];
+      return name === undefined ? [] : [name];
+    });
+    if (
+      positional.length !== 1 ||
+      pythonLiteralStringValue(positional[0]!) === undefined ||
+      keywordNames.some((name) => name !== "methods") ||
+      methodsArguments.length > 1
+    ) {
+      return undefined;
+    }
+    if (methodsArguments.length === 1) {
+      const expression = methodsArguments[0]![1]?.trim();
+      const collection =
+        expression === undefined
+          ? null
+          : /^(\[|\()([\s\S]*)(\]|\))$/u.exec(expression);
+      if (collection?.[2] === undefined) return undefined;
+      const closing = collection[1] === "[" ? "]" : ")";
+      if (collection[3] !== closing || collection[2].trim() === "") {
+        return undefined;
+      }
+      const entries = splitPythonArguments(collection[2]);
+      const methods = entries
+        .map((entry) => pythonLiteralStringValue(entry.trim())?.toUpperCase())
+        .filter((entry): entry is string => entry !== undefined);
+      if (methods.length !== entries.length) return undefined;
+      formMethod = methods.find((method) =>
+        new Set(["PATCH", "POST", "PUT"]).has(method),
+      );
+      allowsForm = formMethod !== undefined;
+    }
+  } else if (
     arguments_.length !== 1 ||
-    arguments_[0]!.trim().startsWith("*") ||
     pythonLiteralStringValue(arguments_[0]!) === undefined
   ) {
     return undefined;
@@ -41941,23 +42014,28 @@ function pythonFlaskRouteEvidence(
   ) {
     return undefined;
   }
-  return [
-    {
-      kind: "flask-official-application-factory",
-      path,
-      line: factory.line,
-      symbol: "flask.Flask",
-    },
-    {
-      kind: "flask-route",
-      path,
-      line: decorators[0]!.line,
-      symbol: `${receiver}.${route[2]}`,
-    },
-  ];
+  return {
+    allowsForm,
+    formMethod,
+    line: decorators[0]!.line,
+    propagators: [
+      {
+        kind: "flask-official-application-factory",
+        path,
+        line: factory.line,
+        symbol: "flask.Flask",
+      },
+      {
+        kind: "flask-route",
+        path,
+        line: decorators[0]!.line,
+        symbol: `${receiver}.${route[2]}`,
+      },
+    ],
+  };
 }
 
-function pythonFlaskRequestArgsEvidence(
+function pythonFlaskRequestDataEvidence(
   files: readonly SourceFileSnapshot[],
   path: string,
   lines: readonly string[],
@@ -41970,19 +42048,20 @@ function pythonFlaskRequestArgsEvidence(
     .join("\n")
     .trim();
   const get =
-    /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*args\s*\.\s*get\s*\(/u.exec(
+    /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*(args|form)\s*\.\s*get\s*\(/u.exec(
       value,
     );
   const subscript =
-    /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*args\s*\[\s*([\s\S]+)\s*\]$/u.exec(
+    /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*(args|form)\s*\[\s*([\s\S]+)\s*\]$/u.exec(
       value,
     );
+  let collection: "args" | "form";
   let requestExpression: string | undefined;
   let field: string | undefined;
-  if (get?.[1] !== undefined) {
+  if (get?.[1] !== undefined && (get[2] === "args" || get[2] === "form")) {
     const arguments_ = pythonCallArgumentsForExpression(
       value,
-      /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*args\s*\.\s*get\s*\(/u,
+      /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*(?:args|form)\s*\.\s*get\s*\(/u,
     );
     if (
       arguments_ === undefined ||
@@ -42008,10 +42087,16 @@ function pythonFlaskRequestArgsEvidence(
       return undefined;
     }
     requestExpression = get[1];
-  } else if (subscript?.[1] !== undefined && subscript[2] !== undefined) {
-    field = pythonLiteralStringValue(subscript[2]);
+    collection = get[2];
+  } else if (
+    subscript?.[1] !== undefined &&
+    (subscript[2] === "args" || subscript[2] === "form") &&
+    subscript[3] !== undefined
+  ) {
+    field = pythonLiteralStringValue(subscript[3]);
     if (field === undefined || field === "") return undefined;
     requestExpression = subscript[1];
+    collection = subscript[2];
   } else {
     return undefined;
   }
@@ -42024,7 +42109,10 @@ function pythonFlaskRequestArgsEvidence(
   );
   if (request === undefined) return undefined;
   return {
-    kind: "flask-request-query-string",
+    kind:
+      collection === "args"
+        ? "flask-request-query-string"
+        : "flask-request-form-string",
     line: origin.line,
     propagators: [
       {
@@ -42034,10 +42122,13 @@ function pythonFlaskRequestArgsEvidence(
         symbol: "flask.request",
       },
       {
-        kind: "flask-request-args-read",
+        kind:
+          collection === "args"
+            ? "flask-request-args-read"
+            : "flask-request-form-read",
         path,
         line: origin.line,
-        symbol: `request.args[${JSON.stringify(field)}]`,
+        symbol: `request.${collection}[${JSON.stringify(field)}]`,
       },
     ],
   };
@@ -42147,7 +42238,7 @@ function pythonFlaskOpenRedirectSource(
   const resolved =
     resolvePythonExpression(lines, expression, callLine) ?? expression;
   if (pythonFixedLocalRedirectPrefix(resolved) !== undefined) return undefined;
-  const directRequestSource = pythonFlaskRequestArgsEvidence(
+  const directRequestSource = pythonFlaskRequestDataEvidence(
     files,
     path,
     lines,
@@ -42169,7 +42260,7 @@ function pythonFlaskOpenRedirectSource(
       (origin) => origin.line >= wrapper.startLine && origin.line <= callLine,
     )
     .flatMap((origin) => {
-      const source = pythonFlaskRequestArgsEvidence(files, path, lines, origin);
+      const source = pythonFlaskRequestDataEvidence(files, path, lines, origin);
       return source === undefined ? [] : [source];
     })
     .filter(
@@ -42180,9 +42271,20 @@ function pythonFlaskOpenRedirectSource(
         ) === index,
     );
   if (sources.length !== 1) return undefined;
+  if (sources[0]!.kind === "flask-request-form-string") {
+    if (!routeEvidence.allowsForm || routeEvidence.formMethod === undefined) {
+      return undefined;
+    }
+    sources[0]!.propagators.unshift({
+      kind: "flask-route-form-method",
+      path,
+      line: routeEvidence.line,
+      symbol: routeEvidence.formMethod,
+    });
+  }
   return {
     ...sources[0]!,
-    propagators: [...routeEvidence, ...sources[0]!.propagators],
+    propagators: [...routeEvidence.propagators, ...sources[0]!.propagators],
   };
 }
 

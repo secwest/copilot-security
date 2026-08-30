@@ -3078,16 +3078,22 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
-The dedicated `python-flask-open-redirect-manifest.json` adds an independent
-Flask root-prefix pair. Its exploit reads one literal `request.args` field,
-prepends only `/`, and passes the result to the official `flask.redirect`;
-the leading slash in the supplied value produces a scheme-relative
-`//attacker.invalid/...` Location. The topology-matched control percent-
-encodes the same value below the non-root fixed `/continue?next=` target.
-Both fixtures pin Flask 3.1.3 and Werkzeug 3.1.8, disable redirect following,
-and make no external request. The model rejects local Flask shadows, rebound
-bindings, Blueprint-only registration, dynamic or multiple decorators,
-ambiguous redirect roles, non-query request collections, and opaque calls:
+The dedicated `python-flask-open-redirect-manifest.json` and
+`python-flask-post-open-redirect-manifest.json` add independent Flask
+root-prefix pairs. The first reads one literal `request.args` field from a GET
+shortcut. The second reads one literal `request.form` field from an exact
+`app.route(..., methods=["POST"])` registration. Each exploit prepends only
+`/` and passes the result to the official `flask.redirect`; the leading slash
+in the supplied value produces a scheme-relative `//attacker.invalid/...`
+Location. Each topology-matched control percent-encodes the same value below
+the non-root fixed `/continue?next=` target. All fixtures pin Flask 3.1.3 and
+Werkzeug 3.1.8, disable redirect following, and make no external request. The
+model accepts form data only for exact POST, PUT, or PATCH shortcuts or a
+static literal route-method collection containing one of those methods. It
+rejects local Flask shadows, rebound bindings, Blueprint-only registration,
+dynamic or multiple decorators, GET/default/DELETE form mismatches, dynamic
+method collections, ambiguous redirect roles, unsupported request collections,
+and opaque calls:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -3100,6 +3106,10 @@ node ../../benchmarks/run-benchmark.mjs `
   --effort high `
   --mode deep
 ```
+
+Run the form-specific gate by substituting
+`python-flask-post-open-redirect-manifest.json` and a separate results
+directory in the same command.
 
 The dedicated `python-django-open-redirect-manifest.json`,
 `python-django-class-view-open-redirect-manifest.json`, and

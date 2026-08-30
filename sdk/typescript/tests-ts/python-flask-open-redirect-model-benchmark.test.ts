@@ -71,6 +71,42 @@ describe("Flask open-redirect model", () => {
     expect(manifest.cases[1].expected).toEqual([]);
   });
 
+  test("keeps a strict POST form exploit/control benchmark contract", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(benchmarkRoot, "python-flask-post-open-redirect-manifest.json"),
+        "utf8",
+      ),
+    );
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(
+      Object.values(manifest.thresholds).every(
+        (value) => value === 0 || value === 1,
+      ),
+    ).toBeTrue();
+    expect(manifest.cases.map(({ id }: { id: string }) => id)).toEqual([
+      "python-flask-post-open-redirect",
+      "python-flask-post-safe-local-redirect",
+    ]);
+    expect(manifest.cases[0].expected[0]).toMatchObject({
+      id: modelId,
+      cwe: ["CWE-601"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(manifest.cases[0].expected[0].requiredValidationTextAnyOf).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(["request.form"]),
+        expect.arrayContaining(['methods=["POST"]']),
+      ]),
+    );
+    expect(manifest.cases[0].expected[0].forbiddenText.length).toBeGreaterThan(
+      0,
+    );
+    expect(manifest.cases[1].expected).toEqual([]);
+  });
+
   test("separates the checked-in root-prefix exploit and fixed-local control", async () => {
     const exploit = join(
       benchmarkRoot,
@@ -100,6 +136,35 @@ describe("Flask open-redirect model", () => {
         cweIds: ["CWE-601"],
       },
     });
+    expect(controlModels).toHaveLength(0);
+  });
+
+  test("separates the checked-in POST form exploit and fixed-local control", async () => {
+    const exploit = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-post-open-redirect",
+    );
+    const control = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-flask-post-safe-local-redirect",
+    );
+    const exploitModels = models(await buildResidualRiskInventory(exploit));
+    const controlModels = models(await buildResidualRiskInventory(control));
+
+    expect(exploitModels).toHaveLength(1);
+    expect(exploitModels[0]).toMatchObject({
+      source: { kind: "flask-request-form-string" },
+      sink: { kind: "flask-redirect-location", cweIds: ["CWE-601"] },
+    });
+    expect(exploitModels[0].propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "flask-route-form-method" }),
+        expect.objectContaining({ kind: "flask-request-form-read" }),
+        expect.objectContaining({ kind: "http-location-header-assignment" }),
+      ]),
+    );
     expect(controlModels).toHaveLength(0);
   });
 
@@ -203,6 +268,59 @@ describe("Flask open-redirect model", () => {
     }
   });
 
+  test("detects form redirects only on exact form-capable routes", async () => {
+    const variants: ReadonlyArray<readonly [string, string, string]> = [
+      [
+        "post-shortcut",
+        '@app.post("/continue")',
+        'request.form.get("next", "")',
+      ],
+      ["put-shortcut", '@app.put("/continue")', 'request.form["next"]'],
+      ["patch-shortcut", '@app.patch("/continue")', 'request.form.get("next")'],
+      [
+        "route-methods",
+        '@app.route("/continue", methods=["POST"])',
+        'request.form.get("next", "")',
+      ],
+      [
+        "route-method-tuple",
+        '@app.route("/continue", methods=("GET", "post"))',
+        'request.form["next"]',
+      ],
+    ];
+    for (const [name, decorator, read] of variants) {
+      const root = await mkdtemp(
+        join(tmpdir(), `flask-form-redirect-${name}-`),
+      );
+      try {
+        await writeRepository(root, {
+          "server.py": [
+            "from flask import Flask, redirect, request",
+            "app = Flask(__name__)",
+            decorator,
+            "def continue_to():",
+            `    target = ${read}`,
+            '    return redirect("/" + target)',
+            "",
+          ].join("\n"),
+        });
+        const detected = models(await buildResidualRiskInventory(root));
+        expect(detected, name).toHaveLength(1);
+        expect(detected[0], name).toMatchObject({
+          source: { kind: "flask-request-form-string" },
+        });
+        expect(detected[0].propagators, name).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ kind: "flask-route-form-method" }),
+            expect.objectContaining({ kind: "flask-request-form-read" }),
+          ]),
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  });
+
   test("preserves request control through a relative redirect wrapper", async () => {
     const root = await mkdtemp(join(tmpdir(), "flask-redirect-wrapper-"));
     try {
@@ -268,6 +386,49 @@ describe("Flask open-redirect model", () => {
           'request.args.get("next", "")',
           'request.form.get("next", "")',
         ),
+      ],
+      [
+        "request-form-default-route",
+        base
+          .replace('@app.get("/continue")', '@app.route("/continue")')
+          .replace("request.args", "request.form"),
+      ],
+      [
+        "request-form-get-only-route",
+        base
+          .replace(
+            '@app.get("/continue")',
+            '@app.route("/continue", methods=["GET"])',
+          )
+          .replace("request.args", "request.form"),
+      ],
+      [
+        "request-form-dynamic-methods",
+        base
+          .replace(
+            "app = Flask(__name__)",
+            'app = Flask(__name__)\nMETHODS = ["POST"]',
+          )
+          .replace(
+            '@app.get("/continue")',
+            '@app.route("/continue", methods=METHODS)',
+          )
+          .replace("request.args", "request.form"),
+      ],
+      [
+        "request-form-empty-methods",
+        base
+          .replace(
+            '@app.get("/continue")',
+            '@app.route("/continue", methods=[])',
+          )
+          .replace("request.args", "request.form"),
+      ],
+      [
+        "request-form-delete-shortcut",
+        base
+          .replace('@app.get("/continue")', '@app.delete("/continue")')
+          .replace("request.args", "request.form"),
       ],
       [
         "rebound-request",
@@ -431,6 +592,8 @@ describe("Flask open-redirect model", () => {
     );
     expect(prompt).toContain("python-flask-open-redirect");
     expect(prompt).toContain("request.args");
+    expect(prompt).toContain("request.form");
+    expect(prompt).toContain('methods=["POST"]');
     expect(prompt).toContain("flask.redirect");
     expect(prompt).toContain("Location");
     expect(prompt).toContain("root-only");

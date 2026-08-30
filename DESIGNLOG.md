@@ -2,6 +2,53 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Bind Flask form sources to exact route methods
+
+**Measured gap and maintained contract.** The unchanged host emitted zero rows
+for an official `@app.post` handler whose literal
+`request.form.get("next", "")` value reached `flask.redirect`, while all eight
+pre-existing Flask regressions passed. Flask's maintained API documents
+[`request.form`](https://flask.palletsprojects.com/en/stable/api/#flask.Request.form)
+as the form-parameter `ImmutableMultiDict`. Its quickstart describes form data
+as POST/PUT request data, and the application API defines
+[`post()`](https://flask.palletsprojects.com/en/stable/api/#flask.Flask.post),
+`put()`, and `patch()` as exact `route()` shortcuts with their corresponding
+method lists. This establishes a real source gap and an exact registration
+boundary rather than justifying a generic `.form` lexical match.
+
+**Method-aware dataflow decision.** The existing official application-factory,
+literal route, stable request binding, relative wrapper, redirect binding, and
+Location proof remains mandatory. Query-string fields remain reachable on any
+accepted modeled route. A form field additionally requires an exact `post`,
+`put`, or `patch` shortcut or one static literal `methods` list/tuple containing
+POST, PUT, or PATCH. New form-source, route-form-method, and form-read
+propagators keep collection and dispatch evidence separate through the final
+finding. Static method names are normalized case-insensitively because HTTP
+method tokens are case-insensitive at the framework registration boundary.
+
+**Fail-closed boundary.** A default `route()` call, `get`, `delete`, an empty
+method collection, dynamic or partially dynamic methods, star expansion,
+unknown route keywords, local Flask shadow, rebound application/request/redirect
+binding, multiple decorator, Blueprint-only registration, opaque transform,
+and unsupported request collection do not prove a form path. The scanner also
+retains the existing non-root local-prefix control and refuses to infer public
+deployment or a downstream credential consequence from the redirect primitive.
+These controls prevent the source extension from converting package or route
+presence into a finding.
+
+**Executable corpus and initial acceptance.** The new Flask 3.1.3 / Werkzeug
+3.1.8 pair uses the same exact `app.route(..., methods=["POST"])`, form field,
+and redirect topology. The exploit adds only `/` and emits
+`//attacker.invalid/...`; the control percent-encodes the value beneath the
+fixed local `/continue?next=` target. TestClient posts locally with
+`follow_redirects=False`, observes only Location, and performs no external
+request. The dedicated manifest applies perfect precision, recall, evidence,
+validation, attack-path, stability, and negative-control gates. The canonical
+corpus advances to 196 pairs, 392 cases, and 1,176 repeated positions. The
+focused Flask, canonical, and Rust bookkeeping lane passes 36 tests and 2,867
+assertions; both exact-version witnesses record attacker-origin selections one
+and zero. Full acceptance follows at the immutable implementation checkpoint.
+
 ## 2026-08-30 — Preserve Django POST form control through exact view dispatch
 
 **Measured gap and comparative boundary.** The unchanged host emitted zero rows

@@ -14,11 +14,18 @@ suppresses the right operand of string concatenation when the left operand
 controls the prefix. Copilot Security distinguishes a non-root fixed local
 prefix from a root-only slash: `"/" + "/attacker.invalid/path"` produces the
 scheme-relative `//attacker.invalid/path` Location and remains reportable.
-The typed Flask model also requires exact application, route, request, query-
-field, redirect, and Location evidence; rejects shadows, rebindings, Blueprint-
-only registration, ambiguous decorators or arguments, non-query collections,
-and opaque transformations; and proves the boundary with a pinned, no-follow
-Flask/Werkzeug exploit/control pair.
+The typed Flask model also requires exact application, route, request,
+query-or-form field, redirect, and Location evidence. Flask documents
+[`request.form`](https://flask.palletsprojects.com/en/stable/api/#flask.Request.form)
+as its form-parameter `ImmutableMultiDict`, and documents `post()` as the exact
+[`route(..., methods=["POST"])` shortcut](https://flask.palletsprojects.com/en/stable/api/#flask.Flask.post).
+The host therefore accepts a form source only under an exact POST, PUT, or
+PATCH shortcut or static literal route-method collection. Default/GET/DELETE
+routes, empty or dynamic method collections, shadows, rebindings, Blueprint-
+only registration, ambiguous decorators or arguments, unsupported collections,
+and opaque transformations fail closed. Separate pinned no-follow query and
+form Flask/Werkzeug exploit/control pairs prove the authority switch and fixed-
+local control without external I/O.
 
 The parallel typed Django model requires an official `path` or `re_path`
 binding inside one balanced `urlpatterns` list, a resolvable registered
