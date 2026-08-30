@@ -2211,6 +2211,10 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
         kind: "django-request-query-string",
         expression: /\bGET\s*(?:\.|\[)/u,
       },
+      {
+        kind: "django-request-form-string",
+        expression: /\bPOST\s*(?:\.|\[)/u,
+      },
     ],
     sinks: [
       {
@@ -3566,7 +3570,8 @@ interface ExportedPythonFunction {
 }
 
 interface PythonDjangoViewHandler extends ExportedPythonFunction {
-  kind: "class-get" | "function";
+  allowsPostForm: boolean;
+  kind: "class-get" | "class-post" | "function";
   requestParameterIndex: number;
   classLine?: number;
   viewBindingLine?: number;
@@ -4629,8 +4634,14 @@ const PYTHON_FLASK_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
 
 const PYTHON_DJANGO_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["Django", "urlpatterns", "django.urls.path", "registered view"],
-  ["function view", "View.as_view", "class-based view", "GET handler"],
-  ["request.GET", "query string", "remote input", "query field"],
+  [
+    "function view",
+    "View.as_view",
+    "class-based view",
+    "GET handler",
+    "POST handler",
+  ],
+  ["request.GET", "request.POST", "query string", "form field", "remote input"],
   [
     "django.shortcuts.redirect",
     "HttpResponseRedirect",
@@ -42176,7 +42187,7 @@ function pythonFlaskOpenRedirectSource(
 }
 
 interface PythonDjangoRequestStringSource {
-  kind: "django-request-query-string";
+  kind: "django-request-form-string" | "django-request-query-string";
   line: number;
   propagators: Array<{
     kind: string;
@@ -42301,7 +42312,7 @@ function pythonDjangoClassViewHandlers(
         line,
         file.lines.length + 1,
       ) ||
-      ["as_view", "dispatch", "get", "setup"].some((member) =>
+      ["as_view", "dispatch", "get", "post", "setup"].some((member) =>
         pythonObjectMemberReassignedBetween(
           file.lines,
           className,
@@ -42328,7 +42339,7 @@ function pythonDjangoClassViewHandlers(
         ),
       ) ||
       body.some((candidate) =>
-        /^ {4}(?:as_view|dispatch|get|http_method_names|setup)\s*(?::[^=]+)?=/u.test(
+        /^ {4}(?:as_view|dispatch|get|http_method_names|post|setup)\s*(?::[^=]+)?=/u.test(
           candidate,
         ),
       )
@@ -42338,6 +42349,7 @@ function pythonDjangoClassViewHandlers(
     const methods: Array<{
       endLine: number;
       line: number;
+      name: "get" | "post";
       parameters: string[];
     }> = [];
     for (
@@ -42346,11 +42358,11 @@ function pythonDjangoClassViewHandlers(
       methodLine += 1
     ) {
       const method =
-        /^ {4}(?:async\s+)?def\s+get\s*\(([^()]*)\)\s*(?:->\s*[^:]+)?\s*:\s*$/u.exec(
+        /^ {4}(?:async\s+)?def\s+(get|post)\s*\(([^()]*)\)\s*(?:->\s*[^:]+)?\s*:\s*$/u.exec(
           structuralLines[methodLine - 1] ?? "",
         );
-      if (method?.[1] === undefined) continue;
-      const rawParameters = splitPythonArguments(method[1]);
+      if (method?.[1] === undefined || method[2] === undefined) continue;
+      const rawParameters = splitPythonArguments(method[2]);
       if (
         rawParameters.some(
           (parameter) =>
@@ -42376,28 +42388,36 @@ function pythonDjangoClassViewHandlers(
       methods.push({
         endLine: pythonIndentedBlockEndLine(file.lines, methodLine, 4),
         line: methodLine,
+        name: method[1] as "get" | "post",
         parameters,
       });
     }
-    if (methods.length !== 1) continue;
-    const method = methods[0]!;
     if (
-      method.endLine <= method.line ||
-      method.parameters.length < 2 ||
-      method.parameters[0] !== "self"
+      methods.length === 0 ||
+      new Set(methods.map(({ name }) => name)).size !== methods.length
     ) {
       continue;
     }
-    handlers.push({
-      kind: "class-get",
-      requestParameterIndex: 1,
-      symbol: className,
-      parameters: method.parameters,
-      startLine: method.line,
-      endLine: method.endLine,
-      classLine: line,
-      viewBindingLine: binding.line,
-    });
+    for (const method of methods) {
+      if (
+        method.endLine <= method.line ||
+        method.parameters.length < 2 ||
+        method.parameters[0] !== "self"
+      ) {
+        continue;
+      }
+      handlers.push({
+        allowsPostForm: method.name === "post",
+        kind: method.name === "get" ? "class-get" : "class-post",
+        requestParameterIndex: 1,
+        symbol: className,
+        parameters: method.parameters,
+        startLine: method.line,
+        endLine: method.endLine,
+        classLine: line,
+        viewBindingLine: binding.line,
+      });
+    }
   }
   return handlers;
 }
@@ -42416,11 +42436,82 @@ function pythonDjangoAsViewReassignedBefore(
     .some((candidate) => reassignment.test(candidate));
 }
 
+function pythonDjangoFunctionAllowsPostForm(
+  files: readonly SourceFileSnapshot[],
+  file: SourceFileSnapshot,
+  wrapper: ExportedPythonFunction,
+): boolean {
+  if (
+    pythonLocalModuleCouldShadow(
+      files,
+      file.path,
+      "django.views.decorators.http",
+    )
+  ) {
+    return true;
+  }
+  for (let line = wrapper.startLine - 1; line >= 1; line -= 1) {
+    const decorator =
+      /^@([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)(?:\(([\s\S]*)\))?\s*$/u.exec(
+        pythonCodeBeforeComment(file.lines[line - 1] ?? ""),
+      );
+    if (decorator?.[1] === undefined) break;
+    const callee = decorator[1];
+    const getOnlyBindings = (["require_GET", "require_safe"] as const).filter(
+      (member) =>
+        pythonOfficialImportedMemberBinding(
+          file.lines,
+          "django.views.decorators.http",
+          member,
+          callee,
+          line,
+        ) !== undefined,
+    );
+    if (getOnlyBindings.length === 1 && decorator[2] === undefined)
+      return false;
+
+    const methodsBinding = pythonOfficialImportedMemberBinding(
+      file.lines,
+      "django.views.decorators.http",
+      "require_http_methods",
+      callee,
+      line,
+    );
+    if (methodsBinding === undefined || decorator[2] === undefined) continue;
+    const arguments_ = splitPythonArguments(decorator[2]);
+    if (
+      arguments_.length !== 1 ||
+      arguments_[0]!.trim().startsWith("*") ||
+      /^[A-Za-z_]\w*\s*=/u.test(arguments_[0]!.trim())
+    ) {
+      continue;
+    }
+    const collection = /^(\[|\()([\s\S]*)(\]|\))$/u.exec(arguments_[0]!.trim());
+    if (collection?.[2] === undefined) continue;
+    const closing = collection[1] === "[" ? "]" : ")";
+    if (collection[3] !== closing) continue;
+    const entries =
+      collection[2].trim().length === 0
+        ? []
+        : splitPythonArguments(collection[2]);
+    const methods = entries
+      .map((entry) => pythonLiteralStringValue(entry.trim())?.toUpperCase())
+      .filter((entry): entry is string => entry !== undefined);
+    if (methods.length === entries.length && !methods.includes("POST")) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function pythonDjangoFunctionViewHandler(
+  files: readonly SourceFileSnapshot[],
+  file: SourceFileSnapshot,
   wrapper: ExportedPythonFunction,
 ): PythonDjangoViewHandler {
   return {
     ...wrapper,
+    allowsPostForm: pythonDjangoFunctionAllowsPostForm(files, file, wrapper),
     kind: "function",
     requestParameterIndex: 0,
   };
@@ -42442,14 +42533,14 @@ function pythonDjangoRouteTargetsHandler(
   );
   const normalizedViewExpression = viewExpression.replace(/\s+/gu, "");
   const targetExpression =
-    wrapper.kind === "class-get"
+    wrapper.kind !== "function"
       ? /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\.as_view\(\)$/u.exec(
           normalizedViewExpression,
         )?.[1]
       : normalizedViewExpression;
   if (targetExpression === undefined) return false;
   if (
-    wrapper.kind === "class-get" &&
+    wrapper.kind !== "function" &&
     pythonDjangoAsViewReassignedBefore(
       routeFile.lines,
       targetExpression,
@@ -42632,7 +42723,7 @@ function pythonDjangoRouteEvidence(
             line,
             symbol: `${member}(${JSON.stringify(route)}, ${wrapper.symbol})`,
           },
-          ...(wrapper.kind === "class-get"
+          ...(wrapper.kind !== "function"
             ? [
                 {
                   kind: "django-as-view-registration",
@@ -42658,7 +42749,7 @@ function pythonDjangoRouteEvidence(
   );
   if (unique.length === 0) return undefined;
   return [
-    ...(wrapper.kind === "class-get"
+    ...(wrapper.kind !== "function"
       ? [
           {
             kind: "django-official-view-binding",
@@ -42958,24 +43049,29 @@ function pythonDjangoRedirectSink(
   return undefined;
 }
 
-function pythonDjangoRequestGetEvidence(
+function pythonDjangoRequestDataEvidence(
   path: string,
   lines: readonly string[],
   wrapper: PythonDjangoViewHandler,
   origin: { expression: string; line: number },
 ): PythonDjangoRequestStringSource | undefined {
   const get =
-    /\b([A-Za-z_]\w*)\s*\.\s*GET\s*\.\s*get\s*\(([\s\S]*)\)\s*$/u.exec(
+    /\b([A-Za-z_]\w*)\s*\.\s*(GET|POST)\s*\.\s*get\s*\(([\s\S]*)\)\s*$/u.exec(
       origin.expression,
     );
   const subscript =
-    /\b([A-Za-z_]\w*)\s*\.\s*GET\s*\[\s*([\s\S]+?)\s*\]\s*$/u.exec(
+    /\b([A-Za-z_]\w*)\s*\.\s*(GET|POST)\s*\[\s*([\s\S]+?)\s*\]\s*$/u.exec(
       origin.expression,
     );
+  let collection: "GET" | "POST";
   let requestExpression: string;
   let field: string | undefined;
-  if (get?.[1] !== undefined && get[2] !== undefined) {
-    const arguments_ = splitPythonArguments(get[2]);
+  if (
+    get?.[1] !== undefined &&
+    (get[2] === "GET" || get[2] === "POST") &&
+    get[3] !== undefined
+  ) {
+    const arguments_ = splitPythonArguments(get[3]);
     if (
       arguments_.length === 0 ||
       arguments_.length > 2 ||
@@ -42999,15 +43095,22 @@ function pythonDjangoRequestGetEvidence(
       return undefined;
     }
     requestExpression = get[1];
-  } else if (subscript?.[1] !== undefined && subscript[2] !== undefined) {
-    field = pythonLiteralStringValue(subscript[2]);
+    collection = get[2];
+  } else if (
+    subscript?.[1] !== undefined &&
+    (subscript[2] === "GET" || subscript[2] === "POST") &&
+    subscript[3] !== undefined
+  ) {
+    field = pythonLiteralStringValue(subscript[3]);
     if (field === undefined || field === "") return undefined;
     requestExpression = subscript[1];
+    collection = subscript[2];
   } else {
     return undefined;
   }
   const requestParameter = wrapper.parameters[wrapper.requestParameterIndex];
   if (
+    (collection === "POST" && !wrapper.allowsPostForm) ||
     requestParameter !== requestExpression ||
     pythonIdentifierReassignedBetween(
       lines,
@@ -43019,23 +43122,31 @@ function pythonDjangoRequestGetEvidence(
     return undefined;
   }
   return {
-    kind: "django-request-query-string",
+    kind:
+      collection === "GET"
+        ? "django-request-query-string"
+        : "django-request-form-string",
     line: origin.line,
     propagators: [
       {
         kind:
-          wrapper.kind === "class-get"
-            ? "django-get-request-parameter"
-            : "django-view-request-parameter",
+          wrapper.kind === "function"
+            ? "django-view-request-parameter"
+            : wrapper.kind === "class-get"
+              ? "django-get-request-parameter"
+              : "django-post-request-parameter",
         path,
         line: wrapper.startLine,
         symbol: requestExpression,
       },
       {
-        kind: "django-request-get-read",
+        kind:
+          collection === "GET"
+            ? "django-request-get-read"
+            : "django-request-post-read",
         path,
         line: origin.line,
-        symbol: `${requestExpression}.GET[${JSON.stringify(field)}]`,
+        symbol: `${requestExpression}.${collection}[${JSON.stringify(field)}]`,
       },
     ],
   };
@@ -43060,7 +43171,7 @@ function pythonDjangoOpenRedirectSource(
           (candidate) =>
             callLine >= candidate.startLine && callLine <= candidate.endLine,
         )
-      : pythonDjangoFunctionViewHandler(functionWrapper);
+      : pythonDjangoFunctionViewHandler(files, file, functionWrapper);
   if (wrapper === undefined || wrapper.parameters.length === 0)
     return undefined;
   const routeEvidence = pythonDjangoRouteEvidence(files, path, wrapper);
@@ -43068,7 +43179,7 @@ function pythonDjangoOpenRedirectSource(
   const resolved =
     resolvePythonExpression(lines, expression, callLine) ?? expression;
   if (pythonFixedLocalRedirectPrefix(resolved) !== undefined) return undefined;
-  const directRequestSource = pythonDjangoRequestGetEvidence(
+  const directRequestSource = pythonDjangoRequestDataEvidence(
     path,
     lines,
     wrapper,
@@ -43090,7 +43201,7 @@ function pythonDjangoOpenRedirectSource(
       (origin) => origin.line >= wrapper.startLine && origin.line <= callLine,
     )
     .flatMap((origin) => {
-      const source = pythonDjangoRequestGetEvidence(
+      const source = pythonDjangoRequestDataEvidence(
         path,
         lines,
         wrapper,

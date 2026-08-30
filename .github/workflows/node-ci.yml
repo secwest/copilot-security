@@ -188,6 +188,10 @@ jobs:
             benchmarks/fixtures/python-django-class-view-open-redirect/examples/witness.py
           "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
             benchmarks/fixtures/python-django-class-view-safe-local-redirect/examples/witness.py
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-django-post-class-view-open-redirect/examples/witness.py
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-django-post-class-view-safe-local-redirect/examples/witness.py
 
   mcp-tool-fixtures:
     name: MCP tool witness / ${{ matrix.os }} / ${{ matrix.fixture }}

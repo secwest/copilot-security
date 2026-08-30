@@ -22,29 +22,39 @@ Flask/Werkzeug exploit/control pair.
 
 The parallel typed Django model requires an official `path` or `re_path`
 binding inside one balanced `urlpatterns` list, a resolvable registered
-function or class handler, its request parameter and literal `request.GET`
-field, and an official shortcut or response-class Location sink. This now
-matches CodeQL's canonical class-view example while requiring stronger
-application proof: one direct official `View` base, exact no-argument
-`as_view()` registration, one undecorated `get(self, request, ...)`, and stable
+function or class handler, its request parameter and a literal `request.GET`
+query field or `request.POST` form field, and an official shortcut or
+response-class Location sink. This matches CodeQL's canonical GET class-view
+example and extends the same typed proof to form redirects. Django documents
+that both request collections are
+[`QueryDict` instances](https://docs.djangoproject.com/en/6.0/ref/request-response/#querydict-objects).
+Class application proof remains stricter than a method-name match: one direct
+official `View` base, exact no-argument `as_view()` registration, one exact
+undecorated `get(self, request, ...)` or `post(self, request, ...)`, and stable
 dispatch state. Django documents that
 [`as_view`, `setup`, and `dispatch`](https://docs.djangoproject.com/en/6.0/ref/class-based-views/base/)
-create the URL callable, bind the request, and select the HTTP method handler.
+create the URL callable, bind the request, and select the lower-cased HTTP
+method handler. The model therefore accepts `request.POST` only under `post()`
+for class views, while registered function views may read either collection.
 The model also incorporates CodeQL's documented
 [`url_has_allowed_host_and_scheme`](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
 countermeasure but suppresses a path only when the exact redirect expression is
 guarded by the official helper and a static allowed-host set. It deliberately
 rejects unregistered handlers, dynamic routing, multiple inheritance,
-decorators, lifecycle or method replacement, configured `as_view` calls,
-shadows, rebindings, opaque transforms, and ambiguous calls. Django's own
+decorators, duplicate handlers, GET/form dispatch mismatch, lifecycle or method
+replacement, configured `as_view` calls, shadows, rebindings, opaque
+transforms, and ambiguous calls. For function views, only a stable official
+`require_GET`, `require_safe`, or static `require_http_methods` list without
+POST suppresses form reachability; `require_POST`, dynamic controls, and
+lookalikes do not. Django's own
 [`redirect` implementation](https://github.com/django/django/blob/main/django/shortcuts.py)
 selects an HTTP redirect response after resolving the target, and the response
 base assigns that target to
 [`Location`](https://github.com/django/django/blob/main/django/http/response.py).
-Pinned Django 6.1 function-view and class-view no-follow pairs prove the
-root-prefix authority switch and encoded fixed-local controls without external
-I/O. The class-view regression measured zero rows before the change and one
-typed CWE-601 row afterward.
+Pinned Django 6.1 function-GET, class-GET, and class-POST no-follow pairs prove
+the root-prefix authority switch and encoded fixed-local controls without
+external I/O. Both class-dispatch regressions measured zero rows before their
+respective change and one typed CWE-601 row afterward.
 
 The latest comparator adoption is CodeQL's merged August 2026
 [`Rust command-injection query`](https://github.com/github/codeql/pull/22323),

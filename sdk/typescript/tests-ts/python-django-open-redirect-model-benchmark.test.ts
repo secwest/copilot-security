@@ -108,6 +108,80 @@ describe("Django open-redirect model", () => {
     expect(manifest.cases[1].expected).toEqual([]);
   });
 
+  test("keeps a strict POST class-view exploit/control benchmark contract", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        join(benchmarkRoot, "python-django-post-open-redirect-manifest.json"),
+        "utf8",
+      ),
+    );
+
+    expect(manifest.schemaVersion).toBe("1.0");
+    expect(
+      Object.values(manifest.thresholds).every(
+        (value) => value === 0 || value === 1,
+      ),
+    ).toBeTrue();
+    expect(manifest.cases.map(({ id }: { id: string }) => id)).toEqual([
+      "python-django-post-class-view-open-redirect",
+      "python-django-post-class-view-safe-local-redirect",
+    ]);
+    expect(manifest.cases[0].expected[0]).toMatchObject({
+      id: modelId,
+      cwe: ["CWE-601"],
+      requireValidation: true,
+      requireAttackPath: true,
+      requireCodeEvidence: true,
+    });
+    expect(
+      manifest.cases[0].expected[0].requiredValidationTextAnyOf,
+    ).toHaveLength(7);
+    expect(
+      manifest.cases[0].expected[0].requiredAttackPathTextAnyOf,
+    ).toHaveLength(7);
+    expect(manifest.cases[1].expected).toEqual([]);
+  });
+
+  test("separates the checked-in POST class-view exploit and fixed-local control", async () => {
+    const exploit = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-django-post-class-view-open-redirect",
+    );
+    const control = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-django-post-class-view-safe-local-redirect",
+    );
+    const exploitModels = models(await buildResidualRiskInventory(exploit));
+    const controlModels = models(await buildResidualRiskInventory(control));
+
+    expect(exploitModels).toHaveLength(1);
+    expect(exploitModels[0]).toMatchObject({
+      source: {
+        kind: "django-request-form-string",
+        path: "src/views.py",
+        line: 7,
+      },
+      sink: {
+        kind: "django-shortcut-redirect-location",
+        path: "src/views.py",
+        line: 9,
+        cweIds: ["CWE-601"],
+      },
+    });
+    expect(exploitModels[0].propagators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "django-official-view-binding" }),
+        expect.objectContaining({ kind: "django-class-based-view" }),
+        expect.objectContaining({ kind: "django-as-view-registration" }),
+        expect.objectContaining({ kind: "django-post-request-parameter" }),
+        expect.objectContaining({ kind: "django-request-post-read" }),
+      ]),
+    );
+    expect(controlModels).toHaveLength(0);
+  });
+
   test("separates the checked-in class-view exploit and fixed-local control", async () => {
     const exploit = join(
       benchmarkRoot,
@@ -228,6 +302,130 @@ describe("Django open-redirect model", () => {
       });
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("detects registered function and class views that redirect from form POST data", async () => {
+    const variants: ReadonlyArray<
+      readonly [string, Readonly<Record<string, string>>, string]
+    > = [
+      [
+        "function",
+        {
+          "app/__init__.py": "",
+          "app/views.py": [
+            "from django.shortcuts import redirect",
+            "",
+            "def continue_to(request):",
+            '    target = request.POST.get("next", "")',
+            '    return redirect("/" + target)',
+            "",
+          ].join("\n"),
+          "app/urls.py": [
+            "from django.urls import path",
+            "from .views import continue_to",
+            "",
+            'urlpatterns = [path("continue/", continue_to)]',
+            "",
+          ].join("\n"),
+        },
+        "django-view-request-parameter",
+      ],
+      [
+        "function-require-post",
+        {
+          "app/__init__.py": "",
+          "app/views.py": [
+            "from django.shortcuts import redirect",
+            "from django.views.decorators.http import require_POST",
+            "",
+            "@require_POST",
+            "def continue_to(request):",
+            '    return redirect("/" + request.POST.get("next", ""))',
+            "",
+          ].join("\n"),
+          "app/urls.py": [
+            "from django.urls import path",
+            "from .views import continue_to",
+            "",
+            'urlpatterns = [path("continue/", continue_to)]',
+            "",
+          ].join("\n"),
+        },
+        "django-view-request-parameter",
+      ],
+      [
+        "class",
+        {
+          "app/__init__.py": "",
+          "app/views.py": [
+            "from django.shortcuts import redirect",
+            "from django.views import View",
+            "",
+            "class ContinueView(View):",
+            "    def post(self, request):",
+            '        target = request.POST["next"]',
+            '        return redirect("/" + target)',
+            "",
+          ].join("\n"),
+          "app/urls.py": [
+            "from django.urls import path",
+            "from .views import ContinueView",
+            "",
+            'urlpatterns = [path("continue/", ContinueView.as_view())]',
+            "",
+          ].join("\n"),
+        },
+        "django-post-request-parameter",
+      ],
+      [
+        "class-with-get-and-post",
+        {
+          "app/__init__.py": "",
+          "app/views.py": [
+            "from django.shortcuts import redirect",
+            "from django.views import View",
+            "",
+            "class ContinueView(View):",
+            "    def get(self, request):",
+            '        return redirect("/continue/")',
+            "",
+            "    def post(self, request):",
+            '        return redirect("/" + request.POST.get("next", ""))',
+            "",
+          ].join("\n"),
+          "app/urls.py": [
+            "from django.urls import path",
+            "from .views import ContinueView",
+            "",
+            'urlpatterns = [path("continue/", ContinueView.as_view())]',
+            "",
+          ].join("\n"),
+        },
+        "django-post-request-parameter",
+      ],
+    ];
+
+    for (const [name, files, parameterKind] of variants) {
+      const root = await mkdtemp(join(tmpdir(), `django-post-${name}-`));
+      try {
+        await writeRepository(root, files);
+        const detected = models(await buildResidualRiskInventory(root));
+        expect(detected, name).toHaveLength(1);
+        expect(detected[0].source, name).toMatchObject({
+          kind: "django-request-form-string",
+          path: "app/views.py",
+        });
+        expect(detected[0].sink.cweIds, name).toEqual(["CWE-601"]);
+        expect(detected[0].propagators, name).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ kind: parameterKind }),
+            expect.objectContaining({ kind: "django-request-post-read" }),
+          ]),
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
     }
   });
 
@@ -444,8 +642,33 @@ describe("Django open-redirect model", () => {
         baseUrls,
       ],
       [
+        "get-handler-post-form",
+        baseViews.replace("request.GET", "request.POST"),
+        baseUrls,
+      ],
+      [
         "get-replaced",
         `${baseViews}ContinueView.get = lambda self, request: request\n`,
+        baseUrls,
+      ],
+      [
+        "post-replaced",
+        `${baseViews
+          .replace("def get", "def post")
+          .replace(
+            "request.GET",
+            "request.POST",
+          )}ContinueView.post = lambda self, request: request\n`,
+        baseUrls,
+      ],
+      [
+        "duplicate-post",
+        `${baseViews
+          .replace("def get", "def post")
+          .replace(
+            "request.GET",
+            "request.POST",
+          )}    def post(self, request):\n        return redirect(request.POST["next"])\n`,
         baseUrls,
       ],
       ["class-rebound", `${baseViews}ContinueView = object\n`, baseUrls],
@@ -717,11 +940,8 @@ describe("Django open-redirect model", () => {
         urls,
       ],
       [
-        "request-post",
-        views.replace(
-          'request.GET.get("next", "")',
-          'request.POST.get("next", "")',
-        ),
+        "request-body",
+        views.replace('request.GET.get("next", "")', "request.body.decode()"),
         urls,
       ],
       ["unregistered-view", views, urls.replace("continue_to)]", "health)]")],
@@ -752,6 +972,48 @@ describe("Django open-redirect model", () => {
           "def continue_to(request):",
           "redirect = lambda value: value\n\ndef continue_to(request):",
         ),
+        urls,
+      ],
+      [
+        "official-require-get",
+        views
+          .replace(
+            "from django.shortcuts import redirect",
+            "from django.shortcuts import redirect\nfrom django.views.decorators.http import require_GET",
+          )
+          .replace(
+            "def continue_to(request):",
+            "@require_GET\ndef continue_to(request):",
+          )
+          .replace("request.GET", "request.POST"),
+        urls,
+      ],
+      [
+        "official-require-http-methods-get-only",
+        views
+          .replace(
+            "from django.shortcuts import redirect",
+            "from django.shortcuts import redirect\nfrom django.views.decorators.http import require_http_methods",
+          )
+          .replace(
+            "def continue_to(request):",
+            '@require_http_methods(["GET", "HEAD"])\ndef continue_to(request):',
+          )
+          .replace("request.GET", "request.POST"),
+        urls,
+      ],
+      [
+        "official-require-http-methods-empty",
+        views
+          .replace(
+            "from django.shortcuts import redirect",
+            "from django.shortcuts import redirect\nfrom django.views.decorators.http import require_http_methods",
+          )
+          .replace(
+            "def continue_to(request):",
+            "@require_http_methods([])\ndef continue_to(request):",
+          )
+          .replace("request.GET", "request.POST"),
         urls,
       ],
       [
@@ -897,7 +1159,10 @@ describe("Django open-redirect model", () => {
     expect(prompt).toContain("urlpatterns");
     expect(prompt).toContain("View.as_view");
     expect(prompt).toContain("get(self, request");
+    expect(prompt).toContain("post(self, request");
     expect(prompt).toContain("request.GET");
+    expect(prompt).toContain("request.POST");
+    expect(prompt).toContain("require_GET");
     expect(prompt).toContain("django.shortcuts.redirect");
     expect(prompt).toContain("Location");
     expect(prompt).toContain("root-only");

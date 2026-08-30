@@ -3101,24 +3101,30 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
-The dedicated `python-django-open-redirect-manifest.json` and
-`python-django-class-view-open-redirect-manifest.json` apply the same perfect
-gates to split Django applications. The first registers a relative-imported
-function view; the second registers a direct official `View` subclass through
-an exact no-argument `ContinueView.as_view()` call and reads the query value in
-`get(self, request)`. Each exploit reads one `request.GET` field, prepends only
-`/`, and passes the result to the official shortcut; the hostile leading slash
-produces a scheme-relative `//attacker.invalid/...` Location. Each
+The dedicated `python-django-open-redirect-manifest.json`,
+`python-django-class-view-open-redirect-manifest.json`, and
+`python-django-post-open-redirect-manifest.json` apply the same perfect gates
+to split Django applications. The first registers a relative-imported function
+view; the second registers a direct official `View` subclass whose
+`get(self, request)` reads `request.GET`; and the third registers the same exact
+no-argument `ContinueView.as_view()` topology while `post(self, request)` reads
+`request.POST`. Each exploit prepends only `/` to one remote query or form
+value and passes the result to the official shortcut, so the hostile leading
+slash produces a scheme-relative `//attacker.invalid/...` Location. Each
 topology-matched control percent-encodes the same bytes below
 `/continue/?next=`. All fixtures pin Django 6.1, use the test client with
-`follow=False`, and make no external request. The typed model also recognizes
-exact `re_path`, `HttpResponseRedirect`, permanent response, qualified,
-aliased, named-target, subscript, repeated literal route, async `get`, and
-relative-wrapper forms. It suppresses an exact official
+`follow=False`, and make no external request. Django documents both
+[`GET` and `POST` as `QueryDict` collections](https://docs.djangoproject.com/en/6.0/ref/request-response/#querydict-objects).
+The typed model also recognizes exact `re_path`, `HttpResponseRedirect`,
+permanent response, qualified, aliased, named-target, subscript, repeated
+literal route, async `get`/`post`, and relative-wrapper forms. It suppresses an exact official
 `url_has_allowed_host_and_scheme` guard with a static host set and otherwise
 fails closed on dynamic or unregistered routing, configured `as_view` calls,
-decorated handlers, multiple inheritance, lifecycle/member replacement,
-shadows, rebindings, opaque calls, and ambiguous arguments:
+decorated handlers, multiple inheritance, duplicate handlers,
+lifecycle/member replacement, a POST collection inside default `get()`,
+an official static GET/HEAD-only function decorator, shadows, rebindings,
+opaque calls, and ambiguous arguments. `require_POST` remains a positive form
+path:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
@@ -3131,8 +3137,9 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
-Use `python-django-class-view-open-redirect-manifest.json` in the same command
-to run the class-dispatch pair.
+Use `python-django-class-view-open-redirect-manifest.json` or
+`python-django-post-open-redirect-manifest.json` in the same command to run the
+GET or POST class-dispatch pair.
 
 The Python multi-hop lane inserts public gateway and service relays between the
 registered Flask route and sink wrapper. It also exercises bounded multiline

@@ -678,6 +678,10 @@ describe("effectiveness benchmark", () => {
         "python-django-class-view-safe-local-redirect",
       ],
       [
+        "python-django-post-class-view-open-redirect",
+        "python-django-post-class-view-safe-local-redirect",
+      ],
+      [
         "rust-axum-tokio-shell-command-injection",
         "rust-axum-tokio-argv-command",
       ],

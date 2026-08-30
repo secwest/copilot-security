@@ -100,19 +100,27 @@ Registered Django function and class-based views now have the same typed
 treatment without collapsing the frameworks into a name-matched rule. The
 Django model requires an official `path` or `re_path` call inside the sole
 balanced `urlpatterns` list, the exact handler and request parameter, one
-literal `request.GET` field, and an official shortcut or
+literal `request.GET` query field or `request.POST` form field, and an official shortcut or
 `HttpResponseRedirect` Location boundary. Class handlers additionally require
 one direct official `View` base, an exact no-argument `as_view()` registration,
-one undecorated `get(self, request, ...)`, and no dispatch/lifecycle or member
-replacement ambiguity. Exact relative imports and bounded redirect wrappers
-are supported, while local framework shadows, rebound symbols, dynamic route
-structures, unregistered handlers, configured `as_view` calls, multiple
-inheritance, ambiguous arguments, other request collections, and opaque
-transformations fail closed. An enclosing official
+an exact undecorated `get(self, request, ...)` or `post(self, request, ...)`,
+and no dispatch/lifecycle or member replacement ambiguity. Under Django's
+default dispatch, form data is accepted only in `post()`, while query data may
+be read by either handler; one exact handler of each kind may coexist. Exact
+relative imports and bounded redirect wrappers are supported, while local
+framework shadows, rebound symbols, dynamic route structures, unregistered
+handlers, configured `as_view` calls, multiple inheritance, duplicate or
+replaced handlers, ambiguous arguments, other request collections, and opaque
+transformations fail closed. An exact official `require_GET`, `require_safe`,
+or static `require_http_methods` decorator without POST suppresses form-source
+reachability on function views; lookalike and dynamic decorators do not. Django
+documents both request collections as
+[`QueryDict`](https://docs.djangoproject.com/en/6.0/ref/request-response/#querydict-objects)
+instances. An enclosing official
 `url_has_allowed_host_and_scheme` check with a static allowed-host set is
-counterevidence. Separate Django 6.1 function-view and class-view pairs use
-`follow=False`, inspect only the Location, and prove why a root-only prefix is
-not same-origin confinement.
+counterevidence. Separate Django 6.1 function-GET, class-GET, and class-POST
+pairs use `follow=False`, inspect only the Location, and prove why a root-only
+prefix is not same-origin confinement.
 It separately models request bodies reaching
 standard-library `pickle.load` or `pickle.loads`, NumPy `load` with literal
 `allow_pickle=True`, as well as PyYAML

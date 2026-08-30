@@ -2,6 +2,74 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Preserve Django POST form control through exact view dispatch
+
+**Measured gap and comparative boundary.** The unchanged host emitted zero rows
+for a registered Django function view whose `request.POST.get("next")` value
+reached the official redirect shortcut; the new positive assertion failed while
+all sixteen pre-existing Django tests stayed green. CodeQL's maintained
+[`py/url-redirection`](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+establishes the high-precision Django redirect family and its canonical GET
+class-view path. Django's maintained request contract independently states that
+both [`HttpRequest.GET` and `HttpRequest.POST` are `QueryDict`
+instances](https://docs.djangoproject.com/en/6.0/ref/request-response/#querydict-objects).
+Extending the existing registered-view proof to POST therefore closes a real
+source and dispatch gap without substituting dependency presence or a generic
+request-name match.
+
+**Dispatch and dataflow decision.** Function views accept one literal GET query
+or POST form field from their exact registered request parameter. Direct
+official `View` subclasses may contribute one exact undecorated `get` and one
+exact undecorated `post` handler through the same no-argument `as_view()` route.
+Django's documented
+[`dispatch()` lifecycle](https://docs.djangoproject.com/en/6.0/ref/class-based-views/base/)
+selects the lower-cased HTTP method name, so a class GET handler may read query
+data but not POST form data; a POST handler may read either the request URL's
+query collection or its submitted form collection. New form-source, POST-method,
+and POST-read propagators keep those roles distinct through aliases and bounded
+relative redirect wrappers.
+
+**Fail-closed boundary.** Preserve the existing requirements for one direct
+official base, one public class definition, exact route identity, stable imports
+and class members, and no decorators or `setup`, `dispatch`, or `as_view`
+overrides. Add `post` to every assignment and monkey-patch rejection. Duplicate
+GET or POST definitions invalidate class dispatch because Python replacement
+order would otherwise be ambiguous. Defaulted or reassigned request parameters,
+`request.body`, unsupported collections, class GET/form mismatch, configured
+`as_view`, dynamic routing, local Django shadows, opaque transformations, and
+unknown redirect arguments remain negative. The official static
+`url_has_allowed_host_and_scheme` guard and a non-root fixed local prefix remain
+counterevidence for either collection. A follow-on adversarial regression
+proved that an official `@require_GET` function could otherwise create a form-
+source false positive. The host now also credits stable official `require_GET`,
+`require_safe`, and static `require_http_methods` collections that omit POST as
+method counterevidence. An exact empty literal collection is deny-all and is
+therefore also credited. It deliberately does not credit lookalike, shadowed,
+rebound, or dynamic method controls; `require_POST` remains a positive path.
+
+**Executable corpus.** A new split Django 6.1 class-view pair posts the same
+hostile value to the same `ContinueView.as_view()` route. The exploit adds only
+`/`, emits `//attacker.invalid/...`, and resolves to the attacker authority; the
+control percent-encodes the value beneath `/continue/?next=`. TestClient uses
+`follow=False`, observes only the Location header, and performs no external
+request. The dedicated manifest applies perfect precision, recall, evidence,
+attack-path, validation, stability, and negative-control gates. The canonical
+corpus advances to 195 pairs, 390 cases, and 1,170 repeated positions.
+
+**Acceptance.** The exact pre-fix regression produced zero rows for the
+function POST case. After implementation, the focused Django, canonical-pair,
+and Rust bookkeeping lane passes 44 tests and 2,903 assertions. Generated-model
+drift and TypeScript checking pass. A disposable environment installs the exact
+Django 6.1 pin; the exploit records one attacker-origin selection and the
+control records zero, then the environment is removed. The 2,158-test aggregate
+records 2,125 passes and 31 intentional skips; its only two failures are the
+known managed-sandbox Git-creation and Windows scanner-home denials, whose full
+affected files pass natively (48/48, 242 assertions). The final empty static
+method-list control passes in the complete Django file (19/19, 125 assertions)
+with a clean type recheck. Self-scan, package, GUI, hosted, and immutable-
+checkpoint evidence follows at the acceptance checkpoint rather than being
+inferred from these local lanes.
+
 ## 2026-08-30 — Model registered Django class-view GET dispatch
 
 **Measured gap and maintained comparator.** The unchanged scanner emitted zero

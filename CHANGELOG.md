@@ -6,6 +6,44 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a measured Django form-redirect false negative. Before the host change,
+  a registered function view reading `request.POST` produced zero findings while
+  all sixteen prior Django regressions passed. The typed model now accepts exact
+  `request.POST.get(...)` and subscript reads in registered function views and
+  exact `post(self, request, ...)` class handlers.
+- Extended class dispatch without broad request-name matching. A direct official
+  `View` may expose one exact GET and one exact POST handler through the same
+  no-argument `as_view()` registration. Form data is reachable only from the
+  POST handler under default dispatch; query data remains available in either
+  handler. Duplicate or replaced POST methods, a POST collection in `get()`,
+  request reassignment, lifecycle overrides, decorators, shadows, and ambiguous
+  routing remain negative.
+- Closed the paired function-view false positive for exact stable
+  `django.views.decorators.http.require_GET`, `require_safe`, and static
+  `require_http_methods` collections that omit POST. A real `require_POST`
+  decorator remains positive; an exact empty static collection is correctly
+  treated as deny-all, while shadowed, rebound, lookalike, or dynamic method
+  controls receive no trust.
+- Added distinct `django-request-form-string`, `django-post-request-parameter`,
+  and `django-request-post-read` evidence plus reviewer requirements that name
+  the form field, exact POST handler, redirect-to-Location edge, origin switch,
+  missing control, and CWE-601.
+- Added a source-matched Django 6.1 POST class-view exploit/control pair and a
+  strict `python-django-post-open-redirect-manifest.json`. Offline TestClient
+  witnesses prove attacker-origin selections of one and zero without following
+  the redirect or performing external I/O. The canonical corpus advances to 195
+  exploit/control pairs, 390 cases, and 1,170 repeated scan positions.
+- Focused acceptance passes 44 Django, canonical, and Rust bookkeeping tests
+  with 2,903 assertions; generated-model and TypeScript checks pass. The
+  new real Django 6.1 exploit/control witnesses also pass in an isolated
+  environment, which is removed after validation.
+- The 2,158-test TypeScript aggregate records 2,125 passes, 31 intentional
+  platform/environment skips, and only the two expected managed-sandbox
+  denials in benchmark Git setup and scanner-home transport. Native reruns of
+  both complete affected files pass 48/48 with 242 assertions. The final
+  deny-all method-decorator precision regression then passes in the complete
+  19-test Django file (125 assertions), alongside a clean generated-model and
+  TypeScript recheck.
 - Closed a separately measured Django class-based-view false negative: the
   unchanged scanner emitted zero rows for an official `django.views.View`
   subclass registered through `ContinueView.as_view()`, while the typed model
