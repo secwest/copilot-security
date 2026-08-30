@@ -33994,23 +33994,31 @@ function pythonFrameworkWrapperSummaries(
               )
               .join("\n") ??
             sinkExpression;
-          const listElementFlows =
+          const collectionElementFlows =
             model.id === "python-web-command"
               ? wrapper.parameters.flatMap((parameter, parameterIndex) => {
-                  const flow = pythonListElementFlowToSink(
-                    file.lines,
-                    wrapper,
-                    sink.line,
-                    tracedSinkExpression,
-                    parameter,
-                  );
+                  const flow =
+                    pythonListElementFlowToSink(
+                      file.lines,
+                      wrapper,
+                      sink.line,
+                      tracedSinkExpression,
+                      parameter,
+                    ) ??
+                    pythonDictionaryElementFlowToSink(
+                      file.lines,
+                      wrapper,
+                      sink.line,
+                      tracedSinkExpression,
+                      parameter,
+                    );
                   return flow === undefined ? [] : [{ parameterIndex, flow }];
                 })
               : [];
           const parameterIndexes = wrapper.parameters.flatMap(
             (parameter, parameterIndex) =>
               pythonLineReferencesIdentifier(tracedSinkExpression, parameter) ||
-              listElementFlows.some(
+              collectionElementFlows.some(
                 (candidate) => candidate.parameterIndex === parameterIndex,
               )
                 ? [parameterIndex]
@@ -34044,7 +34052,7 @@ function pythonFrameworkWrapperSummaries(
               ) === index,
           );
           for (const parameterIndex of parameterIndexes) {
-            const listElementFlow = listElementFlows.find(
+            const collectionElementFlow = collectionElementFlows.find(
               (candidate) => candidate.parameterIndex === parameterIndex,
             )?.flow;
             summaries.push({
@@ -34060,19 +34068,20 @@ function pythonFrameworkWrapperSummaries(
                 cweIds: sinkPattern.cweIds,
               },
               controls: wrapperControls.slice(0, 8),
-              ...(pythonTypedSink === undefined && listElementFlow === undefined
+              ...(pythonTypedSink === undefined &&
+              collectionElementFlow === undefined
                 ? {}
                 : {
                     propagators: [
                       ...(pythonTypedSink?.propagators ?? []),
-                      ...(listElementFlow === undefined
+                      ...(collectionElementFlow === undefined
                         ? []
                         : [
                             {
-                              kind: listElementFlow.kind,
+                              kind: collectionElementFlow.kind,
                               path: file.path,
-                              line: listElementFlow.line,
-                              symbol: listElementFlow.symbol,
+                              line: collectionElementFlow.line,
+                              symbol: collectionElementFlow.symbol,
                             },
                           ]),
                     ],
@@ -42836,6 +42845,23 @@ function resolvePythonExpression(
   return value;
 }
 
+function pythonExpressionCandidates(
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+): string[] {
+  const candidates = new Set([expression]);
+  for (const match of expression.matchAll(/\b([A-Za-z_]\w*)\b/gu)) {
+    const identifier = match[1];
+    if (identifier === undefined) continue;
+    const resolved = resolvePythonExpression(lines, identifier, beforeLine);
+    if (resolved !== undefined && resolved !== identifier) {
+      candidates.add(resolved);
+    }
+  }
+  return [...candidates];
+}
+
 interface PythonListElementFlow {
   kind:
     | "python-list-append-element"
@@ -42853,9 +42879,13 @@ function pythonListElementFlowToSink(
   sinkExpression: string,
   parameter: string,
 ): PythonListElementFlow | undefined {
-  const references = [
-    ...sinkExpression.matchAll(/\b([A-Za-z_]\w*)\s*\[\s*(-?\d+)\s*\]/gu),
-  ];
+  const references = pythonExpressionCandidates(
+    lines,
+    sinkExpression,
+    sinkLine,
+  ).flatMap((candidate) => [
+    ...candidate.matchAll(/\b([A-Za-z_]\w*)\s*\[\s*(-?\d+)\s*\]/gu),
+  ]);
   for (const reference of references) {
     const container = reference[1];
     const requestedIndex = Number(reference[2]);
@@ -43008,6 +43038,335 @@ function pythonListChangedBetween(
   return structuralLines
     .slice(afterLine, Math.max(afterLine, beforeLine - 1))
     .some((candidate) => mutation.test(candidate));
+}
+
+interface PythonDictionaryElementFlow {
+  kind:
+    | "python-dict-item-assignment-element"
+    | "python-dict-ior-element"
+    | "python-dict-literal-element"
+    | "python-dict-setdefault-element"
+    | "python-dict-update-element";
+  line: number;
+  symbol: string;
+}
+
+interface PythonDictionaryStateValue {
+  expression: string;
+  kind: PythonDictionaryElementFlow["kind"];
+  line: number;
+}
+
+function pythonDictionaryElementFlowToSink(
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  sinkLine: number,
+  sinkExpression: string,
+  parameter: string,
+): PythonDictionaryElementFlow | undefined {
+  const selections = pythonExpressionCandidates(
+    lines,
+    sinkExpression,
+    sinkLine,
+  ).flatMap((candidate) => pythonDictionarySelections(candidate));
+  for (const selection of selections) {
+    const state = pythonDictionaryStateBeforeSink(
+      lines,
+      wrapper,
+      sinkLine,
+      selection.container,
+    );
+    const selected = state?.get(selection.key);
+    if (selected === undefined) continue;
+    const resolved = resolvePythonExpression(
+      lines,
+      selected.expression,
+      selected.line,
+    );
+    if (
+      pythonIdentifierReassignedBetween(
+        lines,
+        parameter,
+        wrapper.startLine,
+        selected.line,
+      ) ||
+      (!pythonLineReferencesIdentifier(selected.expression, parameter) &&
+        (resolved === undefined ||
+          !pythonLineReferencesIdentifier(resolved, parameter)))
+    ) {
+      continue;
+    }
+    return {
+      kind: selected.kind,
+      line: selected.line,
+      symbol: `${selection.container}[${JSON.stringify(selection.key)}]`,
+    };
+  }
+  return undefined;
+}
+
+function pythonDictionarySelections(
+  expression: string,
+): Array<{ container: string; key: string }> {
+  const selections: Array<{ container: string; key: string }> = [];
+  for (const match of expression.matchAll(
+    /\b([A-Za-z_]\w*)\s*\[\s*(["'])([A-Za-z0-9_.:/ -]{1,64})\2\s*\]/gu,
+  )) {
+    if (match[1] !== undefined && match[3] !== undefined) {
+      selections.push({ container: match[1], key: match[3] });
+    }
+  }
+  for (const match of expression.matchAll(
+    /\b([A-Za-z_]\w*)\s*\.\s*(?:get|pop)\s*\(([^()\r\n]*)\)/gu,
+  )) {
+    if (match[1] === undefined || match[2] === undefined) continue;
+    const argumentsList = splitPythonArguments(match[2]);
+    if (argumentsList.length < 1 || argumentsList.length > 2) continue;
+    const key = pythonConstantDictionaryKey(argumentsList[0]!);
+    if (key !== undefined) selections.push({ container: match[1], key });
+  }
+  return selections.filter(
+    (selection, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.container === selection.container &&
+          candidate.key === selection.key,
+      ) === index,
+  );
+}
+
+function pythonDictionaryStateBeforeSink(
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  sinkLine: number,
+  container: string,
+): Map<string, PythonDictionaryStateValue> | undefined {
+  const escaped = escapeRegularExpression(container);
+  const initialization = new RegExp(
+    `^${escaped}\\s*(?::[^=]+)?=\\s*(.+)$`,
+    "u",
+  );
+  const alias = new RegExp(
+    `^[A-Za-z_]\\w*\\s*(?::[^=]+)?=\\s*${escaped}\\s*$`,
+    "u",
+  );
+  let state: Map<string, PythonDictionaryStateValue> | undefined;
+  let transitionCount = 0;
+  for (let line = wrapper.startLine + 1; line < sinkLine; line += 1) {
+    const code = pythonCodeBeforeComment(lines[line - 1] ?? "").trim();
+    if (code === "") continue;
+    if (state === undefined) {
+      const match = initialization.exec(code);
+      if (match === null) continue;
+      const value = pythonAssignmentValueAtLine(lines, line);
+      if (value === undefined) continue;
+      state = pythonDictionaryLiteralState(
+        value,
+        line,
+        "python-dict-literal-element",
+      );
+      if (state === undefined) continue;
+      continue;
+    }
+    const reassignment = initialization.exec(code);
+    if (reassignment !== null) {
+      const value = pythonAssignmentValueAtLine(lines, line);
+      if (value === undefined) return undefined;
+      const replacement = pythonDictionaryLiteralState(
+        value,
+        line,
+        "python-dict-literal-element",
+      );
+      if (replacement === undefined) return undefined;
+      state = replacement;
+      transitionCount += 1;
+      if (transitionCount > 64) return undefined;
+      continue;
+    }
+    if (
+      !pythonLineReferencesIdentifier(pythonStructuralCode(code), container)
+    ) {
+      continue;
+    }
+    if (alias.test(code)) return undefined;
+    const mutation = pythonDictionaryMutationAtLine(code, container, line);
+    if (mutation !== undefined) {
+      transitionCount += 1;
+      if (transitionCount > 64) return undefined;
+      for (const [key, value] of mutation.values) {
+        if (!mutation.onlyIfAbsent || !state.has(key)) state.set(key, value);
+      }
+      if (state.size > 64) return undefined;
+      continue;
+    }
+    if (pythonDictionaryMayChangeAtLine(code, container)) return undefined;
+  }
+  return state;
+}
+
+function pythonDictionaryMutationAtLine(
+  code: string,
+  container: string,
+  line: number,
+):
+  | {
+      values: Map<string, PythonDictionaryStateValue>;
+      onlyIfAbsent: boolean;
+    }
+  | undefined {
+  const escaped = escapeRegularExpression(container);
+  const itemAssignment = new RegExp(
+    `^${escaped}\\s*\\[\\s*((?:"[^"\\\\]*")|(?:'[^'\\\\]*'))\\s*\\]\\s*=\\s*(.+)$`,
+    "u",
+  ).exec(code);
+  if (itemAssignment?.[1] !== undefined && itemAssignment[2] !== undefined) {
+    const key = pythonConstantDictionaryKey(itemAssignment[1]);
+    if (key === undefined) return undefined;
+    return {
+      values: new Map([
+        [
+          key,
+          {
+            expression: itemAssignment[2].trim(),
+            kind: "python-dict-item-assignment-element",
+            line,
+          },
+        ],
+      ]),
+      onlyIfAbsent: false,
+    };
+  }
+  const ior = new RegExp(`^${escaped}\\s*\\|=\\s*(\\{[\\s\\S]*\\})$`, "u").exec(
+    code,
+  );
+  if (ior?.[1] !== undefined) {
+    const values = pythonDictionaryLiteralState(
+      ior[1],
+      line,
+      "python-dict-ior-element",
+    );
+    return values === undefined ? undefined : { values, onlyIfAbsent: false };
+  }
+  const call = new RegExp(
+    `^${escaped}\\s*\\.\\s*(update|setdefault)\\s*\\(([\\s\\S]*)\\)$`,
+    "u",
+  ).exec(code);
+  if (call?.[1] === undefined || call[2] === undefined) return undefined;
+  const argumentsList = splitPythonArguments(call[2]);
+  if (call[1] === "update" && argumentsList.length === 1) {
+    const values = pythonDictionaryLiteralState(
+      argumentsList[0]!,
+      line,
+      "python-dict-update-element",
+    );
+    return values === undefined ? undefined : { values, onlyIfAbsent: false };
+  }
+  if (call[1] === "setdefault" && argumentsList.length === 2) {
+    const key = pythonConstantDictionaryKey(argumentsList[0]!);
+    if (key === undefined) return undefined;
+    return {
+      values: new Map([
+        [
+          key,
+          {
+            expression: argumentsList[1]!,
+            kind: "python-dict-setdefault-element",
+            line,
+          },
+        ],
+      ]),
+      onlyIfAbsent: true,
+    };
+  }
+  return undefined;
+}
+
+function pythonDictionaryLiteralState(
+  expression: string,
+  line: number,
+  kind: PythonDictionaryElementFlow["kind"],
+): Map<string, PythonDictionaryStateValue> | undefined {
+  const value = expression.trim();
+  if (/^dict\s*\(\s*\)$/u.test(value)) return new Map();
+  if (!value.startsWith("{") || !value.endsWith("}")) return undefined;
+  const body = value.slice(1, -1).trim();
+  if (body === "") return new Map();
+  const entries = splitPythonArguments(body);
+  if (entries.length > 64) return undefined;
+  const state = new Map<string, PythonDictionaryStateValue>();
+  for (const entry of entries) {
+    const pair = splitPythonDictionaryEntry(entry);
+    if (pair === undefined) return undefined;
+    const key = pythonConstantDictionaryKey(pair.key);
+    if (key === undefined || pair.value === "") return undefined;
+    state.set(key, { expression: pair.value, kind, line });
+  }
+  return state;
+}
+
+function splitPythonDictionaryEntry(
+  entry: string,
+): { key: string; value: string } | undefined {
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  let separator = -1;
+  for (let index = 0; index < entry.length; index += 1) {
+    const character = entry[index]!;
+    if (quote !== "") {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'") quote = character;
+    else if (["(", "[", "{"].includes(character)) depth += 1;
+    else if ([")", "]", "}"].includes(character)) depth -= 1;
+    else if (character === ":" && depth === 0) {
+      if (separator >= 0) return undefined;
+      separator = index;
+    }
+    if (depth < 0) return undefined;
+  }
+  if (quote !== "" || depth !== 0 || separator < 0) return undefined;
+  return {
+    key: entry.slice(0, separator).trim(),
+    value: entry.slice(separator + 1).trim(),
+  };
+}
+
+function pythonConstantDictionaryKey(expression: string): string | undefined {
+  const match = /^(["'])([A-Za-z0-9_.:/ -]{1,64})\1$/u.exec(expression.trim());
+  return match?.[2];
+}
+
+function pythonDictionaryMayChangeAtLine(
+  code: string,
+  container: string,
+): boolean {
+  const escaped = escapeRegularExpression(container);
+  if (
+    new RegExp(
+      `^(?:del\\s+${escaped}\\b|${escaped}\\s*(?:=|:=|\\|=|\\[))`,
+      "u",
+    ).test(code)
+  ) {
+    return true;
+  }
+  const method = new RegExp(
+    `\\b${escaped}\\s*\\.\\s*([A-Za-z_]\\w*)\\s*\\(`,
+    "u",
+  ).exec(code)?.[1];
+  if (
+    method !== undefined &&
+    !new Set(["copy", "get", "items", "keys", "values"]).has(method)
+  ) {
+    return true;
+  }
+  return (
+    new RegExp(`\\(\\s*${escaped}\\s*(?:[,)]|$)`, "u").test(code) ||
+    new RegExp(`[,=]\\s*${escaped}\\s*(?:[,)]|$)`, "u").test(code)
+  );
 }
 
 function modeledJavaCallSource(
@@ -48455,17 +48814,53 @@ function pythonWebCommandEvidenceRequirements(
   const propagators = Array.isArray(frameworkModel["propagators"])
     ? frameworkModel["propagators"]
     : [];
-  const listFlow = propagators.find(
+  const collectionFlow = propagators.find(
     (propagator) =>
       isRecord(propagator) &&
       typeof propagator["kind"] === "string" &&
-      propagator["kind"].startsWith("python-list-") &&
+      (propagator["kind"].startsWith("python-list-") ||
+        propagator["kind"].startsWith("python-dict-")) &&
       propagator["kind"].endsWith("-element"),
   );
-  if (!isRecord(listFlow)) return { validation: [], attackPath: [] };
-  const kind = String(listFlow["kind"]);
+  if (!isRecord(collectionFlow)) return { validation: [], attackPath: [] };
+  const kind = String(collectionFlow["kind"]);
   const symbol =
-    typeof listFlow["symbol"] === "string" ? listFlow["symbol"] : "";
+    typeof collectionFlow["symbol"] === "string"
+      ? collectionFlow["symbol"]
+      : "";
+  if (kind.startsWith("python-dict-")) {
+    const mutation =
+      kind === "python-dict-literal-element"
+        ? ["dictionary literal", "dict literal", kind]
+        : kind === "python-dict-item-assignment-element"
+          ? ["dictionary item assignment", "constant-key assignment", kind]
+          : kind === "python-dict-update-element"
+            ? ["dict.update", "dictionary update", kind]
+            : kind === "python-dict-ior-element"
+              ? ["dictionary |=", "in-place dictionary union", kind]
+              : ["dict.setdefault", "dictionary setdefault", kind];
+    const selected = [
+      ...(symbol === "" ? [] : [symbol]),
+      "selected dictionary value",
+      "constant dictionary key",
+      "constant-key lookup",
+    ];
+    const exactState = [
+      "exact dictionary state",
+      "deterministic dictionary state",
+      "last-write-wins state",
+      "last-write-wins dictionary state",
+    ];
+    const ambiguity = [
+      "no ambiguous mutation",
+      "no intervening overwrite",
+      "no alias escape",
+    ];
+    return {
+      validation: [mutation, selected, exactState, ambiguity],
+      attackPath: [mutation, selected, exactState, ambiguity],
+    };
+  }
   const mutation =
     kind === "python-list-append-element"
       ? ["list append", ".append(", "python-list-append-element"]

@@ -31,6 +31,8 @@ const caseIds = [
   "python-cross-file-safe-command",
   "python-cross-file-list-iadd-command-injection",
   "python-cross-file-list-iadd-safe-command",
+  "python-cross-file-dict-update-command-injection",
+  "python-cross-file-dict-update-safe-command",
   "python-cross-file-sql-injection",
   "python-cross-file-safe-sql",
 ] as const;
@@ -53,10 +55,10 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([...caseIds]);
     expect(
       manifest.cases.filter(({ expected }) => expected.length > 0),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     expect(
       manifest.cases.filter(({ expected }) => expected.length === 0),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(1);
     }
@@ -99,6 +101,20 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(listIadd).toContain('"path":"src/runner.py","line":7');
     expect(
       inventories.get("python-cross-file-list-iadd-safe-command"),
+    ).not.toContain('"scope":"cross-file-wrapper"');
+    const dictionary = inventories.get(
+      "python-cross-file-dict-update-command-injection",
+    );
+    expect(dictionary).toContain('"scope":"cross-file-wrapper"');
+    expect(dictionary).toContain('"id":"python-web-command"');
+    expect(dictionary).toContain('"kind":"python-dict-update-element"');
+    expect(dictionary).toContain('"path":"src/server.py","line":3');
+    expect(dictionary).toContain(
+      '"path":"src/runner.py","line":6,"symbol":"commands[\\"preview\\"]"',
+    );
+    expect(dictionary).toContain('"path":"src/runner.py","line":8');
+    expect(
+      inventories.get("python-cross-file-dict-update-safe-command"),
     ).not.toContain('"scope":"cross-file-wrapper"');
     const sql = inventories.get("python-cross-file-sql-injection");
     expect(sql).toContain('"id":"python-web-sql"');
@@ -247,12 +263,254 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     }
   });
 
+  test("follows exact Python dictionary values into constant-key shell operands", async () => {
+    const root = await mkdtemp(join(tmpdir(), "python-dict-flow-"));
+    const source = join(root, "src");
+    try {
+      await mkdir(source, { recursive: true });
+      await writeFile(join(source, "__init__.py"), "", "utf8");
+      await writeFile(
+        join(source, "server.py"),
+        [
+          "from flask import request",
+          "from .runner import run_report",
+          "def report():",
+          '    report_name = request.args.get("name", "")',
+          "    return run_report(report_name)",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeFile(
+        join(source, "runner.py"),
+        [
+          "import subprocess",
+          "def run_report(report_name):",
+          '    commands = {"preview": "/usr/bin/printf fixed"}',
+          '    commands.update({"preview": f"/opt/reports/{report_name}"})',
+          '    example = "commands.clear() is documentation, not execution"',
+          '    selected = commands.get("preview")',
+          "    return subprocess.run(selected, shell=True, check=True, timeout=2)",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const inventory = await buildResidualRiskInventory(root);
+      expect(inventory).toContain('"scope":"cross-file-wrapper"');
+      expect(inventory).toContain('"id":"python-web-command"');
+      expect(inventory).toContain('"kind":"python-dict-update-element"');
+      expect(inventory).toContain(
+        '"path":"src/runner.py","line":4,"symbol":"commands[\\"preview\\"]"',
+      );
+      expect(inventory).toContain('"path":"src/runner.py","line":7');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("models exact dictionary construction, writes, updates, unions, defaults, and reads", async () => {
+    const root = await mkdtemp(join(tmpdir(), "python-dict-operations-"));
+    const source = join(root, "src");
+    try {
+      await mkdir(source, { recursive: true });
+      await writeFile(join(source, "__init__.py"), "", "utf8");
+      await writeFile(
+        join(source, "server.py"),
+        [
+          "from flask import request",
+          "from .runner import run_report",
+          "def report():",
+          '    report_name = request.args.get("name", "")',
+          "    return run_report(report_name)",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      for (const [body, sink, propagator, mutationLine, sinkLine] of [
+        [
+          ['    commands = {"preview": f"/opt/reports/{report_name}"}'],
+          'commands["preview"]',
+          "python-dict-literal-element",
+          3,
+          4,
+        ],
+        [
+          [
+            "    commands = dict()",
+            '    commands["preview"] = f"/opt/reports/{report_name}"',
+          ],
+          'commands.get("preview")',
+          "python-dict-item-assignment-element",
+          4,
+          5,
+        ],
+        [
+          [
+            "    commands = {}",
+            '    commands.update({"preview": f"/opt/reports/{report_name}"})',
+          ],
+          'commands["preview"]',
+          "python-dict-update-element",
+          4,
+          5,
+        ],
+        [
+          [
+            "    commands = {}",
+            '    commands |= {"preview": f"/opt/reports/{report_name}"}',
+          ],
+          'commands.pop("preview")',
+          "python-dict-ior-element",
+          4,
+          5,
+        ],
+        [
+          [
+            "    commands = {}",
+            '    commands.setdefault("preview", f"/opt/reports/{report_name}")',
+          ],
+          'commands.get("preview")',
+          "python-dict-setdefault-element",
+          4,
+          5,
+        ],
+      ] as const) {
+        await writeFile(
+          join(source, "runner.py"),
+          [
+            "import subprocess",
+            "def run_report(report_name):",
+            ...body,
+            `    return subprocess.run(${sink}, shell=True, check=True, timeout=2)`,
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+        const inventory = await buildResidualRiskInventory(root);
+        expect(inventory, propagator).toContain('"scope":"cross-file-wrapper"');
+        expect(inventory, propagator).toContain(`"kind":"${propagator}"`);
+        expect(inventory, propagator).toContain(
+          `"path":"src/runner.py","line":${mutationLine},"symbol":"commands[\\"preview\\"]"`,
+        );
+        expect(inventory, propagator).toContain(
+          `"path":"src/runner.py","line":${sinkLine}`,
+        );
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects ambiguous, overwritten, or unselected dictionary values", async () => {
+    const root = await mkdtemp(join(tmpdir(), "python-dict-controls-"));
+    const source = join(root, "src");
+    try {
+      await mkdir(source, { recursive: true });
+      await writeFile(join(source, "__init__.py"), "", "utf8");
+      await writeFile(
+        join(source, "server.py"),
+        [
+          "from flask import request",
+          "from .runner import run_report",
+          "def report():",
+          '    report_name = request.args.get("name", "")',
+          "    return run_report(report_name)",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      for (const body of [
+        [
+          '    commands = {"preview": "/usr/bin/printf fixed", "audit": report_name}',
+        ],
+        [
+          '    commands = {"preview": report_name}',
+          '    commands["preview"] = "/usr/bin/printf fixed"',
+        ],
+        [
+          "    commands = {}",
+          '    commands.update({"preview": report_name})',
+          '    commands |= {"preview": "/usr/bin/printf fixed"}',
+        ],
+        [
+          '    commands = {"preview": "/usr/bin/printf fixed"}',
+          '    commands.setdefault("preview", report_name)',
+        ],
+        [
+          "    commands = {}",
+          '    key = "preview"',
+          "    commands[key] = report_name",
+        ],
+        [
+          "    commands = {}",
+          '    payload = {"preview": report_name}',
+          "    commands.update(payload)",
+        ],
+        [
+          '    commands = {"preview": "/usr/bin/printf fixed"}',
+          "    alias = commands",
+          '    alias["preview"] = report_name',
+        ],
+        [
+          '    commands = {"preview": report_name}',
+          "    inspect_state(commands)",
+        ],
+        [
+          '    commands = {"preview": "/usr/bin/printf fixed"}',
+          '    example = "commands.update({\\"preview\\": report_name})"',
+        ],
+        [
+          '    report_name = "/usr/bin/printf fixed"',
+          '    commands = {"preview": report_name}',
+        ],
+      ]) {
+        await writeFile(
+          join(source, "runner.py"),
+          [
+            "import subprocess",
+            "def run_report(report_name):",
+            ...body,
+            '    return subprocess.run(commands["preview"], shell=True, check=True, timeout=2)',
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+        expect(await buildResidualRiskInventory(root)).not.toContain(
+          '"scope":"cross-file-wrapper"',
+        );
+      }
+
+      await writeFile(
+        join(source, "runner.py"),
+        [
+          "import subprocess",
+          "def run_report(report_name):",
+          '    selected_key = "preview"',
+          '    commands = {"preview": report_name}',
+          "    return subprocess.run(commands[selected_key], shell=True, check=True, timeout=2)",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      expect(await buildResidualRiskInventory(root)).not.toContain(
+        '"scope":"cross-file-wrapper"',
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test.skipIf(process.platform === "win32")(
-    "proves shell expansion only in the list-flow exploit fixture",
+    "proves shell expansion only in the collection-flow exploit fixtures",
     () => {
       for (const [id, expected] of [
         ["python-cross-file-list-iadd-command-injection", 1],
         ["python-cross-file-list-iadd-safe-command", 0],
+        ["python-cross-file-dict-update-command-injection", 1],
+        ["python-cross-file-dict-update-safe-command", 0],
       ] as const) {
         const witness = spawnSync(
           "python3",
@@ -266,6 +524,105 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
       }
     },
   );
+
+  test("requires exact dictionary state and selected-key proof in review fields", async () => {
+    const repository = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-cross-file-dict-update-command-injection",
+    );
+    const inventory = await buildResidualRiskInventory(repository);
+    const scanDirectory = await mkdtemp(join(tmpdir(), "python-dict-quality-"));
+    const finding = {
+      occurrenceId: "occ_python_dict_quality",
+      taxonomy: { cwe: ["CWE-78"] },
+      locations: [
+        { path: "src/server.py", startLine: 3, role: "source" },
+        { path: "src/runner.py", startLine: 8, role: "sink" },
+      ],
+      codeEvidence: [
+        {
+          id: "request-source",
+          path: "src/server.py",
+          startLine: 3,
+          code: "from .runner import run_report",
+          explanation: "The relative import supplies the wrapper edge.",
+          role: "source",
+        },
+        {
+          id: "shell-sink",
+          path: "src/runner.py",
+          startLine: 8,
+          code: "    completed = subprocess.run(selected, shell=True, check=True, timeout=2)",
+          explanation: "The selected dictionary value enters the shell.",
+          role: "sink",
+        },
+      ],
+      validation: {
+        summary: "A remote value reaches subprocess.",
+        method: "bounded source review and witness comparison",
+        exploitWitness: "The temporary marker is created only by the exploit.",
+        negativeControl: "The matched key-isolation fixture creates no marker.",
+        evidence: ["request-source", "shell-sink"],
+        counterEvidence: "The control stores the value under another key.",
+        remainingUncertainty: "Deployment reachability remains unproved.",
+      },
+      attackPath: {
+        summary: "A remote value reaches a command.",
+        dataflow: {
+          source: "request-source",
+          sink: "shell-sink",
+          outcome: "shell behavior",
+        },
+        reachability: {
+          attacker: "remote caller",
+          entrypoint: "Flask route",
+          outcome: "command interpretation",
+        },
+        brokenControls: ["shell interpretation"],
+        evidenceRefs: ["request-source", "shell-sink"],
+      },
+    };
+    try {
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      expect(incomplete).toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(incomplete).toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+
+      const contract =
+        'The Flask request crosses the relative run_report wrapper. Exact dict.update overwrites the constant key preview; commands["preview"] is the selected dictionary value reached through commands.get. The deterministic last-write-wins dictionary state has no ambiguous mutation or intervening overwrite before subprocess.run consumes it with shell=True as shell grammar, establishing CWE-78.';
+      finding.validation.summary = contract;
+      finding.attackPath.summary = contract;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const complete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      expect(complete).not.toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(complete).not.toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+    } finally {
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
+  });
 
   test("requires list mutation and selected-index proof in review fields", async () => {
     const repository = join(
@@ -366,7 +723,7 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     }
   });
 
-  test("teaches reviewers the bounded Python list-flow boundary", () => {
+  test("teaches reviewers the bounded Python collection-flow boundaries", () => {
     const prompt = scanQualityGatePrompt("python-list-iadd-element");
     expect(prompt).toContain("python-list-iadd-element");
     expect(prompt).toContain("exact initially empty list");
@@ -374,6 +731,12 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(prompt).toContain("no parameter reassignment");
     expect(prompt).toContain("shell=False");
     expect(prompt).toContain("absence of an intervening overwrite");
+    expect(prompt).toContain("python-dict-update-element");
+    expect(prompt).toContain("deterministic last-write-wins dictionary state");
+    expect(prompt).toContain("bracket/get/pop selection");
+    expect(prompt).toContain(
+      "taint confined to an unselected or overwritten value",
+    );
   });
 
   test("rejects fixed, reassigned, non-relative, and text-only pseudo flows", async () => {

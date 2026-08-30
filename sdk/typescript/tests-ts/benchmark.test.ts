@@ -643,6 +643,10 @@ describe("effectiveness benchmark", () => {
         "python-cross-file-list-iadd-safe-command",
       ],
       [
+        "python-cross-file-dict-update-command-injection",
+        "python-cross-file-dict-update-safe-command",
+      ],
+      [
         "rust-axum-tokio-shell-command-injection",
         "rust-axum-tokio-argv-command",
       ],

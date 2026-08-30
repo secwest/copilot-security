@@ -7,6 +7,46 @@ All notable scanner, application, benchmark, and operational changes are recorde
 ### Scanner effectiveness
 
 - Closed a reproduced Python cross-file command-injection false negative where
+  a Flask request value was stored under a constant dictionary key and later
+  selected through bracket, `get`, or `pop` syntax as the command passed to
+  `subprocess.run(..., shell=True)`. The bounded host model reconstructs exact
+  dictionary literals and empty `dict()`, direct constant-key assignments,
+  literal `dict.update`, Python 3.9 `|=`, and `setdefault`, including duplicate
+  and later-write semantics across at most 64 keys and 64 transitions.
+- Improved mapping precision beyond container-wide taint. A row is retained
+  only when the wrapper parameter reaches the exact constant key selected by
+  the shell sink after bounded value and sink-alias resolution. Direct
+  assignment, update, and `|=` overwrite; `setdefault` preserves an existing
+  key. Dynamic or escaped keys, comprehensions, unpacking, keyword-form dict
+  construction, nonliteral updates, unknown methods, helper or alias escape,
+  pre-storage parameter reassignment, and ambiguous mutations fail closed.
+  Comments and strings are structurally inert, and hostile data in an
+  unselected or subsequently overwritten value does not taint another key.
+- Added a permanent executable `dict.update` exploit/control pair. Both retain
+  the Flask source, relative wrapper, dictionary update, hostile bytes, and a
+  real `shell=True` sink. The exploit overwrites and selects `preview`; the
+  control updates only `audit` and selects a fixed `preview`. Ubuntu/WSL records
+  temporary-marker values `1` and `0`, respectively. The focused Python,
+  canonical, and fixed-count lane passes 36 tests with 2,781 assertions and one
+  intentional Windows POSIX-witness skip; native Ubuntu/WSL passes the widened
+  Python, canonical, residual-risk, and fixed-count lane with 109 tests, 3,866
+  assertions, and no skips. The canonical corpus now contains 184 pairs, 368
+  cases, and 1,104 repeated positions.
+- Completed the authoritative Windows acceptance pass with 2,070 tests and
+  16,176 assertions passing across 214 files in 783.71 seconds, 31 intentional
+  platform/environment skips, and zero failures. An initial direct Bun run used
+  Bun's 5-second default instead of the repository's 30-second test harness and
+  also preceded the production rebuild; its seven failures all pass after the
+  clean build under the authoritative harness, including 24 isolated tests and
+  192 assertions. No deadline or assertion was weakened.
+- Formatting, generated-model drift, TypeScript, the clean production build,
+  and the high-severity production advisory audit pass with no known
+  vulnerabilities. The validated npm archive has 299 entries, is 2,386,490
+  bytes, and has SHA-256
+  `3990be977a24eea2e74cdc673b25b3cfe2754b85212666be2fd45558ea97590f`.
+  Isolated Windows and Ubuntu installations validate the public import, CLI,
+  and all 79 bundled plugin files.
+- Closed a reproduced Python cross-file command-injection false negative where
   a Flask request value entered an initially empty list through `append`,
   `extend`, `insert`, or `+=` and only the selected indexed element later
   reached `subprocess.run(..., shell=True)`. The host now records the exact

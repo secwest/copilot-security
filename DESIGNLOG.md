@@ -2,6 +2,89 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Preserve exact Python dictionary values into shell grammar
+
+**Measured miss and comparator evidence.** The pre-change scanner emitted no
+structured row for a Flask request passed through a relative import into a
+wrapper that used `commands.update({"preview": value})`, selected
+`commands.get("preview")`, and executed that result with `shell=True`. The
+generic lexical process row remained, but the request-to-shell dataflow was
+lost at the dictionary write. GitHub CodeQL's current Python standard-library
+[flow summaries](https://github.com/github/codeql/blob/6846a3721721553fab00a520d3deca3e77dfeeea/python/ql/lib/semmle/python/frameworks/Stdlib.qll)
+model constant-key `get`, `pop`, and `setdefault`, dictionary construction, and
+other content reads; its
+[collection regression](https://github.com/github/codeql/blob/6846a3721721553fab00a520d3deca3e77dfeeea/python/ql/test/library-tests/dataflow/tainttracking/defaultAdditionalTaintStep/test_collections.py)
+also explicitly exercises `dict.update`. Semgrep likewise documents that
+container writes require explicit
+[taint propagators](https://semgrep.dev/docs/writing-rules/glossary#propagator).
+Those sources justify a mapping edge, but not a container-wide finding: shell
+reachability still requires the exact selected value.
+
+**Bounded state semantics.** For one exported Python wrapper, reconstruct at
+most 64 constant-key values through at most 64 state transitions before the
+sink. Accepted initial states are one-line dictionary literals and empty
+`dict()`. Accepted deterministic writes are direct item assignment, an exact
+dictionary-literal `update`, Python 3.9 in-place union `|=`, and `setdefault`.
+Literal and later writes use Python's last-write-wins behavior; `setdefault`
+stores only when the key is absent. An exact literal reassignment replaces the
+old state. Constant keys are deliberately restricted to short, unescaped
+string literals, and duplicate literal keys resolve in source order.
+
+The sink must read the same key through `mapping["key"]`, `mapping.get("key")`,
+or `mapping.pop("key")`. The existing bounded assignment resolver may recover
+both a stored value alias and a local alias used as the sink argument. Reject
+dynamic or escaped keys, dictionary unpacking and comprehensions, keyword-form
+`dict` construction, nonliteral update operands, unknown methods, unsupported
+mutations, a dictionary passed to an unknown helper, or escape through another
+alias. Also reject parameter reassignment before storage and any selected
+value whose exact final state is fixed. A structural-code screen makes comments
+and string examples inert. This deliberately leaves general heap aliasing and
+arbitrary mapping subclasses for a later AST/dataflow increment rather than
+guessing that their methods have built-in `dict` semantics.
+
+**Evidence and false-positive contract.** A retained host row records one of
+`python-dict-literal-element`, `python-dict-item-assignment-element`,
+`python-dict-update-element`, `python-dict-ior-element`, or
+`python-dict-setdefault-element`, the write line, and a canonical selected
+symbol such as `commands["preview"]`. Finding-quality closure independently
+requires validation and attack-path prose to preserve the exact operation,
+constant key, selected value, deterministic state, absence of ambiguous
+mutation or overwrite, relative wrapper, Flask request source, shell boundary,
+and CWE-78. The reviewer prompt rejects claims that taint spreads between
+unrelated keys or that `dict.update` itself executes a command.
+
+**Executable differential and focused acceptance.** The permanent pair keeps
+the same Flask route, relative import, dictionary topology, hostile payload,
+and `shell=True` process call. The positive overwrites `preview` through
+`dict.update` and selects it through `get`. The control stores the same bytes
+only under `audit` while retaining the fixed `preview` command. Both witnesses
+operate only in automatically removed temporary directories. Native Ubuntu/WSL
+records `shell_expanded_marker=1` for the positive and `0` for the control. The
+Windows Python/canonical/fixed-count lane passes 36 tests and 2,781 assertions
+with one intentional POSIX witness skip. Ubuntu/WSL passes the widened Python,
+canonical, residual-risk, and fixed-count lane with 109 tests, 3,866 assertions,
+and no skips. The corpus advances to 184 exploit/control pairs, 368 cases, and
+1,104 repeated scan positions.
+
+**Release acceptance.** The authoritative Windows suite passes 2,070 tests and
+16,176 assertions across 214 files in 783.71 seconds, with 31 intentional
+platform or environment skips and no failures. A preliminary direct Bun run
+used Bun's 5-second default rather than the repository's explicit 30-second
+harness and ran before rebuilding `dist`; the resulting five stale-build
+failures and two repository-scan timeouts all pass after the clean build. The
+24-test isolated lane passes 192 assertions, and the complete authoritative
+rerun passes without changing a timeout or assertion.
+
+Formatting, generated-model drift, TypeScript, the clean production build, and
+the high-severity production advisory audit are green. The validation archive
+contains 299 entries, is 2,386,490 bytes, and has SHA-256
+`3990be977a24eea2e74cdc673b25b3cfe2754b85212666be2fd45558ea97590f`.
+Isolated Windows and Ubuntu installs both validate its public import, CLI, and
+all 79 bundled plugin files.
+
+This closes one exact mapping-flow increment, not the standing scanner-
+effectiveness goal.
+
 ## 2026-08-29 — Preserve exact Python list elements into shell grammar
 
 **Measured miss and comparator evidence.** The previously compiled scanner

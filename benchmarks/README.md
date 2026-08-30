@@ -3007,7 +3007,12 @@ node ../../benchmarks/run-benchmark.mjs `
 ```
 
 The Python cross-file lane applies the same gates to explicit relative
-from-imports and includes multiline parameter-binding counterevidence:
+from-imports and includes multiline parameter-binding counterevidence. Its
+collection pairs distinguish exact list indexes and dictionary keys from
+container-wide taint: the dictionary exploit overwrites and selects `preview`
+through literal `dict.update` and `get`, while the matched control sends the
+same hostile value only to unselected `audit` and retains the same real
+`shell=True` sink. Native witnesses create only disposable temporary markers:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `
