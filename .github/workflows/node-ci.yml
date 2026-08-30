@@ -148,7 +148,7 @@ jobs:
             --disable-pip-version-check \
             --requirement benchmarks/fixtures/python-fastapi-pydantic-body-command-injection/requirements.txt
 
-      - name: Execute direct, Annotated, and embedded exploit and ClassVar-control witnesses
+      - name: Execute body-command and open-redirect exploit/control witnesses
         run: |
           "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
             benchmarks/fixtures/python-fastapi-pydantic-body-command-injection/examples/witness.py
@@ -162,6 +162,10 @@ jobs:
             benchmarks/fixtures/python-fastapi-embedded-pydantic-body-command-injection/examples/witness.py
           "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
             benchmarks/fixtures/python-fastapi-embedded-pydantic-body-safe-command/examples/witness.py
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-fastapi-open-redirect/examples/witness.py
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-fastapi-safe-local-redirect/examples/witness.py
 
   mcp-tool-fixtures:
     name: MCP tool witness / ${{ matrix.os }} / ${{ matrix.fixture }}

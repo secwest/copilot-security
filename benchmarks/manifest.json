@@ -8919,11 +8919,17 @@
           "requiredValidationTextAnyOf": [
             ["FastAPI request body route", "official FastAPI body endpoint"],
             ["Pydantic BaseModel request body", "Pydantic request body model"],
-            ["Annotated[ReportRequest, Body()]", "exact Annotated[Model, Body()] body boundary"],
+            [
+              "Annotated[ReportRequest, Body()]",
+              "exact Annotated[Model, Body()] body boundary"
+            ],
             ["official Annotated", "typing Annotated"],
             ["official FastAPI Body", "fastapi Body binding"],
             ["payload.name", "declared Pydantic string field"],
-            ["stable Pydantic request parameter", "no model or parameter escape"],
+            [
+              "stable Pydantic request parameter",
+              "no model or parameter escape"
+            ],
             ["relative wrapper", "run_report", "relative import"],
             ["subprocess.run", "shell=True", "shell grammar"],
             ["ClassVar", "field isolation", "negative control"]
@@ -8989,19 +8995,32 @@
           "requiredValidationTextAnyOf": [
             ["FastAPI request body route", "official FastAPI body endpoint"],
             ["Pydantic BaseModel request body", "Pydantic request body model"],
-            ["Annotated[ReportRequest, Body(embed=True)]", "Annotated[Model, Body(embed=True)]"],
+            [
+              "Annotated[ReportRequest, Body(embed=True)]",
+              "Annotated[Model, Body(embed=True)]"
+            ],
             ["embedded JSON body shape", "Body(embed=True)"],
             ["official Annotated", "typing Annotated"],
             ["official FastAPI Body", "fastapi Body binding"],
             ["payload.name", "declared Pydantic string field"],
-            ["stable Pydantic request parameter", "no model or parameter escape"],
+            [
+              "stable Pydantic request parameter",
+              "no model or parameter escape"
+            ],
             ["relative wrapper", "run_report", "relative import"],
             ["subprocess.run", "shell=True", "shell grammar"],
             ["ClassVar", "field isolation", "negative control"]
           ],
           "requiredAttackPathTextAnyOf": [
-            ["embedded JSON request body", "embedded body shape", "Body(embed=True)"],
-            ["Annotated[ReportRequest, Body(embed=True)]", "Annotated body boundary"],
+            [
+              "embedded JSON request body",
+              "embedded body shape",
+              "Body(embed=True)"
+            ],
+            [
+              "Annotated[ReportRequest, Body(embed=True)]",
+              "Annotated body boundary"
+            ],
             ["ReportRequest", "Pydantic BaseModel", "request body model"],
             ["payload.name", "body field read", "declared string field"],
             ["stable parameter", "no mutation", "no model escape"],
@@ -9029,6 +9048,79 @@
         "python-fastapi-embedded-pydantic-body-safe-command/run-1/findings.json",
         "python-fastapi-embedded-pydantic-body-safe-command/run-2/findings.json",
         "python-fastapi-embedded-pydantic-body-safe-command/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
+      "id": "python-fastapi-open-redirect",
+      "description": "A FastAPI query string crosses an exact Annotated[str, Query()] boundary and is selected as the absolute Location URL by an official RedirectResponse.",
+      "fixture": "fixtures/python-fastapi-open-redirect",
+      "findingsPaths": [
+        "python-fastapi-open-redirect/run-1/findings.json",
+        "python-fastapi-open-redirect/run-2/findings.json",
+        "python-fastapi-open-redirect/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-fastapi-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/redirects.py",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["FastAPI path operation", "FastAPI route", "app.get"],
+            ["Annotated[str, Query()]", "Query parameter", "query string"],
+            ["RedirectResponse", "official redirect response"],
+            ["url argument", "redirect location", "Location header"],
+            [
+              "absolute URL",
+              "attacker-controlled origin",
+              "attacker-controlled host"
+            ],
+            ["fixed local prefix", "allowlist", "same-origin"],
+            ["CWE-601", "open redirect"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["GET /login", "FastAPI route", "app.get"],
+            ["next_url", "query parameter", "request query"],
+            ["destination", "local alias", "alias"],
+            ["RedirectResponse", "url argument"],
+            ["Location", "redirect target"],
+            [
+              "attacker.invalid",
+              "attacker-controlled origin",
+              "external origin"
+            ],
+            ["follow_redirects=False", "does not follow", "no external request"]
+          ],
+          "forbiddenText": [
+            "the witness contacted attacker.invalid",
+            "proves the endpoint is publicly reachable",
+            "proves credentials were stolen",
+            "every redirect is vulnerable",
+            "a fixed local prefix is an open redirect",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-fastapi-safe-local-redirect",
+      "description": "The topology-matched control percent-encodes the same hostile absolute URL beneath a fixed local /continue redirect target.",
+      "fixture": "fixtures/python-fastapi-safe-local-redirect",
+      "findingsPaths": [
+        "python-fastapi-safe-local-redirect/run-1/findings.json",
+        "python-fastapi-safe-local-redirect/run-2/findings.json",
+        "python-fastapi-safe-local-redirect/run-3/findings.json"
       ],
       "expected": []
     },

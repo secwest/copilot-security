@@ -294,6 +294,39 @@
       "expected": []
     },
     {
+      "id": "python-fastapi-open-redirect",
+      "description": "A FastAPI query string crosses an exact Annotated[str, Query()] boundary and is selected as the absolute Location URL by an official RedirectResponse.",
+      "fixture": "fixtures/python-fastapi-open-redirect",
+      "findingsPaths": ["python-fastapi-open-redirect/run-1/findings.json"],
+      "expected": [
+        {
+          "id": "python-fastapi-open-redirect",
+          "cwe": ["CWE-601"],
+          "locations": [
+            {
+              "path": "src/redirects.py",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["high", "medium"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-fastapi-safe-local-redirect",
+      "description": "The topology-matched control percent-encodes the same hostile absolute URL beneath a fixed local /continue redirect target.",
+      "fixture": "fixtures/python-fastapi-safe-local-redirect",
+      "findingsPaths": [
+        "python-fastapi-safe-local-redirect/run-1/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-cross-file-sql-injection",
       "description": "A Flask request value crosses a relative Python import into an interpolated sqlite query.",
       "fixture": "fixtures/python-cross-file-sql-injection",

@@ -6,6 +6,42 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added a fail-closed `python-fastapi-open-redirect` host model for CWE-601.
+  One stable official FastAPI path operation and string query parameter must
+  reach the positional or named URL of an exact non-shadowed FastAPI or
+  Starlette `RedirectResponse`. Structured evidence retains the route, exact
+  `str` / `Annotated[str, Query()]` / legacy `str = Query()` boundary,
+  request-parameter flow, official response binding, URL argument, and HTTP
+  `Location` assignment through same-file aliases, relative wrappers, and
+  bounded multi-hop relays.
+- Kept origin-control handling deliberately conservative. A fixed local prefix
+  longer than `/` suppresses the model when the remote value is nested beneath
+  it; root-only `"/" + value` remains reportable because a leading slash can
+  form `//host`. Configured or ambiguous Query calls, extra Annotated metadata,
+  non-string, duplicated, or reassigned parameters, multiple candidate request
+  strings, star-expanded or duplicate URL roles, local `fastapi` or `starlette`
+  packages, rebound responses, and lookalikes remain negative. Dotted local-
+  module shadow checks now correctly inspect package prefixes, strengthening
+  all typed Python models.
+- Added a pinned FastAPI/Starlette/HTTPX TestClient differential. The unchanged
+  pre-change host emitted zero structured rows for both fixtures. The new host
+  emits exactly one CWE-601 row for the absolute attacker-origin selection and
+  none when the identical URL is percent-encoded beneath `/continue?next=`.
+  The witness disables redirect following and contacts no external origin;
+  native Ubuntu/WSL records attacker-origin selections `1` and `0`.
+- Added a strict dedicated manifest, canonical three-run cases, model-specific
+  validation and attack-path requirements, reviewer correction guidance, and a
+  hosted witness. The canonical corpus advances to 190 exploit/control pairs,
+  380 cases, and 1,140 repeated scan positions; the focused Python framework
+  corpus advances to 20 cases split 10/10. Initial Windows acceptance passes
+  8 redirect tests with 52 assertions, 17/18 Python framework tests with one
+  intentional witness skip and 265 assertions, and all 192 runnable tests with
+  1,253 assertions across the complete 19-file Python model lane. The
+  authoritative Windows aggregate records 2,092 passes, 31 intentional skips,
+  and two managed-sandbox permission failures across 2,125 tests and 16,522
+  assertions; a native 48-test, 242-assertion rerun passes both denied files,
+  yielding 2,094 passing outcomes and no product failures. Generated-model
+  drift, TypeScript, and the clean production build are green.
 - Closed the documented embedded and legacy FastAPI Pydantic request-body gap.
   The exact endpoint model now accepts `Annotated[Model, Body(embed=True)]`,
   literal `embed=False`, and legacy `Model = Body()` / `Body(...)` equivalents

@@ -3007,11 +3007,12 @@ node ../../benchmarks/run-benchmark.mjs `
 ```
 
 The Python cross-file lane applies the same gates to explicit relative
-from-imports and includes multiline parameter-binding counterevidence. Its seven
+from-imports and includes multiline parameter-binding counterevidence. Its ten
 exploit/control pairs distinguish exact list indexes, dictionary keys, fresh
 `types.SimpleNamespace` fields, and generated standard-library dataclass fields
 from container- or object-wide taint, plus exact FastAPI/Pydantic request-body
-fields from class variables. The object and dataclass exploits
+fields from class variables and an exact FastAPI redirect location from a
+fixed-local control. The object and dataclass exploits
 overwrite and select `command.value`, while their matched controls store the
 same hostile value only in `command.audit` and retain the same real
 `shell=True` sink. Direct attribute assignment, constant-name `setattr`, dot
@@ -3029,7 +3030,15 @@ POST/PUT/PATCH/DELETE routes, a field-only `BaseModel`, stable parameters, and
 one selected string field are required. GET, dependency/query parameters,
 validators/configuration, dynamic `Field` declarations, non-string or private
 fields, shadows, mutation, whole-model escape, and ambiguous selection fail
-closed:
+closed. The redirect exploit binds an official
+`Annotated[str, Query()]` value to `RedirectResponse(url=...)`; its TestClient
+witness disables redirect following and proves only the selected `Location`.
+The control encodes the same hostile absolute URL beneath `/continue?next=`.
+The redirect model rejects ambiguous Query configuration, extra metadata,
+non-string or reassigned parameters, package shadows, replaced response
+bindings, duplicate URL roles, and star expansion. It deliberately keeps
+`"/" + value` reportable because a leading slash in the value can produce
+`//attacker.example`:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `

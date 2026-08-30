@@ -2151,6 +2151,28 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     ],
   },
   {
+    id: "python-fastapi-open-redirect",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\b(?:from\s+(?:fastapi|starlette)\.responses\s+import|import\s+(?:fastapi|starlette)\.responses)\b/iu,
+    ],
+    sources: [
+      {
+        kind: "fastapi-request-string-parameter",
+        expression: /\bQuery\s*\(/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "fastapi-redirect-response-location",
+        expression: /\b[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)?\s*\(/u,
+        cweIds: ["CWE-601"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-pickle-unsafe-load",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3681,6 +3703,7 @@ interface PythonTypedSink {
 function isPythonTypedSinkModel(modelId: string): boolean {
   return (
     modelId === "python-asyncpg-sql" ||
+    modelId === "python-fastapi-open-redirect" ||
     modelId === "python-web-pickle-unsafe-load" ||
     modelId === "python-web-pyyaml-unsafe-load" ||
     modelId === "python-web-numpy-allow-pickle-load" ||
@@ -4520,6 +4543,15 @@ const PYTHON_WEB_COMMAND_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-78", "command injection"],
 ] as const;
 
+const PYTHON_FASTAPI_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["FastAPI", "APIRouter", "path operation", "route"],
+  ["query parameter", "request parameter", "remote input"],
+  ["RedirectResponse", "Location header", "redirect location"],
+  ["absolute URL", "origin", "scheme-relative", "attacker-selected host"],
+  ["fixed local prefix", "allowlist", "same-origin", "url_has_allowed_host"],
+  ["CWE-601", "open redirect", "URL redirection"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4626,6 +4658,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: PYTHON_WEB_COMMAND_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: PYTHON_WEB_COMMAND_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-fastapi-open-redirect",
+    {
+      validation: PYTHON_FASTAPI_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: PYTHON_FASTAPI_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -18514,6 +18553,9 @@ function frameworkDataflowRecords(
     const supportsFastApiPydanticBody =
       PYTHON_EXTENSIONS.has(extension) &&
       model.sources.some((source) => source.kind === "fastapi-bound-parameter");
+    const supportsFastApiOpenRedirect =
+      PYTHON_EXTENSIONS.has(extension) &&
+      model.id === "python-fastapi-open-redirect";
     const hasFastApiPydanticBodyEndpoint =
       supportsFastApiPydanticBody &&
       pythonHasFastApiPydanticBodyEndpoint(files, path, lines);
@@ -18604,7 +18646,9 @@ function frameworkDataflowRecords(
                 )
               : matchingModelLines(lines, model.sinks, 8);
     if (
-      (sources.length === 0 && !hasFastApiPydanticBodyEndpoint) ||
+      (sources.length === 0 &&
+        !hasFastApiPydanticBodyEndpoint &&
+        !supportsFastApiOpenRedirect) ||
       sinks.length === 0
     ) {
       continue;
@@ -18829,82 +18873,84 @@ function frameworkDataflowRecords(
       const pythonTypedSink =
         model.id === "python-asyncpg-sql"
           ? pythonAsyncpgSqlSink(files, path, lines, sink.line)
-          : model.id === "python-web-pyyaml-unsafe-load"
-            ? pythonPyyamlUnsafeSink(files, path, lines, sink.line)
-            : model.id === "python-web-pickle-unsafe-load"
-              ? pythonPickleUnsafeSink(files, path, lines, sink.line)
-              : model.id === "python-web-numpy-allow-pickle-load"
-                ? pythonNumpyAllowPickleUnsafeSink(
-                    files,
-                    path,
-                    lines,
-                    sink.line,
-                  )
-                : model.id === "python-web-joblib-unsafe-load"
-                  ? pythonJoblibUnsafeSink(files, path, lines, sink.line)
-                  : model.id === "python-web-torch-unsafe-load"
-                    ? pythonTorchUnsafeSink(files, path, lines, sink.line)
-                    : model.id === "python-web-lxml-iterparse-xxe"
-                      ? pythonLxmlIterparseXxeSink(
-                          files,
-                          path,
-                          lines,
-                          sink.line,
-                        )
-                      : model.id === "python-web-lxml-etcompat-xxe"
-                        ? pythonLxmlEtCompatXxeSink(
+          : model.id === "python-fastapi-open-redirect"
+            ? pythonFastApiRedirectSink(files, path, lines, sink.line)
+            : model.id === "python-web-pyyaml-unsafe-load"
+              ? pythonPyyamlUnsafeSink(files, path, lines, sink.line)
+              : model.id === "python-web-pickle-unsafe-load"
+                ? pythonPickleUnsafeSink(files, path, lines, sink.line)
+                : model.id === "python-web-numpy-allow-pickle-load"
+                  ? pythonNumpyAllowPickleUnsafeSink(
+                      files,
+                      path,
+                      lines,
+                      sink.line,
+                    )
+                  : model.id === "python-web-joblib-unsafe-load"
+                    ? pythonJoblibUnsafeSink(files, path, lines, sink.line)
+                    : model.id === "python-web-torch-unsafe-load"
+                      ? pythonTorchUnsafeSink(files, path, lines, sink.line)
+                      : model.id === "python-web-lxml-iterparse-xxe"
+                        ? pythonLxmlIterparseXxeSink(
                             files,
                             path,
                             lines,
                             sink.line,
                           )
-                        : model.id === "python-web-tarfile-unsafe-extraction"
-                          ? pythonTarfileUnsafeExtractionSink(
+                        : model.id === "python-web-lxml-etcompat-xxe"
+                          ? pythonLxmlEtCompatXxeSink(
                               files,
                               path,
                               lines,
                               sink.line,
                             )
-                          : model.id === "python-web-hydra-unsafe-instantiate"
-                            ? pythonHydraUnsafeInstantiateSink(
+                          : model.id === "python-web-tarfile-unsafe-extraction"
+                            ? pythonTarfileUnsafeExtractionSink(
                                 files,
                                 path,
                                 lines,
                                 sink.line,
                               )
-                            : model.id ===
-                                "python-web-statemachine-unsafe-scxml-eval"
-                              ? pythonStatemachineUnsafeScxmlSink(
+                            : model.id === "python-web-hydra-unsafe-instantiate"
+                              ? pythonHydraUnsafeInstantiateSink(
                                   files,
                                   path,
                                   lines,
                                   sink.line,
                                 )
                               : model.id ===
-                                  "python-asyncssh-scp-download-path-traversal"
-                                ? pythonAsyncSshScpDownloadSink(
+                                  "python-web-statemachine-unsafe-scxml-eval"
+                                ? pythonStatemachineUnsafeScxmlSink(
                                     files,
                                     path,
                                     lines,
                                     sink.line,
                                   )
                                 : model.id ===
-                                    "python-web-datamodel-codegen-import-injection"
-                                  ? pythonDatamodelCodegenImportInjectionSink(
+                                    "python-asyncssh-scp-download-path-traversal"
+                                  ? pythonAsyncSshScpDownloadSink(
                                       files,
                                       path,
                                       lines,
                                       sink.line,
                                     )
                                   : model.id ===
-                                      "python-web-sympy-unsafe-parse-expr"
-                                    ? pythonSympyUnsafeParseExprSink(
+                                      "python-web-datamodel-codegen-import-injection"
+                                    ? pythonDatamodelCodegenImportInjectionSink(
                                         files,
                                         path,
                                         lines,
                                         sink.line,
                                       )
-                                    : undefined;
+                                    : model.id ===
+                                        "python-web-sympy-unsafe-parse-expr"
+                                      ? pythonSympyUnsafeParseExprSink(
+                                          files,
+                                          path,
+                                          lines,
+                                          sink.line,
+                                        )
+                                      : undefined;
       const dotnetObjectSink =
         model.id === "aspnet-http-object-authorization"
           ? dotnetObjectAuthorizationSink(lines, sink.line)
@@ -19395,7 +19441,19 @@ function frameworkDataflowRecords(
               pythonCallExpression(lines, sink.line, lines.length),
           )
         : undefined;
+      const pythonRedirectSource =
+        model.id === "python-fastapi-open-redirect" &&
+        pythonTypedSink !== undefined
+          ? pythonFastApiOpenRedirectSource(
+              files,
+              path,
+              lines,
+              sink.line,
+              pythonTypedSink.sourceExpression,
+            )
+          : undefined;
       const nonDsetSource =
+        pythonRedirectSource ??
         pythonPydanticSource ??
         (nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
@@ -20098,6 +20156,7 @@ function frameworkDataflowRecords(
                   },
                 ]),
             ...(pythonTypedSink?.propagators ?? []),
+            ...(pythonRedirectSource?.propagators ?? []),
             ...(pythonPydanticSource?.propagators ?? []),
             ...(nodeOpcuaServerDos === undefined
               ? []
@@ -30647,12 +30706,19 @@ function frameworkDirectPythonDataflowRecords(
         const supportsFastApiPydanticBody = summary.model.sources.some(
           (source) => source.kind === "fastapi-bound-parameter",
         );
+        const supportsFastApiOpenRedirect =
+          summary.model.id === "python-fastapi-open-redirect";
         const sources = matchingPythonModelLines(
           caller.lines,
           summary.model.sources,
           32,
         );
-        if (sources.length === 0 && !supportsFastApiPydanticBody) continue;
+        if (
+          sources.length === 0 &&
+          !supportsFastApiPydanticBody &&
+          !supportsFastApiOpenRedirect
+        )
+          continue;
         const calls = pythonCallLines(caller.lines, imported.local);
         for (const call of calls) {
           const argument = call.arguments[summary.parameterIndex];
@@ -30666,7 +30732,17 @@ function frameworkDirectPythonDataflowRecords(
                 argument,
               )
             : undefined;
+          const redirectSource = supportsFastApiOpenRedirect
+            ? pythonFastApiOpenRedirectSource(
+                files,
+                caller.path,
+                caller.lines,
+                call.line,
+                argument,
+              )
+            : undefined;
           const source =
+            redirectSource ??
             pydanticSource ??
             modeledPythonCallSource(
               caller.lines,
@@ -30734,6 +30810,7 @@ function frameworkDirectPythonDataflowRecords(
                 cweIds: summary.sink.cweIds,
               },
               propagators: [
+                ...(redirectSource?.propagators ?? []),
                 ...(pydanticSource?.propagators ?? []),
                 {
                   kind: "relative-python-import",
@@ -31460,12 +31537,19 @@ function frameworkPythonMultiHopDataflowRecords(
         const supportsFastApiPydanticBody = summary.model.sources.some(
           (source) => source.kind === "fastapi-bound-parameter",
         );
+        const supportsFastApiOpenRedirect =
+          summary.model.id === "python-fastapi-open-redirect";
         const sources = matchingPythonModelLines(
           caller.lines,
           summary.model.sources,
           32,
         );
-        if (sources.length === 0 && !supportsFastApiPydanticBody) continue;
+        if (
+          sources.length === 0 &&
+          !supportsFastApiPydanticBody &&
+          !supportsFastApiOpenRedirect
+        )
+          continue;
         for (const call of pythonCallLines(caller.lines, imported.local)) {
           const argument = call.arguments[summary.parameterIndex];
           if (argument === undefined) continue;
@@ -31478,7 +31562,17 @@ function frameworkPythonMultiHopDataflowRecords(
                 argument,
               )
             : undefined;
+          const redirectSource = supportsFastApiOpenRedirect
+            ? pythonFastApiOpenRedirectSource(
+                files,
+                caller.path,
+                caller.lines,
+                call.line,
+                argument,
+              )
+            : undefined;
           const source =
+            redirectSource ??
             pydanticSource ??
             modeledPythonCallSource(
               caller.lines,
@@ -31564,6 +31658,7 @@ function frameworkPythonMultiHopDataflowRecords(
                 cweIds: sinkSummary.sink.cweIds,
               },
               propagators: [
+                ...(redirectSource?.propagators ?? []),
                 ...(pydanticSource?.propagators ?? []),
                 {
                   kind: "relative-python-import",
@@ -33939,96 +34034,103 @@ function pythonFrameworkWrapperSummaries(
           const pythonTypedSink =
             model.id === "python-asyncpg-sql"
               ? pythonAsyncpgSqlSink(files, file.path, file.lines, sink.line)
-              : model.id === "python-web-pyyaml-unsafe-load"
-                ? pythonPyyamlUnsafeSink(
+              : model.id === "python-fastapi-open-redirect"
+                ? pythonFastApiRedirectSink(
                     files,
                     file.path,
                     file.lines,
                     sink.line,
                   )
-                : model.id === "python-web-pickle-unsafe-load"
-                  ? pythonPickleUnsafeSink(
+                : model.id === "python-web-pyyaml-unsafe-load"
+                  ? pythonPyyamlUnsafeSink(
                       files,
                       file.path,
                       file.lines,
                       sink.line,
                     )
-                  : model.id === "python-web-numpy-allow-pickle-load"
-                    ? pythonNumpyAllowPickleUnsafeSink(
+                  : model.id === "python-web-pickle-unsafe-load"
+                    ? pythonPickleUnsafeSink(
                         files,
                         file.path,
                         file.lines,
                         sink.line,
                       )
-                    : model.id === "python-web-joblib-unsafe-load"
-                      ? pythonJoblibUnsafeSink(
+                    : model.id === "python-web-numpy-allow-pickle-load"
+                      ? pythonNumpyAllowPickleUnsafeSink(
                           files,
                           file.path,
                           file.lines,
                           sink.line,
                         )
-                      : model.id === "python-web-torch-unsafe-load"
-                        ? pythonTorchUnsafeSink(
+                      : model.id === "python-web-joblib-unsafe-load"
+                        ? pythonJoblibUnsafeSink(
                             files,
                             file.path,
                             file.lines,
                             sink.line,
                           )
-                        : model.id === "python-web-lxml-iterparse-xxe"
-                          ? pythonLxmlIterparseXxeSink(
+                        : model.id === "python-web-torch-unsafe-load"
+                          ? pythonTorchUnsafeSink(
                               files,
                               file.path,
                               file.lines,
                               sink.line,
                             )
-                          : model.id === "python-web-lxml-etcompat-xxe"
-                            ? pythonLxmlEtCompatXxeSink(
+                          : model.id === "python-web-lxml-iterparse-xxe"
+                            ? pythonLxmlIterparseXxeSink(
                                 files,
                                 file.path,
                                 file.lines,
                                 sink.line,
                               )
-                            : model.id ===
-                                "python-web-tarfile-unsafe-extraction"
-                              ? pythonTarfileUnsafeExtractionSink(
+                            : model.id === "python-web-lxml-etcompat-xxe"
+                              ? pythonLxmlEtCompatXxeSink(
                                   files,
                                   file.path,
                                   file.lines,
                                   sink.line,
                                 )
                               : model.id ===
-                                  "python-web-hydra-unsafe-instantiate"
-                                ? pythonHydraUnsafeInstantiateSink(
+                                  "python-web-tarfile-unsafe-extraction"
+                                ? pythonTarfileUnsafeExtractionSink(
                                     files,
                                     file.path,
                                     file.lines,
                                     sink.line,
                                   )
                                 : model.id ===
-                                    "python-web-statemachine-unsafe-scxml-eval"
-                                  ? pythonStatemachineUnsafeScxmlSink(
+                                    "python-web-hydra-unsafe-instantiate"
+                                  ? pythonHydraUnsafeInstantiateSink(
                                       files,
                                       file.path,
                                       file.lines,
                                       sink.line,
                                     )
                                   : model.id ===
-                                      "python-web-datamodel-codegen-import-injection"
-                                    ? pythonDatamodelCodegenImportInjectionSink(
+                                      "python-web-statemachine-unsafe-scxml-eval"
+                                    ? pythonStatemachineUnsafeScxmlSink(
                                         files,
                                         file.path,
                                         file.lines,
                                         sink.line,
                                       )
                                     : model.id ===
-                                        "python-web-sympy-unsafe-parse-expr"
-                                      ? pythonSympyUnsafeParseExprSink(
+                                        "python-web-datamodel-codegen-import-injection"
+                                      ? pythonDatamodelCodegenImportInjectionSink(
                                           files,
                                           file.path,
                                           file.lines,
                                           sink.line,
                                         )
-                                      : undefined;
+                                      : model.id ===
+                                          "python-web-sympy-unsafe-parse-expr"
+                                        ? pythonSympyUnsafeParseExprSink(
+                                            files,
+                                            file.path,
+                                            file.lines,
+                                            sink.line,
+                                          )
+                                        : undefined;
           if (model.id === "python-web-path" && pythonPathSink === undefined) {
             continue;
           }
@@ -36518,11 +36620,20 @@ function pythonLocalModuleCouldShadow(
   moduleName: string,
 ): boolean {
   const candidates = new Set<string>();
+  const moduleParts = moduleName.split(".");
+  const modulePath = moduleParts.join("/");
   let directory = posix.dirname(sourcePath.replaceAll("\\", "/"));
   while (true) {
     const prefix = directory === "." ? "" : `${directory}/`;
     candidates.add(`${prefix}${moduleName}.py`.toLowerCase());
     candidates.add(`${prefix}${moduleName}/__init__.py`.toLowerCase());
+    candidates.add(`${prefix}${modulePath}.py`.toLowerCase());
+    candidates.add(`${prefix}${modulePath}/__init__.py`.toLowerCase());
+    for (let count = 1; count < moduleParts.length; count += 1) {
+      candidates.add(
+        `${prefix}${moduleParts.slice(0, count).join("/")}/__init__.py`.toLowerCase(),
+      );
+    }
     if (directory === ".") break;
     const parent = posix.dirname(directory);
     if (parent === directory) break;
@@ -41005,11 +41116,30 @@ function pythonPydanticModelDefinition(
       };
 }
 
+const PYTHON_FASTAPI_BODY_ROUTE_METHODS = new Set([
+  "delete",
+  "patch",
+  "post",
+  "put",
+]);
+
+const PYTHON_FASTAPI_REDIRECT_ROUTE_METHODS = new Set([
+  "delete",
+  "get",
+  "head",
+  "options",
+  "patch",
+  "post",
+  "put",
+]);
+
 function pythonFastApiRouteEvidence(
   files: readonly SourceFileSnapshot[],
   path: string,
   lines: readonly string[],
   wrapper: ExportedPythonFunction,
+  allowedMethods: ReadonlySet<string> = PYTHON_FASTAPI_BODY_ROUTE_METHODS,
+  routeEvidenceKind = "fastapi-request-body-route",
 ):
   | Array<{ kind: string; path: string; line: number; symbol?: string }>
   | undefined {
@@ -41030,10 +41160,16 @@ function pythonFastApiRouteEvidence(
     }
   }
   if (decorators.length !== 1) return undefined;
-  const route = /^([A-Za-z_]\w*)\s*\.\s*(post|put|patch|delete)\s*\(/u.exec(
-    decorators[0]!.expression,
-  );
-  if (route?.[1] === undefined || route[2] === undefined) return undefined;
+  const route =
+    /^([A-Za-z_]\w*)\s*\.\s*(delete|get|head|options|patch|post|put)\s*\(/u.exec(
+      decorators[0]!.expression,
+    );
+  if (
+    route?.[1] === undefined ||
+    route[2] === undefined ||
+    !allowedMethods.has(route[2])
+  )
+    return undefined;
   const receiver = route[1];
   const assignments: Array<{
     constructor: string;
@@ -41090,12 +41226,308 @@ function pythonFastApiRouteEvidence(
       symbol: factory.member,
     },
     {
-      kind: "fastapi-request-body-route",
+      kind: routeEvidenceKind,
       path,
       line: decorators[0]!.line,
       symbol: `${receiver}.${route[2]}`,
     },
   ];
+}
+
+interface PythonFastApiRequestStringSource {
+  kind: "fastapi-request-string-parameter";
+  line: number;
+  propagators: Array<{
+    kind: string;
+    path: string;
+    line: number;
+    symbol?: string;
+  }>;
+}
+
+function pythonFastApiQueryCallEvidence(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+): PythonFastApiRequestStringSource["propagators"] | undefined {
+  const call = /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(\s*\)$/u.exec(
+    expression.trim(),
+  );
+  if (call?.[1] === undefined) return undefined;
+  const queryBindings = ["fastapi", "fastapi.params"]
+    .filter(
+      (moduleName) => !pythonLocalModuleCouldShadow(files, path, moduleName),
+    )
+    .map((moduleName) => ({
+      binding: pythonOfficialImportedMemberBinding(
+        lines,
+        moduleName,
+        "Query",
+        call[1]!,
+        beforeLine,
+      ),
+      moduleName,
+    }))
+    .filter((candidate) => candidate.binding !== undefined);
+  if (queryBindings.length !== 1) return undefined;
+  const query = queryBindings[0]!;
+  return [
+    {
+      kind: "fastapi-official-query-parameter",
+      path,
+      line: query.binding!.line,
+      symbol: `${query.moduleName}.Query`,
+    },
+  ];
+}
+
+function pythonFastApiRequestStringParameterEvidence(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  declaration: string,
+  parameter: string,
+  beforeLine: number,
+): PythonFastApiRequestStringSource["propagators"] | undefined {
+  const escapedParameter = escapeRegularExpression(parameter);
+  if (
+    new RegExp(`^\\s*${escapedParameter}\\s*:\\s*str\\s*$`, "u").test(
+      declaration.trim(),
+    )
+  ) {
+    return [
+      {
+        kind: "fastapi-inferred-string-parameter",
+        path,
+        line: beforeLine,
+        symbol: `${parameter}:str`,
+      },
+    ];
+  }
+
+  const annotated = new RegExp(
+    `^\\s*${escapedParameter}\\s*:\\s*([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?)\\s*\\[([\\s\\S]+)\\]\\s*$`,
+    "u",
+  ).exec(declaration.trim());
+  if (annotated?.[1] !== undefined && annotated[2] !== undefined) {
+    const arguments_ = splitPythonArguments(annotated[2]);
+    if (arguments_.length !== 2 || arguments_[0]!.trim() !== "str") {
+      return undefined;
+    }
+    const query = pythonFastApiQueryCallEvidence(
+      files,
+      path,
+      lines,
+      arguments_[1]!,
+      beforeLine,
+    );
+    if (query === undefined) return undefined;
+    const annotatedBindings = ["typing", "typing_extensions"]
+      .filter(
+        (moduleName) => !pythonLocalModuleCouldShadow(files, path, moduleName),
+      )
+      .map((moduleName) => ({
+        binding: pythonOfficialImportedMemberBinding(
+          lines,
+          moduleName,
+          "Annotated",
+          annotated[1]!,
+          beforeLine,
+        ),
+        moduleName,
+      }))
+      .filter((candidate) => candidate.binding !== undefined);
+    if (annotatedBindings.length !== 1) return undefined;
+    const metadata = annotatedBindings[0]!;
+    return [
+      {
+        kind: "python-official-annotated-binding",
+        path,
+        line: metadata.binding!.line,
+        symbol: `${metadata.moduleName}.Annotated`,
+      },
+      ...query,
+    ];
+  }
+
+  const legacy = new RegExp(
+    `^\\s*${escapedParameter}\\s*:\\s*str\\s*=\\s*([\\s\\S]+)$`,
+    "u",
+  ).exec(declaration.trim());
+  return legacy?.[1] === undefined
+    ? undefined
+    : pythonFastApiQueryCallEvidence(files, path, lines, legacy[1], beforeLine);
+}
+
+function pythonFixedLocalRedirectPrefix(
+  expression: string,
+): string | undefined {
+  const value = expression.trim();
+  const doubleQuoted = /^"([^"\\\r\n]*)"\s*\+/u.exec(value)?.[1];
+  const singleQuoted = /^'([^'\\\r\n]*)'\s*\+/u.exec(value)?.[1];
+  const prefix = doubleQuoted ?? singleQuoted;
+  return prefix !== undefined &&
+    prefix.length > 1 &&
+    prefix.startsWith("/") &&
+    !prefix.startsWith("//") &&
+    !prefix.startsWith("/\\")
+    ? prefix
+    : undefined;
+}
+
+function pythonFastApiRedirectSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  const callText = pythonCallExpression(lines, line, lines.length);
+  for (const match of callText.matchAll(
+    /\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(/gu,
+  )) {
+    const callee = match[1];
+    if (callee === undefined || !callee.endsWith("RedirectResponse")) continue;
+    const responseBindings = ["fastapi.responses", "starlette.responses"]
+      .filter(
+        (moduleName) => !pythonLocalModuleCouldShadow(files, path, moduleName),
+      )
+      .map((moduleName) => ({
+        binding: pythonOfficialImportedMemberBinding(
+          lines,
+          moduleName,
+          "RedirectResponse",
+          callee,
+          line,
+        ),
+        moduleName,
+      }))
+      .filter((candidate) => candidate.binding !== undefined);
+    if (responseBindings.length !== 1) continue;
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(
+      lines,
+      line,
+      new RegExp(`\\b${escapeRegularExpression(callee)}\\s*\\(`, "u"),
+    );
+    if (
+      arguments_ === undefined ||
+      arguments_.some((argument) => argument.trim().startsWith("*"))
+    ) {
+      continue;
+    }
+    const namedUrls = arguments_
+      .map((argument) => /^url\s*=\s*([\s\S]+)$/u.exec(argument.trim())?.[1])
+      .filter((argument): argument is string => argument !== undefined);
+    const positional = pythonPositionalArguments(arguments_);
+    if (
+      namedUrls.length > 1 ||
+      (namedUrls.length === 1 && positional.length > 0)
+    ) {
+      continue;
+    }
+    const urlExpression = namedUrls[0] ?? positional[0];
+    if (urlExpression === undefined || urlExpression.trim() === "") continue;
+    const sourceExpression =
+      resolvePythonExpression(lines, urlExpression, line) ??
+      urlExpression.trim();
+    if (pythonFixedLocalRedirectPrefix(sourceExpression) !== undefined)
+      continue;
+    const response = responseBindings[0]!;
+    return {
+      sourceExpression,
+      kind: "fastapi-redirect-response-location",
+      propagators: [
+        {
+          kind: "fastapi-official-redirect-response-binding",
+          path,
+          line: response.binding!.line,
+          symbol: `${response.moduleName}.RedirectResponse`,
+        },
+        {
+          kind: "http-location-header-assignment",
+          path,
+          line,
+          symbol: "RedirectResponse.url -> Location",
+        },
+      ],
+    };
+  }
+  return undefined;
+}
+
+function pythonFastApiOpenRedirectSource(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  callLine: number,
+  expression: string,
+): PythonFastApiRequestStringSource | undefined {
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) =>
+      callLine >= candidate.startLine && callLine <= candidate.endLine,
+  );
+  if (wrapper === undefined) return undefined;
+  const routeEvidence = pythonFastApiRouteEvidence(
+    files,
+    path,
+    lines,
+    wrapper,
+    PYTHON_FASTAPI_REDIRECT_ROUTE_METHODS,
+    "fastapi-redirect-route",
+  );
+  if (routeEvidence === undefined) return undefined;
+  const declarations = pythonFunctionDeclarationParameters(
+    lines,
+    wrapper.startLine,
+  );
+  const resolved =
+    resolvePythonExpression(lines, expression, callLine) ?? expression;
+  if (pythonFixedLocalRedirectPrefix(resolved) !== undefined) return undefined;
+  const matches = wrapper.parameters.flatMap((parameter) => {
+    if (
+      !pythonLineReferencesIdentifier(resolved, parameter) ||
+      pythonIdentifierReassignedBetween(
+        lines,
+        parameter,
+        wrapper.startLine,
+        callLine,
+      )
+    ) {
+      return [];
+    }
+    const declaration = declarations.find((candidate) =>
+      new RegExp(`^\\s*${escapeRegularExpression(parameter)}\\b`, "u").test(
+        candidate,
+      ),
+    );
+    if (declaration === undefined) return [];
+    const evidence = pythonFastApiRequestStringParameterEvidence(
+      files,
+      path,
+      lines,
+      declaration,
+      parameter,
+      wrapper.startLine,
+    );
+    return evidence === undefined ? [] : [{ parameter, evidence }];
+  });
+  if (matches.length !== 1) return undefined;
+  const source = matches[0]!;
+  return {
+    kind: "fastapi-request-string-parameter",
+    line: wrapper.startLine,
+    propagators: [
+      ...routeEvidence,
+      ...source.evidence,
+      {
+        kind: "fastapi-request-parameter-flow",
+        path,
+        line: wrapper.startLine,
+        symbol: source.parameter,
+      },
+    ],
+  };
 }
 
 function pythonPydanticModelForEndpointType(

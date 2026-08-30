@@ -2,6 +2,90 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Model FastAPI redirect origin selection as a typed boundary
+
+**Measured miss and primary-source boundary.** The unchanged compiled host
+emitted two generic lexical rows and zero structured rows for both a FastAPI
+endpoint that returned its query parameter as an absolute redirect URL and a
+topology-matched fixed-local control. CodeQL's current
+[`UrlRedirect.ql`](https://github.com/github/codeql/blob/main/python/ql/src/Security/CWE-601/UrlRedirect.ql)
+classifies uncontrolled redirect locations as CWE-601, while its Python HTTP
+library models a redirect response's location as the sink rather than treating
+every response string as equivalent. Starlette's official
+[`RedirectResponse`](https://github.com/Kludex/starlette/blob/master/starlette/responses.py)
+percent-encodes disallowed characters but preserves URL authority grammar in
+the `Location` header. Therefore quoting by the response object is not an
+origin allowlist. This is a concrete typed data-flow gap, not a reason to
+promote every lexical `redirect` token.
+
+**Executable differential.** The source-identical topology uses FastAPI
+0.116.1, Starlette 0.47.3, Pydantic 2.11.7, and HTTPX 0.28.1. An official GET
+path operation binds `next_url: Annotated[str, Query()]`, aliases it once, and
+passes it through a relative `issue_redirect(destination)` wrapper whose exact
+sink is `RedirectResponse(url=destination)`. TestClient disables redirect
+following. The exploit selects
+`https://attacker.invalid/capture?campaign=redirect` as the exact `Location`;
+the control applies `quote(..., safe="")` beneath `/continue?next=` and retains
+that local path. The observed attacker-origin-selection values are `1` and
+`0`, with no request to the inert example domain.
+
+**Exact source and sink identities.** A source must belong to an exported
+function on an official FastAPI path-operation decorator and resolve to one
+unambiguous stable string parameter. Supported syntax is inferred `str`, exact
+two-part official `Annotated[str, Query()]`, or legacy `str = Query()` with an
+unconfigured official Query call. A sink must be a stable direct, aliased, or
+module-qualified binding of `fastapi.responses.RedirectResponse` or
+`starlette.responses.RedirectResponse`; argument zero or the sole `url=`
+keyword is the redirect location. Same-file aliases, relative wrapper calls,
+and the existing bounded multi-hop summaries preserve source, call, parameter,
+and sink evidence. This intentionally does not guess at configured Query
+metadata, extra Annotated metadata, non-string parameters, star expansion,
+duplicate URL roles, response factories, or arbitrary redirect-like classes.
+
+**Origin confinement and shadow safety.** A plain constant prefix suppresses
+the row only when it begins with exactly one slash, contains more than the root
+slash, and cannot begin a backslash or network-path reference. Thus
+`"/continue?next=" + encoded_remote` is locally anchored, but
+`"/" + remote` stays reportable because remote input beginning with `/` yields
+`//host`. More general allowlist, same-origin, parser, and canonicalization
+logic remains candidate counterevidence for model review instead of being
+silently trusted by a small syntax recognizer. During adversarial regression,
+a local `starlette/__init__.py` exposed a dotted-module shadow false negative.
+The shared Python shadow helper now checks slash-separated dotted module paths
+and every package prefix, improving the identity boundary for all typed Python
+models.
+
+**Evidence and correction contract.** The row records
+`fastapi-redirect-route`, the official query binding when explicit,
+`fastapi-request-parameter-flow`, the exact official response binding,
+`http-location-header-assignment`, aliases or wrapper propagators, and CWE-601.
+Host quality closure independently requires validation and attack-path prose to
+name the FastAPI request boundary, RedirectResponse URL/Location boundary,
+attacker origin or host selection, and the absence or presence of same-origin,
+allowlist, or fixed-local confinement. The correction prompt forbids claims
+that the safe witness contacted the external origin, that route syntax proves
+public reachability, or that an open redirect alone proves credential theft.
+
+**Initial regression evidence.** Eight dedicated tests pass 52 assertions,
+including direct, aliased, module-qualified, legacy, Starlette, wrapper,
+multi-hop, root-prefix, shadow, rebinding, ambiguity, quality, and prompt
+boundaries. The focused Python cross-file lane passes 17 runnable tests and 265
+assertions with one intentional Windows witness skip. All 192 runnable tests
+and 1,253 assertions across the 19 Python model files pass, with eight expected
+platform skips. Generated-model drift, TypeScript, and a clean production build
+pass. Native Ubuntu/WSL reproduces the exact `1`/`0` witness differential. The
+canonical corpus advances to 190 exploit/control pairs, 380 cases, and 1,140
+three-run scan positions; the focused Python framework corpus reaches 20 cases
+split 10/10. Full aggregate, self-review, package, desktop, and hosted evidence
+follows the implementation checkpoint. The standing scanner-effectiveness goal
+remains active.
+
+The authoritative Windows aggregate records 2,092 passes, 31 intentional
+skips, and two managed-sandbox permission failures across 2,125 tests and
+16,522 assertions. Rerunning both affected files with native filesystem access
+passes all 48 tests and 242 assertions, including the exact two denied cases;
+the combined product result is 2,094 passes and no failures.
+
 ## 2026-08-30 — Preserve embedded and legacy FastAPI Body forms
 
 **Measured miss and authoritative boundary.** The unchanged production host

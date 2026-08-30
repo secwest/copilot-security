@@ -69,6 +69,18 @@ defaults, local module lookalikes, rebinding, mutation, model escape, ambiguous
 fields, and `ClassVar` selection fail closed. Topology-matched TestClient pairs
 distinguish hostile direct and embedded body fields from fixed `ClassVar`
 values excluded from Pydantic request data.
+The same pass independently models FastAPI open redirects. It requires one
+stable string query parameter on an official path operation and one exact
+non-shadowed FastAPI or Starlette `RedirectResponse` whose positional or
+`url=` location resolves from that parameter. It records the resulting HTTP
+`Location` boundary and carries the value through aliases, relative wrappers,
+and bounded relays. A fixed local prefix such as `/continue?next=` closes the
+origin-selection path when the remote value is encoded beneath it; a root-only
+`"/" + value` does not, because an input beginning with `/` can still produce
+a network-path reference. Configured or ambiguous `Query` calls, non-string or
+reassigned parameters, extra `Annotated` metadata, duplicate URL roles, star
+expansion, local package shadows, replaced response bindings, and lookalikes
+fail closed.
 It separately models request bodies reaching
 standard-library `pickle.load` or `pickle.loads`, NumPy `load` with literal
 `allow_pickle=True`, as well as PyYAML
@@ -756,11 +768,14 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model auto --effort high --mode deep
 ```
 
-The 18-case Python relative-import lane measures nine cross-file command,
-FastAPI/Pydantic body, collection/object-field, and SQL positives against nine
-topology-matched negative controls. Its body cases separately cover direct
-model parameters, exact official `Annotated[Model, Body()]` metadata, and the
-embedded `Annotated[Model, Body(embed=True)]` JSON shape:
+The 20-case Python relative-import lane measures ten cross-file command,
+FastAPI/Pydantic body, FastAPI open-redirect, collection/object-field, and SQL
+positives against ten topology-matched negative controls. Its body cases
+separately cover direct model parameters, exact official
+`Annotated[Model, Body()]` metadata, and the embedded
+`Annotated[Model, Body(embed=True)]` JSON shape. The redirect pair contrasts an
+attacker-selected absolute `Location` origin with the identical URL
+percent-encoded beneath a fixed local path:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `

@@ -43,6 +43,8 @@ const caseIds = [
   "python-fastapi-annotated-pydantic-body-safe-command",
   "python-fastapi-embedded-pydantic-body-command-injection",
   "python-fastapi-embedded-pydantic-body-safe-command",
+  "python-fastapi-open-redirect",
+  "python-fastapi-safe-local-redirect",
   "python-cross-file-sql-injection",
   "python-cross-file-safe-sql",
 ] as const;
@@ -65,10 +67,10 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([...caseIds]);
     expect(
       manifest.cases.filter(({ expected }) => expected.length > 0),
-    ).toHaveLength(9);
+    ).toHaveLength(10);
     expect(
       manifest.cases.filter(({ expected }) => expected.length === 0),
-    ).toHaveLength(9);
+    ).toHaveLength(10);
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(1);
     }
@@ -197,6 +199,21 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(
       inventories.get("python-fastapi-annotated-pydantic-body-safe-command"),
     ).not.toContain('"scope":"cross-file-wrapper"');
+    const openRedirect = inventories.get("python-fastapi-open-redirect");
+    expect(openRedirect).toContain('"scope":"cross-file-wrapper"');
+    expect(openRedirect).toContain('"id":"python-fastapi-open-redirect"');
+    expect(openRedirect).toContain(
+      '"source":{"kind":"fastapi-request-string-parameter","path":"src/server.py","line":11}',
+    );
+    expect(openRedirect).toContain('"kind":"fastapi-redirect-route"');
+    expect(openRedirect).toContain('"kind":"fastapi-official-query-parameter"');
+    expect(openRedirect).toContain('"kind":"relative-python-import"');
+    expect(openRedirect).toContain(
+      '"sink":{"kind":"fastapi-redirect-response-location","path":"src/redirects.py","line":5,"cweIds":["CWE-601"]}',
+    );
+    expect(inventories.get("python-fastapi-safe-local-redirect")).not.toContain(
+      '"id":"python-fastapi-open-redirect"',
+    );
     const sql = inventories.get("python-cross-file-sql-injection");
     expect(sql).toContain('"id":"python-web-sql"');
     expect(sql).toContain('"kind":"wrapper-call-argument"');
