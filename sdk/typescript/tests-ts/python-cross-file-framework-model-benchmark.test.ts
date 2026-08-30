@@ -37,6 +37,8 @@ const caseIds = [
   "python-cross-file-object-field-safe-command",
   "python-cross-file-dataclass-field-command-injection",
   "python-cross-file-dataclass-field-safe-command",
+  "python-fastapi-pydantic-body-command-injection",
+  "python-fastapi-pydantic-body-safe-command",
   "python-cross-file-sql-injection",
   "python-cross-file-safe-sql",
 ] as const;
@@ -59,10 +61,10 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([...caseIds]);
     expect(
       manifest.cases.filter(({ expected }) => expected.length > 0),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     expect(
       manifest.cases.filter(({ expected }) => expected.length === 0),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(1);
     }
@@ -151,6 +153,26 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(dataclassField).toContain('"path":"src/runner.py","line":15');
     expect(
       inventories.get("python-cross-file-dataclass-field-safe-command"),
+    ).not.toContain('"scope":"cross-file-wrapper"');
+    const pydanticBody = inventories.get(
+      "python-fastapi-pydantic-body-command-injection",
+    );
+    expect(pydanticBody).toContain('"scope":"cross-file-wrapper"');
+    expect(pydanticBody).toContain('"id":"python-web-command"');
+    expect(pydanticBody).toContain(
+      '"source":{"kind":"fastapi-pydantic-body-field","path":"src/server.py","line":10}',
+    );
+    expect(pydanticBody).toContain('"kind":"fastapi-request-body-route"');
+    expect(pydanticBody).toContain(
+      '"kind":"pydantic-official-basemodel-binding"',
+    );
+    expect(pydanticBody).toContain(
+      '"kind":"pydantic-request-body-string-field"',
+    );
+    expect(pydanticBody).toContain('"kind":"fastapi-pydantic-body-field-read"');
+    expect(pydanticBody).toContain('"path":"src/runner.py","line":5');
+    expect(
+      inventories.get("python-fastapi-pydantic-body-safe-command"),
     ).not.toContain('"scope":"cross-file-wrapper"');
     const sql = inventories.get("python-cross-file-sql-injection");
     expect(sql).toContain('"id":"python-web-sql"');

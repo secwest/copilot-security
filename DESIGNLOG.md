@@ -2,6 +2,83 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Preserve exact FastAPI/Pydantic request-body fields into shell grammar
+
+**Measured miss and comparator evidence.** The reproduction uses an official
+FastAPI POST path operation whose direct `ReportRequest` parameter is a
+Pydantic `BaseModel`; `payload.name` crosses a relative `run_report` wrapper
+into `subprocess.run(..., shell=True)`. The topology-matched control accepts the
+same hostile JSON but selects `payload.fixed_command`, declared as
+`ClassVar[str]`. Before this increment, both repositories emitted lexical
+process leads but no structured request-to-shell row. FastAPI's official
+[request-body documentation](https://fastapi.tiangolo.com/tutorial/body/)
+establishes that a Pydantic model-typed endpoint parameter is read from JSON,
+converted and validated, and made available as a model. CodeQL's current
+[Pydantic `BaseModel` library](https://codeql.github.com/codeql-standard-libraries/python/semmle/python/frameworks/Pydantic.qll/module.Pydantic%24Pydantic%24BaseModel.html)
+provides the relevant framework-source comparator, while its
+[Python data-flow guide](https://codeql.github.com/docs/codeql-language-guides/analyzing-data-flow-in-python/)
+and immutable
+[`Attributes.qll`](https://github.com/github/codeql/blob/fa8a2870208efa9356e13adef583e9ef43c70717/python/ql/lib/semmle/python/dataflow/new/internal/Attributes.qll)
+show the broader local and field-flow machinery. Those comparators motivate
+coverage but do not replace exact host evidence.
+
+**Exact body-model boundary.** A retained source requires an unshadowed
+official `FastAPI` or `APIRouter` constructor, one stable application/router
+receiver, one POST/PUT/PATCH/DELETE decorator, and a direct endpoint parameter
+typed as one exact model. The model must be a same-file definition or one exact
+relative import and must have one stable official `pydantic.BaseModel` base.
+Its bounded body contains only ordinary annotated fields with simple literal
+defaults. Only `str`, `str | None`, and `None | str` are request-to-shell
+candidates. Exact `typing.ClassVar` fields are excluded. GET, dependencies,
+`Annotated`, arbitrary or multiple bases, methods, validators, configuration,
+dynamic or constrained `Field` declarations, private or non-string fields,
+local `fastapi`, `pydantic`, or `typing` shadows, ambiguous or reassigned
+bindings, and models exceeding 64 fields or 128 lines reject the path.
+
+**Read and stability boundary.** Dot selection and constant-name `getattr`
+may select one declared string field; the existing scalar resolver may then
+follow its bounded local alias. Parameter reassignment, selected-field
+mutation, model/class replacement, receiver/member replacement, whole-model
+alias or helper escape, dynamic field names, and multiple selected fields fail
+closed. Same-file, relative-wrapper, and bounded multi-hop command models carry
+the same source record. The row preserves the official factory, route,
+`BaseModel` binding, optional relative model import, model, declared field,
+parameter, field read, wrapper imports/calls/parameters, and shell sink.
+
+**Quality and safety contract.** Validation and attack-path text must each
+name the official FastAPI request-body route, Pydantic `BaseModel` request
+body, exact declared field and stable parameter, relative wrapper, shell
+grammar, CWE-78, and the absence of `ClassVar`, validator, mutation, or escape
+confusion. Pydantic type/schema acceptance is not shell sanitization. The
+TestClient witnesses use the real pinned FastAPI/Pydantic stack and create only
+an automatically removed temporary marker: the exploit records expansion `1`;
+the `ClassVar` control records `0`. They do not establish deployment,
+authentication, privilege, containment, or production impact.
+
+**Regression boundary.** Dedicated tests cover direct and module-qualified
+framework imports, aliases, `APIRouter`, same-file and relative models,
+optional strings, constant `getattr`, exact evidence closure, and reviewer
+guidance. Adversarial negatives cover absent/GET routes, arbitrary and multiple
+bases, methods, configuration, dynamic fields, integer and `ClassVar`
+selection, default and `Annotated` parameters, parameter and field mutation,
+whole-model escape, dynamic and multiple field selection, factory and
+`BaseModel` replacement, all three local module shadows, and resource caps.
+The canonical corpus advances to 187 pairs, 374 cases, and 1,122 repeated scan
+positions. The authoritative native Windows suite passes 2,081 tests, skips 31
+intentional platform/environment cases, fails none, and records 16,369
+assertions across 215 files in 836.43 seconds. The focused Ubuntu/WSL lane
+passes all 30 tests and 357 assertions, and the separately pinned TestClient
+witnesses record `1` and `0`. Formatting, generated-model drift, TypeScript
+checking, the production build, and the production dependency audit are clean.
+
+The release archive contains 299 entries, is 2,443,615 bytes, and has SHA-256
+`17fa925b4dc738bf2c22100257dfeb36aebcb9a307b31b0c997ba9d66309922e`.
+Strict inspection plus isolated Windows and Ubuntu installations validate the
+public import, CLI, and all 79 bundled plugin files.
+
+This closes one exact request-body field increment, not the standing scanner-
+effectiveness goal.
+
 ## 2026-08-29 — Preserve exact generated Python dataclass fields into shell grammar
 
 **Measured miss and comparator evidence.** A production-build reproduction used

@@ -189,6 +189,41 @@
       "expected": []
     },
     {
+      "id": "python-fastapi-pydantic-body-command-injection",
+      "description": "A FastAPI JSON request body is validated into an exact Pydantic BaseModel string field, read by the route, and passed through a relative wrapper into shell grammar.",
+      "fixture": "fixtures/python-fastapi-pydantic-body-command-injection",
+      "findingsPaths": [
+        "python-fastapi-pydantic-body-command-injection/run-1/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-fastapi-pydantic-body-command-injection",
+          "cwe": ["CWE-78"],
+          "locations": [
+            {
+              "path": "src/runner.py",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true
+        }
+      ]
+    },
+    {
+      "id": "python-fastapi-pydantic-body-safe-command",
+      "description": "The topology-matched control accepts the same JSON body but selects an exact ClassVar that is not a Pydantic request-body field.",
+      "fixture": "fixtures/python-fastapi-pydantic-body-safe-command",
+      "findingsPaths": [
+        "python-fastapi-pydantic-body-safe-command/run-1/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "python-cross-file-sql-injection",
       "description": "A Flask request value crosses a relative Python import into an interpolated sqlite query.",
       "fixture": "fixtures/python-cross-file-sql-injection",

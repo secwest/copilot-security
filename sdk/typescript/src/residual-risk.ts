@@ -18511,6 +18511,12 @@ function frameworkDataflowRecords(
                 line: sailsAction2Source.startLine,
               },
             ];
+    const supportsFastApiPydanticBody =
+      PYTHON_EXTENSIONS.has(extension) &&
+      model.sources.some((source) => source.kind === "fastapi-bound-parameter");
+    const hasFastApiPydanticBodyEndpoint =
+      supportsFastApiPydanticBody &&
+      pythonHasFastApiPydanticBodyEndpoint(files, path, lines);
     const sinks =
       model.id === "node-http-path" || model.id === "python-web-path"
         ? exactFilesystemPathSinkLines(lines, model.id, 32)
@@ -18597,7 +18603,12 @@ function frameworkDataflowRecords(
                   model.id === "java-r2dbc-spi-sql",
                 )
               : matchingModelLines(lines, model.sinks, 8);
-    if (sources.length === 0 || sinks.length === 0) continue;
+    if (
+      (sources.length === 0 && !hasFastApiPydanticBodyEndpoint) ||
+      sinks.length === 0
+    ) {
+      continue;
+    }
     const controls = JAVASCRIPT_EXTENSIONS.has(extension)
       ? model.id === "node-http-object-authorization" ||
         model.id === "node-http-mongoose-nosql" ||
@@ -19373,8 +19384,20 @@ function frameworkDataflowRecords(
               nodePathSink.expressions.join("\n"),
             )
           : undefined;
+      const pythonPydanticSource = supportsFastApiPydanticBody
+        ? pythonFastApiPydanticBodyFieldSource(
+            files,
+            path,
+            lines,
+            sink.line,
+            pythonTypedSink?.sourceExpression ??
+              pythonPathSink?.expressions.join("\n") ??
+              pythonCallExpression(lines, sink.line, lines.length),
+          )
+        : undefined;
       const nonDsetSource =
-        nodePackageVulnerabilitySourceExpression !== undefined
+        pythonPydanticSource ??
+        (nodePackageVulnerabilitySourceExpression !== undefined
           ? modeledObjectLookupSource(
               lines,
               sources,
@@ -19598,7 +19621,7 @@ function frameworkDataflowRecords(
                                                   : nearestModeledSource(
                                                       sources,
                                                       sink.line,
-                                                    );
+                                                    ));
       const source =
         model.id === "node-http-fastify-static-route-guard-bypass"
           ? nodeFastifyStatic?.source
@@ -20075,6 +20098,7 @@ function frameworkDataflowRecords(
                   },
                 ]),
             ...(pythonTypedSink?.propagators ?? []),
+            ...(pythonPydanticSource?.propagators ?? []),
             ...(nodeOpcuaServerDos === undefined
               ? []
               : [
@@ -30620,23 +30644,37 @@ function frameworkDirectPythonDataflowRecords(
         summariesByFileAndSymbol.get(`${importedPath}\0${imported.imported}`) ??
         [];
       for (const summary of matchingSummaries) {
+        const supportsFastApiPydanticBody = summary.model.sources.some(
+          (source) => source.kind === "fastapi-bound-parameter",
+        );
         const sources = matchingPythonModelLines(
           caller.lines,
           summary.model.sources,
           32,
         );
-        if (sources.length === 0) continue;
+        if (sources.length === 0 && !supportsFastApiPydanticBody) continue;
         const calls = pythonCallLines(caller.lines, imported.local);
         for (const call of calls) {
           const argument = call.arguments[summary.parameterIndex];
           if (argument === undefined) continue;
-          const source = modeledPythonCallSource(
-            caller.lines,
-            sources,
-            call.line,
-            argument,
-            summary.model.sources,
-          );
+          const pydanticSource = supportsFastApiPydanticBody
+            ? pythonFastApiPydanticBodyFieldSource(
+                files,
+                caller.path,
+                caller.lines,
+                call.line,
+                argument,
+              )
+            : undefined;
+          const source =
+            pydanticSource ??
+            modeledPythonCallSource(
+              caller.lines,
+              sources,
+              call.line,
+              argument,
+              summary.model.sources,
+            );
           if (source === undefined) continue;
           const key = [
             summary.model.id,
@@ -30696,6 +30734,7 @@ function frameworkDirectPythonDataflowRecords(
                 cweIds: summary.sink.cweIds,
               },
               propagators: [
+                ...(pydanticSource?.propagators ?? []),
                 {
                   kind: "relative-python-import",
                   path: caller.path,
@@ -31418,22 +31457,36 @@ function frameworkPythonMultiHopDataflowRecords(
       for (const summary of matchingSummaries) {
         const chain = importedFrameworkRelayChain(summary);
         if (chain === undefined || chain.relays.length === 0) continue;
+        const supportsFastApiPydanticBody = summary.model.sources.some(
+          (source) => source.kind === "fastapi-bound-parameter",
+        );
         const sources = matchingPythonModelLines(
           caller.lines,
           summary.model.sources,
           32,
         );
-        if (sources.length === 0) continue;
+        if (sources.length === 0 && !supportsFastApiPydanticBody) continue;
         for (const call of pythonCallLines(caller.lines, imported.local)) {
           const argument = call.arguments[summary.parameterIndex];
           if (argument === undefined) continue;
-          const source = modeledPythonCallSource(
-            caller.lines,
-            sources,
-            call.line,
-            argument,
-            summary.model.sources,
-          );
+          const pydanticSource = supportsFastApiPydanticBody
+            ? pythonFastApiPydanticBodyFieldSource(
+                files,
+                caller.path,
+                caller.lines,
+                call.line,
+                argument,
+              )
+            : undefined;
+          const source =
+            pydanticSource ??
+            modeledPythonCallSource(
+              caller.lines,
+              sources,
+              call.line,
+              argument,
+              summary.model.sources,
+            );
           if (source === undefined) continue;
           const sinkSummary = chain.sink;
           const key = [
@@ -31511,6 +31564,7 @@ function frameworkPythonMultiHopDataflowRecords(
                 cweIds: sinkSummary.sink.cweIds,
               },
               propagators: [
+                ...(pydanticSource?.propagators ?? []),
                 {
                   kind: "relative-python-import",
                   path: caller.path,
@@ -40686,6 +40740,679 @@ function pythonFastApiParameterSourceHasOfficialBinding(
   );
 }
 
+interface PythonPydanticModelField {
+  line: number;
+  name: string;
+  stringBodyInput: boolean;
+}
+
+interface PythonPydanticModelDefinition {
+  baseModelBindingLine: number;
+  classLine: number;
+  fields: readonly PythonPydanticModelField[];
+  name: string;
+  path: string;
+}
+
+interface PythonFastApiPydanticBodyFieldSource {
+  kind: "fastapi-pydantic-body-field";
+  line: number;
+  propagators: Array<{
+    kind: string;
+    path: string;
+    line: number;
+    symbol?: string;
+  }>;
+}
+
+function pythonOfficialImportedMemberBinding(
+  lines: readonly string[],
+  moduleName: string,
+  memberName: string,
+  expression: string,
+  beforeLine: number,
+): { line: number; symbol: string } | undefined {
+  const structuralLines = pythonStructuralLines(lines);
+  const normalized = expression.replace(/\s+/gu, "");
+  if (!normalized.includes(".")) {
+    const matches: Array<{ line: number; symbol: string }> = [];
+    for (let line = 1; line < beforeLine; line += 1) {
+      const imported = new RegExp(
+        `^\\s*from\\s+${escapeRegularExpression(moduleName)}\\s+import\\s+(.+)$`,
+        "u",
+      ).exec(structuralLines[line - 1] ?? "");
+      if (imported?.[1] === undefined) continue;
+      for (const item of splitPythonArguments(imported[1])) {
+        const binding = new RegExp(
+          `^${escapeRegularExpression(memberName)}(?:\\s+as\\s+([A-Za-z_]\\w*))?$`,
+          "u",
+        ).exec(item.trim());
+        if (binding === null) continue;
+        const local = binding[1] ?? memberName;
+        if (local === normalized) matches.push({ line, symbol: local });
+      }
+    }
+    const match = matches.length === 1 ? matches[0] : undefined;
+    return match !== undefined &&
+      pythonImportedBindingUnchangedBetween(
+        lines,
+        match.symbol,
+        match.line,
+        beforeLine,
+      )
+      ? match
+      : undefined;
+  }
+  const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(normalized);
+  if (qualified?.[1] === undefined || qualified[2] !== memberName) {
+    return undefined;
+  }
+  const matches: Array<{ line: number; symbol: string }> = [];
+  for (let line = 1; line < beforeLine; line += 1) {
+    const imported = new RegExp(
+      `^\\s*import\\s+${escapeRegularExpression(moduleName)}(?:\\s+as\\s+([A-Za-z_]\\w*))?\\s*$`,
+      "u",
+    ).exec(structuralLines[line - 1] ?? "");
+    if (imported !== null && (imported[1] ?? moduleName) === qualified[1]) {
+      matches.push({ line, symbol: qualified[1] });
+    }
+  }
+  const match = matches.length === 1 ? matches[0] : undefined;
+  return match !== undefined &&
+    pythonImportedBindingUnchangedBetween(
+      lines,
+      match.symbol,
+      match.line,
+      beforeLine,
+    ) &&
+    !pythonObjectMemberReassignedBetween(
+      lines,
+      match.symbol,
+      memberName,
+      match.line,
+      beforeLine,
+    )
+    ? match
+    : undefined;
+}
+
+function pythonOfficialClassVarAnnotation(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  annotation: string,
+  classLine: number,
+): boolean {
+  if (pythonLocalModuleCouldShadow(files, path, "typing")) return false;
+  const normalized = annotation.replace(/\s+/gu, "");
+  const direct = /^([A-Za-z_]\w*)\[[\s\S]+\]$/u.exec(normalized);
+  if (direct?.[1] !== undefined) {
+    return (
+      pythonOfficialImportedMemberBinding(
+        lines,
+        "typing",
+        "ClassVar",
+        direct[1],
+        classLine,
+      ) !== undefined
+    );
+  }
+  const qualified = /^([A-Za-z_]\w*\.ClassVar)\[[\s\S]+\]$/u.exec(normalized);
+  return (
+    qualified?.[1] !== undefined &&
+    pythonOfficialImportedMemberBinding(
+      lines,
+      "typing",
+      "ClassVar",
+      qualified[1],
+      classLine,
+    ) !== undefined
+  );
+}
+
+function pythonPydanticDefaultIsSimple(value: string | undefined): boolean {
+  return (
+    value === undefined ||
+    /^(?:None|True|False|-?\d+(?:\.\d+)?|["'][^"'\r\n]*["'])$/u.test(
+      value.trim(),
+    )
+  );
+}
+
+function pythonPydanticStringBodyAnnotation(annotation: string): boolean {
+  const normalized = annotation.replace(/\s+/gu, "");
+  return /^(?:str|str\|None|None\|str)$/u.test(normalized);
+}
+
+function pythonPydanticModelDefinition(
+  files: readonly SourceFileSnapshot[],
+  file: SourceFileSnapshot,
+  name: string,
+  beforeLine = file.lines.length + 1,
+): PythonPydanticModelDefinition | undefined {
+  if (pythonLocalModuleCouldShadow(files, file.path, "pydantic")) {
+    return undefined;
+  }
+  const structuralLines = pythonStructuralLines(file.lines);
+  const escaped = escapeRegularExpression(name);
+  const definitions: Array<{ base: string; line: number }> = [];
+  for (let line = 1; line < beforeLine; line += 1) {
+    const match = new RegExp(
+      `^class\\s+${escaped}\\s*\\(\\s*([^,)]+)\\s*\\)\\s*:\\s*$`,
+      "u",
+    ).exec(structuralLines[line - 1] ?? "");
+    if (match?.[1] !== undefined) {
+      definitions.push({ base: match[1].trim(), line });
+    }
+  }
+  if (definitions.length !== 1) return undefined;
+  const definition = definitions[0]!;
+  const baseBinding = pythonOfficialImportedMemberBinding(
+    file.lines,
+    "pydantic",
+    "BaseModel",
+    definition.base,
+    definition.line,
+  );
+  if (baseBinding === undefined) return undefined;
+  const stableBaseBinding = pythonOfficialImportedMemberBinding(
+    file.lines,
+    "pydantic",
+    "BaseModel",
+    definition.base,
+    beforeLine,
+  );
+  if (
+    stableBaseBinding === undefined ||
+    stableBaseBinding.line !== baseBinding.line
+  ) {
+    return undefined;
+  }
+  if (
+    !pythonImportedBindingUnchangedBetween(
+      file.lines,
+      name,
+      definition.line,
+      beforeLine,
+    )
+  ) {
+    return undefined;
+  }
+  const fields: PythonPydanticModelField[] = [];
+  for (
+    let line = definition.line + 1;
+    line <= Math.min(file.lines.length, definition.line + 128);
+    line += 1
+  ) {
+    const structural = structuralLines[line - 1] ?? "";
+    if (structural.trim() === "") continue;
+    if (/^\S/u.test(structural)) break;
+    const field =
+      /^ {4}([A-Za-z_]\w*)\s*:\s*([^=]+?)(?:\s*=\s*(.+))?\s*$/u.exec(
+        pythonCodeBeforeComment(file.lines[line - 1] ?? ""),
+      );
+    if (
+      field?.[1] === undefined ||
+      field[2] === undefined ||
+      field[1].startsWith("_") ||
+      !pythonPydanticDefaultIsSimple(field[3])
+    ) {
+      return undefined;
+    }
+    const annotation = field[2].trim();
+    if (/\bClassVar\b/u.test(annotation)) {
+      if (
+        !pythonOfficialClassVarAnnotation(
+          files,
+          file.path,
+          file.lines,
+          annotation,
+          definition.line,
+        )
+      ) {
+        return undefined;
+      }
+      continue;
+    }
+    if (fields.some((candidate) => candidate.name === field[1])) {
+      return undefined;
+    }
+    fields.push({
+      line,
+      name: field[1],
+      stringBodyInput: pythonPydanticStringBodyAnnotation(annotation),
+    });
+    if (fields.length > 64) return undefined;
+  }
+  return fields.length === 0
+    ? undefined
+    : {
+        baseModelBindingLine: baseBinding.line,
+        classLine: definition.line,
+        fields,
+        name,
+        path: file.path,
+      };
+}
+
+function pythonFastApiRouteEvidence(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+):
+  | Array<{ kind: string; path: string; line: number; symbol?: string }>
+  | undefined {
+  if (pythonLocalModuleCouldShadow(files, path, "fastapi")) return undefined;
+  const structuralLines = pythonStructuralLines(lines);
+  let cursor = wrapper.startLine - 1;
+  while (cursor > 0 && (structuralLines[cursor - 1] ?? "").trim() === "") {
+    cursor -= 1;
+  }
+  const decorators: Array<{ expression: string; line: number }> = [];
+  while (cursor > 0) {
+    const candidate = (structuralLines[cursor - 1] ?? "").trim();
+    if (!candidate.startsWith("@")) break;
+    decorators.unshift({ expression: candidate.slice(1), line: cursor });
+    cursor -= 1;
+    while (cursor > 0 && (structuralLines[cursor - 1] ?? "").trim() === "") {
+      cursor -= 1;
+    }
+  }
+  if (decorators.length !== 1) return undefined;
+  const route = /^([A-Za-z_]\w*)\s*\.\s*(post|put|patch|delete)\s*\(/u.exec(
+    decorators[0]!.expression,
+  );
+  if (route?.[1] === undefined || route[2] === undefined) return undefined;
+  const receiver = route[1];
+  const assignments: Array<{
+    constructor: string;
+    line: number;
+  }> = [];
+  const receiverPattern = escapeRegularExpression(receiver);
+  for (let line = 1; line < decorators[0]!.line; line += 1) {
+    const assignment = new RegExp(
+      `^${receiverPattern}\\s*(?::[^=]+)?=\\s*([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?)\\s*\\(`,
+      "u",
+    ).exec(structuralLines[line - 1] ?? "");
+    if (assignment?.[1] !== undefined) {
+      assignments.push({ constructor: assignment[1], line });
+    }
+  }
+  if (assignments.length !== 1) return undefined;
+  const assignment = assignments[0]!;
+  const factoryNames = ["FastAPI", "APIRouter"] as const;
+  const factory = factoryNames
+    .map((member) => ({
+      binding: pythonOfficialImportedMemberBinding(
+        lines,
+        "fastapi",
+        member,
+        assignment.constructor,
+        assignment.line,
+      ),
+      member,
+    }))
+    .find((candidate) => candidate.binding !== undefined);
+  if (
+    factory?.binding === undefined ||
+    !pythonImportedBindingUnchangedBetween(
+      lines,
+      receiver,
+      assignment.line,
+      decorators[0]!.line,
+    ) ||
+    pythonObjectMemberReassignedBetween(
+      lines,
+      receiver,
+      route[2],
+      assignment.line,
+      decorators[0]!.line,
+    )
+  ) {
+    return undefined;
+  }
+  return [
+    {
+      kind: "fastapi-official-application-factory",
+      path,
+      line: factory.binding.line,
+      symbol: factory.member,
+    },
+    {
+      kind: "fastapi-request-body-route",
+      path,
+      line: decorators[0]!.line,
+      symbol: `${receiver}.${route[2]}`,
+    },
+  ];
+}
+
+function pythonPydanticModelForEndpointType(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  typeName: string,
+  beforeLine: number,
+):
+  | {
+      definition: PythonPydanticModelDefinition;
+      importEvidence?: { line: number; symbol: string };
+    }
+  | undefined {
+  const file = files.find((candidate) => candidate.path === path);
+  if (file === undefined) return undefined;
+  const candidates: Array<{
+    definition: PythonPydanticModelDefinition;
+    importEvidence?: { line: number; symbol: string };
+  }> = [];
+  const local = pythonPydanticModelDefinition(
+    files,
+    file,
+    typeName,
+    beforeLine,
+  );
+  if (local !== undefined) candidates.push({ definition: local });
+  const knownPaths = new Map(
+    files.map((candidate) => [
+      modelPathComparisonKey(candidate.path),
+      candidate.path,
+    ]),
+  );
+  for (const imported of importedPythonSymbols(lines)) {
+    if (
+      imported.local !== typeName ||
+      imported.line >= beforeLine ||
+      !pythonImportedBindingUnchangedBetween(
+        lines,
+        typeName,
+        imported.line,
+        beforeLine,
+      )
+    ) {
+      continue;
+    }
+    const importedPath = resolveRelativePythonImport(
+      path,
+      imported.moduleSpecifier,
+      knownPaths,
+    );
+    const importedFile = files.find(
+      (candidate) => candidate.path === importedPath,
+    );
+    if (importedFile === undefined) continue;
+    const definition = pythonPydanticModelDefinition(
+      files,
+      importedFile,
+      imported.imported,
+    );
+    if (definition !== undefined) {
+      candidates.push({
+        definition,
+        importEvidence: {
+          line: imported.line,
+          symbol: `${imported.imported} as ${imported.local}`,
+        },
+      });
+    }
+  }
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+function pythonPydanticExpressionOrigins(
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+): PythonResolvedExpressionOrigin[] {
+  const origins: PythonResolvedExpressionOrigin[] = [
+    { expression, line: beforeLine },
+  ];
+  for (const match of expression.matchAll(/\b([A-Za-z_]\w*)\b/gu)) {
+    const identifier = match[1];
+    if (identifier === undefined) continue;
+    const origin = resolvePythonExpressionOrigin(lines, identifier, beforeLine);
+    if (
+      origin !== undefined &&
+      !origins.some(
+        (candidate) =>
+          candidate.expression === origin.expression &&
+          candidate.line === origin.line,
+      )
+    ) {
+      origins.push(origin);
+    }
+  }
+  return origins.slice(0, 32);
+}
+
+function pythonPydanticParameterIsStable(
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  parameter: string,
+  readLine: number,
+): boolean {
+  if (
+    pythonIdentifierReassignedBetween(
+      lines,
+      parameter,
+      wrapper.startLine,
+      readLine,
+    )
+  ) {
+    return false;
+  }
+  const escaped = escapeRegularExpression(parameter);
+  const structuralLines = pythonStructuralLines(lines);
+  for (let line = wrapper.startLine + 1; line < readLine; line += 1) {
+    const structural = (structuralLines[line - 1] ?? "").trim();
+    if (structural === "") continue;
+    if (
+      new RegExp(
+        `^(?:del\\s+${escaped}(?:\\.|\\b)|${escaped}\\s*\\.\\s*[A-Za-z_]\\w*\\s*(?:[+\\-*/%&|^]?=|:=)|setattr\\s*\\(\\s*${escaped}\\b|object\\s*\\.\\s*__setattr__\\s*\\(\\s*${escaped}\\b)`,
+        "u",
+      ).test(structural) ||
+      new RegExp(`^[A-Za-z_]\\w*\\s*(?::[^=]+)?=\\s*${escaped}\\s*$`, "u").test(
+        structural,
+      ) ||
+      new RegExp(`${escaped}\\s*\\.\\s*[A-Za-z_]\\w*\\s*\\(`, "u").test(
+        structural,
+      ) ||
+      new RegExp(`\\b${escaped}\\b(?!\\s*\\.)`, "u").test(
+        structural.replace(
+          new RegExp(`^(?:if|elif|while|assert)\\s+`, "u"),
+          "",
+        ),
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function pythonFastApiPydanticBodyFieldSource(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  callLine: number,
+  expression: string,
+): PythonFastApiPydanticBodyFieldSource | undefined {
+  const wrapper = exportedPythonFunctions(lines).find(
+    (candidate) =>
+      callLine >= candidate.startLine && callLine <= candidate.endLine,
+  );
+  if (wrapper === undefined) return undefined;
+  const routeEvidence = pythonFastApiRouteEvidence(files, path, lines, wrapper);
+  if (routeEvidence === undefined) return undefined;
+  const declarations = pythonFunctionDeclarationParameters(
+    lines,
+    wrapper.startLine,
+  );
+  const origins = pythonPydanticExpressionOrigins(lines, expression, callLine);
+  const matches: Array<{
+    field: PythonPydanticModelField;
+    model: ReturnType<typeof pythonPydanticModelForEndpointType> & {};
+    parameter: string;
+    readLine: number;
+  }> = [];
+  for (const parameter of wrapper.parameters) {
+    const declaration = declarations.find((candidate) =>
+      new RegExp(`^\\s*${escapeRegularExpression(parameter)}\\s*:`, "u").test(
+        candidate,
+      ),
+    );
+    if (declaration === undefined || declaration.includes("=")) continue;
+    const annotated = new RegExp(
+      `^\\s*${escapeRegularExpression(parameter)}\\s*:\\s*([A-Za-z_]\\w*)\\s*$`,
+      "u",
+    ).exec(declaration.trim());
+    if (annotated?.[1] === undefined) continue;
+    const model = pythonPydanticModelForEndpointType(
+      files,
+      path,
+      lines,
+      annotated[1],
+      wrapper.startLine,
+    );
+    if (model === undefined) continue;
+    const escapedParameter = escapeRegularExpression(parameter);
+    for (const origin of origins) {
+      const direct = new RegExp(
+        `\\b${escapedParameter}\\s*\\.\\s*([A-Za-z_]\\w*)\\b`,
+        "gu",
+      );
+      for (const fieldMatch of origin.expression.matchAll(direct)) {
+        const field = model.definition.fields.find(
+          (candidate) => candidate.name === fieldMatch[1],
+        );
+        if (field?.stringBodyInput === true) {
+          matches.push({
+            field,
+            model,
+            parameter,
+            readLine: origin.line,
+          });
+        }
+      }
+      const getattr = new RegExp(
+        `\\bgetattr\\s*\\(\\s*${escapedParameter}\\s*,\\s*["']([A-Za-z_]\\w*)["'](?:\\s*,[^)]*)?\\)`,
+        "gu",
+      );
+      for (const fieldMatch of origin.expression.matchAll(getattr)) {
+        const field = model.definition.fields.find(
+          (candidate) => candidate.name === fieldMatch[1],
+        );
+        if (field?.stringBodyInput === true) {
+          matches.push({
+            field,
+            model,
+            parameter,
+            readLine: origin.line,
+          });
+        }
+      }
+    }
+  }
+  const unique = matches.filter(
+    (match, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.parameter === match.parameter &&
+          candidate.field.name === match.field.name &&
+          candidate.model.definition.path === match.model.definition.path,
+      ) === index,
+  );
+  if (unique.length !== 1) return undefined;
+  const selected = unique[0]!;
+  if (
+    !pythonPydanticParameterIsStable(
+      lines,
+      wrapper,
+      selected.parameter,
+      selected.readLine,
+    )
+  ) {
+    return undefined;
+  }
+  return {
+    kind: "fastapi-pydantic-body-field",
+    line: wrapper.startLine,
+    propagators: [
+      ...routeEvidence,
+      {
+        kind: "pydantic-official-basemodel-binding",
+        path: selected.model.definition.path,
+        line: selected.model.definition.baseModelBindingLine,
+        symbol: "BaseModel",
+      },
+      ...(selected.model.importEvidence === undefined
+        ? []
+        : [
+            {
+              kind: "relative-python-pydantic-model-import",
+              path,
+              line: selected.model.importEvidence.line,
+              symbol: selected.model.importEvidence.symbol,
+            },
+          ]),
+      {
+        kind: "pydantic-request-body-model",
+        path: selected.model.definition.path,
+        line: selected.model.definition.classLine,
+        symbol: selected.model.definition.name,
+      },
+      {
+        kind: "pydantic-request-body-string-field",
+        path: selected.model.definition.path,
+        line: selected.field.line,
+        symbol: `${selected.model.definition.name}.${selected.field.name}`,
+      },
+      {
+        kind: "fastapi-pydantic-body-parameter",
+        path,
+        line: wrapper.startLine,
+        symbol: `${selected.parameter}:${selected.model.definition.name}`,
+      },
+      {
+        kind: "fastapi-pydantic-body-field-read",
+        path,
+        line: selected.readLine,
+        symbol: `${selected.parameter}.${selected.field.name}`,
+      },
+    ],
+  };
+}
+
+function pythonHasFastApiPydanticBodyEndpoint(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+): boolean {
+  return exportedPythonFunctions(lines).some((wrapper) => {
+    if (pythonFastApiRouteEvidence(files, path, lines, wrapper) === undefined) {
+      return false;
+    }
+    return pythonFunctionDeclarationParameters(lines, wrapper.startLine).some(
+      (declaration) => {
+        if (declaration.includes("=")) return false;
+        const annotation = /^\s*[A-Za-z_]\w*\s*:\s*([A-Za-z_]\w*)\s*$/u.exec(
+          declaration.trim(),
+        );
+        return (
+          annotation?.[1] !== undefined &&
+          pythonPydanticModelForEndpointType(
+            files,
+            path,
+            lines,
+            annotation[1],
+            wrapper.startLine,
+          ) !== undefined
+        );
+      },
+    );
+  });
+}
+
 function javascriptCallArgumentsAtLine(
   lines: readonly string[],
   line: number,
@@ -49524,6 +50251,39 @@ function pythonWebCommandEvidenceRequirements(
   const propagators = Array.isArray(frameworkModel["propagators"])
     ? frameworkModel["propagators"]
     : [];
+  const pydanticFlow = propagators.find(
+    (propagator) =>
+      isRecord(propagator) &&
+      propagator["kind"] === "fastapi-pydantic-body-field-read",
+  );
+  if (isRecord(pydanticFlow)) {
+    const symbol =
+      typeof pydanticFlow["symbol"] === "string" ? pydanticFlow["symbol"] : "";
+    const route = [
+      "FastAPI request body route",
+      "official FastAPI body endpoint",
+      "fastapi-request-body-route",
+    ];
+    const model = [
+      "Pydantic BaseModel request body",
+      "Pydantic request body model",
+      "pydantic-request-body-model",
+    ];
+    const field = [
+      ...(symbol === "" ? [] : [symbol]),
+      "declared Pydantic string field",
+      "Pydantic body field read",
+    ];
+    const stability = [
+      "stable Pydantic request parameter",
+      "no model or parameter escape",
+      "no ClassVar, mutation, or validator broadening",
+    ];
+    return {
+      validation: [route, model, field, stability],
+      attackPath: [route, model, field, stability],
+    };
+  }
   const indirectFlow = propagators.find(
     (propagator) =>
       isRecord(propagator) &&

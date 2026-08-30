@@ -6,6 +6,39 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a reproduced FastAPI/Pydantic request-body command-injection false
+  negative. An exact JSON body field on a `pydantic.BaseModel` now crosses a
+  same-file, relative-wrapper, or bounded multi-hop Python flow into shell
+  grammar as a structured `python-web-command` row. The topology-matched
+  control selects a `ClassVar` that Pydantic excludes from request-body fields
+  and emits no structured row.
+- Added a fail-closed FastAPI/Pydantic boundary: exact non-shadowed
+  `FastAPI`/`APIRouter` factories; POST, PUT, PATCH, or DELETE route decorators;
+  direct model-typed body parameters; exact stable `BaseModel` identity; and
+  one selected declared `str` or optional-`str` field. GET routes, dependency
+  or query injection, arbitrary or multiply inherited classes, methods,
+  validators, model configuration, dynamic `Field` declarations, private,
+  non-string, or `ClassVar` fields, local module shadows, reassignment,
+  mutation, whole-model escape, dynamic `getattr`, multiple selected fields,
+  and models above the 64-field/128-line cap fail closed.
+- Added an executable FastAPI TestClient exploit/control pair and a dedicated
+  adversarial regression matrix. Reviewer closure now requires the official
+  request-body route, exact Pydantic model and field, stable parameter,
+  wrapper path, shell boundary, CWE-78, and the absence of `ClassVar`,
+  validator, mutation, or escape confusion. The canonical corpus advances to
+  187 exploit/control pairs, 374 cases, and 1,122 repeated scan positions.
+- Completed the authoritative native Windows suite with 2,081 passes, 31
+  intentional platform/environment skips, zero failures, and 16,369 assertions
+  across 2,112 tests and 215 files in 836.43 seconds. The focused Ubuntu/WSL
+  lane passes all 30 tests and 357 assertions; the real pinned TestClient
+  witnesses independently record temporary-marker values `1` and `0`.
+  Formatting, generated-model drift, TypeScript checking, the production
+  build, and the high-severity production advisory audit are clean.
+- The validated npm archive contains 299 entries, is 2,443,615 bytes, and has
+  SHA-256
+  `17fa925b4dc738bf2c22100257dfeb36aebcb9a307b31b0c997ba9d66309922e`.
+  Strict archive inspection plus isolated Windows and Ubuntu installations
+  validate the public import, CLI, and all 79 bundled plugin files.
 - Closed a reproduced Python cross-file command-injection false negative where
   a Flask request crossed a relative wrapper, entered a declared field of a
   standard-library generated dataclass, was selected through dot or

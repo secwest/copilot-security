@@ -130,6 +130,31 @@ jobs:
           node bin/copilot-security.mjs --version
           node bin/copilot-security.mjs --help
 
+  fastapi-pydantic-body-fixtures:
+    name: FastAPI Pydantic request-body witness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install exact fixture dependencies
+        run: |
+          python3 -m venv "${{ runner.temp }}/fastapi-pydantic-witness"
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/pip" install \
+            --disable-pip-version-check \
+            --requirement benchmarks/fixtures/python-fastapi-pydantic-body-command-injection/requirements.txt
+
+      - name: Execute bounded exploit and ClassVar-control witnesses
+        run: |
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-fastapi-pydantic-body-command-injection/examples/witness.py
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-fastapi-pydantic-body-safe-command/examples/witness.py
+
   mcp-tool-fixtures:
     name: MCP tool witness / ${{ matrix.os }} / ${{ matrix.fixture }}
     runs-on: ${{ matrix.os }}

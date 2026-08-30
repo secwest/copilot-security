@@ -3007,10 +3007,11 @@ node ../../benchmarks/run-benchmark.mjs `
 ```
 
 The Python cross-file lane applies the same gates to explicit relative
-from-imports and includes multiline parameter-binding counterevidence. Its six
+from-imports and includes multiline parameter-binding counterevidence. Its seven
 exploit/control pairs distinguish exact list indexes, dictionary keys, fresh
 `types.SimpleNamespace` fields, and generated standard-library dataclass fields
-from container- or object-wide taint. The object and dataclass exploits
+from container- or object-wide taint, plus exact FastAPI/Pydantic request-body
+fields from class variables. The object and dataclass exploits
 overwrite and select `command.value`, while their matched controls store the
 same hostile value only in `command.audit` and retain the same real
 `shell=True` sink. Direct attribute assignment, constant-name `setattr`, dot
@@ -3020,7 +3021,15 @@ requires an exact non-shadowed `dataclasses.dataclass` decorator, a field-only
 class body, declared fields, and complete keyword construction. Defaults,
 inheritance, methods, positional or incomplete construction, dynamic fields,
 arbitrary objects, alias escape, and ambiguous mutations fail closed. Native
-witnesses create only disposable temporary markers:
+witnesses create only disposable temporary markers. The FastAPI pair uses a
+real pinned TestClient request; the positive reads the declared body string
+`payload.name`, while the control reads `payload.fixed_command`, an exact
+`ClassVar[str]` excluded from the JSON body. Exact official framework imports,
+POST/PUT/PATCH/DELETE routes, a field-only `BaseModel`, stable parameters, and
+one selected string field are required. GET, dependency/query parameters,
+validators/configuration, dynamic `Field` declarations, non-string or private
+fields, shadows, mutation, whole-model escape, and ambiguous selection fail
+closed:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `

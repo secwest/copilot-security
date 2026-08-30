@@ -655,6 +655,10 @@ describe("effectiveness benchmark", () => {
         "python-cross-file-dataclass-field-safe-command",
       ],
       [
+        "python-fastapi-pydantic-body-command-injection",
+        "python-fastapi-pydantic-body-safe-command",
+      ],
+      [
         "rust-axum-tokio-shell-command-injection",
         "rust-axum-tokio-argv-command",
       ],
