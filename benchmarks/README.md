@@ -3007,16 +3007,20 @@ node ../../benchmarks/run-benchmark.mjs `
 ```
 
 The Python cross-file lane applies the same gates to explicit relative
-from-imports and includes multiline parameter-binding counterevidence. Its
-indirect-flow pairs distinguish exact list indexes, dictionary keys, and fresh
-`types.SimpleNamespace` fields from container- or object-wide taint. The object
-exploit overwrites and selects `command.value`, while the matched control stores
-the same hostile value only in `command.audit` and retains the same real
+from-imports and includes multiline parameter-binding counterevidence. Its six
+exploit/control pairs distinguish exact list indexes, dictionary keys, fresh
+`types.SimpleNamespace` fields, and generated standard-library dataclass fields
+from container- or object-wide taint. The object and dataclass exploits
+overwrite and select `command.value`, while their matched controls store the
+same hostile value only in `command.audit` and retain the same real
 `shell=True` sink. Direct attribute assignment, constant-name `setattr`, dot
 selection, and constant-name `getattr` are covered under receiver-sensitive,
-last-write-wins state; dynamic fields, arbitrary objects, alias escape, and
-ambiguous mutations fail closed. Native witnesses create only disposable
-temporary markers:
+field-sensitive, last-write-wins state. The dataclass case additionally
+requires an exact non-shadowed `dataclasses.dataclass` decorator, a field-only
+class body, declared fields, and complete keyword construction. Defaults,
+inheritance, methods, positional or incomplete construction, dynamic fields,
+arbitrary objects, alias escape, and ambiguous mutations fail closed. Native
+witnesses create only disposable temporary markers:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `

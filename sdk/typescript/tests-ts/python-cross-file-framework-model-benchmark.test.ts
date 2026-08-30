@@ -35,6 +35,8 @@ const caseIds = [
   "python-cross-file-dict-update-safe-command",
   "python-cross-file-object-field-command-injection",
   "python-cross-file-object-field-safe-command",
+  "python-cross-file-dataclass-field-command-injection",
+  "python-cross-file-dataclass-field-safe-command",
   "python-cross-file-sql-injection",
   "python-cross-file-safe-sql",
 ] as const;
@@ -57,10 +59,10 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([...caseIds]);
     expect(
       manifest.cases.filter(({ expected }) => expected.length > 0),
-    ).toHaveLength(5);
+    ).toHaveLength(6);
     expect(
       manifest.cases.filter(({ expected }) => expected.length === 0),
-    ).toHaveLength(5);
+    ).toHaveLength(6);
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(1);
     }
@@ -133,6 +135,22 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(objectField).toContain('"path":"src/runner.py","line":9');
     expect(
       inventories.get("python-cross-file-object-field-safe-command"),
+    ).not.toContain('"scope":"cross-file-wrapper"');
+    const dataclassField = inventories.get(
+      "python-cross-file-dataclass-field-command-injection",
+    );
+    expect(dataclassField).toContain('"scope":"cross-file-wrapper"');
+    expect(dataclassField).toContain('"id":"python-web-command"');
+    expect(dataclassField).toContain(
+      '"kind":"python-dataclass-attribute-assignment"',
+    );
+    expect(dataclassField).toContain('"path":"src/server.py","line":3');
+    expect(dataclassField).toContain(
+      '"path":"src/runner.py","line":13,"symbol":"command.value"',
+    );
+    expect(dataclassField).toContain('"path":"src/runner.py","line":15');
+    expect(
+      inventories.get("python-cross-file-dataclass-field-safe-command"),
     ).not.toContain('"scope":"cross-file-wrapper"');
     const sql = inventories.get("python-cross-file-sql-injection");
     expect(sql).toContain('"id":"python-web-sql"');
@@ -806,6 +824,380 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
           '"scope":"cross-file-wrapper"',
         );
       }
+      await writeFile(
+        join(source, "types.py"),
+        "class SimpleNamespace:\n    pass\n",
+        "utf8",
+      );
+      await writeFile(
+        join(source, "runner.py"),
+        [
+          "import subprocess",
+          "from types import SimpleNamespace",
+          "def run_report(report_name):",
+          "    command = SimpleNamespace(value=report_name)",
+          "    return subprocess.run(command.value, shell=True, check=True, timeout=2)",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      expect(await buildResidualRiskInventory(root)).not.toContain(
+        '"scope":"cross-file-wrapper"',
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("follows exact generated dataclass fields into selected shell operands", async () => {
+    const root = await mkdtemp(join(tmpdir(), "python-dataclass-field-flow-"));
+    const source = join(root, "src");
+    try {
+      await mkdir(source, { recursive: true });
+      await writeFile(join(source, "__init__.py"), "", "utf8");
+      await writeFile(
+        join(source, "server.py"),
+        [
+          "from flask import request",
+          "from .runner import run_report",
+          "def report():",
+          '    report_name = request.args.get("name", "")',
+          "    return run_report(report_name)",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      for (const [
+        importLine,
+        decorator,
+        body,
+        sink,
+        propagator,
+        mutationLine,
+        sinkLine,
+      ] of [
+        [
+          "from dataclasses import dataclass",
+          "@dataclass",
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          "python-dataclass-constructor-field",
+          8,
+          9,
+        ],
+        [
+          "from dataclasses import dataclass as record",
+          "@record()",
+          [
+            '    command = ReportCommand(value="/usr/bin/printf fixed", audit="audit")',
+            "    command.value = report_name",
+          ],
+          "command.value",
+          "python-dataclass-attribute-assignment",
+          9,
+          10,
+        ],
+        [
+          "import dataclasses as records",
+          "@records.dataclass",
+          [
+            '    command = ReportCommand(value="/usr/bin/printf fixed", audit="audit")',
+            '    setattr(command, "value", report_name)',
+          ],
+          'getattr(command, "value")',
+          "python-dataclass-setattr-assignment",
+          9,
+          10,
+        ],
+      ] as const) {
+        await writeFile(
+          join(source, "runner.py"),
+          [
+            "import subprocess",
+            importLine,
+            decorator,
+            "class ReportCommand:",
+            "    value: str",
+            "    audit: str",
+            "def run_report(report_name):",
+            ...body,
+            `    return subprocess.run(${sink}, shell=True, check=True, timeout=2)`,
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+        const inventory = await buildResidualRiskInventory(root);
+        expect(inventory, propagator).toContain('"scope":"cross-file-wrapper"');
+        expect(inventory, propagator).toContain('"id":"python-web-command"');
+        expect(inventory, propagator).toContain(`"kind":"${propagator}"`);
+        expect(inventory, propagator).toContain(
+          `"path":"src/runner.py","line":${mutationLine},"symbol":"command.value"`,
+        );
+        expect(inventory, propagator).toContain(
+          `"path":"src/runner.py","line":${sinkLine}`,
+        );
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects unproved, broadened, or structurally ambiguous dataclass fields", async () => {
+    const root = await mkdtemp(join(tmpdir(), "python-dataclass-controls-"));
+    const source = join(root, "src");
+    const ordinaryClass = [
+      "class ReportCommand:",
+      "    value: str",
+      "    audit: str",
+    ];
+    const exactDataclass = [
+      "from dataclasses import dataclass",
+      "@dataclass",
+      ...ordinaryClass,
+    ];
+    try {
+      await mkdir(source, { recursive: true });
+      await writeFile(join(source, "__init__.py"), "", "utf8");
+      await writeFile(
+        join(source, "server.py"),
+        [
+          "from flask import request",
+          "from .runner import run_report",
+          "def report():",
+          '    report_name = request.args.get("name", "")',
+          "    return run_report(report_name)",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      for (const [prelude, body, sink, localShadow] of [
+        [
+          ordinaryClass,
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          [
+            "def dataclass(cls):",
+            "    return cls",
+            "@dataclass",
+            ...ordinaryClass,
+          ],
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          [
+            "from dataclasses import dataclass",
+            "@dataclass(frozen=True)",
+            ...ordinaryClass,
+          ],
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          [
+            "from dataclasses import dataclass",
+            "@dataclass",
+            "class ReportCommand(Base):",
+            "    value: str",
+            "    audit: str",
+          ],
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          [
+            "from dataclasses import dataclass",
+            "@dataclass",
+            "class ReportCommand:",
+            '    value: str = "fixed"',
+            "    audit: str",
+          ],
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          [
+            "from dataclasses import dataclass",
+            "@dataclass",
+            "class ReportCommand:",
+            "    value: str",
+            "    audit: str",
+            "    def inspect(self):",
+            "        return self.value",
+          ],
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          [
+            "from dataclasses import dataclass",
+            "@sealed",
+            "@dataclass",
+            ...ordinaryClass,
+          ],
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          [
+            "from dataclasses import dataclass",
+            "from typing import ClassVar",
+            "@dataclass",
+            "class ReportCommand:",
+            "    value: ClassVar[str]",
+            "    audit: str",
+          ],
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          exactDataclass,
+          ["    command = ReportCommand(value=report_name)"],
+          "command.value",
+          false,
+        ],
+        [
+          exactDataclass,
+          ['    command = ReportCommand(report_name, "audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          [
+            "from dataclasses import dataclass",
+            "from decorators import dataclass",
+            "@dataclass",
+            ...ordinaryClass,
+          ],
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          [
+            "from dataclasses import dataclass",
+            "dataclass = record",
+            "@dataclass",
+            ...ordinaryClass,
+          ],
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          exactDataclass,
+          [
+            "    ReportCommand = replacement",
+            '    command = ReportCommand(value=report_name, audit="audit")',
+          ],
+          "command.value",
+          false,
+        ],
+        [
+          [...exactDataclass, "@dataclass", ...ordinaryClass],
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          false,
+        ],
+        [
+          exactDataclass,
+          [
+            '    command = ReportCommand(value="/usr/bin/printf fixed", audit="audit")',
+            "    command.extra = report_name",
+          ],
+          "command.value",
+          false,
+        ],
+        [
+          exactDataclass,
+          [
+            '    command = ReportCommand(value="/usr/bin/printf fixed", audit="audit")',
+            "    command.audit = report_name",
+          ],
+          "command.value",
+          false,
+        ],
+        [
+          exactDataclass,
+          [
+            '    command = ReportCommand(value=report_name, audit="audit")',
+            '    command.value = "/usr/bin/printf fixed"',
+          ],
+          "command.value",
+          false,
+        ],
+        [
+          exactDataclass,
+          [
+            '    command = ReportCommand(value=report_name, audit="audit")',
+            "    inspect_state(command)",
+          ],
+          "command.value",
+          false,
+        ],
+        [
+          exactDataclass,
+          [
+            '    command = ReportCommand(value=report_name, audit="audit")',
+            "    ReportCommand.value = replacement",
+          ],
+          "command.value",
+          false,
+        ],
+        [
+          exactDataclass,
+          [
+            '    command = ReportCommand(value=report_name, audit="audit")',
+            "    command_type = ReportCommand",
+          ],
+          "command.value",
+          false,
+        ],
+        [
+          exactDataclass,
+          ['    command = ReportCommand(value=report_name, audit="audit")'],
+          "command.value",
+          true,
+        ],
+      ] as const) {
+        const shadowPath = join(source, "dataclasses.py");
+        if (localShadow) {
+          await writeFile(
+            shadowPath,
+            "def dataclass(cls):\n    return cls\n",
+            "utf8",
+          );
+        } else {
+          await rm(shadowPath, { force: true });
+        }
+        await writeFile(
+          join(source, "runner.py"),
+          [
+            "import subprocess",
+            ...prelude,
+            "def run_report(report_name):",
+            ...body,
+            `    return subprocess.run(${sink}, shell=True, check=True, timeout=2)`,
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+        expect(await buildResidualRiskInventory(root)).not.toContain(
+          '"scope":"cross-file-wrapper"',
+        );
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -821,6 +1213,8 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
         ["python-cross-file-dict-update-safe-command", 0],
         ["python-cross-file-object-field-command-injection", 1],
         ["python-cross-file-object-field-safe-command", 0],
+        ["python-cross-file-dataclass-field-command-injection", 1],
+        ["python-cross-file-dataclass-field-safe-command", 0],
       ] as const) {
         const witness = spawnSync(
           "python3",
@@ -1036,6 +1430,109 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     }
   });
 
+  test("requires generated dataclass identity and declared-field proof in review fields", async () => {
+    const repository = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-cross-file-dataclass-field-command-injection",
+    );
+    const inventory = await buildResidualRiskInventory(repository);
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "python-dataclass-field-quality-"),
+    );
+    const finding = {
+      occurrenceId: "occ_python_dataclass_field_quality",
+      taxonomy: { cwe: ["CWE-78"] },
+      locations: [
+        { path: "src/server.py", startLine: 3, role: "source" },
+        { path: "src/runner.py", startLine: 15, role: "sink" },
+      ],
+      codeEvidence: [
+        {
+          id: "request-source",
+          path: "src/server.py",
+          startLine: 3,
+          code: "from .runner import run_report",
+          explanation: "The relative import supplies the wrapper edge.",
+          role: "source",
+        },
+        {
+          id: "shell-sink",
+          path: "src/runner.py",
+          startLine: 15,
+          code: "    completed = subprocess.run(selected, shell=True, check=True, timeout=2)",
+          explanation:
+            "The selected declared dataclass field enters the shell.",
+          role: "sink",
+        },
+      ],
+      validation: {
+        summary: "A remote value reaches subprocess through a dataclass.",
+        method: "bounded source review and witness comparison",
+        exploitWitness: "The temporary marker is created only by the exploit.",
+        negativeControl:
+          "The matched declared-field isolation fixture creates no marker.",
+        evidence: ["request-source", "shell-sink"],
+        counterEvidence: "The control stores the value in another field.",
+        remainingUncertainty: "Deployment reachability remains unproved.",
+      },
+      attackPath: {
+        summary: "A remote value reaches a command through a dataclass.",
+        dataflow: {
+          source: "request-source",
+          sink: "shell-sink",
+          outcome: "shell behavior",
+        },
+        reachability: {
+          attacker: "remote caller",
+          entrypoint: "Flask route",
+          outcome: "command interpretation",
+        },
+        brokenControls: ["shell interpretation"],
+        evidenceRefs: ["request-source", "shell-sink"],
+      },
+    };
+    try {
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      expect(incomplete).toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(incomplete).toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+
+      const contract =
+        "The Flask request crosses the relative run_report wrapper into a generated standard-library dataclass receiver ReportCommand. Exact dataclass attribute assignment writes report_name to the declared command.value field; that constant selected object field is read from the same receiver. Receiver-sensitive last-write-wins field state proves no object broadening, no receiver alias escape, no ambiguous attribute mutation, and no intervening overwrite before subprocess.run consumes it with shell=True as shell grammar, establishing CWE-78.";
+      finding.validation.summary = contract;
+      finding.attackPath.summary = contract;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const complete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      expect(complete).not.toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(complete).not.toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+    } finally {
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
+  });
+
   test("requires list mutation and selected-index proof in review fields", async () => {
     const repository = join(
       benchmarkRoot,
@@ -1154,6 +1651,13 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(prompt).toContain("receiver-sensitive last-write-wins field state");
     expect(prompt).toContain("object escape through an alias or helper");
     expect(prompt).toContain("taint confined to another receiver or field");
+    expect(prompt).toContain("python-dataclass-attribute-assignment");
+    expect(prompt).toContain("generated standard-library dataclass receiver");
+    expect(prompt).toContain("exact keyword argument for every declared field");
+    expect(prompt).toContain("Pysa-style whole-object broadening");
+    expect(prompt).toContain(
+      "topology-matched declared-field isolation control",
+    );
   });
 
   test("rejects fixed, reassigned, non-relative, and text-only pseudo flows", async () => {

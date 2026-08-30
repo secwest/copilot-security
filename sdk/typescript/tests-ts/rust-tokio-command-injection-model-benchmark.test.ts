@@ -216,12 +216,12 @@ describe("Rust Tokio command-injection model benchmark", () => {
     expect(prompt).toContain("exact official Tokio identity");
   });
 
-  test("keeps the canonical corpus paired at 185 exploit/control pairs", async () => {
+  test("keeps the canonical corpus paired at 186 exploit/control pairs", async () => {
     const manifest = JSON.parse(
       await readUtf8(join(benchmarkRoot, "manifest.json")),
     ) as BenchmarkManifest;
     const cases = new Map(manifest.cases.map((item) => [item.id, item]));
-    expect(manifest.cases).toHaveLength(370);
+    expect(manifest.cases).toHaveLength(372);
     expect(cases.get(vulnerableId)?.expected).toHaveLength(1);
     expect(cases.get(controlId)?.expected).toEqual([]);
   });

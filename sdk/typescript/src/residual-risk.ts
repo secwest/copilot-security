@@ -34013,6 +34013,8 @@ function pythonFrameworkWrapperSummaries(
                       parameter,
                     ) ??
                     pythonObjectFieldFlowToSink(
+                      files,
+                      file.path,
                       file.lines,
                       wrapper,
                       sink.line,
@@ -43378,6 +43380,9 @@ function pythonDictionaryMayChangeAtLine(
 
 interface PythonObjectFieldFlow {
   kind:
+    | "python-dataclass-attribute-assignment"
+    | "python-dataclass-constructor-field"
+    | "python-dataclass-setattr-assignment"
     | "python-object-attribute-assignment"
     | "python-object-constructor-field"
     | "python-object-setattr-assignment";
@@ -43391,7 +43396,16 @@ interface PythonObjectFieldStateValue {
   line: number;
 }
 
+interface PythonObjectFieldState {
+  declaredFields?: ReadonlySet<string>;
+  fields: Map<string, PythonObjectFieldStateValue>;
+  objectKind: "dataclass" | "simple-namespace";
+  typeName: string;
+}
+
 function pythonObjectFieldFlowToSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
   lines: readonly string[],
   wrapper: ExportedPythonFunction,
   sinkLine: number,
@@ -43405,12 +43419,14 @@ function pythonObjectFieldFlowToSink(
   ).flatMap((candidate) => pythonObjectFieldSelections(candidate));
   for (const selection of selections) {
     const state = pythonObjectFieldStateBeforeSink(
+      files,
+      sourcePath,
       lines,
       wrapper,
       sinkLine,
       selection.receiver,
     );
-    const selected = state?.get(selection.field);
+    const selected = state?.fields.get(selection.field);
     if (selected === undefined) continue;
     const resolved = resolvePythonExpression(
       lines,
@@ -43474,11 +43490,13 @@ function pythonObjectFieldSelections(
 }
 
 function pythonObjectFieldStateBeforeSink(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
   lines: readonly string[],
   wrapper: ExportedPythonFunction,
   sinkLine: number,
   receiver: string,
-): Map<string, PythonObjectFieldStateValue> | undefined {
+): PythonObjectFieldState | undefined {
   const escaped = escapeRegularExpression(receiver);
   const initialization = new RegExp(
     `^${escaped}\\s*(?::[^=]+)?=\\s*(.+)$`,
@@ -43488,7 +43506,7 @@ function pythonObjectFieldStateBeforeSink(
     `^[A-Za-z_]\\w*\\s*(?::[^=]+)?=\\s*${escaped}\\s*$`,
     "u",
   );
-  let state: Map<string, PythonObjectFieldStateValue> | undefined;
+  let state: PythonObjectFieldState | undefined;
   let transitionCount = 0;
   for (let line = wrapper.startLine + 1; line < sinkLine; line += 1) {
     const code = pythonCodeBeforeComment(lines[line - 1] ?? "").trim();
@@ -43496,13 +43514,22 @@ function pythonObjectFieldStateBeforeSink(
     if (state === undefined) {
       const match = initialization.exec(code);
       if (match?.[1] === undefined) continue;
-      state = pythonSimpleNamespaceState(lines, wrapper, line, match[1]);
+      state = pythonFreshObjectFieldState(
+        files,
+        sourcePath,
+        lines,
+        wrapper,
+        line,
+        match[1],
+      );
       if (state === undefined) continue;
       continue;
     }
     const reassignment = initialization.exec(code);
     if (reassignment?.[1] !== undefined) {
-      const replacement = pythonSimpleNamespaceState(
+      const replacement = pythonFreshObjectFieldState(
+        files,
+        sourcePath,
         lines,
         wrapper,
         line,
@@ -43514,16 +43541,33 @@ function pythonObjectFieldStateBeforeSink(
       if (transitionCount > 64) return undefined;
       continue;
     }
+    if (
+      state.objectKind === "dataclass" &&
+      pythonLineReferencesIdentifier(pythonStructuralCode(code), state.typeName)
+    ) {
+      return undefined;
+    }
     if (!pythonLineReferencesIdentifier(pythonStructuralCode(code), receiver)) {
       continue;
     }
     if (alias.test(code)) return undefined;
-    const mutation = pythonObjectFieldMutationAtLine(code, receiver, line);
+    const mutation = pythonObjectFieldMutationAtLine(
+      code,
+      receiver,
+      line,
+      state.objectKind,
+    );
     if (mutation !== undefined) {
+      if (
+        state.objectKind === "dataclass" &&
+        !state.declaredFields?.has(mutation.field)
+      ) {
+        return undefined;
+      }
       transitionCount += 1;
       if (transitionCount > 64) return undefined;
-      state.set(mutation.field, mutation.value);
-      if (state.size > 64) return undefined;
+      state.fields.set(mutation.field, mutation.value);
+      if (state.fields.size > 64) return undefined;
       continue;
     }
     if (pythonObjectFieldMayChangeAtLine(code, receiver)) return undefined;
@@ -43531,12 +43575,35 @@ function pythonObjectFieldStateBeforeSink(
   return state;
 }
 
-function pythonSimpleNamespaceState(
+function pythonFreshObjectFieldState(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
   lines: readonly string[],
   wrapper: ExportedPythonFunction,
   line: number,
   expression: string,
-): Map<string, PythonObjectFieldStateValue> | undefined {
+): PythonObjectFieldState | undefined {
+  return (
+    pythonSimpleNamespaceState(
+      files,
+      sourcePath,
+      lines,
+      wrapper,
+      line,
+      expression,
+    ) ??
+    pythonDataclassState(files, sourcePath, lines, wrapper, line, expression)
+  );
+}
+
+function pythonSimpleNamespaceState(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  line: number,
+  expression: string,
+): PythonObjectFieldState | undefined {
   const call =
     /^([A-Za-z_]\w*(?:\s*\.\s*SimpleNamespace)?)\s*\(([\s\S]*)\)$/u.exec(
       expression.trim(),
@@ -43544,12 +43611,25 @@ function pythonSimpleNamespaceState(
   if (call?.[1] === undefined || call[2] === undefined) return undefined;
   const constructor = call[1].replace(/\s+/gu, "");
   if (
-    !pythonOfficialSimpleNamespaceConstructor(lines, wrapper, line, constructor)
+    !pythonOfficialSimpleNamespaceConstructor(
+      files,
+      sourcePath,
+      lines,
+      wrapper,
+      line,
+      constructor,
+    )
   ) {
     return undefined;
   }
   const argumentsText = call[2].trim();
-  if (argumentsText === "") return new Map();
+  if (argumentsText === "") {
+    return {
+      fields: new Map(),
+      objectKind: "simple-namespace",
+      typeName: "types.SimpleNamespace",
+    };
+  }
   const argumentsList = splitPythonArguments(argumentsText);
   if (argumentsList.length > 64) return undefined;
   const state = new Map<string, PythonObjectFieldStateValue>();
@@ -43570,15 +43650,229 @@ function pythonSimpleNamespaceState(
       line,
     });
   }
-  return state;
+  return {
+    fields: state,
+    objectKind: "simple-namespace",
+    typeName: "types.SimpleNamespace",
+  };
+}
+
+interface PythonGeneratedDataclassDefinition {
+  classLine: number;
+  fields: string[];
+  name: string;
+}
+
+function pythonDataclassState(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  line: number,
+  expression: string,
+): PythonObjectFieldState | undefined {
+  const call = /^([A-Za-z_]\w*)\s*\(([\s\S]*)\)$/u.exec(expression.trim());
+  if (call?.[1] === undefined || call[2] === undefined) return undefined;
+  const constructor = call[1];
+  if (wrapper.parameters.includes(constructor)) return undefined;
+  const definition = pythonGeneratedDataclassDefinition(
+    files,
+    sourcePath,
+    lines,
+    constructor,
+    line,
+  );
+  if (definition === undefined) return undefined;
+  const argumentsList = splitPythonArguments(call[2].trim());
+  if (argumentsList.length !== definition.fields.length) return undefined;
+  const declaredFields = new Set(definition.fields);
+  const fields = new Map<string, PythonObjectFieldStateValue>();
+  for (const argument of argumentsList) {
+    const keyword = /^([A-Za-z_]\w*)\s*=\s*([\s\S]+)$/u.exec(argument);
+    if (
+      keyword?.[1] === undefined ||
+      keyword[2] === undefined ||
+      keyword[2].trim() === "" ||
+      !declaredFields.has(keyword[1]) ||
+      fields.has(keyword[1])
+    ) {
+      return undefined;
+    }
+    fields.set(keyword[1], {
+      expression: keyword[2].trim(),
+      kind: "python-dataclass-constructor-field",
+      line,
+    });
+  }
+  if (fields.size !== declaredFields.size) return undefined;
+  return {
+    declaredFields,
+    fields,
+    objectKind: "dataclass",
+    typeName: definition.name,
+  };
+}
+
+function pythonGeneratedDataclassDefinition(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
+  lines: readonly string[],
+  name: string,
+  callLine: number,
+): PythonGeneratedDataclassDefinition | undefined {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "dataclasses")) {
+    return undefined;
+  }
+  const structuralLines = pythonStructuralLines(lines);
+  const escaped = escapeRegularExpression(name);
+  const definitions: number[] = [];
+  for (let line = 1; line < callLine; line += 1) {
+    if (
+      new RegExp(`^class\\s+${escaped}\\s*:\\s*$`, "u").test(
+        structuralLines[line - 1] ?? "",
+      )
+    ) {
+      definitions.push(line);
+    }
+  }
+  if (definitions.length !== 1) return undefined;
+  const classLine = definitions[0]!;
+  if (
+    !pythonImportedBindingUnchangedBetween(lines, name, classLine, callLine)
+  ) {
+    return undefined;
+  }
+  if (
+    structuralLines
+      .slice(classLine, Math.max(classLine, callLine - 1))
+      .some((candidate) => pythonLineReferencesIdentifier(candidate, name))
+  ) {
+    return undefined;
+  }
+  let decoratorLine = classLine - 1;
+  while (
+    decoratorLine > 0 &&
+    (structuralLines[decoratorLine - 1] ?? "").trim() === ""
+  ) {
+    decoratorLine -= 1;
+  }
+  const decorator = (structuralLines[decoratorLine - 1] ?? "").trim();
+  if (
+    !decorator.startsWith("@") ||
+    !pythonOfficialDataclassDecorator(lines, decoratorLine, decorator.slice(1))
+  ) {
+    return undefined;
+  }
+  let previousLine = decoratorLine - 1;
+  while (
+    previousLine > 0 &&
+    (structuralLines[previousLine - 1] ?? "").trim() === ""
+  ) {
+    previousLine -= 1;
+  }
+  if ((structuralLines[previousLine - 1] ?? "").trim().startsWith("@")) {
+    return undefined;
+  }
+  const fields: string[] = [];
+  for (let line = classLine + 1; line <= lines.length; line += 1) {
+    const structural = structuralLines[line - 1] ?? "";
+    if (structural.trim() === "") continue;
+    if (/^\S/u.test(structural)) break;
+    const field = /^ {4}([A-Za-z_]\w*)\s*:\s*([^=]+?)\s*$/u.exec(structural);
+    if (
+      field?.[1] === undefined ||
+      field[2] === undefined ||
+      !pythonObjectFieldNameIsSupported(field[1]) ||
+      /\b(?:ClassVar|InitVar|KW_ONLY)\b/u.test(field[2]) ||
+      fields.includes(field[1])
+    ) {
+      return undefined;
+    }
+    fields.push(field[1]);
+    if (fields.length > 64) return undefined;
+  }
+  if (fields.length === 0) return undefined;
+  return { classLine, fields, name };
+}
+
+function pythonOfficialDataclassDecorator(
+  lines: readonly string[],
+  decoratorLine: number,
+  expression: string,
+): boolean {
+  const normalized = expression.replace(/\s+/gu, "");
+  const parsed = /^([A-Za-z_]\w*(?:\.dataclass)?)(?:\(\))?$/u.exec(normalized);
+  if (parsed?.[1] === undefined) return false;
+  const decorator = parsed[1];
+  const structuralLines = pythonStructuralLines(lines);
+  if (!decorator.includes(".")) {
+    const imports: Array<{ binding: string; line: number }> = [];
+    for (let line = 1; line < decoratorLine; line += 1) {
+      const match = /^\s*from\s+dataclasses\s+import\s+(.+)$/u.exec(
+        structuralLines[line - 1] ?? "",
+      );
+      if (match?.[1] === undefined) continue;
+      for (const imported of splitPythonArguments(match[1])) {
+        const item = /^dataclass(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+          imported.trim(),
+        );
+        if (item !== null) {
+          imports.push({ binding: item[1] ?? "dataclass", line });
+        }
+      }
+    }
+    const matching = imports.filter((item) => item.binding === decorator);
+    return (
+      matching.length === 1 &&
+      pythonImportedBindingUnchangedBetween(
+        lines,
+        decorator,
+        matching[0]!.line,
+        decoratorLine,
+      )
+    );
+  }
+  const qualified = /^([A-Za-z_]\w*)\.dataclass$/u.exec(decorator);
+  if (qualified?.[1] === undefined) return false;
+  const binding = qualified[1];
+  const imports: Array<{ binding: string; line: number }> = [];
+  for (let line = 1; line < decoratorLine; line += 1) {
+    const match =
+      /^\s*import\s+dataclasses(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+        structuralLines[line - 1] ?? "",
+      );
+    if (match !== null) {
+      imports.push({ binding: match[1] ?? "dataclasses", line });
+    }
+  }
+  const matching = imports.filter((item) => item.binding === binding);
+  return (
+    matching.length === 1 &&
+    pythonImportedBindingUnchangedBetween(
+      lines,
+      binding,
+      matching[0]!.line,
+      decoratorLine,
+    ) &&
+    !pythonObjectMemberReassignedBetween(
+      lines,
+      binding,
+      "dataclass",
+      matching[0]!.line,
+      decoratorLine,
+    )
+  );
 }
 
 function pythonOfficialSimpleNamespaceConstructor(
+  files: readonly SourceFileSnapshot[],
+  sourcePath: string,
   lines: readonly string[],
   wrapper: ExportedPythonFunction,
   callLine: number,
   constructor: string,
 ): boolean {
+  if (pythonLocalModuleCouldShadow(files, sourcePath, "types")) return false;
   const structuralLines = pythonStructuralLines(lines);
   if (!constructor.includes(".")) {
     if (wrapper.parameters.includes(constructor)) return false;
@@ -43685,6 +43979,7 @@ function pythonObjectFieldMutationAtLine(
   code: string,
   receiver: string,
   line: number,
+  objectKind: PythonObjectFieldState["objectKind"],
 ): { field: string; value: PythonObjectFieldStateValue } | undefined {
   const escaped = escapeRegularExpression(receiver);
   const assignment = new RegExp(
@@ -43700,7 +43995,10 @@ function pythonObjectFieldMutationAtLine(
       field: assignment[1],
       value: {
         expression: assignment[2].trim(),
-        kind: "python-object-attribute-assignment",
+        kind:
+          objectKind === "dataclass"
+            ? "python-dataclass-attribute-assignment"
+            : "python-object-attribute-assignment",
         line,
       },
     };
@@ -43720,7 +44018,10 @@ function pythonObjectFieldMutationAtLine(
     field,
     value: {
       expression: argumentsList[0]!,
-      kind: "python-object-setattr-assignment",
+      kind:
+        objectKind === "dataclass"
+          ? "python-dataclass-setattr-assignment"
+          : "python-object-setattr-assignment",
       line,
     },
   };
@@ -49230,23 +49531,39 @@ function pythonWebCommandEvidenceRequirements(
       (((propagator["kind"].startsWith("python-list-") ||
         propagator["kind"].startsWith("python-dict-")) &&
         propagator["kind"].endsWith("-element")) ||
-        propagator["kind"].startsWith("python-object-")),
+        propagator["kind"].startsWith("python-object-") ||
+        propagator["kind"].startsWith("python-dataclass-")),
   );
   if (!isRecord(indirectFlow)) return { validation: [], attackPath: [] };
   const kind = String(indirectFlow["kind"]);
   const symbol =
     typeof indirectFlow["symbol"] === "string" ? indirectFlow["symbol"] : "";
-  if (kind.startsWith("python-object-")) {
-    const mutation =
-      kind === "python-object-constructor-field"
+  if (
+    kind.startsWith("python-object-") ||
+    kind.startsWith("python-dataclass-")
+  ) {
+    const dataclassFlow = kind.startsWith("python-dataclass-");
+    const mutation = kind.endsWith("-constructor-field")
+      ? [
+          dataclassFlow
+            ? "generated dataclass constructor field"
+            : "SimpleNamespace constructor field",
+          "constructor keyword field",
+          kind,
+        ]
+      : kind.endsWith("-setattr-assignment")
         ? [
-            "SimpleNamespace constructor field",
-            "constructor keyword field",
+            dataclassFlow ? "dataclass setattr" : "setattr",
+            "constant-field setattr",
             kind,
           ]
-        : kind === "python-object-setattr-assignment"
-          ? ["setattr", "constant-field setattr", kind]
-          : ["attribute assignment", "direct field assignment", kind];
+        : [
+            dataclassFlow
+              ? "dataclass attribute assignment"
+              : "attribute assignment",
+            "direct field assignment",
+            kind,
+          ];
     const selected = [
       ...(symbol === "" ? [] : [symbol]),
       "selected object field",

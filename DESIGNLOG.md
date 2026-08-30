@@ -2,6 +2,101 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Preserve exact generated Python dataclass fields into shell grammar
+
+**Measured miss and comparator evidence.** A production-build reproduction used
+a Flask request, one relative wrapper, an ordinary `@dataclass` with declared
+`value` and `audit` fields, complete keyword construction, a hostile write to
+`command.value`, a local alias of that field, and
+`subprocess.run(..., shell=True)`. Before this increment, both the vulnerable
+case and its same-object, different-field control emitted only two lexical
+process leads and no structured request-to-shell row. Python's official
+[`dataclasses` documentation](https://docs.python.org/3/library/dataclasses.html)
+establishes that `@dataclass` generates methods such as `__init__` from declared
+fields and defaults to a mutable class. Pysa's
+[`object` taint model](https://pyre-check.org/docs/pysa-basics/) can propagate
+taint to all attributes and documents the resulting false-positive risk; its
+[`access-path and broadening guidance`](https://pyre-check.org/docs/pysa-advanced/)
+also describes constructor/property propagation and the precision/performance
+tradeoff. Those are useful discovery comparators, but whole-object broadening
+cannot prove that one selected shell-command field contains the request value.
+GitHub CodeQL's current Python
+[`Attributes.qll`](https://github.com/github/codeql/blob/fa8a2870208efa9356e13adef583e9ef43c70717/python/ql/lib/semmle/python/dataflow/new/internal/Attributes.qll)
+and its
+[`field-flow regression`](https://github.com/github/codeql/blob/fa8a2870208efa9356e13adef583e9ef43c70717/python/ql/test/library-tests/dataflow/fieldflow/test.py)
+provide the broader attribute-flow comparison retained from the preceding
+object-field increment.
+
+**Exact generated-init boundary.** An accepted type must resolve to the exact,
+non-shadowed standard-library decorator through a stable
+`from dataclasses import dataclass` binding or a stable `import dataclasses`
+module binding, with supported aliases. A repository-local `dataclasses.py` or
+`dataclasses/__init__.py`, competing import, binding reassignment, class
+replacement, later monkeypatch or type escape, decorator call with arguments,
+additional decorator, base class, duplicate class, or ambiguous class identity
+rejects the path. The class body must contain only 1–64 unique ordinary
+annotations: no defaults, methods, `ClassVar`, `InitVar`, `KW_ONLY`, descriptors,
+or generated-method configuration. Construction supplies every declared field
+exactly once by keyword, with no positional, duplicate, missing, or unknown
+arguments. This deliberately models a small field-only DTO grammar, not general
+dataclass behavior.
+
+**Receiver and field state.** Constructor values establish exact declared-field
+state. Direct `receiver.field = value` and constant-name
+`setattr(receiver, "field", value)` overwrite one declared field; dot selection
+and constant-name `getattr` read one declared field. The existing bounded value
+and sink resolver may follow local scalar aliases. State remains
+receiver-sensitive, field-sensitive, and last-write-wins. Another receiver,
+another field, an undeclared or dynamic name, an alias/helper escape, receiver
+or parameter replacement, an unknown method, augmented or annotated write,
+deletion, tuple target, ambiguous mutation, or later fixed overwrite cannot
+support the finding. The same local-module shadow check now also prevents a
+repository `types` module from impersonating `types.SimpleNamespace`.
+
+**Evidence and closure contract.** A retained row records exactly one of
+`python-dataclass-constructor-field`,
+`python-dataclass-attribute-assignment`, or
+`python-dataclass-setattr-assignment`, including its source line and canonical
+`receiver.field` symbol. Validation and attack-path closure require the Flask
+source, relative wrapper, exact generated dataclass, declared field, complete
+keyword construction, exact mutation and selection, same receiver and field,
+last-write-wins state, absence of broadening, alias escape, or overwrite, shell
+grammar boundary, CWE-78, and the topology-matched field-isolation control.
+The prompt expressly rejects Pysa-style whole-object taint as exact field
+evidence. Witness execution proves only harmless shell expansion; deployment,
+platform, executable, privileges, reachability, containment, and concrete
+impact remain separate validation questions.
+
+**Executable differential and focused acceptance.** Both permanent fixtures
+keep the same route, relative import, declared field-only dataclass, complete
+keyword constructor, request bytes, local selected-value alias, and
+`shell=True` sink. The exploit writes and selects `command.value`; the control
+writes the request only to `command.audit` and keeps `command.value` fixed.
+Ubuntu/WSL witnesses create and automatically remove a temporary marker and
+record `1` and `0`, respectively. A clean production build emits exactly one
+structured positive row with source `src/server.py:10`, wrapper parameter at
+`src/runner.py:11`, `python-dataclass-attribute-assignment` for
+`command.value` at line 13, shell sink at line 15, and CWE-78; the matched
+control emits no structured row. The focused Windows Python, canonical,
+inventory, and fixed-count lane passes 112 tests and 3,983 assertions with
+three intentional POSIX/symlink/permission skips. The native Ubuntu/WSL lane
+passes all 115 tests and 4,002 assertions. The corpus advances to 186 pairs,
+372 cases, and 1,116 repeated scan positions.
+
+The authoritative native Windows suite passes 2,076 tests, skips 31
+intentional platform or environment cases, fails none, and records 16,306
+assertions across 214 files in 807.87 seconds. Formatting, generated-model
+drift, TypeScript checking, the clean production build, and the high-severity
+production advisory audit are green with no known vulnerabilities.
+
+The release archive contains 299 entries, is 2,399,022 bytes, and has SHA-256
+`03bdc619615d52d514892dc44b7d396f3e15e75044894f36924882687ffc50b1`.
+Strict inspection plus isolated Windows and Ubuntu installations validate the
+public import, CLI, and all 79 bundled plugin files.
+
+This closes one exact generated-dataclass increment, not the standing scanner-
+effectiveness goal.
+
 ## 2026-08-29 — Preserve exact Python SimpleNamespace fields into shell grammar
 
 **Measured miss and comparator evidence.** A production-build reproduction used

@@ -7,6 +7,50 @@ All notable scanner, application, benchmark, and operational changes are recorde
 ### Scanner effectiveness
 
 - Closed a reproduced Python cross-file command-injection false negative where
+  a Flask request crossed a relative wrapper, entered a declared field of a
+  standard-library generated dataclass, was selected through dot or
+  constant-name `getattr`, and reached `subprocess.run(..., shell=True)`. The
+  pre-change production inventory emitted only lexical process leads; the
+  rebuilt scanner emits exactly one structured `python-web-command` row for
+  the vulnerable fixture and none for its same-object, different-field control.
+- Added a bounded generated-dataclass field model without broadening arbitrary
+  Python objects. The accepted shape requires one exact, non-shadowed
+  `dataclasses.dataclass` decorator; one field-only class with 1–64 unique,
+  ordinary annotated fields and no bases, defaults, methods, or additional
+  decorators; and complete, exact keyword construction. Receiver-sensitive,
+  field-sensitive, last-write-wins state supports constructor fields, direct
+  assignment, constant-name `setattr`, dot selection, and constant-name
+  `getattr`. Positional, incomplete, duplicate, or unknown arguments;
+  `ClassVar`, `InitVar`, `KW_ONLY`, defaults, inheritance, configured or frozen
+  decorators, local-module shadowing, class replacement or monkeypatching,
+  undeclared fields, alias or helper escape, dynamic names, ambiguous writes,
+  and later safe overwrite fail closed.
+- Hardened the existing `SimpleNamespace` identity check so a repository-local
+  `types.py` or `types/__init__.py` cannot masquerade as the standard-library
+  module. Reviewer guidance now requires exact generated-dataclass evidence and
+  explicitly rejects Pysa-style whole-object broadening as proof of a selected
+  field.
+- Added an executable dataclass exploit/control pair, bringing the canonical
+  corpus to 186 pairs, 372 cases, and 1,116 repeated scan positions. Both
+  fixtures retain the Flask source, relative import, declared dataclass fields,
+  complete keyword construction, local selection, hostile bytes, and real
+  shell sink. Only the positive writes those bytes to `command.value`; the
+  control writes them to `command.audit`. Ubuntu/WSL witnesses record temporary
+  marker values `1` and `0`. The focused Windows lane passes 112 tests and
+  3,983 assertions with three intentional platform/permission skips; the same
+  four-file lane passes all 115 tests and 4,002 assertions on Ubuntu/WSL.
+- Completed the authoritative native Windows suite with 2,076 passes, 31
+  intentional platform/environment skips, zero failures, and 16,306 assertions
+  across 2,107 tests and 214 files in 807.87 seconds. Formatting,
+  generated-model drift, TypeScript checking, the clean production build, and
+  the high-severity production advisory audit are green with no known
+  vulnerabilities.
+- The validated npm archive contains 299 entries, is 2,399,022 bytes, and has
+  SHA-256
+  `03bdc619615d52d514892dc44b7d396f3e15e75044894f36924882687ffc50b1`.
+  Strict archive inspection plus isolated Windows and Ubuntu installations
+  validate the public import, CLI, and all 79 bundled plugin files.
+- Closed a reproduced Python cross-file command-injection false negative where
   a Flask request crossed a relative wrapper, was written to a fresh
   `types.SimpleNamespace` field, selected through dot or constant-name
   `getattr`, and passed to `subprocess.run(..., shell=True)`. Before this
