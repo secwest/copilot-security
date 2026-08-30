@@ -46,6 +46,19 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `3990be977a24eea2e74cdc673b25b3cfe2754b85212666be2fd45558ea97590f`.
   Isolated Windows and Ubuntu installations validate the public import, CLI,
   and all 79 bundled plugin files.
+- Two independent compiled inventories of the 3,865-file tracked-only archive
+  at exact implementation checkpoint
+  `2edc0571ab3a9a6b84e1082a293589f802afc39d` are byte-identical at the
+  256-row cap: 617,203 bytes and SHA-256
+  `52dfb19047df358ddb722d67aecd43fecc844fb5db4dd21c54a1a78709c9dd3c`.
+  Exactly one row retains the new fixture's Flask request source, relative
+  wrapper call, `python-dict-update-element` for `commands["preview"]`, final
+  `shell=True` sink, and CWE-78; the topology-matched safe control is absent.
+- All eleven hosted workflow families pass exact implementation checkpoint
+  `2edc057`: Node `33284772599` (91/91 jobs), container `33284772628`, Windows
+  GUI `33284772603`, Linux GUI `33284772594`, Java `33284772577`, Kotlin
+  `33284772659`, .NET `33284772649`, Go `33284772597`, Rust `33284772625`,
+  Ruby `33284772672`, and PHP `33284772634`.
 - Closed a reproduced Python cross-file command-injection false negative where
   a Flask request value entered an initially empty list through `append`,
   `extend`, `insert`, or `+=` and only the selected indexed element later

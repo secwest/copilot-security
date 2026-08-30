@@ -82,6 +82,26 @@ contains 299 entries, is 2,386,490 bytes, and has SHA-256
 Isolated Windows and Ubuntu installs both validate its public import, CLI, and
 all 79 bundled plugin files.
 
+Two independent compiled self-inventories of the 3,865-file tracked-only
+archive at exact implementation checkpoint
+`2edc0571ab3a9a6b84e1082a293589f802afc39d` complete in 42,703.206 and
+23,020.819 milliseconds. They are byte-identical at the 256-row cap: 617,203
+bytes with SHA-256
+`52dfb19047df358ddb722d67aecd43fecc844fb5db4dd21c54a1a78709c9dd3c`.
+Strict inspection finds one and only one new-fixture row. It preserves the
+Flask source at `src/server.py:10`, relative import and wrapper argument,
+wrapper parameter, `python-dict-update-element` at `src/runner.py:6` for
+`commands["preview"]`, the final `shell=True` sink at line 8, and CWE-78. The
+source-identical dictionary topology that writes hostile bytes only to
+`audit` and selects fixed `preview` emits no row.
+
+**Hosted closure.** All eleven workflow families pass exact implementation
+checkpoint `2edc057`: Node `33284772599`, container `33284772628`, Windows GUI
+`33284772603`, Linux GUI `33284772594`, Java `33284772577`, Kotlin
+`33284772659`, .NET `33284772649`, Go `33284772597`, Rust `33284772625`, Ruby
+`33284772672`, and PHP `33284772634`. Node CI completes all 91 jobs with no
+failure or cancellation.
+
 This closes one exact mapping-flow increment, not the standing scanner-
 effectiveness goal.
 
