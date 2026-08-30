@@ -3059,7 +3059,10 @@ declares `response_class=RedirectResponse` and returns the hostile query URL
 directly; its matched control returns the same bytes only after encoding them
 beneath `/continue?next=`. The host requires one exact official response-class
 binding, rejects duplicate or wildcard route options, and accepts only an
-unconditional top-level return without an opaque helper call. The pinned
+unconditional top-level return without an opaque helper call. Both fixtures use
+a balanced five-line path-operation decorator, so the canonical lane exercises
+Python's ordinary implicit parenthesized line joining while retaining the first
+physical decorator line as evidence. The pinned
 TestClient witnesses disable redirect following and observe attacker-origin
 selection values `1` and `0`:
 

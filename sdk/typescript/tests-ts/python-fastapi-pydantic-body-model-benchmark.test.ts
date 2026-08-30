@@ -123,6 +123,43 @@ describe("FastAPI Pydantic request-body field model", () => {
     }
   });
 
+  test("preserves Pydantic request-body evidence through a multiline route decorator", async () => {
+    const root = await mkdtemp(
+      join(tmpdir(), "fastapi-pydantic-multiline-route-"),
+    );
+    try {
+      await writeRepository(
+        root,
+        crossFileRepository(
+          undefined,
+          [
+            "from fastapi import FastAPI",
+            "from .models import ReportRequest",
+            "from .runner import run_report",
+            "app = FastAPI()",
+            "@app.post(",
+            '    "/report",',
+            "    status_code=201,  # implicit physical-line continuation",
+            ")",
+            "def report(payload: ReportRequest):",
+            "    return run_report(payload.name)",
+            "",
+          ].join("\n"),
+        ),
+      );
+
+      const inventory = await buildResidualRiskInventory(root);
+      expect(inventory).toContain(sourceKind);
+      expect(inventory).toContain(
+        '"kind":"fastapi-request-body-route","path":"src/server.py","line":5',
+      );
+      expect(inventory).toContain('"scope":"cross-file-wrapper"');
+      expect(inventory).toContain('"kind":"fastapi-pydantic-body-field-read"');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("preserves the exact body field through bounded Python relays", async () => {
     const root = await mkdtemp(join(tmpdir(), "fastapi-pydantic-multihop-"));
     try {

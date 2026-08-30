@@ -74,7 +74,10 @@ stable string query parameter on an official path operation and one exact
 non-shadowed FastAPI or Starlette `RedirectResponse`. The redirect boundary may
 be its positional or `url=` constructor argument, or the route's sole exact
 `response_class=RedirectResponse` role plus an unconditional top-level URL
-return. It records the resulting HTTP `Location` boundary and carries
+return. Single-line and balanced multiline path-operation decorators are
+recognized through a bounded, comment- and string-aware structural span while
+retaining the first physical decorator line as provenance. It records the
+resulting HTTP `Location` boundary and carries
 constructor values through aliases, relative wrappers, and bounded relays. A
 fixed local prefix such as `/continue?next=` closes the origin-selection path
 when the remote value is encoded beneath it; a root-only `"/" + value` does

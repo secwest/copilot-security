@@ -514,6 +514,63 @@ describe("FastAPI open-redirect model", () => {
     }
   });
 
+  test("models a balanced multiline response_class decorator without accepting its fixed-local twin", async () => {
+    const exploit = await mkdtemp(
+      join(tmpdir(), "fastapi-multiline-response-class-redirect-"),
+    );
+    const control = await mkdtemp(
+      join(tmpdir(), "fastapi-multiline-response-class-local-"),
+    );
+    const multilineDecorator = [
+      "@app.get(",
+      '    "/login",',
+      "    response_class=RedirectResponse,",
+      "    status_code=307,  # remains part of the decorator expression",
+      ")",
+    ].join("\n");
+    try {
+      await writeRepository(exploit, {
+        "server.py": responseClassServer(
+          "next_url: Annotated[str, Query()]",
+        ).replace(
+          '@app.get("/login", response_class=RedirectResponse, status_code=307)',
+          multilineDecorator,
+        ),
+      });
+      await writeRepository(control, {
+        "server.py": responseClassServer(
+          "next_url: Annotated[str, Query()]",
+          '"/continue?next=" + next_url',
+        ).replace(
+          '@app.get("/login", response_class=RedirectResponse, status_code=307)',
+          multilineDecorator,
+        ),
+      });
+
+      const detected = models(await buildResidualRiskInventory(exploit));
+      expect(detected).toHaveLength(1);
+      expect(detected[0].source).toMatchObject({
+        kind: "fastapi-request-string-parameter",
+        line: 10,
+      });
+      expect(detected[0].sink).toMatchObject({
+        kind: "fastapi-response-class-redirect-location",
+        line: 12,
+        cweIds: ["CWE-601"],
+      });
+      expect(
+        detected[0].propagators.find(
+          (propagator: { kind: string }) =>
+            propagator.kind === "fastapi-redirect-route",
+        ),
+      ).toMatchObject({ line: 5, symbol: "app.get" });
+      expect(models(await buildResidualRiskInventory(control))).toHaveLength(0);
+    } finally {
+      await rm(exploit, { recursive: true, force: true });
+      await rm(control, { recursive: true, force: true });
+    }
+  });
+
   test("separates the executable response_class fixture pair", async () => {
     const exploit = join(
       benchmarkRoot,
@@ -533,12 +590,12 @@ describe("FastAPI open-redirect model", () => {
     expect(exploitModels[0].source).toMatchObject({
       kind: "fastapi-request-string-parameter",
       path: "src/server.py",
-      line: 11,
+      line: 15,
     });
     expect(exploitModels[0].sink).toEqual({
       kind: "fastapi-response-class-redirect-location",
       path: "src/server.py",
-      line: 13,
+      line: 17,
       cweIds: ["CWE-601"],
     });
     expect(
@@ -590,6 +647,24 @@ describe("FastAPI open-redirect model", () => {
           "from fastapi import FastAPI",
           "from fastapi.responses import RedirectResponse",
         ]),
+      ],
+      [
+        "preceded-by-decorated-handler",
+        [
+          "from fastapi import FastAPI",
+          "from fastapi.responses import RedirectResponse",
+          "app = FastAPI()",
+          '@app.get("/health")',
+          "def health():",
+          '    return "ok"',
+          "@app.get(",
+          '    "/login",',
+          "    response_class=RedirectResponse,",
+          ")",
+          "def login(next_url: str):",
+          "    return next_url",
+          "",
+        ].join("\n"),
       ],
     ];
 
@@ -659,10 +734,44 @@ describe("FastAPI open-redirect model", () => {
         ),
       ],
       [
+        "additional-decorator",
+        responseClassServer("next_url: str").replace(
+          '@app.get("/login", response_class=RedirectResponse, status_code=307)',
+          [
+            "@authorization_required",
+            '@app.get("/login", response_class=RedirectResponse, status_code=307)',
+          ].join("\n"),
+        ),
+      ],
+      [
         "expanded-route-options",
         responseClassServer("next_url: str").replace(
           "response_class=RedirectResponse, status_code=307",
           "response_class=RedirectResponse, **route_options",
+        ),
+      ],
+      [
+        "multiline-expanded-route-options",
+        responseClassServer("next_url: str").replace(
+          '@app.get("/login", response_class=RedirectResponse, status_code=307)',
+          [
+            "@app.get(",
+            '    "/login",',
+            "    response_class=RedirectResponse,",
+            "    **route_options,",
+            ")",
+          ].join("\n"),
+        ),
+      ],
+      [
+        "unbalanced-multiline-decorator",
+        responseClassServer("next_url: str").replace(
+          '@app.get("/login", response_class=RedirectResponse, status_code=307)',
+          [
+            "@app.get(",
+            '    "/login",',
+            "    response_class=RedirectResponse,",
+          ].join("\n"),
         ),
       ],
       [

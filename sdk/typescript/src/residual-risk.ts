@@ -41138,6 +41138,75 @@ const PYTHON_FASTAPI_REDIRECT_ROUTE_METHODS = new Set([
   "put",
 ]);
 
+interface PythonDecoratorSpan {
+  expression: string;
+  structuralExpression: string;
+  line: number;
+}
+
+function pythonDecoratorSpansBeforeFunction(
+  lines: readonly string[],
+  functionLine: number,
+): PythonDecoratorSpan[] {
+  const structuralLines = pythonStructuralLines(lines);
+  const decorators: PythonDecoratorSpan[] = [];
+  let cursor = functionLine - 1;
+  while (cursor > 0 && (structuralLines[cursor - 1] ?? "").trim() === "") {
+    cursor -= 1;
+  }
+  while (cursor > 0) {
+    const endLine = cursor;
+    const earliest = Math.max(1, endLine - 31);
+    let startLine = endLine;
+    while (
+      startLine >= earliest &&
+      !(structuralLines[startLine - 1] ?? "").trimStart().startsWith("@")
+    ) {
+      startLine -= 1;
+    }
+    if (startLine < earliest) break;
+
+    const originalBlock = lines.slice(startLine - 1, endLine).join("\n");
+    const structuralBlock = structuralLines
+      .slice(startLine - 1, endLine)
+      .join("\n");
+    const at = structuralBlock.indexOf("@");
+    if (at < 0 || structuralBlock.slice(0, at).trim() !== "") {
+      if (decorators.length === 0) return [];
+      break;
+    }
+    const expression = originalBlock.slice(at + 1);
+    const structuralExpression = structuralBlock.slice(at + 1);
+    const open = structuralExpression.indexOf("(");
+    if (open < 0) {
+      if (
+        !/^[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*\s*$/u.test(
+          structuralExpression,
+        )
+      ) {
+        if (decorators.length === 0) return [];
+        break;
+      }
+    } else {
+      const close = matchingCallParenthesis(structuralExpression, open);
+      if (close < 0 || structuralExpression.slice(close + 1).trim() !== "") {
+        if (decorators.length === 0) return [];
+        break;
+      }
+    }
+    decorators.unshift({
+      expression,
+      structuralExpression,
+      line: startLine,
+    });
+    cursor = startLine - 1;
+    while (cursor > 0 && (structuralLines[cursor - 1] ?? "").trim() === "") {
+      cursor -= 1;
+    }
+  }
+  return decorators;
+}
+
 function pythonFastApiRouteEvidence(
   files: readonly SourceFileSnapshot[],
   path: string,
@@ -41150,24 +41219,14 @@ function pythonFastApiRouteEvidence(
   | undefined {
   if (pythonLocalModuleCouldShadow(files, path, "fastapi")) return undefined;
   const structuralLines = pythonStructuralLines(lines);
-  let cursor = wrapper.startLine - 1;
-  while (cursor > 0 && (structuralLines[cursor - 1] ?? "").trim() === "") {
-    cursor -= 1;
-  }
-  const decorators: Array<{ expression: string; line: number }> = [];
-  while (cursor > 0) {
-    const candidate = (structuralLines[cursor - 1] ?? "").trim();
-    if (!candidate.startsWith("@")) break;
-    decorators.unshift({ expression: candidate.slice(1), line: cursor });
-    cursor -= 1;
-    while (cursor > 0 && (structuralLines[cursor - 1] ?? "").trim() === "") {
-      cursor -= 1;
-    }
-  }
+  const decorators = pythonDecoratorSpansBeforeFunction(
+    lines,
+    wrapper.startLine,
+  );
   if (decorators.length !== 1) return undefined;
   const route =
     /^([A-Za-z_]\w*)\s*\.\s*(delete|get|head|options|patch|post|put)\s*\(/u.exec(
-      decorators[0]!.expression,
+      decorators[0]!.structuralExpression,
     );
   if (
     route?.[1] === undefined ||
@@ -41498,8 +41557,12 @@ function pythonFastApiResponseClassRedirectSink(
   }
   if (/\b[A-Za-z_]\w*\s*\(/u.test(resolvedReturn)) return undefined;
 
-  const decorator = lines[route.line - 1] ?? "";
-  const structuralDecorator = pythonStructuralCode(decorator);
+  const decorator = pythonDecoratorSpansBeforeFunction(
+    lines,
+    wrapper.startLine,
+  ).find((candidate) => candidate.line === route.line);
+  if (decorator === undefined) return undefined;
+  const structuralDecorator = decorator.structuralExpression;
   const routeCall =
     /\.\s*(?:delete|get|head|options|patch|post|put)\s*\(/u.exec(
       structuralDecorator,
@@ -41508,7 +41571,9 @@ function pythonFastApiResponseClassRedirectSink(
   const open = structuralDecorator.indexOf("(", routeCall.index);
   const close = matchingCallParenthesis(structuralDecorator, open);
   if (open < 0 || close < 0) return undefined;
-  const arguments_ = splitPythonArguments(decorator.slice(open + 1, close));
+  const arguments_ = splitPythonArguments(
+    decorator.expression.slice(open + 1, close),
+  );
   if (arguments_.some((argument) => argument.trim().startsWith("*"))) {
     return undefined;
   }

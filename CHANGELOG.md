@@ -6,6 +6,33 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a reproduced shared false negative for balanced multiline FastAPI
+  path-operation decorators. The unchanged host passed its 12 existing direct-
+  return redirect checks but emitted no finding for the new executable case.
+  Route evidence now spans a comment- and string-aware balanced decorator call
+  bounded to 32 physical lines while preserving the first `@app.get(` or
+  `@app.post(` line as exact provenance.
+- Kept the expansion fail closed. FastAPI evidence still requires exactly one
+  official path-operation decorator; unbalanced calls, additional decorators,
+  wildcard options, duplicate roles, local framework shadows, and unrelated
+  preceding decorated handlers cannot broaden a finding. The shared route
+  boundary improves both the direct-return CWE-601 model and cross-file
+  FastAPI/Pydantic request-body-to-shell flows.
+- Converted the existing response-class exploit/control fixture pair to
+  ordinary multiline decorator syntax, so the canonical corpus remains 191
+  pairs, 382 cases, and 1,146 repeated positions while continuously exercising
+  the repaired parser. Its pinned WSL TestClient witness records attacker-
+  origin selections `1` and `0` on FastAPI 0.116.1, Starlette 0.47.3, Pydantic
+  2.11.7, and HTTPX 0.28.1 without following the redirect or contacting an
+  external origin.
+- Focused acceptance passes 24 tests and 191 assertions; the complete 19-file
+  Python lane passes 198 tests and 1,299 assertions with eight intentional
+  platform skips; and the focused plus Pydantic plus canonical gate passes 42
+  tests and 2,868 assertions. The authoritative native aggregate passes 2,100
+  tests and 16,585 assertions, skips 31 intentional platform/environment cases,
+  and has no failures across 2,131 tests in 216 files. Formatting, generated-
+  model drift, TypeScript, the clean production build, and the production high-
+  severity advisory audit are green.
 - Closed FastAPI's documented `response_class=RedirectResponse` direct-return
   gap under the existing typed CWE-601 model. The new sink requires an exact
   official FastAPI or Starlette response binding in the route decorator's sole

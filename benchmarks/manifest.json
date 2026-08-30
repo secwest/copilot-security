@@ -9126,7 +9126,7 @@
     },
     {
       "id": "python-fastapi-response-class-open-redirect",
-      "description": "A FastAPI query string is returned directly from a route whose exact official response_class constructs an attacker-selected RedirectResponse Location.",
+      "description": "A FastAPI query string is returned directly from a route whose balanced multiline decorator gives an exact official response_class that constructs an attacker-selected RedirectResponse Location.",
       "fixture": "fixtures/python-fastapi-response-class-open-redirect",
       "findingsPaths": [
         "python-fastapi-response-class-open-redirect/run-1/findings.json",
@@ -9140,8 +9140,8 @@
           "locations": [
             {
               "path": "src/server.py",
-              "startLine": 13,
-              "endLine": 13,
+              "startLine": 17,
+              "endLine": 17,
               "lineTolerance": 1
             }
           ],

@@ -428,6 +428,10 @@ response binding and an unconditional top-level return, while rejecting
 duplicate or wildcard route options, guarded returns, opaque helper calls,
 rebindings, and local framework shadows. This goes beyond a generic redirect
 sink name by preserving how FastAPI actually creates the `Location` header.
+The route boundary accepts balanced path-operation decorator calls across at
+most 32 physical lines using comment- and string-scrubbed structural syntax;
+unbalanced or multiply decorated handlers remain deliberately unmodeled. The
+same shared boundary preserves multiline FastAPI/Pydantic request-body sources.
 
 `benchmarks/python-multi-hop-framework-manifest.json` adds a public Python
 service relay between each registered Flask route and its command or SQL sink

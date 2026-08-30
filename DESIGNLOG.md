@@ -2,6 +2,62 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Preserve balanced multiline FastAPI route decorators
+
+**Measured shared false negative.** Python permits expressions enclosed in
+parentheses to continue across physical lines, including comments and blank
+continuation lines, and its grammar permits a decorator expression before a
+function definition. FastAPI documents path-operation decorators and the
+`response_class=RedirectResponse` direct-return form. The unchanged host passed
+12 existing direct-return redirect tests but emitted zero findings for the new
+balanced multiline case, failing its sole exploit assertion. Because the same
+route helper establishes FastAPI/Pydantic request-body sources, this was one
+shared framework boundary hiding more than one vulnerability class.
+
+Primary semantics: [Python compound statements](https://docs.python.org/3/reference/compound_stmts.html),
+[Python implicit line joining](https://docs.python.org/3/reference/lexical_analysis.html#implicit-line-joining),
+[FastAPI custom response classes](https://fastapi.tiangolo.com/advanced/custom-response/),
+and [FastAPI `RedirectResponse`](https://fastapi.tiangolo.com/reference/responses/#fastapi.responses.RedirectResponse).
+
+**Bounded structural parser.** `pythonDecoratorSpansBeforeFunction` walks
+backward from a function declaration and pairs the original source with the
+existing comment- and string-scrubbed structural representation. It accepts a
+bare dotted decorator or one balanced decorator call whose closing parenthesis
+leaves only structural whitespace. Each candidate is capped at 32 physical
+lines. Original and structural blocks remain character-aligned, allowing the
+response-class model to parse exact argument bytes without treating comments
+or string contents as syntax. Evidence remains anchored to the first physical
+decorator line.
+
+**Ambiguity boundary.** The shared helper can recover adjacent decorator spans,
+but FastAPI route evidence retains its existing exactly-one-decorator rule.
+Unbalanced calls, non-decorator text, additional decorators, wildcard route
+options, duplicate response-class roles, shadows, and rebindings fail closed.
+A separate valid decorated handler before the current endpoint terminates the
+backward walk without erasing the current balanced span; a positive regression
+locks this ordinary module layout. Negative regressions cover unbalanced calls,
+wildcard expansion, and an additional decorator.
+
+**Executable and canonical evidence.** The existing pinned response-class pair
+now uses a five-line decorator, including an inline comment. With redirect
+following disabled, its WSL TestClient witness selects the inert attacker
+origin once for the exploit and zero times for the fixed-local control on
+FastAPI 0.116.1, Starlette 0.47.3, Pydantic 2.11.7, and HTTPX 0.28.1. No external
+request occurs. Reusing the existing semantic pair keeps the canonical corpus
+at 191 pairs, 382 cases, and 1,146 repeated scan positions while making every
+canonical run exercise the repaired syntax.
+
+**Regression evidence.** The initial focused contract passes 24 tests and 191
+assertions. The complete 19-file Python lane passes 198 tests and 1,299
+assertions with eight intentional platform skips. The focused redirect,
+Pydantic, and canonical gate passes 42 tests and 2,868 assertions. Formatting,
+generated-model drift, TypeScript, the clean production build, and the
+production high-severity advisory audit pass. The uninterrupted authoritative
+native aggregate passes 2,100 tests and 16,585 assertions, skips 31 intentional
+platform/environment cases, and reports no failures across 2,131 tests in 216
+files. Immutable self-review, package inspection, and hosted evidence follow
+the implementation checkpoint; the standing effectiveness goal remains active.
+
 ## 2026-08-30 — Preserve FastAPI response-class redirect construction
 
 **Measured false negative.** FastAPI's official
