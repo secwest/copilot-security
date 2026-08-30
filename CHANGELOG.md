@@ -30,6 +30,38 @@ All notable scanner, application, benchmark, and operational changes are recorde
   tests with 2,867 assertions; generated-model and TypeScript checks pass. Both
   exact-version POST witnesses pass. Full aggregate, package, GUI, hosted, and
   immutable-checkpoint evidence follows after the implementation checkpoint.
+- Exact implementation checkpoint
+  `5de7c8f8889f9378b25f2bc8ffa47379d11f3b7f` has a 3,764,407-byte tracked
+  source archive with SHA-256
+  `a0c3ac643de3fcfcbde8d472f31545e9096093d6b290558ba0a61adda0dd4127`.
+  Two independent 299-entry npm packages are byte-identical at 2,479,253 bytes
+  with SHA-256
+  `fec56a0e02aaf379a85179b2b5615f70ca2e20f6aa0c7fb64aac12a279d5e0fd`;
+  a fresh 67-package install validates the public API, CLI, and all 79 bundled
+  plugin files. The production high-severity dependency audit is clean.
+- Full local acceptance runs 2,161 tests across 218 files: 2,128 pass, 31
+  intentional platform/integration skips, and only two expected managed-sandbox
+  failures. Both affected files pass natively at 48/48 tests and 242 assertions.
+  All Python lanes pass 228 tests with eight intentional skips and 1,502
+  assertions; the focused Flask/canonical/bookkeeping lane passes 36/36 tests
+  with 2,867 assertions. Formatting, generated models, types, and build pass.
+- Windows GUI acceptance builds with zero warnings/errors, passes 7/7 core and
+  3/3 shared tests, and publishes a 346,796-byte executable with SHA-256
+  `20259e7ee90d076286dfbd1727e2cc45fee427a5fc50a53ecc8c232c9e1a72e8`.
+  Ubuntu/WSL locked restore and build also have zero warnings/errors; 7/7 core,
+  3/3 shared, and 2/2 Linux UI tests pass, as do non-graphical and X11/Xvfb
+  startup. The 72,568-byte Linux executable has SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- All 11 hosted workflow families pass at `5de7c8f`: Node `33339341739`
+  (92/92 jobs), container `33339341735`, Windows GUI `33339341705`, Linux GUI
+  `33339341736`, Java `33339341699`, .NET `33339341783`, Go `33339341721`,
+  Kotlin `33339341757`, Rust `33339341752`, PHP `33339341704`, and Ruby
+  `33339341700`.
+- An isolated tracked-only deep self-scan dry-run binds the clean exact
+  implementation SHA, scanner-owned external output path, xhigh effort, and
+  three-session recovery budget. Removing ambient `GH_TOKEN` correctly selects
+  stored Copilot credentials. No production Copilot call was made and no scan
+  finding or completion claim is inferred from preflight.
 - Closed a measured Django form-redirect false negative. Before the host change,
   a registered function view reading `request.POST` produced zero findings while
   all sixteen prior Django regressions passed. The typed model now accepts exact

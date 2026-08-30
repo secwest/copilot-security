@@ -49,6 +49,36 @@ focused Flask, canonical, and Rust bookkeeping lane passes 36 tests and 2,867
 assertions; both exact-version witnesses record attacker-origin selections one
 and zero. Full acceptance follows at the immutable implementation checkpoint.
 
+**Checkpoint evidence.** Exact implementation checkpoint
+`5de7c8f8889f9378b25f2bc8ffa47379d11f3b7f` has a 3,764,407-byte tracked
+archive (SHA-256
+`a0c3ac643de3fcfcbde8d472f31545e9096093d6b290558ba0a61adda0dd4127`).
+Two independent production npm packages are byte-identical at 2,479,253 bytes
+and 299 entries (SHA-256
+`fec56a0e02aaf379a85179b2b5615f70ca2e20f6aa0c7fb64aac12a279d5e0fd`);
+a fresh 67-package install validates the public API, CLI, and all 79 bundled
+plugin files. The production dependency audit is clean. The full TypeScript
+aggregate runs 2,161 tests across 218 files: 2,128 pass, 31 intentional skips,
+and two managed-sandbox failures whose complete affected files pass natively at
+48/48 tests and 242 assertions.
+
+Windows and Ubuntu/WSL GUI builds have zero warnings/errors. Windows passes 7/7
+core and 3/3 shared tests; Ubuntu passes those plus 2/2 Linux UI tests and both
+non-graphical and X11/Xvfb startup. The published Windows executable is 346,796
+bytes (SHA-256
+`20259e7ee90d076286dfbd1727e2cc45fee427a5fc50a53ecc8c232c9e1a72e8`)
+and Linux is 72,568 bytes (SHA-256
+`7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`).
+All 11 hosted workflows pass at the implementation checkpoint, including all
+92 Node jobs.
+
+The isolated deep self-scan preflight uses a clean tracked-only clone at the
+exact implementation SHA, a scanner-owned external output directory, xhigh
+effort, and a bounded three-session recovery policy. Removing the shell-injected
+`GH_TOKEN` selects stored Copilot credentials. This evidence is input validation
+only: no production Copilot call was made, so it is not represented as a scan
+finding or completed self-scan.
+
 ## 2026-08-30 — Preserve Django POST form control through exact view dispatch
 
 **Measured gap and comparative boundary.** The unchanged host emitted zero rows
