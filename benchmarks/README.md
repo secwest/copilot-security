@@ -3008,11 +3008,15 @@ node ../../benchmarks/run-benchmark.mjs `
 
 The Python cross-file lane applies the same gates to explicit relative
 from-imports and includes multiline parameter-binding counterevidence. Its
-collection pairs distinguish exact list indexes and dictionary keys from
-container-wide taint: the dictionary exploit overwrites and selects `preview`
-through literal `dict.update` and `get`, while the matched control sends the
-same hostile value only to unselected `audit` and retains the same real
-`shell=True` sink. Native witnesses create only disposable temporary markers:
+indirect-flow pairs distinguish exact list indexes, dictionary keys, and fresh
+`types.SimpleNamespace` fields from container- or object-wide taint. The object
+exploit overwrites and selects `command.value`, while the matched control stores
+the same hostile value only in `command.audit` and retains the same real
+`shell=True` sink. Direct attribute assignment, constant-name `setattr`, dot
+selection, and constant-name `getattr` are covered under receiver-sensitive,
+last-write-wins state; dynamic fields, arbitrary objects, alias escape, and
+ambiguous mutations fail closed. Native witnesses create only disposable
+temporary markers:
 
 ```powershell
 node ../../benchmarks/run-benchmark.mjs `

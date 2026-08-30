@@ -2,6 +2,103 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-29 — Preserve exact Python SimpleNamespace fields into shell grammar
+
+**Measured miss and comparator evidence.** A production-build reproduction used
+a Flask request, one relative wrapper, `command = SimpleNamespace(value=fixed)`,
+`command.value = f"...{report_name}"`, a local alias of `command.value`, and
+`subprocess.run(..., shell=True)`. The pre-change inventory emitted one generic
+lexical process lead and no structured request-to-shell row. The current GitHub
+CodeQL Python dataflow library at immutable commit
+[`fa8a287`](https://github.com/github/codeql/blob/fa8a2870208efa9356e13adef583e9ef43c70717/python/ql/lib/semmle/python/dataflow/new/internal/Attributes.qll)
+models simple attribute reads and writes, `getattr`, `setattr`, and class fields.
+Its accompanying
+[field-flow regression](https://github.com/github/codeql/blob/fa8a2870208efa9356e13adef583e9ef43c70717/python/ql/test/library-tests/dataflow/fieldflow/test.py)
+covers direct assignment, attribute built-ins, constructor flow, and nested
+objects, while recording remaining missing and spurious cases. That breadth is
+useful for discovery, but this scanner's host evidence must additionally prove
+the exact runtime object, selected field, final write, and shell boundary before
+promoting a finding.
+
+**Semantic boundary.** Python's official
+[`types.SimpleNamespace` documentation](https://docs.python.org/3/library/types.html#types.SimpleNamespace)
+defines a simple object with attribute access and keyword fields. Current Python
+also accepts a positional mapping or iterable, but this increment deliberately
+rejects positional construction because reconstructing arbitrary mapping
+contents would exceed the bounded proof. An accepted constructor must resolve
+to one stable, unique standard-library binding from `from types import
+SimpleNamespace` or `import types`, including a stable import alias. A missing,
+reassigned, duplicated, shadowed, or later competing binding is not enough.
+Local classes and functions, loop or context-manager targets, deletion, and star
+imports invalidate the claimed identity.
+
+**Bounded receiver state.** For one exported wrapper, reconstruct an empty or
+keyword-initialized fresh namespace and at most 64 fields through at most 64
+state transitions before the sink. Constructor keywords establish initial
+values. Direct `receiver.field = value` and constant-name
+`setattr(receiver, "field", value)` overwrite exactly one field. Dot selection
+and constant-name `getattr(receiver, "field")` read exactly one field. The
+existing bounded expression resolver may follow aliases of both the stored
+parameter value and the selected sink expression. A fresh exact namespace
+replacement resets state; an unknown replacement rejects the path.
+
+The model is receiver-sensitive and field-sensitive. It rejects dynamic names,
+all dunder fields, `__dict__`, arbitrary classes, aliases or helper escape,
+unknown receiver methods, parameter reassignment, and augmented, annotated,
+deleted, tuple, or otherwise ambiguous field targets. Comments and string
+examples remain inert. Last-write-wins semantics mean a later fixed write
+suppresses the earlier hostile value. Taint on another receiver or another
+field cannot reach the selected field. These precision boundaries intentionally
+leave general Python heap aliasing, descriptors, properties, arbitrary class
+constructors, and dynamic attribute protocols for a future parser-backed model.
+
+**Evidence and finding-quality contract.** A retained row records exactly one
+of `python-object-constructor-field`,
+`python-object-attribute-assignment`, or
+`python-object-setattr-assignment`, its source line, and the canonical
+`receiver.field` symbol. Validation and attack-path closure independently
+require the Flask request source, relative wrapper, fresh official receiver,
+field operation, constant selected field, same receiver, receiver-sensitive
+last-write-wins state, absence of alias escape or intervening overwrite, exact
+shell grammar boundary, CWE-78, and the topology-matched field-isolation
+control. The prompt forbids an object-wide taint claim and treats the executable
+witness only as proof of harmless POSIX shell expansion; deployed platform,
+executable, privileges, reachability, authentication, containment, and concrete
+impact still need separate validation.
+
+**Executable differential.** The permanent pair keeps the same Flask route,
+relative import, namespace construction, hostile payload, local selected-value
+alias, and `shell=True` sink. The positive writes the request value to
+`command.value` and selects it. The control writes the same value only to
+`command.audit` while preserving a fixed `command.value`. Both witnesses use
+automatically removed temporary directories. Native Ubuntu/WSL records
+`shell_expanded_marker=1` for the positive and `0` for the control. A clean
+production build emits exactly one structured positive row with the Flask
+source, `python-object-attribute-assignment` at `src/runner.py:7`, and sink at
+line 9; the safe twin emits no structured row.
+
+**Acceptance before exact-commit sealing.** The hardened Windows model lane
+passes 39 tests and 2,845 assertions with one intentional POSIX witness skip.
+The native Ubuntu/WSL Python, canonical, residual-inventory, and fixed-count lane
+passes 112 tests and 3,934 assertions without failures. The corpus advances to
+185 exploit/control pairs, 370 cases, and 1,110 repeated scan positions. The
+authoritative native Windows suite passes 2,073 tests, skips 31 intentional
+platform or environment cases, fails none, and records 16,240 assertions across
+214 files in 815.13 seconds. A preliminary managed run was stopped at the known
+Git-fixture child-process access boundary; the same test passes in the complete
+native run.
+
+Formatting, generated-model drift, TypeScript checking, the clean production
+build, and the high-severity production advisory audit are green. The release
+archive has 299 entries, is 2,394,366 bytes, and has SHA-256
+`368f18557abc9910b76dbe55f50517bf07707810836fb755c8cd2308a2c45a77`.
+Strict inspection and isolated Windows and Ubuntu installs validate the public
+import, CLI, and all 79 bundled plugin files. Exact-commit self-scan and hosted
+workflow closure are recorded after the implementation checkpoint exists.
+
+This closes one exact object-field increment, not the standing scanner-
+effectiveness goal.
+
 ## 2026-08-29 — Preserve exact Python dictionary values into shell grammar
 
 **Measured miss and comparator evidence.** The pre-change scanner emitted no

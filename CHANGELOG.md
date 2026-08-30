@@ -7,6 +7,44 @@ All notable scanner, application, benchmark, and operational changes are recorde
 ### Scanner effectiveness
 
 - Closed a reproduced Python cross-file command-injection false negative where
+  a Flask request crossed a relative wrapper, was written to a fresh
+  `types.SimpleNamespace` field, selected through dot or constant-name
+  `getattr`, and passed to `subprocess.run(..., shell=True)`. Before this
+  increment the compiled scanner emitted only a generic lexical process lead;
+  it now emits one structured `python-web-command` row with the exact request,
+  wrapper, field write, selected receiver and field, sink, and CWE-78.
+- Added bounded, receiver-sensitive field state for the exact standard-library
+  `SimpleNamespace` binding. Empty and keyword constructors, direct attribute
+  assignment, and constant-name `setattr` are modeled with last-write-wins
+  semantics across at most 64 fields and 64 transitions. Positional mappings,
+  arbitrary classes, dynamic or special fields, unknown methods, augmented,
+  annotated, deleted, tuple, or ambiguous writes, receiver replacement with an
+  unknown object, binding or parameter reassignment, and alias/helper escape
+  fail closed. A value in another receiver or field, or one removed by a later
+  safe overwrite, cannot taint the selected field.
+- Added a permanent executable object-field exploit/control pair and strict
+  validation and attack-path requirements. Both fixtures retain the Flask
+  source, relative import, fresh namespace, hostile bytes, field operations,
+  and real shell sink; only the positive selects the hostile `command.value`.
+  Ubuntu/WSL records temporary-marker values `1` and `0`. The focused Windows
+  lane passes 39 tests and 2,845 assertions with one intentional POSIX witness
+  skip; Ubuntu/WSL passes the Python, canonical, inventory, and fixed-count lane
+  with 112 tests and 3,934 assertions and no failures. The canonical corpus now
+  contains 185 pairs, 370 cases, and 1,110 repeated scan positions.
+- Completed the authoritative native Windows suite with 2,073 passes, 31
+  intentional platform/environment skips, zero failures, and 16,240 assertions
+  across 2,104 tests and 214 files in 815.13 seconds. The managed-sandbox run
+  was stopped after its known Git-fixture child-process access denial; the
+  correctly permissioned complete run passed that test and every later test.
+  Formatting, generated-model drift, TypeScript, the clean production build,
+  and the high-severity production advisory audit are green with no known
+  vulnerabilities.
+- The validated npm archive contains 299 entries, is 2,394,366 bytes, and has
+  SHA-256
+  `368f18557abc9910b76dbe55f50517bf07707810836fb755c8cd2308a2c45a77`.
+  Strict archive inspection plus isolated Windows and Ubuntu installations
+  validate the public import, CLI, and all 79 bundled plugin files.
+- Closed a reproduced Python cross-file command-injection false negative where
   a Flask request value was stored under a constant dictionary key and later
   selected through bracket, `get`, or `pop` syntax as the command passed to
   `subprocess.run(..., shell=True)`. The bounded host model reconstructs exact

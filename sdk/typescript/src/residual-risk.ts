@@ -33994,7 +33994,7 @@ function pythonFrameworkWrapperSummaries(
               )
               .join("\n") ??
             sinkExpression;
-          const collectionElementFlows =
+          const indirectParameterFlows =
             model.id === "python-web-command"
               ? wrapper.parameters.flatMap((parameter, parameterIndex) => {
                   const flow =
@@ -34011,6 +34011,13 @@ function pythonFrameworkWrapperSummaries(
                       sink.line,
                       tracedSinkExpression,
                       parameter,
+                    ) ??
+                    pythonObjectFieldFlowToSink(
+                      file.lines,
+                      wrapper,
+                      sink.line,
+                      tracedSinkExpression,
+                      parameter,
                     );
                   return flow === undefined ? [] : [{ parameterIndex, flow }];
                 })
@@ -34018,7 +34025,7 @@ function pythonFrameworkWrapperSummaries(
           const parameterIndexes = wrapper.parameters.flatMap(
             (parameter, parameterIndex) =>
               pythonLineReferencesIdentifier(tracedSinkExpression, parameter) ||
-              collectionElementFlows.some(
+              indirectParameterFlows.some(
                 (candidate) => candidate.parameterIndex === parameterIndex,
               )
                 ? [parameterIndex]
@@ -34052,7 +34059,7 @@ function pythonFrameworkWrapperSummaries(
               ) === index,
           );
           for (const parameterIndex of parameterIndexes) {
-            const collectionElementFlow = collectionElementFlows.find(
+            const indirectParameterFlow = indirectParameterFlows.find(
               (candidate) => candidate.parameterIndex === parameterIndex,
             )?.flow;
             summaries.push({
@@ -34069,19 +34076,19 @@ function pythonFrameworkWrapperSummaries(
               },
               controls: wrapperControls.slice(0, 8),
               ...(pythonTypedSink === undefined &&
-              collectionElementFlow === undefined
+              indirectParameterFlow === undefined
                 ? {}
                 : {
                     propagators: [
                       ...(pythonTypedSink?.propagators ?? []),
-                      ...(collectionElementFlow === undefined
+                      ...(indirectParameterFlow === undefined
                         ? []
                         : [
                             {
-                              kind: collectionElementFlow.kind,
+                              kind: indirectParameterFlow.kind,
                               path: file.path,
-                              line: collectionElementFlow.line,
-                              symbol: collectionElementFlow.symbol,
+                              line: indirectParameterFlow.line,
+                              symbol: indirectParameterFlow.symbol,
                             },
                           ]),
                     ],
@@ -43369,6 +43376,408 @@ function pythonDictionaryMayChangeAtLine(
   );
 }
 
+interface PythonObjectFieldFlow {
+  kind:
+    | "python-object-attribute-assignment"
+    | "python-object-constructor-field"
+    | "python-object-setattr-assignment";
+  line: number;
+  symbol: string;
+}
+
+interface PythonObjectFieldStateValue {
+  expression: string;
+  kind: PythonObjectFieldFlow["kind"];
+  line: number;
+}
+
+function pythonObjectFieldFlowToSink(
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  sinkLine: number,
+  sinkExpression: string,
+  parameter: string,
+): PythonObjectFieldFlow | undefined {
+  const selections = pythonExpressionCandidates(
+    lines,
+    sinkExpression,
+    sinkLine,
+  ).flatMap((candidate) => pythonObjectFieldSelections(candidate));
+  for (const selection of selections) {
+    const state = pythonObjectFieldStateBeforeSink(
+      lines,
+      wrapper,
+      sinkLine,
+      selection.receiver,
+    );
+    const selected = state?.get(selection.field);
+    if (selected === undefined) continue;
+    const resolved = resolvePythonExpression(
+      lines,
+      selected.expression,
+      selected.line,
+    );
+    if (
+      pythonIdentifierReassignedBetween(
+        lines,
+        parameter,
+        wrapper.startLine,
+        selected.line,
+      ) ||
+      (!pythonLineReferencesIdentifier(selected.expression, parameter) &&
+        (resolved === undefined ||
+          !pythonLineReferencesIdentifier(resolved, parameter)))
+    ) {
+      continue;
+    }
+    return {
+      kind: selected.kind,
+      line: selected.line,
+      symbol: `${selection.receiver}.${selection.field}`,
+    };
+  }
+  return undefined;
+}
+
+function pythonObjectFieldSelections(
+  expression: string,
+): Array<{ receiver: string; field: string }> {
+  const selections: Array<{ receiver: string; field: string }> = [];
+  for (const match of expression.matchAll(
+    /\b([A-Za-z_]\w*)\s*\.\s*([A-Za-z_]\w*)\b/gu,
+  )) {
+    if (
+      match[1] !== undefined &&
+      match[2] !== undefined &&
+      pythonObjectFieldNameIsSupported(match[2])
+    ) {
+      selections.push({ receiver: match[1], field: match[2] });
+    }
+  }
+  for (const match of expression.matchAll(
+    /\bgetattr\s*\(\s*([A-Za-z_]\w*)\s*,\s*((?:"[^"\\]*")|(?:'[^'\\]*'))(?:\s*,[^()]*)?\)/gu,
+  )) {
+    if (match[1] === undefined || match[2] === undefined) continue;
+    const field = pythonConstantObjectField(match[2]);
+    if (field !== undefined) {
+      selections.push({ receiver: match[1], field });
+    }
+  }
+  return selections.filter(
+    (selection, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.receiver === selection.receiver &&
+          candidate.field === selection.field,
+      ) === index,
+  );
+}
+
+function pythonObjectFieldStateBeforeSink(
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  sinkLine: number,
+  receiver: string,
+): Map<string, PythonObjectFieldStateValue> | undefined {
+  const escaped = escapeRegularExpression(receiver);
+  const initialization = new RegExp(
+    `^${escaped}\\s*(?::[^=]+)?=\\s*(.+)$`,
+    "u",
+  );
+  const alias = new RegExp(
+    `^[A-Za-z_]\\w*\\s*(?::[^=]+)?=\\s*${escaped}\\s*$`,
+    "u",
+  );
+  let state: Map<string, PythonObjectFieldStateValue> | undefined;
+  let transitionCount = 0;
+  for (let line = wrapper.startLine + 1; line < sinkLine; line += 1) {
+    const code = pythonCodeBeforeComment(lines[line - 1] ?? "").trim();
+    if (code === "") continue;
+    if (state === undefined) {
+      const match = initialization.exec(code);
+      if (match?.[1] === undefined) continue;
+      state = pythonSimpleNamespaceState(lines, wrapper, line, match[1]);
+      if (state === undefined) continue;
+      continue;
+    }
+    const reassignment = initialization.exec(code);
+    if (reassignment?.[1] !== undefined) {
+      const replacement = pythonSimpleNamespaceState(
+        lines,
+        wrapper,
+        line,
+        reassignment[1],
+      );
+      if (replacement === undefined) return undefined;
+      state = replacement;
+      transitionCount += 1;
+      if (transitionCount > 64) return undefined;
+      continue;
+    }
+    if (!pythonLineReferencesIdentifier(pythonStructuralCode(code), receiver)) {
+      continue;
+    }
+    if (alias.test(code)) return undefined;
+    const mutation = pythonObjectFieldMutationAtLine(code, receiver, line);
+    if (mutation !== undefined) {
+      transitionCount += 1;
+      if (transitionCount > 64) return undefined;
+      state.set(mutation.field, mutation.value);
+      if (state.size > 64) return undefined;
+      continue;
+    }
+    if (pythonObjectFieldMayChangeAtLine(code, receiver)) return undefined;
+  }
+  return state;
+}
+
+function pythonSimpleNamespaceState(
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  line: number,
+  expression: string,
+): Map<string, PythonObjectFieldStateValue> | undefined {
+  const call =
+    /^([A-Za-z_]\w*(?:\s*\.\s*SimpleNamespace)?)\s*\(([\s\S]*)\)$/u.exec(
+      expression.trim(),
+    );
+  if (call?.[1] === undefined || call[2] === undefined) return undefined;
+  const constructor = call[1].replace(/\s+/gu, "");
+  if (
+    !pythonOfficialSimpleNamespaceConstructor(lines, wrapper, line, constructor)
+  ) {
+    return undefined;
+  }
+  const argumentsText = call[2].trim();
+  if (argumentsText === "") return new Map();
+  const argumentsList = splitPythonArguments(argumentsText);
+  if (argumentsList.length > 64) return undefined;
+  const state = new Map<string, PythonObjectFieldStateValue>();
+  for (const argument of argumentsList) {
+    const keyword = /^([A-Za-z_]\w*)\s*=\s*([\s\S]+)$/u.exec(argument);
+    if (
+      keyword?.[1] === undefined ||
+      keyword[2] === undefined ||
+      keyword[2].trim() === "" ||
+      !pythonObjectFieldNameIsSupported(keyword[1]) ||
+      state.has(keyword[1])
+    ) {
+      return undefined;
+    }
+    state.set(keyword[1], {
+      expression: keyword[2].trim(),
+      kind: "python-object-constructor-field",
+      line,
+    });
+  }
+  return state;
+}
+
+function pythonOfficialSimpleNamespaceConstructor(
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+  callLine: number,
+  constructor: string,
+): boolean {
+  const structuralLines = pythonStructuralLines(lines);
+  if (!constructor.includes(".")) {
+    if (wrapper.parameters.includes(constructor)) return false;
+    const imports: Array<{ binding: string; line: number }> = [];
+    for (let line = 1; line < callLine; line += 1) {
+      const match = /^\s*from\s+types\s+import\s+(.+)$/u.exec(
+        structuralLines[line - 1] ?? "",
+      );
+      if (match?.[1] === undefined) continue;
+      for (const imported of splitPythonArguments(match[1])) {
+        const item = /^SimpleNamespace(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+          imported.trim(),
+        );
+        if (item !== null) {
+          imports.push({ binding: item[1] ?? "SimpleNamespace", line });
+        }
+      }
+    }
+    const matching = imports.filter((item) => item.binding === constructor);
+    return (
+      matching.length === 1 &&
+      pythonImportedBindingUnchangedBetween(
+        lines,
+        constructor,
+        matching[0]!.line,
+        callLine,
+      )
+    );
+  }
+  const qualified = /^([A-Za-z_]\w*)\.SimpleNamespace$/u.exec(constructor);
+  if (qualified?.[1] === undefined) return false;
+  const binding = qualified[1];
+  if (wrapper.parameters.includes(binding)) return false;
+  const imports: Array<{ binding: string; line: number }> = [];
+  for (let line = 1; line < callLine; line += 1) {
+    const match = /^\s*import\s+types(?:\s+as\s+([A-Za-z_]\w*))?\s*$/u.exec(
+      structuralLines[line - 1] ?? "",
+    );
+    if (match !== null) {
+      imports.push({ binding: match[1] ?? "types", line });
+    }
+  }
+  const matching = imports.filter((item) => item.binding === binding);
+  return (
+    matching.length === 1 &&
+    pythonImportedBindingUnchangedBetween(
+      lines,
+      binding,
+      matching[0]!.line,
+      callLine,
+    )
+  );
+}
+
+function pythonImportedBindingUnchangedBetween(
+  lines: readonly string[],
+  binding: string,
+  afterLine: number,
+  beforeLine: number,
+): boolean {
+  if (
+    pythonIdentifierReassignedBetween(lines, binding, afterLine, beforeLine)
+  ) {
+    return false;
+  }
+  const escaped = escapeRegularExpression(binding);
+  const shadow = new RegExp(
+    `^\\s*(?:(?:def|class)\\s+${escaped}\\b|del\\s+${escaped}\\b|(?:for|with)\\b[^\\r\\n]*\\bas\\s+${escaped}\\b)`,
+    "u",
+  );
+  for (const candidate of pythonStructuralLines(lines).slice(
+    afterLine,
+    Math.max(afterLine, beforeLine - 1),
+  )) {
+    if (shadow.test(candidate)) return false;
+    const fromImport = /^\s*from\s+\S+\s+import\s+(.+)$/u.exec(candidate);
+    if (fromImport?.[1] !== undefined) {
+      for (const imported of splitPythonArguments(fromImport[1])) {
+        const item = /^(?:([A-Za-z_]\w*)|\*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+          imported.trim(),
+        );
+        if (item?.[1] === undefined && item?.[2] === undefined) return false;
+        if (item?.[1] === undefined || (item[2] ?? item[1]) === binding) {
+          return false;
+        }
+      }
+    }
+    const directImport = /^\s*import\s+(.+)$/u.exec(candidate);
+    if (directImport?.[1] !== undefined) {
+      for (const imported of splitPythonArguments(directImport[1])) {
+        const item =
+          /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?:\s+as\s+([A-Za-z_]\w*))?$/u.exec(
+            imported.trim(),
+          );
+        if (item?.[1] === undefined) return false;
+        if ((item[2] ?? item[1].split(".")[0]) === binding) return false;
+      }
+    }
+  }
+  return true;
+}
+
+function pythonObjectFieldMutationAtLine(
+  code: string,
+  receiver: string,
+  line: number,
+): { field: string; value: PythonObjectFieldStateValue } | undefined {
+  const escaped = escapeRegularExpression(receiver);
+  const assignment = new RegExp(
+    `^${escaped}\\s*\\.\\s*([A-Za-z_]\\w*)\\s*=\\s*(.+)$`,
+    "u",
+  ).exec(code);
+  if (
+    assignment?.[1] !== undefined &&
+    assignment[2] !== undefined &&
+    pythonObjectFieldNameIsSupported(assignment[1])
+  ) {
+    return {
+      field: assignment[1],
+      value: {
+        expression: assignment[2].trim(),
+        kind: "python-object-attribute-assignment",
+        line,
+      },
+    };
+  }
+  const setattrCall = new RegExp(
+    `^setattr\\s*\\(\\s*${escaped}\\s*,\\s*((?:"[^"\\\\]*")|(?:'[^'\\\\]*'))\\s*,([\\s\\S]+)\\)$`,
+    "u",
+  ).exec(code);
+  if (setattrCall?.[1] === undefined || setattrCall[2] === undefined) {
+    return undefined;
+  }
+  const field = pythonConstantObjectField(setattrCall[1]);
+  if (field === undefined) return undefined;
+  const argumentsList = splitPythonArguments(setattrCall[2]);
+  if (argumentsList.length !== 1) return undefined;
+  return {
+    field,
+    value: {
+      expression: argumentsList[0]!,
+      kind: "python-object-setattr-assignment",
+      line,
+    },
+  };
+}
+
+function pythonConstantObjectField(expression: string): string | undefined {
+  const match = /^(?:"([A-Za-z_]\w*)"|'([A-Za-z_]\w*)')$/u.exec(
+    expression.trim(),
+  );
+  const field = match?.[1] ?? match?.[2];
+  return field !== undefined && pythonObjectFieldNameIsSupported(field)
+    ? field
+    : undefined;
+}
+
+function pythonObjectFieldNameIsSupported(field: string): boolean {
+  return (
+    /^[A-Za-z_]\w*$/u.test(field) &&
+    !(field.startsWith("__") && field.endsWith("__"))
+  );
+}
+
+function pythonObjectFieldMayChangeAtLine(
+  code: string,
+  receiver: string,
+): boolean {
+  const escaped = escapeRegularExpression(receiver);
+  if (
+    new RegExp(`^\\s*del\\s+${escaped}\\b`, "u").test(code) ||
+    new RegExp(
+      `\\b${escaped}\\s*\\.\\s*(?:__[A-Za-z_]\\w*__|[A-Za-z_]\\w*\\s*\\()`,
+      "u",
+    ).test(code) ||
+    new RegExp(`^[^=]*\\b${escaped}\\s*\\.\\s*[A-Za-z_]\\w*[^=]*=`, "u").test(
+      code,
+    ) ||
+    new RegExp(
+      `\\b${escaped}\\s*\\.\\s*[A-Za-z_]\\w*\\s*(?::[^=]+)?(?:[+\\-*/%&|^]?=|:=)`,
+      "u",
+    ).test(code)
+  ) {
+    return true;
+  }
+  let remaining = code.replace(
+    new RegExp(
+      `\\b(?:getattr|hasattr)\\s*\\(\\s*${escaped}\\s*,\\s*(?:"[A-Za-z_]\\w*"|'[A-Za-z_]\\w*')(?:\\s*,[^()]*)?\\)`,
+      "gu",
+    ),
+    "",
+  );
+  remaining = remaining.replace(
+    new RegExp(`\\b${escaped}\\s*\\.\\s*[A-Za-z_]\\w*\\b`, "gu"),
+    "",
+  );
+  return new RegExp(`\\b${escaped}\\b`, "u").test(remaining);
+}
+
 function modeledJavaCallSource(
   lines: readonly string[],
   method: ExportedJavaMethod,
@@ -48814,20 +49223,52 @@ function pythonWebCommandEvidenceRequirements(
   const propagators = Array.isArray(frameworkModel["propagators"])
     ? frameworkModel["propagators"]
     : [];
-  const collectionFlow = propagators.find(
+  const indirectFlow = propagators.find(
     (propagator) =>
       isRecord(propagator) &&
       typeof propagator["kind"] === "string" &&
-      (propagator["kind"].startsWith("python-list-") ||
+      (((propagator["kind"].startsWith("python-list-") ||
         propagator["kind"].startsWith("python-dict-")) &&
-      propagator["kind"].endsWith("-element"),
+        propagator["kind"].endsWith("-element")) ||
+        propagator["kind"].startsWith("python-object-")),
   );
-  if (!isRecord(collectionFlow)) return { validation: [], attackPath: [] };
-  const kind = String(collectionFlow["kind"]);
+  if (!isRecord(indirectFlow)) return { validation: [], attackPath: [] };
+  const kind = String(indirectFlow["kind"]);
   const symbol =
-    typeof collectionFlow["symbol"] === "string"
-      ? collectionFlow["symbol"]
-      : "";
+    typeof indirectFlow["symbol"] === "string" ? indirectFlow["symbol"] : "";
+  if (kind.startsWith("python-object-")) {
+    const mutation =
+      kind === "python-object-constructor-field"
+        ? [
+            "SimpleNamespace constructor field",
+            "constructor keyword field",
+            kind,
+          ]
+        : kind === "python-object-setattr-assignment"
+          ? ["setattr", "constant-field setattr", kind]
+          : ["attribute assignment", "direct field assignment", kind];
+    const selected = [
+      ...(symbol === "" ? [] : [symbol]),
+      "selected object field",
+      "constant field",
+      "same receiver and field",
+    ];
+    const exactState = [
+      "exact object field state",
+      "receiver-sensitive field state",
+      "last-write-wins field state",
+      "receiver-sensitive last-write-wins field state",
+    ];
+    const ambiguity = [
+      "no receiver alias escape",
+      "no ambiguous attribute mutation",
+      "no intervening overwrite",
+    ];
+    return {
+      validation: [mutation, selected, exactState, ambiguity],
+      attackPath: [mutation, selected, exactState, ambiguity],
+    };
+  }
   if (kind.startsWith("python-dict-")) {
     const mutation =
       kind === "python-dict-literal-element"

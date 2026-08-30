@@ -33,6 +33,8 @@ const caseIds = [
   "python-cross-file-list-iadd-safe-command",
   "python-cross-file-dict-update-command-injection",
   "python-cross-file-dict-update-safe-command",
+  "python-cross-file-object-field-command-injection",
+  "python-cross-file-object-field-safe-command",
   "python-cross-file-sql-injection",
   "python-cross-file-safe-sql",
 ] as const;
@@ -55,10 +57,10 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([...caseIds]);
     expect(
       manifest.cases.filter(({ expected }) => expected.length > 0),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
     expect(
       manifest.cases.filter(({ expected }) => expected.length === 0),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(1);
     }
@@ -115,6 +117,22 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(dictionary).toContain('"path":"src/runner.py","line":8');
     expect(
       inventories.get("python-cross-file-dict-update-safe-command"),
+    ).not.toContain('"scope":"cross-file-wrapper"');
+    const objectField = inventories.get(
+      "python-cross-file-object-field-command-injection",
+    );
+    expect(objectField).toContain('"scope":"cross-file-wrapper"');
+    expect(objectField).toContain('"id":"python-web-command"');
+    expect(objectField).toContain(
+      '"kind":"python-object-attribute-assignment"',
+    );
+    expect(objectField).toContain('"path":"src/server.py","line":3');
+    expect(objectField).toContain(
+      '"path":"src/runner.py","line":7,"symbol":"command.value"',
+    );
+    expect(objectField).toContain('"path":"src/runner.py","line":9');
+    expect(
+      inventories.get("python-cross-file-object-field-safe-command"),
     ).not.toContain('"scope":"cross-file-wrapper"');
     const sql = inventories.get("python-cross-file-sql-injection");
     expect(sql).toContain('"id":"python-web-sql"');
@@ -503,14 +521,306 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     }
   });
 
+  test("follows exact fresh-object fields into selected shell operands", async () => {
+    const root = await mkdtemp(join(tmpdir(), "python-object-field-flow-"));
+    const source = join(root, "src");
+    try {
+      await mkdir(source, { recursive: true });
+      await writeFile(join(source, "__init__.py"), "", "utf8");
+      await writeFile(
+        join(source, "server.py"),
+        [
+          "from flask import request",
+          "from .runner import run_report",
+          "def report():",
+          '    report_name = request.args.get("name", "")',
+          "    return run_report(report_name)",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      for (const [
+        importLine,
+        body,
+        sink,
+        propagator,
+        mutationLine,
+        sinkLine,
+      ] of [
+        [
+          "from types import SimpleNamespace",
+          [
+            '    command = SimpleNamespace(value=f"/opt/reports/{report_name}")',
+          ],
+          "command.value",
+          "python-object-constructor-field",
+          4,
+          5,
+        ],
+        [
+          "from types import SimpleNamespace as Namespace",
+          [
+            '    command = Namespace(value="/usr/bin/printf fixed")',
+            '    command.value = f"/opt/reports/{report_name}"',
+          ],
+          "command.value",
+          "python-object-attribute-assignment",
+          5,
+          6,
+        ],
+        [
+          "import types as namespace_types",
+          [
+            "    command = namespace_types.SimpleNamespace()",
+            '    setattr(command, "value", f"/opt/reports/{report_name}")',
+          ],
+          'getattr(command, "value")',
+          "python-object-setattr-assignment",
+          5,
+          6,
+        ],
+      ] as const) {
+        await writeFile(
+          join(source, "runner.py"),
+          [
+            "import subprocess",
+            importLine,
+            "def run_report(report_name):",
+            ...body,
+            `    return subprocess.run(${sink}, shell=True, check=True, timeout=2)`,
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+        const inventory = await buildResidualRiskInventory(root);
+        expect(inventory, propagator).toContain('"scope":"cross-file-wrapper"');
+        expect(inventory, propagator).toContain('"id":"python-web-command"');
+        expect(inventory, propagator).toContain(`"kind":"${propagator}"`);
+        expect(inventory, propagator).toContain(
+          `"path":"src/runner.py","line":${mutationLine},"symbol":"command.value"`,
+        );
+        expect(inventory, propagator).toContain(
+          `"path":"src/runner.py","line":${sinkLine}`,
+        );
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects ambiguous, overwritten, cross-object, or unselected fields", async () => {
+    const root = await mkdtemp(join(tmpdir(), "python-object-field-controls-"));
+    const source = join(root, "src");
+    try {
+      await mkdir(source, { recursive: true });
+      await writeFile(join(source, "__init__.py"), "", "utf8");
+      await writeFile(
+        join(source, "server.py"),
+        [
+          "from flask import request",
+          "from .runner import run_report",
+          "def report():",
+          '    report_name = request.args.get("name", "")',
+          "    return run_report(report_name)",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      for (const [imports, body, sink] of [
+        [
+          ["from types import SimpleNamespace"],
+          [
+            '    command = SimpleNamespace(value="/usr/bin/printf fixed")',
+            "    command.audit = report_name",
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    command = SimpleNamespace(value=report_name)",
+            '    command.value = "/usr/bin/printf fixed"',
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    command = SimpleNamespace()",
+            '    field = "value"',
+            "    setattr(command, field, report_name)",
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    command = SimpleNamespace(value=report_name)",
+            '    field = "value"',
+          ],
+          "getattr(command, field)",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            '    command = SimpleNamespace(value="/usr/bin/printf fixed")',
+            "    alias = command",
+            "    alias.value = report_name",
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    command = SimpleNamespace(value=report_name)",
+            "    inspect_state(command)",
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    command = SimpleNamespace(value=report_name)",
+            '    command = SimpleNamespace(value="/usr/bin/printf fixed")',
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    primary = SimpleNamespace(value=report_name)",
+            '    command = SimpleNamespace(value="/usr/bin/printf fixed")',
+          ],
+          "command.value",
+        ],
+        [
+          [],
+          ["    command = SimpleNamespace(value=report_name)"],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    SimpleNamespace = namespace_factory",
+            "    command = SimpleNamespace(value=report_name)",
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            '    command = SimpleNamespace(value="/usr/bin/printf fixed")',
+            '    command.__dict__["value"] = report_name',
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            '    command = SimpleNamespace(value="/usr/bin/printf fixed")',
+            '    example = "command.value = report_name"',
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            '    report_name = "/usr/bin/printf fixed"',
+            "    command = SimpleNamespace(value=report_name)",
+          ],
+          "command.value",
+        ],
+        [
+          [
+            "from types import SimpleNamespace",
+            "from other_types import SimpleNamespace",
+          ],
+          ["    command = SimpleNamespace(value=report_name)"],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    class SimpleNamespace:",
+            "        pass",
+            "    command = SimpleNamespace(value=report_name)",
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    command = SimpleNamespace(value=report_name)",
+            '    (command.value, other) = ("/usr/bin/printf fixed", "fixed")',
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    command = SimpleNamespace(value=report_name)",
+            '    command.__dict__["value"] = "/usr/bin/printf fixed"',
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    command = SimpleNamespace(value=report_name)",
+            "    command.clear()",
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            "    command = SimpleNamespace(value=report_name)",
+            "    del command.value",
+          ],
+          "command.value",
+        ],
+        [
+          ["from types import SimpleNamespace"],
+          [
+            '    command = SimpleNamespace(value="/usr/bin/printf fixed")',
+            "    command.value += report_name",
+          ],
+          "command.value",
+        ],
+      ] as const) {
+        await writeFile(
+          join(source, "runner.py"),
+          [
+            "import subprocess",
+            ...imports,
+            "def run_report(report_name):",
+            ...body,
+            `    return subprocess.run(${sink}, shell=True, check=True, timeout=2)`,
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+        expect(await buildResidualRiskInventory(root)).not.toContain(
+          '"scope":"cross-file-wrapper"',
+        );
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test.skipIf(process.platform === "win32")(
-    "proves shell expansion only in the collection-flow exploit fixtures",
+    "proves shell expansion only in the indirect-flow exploit fixtures",
     () => {
       for (const [id, expected] of [
         ["python-cross-file-list-iadd-command-injection", 1],
         ["python-cross-file-list-iadd-safe-command", 0],
         ["python-cross-file-dict-update-command-injection", 1],
         ["python-cross-file-dict-update-safe-command", 0],
+        ["python-cross-file-object-field-command-injection", 1],
+        ["python-cross-file-object-field-safe-command", 0],
       ] as const) {
         const witness = spawnSync(
           "python3",
@@ -602,6 +912,108 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
 
       const contract =
         'The Flask request crosses the relative run_report wrapper. Exact dict.update overwrites the constant key preview; commands["preview"] is the selected dictionary value reached through commands.get. The deterministic last-write-wins dictionary state has no ambiguous mutation or intervening overwrite before subprocess.run consumes it with shell=True as shell grammar, establishing CWE-78.';
+      finding.validation.summary = contract;
+      finding.attackPath.summary = contract;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const complete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      expect(complete).not.toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(complete).not.toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+    } finally {
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("requires exact receiver, field, and last-write proof in review fields", async () => {
+    const repository = join(
+      benchmarkRoot,
+      "fixtures",
+      "python-cross-file-object-field-command-injection",
+    );
+    const inventory = await buildResidualRiskInventory(repository);
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "python-object-field-quality-"),
+    );
+    const finding = {
+      occurrenceId: "occ_python_object_field_quality",
+      taxonomy: { cwe: ["CWE-78"] },
+      locations: [
+        { path: "src/server.py", startLine: 3, role: "source" },
+        { path: "src/runner.py", startLine: 9, role: "sink" },
+      ],
+      codeEvidence: [
+        {
+          id: "request-source",
+          path: "src/server.py",
+          startLine: 3,
+          code: "from .runner import run_report",
+          explanation: "The relative import supplies the wrapper edge.",
+          role: "source",
+        },
+        {
+          id: "shell-sink",
+          path: "src/runner.py",
+          startLine: 9,
+          code: "    completed = subprocess.run(selected, shell=True, check=True, timeout=2)",
+          explanation: "The selected object field enters the shell.",
+          role: "sink",
+        },
+      ],
+      validation: {
+        summary: "A remote value reaches subprocess through an object.",
+        method: "bounded source review and witness comparison",
+        exploitWitness: "The temporary marker is created only by the exploit.",
+        negativeControl:
+          "The matched field-isolation fixture creates no marker.",
+        evidence: ["request-source", "shell-sink"],
+        counterEvidence: "The control stores the value in another field.",
+        remainingUncertainty: "Deployment reachability remains unproved.",
+      },
+      attackPath: {
+        summary: "A remote value reaches a command through an object.",
+        dataflow: {
+          source: "request-source",
+          sink: "shell-sink",
+          outcome: "shell behavior",
+        },
+        reachability: {
+          attacker: "remote caller",
+          entrypoint: "Flask route",
+          outcome: "command interpretation",
+        },
+        brokenControls: ["shell interpretation"],
+        evidenceRefs: ["request-source", "shell-sink"],
+      },
+    };
+    try {
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      expect(incomplete).toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(incomplete).toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+
+      const contract =
+        "The Flask request crosses the relative run_report wrapper into a fresh standard-library SimpleNamespace receiver. Exact attribute assignment writes report_name to command.value; that constant selected object field is read from the same receiver. Receiver-sensitive last-write-wins field state proves no receiver alias escape, ambiguous attribute mutation, or intervening overwrite before subprocess.run consumes it with shell=True as shell grammar, establishing CWE-78.";
       finding.validation.summary = contract;
       finding.attackPath.summary = contract;
       await writeFile(
@@ -723,7 +1135,7 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     }
   });
 
-  test("teaches reviewers the bounded Python collection-flow boundaries", () => {
+  test("teaches reviewers the bounded Python collection and field-flow boundaries", () => {
     const prompt = scanQualityGatePrompt("python-list-iadd-element");
     expect(prompt).toContain("python-list-iadd-element");
     expect(prompt).toContain("exact initially empty list");
@@ -737,6 +1149,11 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(prompt).toContain(
       "taint confined to an unselected or overwritten value",
     );
+    expect(prompt).toContain("python-object-attribute-assignment");
+    expect(prompt).toContain("fresh standard-library types.SimpleNamespace");
+    expect(prompt).toContain("receiver-sensitive last-write-wins field state");
+    expect(prompt).toContain("object escape through an alias or helper");
+    expect(prompt).toContain("taint confined to another receiver or field");
   });
 
   test("rejects fixed, reassigned, non-relative, and text-only pseudo flows", async () => {
