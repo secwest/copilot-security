@@ -42,6 +42,33 @@ All notable scanner, application, benchmark, and operational changes are recorde
   assertions; a native 48-test, 242-assertion rerun passes both denied files,
   yielding 2,094 passing outcomes and no product failures. Generated-model
   drift, TypeScript, and the clean production build are green.
+- Two compiled inventories of the immutable 3,946-file implementation archive
+  at checkpoint `8dfe36f2cba0a31b6aba4c68bed7df0c4f80390e` are byte-
+  identical. Each reaches the 256-row cap with 256 structured records, is
+  624,998 bytes, and has SHA-256
+  `f0238cb2713be74054442e8e78070a7fd5c4e7f5e65a1e55324fa1f3df11eb24`.
+  Exactly one FastAPI redirect row retains the request parameter at
+  `src/server.py:11`, relative wrapper call, sink at `src/redirects.py:5`,
+  CWE-601, and all ten ordered route, Query, Annotated, import, call, parameter,
+  response-binding, and Location propagators; the fixed-local twin is absent.
+  The 21,534,720-byte archive has SHA-256
+  `8c0b0d110575f303b7634c1e098e2ea82fc76abd88d52be0d9bc69689087b088`
+  and was removed after verification. A first 371-file subdirectory archive
+  was explicitly rejected when the required fixture row was absent.
+- Strict package inspection validates a 2,452,901-byte npm archive with SHA-256
+  `e10464405f313b4470117c3d5f50748e526d3975beb9af16c1541f1905786702`.
+  An isolated installation adds 67 packages and validates the public import,
+  executable CLI, and all 79 bundled plugin files. The production high-severity
+  advisory audit reports no known vulnerabilities; the archive and isolated
+  installation are removed after validation.
+- Hosted acceptance for checkpoint `8dfe36f` is green across all 11 workflow
+  families: Node CI `33308699091` completes all 92 jobs, including the new
+  FastAPI request-body and open-redirect witnesses; PHP `33308699054`, Go
+  `33308699115`, Ruby `33308699064`, Rust `33308699093`, .NET `33308699104`,
+  Windows GUI `33308699123`, container `33308699117`, Kotlin `33308699074`,
+  Linux GUI `33308699062`, and Java `33308699079` also succeed. The exact
+  implementation checkpoint is published on the public `secwest/copilot-security`
+  `main` branch.
 - Closed the documented embedded and legacy FastAPI Pydantic request-body gap.
   The exact endpoint model now accepts `Annotated[Model, Body(embed=True)]`,
   literal `embed=False`, and legacy `Model = Body()` / `Body(...)` equivalents

@@ -86,6 +86,40 @@ skips, and two managed-sandbox permission failures across 2,125 tests and
 passes all 48 tests and 242 assertions, including the exact two denied cases;
 the combined product result is 2,094 passes and no failures.
 
+**Immutable self-review and distribution evidence.** Two compiled inventories
+of the repository-root `git archive` for exact implementation checkpoint
+`8dfe36f2cba0a31b6aba4c68bed7df0c4f80390e` take 41,353.168 and
+21,240.521 milliseconds. Both produce the same 256 structured rows, 624,998
+bytes, and SHA-256
+`f0238cb2713be74054442e8e78070a7fd5c4e7f5e65a1e55324fa1f3df11eb24`;
+246 retained rows originate in benchmark fixtures. The one FastAPI redirect
+row keeps source `benchmarks/fixtures/python-fastapi-open-redirect/src/server.py:11`,
+sink `src/redirects.py:5`, CWE-601, `cross-file-wrapper` scope, and all ten
+ordered factory, route, Annotated, Query, request-flow, import, call,
+wrapper-parameter, response-binding, and Location propagators. Its fixed-local
+twin is absent. The 3,946-file, 21,534,720-byte source archive has SHA-256
+`8c0b0d110575f303b7634c1e098e2ea82fc76abd88d52be0d9bc69689087b088`
+and is removed after verification. An initial command invoked `git archive`
+below `sdk/typescript`; the required-row assertion rejected that 371-file
+partial archive before any result was accepted.
+
+The production package build yields a 2,452,901-byte archive with SHA-256
+`e10464405f313b4470117c3d5f50748e526d3975beb9af16c1541f1905786702`.
+Strict inspection and an isolated 67-package installation validate the public
+module import, executable CLI, and all 79 bundled plugin files. Formatting,
+generated-model drift, TypeScript, the clean build, and the production
+high-severity advisory audit are green with no known vulnerabilities. The
+package archive and isolated consumer are removed after validation.
+
+**Hosted closure.** The exact checkpoint is public on
+`secwest/copilot-security` `main`. Node CI run `33308699091` passes all 92 jobs,
+including both FastAPI executable witnesses. The remaining workflow families
+also pass: PHP `33308699054`, Go `33308699115`, Ruby `33308699064`, Rust
+`33308699093`, .NET `33308699104`, Windows GUI `33308699123`, container
+`33308699117`, Kotlin `33308699074`, Linux GUI `33308699062`, and Java
+`33308699079`. These immutable run IDs close the hosted acceptance gate for
+implementation checkpoint `8dfe36f2cba0a31b6aba4c68bed7df0c4f80390e`.
+
 ## 2026-08-30 — Preserve embedded and legacy FastAPI Body forms
 
 **Measured miss and authoritative boundary.** The unchanged production host
