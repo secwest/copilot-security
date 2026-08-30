@@ -39,6 +39,22 @@ All notable scanner, application, benchmark, and operational changes are recorde
   `17fa925b4dc738bf2c22100257dfeb36aebcb9a307b31b0c997ba9d66309922e`.
   Strict archive inspection plus isolated Windows and Ubuntu installations
   validate the public import, CLI, and all 79 bundled plugin files.
+- Two compiled inventories of the immutable 3,904-file implementation archive
+  at checkpoint `5d604c2e89de130396277794d9d494b128dfa7b0` are byte-identical.
+  Each reaches the 256-row cap, is 619,632 bytes, and has SHA-256
+  `2f2da111999e27600df6f31b10ec56f78650a3db6ad1c0b3ade62c4a6ad7888e`.
+  Exactly one row records the new FastAPI route, Pydantic model/string field,
+  relative model and wrapper imports, `payload.name` read, `shell=True` sink,
+  and CWE-78; the `ClassVar` control is absent. The 21,360,640-byte exact-
+  commit archive has SHA-256
+  `53b7e2babae6bf709919761632c9526627fc2d2794b6c32919d4717a82c75623`.
+- All eleven hosted workflow families pass exact implementation checkpoint
+  `5d604c2`: Node `33297071160` (92/92 jobs, including the new pinned FastAPI
+  witness), container `33297071141`, Windows GUI `33297071172`, Linux GUI
+  `33297071161`, Java `33297071144`, Kotlin `33297071164`, .NET
+  `33297071157`, Go `33297071128`, Rust `33297071134`, Ruby `33297071139`,
+  and PHP `33297071189`. The repository remains public on default branch
+  `main`.
 - Closed a reproduced Python cross-file command-injection false negative where
   a Flask request crossed a relative wrapper, entered a declared field of a
   standard-library generated dataclass, was selected through dot or

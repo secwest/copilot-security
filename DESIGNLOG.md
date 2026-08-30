@@ -76,6 +76,35 @@ The release archive contains 299 entries, is 2,443,615 bytes, and has SHA-256
 Strict inspection plus isolated Windows and Ubuntu installations validate the
 public import, CLI, and all 79 bundled plugin files.
 
+Two compiled inventories of the immutable 3,904-file implementation archive
+at checkpoint `5d604c2e89de130396277794d9d494b128dfa7b0` both reach the
+256-row cap and are byte-identical: 619,632 bytes with SHA-256
+`2f2da111999e27600df6f31b10ec56f78650a3db6ad1c0b3ade62c4a6ad7888e`.
+Exactly one row records the official FastAPI factory and POST route, exact
+Pydantic binding/model/string field, relative model import, `payload.name`
+read, relative `run_report` wrapper, `shell=True` subprocess sink, and CWE-78.
+The topology-matched `ClassVar` control emits no row. The 21,360,640-byte
+exact-commit archive has SHA-256
+`53b7e2babae6bf709919761632c9526627fc2d2794b6c32919d4717a82c75623`.
+
+Hosted closure is clean at the same implementation checkpoint. Node run
+[`33297071160`](https://github.com/secwest/copilot-security/actions/runs/33297071160)
+passes all 92 jobs, including the dedicated pinned FastAPI/Pydantic witness;
+container
+[`33297071141`](https://github.com/secwest/copilot-security/actions/runs/33297071141),
+Windows GUI
+[`33297071172`](https://github.com/secwest/copilot-security/actions/runs/33297071172),
+Linux GUI
+[`33297071161`](https://github.com/secwest/copilot-security/actions/runs/33297071161),
+Java [`33297071144`](https://github.com/secwest/copilot-security/actions/runs/33297071144),
+Kotlin [`33297071164`](https://github.com/secwest/copilot-security/actions/runs/33297071164),
+.NET [`33297071157`](https://github.com/secwest/copilot-security/actions/runs/33297071157),
+Go [`33297071128`](https://github.com/secwest/copilot-security/actions/runs/33297071128),
+Rust [`33297071134`](https://github.com/secwest/copilot-security/actions/runs/33297071134),
+Ruby [`33297071139`](https://github.com/secwest/copilot-security/actions/runs/33297071139),
+and PHP [`33297071189`](https://github.com/secwest/copilot-security/actions/runs/33297071189)
+all pass. GitHub reports the repository public on default branch `main`.
+
 This closes one exact request-body field increment, not the standing scanner-
 effectiveness goal.
 
