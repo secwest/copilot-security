@@ -49,6 +49,25 @@ with qualified, aliased, async, same-file, relative-module, lifecycle,
 reassignment, decorator, shadow, and duplicate-definition tests, the canonical
 corpus advances to 194 pairs, 388 cases, and 1,164 repeated scan positions.
 
+**Final acceptance.** Exact implementation checkpoint
+`1e77620c9c3f714ff370539b8d607372e134d81e` passes the 2,155-test aggregate
+with 2,122 passes, 31 intentional skips, and only two managed-sandbox denials;
+native reruns of both complete affected files pass 48/48. Two isolated
+exact-checkpoint inventories are byte-identical at 256 rows and 627,964 bytes
+(SHA-256
+`fa8304167b0e18c8a62b80f6a9d7e8abc0449fa46bc8ed4bcc0f779b3813a0da`),
+retain exactly one class-view exploit with all nine structured propagators, and
+emit no Django row for the safe twin. Two 299-entry npm archives are
+byte-identical at 2,442,805 bytes (SHA-256
+`e5d6ed4a01109cd6567358a6dd9f3711ef62d12d1112bc19ed2af78281595a7d`),
+and an isolated 67-package install validates the public API, CLI, and all 79
+plugin files. Windows and Ubuntu/WSL GUI builds have zero warnings/errors; all
+core, shared, Linux UI, non-graphical, and X11/Xvfb tests pass. All 11 hosted
+workflow families pass at the implementation hash, including every one of the
+92 Node jobs. Repository visibility remains public and default branch remains
+`main`. Temporary package, archive, extracted-tree, GUI publication, and
+Django-environment artifacts are removed after recording their hashes.
+
 ## 2026-08-30 — Require registered Django views at redirect Location sinks
 
 **Measured gap and comparator evidence.** CodeQL's maintained

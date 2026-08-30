@@ -24,6 +24,39 @@ All notable scanner, application, benchmark, and operational changes are recorde
   pairs, 388 cases, and 1,164 repeated scan positions. The focused class-view,
   canonical-count, and TypeScript compilation lanes pass 23 tests and 144
   assertions before full acceptance.
+- Final scanner acceptance at exact implementation checkpoint
+  `1e77620c9c3f714ff370539b8d607372e134d81e` runs all 2,155 TypeScript
+  tests in 844.63 seconds: 2,122 pass, 31 intentional environment/platform
+  cases skip, and the two managed-sandbox Git/Windows-ACL denials pass in a
+  native rerun of their complete six-test and 42-test files (48/48, 242
+  assertions). Generated-model drift, formatting, TypeScript, the clean build,
+  and the production high-severity dependency audit are green.
+- Two scans of an isolated exact-checkpoint tracked tree are byte-identical at
+  the 256-row cap: 627,964 bytes with SHA-256
+  `fa8304167b0e18c8a62b80f6a9d7e8abc0449fa46bc8ed4bcc0f779b3813a0da`.
+  Exactly one new row retains the class-view source at `src/views.py:7`, sink
+  at `src/views.py:9`, CWE-601, and all nine View/route/query/Location
+  propagators; the topology-matched safe twin emits no Django row. The
+  5,949,888-byte exact tracked ZIP has SHA-256
+  `0d0ba56f61520198f0345906ed9f150703b7241c66553d0af22c69a149e05da1`.
+- Two production package builds are byte-identical. Strict inspection validates
+  the 299-entry, 2,442,805-byte archive with SHA-256
+  `e5d6ed4a01109cd6567358a6dd9f3711ef62d12d1112bc19ed2af78281595a7d`;
+  a fresh 67-package install validates the public import, CLI, and all 79
+  bundled plugin files. The exact Django 6.1 exploit/control witnesses pass in
+  an isolated environment.
+- Windows GUI acceptance builds with zero warnings/errors, passes 7/7 core and
+  3/3 shared tests, and publishes a 346,796-byte executable with SHA-256
+  `93513ea1f20bcfd0f718651195aaaa65239d34f66556224eb203a74b6d264da0`.
+  Ubuntu/WSL builds with zero warnings/errors, passes 7/7 core, 3/3 shared, and
+  2/2 Linux UI tests, passes non-graphical and X11/Xvfb startup, and publishes
+  a 72,568-byte executable with SHA-256
+  `7e29d642169a6c218c249216c6c10648307aea88faf636b69ac25741104b4adf`.
+- All 11 exact-checkpoint workflow families pass: Node `33329023218` (92/92
+  jobs), container `33329023217`, Windows GUI `33329023180`, Linux GUI
+  `33329023185`, Java `33329023197`, .NET `33329023216`, Go `33329023204`,
+  Kotlin `33329023109`, Rust `33329023171`, PHP `33329023228`, and Ruby
+  `33329023239`. The repository remains public on default branch `main`.
 - Added a fail-closed `python-django-open-redirect` model for CWE-601. It
   requires an official `django.urls.path` or `re_path` call inside the sole
   balanced `urlpatterns` list, an exact same-file or relative-imported function
