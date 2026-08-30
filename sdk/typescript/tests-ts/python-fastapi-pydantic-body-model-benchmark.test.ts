@@ -228,6 +228,79 @@ describe("FastAPI Pydantic request-body field model", () => {
     }
   });
 
+  test("detects documented embedded and legacy model body bindings", async () => {
+    const variants: ReadonlyArray<readonly [string, string]> = [
+      [
+        "annotated-embedded",
+        [
+          "from typing import Annotated",
+          "from fastapi import Body, FastAPI",
+          "from .models import ReportRequest",
+          "from .runner import run_report",
+          "app = FastAPI()",
+          '@app.post("/report")',
+          "def report(payload: Annotated[ReportRequest, Body(embed=True)]):",
+          "    return run_report(payload.name)",
+          "",
+        ].join("\n"),
+      ],
+      [
+        "annotated-explicit-unembedded",
+        [
+          "from typing_extensions import Annotated as Metadata",
+          "from fastapi import Body as RequestBody, FastAPI",
+          "from .models import ReportRequest as Payload",
+          "from .runner import run_report",
+          "app = FastAPI()",
+          '@app.put("/report")',
+          "def report(payload: Metadata[Payload, RequestBody(embed=False)]):",
+          "    return run_report(payload.name)",
+          "",
+        ].join("\n"),
+      ],
+      [
+        "legacy",
+        [
+          "from fastapi import Body, FastAPI",
+          "from .models import ReportRequest",
+          "from .runner import run_report",
+          "app = FastAPI()",
+          '@app.patch("/report")',
+          "def report(payload: ReportRequest = Body()):",
+          "    return run_report(payload.name)",
+          "",
+        ].join("\n"),
+      ],
+      [
+        "legacy-qualified-required-embedded",
+        [
+          "import fastapi as api",
+          "from .models import ReportRequest",
+          "from .runner import run_report",
+          "app = api.FastAPI()",
+          '@app.delete("/report")',
+          "def report(payload: ReportRequest = api.Body(..., embed=True)):",
+          "    return run_report(payload.name)",
+          "",
+        ].join("\n"),
+      ],
+    ];
+
+    for (const [name, server] of variants) {
+      const root = await mkdtemp(join(tmpdir(), `fastapi-body-form-${name}-`));
+      try {
+        await writeRepository(root, crossFileRepository(undefined, server));
+        const inventory = await buildResidualRiskInventory(root);
+        expect(inventory, name).toContain(sourceKind);
+        expect(inventory, name).toContain(
+          '"kind":"fastapi-official-body-parameter"',
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  });
+
   test("rejects ambiguous framework, model, parameter, and field semantics", async () => {
     const exactModels = crossFileRepository()["src/models.py"]!;
     const exactServer = crossFileRepository()["src/server.py"]!;
@@ -420,7 +493,16 @@ describe("FastAPI Pydantic request-body field model", () => {
           .replace("Body, FastAPI", "Depends, FastAPI")
           .replace("Body()", "Depends()"),
       ],
-      ["body-options", exact.replace("Body()", "Body(embed=True)")],
+      [
+        "unsupported-body-option",
+        exact.replace("Body()", 'Body(alias="payload")'),
+      ],
+      ["dynamic-embed", exact.replace("Body()", "Body(embed=flag)")],
+      ["positional-embed", exact.replace("Body()", "Body(True)")],
+      [
+        "duplicate-embed",
+        exact.replace("Body()", "Body(embed=True, embed=False)"),
+      ],
       ["extra-metadata", exact.replace("Body()]", 'Body(), "tag"]')],
       [
         "default-value",
@@ -484,6 +566,45 @@ describe("FastAPI Pydantic request-body field model", () => {
           "from fastapi import FastAPI\nfrom local_params import Body",
         ),
         { "local_params.py": "def Body():\n    return object()\n" },
+      ],
+      [
+        "legacy-query",
+        exact
+          .replace("from typing import Annotated\n", "")
+          .replace("Body, FastAPI", "FastAPI, Query")
+          .replace(
+            "Annotated[ReportRequest, Body()]",
+            "ReportRequest = Query()",
+          ),
+      ],
+      [
+        "legacy-missing-body-import",
+        exact
+          .replace("from typing import Annotated\n", "")
+          .replace(
+            "from fastapi import Body, FastAPI",
+            "from fastapi import FastAPI",
+          )
+          .replace(
+            "Annotated[ReportRequest, Body()]",
+            "ReportRequest = Body()",
+          ),
+      ],
+      [
+        "legacy-body-rebound",
+        exact
+          .replace("from typing import Annotated\n", "")
+          .replace("app = FastAPI()", "Body = replacement\napp = FastAPI()")
+          .replace(
+            "Annotated[ReportRequest, Body()]",
+            "ReportRequest = Body()",
+          ),
+      ],
+      [
+        "legacy-arbitrary-default",
+        exact
+          .replace("from typing import Annotated\n", "")
+          .replace("Annotated[ReportRequest, Body()]", "ReportRequest = None"),
       ],
     ];
 
@@ -684,6 +805,112 @@ describe("FastAPI Pydantic request-body field model", () => {
     }
   });
 
+  test("requires embedded and legacy Body shape in review fields", async () => {
+    const repository = await mkdtemp(
+      join(tmpdir(), "fastapi-legacy-embedded-quality-repository-"),
+    );
+    const scanDirectory = await mkdtemp(
+      join(tmpdir(), "fastapi-legacy-embedded-quality-scan-"),
+    );
+    const server = [
+      "from fastapi import Body, FastAPI",
+      "from .models import ReportRequest",
+      "from .runner import run_report",
+      "app = FastAPI()",
+      '@app.post("/report")',
+      "def report(payload: ReportRequest = Body(..., embed=True)):",
+      "    return run_report(payload.name)",
+      "",
+    ].join("\n");
+    const finding: any = {
+      occurrenceId: "occ_fastapi_legacy_embedded_quality",
+      taxonomy: { cwe: ["CWE-78"] },
+      locations: [
+        { path: "src/server.py", startLine: 7, role: "source" },
+        { path: "src/runner.py", startLine: 3, role: "sink" },
+      ],
+      codeEvidence: [
+        {
+          id: "body-source",
+          path: "src/server.py",
+          startLine: 7,
+          code: "payload.name",
+          explanation: "Embedded legacy body field read.",
+          role: "source",
+        },
+        {
+          id: "shell-sink",
+          path: "src/runner.py",
+          startLine: 3,
+          code: "subprocess.run(..., shell=True)",
+          explanation: "Shell grammar sink.",
+          role: "sink",
+        },
+      ],
+      validation: {
+        summary:
+          "The official FastAPI request body route binds a Pydantic BaseModel request body. The exact declared string field payload.name is read from a stable Pydantic request parameter, crosses the relative wrapper, and reaches subprocess with shell=True as shell grammar for CWE-78. There is no model or parameter escape and no ClassVar, mutation, or validator broadening.",
+        method: "source review",
+        evidence: ["body-source", "shell-sink"],
+      },
+      attackPath: {
+        summary:
+          "The official FastAPI request body route binds a Pydantic BaseModel request body. The exact declared string field payload.name is read from a stable Pydantic request parameter, crosses the relative wrapper, and reaches subprocess with shell=True as shell grammar for CWE-78. There is no model or parameter escape and no ClassVar, mutation, or validator broadening.",
+        dataflow: {
+          source: "body-source",
+          sink: "shell-sink",
+          outcome: "shell grammar",
+        },
+        evidenceRefs: ["body-source", "shell-sink"],
+      },
+    };
+    try {
+      await writeRepository(repository, crossFileRepository(undefined, server));
+      const inventory = await buildResidualRiskInventory(repository);
+      expect(inventory).toContain('"kind":"fastapi-embedded-body-shape"');
+      expect(inventory).toContain('"kind":"fastapi-legacy-body-default"');
+
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const incomplete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      expect(incomplete).toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(incomplete).toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+
+      const bodyShape =
+        " The embedded JSON body shape uses Body(embed=True). The legacy Model = Body(...) request body is an official FastAPI Body default.";
+      finding.validation.summary += bodyShape;
+      finding.attackPath.summary += bodyShape;
+      await writeFile(
+        join(scanDirectory, "findings.json"),
+        JSON.stringify({ findings: [finding] }),
+      );
+      const complete = await buildFindingQualityGapInventory(
+        scanDirectory,
+        repository,
+        inventory,
+      );
+      expect(complete).not.toContain(
+        "missing_model_specific_validation_evidence",
+      );
+      expect(complete).not.toContain(
+        "missing_model_specific_attack_path_evidence",
+      );
+    } finally {
+      await rm(repository, { recursive: true, force: true });
+      await rm(scanDirectory, { recursive: true, force: true });
+    }
+  });
+
   test("teaches review to preserve the exact Pydantic body boundary", () => {
     const prompt = scanQualityGatePrompt(
       '{"frameworkModel":{"id":"python-web-command","propagators":[{"kind":"fastapi-pydantic-body-field-read"}]}}',
@@ -694,8 +921,10 @@ describe("FastAPI Pydantic request-body field model", () => {
     );
     expect(prompt).toContain("ClassVar");
     expect(prompt).toContain("official FastAPI request-body route");
-    expect(prompt).toContain("exact Annotated[Model, Body()] form");
+    expect(prompt).toContain("exact Annotated[Model, Body()]");
     expect(prompt).toContain("typing_extensions");
-    expect(prompt).toContain("Body calls with arguments");
+    expect(prompt).toContain("Body(embed=True)");
+    expect(prompt).toContain("legacy Model = Body(...)");
+    expect(prompt).toContain("dynamic or duplicate embed values");
   });
 });

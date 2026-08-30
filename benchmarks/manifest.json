@@ -8962,6 +8962,77 @@
       "expected": []
     },
     {
+      "id": "python-fastapi-embedded-pydantic-body-command-injection",
+      "description": "A FastAPI JSON request body uses exact official Annotated[Model, Body(embed=True)] metadata, reads one declared Pydantic string field from the embedded object, and passes it through a relative wrapper into a shell=True command string.",
+      "fixture": "fixtures/python-fastapi-embedded-pydantic-body-command-injection",
+      "findingsPaths": [
+        "python-fastapi-embedded-pydantic-body-command-injection/run-1/findings.json",
+        "python-fastapi-embedded-pydantic-body-command-injection/run-2/findings.json",
+        "python-fastapi-embedded-pydantic-body-command-injection/run-3/findings.json"
+      ],
+      "expected": [
+        {
+          "id": "python-fastapi-embedded-pydantic-body-command-injection",
+          "cwe": ["CWE-78"],
+          "locations": [
+            {
+              "path": "src/runner.py",
+              "startLine": 5,
+              "endLine": 5,
+              "lineTolerance": 1
+            }
+          ],
+          "acceptableSeverities": ["critical", "high"],
+          "requireValidation": true,
+          "requireAttackPath": true,
+          "requireCodeEvidence": true,
+          "requiredValidationTextAnyOf": [
+            ["FastAPI request body route", "official FastAPI body endpoint"],
+            ["Pydantic BaseModel request body", "Pydantic request body model"],
+            ["Annotated[ReportRequest, Body(embed=True)]", "Annotated[Model, Body(embed=True)]"],
+            ["embedded JSON body shape", "Body(embed=True)"],
+            ["official Annotated", "typing Annotated"],
+            ["official FastAPI Body", "fastapi Body binding"],
+            ["payload.name", "declared Pydantic string field"],
+            ["stable Pydantic request parameter", "no model or parameter escape"],
+            ["relative wrapper", "run_report", "relative import"],
+            ["subprocess.run", "shell=True", "shell grammar"],
+            ["ClassVar", "field isolation", "negative control"]
+          ],
+          "requiredAttackPathTextAnyOf": [
+            ["embedded JSON request body", "embedded body shape", "Body(embed=True)"],
+            ["Annotated[ReportRequest, Body(embed=True)]", "Annotated body boundary"],
+            ["ReportRequest", "Pydantic BaseModel", "request body model"],
+            ["payload.name", "body field read", "declared string field"],
+            ["stable parameter", "no mutation", "no model escape"],
+            ["run_report", "relative wrapper", "wrapper import"],
+            ["subprocess.run", "shell command", "shell grammar"],
+            ["fixed_command", "ClassVar", "paired control"]
+          ],
+          "forbiddenText": [
+            "embed sanitizes shell commands",
+            "Body validates shell grammar",
+            "every BaseModel field is attacker controlled",
+            "ClassVar is accepted from the JSON body",
+            "FastAPI proves the route is publicly reachable",
+            "the witness proves production compromise",
+            "the host is fully compromised"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-fastapi-embedded-pydantic-body-safe-command",
+      "description": "The topology-matched control retains exact Annotated[Model, Body(embed=True)] metadata and the hostile embedded JSON body but selects an exact ClassVar excluded from Pydantic request fields before the same wrapper and shell sink.",
+      "fixture": "fixtures/python-fastapi-embedded-pydantic-body-safe-command",
+      "findingsPaths": [
+        "python-fastapi-embedded-pydantic-body-safe-command/run-1/findings.json",
+        "python-fastapi-embedded-pydantic-body-safe-command/run-2/findings.json",
+        "python-fastapi-embedded-pydantic-body-safe-command/run-3/findings.json"
+      ],
+      "expected": []
+    },
+    {
       "id": "rust-axum-tokio-shell-command-injection",
       "description": "An Axum query parameter is formatted into POSIX shell grammar and executed through an official Tokio process Command output call.",
       "fixture": "fixtures/rust-axum-tokio-shell-command-injection",

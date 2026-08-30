@@ -58,14 +58,17 @@ and Node, Python, and Spring models cover server-side template injection. Each a
 row identifies an exact source line, sink line, CWE family, and nearby
 candidate controls. The Python host pass also models request bodies reaching
 shell grammar through exact FastAPI/Pydantic boundaries. It accepts a direct
-model parameter or the official `Annotated[Model, Body()]` form, proves stable
-non-shadowed FastAPI, `Annotated`, `Body`, and `BaseModel` identities, selects
-one declared string field, and carries that field across relative wrappers and
-bounded relays. Query or dependency metadata, extra `Annotated` metadata,
-configured `Body` calls, defaults, local module lookalikes, rebinding,
-mutation, model escape, ambiguous fields, and `ClassVar` selection fail
-closed. A topology-matched TestClient pair distinguishes the hostile declared
-body field from a fixed `ClassVar` excluded from Pydantic request data.
+model parameter, official `Annotated[Model, Body()]`, literal
+`Body(embed=True|False)` metadata, and the documented legacy
+`Model = Body(...)` equivalents. It proves stable non-shadowed FastAPI,
+`Annotated`, `Body`, and `BaseModel` identities, records whether the JSON body
+is embedded, selects one declared string field, and carries that field across
+relative wrappers and bounded relays. Query or dependency metadata, extra
+`Annotated` metadata, unsupported or dynamic `Body` options, arbitrary
+defaults, local module lookalikes, rebinding, mutation, model escape, ambiguous
+fields, and `ClassVar` selection fail closed. Topology-matched TestClient pairs
+distinguish hostile direct and embedded body fields from fixed `ClassVar`
+values excluded from Pydantic request data.
 It separately models request bodies reaching
 standard-library `pickle.load` or `pickle.loads`, NumPy `load` with literal
 `allow_pickle=True`, as well as PyYAML
@@ -753,10 +756,11 @@ node benchmarks/run-benchmark.mjs `
   --auth github --model auto --effort high --mode deep
 ```
 
-The 16-case Python relative-import lane measures eight cross-file command,
-FastAPI/Pydantic body, collection/object-field, and SQL positives against eight
+The 18-case Python relative-import lane measures nine cross-file command,
+FastAPI/Pydantic body, collection/object-field, and SQL positives against nine
 topology-matched negative controls. Its body cases separately cover direct
-model parameters and exact official `Annotated[Model, Body()]` metadata:
+model parameters, exact official `Annotated[Model, Body()]` metadata, and the
+embedded `Annotated[Model, Body(embed=True)]` JSON shape:
 
 ```powershell
 node benchmarks/run-benchmark.mjs `

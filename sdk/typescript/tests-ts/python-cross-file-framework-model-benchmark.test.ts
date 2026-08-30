@@ -41,6 +41,8 @@ const caseIds = [
   "python-fastapi-pydantic-body-safe-command",
   "python-fastapi-annotated-pydantic-body-command-injection",
   "python-fastapi-annotated-pydantic-body-safe-command",
+  "python-fastapi-embedded-pydantic-body-command-injection",
+  "python-fastapi-embedded-pydantic-body-safe-command",
   "python-cross-file-sql-injection",
   "python-cross-file-safe-sql",
 ] as const;
@@ -63,10 +65,10 @@ describe("Python cross-file framework-model effectiveness benchmark", () => {
     expect(manifest.cases.map(({ id }) => id)).toEqual([...caseIds]);
     expect(
       manifest.cases.filter(({ expected }) => expected.length > 0),
-    ).toHaveLength(8);
+    ).toHaveLength(9);
     expect(
       manifest.cases.filter(({ expected }) => expected.length === 0),
-    ).toHaveLength(8);
+    ).toHaveLength(9);
     for (const benchmarkCase of manifest.cases) {
       expect(benchmarkCase.findingsPaths).toHaveLength(1);
     }

@@ -2,6 +2,90 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Preserve embedded and legacy FastAPI Body forms
+
+**Measured miss and authoritative boundary.** The unchanged production host
+emitted four generic lexical rows and zero structured request-to-shell rows for
+an endpoint declared as
+`payload: Annotated[ReportRequest, Body(embed=True)]`; its source-identical
+`ClassVar` control emitted three generic rows and no structured row. FastAPI's
+official
+[multiple-body-parameter documentation](https://fastapi.tiangolo.com/tutorial/body-multiple-params/)
+documents both `Annotated[Item, Body(embed=True)]` and the legacy
+`item: Item = Body(embed=True)` spelling. It explains that embedding changes
+the expected JSON from the model object itself to an outer parameter-name key,
+then still converts and validates that nested data as the same Pydantic model.
+The official
+[Body reference](https://fastapi.tiangolo.com/reference/parameters/#fastapi.Body)
+defines `embed` as a boolean-or-None shape option. Authenticated current source
+searches found no `Body(embed=True)` model in public CodeQL, Semgrep rules, or
+the reference scanner, so this is an independently measured coverage gain
+rather than a copied pattern.
+
+**Executable differential.** The new pinned FastAPI 0.116.1, Pydantic 2.11.7,
+Starlette 0.47.3, and HTTPX 0.28.1 TestClient pair sends identical nested JSON
+`{"payload":{"name":...}}` through the same POST route, Pydantic model,
+relative wrapper, and real `subprocess.run(..., shell=True)` sink. Selecting
+the declared `payload.name` field creates one harmless disposable marker;
+selecting `payload.fixed_command`, an exact `typing.ClassVar`, leaves it absent.
+The observed marker values are `1` and `0`. A separate pinned-runtime probe
+confirms FastAPI also accepts a required ellipsis inside Annotated Body metadata.
+
+**Shared exact Body-call contract.** Endpoint parsing no longer treats every
+default as ambiguous. It recognizes direct `Model`, exact two-part
+`Annotated[Model, Body(...)]`, or legacy `Model = Body(...)`. Explicit Body
+forms must resolve one stable official `fastapi.Body` or
+`fastapi.params.Body` binding; Annotated forms must also resolve one stable
+official `typing.Annotated` or `typing_extensions.Annotated` binding. The Body
+call may contain no arguments, one leading `...` required sentinel, one literal
+`embed=True` or `embed=False`, or the sentinel followed by that literal embed
+keyword. Direct, aliased, and one-level module-qualified bindings are retained.
+
+Everything else fails closed: non-Body metadata, extra Annotated metadata,
+aliases, media types, validation options, arbitrary defaults, positional embed
+values, dynamic or duplicate embed values, missing or competing imports,
+binding or member replacement, and repository-local `fastapi`, `typing`, or
+`typing_extensions` shadows. Existing route, BaseModel, declared-string-field,
+model-shape, mutation, escape, validator, and resource-cap exclusions remain
+unchanged. This avoids turning broad framework syntax recognition into a claim
+that every configured Pydantic model is an unconstrained command source.
+
+**Evidence and model-facing closure.** Every explicit Body form records
+`fastapi-official-body-parameter`. Embedded input additionally records
+`fastapi-embedded-body-shape`; a non-Annotated default records
+`fastapi-legacy-body-default`. Host quality auditing independently requires
+both validation and attack-path prose to retain those syntax-specific facts.
+The Copilot correction prompt explains that embedding changes the JSON envelope
+but not attacker control of the resulting model, and rejects unsupported Body
+options rather than asking the model to guess their semantics.
+
+**Regression and acceptance.** Modern embedded, explicit unembedded, legacy,
+aliased, qualified, and required forms pass. Query, dynamic/positional/duplicate
+embed, unsupported option, arbitrary-default, missing-import, rebound, shadow,
+and lookalike cases remain negative. The canonical corpus advances to 189
+exploit/control pairs, 378 cases, and 1,134 repeated positions; the focused
+Python relative-import corpus advances to 18 cases split 9/9. Focused Windows
+regression passes 45 tests and 3,003 assertions with one intentional POSIX
+witness skip. Native Ubuntu/WSL passes all 46 tests and 3,019 assertions,
+including executable witnesses.
+
+The authoritative Windows aggregate records 2,083 passes, 31 intentional
+skips, two managed-sandbox permission denials, and one stale 188-pair assertion
+across 2,117 tests and 16,447 assertions. Updating that independent guard to
+189 pairs and rerunning its file with both denied Git/Windows-ACL files under
+native permissions passes all 55 tests and 299 assertions. The combined exact
+outcome is therefore 2,086 passing tests and no product failures. This closes
+one documented FastAPI syntax family, not the standing scanner-effectiveness
+goal.
+
+The validated npm archive contains 299 entries, is 2,446,494 bytes, and has
+SHA-256
+`3b2326dac6616d602e9cf05fd307222c18d73234488420e6e1edf22d870383e4`.
+Strict inspection and isolated Windows and Ubuntu installs validate the public
+import, executable CLI, and all 79 bundled plugin files. Generated-model drift,
+formatting, TypeScript, the clean production build, and the production
+dependency audit are green with no known vulnerabilities.
+
 ## 2026-08-30 — Treat exact FastAPI Annotated models as request bodies
 
 **Measured miss and primary evidence.** The pre-change production scanner

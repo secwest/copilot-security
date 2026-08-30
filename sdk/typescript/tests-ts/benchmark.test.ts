@@ -663,6 +663,10 @@ describe("effectiveness benchmark", () => {
         "python-fastapi-annotated-pydantic-body-safe-command",
       ],
       [
+        "python-fastapi-embedded-pydantic-body-command-injection",
+        "python-fastapi-embedded-pydantic-body-safe-command",
+      ],
+      [
         "rust-axum-tokio-shell-command-injection",
         "rust-axum-tokio-argv-command",
       ],

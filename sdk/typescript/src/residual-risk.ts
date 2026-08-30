@@ -41169,6 +41169,80 @@ function pythonPydanticModelForEndpointType(
   return candidates.length === 1 ? candidates[0] : undefined;
 }
 
+function pythonFastApiBodyCallEvidence(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  expression: string,
+  beforeLine: number,
+  form: "annotated" | "legacy",
+): PythonFastApiPydanticEndpointType["propagators"] | undefined {
+  const call = /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(([\s\S]*)\)$/u.exec(
+    expression.trim(),
+  );
+  if (call?.[1] === undefined || call[2] === undefined) return undefined;
+  const arguments_ = call[2].trim() === "" ? [] : splitPythonArguments(call[2]);
+  if (arguments_.length > 2) return undefined;
+  let required = false;
+  let embedded: boolean | undefined;
+  for (const [index, argument] of arguments_.entries()) {
+    const normalized = argument.replace(/\s+/gu, "");
+    if (normalized === "...") {
+      if (index !== 0 || required) return undefined;
+      required = true;
+      continue;
+    }
+    const embed = /^embed=(True|False)$/u.exec(normalized);
+    if (embed?.[1] === undefined || embedded !== undefined) return undefined;
+    embedded = embed[1] === "True";
+  }
+  const bodyBindings = ["fastapi", "fastapi.params"]
+    .filter(
+      (moduleName) => !pythonLocalModuleCouldShadow(files, path, moduleName),
+    )
+    .map((moduleName) => ({
+      binding: pythonOfficialImportedMemberBinding(
+        lines,
+        moduleName,
+        "Body",
+        call[1]!,
+        beforeLine,
+      ),
+      moduleName,
+    }))
+    .filter((candidate) => candidate.binding !== undefined);
+  if (bodyBindings.length !== 1) return undefined;
+  const body = bodyBindings[0]!;
+  return [
+    {
+      kind: "fastapi-official-body-parameter",
+      path,
+      line: body.binding!.line,
+      symbol: `${body.moduleName}.Body`,
+    },
+    ...(form === "legacy"
+      ? [
+          {
+            kind: "fastapi-legacy-body-default",
+            path,
+            line: beforeLine,
+            symbol: required ? "Model = Body(...)" : "Model = Body()",
+          },
+        ]
+      : []),
+    ...(embedded === true
+      ? [
+          {
+            kind: "fastapi-embedded-body-shape",
+            path,
+            line: beforeLine,
+            symbol: "Body(embed=True)",
+          },
+        ]
+      : []),
+  ];
+}
+
 function pythonFastApiPydanticEndpointType(
   files: readonly SourceFileSnapshot[],
   path: string,
@@ -41177,12 +41251,12 @@ function pythonFastApiPydanticEndpointType(
   parameter: string,
   beforeLine: number,
 ): PythonFastApiPydanticEndpointType | undefined {
-  if (declaration.includes("=")) return undefined;
   const escapedParameter = escapeRegularExpression(parameter);
+  const trimmed = declaration.trim();
   const direct = new RegExp(
     `^\\s*${escapedParameter}\\s*:\\s*([A-Za-z_]\\w*)\\s*$`,
     "u",
-  ).exec(declaration.trim());
+  ).exec(trimmed);
   if (direct?.[1] !== undefined) {
     return { modelType: direct[1], propagators: [] };
   }
@@ -41190,69 +41264,67 @@ function pythonFastApiPydanticEndpointType(
   const annotation = new RegExp(
     `^\\s*${escapedParameter}\\s*:\\s*([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?)\\s*\\[([\\s\\S]+)\\]\\s*$`,
     "u",
-  ).exec(declaration.trim());
-  if (annotation?.[1] === undefined || annotation[2] === undefined) {
-    return undefined;
-  }
-  const arguments_ = splitPythonArguments(annotation[2]);
-  if (arguments_.length !== 2) return undefined;
-  const modelType = /^([A-Za-z_]\w*)$/u.exec(arguments_[0]!.trim())?.[1];
-  const bodyCall = /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(\s*\)$/u.exec(
-    arguments_[1]!.trim(),
-  );
-  if (modelType === undefined || bodyCall?.[1] === undefined) {
-    return undefined;
+  ).exec(trimmed);
+  if (annotation?.[1] !== undefined && annotation[2] !== undefined) {
+    const arguments_ = splitPythonArguments(annotation[2]);
+    if (arguments_.length !== 2) return undefined;
+    const modelType = /^([A-Za-z_]\w*)$/u.exec(arguments_[0]!.trim())?.[1];
+    const body = pythonFastApiBodyCallEvidence(
+      files,
+      path,
+      lines,
+      arguments_[1]!,
+      beforeLine,
+      "annotated",
+    );
+    if (modelType === undefined || body === undefined) return undefined;
+    const annotatedBinding = ["typing", "typing_extensions"]
+      .filter(
+        (moduleName) => !pythonLocalModuleCouldShadow(files, path, moduleName),
+      )
+      .map((moduleName) => ({
+        binding: pythonOfficialImportedMemberBinding(
+          lines,
+          moduleName,
+          "Annotated",
+          annotation[1]!,
+          beforeLine,
+        ),
+        moduleName,
+      }))
+      .filter((candidate) => candidate.binding !== undefined);
+    if (annotatedBinding.length !== 1) return undefined;
+    const annotated = annotatedBinding[0]!;
+    return {
+      modelType,
+      propagators: [
+        {
+          kind: "python-official-annotated-binding",
+          path,
+          line: annotated.binding!.line,
+          symbol: `${annotated.moduleName}.Annotated`,
+        },
+        ...body,
+      ],
+    };
   }
 
-  const annotatedBinding = ["typing", "typing_extensions"]
-    .filter(
-      (moduleName) => !pythonLocalModuleCouldShadow(files, path, moduleName),
-    )
-    .map((moduleName) => ({
-      binding: pythonOfficialImportedMemberBinding(
-        lines,
-        moduleName,
-        "Annotated",
-        annotation[1]!,
-        beforeLine,
-      ),
-      moduleName,
-    }))
-    .filter((candidate) => candidate.binding !== undefined);
-  const bodyBinding = ["fastapi", "fastapi.params"]
-    .map((moduleName) => ({
-      binding: pythonOfficialImportedMemberBinding(
-        lines,
-        moduleName,
-        "Body",
-        bodyCall[1]!,
-        beforeLine,
-      ),
-      moduleName,
-    }))
-    .filter((candidate) => candidate.binding !== undefined);
-  if (annotatedBinding.length !== 1 || bodyBinding.length !== 1) {
-    return undefined;
-  }
-  const annotated = annotatedBinding[0]!;
-  const body = bodyBinding[0]!;
-  return {
-    modelType,
-    propagators: [
-      {
-        kind: "python-official-annotated-binding",
-        path,
-        line: annotated.binding!.line,
-        symbol: `${annotated.moduleName}.Annotated`,
-      },
-      {
-        kind: "fastapi-official-body-parameter",
-        path,
-        line: body.binding!.line,
-        symbol: `${body.moduleName}.Body`,
-      },
-    ],
-  };
+  const legacy = new RegExp(
+    `^\\s*${escapedParameter}\\s*:\\s*([A-Za-z_]\\w*)\\s*=\\s*([\\s\\S]+)$`,
+    "u",
+  ).exec(trimmed);
+  if (legacy?.[1] === undefined || legacy[2] === undefined) return undefined;
+  const body = pythonFastApiBodyCallEvidence(
+    files,
+    path,
+    lines,
+    legacy[2],
+    beforeLine,
+    "legacy",
+  );
+  return body === undefined
+    ? undefined
+    : { modelType: legacy[1], propagators: body };
 }
 
 function pythonPydanticExpressionOrigins(
@@ -50405,9 +50477,51 @@ function pythonWebCommandEvidenceRequirements(
           ],
         ]
       : [];
+    const embeddedBoundary = propagators.some(
+      (propagator) =>
+        isRecord(propagator) &&
+        propagator["kind"] === "fastapi-embedded-body-shape",
+    )
+      ? [
+          [
+            "embedded JSON body shape",
+            "Body(embed=True)",
+            "fastapi-embedded-body-shape",
+          ],
+        ]
+      : [];
+    const legacyBoundary = propagators.some(
+      (propagator) =>
+        isRecord(propagator) &&
+        propagator["kind"] === "fastapi-legacy-body-default",
+    )
+      ? [
+          [
+            "legacy Model = Body(...) request body",
+            "FastAPI Body default",
+            "fastapi-legacy-body-default",
+          ],
+        ]
+      : [];
     return {
-      validation: [route, model, field, stability, ...annotatedBoundary],
-      attackPath: [route, model, field, stability, ...annotatedBoundary],
+      validation: [
+        route,
+        model,
+        field,
+        stability,
+        ...annotatedBoundary,
+        ...embeddedBoundary,
+        ...legacyBoundary,
+      ],
+      attackPath: [
+        route,
+        model,
+        field,
+        stability,
+        ...annotatedBoundary,
+        ...embeddedBoundary,
+        ...legacyBoundary,
+      ],
     };
   }
   const indirectFlow = propagators.find(

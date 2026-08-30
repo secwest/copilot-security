@@ -6,6 +6,42 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed the documented embedded and legacy FastAPI Pydantic request-body gap.
+  The exact endpoint model now accepts `Annotated[Model, Body(embed=True)]`,
+  literal `embed=False`, and legacy `Model = Body()` / `Body(...)` equivalents
+  while preserving the same declared request-controlled field through bounded
+  Python wrappers into shell grammar.
+- Added a shared fail-closed `Body` call contract. Only zero arguments, an
+  optional leading required ellipsis, and one literal `embed=True` or
+  `embed=False` keyword qualify. Query/dependency metadata, extra Annotated
+  metadata, aliases and other Body options, positional, dynamic, or duplicate
+  embed values, arbitrary defaults, shadows, missing/ambiguous imports, and
+  rebound bindings remain negative.
+- Structured evidence now distinguishes `fastapi-embedded-body-shape` and
+  `fastapi-legacy-body-default`. Host quality closure and the Copilot reviewer
+  must retain the exact embedded JSON envelope or legacy default syntax in
+  both validation and attack-path prose.
+- Added a pinned FastAPI TestClient exploit/control pair whose nested JSON
+  produces temporary-marker values `1` and `0`. The unchanged pre-change host
+  emitted zero structured rows for both; the new host emits exactly one for
+  the vulnerable field and none for the topology-matched `ClassVar` control.
+  The canonical corpus advances to 189 exploit/control pairs, 378 cases, and
+  1,134 repeated scan positions; the focused Python relative-import corpus is
+  18 cases split 9/9.
+- Focused Windows regression passes 45 tests and 3,003 assertions with one
+  intentional POSIX-witness skip; native Ubuntu/WSL passes all 46 tests and
+  3,019 assertions. The authoritative Windows aggregate records 2,083 passes,
+  31 intentional skips, two managed-sandbox permission denials, and one stale
+  corpus-count assertion across 2,117 tests and 16,447 assertions. After
+  correcting the count to 189 pairs, a native 55-test, 299-assertion rerun
+  passes that guard and both denied Git/Windows-ACL files, yielding 2,086
+  passing outcomes and no product failures.
+- The validated 299-entry npm archive is 2,446,494 bytes with SHA-256
+  `3b2326dac6616d602e9cf05fd307222c18d73234488420e6e1edf22d870383e4`.
+  Strict inspection and isolated Windows and Ubuntu installs validate the
+  public import, executable CLI, and all 79 bundled plugin files. Generated-
+  model drift, formatting, TypeScript, the clean production build, and the
+  production dependency audit are clean.
 - Closed the documented FastAPI `Annotated[Model, Body()]` request-body gap.
   Exact official `typing` or `typing_extensions.Annotated` and `fastapi` or
   `fastapi.params.Body` bindings now preserve the selected Pydantic string
