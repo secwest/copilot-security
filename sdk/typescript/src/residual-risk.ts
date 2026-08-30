@@ -2178,6 +2178,28 @@ const FRAMEWORK_DATAFLOW_MODELS: readonly FrameworkDataflowModel[] = [
     controls: [],
   },
   {
+    id: "python-flask-open-redirect",
+    language: "python",
+    extensions: PYTHON_EXTENSIONS,
+    activation: [
+      /\b(?:from\s+flask\s+import|import\s+flask(?:\s+as\s+[A-Za-z_]\w*)?)\b/iu,
+    ],
+    sources: [
+      {
+        kind: "flask-request-query-string",
+        expression: /\bargs\s*(?:\.|\[)/u,
+      },
+    ],
+    sinks: [
+      {
+        kind: "flask-redirect-location",
+        expression: /\b[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)?\s*\(/u,
+        cweIds: ["CWE-601"],
+      },
+    ],
+    controls: [],
+  },
+  {
     id: "python-web-pickle-unsafe-load",
     language: "python",
     extensions: PYTHON_EXTENSIONS,
@@ -3709,6 +3731,7 @@ function isPythonTypedSinkModel(modelId: string): boolean {
   return (
     modelId === "python-asyncpg-sql" ||
     modelId === "python-fastapi-open-redirect" ||
+    modelId === "python-flask-open-redirect" ||
     modelId === "python-web-pickle-unsafe-load" ||
     modelId === "python-web-pyyaml-unsafe-load" ||
     modelId === "python-web-numpy-allow-pickle-load" ||
@@ -3722,6 +3745,13 @@ function isPythonTypedSinkModel(modelId: string): boolean {
     modelId === "python-asyncssh-scp-download-path-traversal" ||
     modelId === "python-web-datamodel-codegen-import-injection" ||
     modelId === "python-web-sympy-unsafe-parse-expr"
+  );
+}
+
+function isPythonOpenRedirectModel(modelId: string): boolean {
+  return (
+    modelId === "python-fastapi-open-redirect" ||
+    modelId === "python-flask-open-redirect"
   );
 }
 
@@ -4557,6 +4587,15 @@ const PYTHON_FASTAPI_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["CWE-601", "open redirect", "URL redirection"],
 ] as const;
 
+const PYTHON_FLASK_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
+  ["Flask", "application factory", "route decorator", "flask route"],
+  ["request.args", "query string", "remote input", "query field"],
+  ["flask.redirect", "Location header", "redirect location"],
+  ["absolute URL", "origin", "scheme-relative", "attacker-selected host"],
+  ["root-only prefix", "fixed local prefix", "allowlist", "same-origin"],
+  ["CWE-601", "open redirect", "URL redirection"],
+] as const;
+
 const NODE_MCP_TOOL_SSRF_FIELD_EVIDENCE_REQUIREMENTS = [
   ["MCP tool", "registerTool", "server.tool", "tool callback"],
   ["tool input", "callback input", "LLM-controlled", "client-controlled"],
@@ -4670,6 +4709,13 @@ const MODEL_SPECIFIC_FINDING_REQUIREMENTS: ReadonlyMap<
     {
       validation: PYTHON_FASTAPI_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
       attackPath: PYTHON_FASTAPI_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+    },
+  ],
+  [
+    "python-flask-open-redirect",
+    {
+      validation: PYTHON_FLASK_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
+      attackPath: PYTHON_FLASK_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS,
     },
   ],
   [
@@ -18558,9 +18604,8 @@ function frameworkDataflowRecords(
     const supportsFastApiPydanticBody =
       PYTHON_EXTENSIONS.has(extension) &&
       model.sources.some((source) => source.kind === "fastapi-bound-parameter");
-    const supportsFastApiOpenRedirect =
-      PYTHON_EXTENSIONS.has(extension) &&
-      model.id === "python-fastapi-open-redirect";
+    const supportsPythonOpenRedirect =
+      PYTHON_EXTENSIONS.has(extension) && isPythonOpenRedirectModel(model.id);
     const hasFastApiPydanticBodyEndpoint =
       supportsFastApiPydanticBody &&
       pythonHasFastApiPydanticBodyEndpoint(files, path, lines);
@@ -18653,7 +18698,7 @@ function frameworkDataflowRecords(
     if (
       (sources.length === 0 &&
         !hasFastApiPydanticBodyEndpoint &&
-        !supportsFastApiOpenRedirect) ||
+        !supportsPythonOpenRedirect) ||
       sinks.length === 0
     ) {
       continue;
@@ -18878,8 +18923,8 @@ function frameworkDataflowRecords(
       const pythonTypedSink =
         model.id === "python-asyncpg-sql"
           ? pythonAsyncpgSqlSink(files, path, lines, sink.line)
-          : model.id === "python-fastapi-open-redirect"
-            ? pythonFastApiRedirectSink(files, path, lines, sink.line)
+          : isPythonOpenRedirectModel(model.id)
+            ? pythonOpenRedirectSink(model.id, files, path, lines, sink.line)
             : model.id === "python-web-pyyaml-unsafe-load"
               ? pythonPyyamlUnsafeSink(files, path, lines, sink.line)
               : model.id === "python-web-pickle-unsafe-load"
@@ -19447,9 +19492,9 @@ function frameworkDataflowRecords(
           )
         : undefined;
       const pythonRedirectSource =
-        model.id === "python-fastapi-open-redirect" &&
-        pythonTypedSink !== undefined
-          ? pythonFastApiOpenRedirectSource(
+        isPythonOpenRedirectModel(model.id) && pythonTypedSink !== undefined
+          ? pythonOpenRedirectSource(
+              model.id,
               files,
               path,
               lines,
@@ -19535,156 +19580,162 @@ function frameworkDataflowRecords(
                                 ),
                               )
                               .find((candidate) => candidate !== undefined)
-                          : isPythonTypedSinkModel(model.id) &&
-                              pythonTypedSink !== undefined
-                            ? model.id === "python-asyncpg-sql"
-                              ? modeledPythonAsyncpgSource(
-                                  lines,
-                                  sources,
-                                  sink.line,
-                                  pythonTypedSink.sourceExpression,
-                                  model.sources,
-                                )
-                              : model.id ===
-                                  "python-web-sympy-unsafe-parse-expr"
-                                ? modeledPythonSympyObjectSource(
+                          : isPythonOpenRedirectModel(model.id)
+                            ? undefined
+                            : isPythonTypedSinkModel(model.id) &&
+                                pythonTypedSink !== undefined
+                              ? model.id === "python-asyncpg-sql"
+                                ? modeledPythonAsyncpgSource(
                                     lines,
                                     sources,
                                     sink.line,
                                     pythonTypedSink.sourceExpression,
-                                    model.sources,
-                                  )
-                                : modeledPythonObjectSource(
-                                    lines,
-                                    sources,
-                                    sink.line,
-                                    pythonTypedSink.sourceExpression,
-                                    model.sources,
-                                  )
-                            : model.id === "node-http-object-authorization" &&
-                                nodeObjectSink !== undefined
-                              ? modeledObjectLookupSource(
-                                  lines,
-                                  sources,
-                                  sink.line,
-                                  nodeObjectSink.argument,
-                                  model.sources,
-                                )
-                              : model.id === "node-http-ssrf" &&
-                                  nodeHttpSink?.urlExpression !== undefined
-                                ? modeledCallSource(
-                                    lines,
-                                    sources,
-                                    sink.line,
-                                    nodeHttpSink.urlExpression,
                                     model.sources,
                                   )
                                 : model.id ===
-                                    "node-copilot-system-prompt-injection"
-                                  ? nodeCopilotResolution?.source
-                                  : extension === ".java" &&
-                                      model.id ===
-                                        "spring-http-object-authorization" &&
-                                      javaObjectSink !== undefined
-                                    ? modeledSameFileJavaObjectSource(
-                                        lines,
-                                        sink.line,
-                                        javaObjectSink.argument,
-                                        model.sources,
-                                      )
+                                    "python-web-sympy-unsafe-parse-expr"
+                                  ? modeledPythonSympyObjectSource(
+                                      lines,
+                                      sources,
+                                      sink.line,
+                                      pythonTypedSink.sourceExpression,
+                                      model.sources,
+                                    )
+                                  : modeledPythonObjectSource(
+                                      lines,
+                                      sources,
+                                      sink.line,
+                                      pythonTypedSink.sourceExpression,
+                                      model.sources,
+                                    )
+                              : model.id === "node-http-object-authorization" &&
+                                  nodeObjectSink !== undefined
+                                ? modeledObjectLookupSource(
+                                    lines,
+                                    sources,
+                                    sink.line,
+                                    nodeObjectSink.argument,
+                                    model.sources,
+                                  )
+                                : model.id === "node-http-ssrf" &&
+                                    nodeHttpSink?.urlExpression !== undefined
+                                  ? modeledCallSource(
+                                      lines,
+                                      sources,
+                                      sink.line,
+                                      nodeHttpSink.urlExpression,
+                                      model.sources,
+                                    )
+                                  : model.id ===
+                                      "node-copilot-system-prompt-injection"
+                                    ? nodeCopilotResolution?.source
                                     : extension === ".java" &&
-                                        model.id === "spring-r2dbc-sql" &&
-                                        javaR2dbcSink !== undefined
+                                        model.id ===
+                                          "spring-http-object-authorization" &&
+                                        javaObjectSink !== undefined
                                       ? modeledSameFileJavaObjectSource(
                                           lines,
                                           sink.line,
-                                          javaR2dbcSink.queryExpression,
+                                          javaObjectSink.argument,
                                           model.sources,
                                         )
                                       : extension === ".java" &&
-                                          model.id === "java-r2dbc-spi-sql" &&
-                                          javaR2dbcSpi !== undefined
+                                          model.id === "spring-r2dbc-sql" &&
+                                          javaR2dbcSink !== undefined
                                         ? modeledSameFileJavaObjectSource(
                                             lines,
                                             sink.line,
-                                            javaR2dbcSpi.grammarExpression,
+                                            javaR2dbcSink.queryExpression,
                                             model.sources,
                                           )
                                         : extension === ".java" &&
-                                            model.id ===
-                                              "spring-mvc-jpa-mass-assignment" &&
-                                            javaJpaSink !== undefined &&
-                                            javaJpaDomainType !== undefined
-                                          ? (() => {
-                                              const method =
-                                                exportedJavaMethods(lines).find(
-                                                  (candidate) =>
-                                                    sink.line >=
-                                                      candidate.startLine &&
-                                                    sink.line <=
-                                                      candidate.endLine,
-                                                );
-                                              return method === undefined
-                                                ? undefined
-                                                : modeledJavaMassAssignmentSource(
-                                                    lines,
-                                                    method,
-                                                    sink.line,
-                                                    javaJpaSink.argument,
-                                                    javaJpaDomainType,
-                                                  );
-                                            })()
+                                            model.id === "java-r2dbc-spi-sql" &&
+                                            javaR2dbcSpi !== undefined
+                                          ? modeledSameFileJavaObjectSource(
+                                              lines,
+                                              sink.line,
+                                              javaR2dbcSpi.grammarExpression,
+                                              model.sources,
+                                            )
                                           : extension === ".java" &&
-                                              (model.id ===
-                                                "spring-http-ssrf" ||
-                                                model.id === "spring-http-path")
-                                            ? modeledSameFileJavaSource(
-                                                lines,
-                                                sink.line,
-                                                model.id,
-                                                model.sources,
-                                              )
-                                            : extension === ".cs" &&
-                                                model.id ===
-                                                  "aspnet-http-template-injection"
-                                              ? modeledSameFileDotnetTemplateSource(
+                                              model.id ===
+                                                "spring-mvc-jpa-mass-assignment" &&
+                                              javaJpaSink !== undefined &&
+                                              javaJpaDomainType !== undefined
+                                            ? (() => {
+                                                const method =
+                                                  exportedJavaMethods(
+                                                    lines,
+                                                  ).find(
+                                                    (candidate) =>
+                                                      sink.line >=
+                                                        candidate.startLine &&
+                                                      sink.line <=
+                                                        candidate.endLine,
+                                                  );
+                                                return method === undefined
+                                                  ? undefined
+                                                  : modeledJavaMassAssignmentSource(
+                                                      lines,
+                                                      method,
+                                                      sink.line,
+                                                      javaJpaSink.argument,
+                                                      javaJpaDomainType,
+                                                    );
+                                              })()
+                                            : extension === ".java" &&
+                                                (model.id ===
+                                                  "spring-http-ssrf" ||
+                                                  model.id ===
+                                                    "spring-http-path")
+                                              ? modeledSameFileJavaSource(
                                                   lines,
                                                   sink.line,
+                                                  model.id,
                                                   model.sources,
-                                                  files,
-                                                  path,
                                                 )
                                               : extension === ".cs" &&
                                                   model.id ===
-                                                    "aspnet-http-object-authorization" &&
-                                                  dotnetObjectSink !== undefined
-                                                ? modeledSameFileDotnetObjectSource(
+                                                    "aspnet-http-template-injection"
+                                                ? modeledSameFileDotnetTemplateSource(
                                                     lines,
                                                     sink.line,
-                                                    dotnetObjectSink.argument,
                                                     model.sources,
                                                     files,
                                                     path,
                                                   )
                                                 : extension === ".cs" &&
-                                                    model.id.startsWith(
-                                                      "aspnet-http-",
-                                                    )
-                                                  ? modeledSameFileDotnetSource(
+                                                    model.id ===
+                                                      "aspnet-http-object-authorization" &&
+                                                    dotnetObjectSink !==
+                                                      undefined
+                                                  ? modeledSameFileDotnetObjectSource(
                                                       lines,
                                                       sink.line,
+                                                      dotnetObjectSink.argument,
                                                       model.sources,
                                                       files,
                                                       path,
-                                                    ) ??
-                                                    nearestModeledSource(
-                                                      matchedSources,
-                                                      sink.line,
                                                     )
-                                                  : nearestModeledSource(
-                                                      sources,
-                                                      sink.line,
-                                                    ));
+                                                  : extension === ".cs" &&
+                                                      model.id.startsWith(
+                                                        "aspnet-http-",
+                                                      )
+                                                    ? modeledSameFileDotnetSource(
+                                                        lines,
+                                                        sink.line,
+                                                        model.sources,
+                                                        files,
+                                                        path,
+                                                      ) ??
+                                                      nearestModeledSource(
+                                                        matchedSources,
+                                                        sink.line,
+                                                      )
+                                                    : nearestModeledSource(
+                                                        sources,
+                                                        sink.line,
+                                                      ));
       const source =
         model.id === "node-http-fastify-static-route-guard-bypass"
           ? nodeFastifyStatic?.source
@@ -30711,8 +30762,9 @@ function frameworkDirectPythonDataflowRecords(
         const supportsFastApiPydanticBody = summary.model.sources.some(
           (source) => source.kind === "fastapi-bound-parameter",
         );
-        const supportsFastApiOpenRedirect =
-          summary.model.id === "python-fastapi-open-redirect";
+        const supportsPythonOpenRedirect = isPythonOpenRedirectModel(
+          summary.model.id,
+        );
         const sources = matchingPythonModelLines(
           caller.lines,
           summary.model.sources,
@@ -30721,7 +30773,7 @@ function frameworkDirectPythonDataflowRecords(
         if (
           sources.length === 0 &&
           !supportsFastApiPydanticBody &&
-          !supportsFastApiOpenRedirect
+          !supportsPythonOpenRedirect
         )
           continue;
         const calls = pythonCallLines(caller.lines, imported.local);
@@ -30737,8 +30789,9 @@ function frameworkDirectPythonDataflowRecords(
                 argument,
               )
             : undefined;
-          const redirectSource = supportsFastApiOpenRedirect
-            ? pythonFastApiOpenRedirectSource(
+          const redirectSource = supportsPythonOpenRedirect
+            ? pythonOpenRedirectSource(
+                summary.model.id,
                 files,
                 caller.path,
                 caller.lines,
@@ -30749,13 +30802,15 @@ function frameworkDirectPythonDataflowRecords(
           const source =
             redirectSource ??
             pydanticSource ??
-            modeledPythonCallSource(
-              caller.lines,
-              sources,
-              call.line,
-              argument,
-              summary.model.sources,
-            );
+            (supportsPythonOpenRedirect
+              ? undefined
+              : modeledPythonCallSource(
+                  caller.lines,
+                  sources,
+                  call.line,
+                  argument,
+                  summary.model.sources,
+                ));
           if (source === undefined) continue;
           const key = [
             summary.model.id,
@@ -31542,8 +31597,9 @@ function frameworkPythonMultiHopDataflowRecords(
         const supportsFastApiPydanticBody = summary.model.sources.some(
           (source) => source.kind === "fastapi-bound-parameter",
         );
-        const supportsFastApiOpenRedirect =
-          summary.model.id === "python-fastapi-open-redirect";
+        const supportsPythonOpenRedirect = isPythonOpenRedirectModel(
+          summary.model.id,
+        );
         const sources = matchingPythonModelLines(
           caller.lines,
           summary.model.sources,
@@ -31552,7 +31608,7 @@ function frameworkPythonMultiHopDataflowRecords(
         if (
           sources.length === 0 &&
           !supportsFastApiPydanticBody &&
-          !supportsFastApiOpenRedirect
+          !supportsPythonOpenRedirect
         )
           continue;
         for (const call of pythonCallLines(caller.lines, imported.local)) {
@@ -31567,8 +31623,9 @@ function frameworkPythonMultiHopDataflowRecords(
                 argument,
               )
             : undefined;
-          const redirectSource = supportsFastApiOpenRedirect
-            ? pythonFastApiOpenRedirectSource(
+          const redirectSource = supportsPythonOpenRedirect
+            ? pythonOpenRedirectSource(
+                summary.model.id,
                 files,
                 caller.path,
                 caller.lines,
@@ -31579,13 +31636,15 @@ function frameworkPythonMultiHopDataflowRecords(
           const source =
             redirectSource ??
             pydanticSource ??
-            modeledPythonCallSource(
-              caller.lines,
-              sources,
-              call.line,
-              argument,
-              summary.model.sources,
-            );
+            (supportsPythonOpenRedirect
+              ? undefined
+              : modeledPythonCallSource(
+                  caller.lines,
+                  sources,
+                  call.line,
+                  argument,
+                  summary.model.sources,
+                ));
           if (source === undefined) continue;
           const sinkSummary = chain.sink;
           const key = [
@@ -34039,8 +34098,9 @@ function pythonFrameworkWrapperSummaries(
           const pythonTypedSink =
             model.id === "python-asyncpg-sql"
               ? pythonAsyncpgSqlSink(files, file.path, file.lines, sink.line)
-              : model.id === "python-fastapi-open-redirect"
-                ? pythonFastApiRedirectSink(
+              : isPythonOpenRedirectModel(model.id)
+                ? pythonOpenRedirectSink(
+                    model.id,
                     files,
                     file.path,
                     file.lines,
@@ -41695,6 +41755,398 @@ function pythonFastApiOpenRedirectSource(
       },
     ],
   };
+}
+
+interface PythonFlaskRequestStringSource {
+  kind: "flask-request-query-string";
+  line: number;
+  propagators: Array<{
+    kind: string;
+    path: string;
+    line: number;
+    symbol?: string;
+  }>;
+}
+
+function pythonFlaskHandlerAtLine(
+  lines: readonly string[],
+  line: number,
+): ExportedPythonFunction | undefined {
+  const exported = exportedPythonFunctions(lines).find(
+    (candidate) => line >= candidate.startLine && line <= candidate.endLine,
+  );
+  if (exported !== undefined) return exported;
+  const structuralLines = pythonStructuralLines(lines);
+  for (let index = 0; index < line; index += 1) {
+    const match =
+      /^(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(\s*\)\s*(?:->[^:]+)?\s*:/u.exec(
+        structuralLines[index] ?? "",
+      );
+    if (match?.[1] === undefined || match[1].startsWith("_")) continue;
+    const endLine = pythonFunctionEndLine(lines, index);
+    if (line >= index + 1 && line <= endLine) {
+      return {
+        symbol: match[1],
+        parameters: [],
+        startLine: index + 1,
+        endLine,
+      };
+    }
+  }
+  return undefined;
+}
+
+function pythonFlaskRouteEvidence(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  wrapper: ExportedPythonFunction,
+):
+  | Array<{ kind: string; path: string; line: number; symbol?: string }>
+  | undefined {
+  if (pythonLocalModuleCouldShadow(files, path, "flask")) return undefined;
+  const structuralLines = pythonStructuralLines(lines);
+  const decorators = pythonDecoratorSpansBeforeFunction(
+    lines,
+    wrapper.startLine,
+  );
+  if (decorators.length !== 1) return undefined;
+  const route =
+    /^([A-Za-z_]\w*)\s*\.\s*(delete|get|patch|post|put|route)\s*\(/u.exec(
+      decorators[0]!.structuralExpression,
+    );
+  if (route?.[1] === undefined || route[2] === undefined) return undefined;
+  const receiver = route[1];
+  const open = decorators[0]!.structuralExpression.indexOf("(", route.index);
+  const close = matchingCallParenthesis(
+    decorators[0]!.structuralExpression,
+    open,
+  );
+  if (open < 0 || close < 0) return undefined;
+  const arguments_ = splitPythonArguments(
+    decorators[0]!.expression.slice(open + 1, close),
+  );
+  if (
+    arguments_.length !== 1 ||
+    arguments_[0]!.trim().startsWith("*") ||
+    pythonLiteralStringValue(arguments_[0]!) === undefined
+  ) {
+    return undefined;
+  }
+
+  const assignments: Array<{ constructor: string; line: number }> = [];
+  const receiverPattern = escapeRegularExpression(receiver);
+  for (let line = 1; line < decorators[0]!.line; line += 1) {
+    const assignment = new RegExp(
+      `^\\s*${receiverPattern}\\s*(?::[^=]+)?=\\s*([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?)\\s*\\(`,
+      "u",
+    ).exec(structuralLines[line - 1] ?? "");
+    if (assignment?.[1] !== undefined) {
+      assignments.push({ constructor: assignment[1], line });
+    }
+  }
+  if (assignments.length !== 1) return undefined;
+  const assignment = assignments[0]!;
+  const factory = pythonOfficialImportedMemberBinding(
+    lines,
+    "flask",
+    "Flask",
+    assignment.constructor,
+    assignment.line,
+  );
+  if (
+    factory === undefined ||
+    !pythonImportedBindingUnchangedBetween(
+      lines,
+      receiver,
+      assignment.line,
+      decorators[0]!.line,
+    ) ||
+    pythonObjectMemberReassignedBetween(
+      lines,
+      receiver,
+      route[2],
+      assignment.line,
+      decorators[0]!.line,
+    )
+  ) {
+    return undefined;
+  }
+  return [
+    {
+      kind: "flask-official-application-factory",
+      path,
+      line: factory.line,
+      symbol: "flask.Flask",
+    },
+    {
+      kind: "flask-route",
+      path,
+      line: decorators[0]!.line,
+      symbol: `${receiver}.${route[2]}`,
+    },
+  ];
+}
+
+function pythonFlaskRequestArgsEvidence(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  origin: PythonResolvedExpressionOrigin,
+): PythonFlaskRequestStringSource | undefined {
+  if (pythonLocalModuleCouldShadow(files, path, "flask")) return undefined;
+  const value = origin.expression
+    .split(/\r?\n/u)
+    .map((line) => pythonCodeBeforeComment(line))
+    .join("\n")
+    .trim();
+  const get =
+    /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*args\s*\.\s*get\s*\(/u.exec(
+      value,
+    );
+  const subscript =
+    /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*args\s*\[\s*([\s\S]+)\s*\]$/u.exec(
+      value,
+    );
+  let requestExpression: string | undefined;
+  let field: string | undefined;
+  if (get?.[1] !== undefined) {
+    const arguments_ = pythonCallArgumentsForExpression(
+      value,
+      /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\.\s*args\s*\.\s*get\s*\(/u,
+    );
+    if (
+      arguments_ === undefined ||
+      arguments_.length < 1 ||
+      arguments_.length > 2 ||
+      arguments_.some(
+        (argument) =>
+          argument.trim().startsWith("*") ||
+          /^[A-Za-z_]\w*\s*=/u.test(argument.trim()),
+      )
+    ) {
+      return undefined;
+    }
+    field = pythonLiteralStringValue(arguments_[0]!);
+    const defaultValue = arguments_[1]?.trim();
+    if (
+      field === undefined ||
+      field === "" ||
+      (defaultValue !== undefined &&
+        defaultValue !== "None" &&
+        pythonLiteralStringValue(defaultValue) === undefined)
+    ) {
+      return undefined;
+    }
+    requestExpression = get[1];
+  } else if (subscript?.[1] !== undefined && subscript[2] !== undefined) {
+    field = pythonLiteralStringValue(subscript[2]);
+    if (field === undefined || field === "") return undefined;
+    requestExpression = subscript[1];
+  } else {
+    return undefined;
+  }
+  const request = pythonOfficialImportedMemberBinding(
+    lines,
+    "flask",
+    "request",
+    requestExpression,
+    origin.line,
+  );
+  if (request === undefined) return undefined;
+  return {
+    kind: "flask-request-query-string",
+    line: origin.line,
+    propagators: [
+      {
+        kind: "flask-official-request-binding",
+        path,
+        line: request.line,
+        symbol: "flask.request",
+      },
+      {
+        kind: "flask-request-args-read",
+        path,
+        line: origin.line,
+        symbol: `request.args[${JSON.stringify(field)}]`,
+      },
+    ],
+  };
+}
+
+function pythonFlaskRedirectSink(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  const callText = pythonCallExpression(lines, line, lines.length);
+  for (const match of callText.matchAll(
+    /\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(/gu,
+  )) {
+    const callee = match[1];
+    if (callee === undefined || !callee.endsWith("redirect")) continue;
+    if (pythonLocalModuleCouldShadow(files, path, "flask")) continue;
+    const redirect = pythonOfficialImportedMemberBinding(
+      lines,
+      "flask",
+      "redirect",
+      callee,
+      line,
+    );
+    if (redirect === undefined) continue;
+    const arguments_ = pythonCallArgumentsForCalleeAtLine(
+      lines,
+      line,
+      new RegExp(`\\b${escapeRegularExpression(callee)}\\s*\\(`, "u"),
+    );
+    if (
+      arguments_ === undefined ||
+      arguments_.some((argument) => argument.trim().startsWith("*"))
+    ) {
+      continue;
+    }
+    const keywordNames = arguments_.flatMap((argument) => {
+      const name = /^([A-Za-z_]\w*)\s*=/u.exec(argument.trim())?.[1];
+      return name === undefined ? [] : [name];
+    });
+    if (
+      keywordNames.some(
+        (name) => !new Set(["location", "code", "Response"]).has(name),
+      ) ||
+      new Set(keywordNames).size !== keywordNames.length
+    ) {
+      continue;
+    }
+    const namedLocations = arguments_
+      .map(
+        (argument) => /^location\s*=\s*([\s\S]+)$/u.exec(argument.trim())?.[1],
+      )
+      .filter((argument): argument is string => argument !== undefined);
+    const positional = pythonPositionalArguments(arguments_);
+    if (
+      namedLocations.length > 1 ||
+      (namedLocations.length === 1 && positional.length > 0) ||
+      (namedLocations.length === 0 &&
+        (positional.length === 0 || positional.length > 3))
+    ) {
+      continue;
+    }
+    const locationExpression = namedLocations[0] ?? positional[0];
+    if (locationExpression === undefined || locationExpression.trim() === "") {
+      continue;
+    }
+    const sourceExpression =
+      resolvePythonExpression(lines, locationExpression, line) ??
+      locationExpression.trim();
+    if (pythonFixedLocalRedirectPrefix(sourceExpression) !== undefined) {
+      continue;
+    }
+    return {
+      sourceExpression,
+      kind: "flask-redirect-location",
+      propagators: [
+        {
+          kind: "flask-official-redirect-binding",
+          path,
+          line: redirect.line,
+          symbol: "flask.redirect",
+        },
+        {
+          kind: "http-location-header-assignment",
+          path,
+          line,
+          symbol: "flask.redirect(location) -> Location",
+        },
+      ],
+    };
+  }
+  return undefined;
+}
+
+function pythonFlaskOpenRedirectSource(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  callLine: number,
+  expression: string,
+): PythonFlaskRequestStringSource | undefined {
+  const wrapper = pythonFlaskHandlerAtLine(lines, callLine);
+  if (wrapper === undefined) return undefined;
+  const routeEvidence = pythonFlaskRouteEvidence(files, path, lines, wrapper);
+  if (routeEvidence === undefined) return undefined;
+  const resolved =
+    resolvePythonExpression(lines, expression, callLine) ?? expression;
+  if (pythonFixedLocalRedirectPrefix(resolved) !== undefined) return undefined;
+  const directRequestSource = pythonFlaskRequestArgsEvidence(
+    files,
+    path,
+    lines,
+    { expression: resolved, line: callLine },
+  );
+  if (
+    directRequestSource === undefined &&
+    /\b[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)?\s*\(/u.test(
+      resolved
+        .split(/\r?\n/u)
+        .map((line) => pythonCodeBeforeComment(line))
+        .join("\n"),
+    )
+  ) {
+    return undefined;
+  }
+  const sources = pythonPydanticExpressionOrigins(lines, resolved, callLine)
+    .filter(
+      (origin) => origin.line >= wrapper.startLine && origin.line <= callLine,
+    )
+    .flatMap((origin) => {
+      const source = pythonFlaskRequestArgsEvidence(files, path, lines, origin);
+      return source === undefined ? [] : [source];
+    })
+    .filter(
+      (source, index, all) =>
+        all.findIndex(
+          (candidate) =>
+            candidate.line === source.line && candidate.kind === source.kind,
+        ) === index,
+    );
+  if (sources.length !== 1) return undefined;
+  return {
+    ...sources[0]!,
+    propagators: [...routeEvidence, ...sources[0]!.propagators],
+  };
+}
+
+function pythonOpenRedirectSink(
+  modelId: string,
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  line: number,
+): PythonTypedSink | undefined {
+  return modelId === "python-fastapi-open-redirect"
+    ? pythonFastApiRedirectSink(files, path, lines, line)
+    : modelId === "python-flask-open-redirect"
+      ? pythonFlaskRedirectSink(files, path, lines, line)
+      : undefined;
+}
+
+function pythonOpenRedirectSource(
+  modelId: string,
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  callLine: number,
+  expression: string,
+):
+  | PythonFastApiRequestStringSource
+  | PythonFlaskRequestStringSource
+  | undefined {
+  return modelId === "python-fastapi-open-redirect"
+    ? pythonFastApiOpenRedirectSource(files, path, lines, callLine, expression)
+    : modelId === "python-flask-open-redirect"
+      ? pythonFlaskOpenRedirectSource(files, path, lines, callLine, expression)
+      : undefined;
 }
 
 function pythonPydanticModelForEndpointType(

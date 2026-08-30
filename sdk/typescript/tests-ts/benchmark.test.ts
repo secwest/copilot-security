@@ -671,6 +671,7 @@ describe("effectiveness benchmark", () => {
         "python-fastapi-response-class-open-redirect",
         "python-fastapi-response-class-safe-local-redirect",
       ],
+      ["python-flask-open-redirect", "python-flask-safe-local-redirect"],
       [
         "rust-axum-tokio-shell-command-injection",
         "rust-axum-tokio-argv-command",

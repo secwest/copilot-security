@@ -3078,6 +3078,29 @@ node ../../benchmarks/run-benchmark.mjs `
   --mode deep
 ```
 
+The dedicated `python-flask-open-redirect-manifest.json` adds an independent
+Flask root-prefix pair. Its exploit reads one literal `request.args` field,
+prepends only `/`, and passes the result to the official `flask.redirect`;
+the leading slash in the supplied value produces a scheme-relative
+`//attacker.invalid/...` Location. The topology-matched control percent-
+encodes the same value below the non-root fixed `/continue?next=` target.
+Both fixtures pin Flask 3.1.3 and Werkzeug 3.1.8, disable redirect following,
+and make no external request. The model rejects local Flask shadows, rebound
+bindings, Blueprint-only registration, dynamic or multiple decorators,
+ambiguous redirect roles, non-query request collections, and opaque calls:
+
+```powershell
+node ../../benchmarks/run-benchmark.mjs `
+  --manifest ../../benchmarks/python-flask-open-redirect-manifest.json `
+  --results-dir C:\security-benchmarks\copilot-security-python-flask-redirect `
+  --runs 1 `
+  --selection-only `
+  --auth github `
+  --model gpt-5.6-terra `
+  --effort high `
+  --mode deep
+```
+
 The Python multi-hop lane inserts public gateway and service relays between the
 registered Flask route and sink wrapper. It also exercises bounded multiline
 relay calls:

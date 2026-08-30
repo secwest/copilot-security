@@ -2,6 +2,72 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Model Flask redirects without trusting a root-only prefix
+
+**Measured comparator gap.** CodeQL's high-precision
+[`py/url-redirection` query](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+documents the ordinary Flask `request.args.get(...)` to `redirect(...)`
+flow. Its current
+[`StringConcatAsSanitizer`](https://github.com/github/codeql/blob/main/python/ql/lib/semmle/python/security/dataflow/UrlRedirectCustomizations.qll)
+treats the right operand of every string concatenation as sanitized because
+the left operand controls the prefix. That is sound for a non-root application
+path, but not for `"/" + remote`: a remote value beginning with slash yields
+`//attacker.invalid/path`, a network-path reference that selects another
+authority. The unchanged Copilot Security host also emitted no typed Flask row
+for this executable case. Its new regression therefore failed exactly one
+exploit assertion with zero rows before implementation.
+
+**Typed boundary.** The new `python-flask-open-redirect` model requires one
+stable official `flask.Flask` factory assignment, one literal
+`route/get/post/put/patch/delete` decorator, an official stable
+`flask.request` binding, and one literal `request.args.get` or subscript
+field. The exact value must reach argument zero or the sole named
+`location=` role of a stable official `flask.redirect`. Structured
+propagators record the factory, route, request binding, query field, redirect
+binding, and Werkzeug-backed Location assignment. Zero-argument Flask handlers
+need a bounded top-level handler resolver because the general exported-wrapper
+inventory intentionally omits functions with no parameters. Handlers with
+path parameters continue through the existing exported-function path.
+
+**Precision boundary.** The model rejects repository-local `flask` packages,
+binding and member replacement, Blueprint-only registration without a proved
+application mount, multiple decorators, dynamic or expanded route arguments,
+star-expanded or unknown redirect arguments, request collections other than
+`args`, opaque call transformations, and unresolved multiple query fields.
+Open-redirect models cannot fall back to the generic text-matched framework
+source when typed proof fails; a regression caught and closed that rebound-
+request escape. A fixed application-owned prefix longer than `/` suppresses
+the path, while a root-only prefix remains reportable.
+
+**Executable differential.** Flask documents that
+[`redirect(location)`](https://flask.palletsprojects.com/en/stable/api/)
+creates a redirect response, while Werkzeug's
+[`redirect` implementation](https://github.com/pallets/werkzeug/blob/main/src/werkzeug/utils.py)
+assigns the supplied value to `Location`. The paired fixtures pin
+[Flask 3.1.3](https://pypi.org/project/Flask/) and
+[Werkzeug 3.1.8](https://pypi.org/project/Werkzeug/). The exploit sends
+`/attacker.invalid/capture`, observes
+`//attacker.invalid/capture`, and resolves that Location to the attacker
+authority. The control percent-encodes the same bytes beneath
+`/continue?next=`. Both use Flask's documented
+[`test_client`](https://flask.palletsprojects.com/en/stable/testing/) with
+`follow_redirects=False`, so no external request occurs.
+
+**Regression and benchmark contract.** Positive tests cover direct and
+qualified imports, `request.args.get`, subscript access, positional and named
+redirect roles, `route` and shortcut decorators, zero-argument and path-
+parameter handlers, aliases, and a relative redirect wrapper. Negative tests
+cover every precision boundary above. Model-specific finding-quality rules
+require the exact Flask, query, Location, origin, root-prefix/control, and
+CWE-601 evidence in both validation and attack-path fields. Focused Flask,
+FastAPI, and canonical acceptance passes 39 tests and 2,827 assertions. The
+strict corpus now contains 192 pairs, 384 cases, and 1,152 repeated positions.
+Generated-model drift, TypeScript, formatting, and a clean production build
+pass. The authoritative native Windows aggregate passes 2,108 tests and 16,641
+assertions, skips 31 intentional platform/environment cases, and reports no
+failures across 2,139 tests in 217 files. The standing effectiveness goal
+remains active.
+
 ## 2026-08-30 — Preserve balanced multiline FastAPI route decorators
 
 **Measured shared false negative.** Python permits expressions enclosed in

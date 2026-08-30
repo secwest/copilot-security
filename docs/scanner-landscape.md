@@ -5,6 +5,21 @@ the constraints for integrating them without turning Copilot Security into an
 unverifiable alert aggregator. It is a living engineering backlog, not a claim
 that dissimilar products can be reduced to one score.
 
+The latest comparator adoption starts from CodeQL's maintained
+[`py/url-redirection` query](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+and its Flask `request.args` example, but tightens one current sanitizer
+assumption. CodeQL's
+[`StringConcatAsSanitizer`](https://github.com/github/codeql/blob/main/python/ql/lib/semmle/python/security/dataflow/UrlRedirectCustomizations.qll)
+suppresses the right operand of string concatenation when the left operand
+controls the prefix. Copilot Security distinguishes a non-root fixed local
+prefix from a root-only slash: `"/" + "/attacker.invalid/path"` produces the
+scheme-relative `//attacker.invalid/path` Location and remains reportable.
+The typed Flask model also requires exact application, route, request, query-
+field, redirect, and Location evidence; rejects shadows, rebindings, Blueprint-
+only registration, ambiguous decorators or arguments, non-query collections,
+and opaque transformations; and proves the boundary with a pinned, no-follow
+Flask/Werkzeug exploit/control pair.
+
 The latest comparator adoption is CodeQL's merged August 2026
 [`Rust command-injection query`](https://github.com/github/codeql/pull/22323),
 which adds `Command::new`, `arg`, and `args` sinks for both the standard-library

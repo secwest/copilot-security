@@ -6,6 +6,37 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Added a fail-closed `python-flask-open-redirect` model for CWE-601. It
+  requires an official `flask.Flask` application, one literal route, an exact
+  stable `flask.request.args` query-field read, and an official
+  `flask.redirect` Location sink. Same-file aliases and one relative wrapper
+  retain structured factory, route, request, field, redirect, and Location
+  evidence.
+- Closed a reproduced root-prefix false negative. The unchanged scanner emitted
+  no row for `"/" + target`; the implemented model preserves it because a
+  target beginning with slash forms `//host`. This is stricter than CodeQL's
+  current URL-redirection string-concatenation sanitizer, which treats the
+  right operand as sanitized whenever the left operand controls the prefix.
+- Preserved fail-closed precision for local Flask shadows, rebound request,
+  redirect, application, and route members, Blueprint-only registration,
+  multiple or dynamic decorators, star or unknown redirect arguments,
+  non-query request collections, opaque transformations, and multiple
+  unresolved query sources. A non-root fixed local prefix remains a control.
+- Added a pinned Flask 3.1.3 / Werkzeug 3.1.8 exploit/control pair. With
+  `follow_redirects=False`, the exploit emits
+  `//attacker.invalid/capture` and the encoded control remains below
+  `/continue?next=`; neither witness performs an external request. The
+  canonical corpus advances to 192 pairs, 384 cases, and 1,152 repeated scan
+  positions.
+- Focused Flask, FastAPI, and canonical acceptance passes 39 tests and 2,827
+  assertions. Generated-model drift, TypeScript, formatting, and a clean
+  production build pass.
+- The authoritative native Windows aggregate passes 2,108 tests and 16,641
+  assertions, skips 31 intentional platform/environment cases, and reports no
+  failures across 2,139 tests in 217 files. The initial sandboxed soak exposed
+  only stale-build, private-ACL, and 191-pair bookkeeping conditions; a fresh
+  build, the 192-pair update, and the required native ACL boundary clear all
+  seven without changing product expectations.
 - Closed a reproduced shared false negative for balanced multiline FastAPI
   path-operation decorators. The unchanged host passed its 12 existing direct-
   return redirect checks but emitted no finding for the new executable case.

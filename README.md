@@ -86,6 +86,16 @@ reference. Configured or ambiguous `Query` calls, non-string or reassigned
 parameters, extra `Annotated` metadata, duplicate URL or response-class roles,
 wildcard route options, guarded or opaque direct returns, star expansion,
 local package shadows, replaced response bindings, and lookalikes fail closed.
+Flask redirects have a separate typed CWE-601 model. It requires an official
+`flask.Flask` application and literal route, one stable
+`flask.request.args` field, and an official `flask.redirect` Location
+sink. It supports direct, qualified, and relative-wrapper forms without
+promoting Blueprint-only registration, local lookalikes, rebound bindings,
+non-query collections, opaque transformations, or ambiguous arguments. A
+non-root fixed local prefix is a control; a root-only `"/" + value` is not,
+because a value beginning with slash becomes a scheme-relative
+`//attacker.invalid/...` redirect. The pinned Flask/Werkzeug fixture pair
+uses `follow_redirects=False` and inspects only the emitted Location.
 It separately models request bodies reaching
 standard-library `pickle.load` or `pickle.loads`, NumPy `load` with literal
 `allow_pickle=True`, as well as PyYAML

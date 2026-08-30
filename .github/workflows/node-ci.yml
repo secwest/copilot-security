@@ -130,8 +130,8 @@ jobs:
           node bin/copilot-security.mjs --version
           node bin/copilot-security.mjs --help
 
-  fastapi-pydantic-body-fixtures:
-    name: FastAPI Pydantic request-body witness
+  python-framework-fixtures:
+    name: Python framework exploit/control witnesses
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -147,6 +147,9 @@ jobs:
           "${{ runner.temp }}/fastapi-pydantic-witness/bin/pip" install \
             --disable-pip-version-check \
             --requirement benchmarks/fixtures/python-fastapi-pydantic-body-command-injection/requirements.txt
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/pip" install \
+            --disable-pip-version-check \
+            --requirement benchmarks/fixtures/python-flask-open-redirect/requirements.txt
 
       - name: Execute body-command and open-redirect exploit/control witnesses
         run: |
@@ -170,6 +173,10 @@ jobs:
             benchmarks/fixtures/python-fastapi-response-class-open-redirect/examples/witness.py
           "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
             benchmarks/fixtures/python-fastapi-response-class-safe-local-redirect/examples/witness.py
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-flask-open-redirect/examples/witness.py
+          "${{ runner.temp }}/fastapi-pydantic-witness/bin/python" \
+            benchmarks/fixtures/python-flask-safe-local-redirect/examples/witness.py
 
   mcp-tool-fixtures:
     name: MCP tool witness / ${{ matrix.os }} / ${{ matrix.fixture }}
