@@ -6,6 +6,24 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed a separately measured Django class-based-view false negative: the
+  unchanged scanner emitted zero rows for an official `django.views.View`
+  subclass registered through `ContinueView.as_view()`, while the typed model
+  now emits the expected `python-django-open-redirect` row from
+  `get(self, request)`.
+- Added fail-closed class-dispatch proof for one direct official `View` base,
+  an exact no-argument `as_view()` URL registration, one undecorated GET
+  handler, its second request parameter, and stable class/import/member state.
+  Multiple inheritance, decorators, duplicate definitions, configured
+  `as_view`, `setup`/`dispatch` overrides, defaulted or reassigned request
+  parameters, local Django shadows, and replaced `as_view` or `get` members
+  remain negative. The existing official host-and-scheme guard suppression also
+  applies inside class handlers.
+- Added a strict Django 6.1 class-view exploit/control pair and offline
+  no-follow witnesses. The canonical corpus advances to 194 exploit/control
+  pairs, 388 cases, and 1,164 repeated scan positions. The focused class-view,
+  canonical-count, and TypeScript compilation lanes pass 23 tests and 144
+  assertions before full acceptance.
 - Added a fail-closed `python-django-open-redirect` model for CWE-601. It
   requires an official `django.urls.path` or `re_path` call inside the sole
   balanced `urlpatterns` list, an exact same-file or relative-imported function

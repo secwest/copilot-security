@@ -2,6 +2,53 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Model registered Django class-view GET dispatch
+
+**Measured gap and maintained comparator.** The unchanged scanner emitted zero
+rows for an official `django.views.View` subclass whose vulnerable
+`get(self, request)` method was registered as `ContinueView.as_view()`; the new
+positive regression therefore failed its exact one-row assertion before the
+implementation. CodeQL's current high-precision
+[`py/url-redirection`](https://codeql.github.com/codeql-query-help/python/py-url-redirection/)
+help uses this same Django class-view shape in its canonical example. Matching
+that coverage closes a real parity gap; retaining application-registration and
+dispatch proof makes the boundary narrower than a method-name match.
+
+**Framework semantics.** Django documents that
+[`as_view()`](https://docs.djangoproject.com/en/6.0/ref/class-based-views/base/)
+returns the callable used by URL configuration, `setup()` assigns the incoming
+`HttpRequest` to the instance, and `dispatch()` sends GET to `get()`. The
+maintained
+[`View` source](https://github.com/django/django/blob/main/django/views/generic/base.py)
+implements that lifecycle. The model represents it with four distinct
+propagators: the official View binding, the class declaration, the exact
+`as_view()` registration, and the GET request parameter. Existing URL-pattern,
+query-read, redirect-binding, wrapper, and Location evidence remains intact.
+
+**Fail-closed boundary.** A class handler must have one top-level public class
+definition, one direct official `django.views.View` or
+`django.views.generic.View` base, no class or method decorator, and exactly one
+`get(self, request, ...)` method. The request arguments cannot be defaulted and
+the request identifier cannot be reassigned before the source. The class must
+be the exact same-file or relative-imported target of a no-argument
+`ClassName.as_view()` call inside the sole balanced `urlpatterns` list.
+Multiple inheritance, duplicate classes or GET methods, `setup`, `dispatch`,
+or `as_view` overrides, `http_method_names` replacement, configured `as_view`
+calls, class/import rebindings, member monkey patches, local Django packages,
+and dynamic registration fail closed. Function views retain their previous
+independent typed path.
+
+**Controls and executable corpus.** The enclosing official
+`url_has_allowed_host_and_scheme` suppression now recognizes the same guard
+inside a class GET handler. A new topology-matched Django 6.1 pair registers the
+same `ContinueView.as_view()` structure on both sides. The exploit prepends
+only `/` and emits `//attacker.invalid/...`; the control percent-encodes the
+same input beneath `/continue/?next=`. Both test-client witnesses set
+`follow=False`, inspect only Location, and make no external request. Together
+with qualified, aliased, async, same-file, relative-module, lifecycle,
+reassignment, decorator, shadow, and duplicate-definition tests, the canonical
+corpus advances to 194 pairs, 388 cases, and 1,164 repeated scan positions.
+
 ## 2026-08-30 — Require registered Django views at redirect Location sinks
 
 **Measured gap and comparator evidence.** CodeQL's maintained

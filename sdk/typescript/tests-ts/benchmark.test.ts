@@ -674,6 +674,10 @@ describe("effectiveness benchmark", () => {
       ["python-flask-open-redirect", "python-flask-safe-local-redirect"],
       ["python-django-open-redirect", "python-django-safe-local-redirect"],
       [
+        "python-django-class-view-open-redirect",
+        "python-django-class-view-safe-local-redirect",
+      ],
+      [
         "rust-axum-tokio-shell-command-injection",
         "rust-axum-tokio-argv-command",
       ],

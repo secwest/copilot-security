@@ -3565,6 +3565,13 @@ interface ExportedPythonFunction {
   endLine: number;
 }
 
+interface PythonDjangoViewHandler extends ExportedPythonFunction {
+  kind: "class-get" | "function";
+  requestParameterIndex: number;
+  classLine?: number;
+  viewBindingLine?: number;
+}
+
 interface ExportedJavaMethod {
   ownerType: string;
   symbol: string;
@@ -4622,6 +4629,7 @@ const PYTHON_FLASK_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
 
 const PYTHON_DJANGO_OPEN_REDIRECT_FIELD_EVIDENCE_REQUIREMENTS = [
   ["Django", "urlpatterns", "django.urls.path", "registered view"],
+  ["function view", "View.as_view", "class-based view", "GET handler"],
   ["request.GET", "query string", "remote input", "query field"],
   [
     "django.shortcuts.redirect",
@@ -42214,13 +42222,217 @@ function pythonDjangoUrlPatternLines(
   return ranges.length === 1 ? new Set(ranges[0]) : new Set();
 }
 
+function pythonIndentedBlockEndLine(
+  lines: readonly string[],
+  startLine: number,
+  indentation: number,
+): number {
+  let lastLine = startLine;
+  for (let line = startLine + 1; line <= lines.length; line += 1) {
+    const code = pythonCodeBeforeComment(lines[line - 1] ?? "");
+    if (code.trim() === "") continue;
+    const leading = /^(\s*)/u.exec(code)?.[1] ?? "";
+    if (leading.includes("\t")) return startLine;
+    if (leading.length <= indentation) break;
+    lastLine = line;
+  }
+  return lastLine;
+}
+
+function pythonDjangoClassViewHandlers(
+  files: readonly SourceFileSnapshot[],
+  file: SourceFileSnapshot,
+): PythonDjangoViewHandler[] {
+  if (pythonLocalModuleCouldShadow(files, file.path, "django.views")) return [];
+  const structuralLines = pythonStructuralLines(file.lines);
+  const handlers: PythonDjangoViewHandler[] = [];
+  for (let line = 1; line <= structuralLines.length; line += 1) {
+    const declaration =
+      /^class\s+([A-Za-z_]\w*)\s*\(\s*([^,()]+)\s*\)\s*:\s*$/u.exec(
+        structuralLines[line - 1] ?? "",
+      );
+    if (declaration?.[1] === undefined || declaration[2] === undefined) {
+      continue;
+    }
+    const className = declaration[1];
+    if (className.startsWith("_")) continue;
+    const classDefinitions = structuralLines.filter((candidate) =>
+      new RegExp(
+        `^class\\s+${escapeRegularExpression(className)}\\s*\\(`,
+        "u",
+      ).test(candidate),
+    );
+    if (classDefinitions.length !== 1) continue;
+    let previous = line - 1;
+    while (
+      previous > 0 &&
+      (structuralLines[previous - 1] ?? "").trim() === ""
+    ) {
+      previous -= 1;
+    }
+    if (
+      previous > 0 &&
+      (structuralLines[previous - 1] ?? "").trimStart().startsWith("@")
+    ) {
+      continue;
+    }
+    const bindings = ["django.views", "django.views.generic"]
+      .map((moduleName) =>
+        pythonOfficialImportedMemberBinding(
+          file.lines,
+          moduleName,
+          "View",
+          declaration[2]!.trim(),
+          line,
+        ),
+      )
+      .filter(
+        (binding): binding is { line: number; symbol: string } =>
+          binding !== undefined,
+      );
+    if (bindings.length !== 1) continue;
+    const binding = bindings[0]!;
+    const classEndLine = pythonIndentedBlockEndLine(file.lines, line, 0);
+    if (
+      classEndLine <= line ||
+      pythonIdentifierReassignedBetween(
+        file.lines,
+        className,
+        line,
+        file.lines.length + 1,
+      ) ||
+      ["as_view", "dispatch", "get", "setup"].some((member) =>
+        pythonObjectMemberReassignedBetween(
+          file.lines,
+          className,
+          member,
+          line,
+          file.lines.length + 1,
+        ),
+      ) ||
+      pythonImportedBindingUnchangedBetween(
+        file.lines,
+        binding.symbol,
+        binding.line,
+        file.lines.length + 1,
+      ) === false
+    ) {
+      continue;
+    }
+    const body = structuralLines.slice(line, classEndLine);
+    if (
+      body.some((candidate) => /^ {4}@/u.test(candidate)) ||
+      body.some((candidate) =>
+        /^ {4}(?:async\s+)?def\s+(?:as_view|dispatch|setup)\s*\(/u.test(
+          candidate,
+        ),
+      ) ||
+      body.some((candidate) =>
+        /^ {4}(?:as_view|dispatch|get|http_method_names|setup)\s*(?::[^=]+)?=/u.test(
+          candidate,
+        ),
+      )
+    ) {
+      continue;
+    }
+    const methods: Array<{
+      endLine: number;
+      line: number;
+      parameters: string[];
+    }> = [];
+    for (
+      let methodLine = line + 1;
+      methodLine <= classEndLine;
+      methodLine += 1
+    ) {
+      const method =
+        /^ {4}(?:async\s+)?def\s+get\s*\(([^()]*)\)\s*(?:->\s*[^:]+)?\s*:\s*$/u.exec(
+          structuralLines[methodLine - 1] ?? "",
+        );
+      if (method?.[1] === undefined) continue;
+      const rawParameters = splitPythonArguments(method[1]);
+      if (
+        rawParameters.some(
+          (parameter) =>
+            !/^\*{0,2}[A-Za-z_]\w*(?:\s*:\s*[^=]+)?(?:\s*=\s*.+)?$/u.test(
+              parameter.trim(),
+            ),
+        ) ||
+        !/^self(?:\s*:\s*[^=]+)?$/u.test(rawParameters[0]?.trim() ?? "") ||
+        !/^request(?:\s*:\s*[^=]+)?$/u.test(rawParameters[1]?.trim() ?? "")
+      ) {
+        continue;
+      }
+      const parameters = rawParameters
+        .map((parameter) =>
+          parameter
+            .trim()
+            .replace(/^\*{1,2}/u, "")
+            .replace(/\s*=.*$/u, "")
+            .replace(/\s*:\s*.*$/u, "")
+            .trim(),
+        )
+        .filter((parameter) => /^[A-Za-z_]\w*$/u.test(parameter));
+      methods.push({
+        endLine: pythonIndentedBlockEndLine(file.lines, methodLine, 4),
+        line: methodLine,
+        parameters,
+      });
+    }
+    if (methods.length !== 1) continue;
+    const method = methods[0]!;
+    if (
+      method.endLine <= method.line ||
+      method.parameters.length < 2 ||
+      method.parameters[0] !== "self"
+    ) {
+      continue;
+    }
+    handlers.push({
+      kind: "class-get",
+      requestParameterIndex: 1,
+      symbol: className,
+      parameters: method.parameters,
+      startLine: method.line,
+      endLine: method.endLine,
+      classLine: line,
+      viewBindingLine: binding.line,
+    });
+  }
+  return handlers;
+}
+
+function pythonDjangoAsViewReassignedBefore(
+  lines: readonly string[],
+  targetExpression: string,
+  beforeLine: number,
+): boolean {
+  const reassignment = new RegExp(
+    `^\\s*${escapeRegularExpression(targetExpression)}\\s*\\.\\s*as_view\\s*(?:[+\\-*/%&|^]?=|:=)`,
+    "u",
+  );
+  return pythonStructuralLines(lines)
+    .slice(0, Math.max(0, beforeLine - 1))
+    .some((candidate) => reassignment.test(candidate));
+}
+
+function pythonDjangoFunctionViewHandler(
+  wrapper: ExportedPythonFunction,
+): PythonDjangoViewHandler {
+  return {
+    ...wrapper,
+    kind: "function",
+    requestParameterIndex: 0,
+  };
+}
+
 function pythonDjangoRouteTargetsHandler(
   files: readonly SourceFileSnapshot[],
   routeFile: SourceFileSnapshot,
   routeLine: number,
   viewExpression: string,
   viewPath: string,
-  wrapper: ExportedPythonFunction,
+  wrapper: PythonDjangoViewHandler,
 ): boolean {
   const knownPaths = new Map(
     files.map((candidate) => [
@@ -42228,7 +42440,25 @@ function pythonDjangoRouteTargetsHandler(
       candidate.path,
     ]),
   );
-  const direct = /^([A-Za-z_]\w*)$/u.exec(viewExpression.trim())?.[1];
+  const normalizedViewExpression = viewExpression.replace(/\s+/gu, "");
+  const targetExpression =
+    wrapper.kind === "class-get"
+      ? /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\.as_view\(\)$/u.exec(
+          normalizedViewExpression,
+        )?.[1]
+      : normalizedViewExpression;
+  if (targetExpression === undefined) return false;
+  if (
+    wrapper.kind === "class-get" &&
+    pythonDjangoAsViewReassignedBefore(
+      routeFile.lines,
+      targetExpression,
+      routeLine,
+    )
+  ) {
+    return false;
+  }
+  const direct = /^([A-Za-z_]\w*)$/u.exec(targetExpression)?.[1];
   if (direct !== undefined) {
     if (
       routeFile.path === viewPath &&
@@ -42257,13 +42487,19 @@ function pythonDjangoRouteTargetsHandler(
           routeFile.path,
           imported.moduleSpecifier,
           knownPaths,
-        ) === viewPath,
+        ) === viewPath &&
+        (wrapper.kind === "function" ||
+          !pythonObjectMemberReassignedBetween(
+            routeFile.lines,
+            direct,
+            "as_view",
+            imported.line,
+            routeLine,
+          )),
     );
   }
 
-  const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(
-    viewExpression.replace(/\s+/gu, ""),
-  );
+  const qualified = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/u.exec(targetExpression);
   if (qualified?.[1] === undefined || qualified[2] !== wrapper.symbol) {
     return false;
   }
@@ -42311,7 +42547,7 @@ function pythonDjangoRouteTargetsHandler(
 function pythonDjangoRouteEvidence(
   files: readonly SourceFileSnapshot[],
   viewPath: string,
-  wrapper: ExportedPythonFunction,
+  wrapper: PythonDjangoViewHandler,
 ): PythonDjangoRequestStringSource["propagators"] | undefined {
   const evidence: PythonDjangoRequestStringSource["propagators"] = [];
   for (const routeFile of files) {
@@ -42396,6 +42632,16 @@ function pythonDjangoRouteEvidence(
             line,
             symbol: `${member}(${JSON.stringify(route)}, ${wrapper.symbol})`,
           },
+          ...(wrapper.kind === "class-get"
+            ? [
+                {
+                  kind: "django-as-view-registration",
+                  path: routeFile.path,
+                  line,
+                  symbol: `${wrapper.symbol}.as_view()`,
+                },
+              ]
+            : []),
         );
       }
     }
@@ -42410,7 +42656,26 @@ function pythonDjangoRouteEvidence(
           existing.symbol === candidate.symbol,
       ) === index,
   );
-  return unique.length === 0 ? undefined : unique.slice(0, 8);
+  if (unique.length === 0) return undefined;
+  return [
+    ...(wrapper.kind === "class-get"
+      ? [
+          {
+            kind: "django-official-view-binding",
+            path: viewPath,
+            line: wrapper.viewBindingLine!,
+            symbol: "django.views.View",
+          },
+          {
+            kind: "django-class-based-view",
+            path: viewPath,
+            line: wrapper.classLine!,
+            symbol: wrapper.symbol,
+          },
+        ]
+      : []),
+    ...unique,
+  ].slice(0, 10);
 }
 
 function pythonDjangoStaticAllowedHosts(
@@ -42444,10 +42709,19 @@ function pythonDjangoAllowedHostGuard(
   sinkLine: number,
   sourceExpression: string,
 ): boolean {
-  const wrapper = exportedPythonFunctions(lines).find(
+  const functionWrapper = exportedPythonFunctions(lines).find(
     (candidate) =>
       sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
   );
+  const file = files.find((candidate) => candidate.path === path);
+  const wrapper =
+    functionWrapper ??
+    (file === undefined
+      ? undefined
+      : pythonDjangoClassViewHandlers(files, file).find(
+          (candidate) =>
+            sinkLine >= candidate.startLine && sinkLine <= candidate.endLine,
+        ));
   if (wrapper === undefined) return false;
   const structuralLines = pythonStructuralLines(lines);
   const sinkIndent = /^(\s*)/u.exec(structuralLines[sinkLine - 1] ?? "")![1]!
@@ -42687,7 +42961,7 @@ function pythonDjangoRedirectSink(
 function pythonDjangoRequestGetEvidence(
   path: string,
   lines: readonly string[],
-  wrapper: ExportedPythonFunction,
+  wrapper: PythonDjangoViewHandler,
   origin: { expression: string; line: number },
 ): PythonDjangoRequestStringSource | undefined {
   const get =
@@ -42732,8 +43006,9 @@ function pythonDjangoRequestGetEvidence(
   } else {
     return undefined;
   }
+  const requestParameter = wrapper.parameters[wrapper.requestParameterIndex];
   if (
-    wrapper.parameters[0] !== requestExpression ||
+    requestParameter !== requestExpression ||
     pythonIdentifierReassignedBetween(
       lines,
       requestExpression,
@@ -42748,7 +43023,10 @@ function pythonDjangoRequestGetEvidence(
     line: origin.line,
     propagators: [
       {
-        kind: "django-view-request-parameter",
+        kind:
+          wrapper.kind === "class-get"
+            ? "django-get-request-parameter"
+            : "django-view-request-parameter",
         path,
         line: wrapper.startLine,
         symbol: requestExpression,
@@ -42770,10 +43048,19 @@ function pythonDjangoOpenRedirectSource(
   callLine: number,
   expression: string,
 ): PythonDjangoRequestStringSource | undefined {
-  const wrapper = exportedPythonFunctions(lines).find(
+  const file = files.find((candidate) => candidate.path === path);
+  if (file === undefined) return undefined;
+  const functionWrapper = exportedPythonFunctions(lines).find(
     (candidate) =>
       callLine >= candidate.startLine && callLine <= candidate.endLine,
   );
+  const wrapper =
+    functionWrapper === undefined
+      ? pythonDjangoClassViewHandlers(files, file).find(
+          (candidate) =>
+            callLine >= candidate.startLine && callLine <= candidate.endLine,
+        )
+      : pythonDjangoFunctionViewHandler(functionWrapper);
   if (wrapper === undefined || wrapper.parameters.length === 0)
     return undefined;
   const routeEvidence = pythonDjangoRouteEvidence(files, path, wrapper);
