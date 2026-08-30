@@ -2,6 +2,64 @@
 
 This log records consequential implementation decisions, their evidence, and the tradeoffs that future scanner work must preserve.
 
+## 2026-08-30 — Treat exact FastAPI Annotated models as request bodies
+
+**Measured miss and primary evidence.** The pre-change production scanner
+retained only lexical process/path leads for a POST endpoint declared as
+`payload: Annotated[ReportRequest, Body()]`; it emitted no structured
+request-to-shell row. The source-identical control selected a `ClassVar` and
+also emitted no structured row. FastAPI's official
+[body-parameter documentation](https://fastapi.tiangolo.com/tutorial/body-multiple-params/)
+both recommends the `Annotated` form where possible and documents `Body()` as
+the metadata that makes a value a request-body parameter. It also documents
+that the Pydantic model is converted and validated from request data. That
+common documented boundary justifies closing the false negative without
+broadening arbitrary Python annotations.
+
+**Exact annotation contract.** The endpoint parser now shares one contract
+between the early applicability check and the source-to-sink analyzer. It
+accepts either the existing direct model type or exactly two-part
+`Annotated[Model, Body()]` metadata. `Annotated` must resolve uniquely through
+a stable official `typing` or `typing_extensions` direct, aliased, or
+module-qualified import. `Body` must likewise resolve uniquely through a
+stable official `fastapi` or `fastapi.params` direct, aliased, or
+module-qualified import. The existing route proof independently requires an
+unshadowed official FastAPI application/router factory and a mutating HTTP
+method. The model remains one exact same-file or relatively imported
+`pydantic.BaseModel` definition, and only one declared string field may reach
+the sink.
+
+**Fail-closed exclusions.** Query, dependency, path, form, file, header, and
+cookie metadata do not satisfy the body contract. Extra `Annotated` metadata,
+configured `Body(...)` calls, parameter defaults, nested or dynamic type
+expressions, missing or duplicate bindings, rebinding before route definition,
+and repository-local `typing`, `typing_extensions`, or `fastapi` modules are
+rejected. The deliberately narrow zero-argument `Body()` boundary avoids
+claiming that arbitrary metadata options preserve the same body shape; those
+variants can be added later only with topology-matched evidence. Existing
+parameter/field stability, model-escape, validator/configuration, resource-cap,
+and `ClassVar` exclusions continue to dominate the new syntax support.
+
+**Evidence and reviewer closure.** Structured rows add
+`python-official-annotated-binding` and
+`fastapi-official-body-parameter` before the existing exact BaseModel, model,
+field, parameter, wrapper, and sink evidence. When those propagators are
+present, both validation and attack-path prose must name the exact
+`Annotated[Model, Body()]` boundary and official Annotated/FastAPI Body
+bindings. The correction prompt explicitly rejects non-Body or extra metadata,
+Body arguments, defaults, lookalikes, shadows, and replacement. This prevents
+the model-facing review stage from erasing the host's narrower proof.
+
+**Regression boundary.** Direct, aliased, and qualified official forms pass;
+14 dedicated metadata, default, import, replacement, shadow, and lookalike
+controls fail closed. A pinned FastAPI/Pydantic TestClient exploit/control pair
+keeps the same POST route, annotated model body, relative wrapper, and
+`shell=True` sink while changing only the selected declared field versus
+excluded `ClassVar`. The canonical corpus advances to 188 pairs, 376 cases,
+and 1,128 repeated positions, while the focused cross-file Python corpus is 16
+cases split 8/8. This increment improves one common request-body syntax and
+does not complete the standing scanner-effectiveness goal.
+
 ## 2026-08-29 — Preserve exact FastAPI/Pydantic request-body fields into shell grammar
 
 **Measured miss and comparator evidence.** The reproduction uses an official

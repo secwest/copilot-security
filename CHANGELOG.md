@@ -6,6 +6,35 @@ All notable scanner, application, benchmark, and operational changes are recorde
 
 ### Scanner effectiveness
 
+- Closed the documented FastAPI `Annotated[Model, Body()]` request-body gap.
+  Exact official `typing` or `typing_extensions.Annotated` and `fastapi` or
+  `fastapi.params.Body` bindings now preserve the selected Pydantic string
+  field through same-file, relative-wrapper, and bounded multi-hop Python sink
+  models. Direct, aliased, and module-qualified forms are covered.
+- Kept the new boundary fail closed: query and dependency metadata, extra
+  metadata, `Body` arguments, defaults, missing or ambiguous imports, binding
+  replacement, repository-local `typing`, `typing_extensions`, or `fastapi`
+  shadows, and lookalike helpers do not qualify. Structured evidence records
+  both the official `Annotated` and `Body` bindings, and quality closure must
+  name the exact annotated body boundary.
+- Added a real pinned TestClient exploit/control pair, 14 new adversarial
+  metadata/binding negatives, hosted witness coverage, and direct corpus
+  assertions. The canonical corpus advances to 188 exploit/control pairs, 376
+  cases, and 1,128 repeated scan positions; the focused Python relative-import
+  corpus advances to 16 cases split evenly between positives and controls.
+- Local acceptance closes with 2,082 passes, 31 intentional skips, and two
+  managed-sandbox permission denials across 2,115 tests and 16,413 assertions;
+  the two denied Git/Windows-ACL cases pass in a 48-test, 242-assertion native
+  rerun, yielding 2,084 passing outcomes and no product failures. Ubuntu/WSL
+  passes all 51 focused tests and 3,040 assertions. The pinned TestClient
+  witnesses record temporary-marker values `1` and `0`.
+- The validated npm archive contains 299 entries, is 2,445,031 bytes, and has
+  SHA-256
+  `3844c3da3bfeced90836d8f8a0578b43969e9860f6c370ce56a566018d573d8a`.
+  Strict archive inspection plus isolated Windows and Ubuntu installations
+  validate the public import, CLI, and all 79 bundled plugin files. Generated-
+  model drift, formatting, TypeScript checking, the production build, and the
+  production advisory audit are clean.
 - Closed a reproduced FastAPI/Pydantic request-body command-injection false
   negative. An exact JSON body field on a `pydantic.BaseModel` now crosses a
   same-file, relative-wrapper, or bounded multi-hop Python flow into shell

@@ -40765,6 +40765,16 @@ interface PythonFastApiPydanticBodyFieldSource {
   }>;
 }
 
+interface PythonFastApiPydanticEndpointType {
+  modelType: string;
+  propagators: Array<{
+    kind: string;
+    path: string;
+    line: number;
+    symbol?: string;
+  }>;
+}
+
 function pythonOfficialImportedMemberBinding(
   lines: readonly string[],
   moduleName: string,
@@ -41159,6 +41169,92 @@ function pythonPydanticModelForEndpointType(
   return candidates.length === 1 ? candidates[0] : undefined;
 }
 
+function pythonFastApiPydanticEndpointType(
+  files: readonly SourceFileSnapshot[],
+  path: string,
+  lines: readonly string[],
+  declaration: string,
+  parameter: string,
+  beforeLine: number,
+): PythonFastApiPydanticEndpointType | undefined {
+  if (declaration.includes("=")) return undefined;
+  const escapedParameter = escapeRegularExpression(parameter);
+  const direct = new RegExp(
+    `^\\s*${escapedParameter}\\s*:\\s*([A-Za-z_]\\w*)\\s*$`,
+    "u",
+  ).exec(declaration.trim());
+  if (direct?.[1] !== undefined) {
+    return { modelType: direct[1], propagators: [] };
+  }
+
+  const annotation = new RegExp(
+    `^\\s*${escapedParameter}\\s*:\\s*([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?)\\s*\\[([\\s\\S]+)\\]\\s*$`,
+    "u",
+  ).exec(declaration.trim());
+  if (annotation?.[1] === undefined || annotation[2] === undefined) {
+    return undefined;
+  }
+  const arguments_ = splitPythonArguments(annotation[2]);
+  if (arguments_.length !== 2) return undefined;
+  const modelType = /^([A-Za-z_]\w*)$/u.exec(arguments_[0]!.trim())?.[1];
+  const bodyCall = /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(\s*\)$/u.exec(
+    arguments_[1]!.trim(),
+  );
+  if (modelType === undefined || bodyCall?.[1] === undefined) {
+    return undefined;
+  }
+
+  const annotatedBinding = ["typing", "typing_extensions"]
+    .filter(
+      (moduleName) => !pythonLocalModuleCouldShadow(files, path, moduleName),
+    )
+    .map((moduleName) => ({
+      binding: pythonOfficialImportedMemberBinding(
+        lines,
+        moduleName,
+        "Annotated",
+        annotation[1]!,
+        beforeLine,
+      ),
+      moduleName,
+    }))
+    .filter((candidate) => candidate.binding !== undefined);
+  const bodyBinding = ["fastapi", "fastapi.params"]
+    .map((moduleName) => ({
+      binding: pythonOfficialImportedMemberBinding(
+        lines,
+        moduleName,
+        "Body",
+        bodyCall[1]!,
+        beforeLine,
+      ),
+      moduleName,
+    }))
+    .filter((candidate) => candidate.binding !== undefined);
+  if (annotatedBinding.length !== 1 || bodyBinding.length !== 1) {
+    return undefined;
+  }
+  const annotated = annotatedBinding[0]!;
+  const body = bodyBinding[0]!;
+  return {
+    modelType,
+    propagators: [
+      {
+        kind: "python-official-annotated-binding",
+        path,
+        line: annotated.binding!.line,
+        symbol: `${annotated.moduleName}.Annotated`,
+      },
+      {
+        kind: "fastapi-official-body-parameter",
+        path,
+        line: body.binding!.line,
+        symbol: `${body.moduleName}.Body`,
+      },
+    ],
+  };
+}
+
 function pythonPydanticExpressionOrigins(
   lines: readonly string[],
   expression: string,
@@ -41250,6 +41346,7 @@ function pythonFastApiPydanticBodyFieldSource(
   );
   const origins = pythonPydanticExpressionOrigins(lines, expression, callLine);
   const matches: Array<{
+    endpoint: PythonFastApiPydanticEndpointType;
     field: PythonPydanticModelField;
     model: ReturnType<typeof pythonPydanticModelForEndpointType> & {};
     parameter: string;
@@ -41261,17 +41358,21 @@ function pythonFastApiPydanticBodyFieldSource(
         candidate,
       ),
     );
-    if (declaration === undefined || declaration.includes("=")) continue;
-    const annotated = new RegExp(
-      `^\\s*${escapeRegularExpression(parameter)}\\s*:\\s*([A-Za-z_]\\w*)\\s*$`,
-      "u",
-    ).exec(declaration.trim());
-    if (annotated?.[1] === undefined) continue;
+    if (declaration === undefined) continue;
+    const endpoint = pythonFastApiPydanticEndpointType(
+      files,
+      path,
+      lines,
+      declaration,
+      parameter,
+      wrapper.startLine,
+    );
+    if (endpoint === undefined) continue;
     const model = pythonPydanticModelForEndpointType(
       files,
       path,
       lines,
-      annotated[1],
+      endpoint.modelType,
       wrapper.startLine,
     );
     if (model === undefined) continue;
@@ -41287,6 +41388,7 @@ function pythonFastApiPydanticBodyFieldSource(
         );
         if (field?.stringBodyInput === true) {
           matches.push({
+            endpoint,
             field,
             model,
             parameter,
@@ -41304,6 +41406,7 @@ function pythonFastApiPydanticBodyFieldSource(
         );
         if (field?.stringBodyInput === true) {
           matches.push({
+            endpoint,
             field,
             model,
             parameter,
@@ -41319,6 +41422,7 @@ function pythonFastApiPydanticBodyFieldSource(
         (candidate) =>
           candidate.parameter === match.parameter &&
           candidate.field.name === match.field.name &&
+          candidate.endpoint.modelType === match.endpoint.modelType &&
           candidate.model.definition.path === match.model.definition.path,
       ) === index,
   );
@@ -41339,6 +41443,7 @@ function pythonFastApiPydanticBodyFieldSource(
     line: wrapper.startLine,
     propagators: [
       ...routeEvidence,
+      ...selected.endpoint.propagators,
       {
         kind: "pydantic-official-basemodel-binding",
         path: selected.model.definition.path,
@@ -41394,17 +41499,25 @@ function pythonHasFastApiPydanticBodyEndpoint(
     }
     return pythonFunctionDeclarationParameters(lines, wrapper.startLine).some(
       (declaration) => {
-        if (declaration.includes("=")) return false;
-        const annotation = /^\s*[A-Za-z_]\w*\s*:\s*([A-Za-z_]\w*)\s*$/u.exec(
+        const parameter = /^\s*([A-Za-z_]\w*)\s*:/u.exec(
           declaration.trim(),
+        )?.[1];
+        if (parameter === undefined) return false;
+        const annotation = pythonFastApiPydanticEndpointType(
+          files,
+          path,
+          lines,
+          declaration,
+          parameter,
+          wrapper.startLine,
         );
         return (
-          annotation?.[1] !== undefined &&
+          annotation !== undefined &&
           pythonPydanticModelForEndpointType(
             files,
             path,
             lines,
-            annotation[1],
+            annotation.modelType,
             wrapper.startLine,
           ) !== undefined
         );
@@ -50279,9 +50392,22 @@ function pythonWebCommandEvidenceRequirements(
       "no model or parameter escape",
       "no ClassVar, mutation, or validator broadening",
     ];
+    const annotatedBoundary = propagators.some(
+      (propagator) =>
+        isRecord(propagator) &&
+        propagator["kind"] === "python-official-annotated-binding",
+    )
+      ? [
+          [
+            "exact Annotated[Model, Body()] body boundary",
+            "official Annotated and FastAPI Body bindings",
+            "python-official-annotated-binding",
+          ],
+        ]
+      : [];
     return {
-      validation: [route, model, field, stability],
-      attackPath: [route, model, field, stability],
+      validation: [route, model, field, stability, ...annotatedBoundary],
+      attackPath: [route, model, field, stability, ...annotatedBoundary],
     };
   }
   const indirectFlow = propagators.find(
