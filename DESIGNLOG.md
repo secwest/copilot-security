@@ -86,6 +86,45 @@ import, executable CLI, and all 79 bundled plugin files. Generated-model drift,
 formatting, TypeScript, the clean production build, and the production
 dependency audit are green with no known vulnerabilities.
 
+Two compiled inventories of the immutable 3,932-file implementation archive
+at checkpoint `aaaa7da9656255020f792873f929b2950f57c848` both reach the
+256-row cap and are byte-identical: 623,886 bytes with SHA-256
+`3946b2f1327f59f5e3d822e9f2d34326ff4c17b8c4333b8ae2b4ccf66a80a79a`.
+Exactly one row preserves `fastapi-embedded-body-shape`, the official Annotated
+and Body bindings, exact Pydantic model and declared string field, relative
+model and wrapper imports, `payload.name`, `shell=True`, and CWE-78. The
+topology-matched `ClassVar` control emits no structured row. The disposable
+21,463,040-byte source archive has SHA-256
+`581b0843e07cb47fc00e7bd56bdd57d0ac560314037c3906fa3e5c03c714192a`;
+it was deleted after verification and is reproducible with `git archive` from
+the recorded commit.
+
+Hosted closure is green at the same implementation checkpoint. Node run
+[`33304028467`](https://github.com/secwest/copilot-security/actions/runs/33304028467)
+passes all 92 jobs, including the pinned direct, Annotated, and embedded
+FastAPI witnesses; container
+[`33304028423`](https://github.com/secwest/copilot-security/actions/runs/33304028423),
+Windows GUI
+[`33304028430`](https://github.com/secwest/copilot-security/actions/runs/33304028430),
+Linux GUI
+[`33304028341`](https://github.com/secwest/copilot-security/actions/runs/33304028341),
+Java
+[`33304028398`](https://github.com/secwest/copilot-security/actions/runs/33304028398),
+Kotlin
+[`33304028417`](https://github.com/secwest/copilot-security/actions/runs/33304028417),
+.NET
+[`33304028345`](https://github.com/secwest/copilot-security/actions/runs/33304028345),
+Go
+[`33304028355`](https://github.com/secwest/copilot-security/actions/runs/33304028355),
+Rust
+[`33304028342`](https://github.com/secwest/copilot-security/actions/runs/33304028342),
+Ruby
+[`33304028407`](https://github.com/secwest/copilot-security/actions/runs/33304028407),
+and PHP
+[`33304028395`](https://github.com/secwest/copilot-security/actions/runs/33304028395)
+also pass. GitHub reports the repository public on default branch `main`, with
+remote `main` at the exact implementation commit.
+
 ## 2026-08-30 — Treat exact FastAPI Annotated models as request bodies
 
 **Measured miss and primary evidence.** The pre-change production scanner

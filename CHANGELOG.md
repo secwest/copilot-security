@@ -42,6 +42,22 @@ All notable scanner, application, benchmark, and operational changes are recorde
   public import, executable CLI, and all 79 bundled plugin files. Generated-
   model drift, formatting, TypeScript, the clean production build, and the
   production dependency audit are clean.
+- Two compiled inventories of the immutable 3,932-file implementation archive
+  at checkpoint `aaaa7da9656255020f792873f929b2950f57c848` are byte-identical.
+  Each reaches the 256-row cap, is 623,886 bytes, and has SHA-256
+  `3946b2f1327f59f5e3d822e9f2d34326ff4c17b8c4333b8ae2b4ccf66a80a79a`.
+  Exactly one row retains the embedded-body shape, official Annotated and Body
+  bindings, Pydantic model/string field, relative model and command-wrapper
+  imports, `payload.name`, `shell=True`, and CWE-78; the `ClassVar` control is
+  absent. The 21,463,040-byte source archive has SHA-256
+  `581b0843e07cb47fc00e7bd56bdd57d0ac560314037c3906fa3e5c03c714192a`.
+- All eleven hosted workflow families pass exact implementation checkpoint
+  `aaaa7da`: Node `33304028467` (92/92 jobs, including direct, Annotated, and
+  embedded pinned FastAPI witnesses), container `33304028423`, Windows GUI
+  `33304028430`, Linux GUI `33304028341`, Java `33304028398`, Kotlin
+  `33304028417`, .NET `33304028345`, Go `33304028355`, Rust `33304028342`,
+  Ruby `33304028407`, and PHP `33304028395`. The repository remains public on
+  default branch `main`.
 - Closed the documented FastAPI `Annotated[Model, Body()]` request-body gap.
   Exact official `typing` or `typing_extensions.Annotated` and `fastapi` or
   `fastapi.params.Body` bindings now preserve the selected Pydantic string
