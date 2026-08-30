@@ -60,6 +60,54 @@ and 1,128 repeated positions, while the focused cross-file Python corpus is 16
 cases split 8/8. This increment improves one common request-body syntax and
 does not complete the standing scanner-effectiveness goal.
 
+Local acceptance closes with 2,082 passes, 31 intentional platform or
+environment skips, and two managed-sandbox permission denials across 2,115
+tests and 16,413 assertions. Both denied Git/Windows-ACL cases pass in a
+48-test, 242-assertion native rerun, so the combined outcome is 2,084 passing
+tests and no product failures. Ubuntu/WSL passes 51 focused tests and 3,040
+assertions. The pinned FastAPI 0.116.1, Pydantic 2.11.7, Starlette 0.47.3, and
+HTTPX 0.28.1 witnesses record temporary-marker values `1` and `0` on Python
+3.12. Host Python 3.14 cannot build the older pinned pydantic-core/PyO3 release,
+so it is not treated as a product failure.
+
+The exact npm archive contains 299 entries, is 2,445,031 bytes, and has
+SHA-256
+`3844c3da3bfeced90836d8f8a0578b43969e9860f6c370ce56a566018d573d8a`.
+Strict inspection and isolated Windows and Ubuntu installs validate the
+public import, executable CLI, and all 79 bundled plugin files. Generated-
+model drift, formatting, TypeScript, the clean production build, and the
+production dependency audit are clean.
+
+Two compiled inventories of the immutable 3,918-file implementation archive
+at checkpoint `1cdf97a70e90406e716d9803ae9992808d70b2b0` both reach the
+256-row cap and are byte-identical: 621,677 bytes with SHA-256
+`f9510f76d4c995bde2475b0b6dcdec7e290514a39fe720d7f195c09b81006ac6`.
+Exactly one row preserves the official Annotated and Body bindings, exact
+Pydantic model and declared string field, relative model and wrapper imports,
+`payload.name`, `shell=True`, and CWE-78. The `ClassVar` control is absent. The
+21,411,840-byte source archive has SHA-256
+`1e78ed3131ac85e2087206d57e487d8cfd0818fd9db2bbf93a01b5397b102199`.
+
+Hosted closure is green at the same implementation checkpoint. Node run
+[`33300495470`](https://github.com/secwest/copilot-security/actions/runs/33300495470)
+passes all 92 jobs, including the pinned direct and Annotated FastAPI witness;
+container
+[`33300495506`](https://github.com/secwest/copilot-security/actions/runs/33300495506),
+Windows GUI
+[`33300495473`](https://github.com/secwest/copilot-security/actions/runs/33300495473),
+Linux GUI
+[`33300495462`](https://github.com/secwest/copilot-security/actions/runs/33300495462),
+Java [`33300495474`](https://github.com/secwest/copilot-security/actions/runs/33300495474),
+Kotlin
+[`33300495471`](https://github.com/secwest/copilot-security/actions/runs/33300495471),
+.NET [`33300495417`](https://github.com/secwest/copilot-security/actions/runs/33300495417),
+Go [`33300495421`](https://github.com/secwest/copilot-security/actions/runs/33300495421),
+Rust [`33300495502`](https://github.com/secwest/copilot-security/actions/runs/33300495502),
+Ruby [`33300495493`](https://github.com/secwest/copilot-security/actions/runs/33300495493),
+and PHP
+[`33300495456`](https://github.com/secwest/copilot-security/actions/runs/33300495456)
+all pass. GitHub reports the repository public on default branch `main`.
+
 ## 2026-08-29 — Preserve exact FastAPI/Pydantic request-body fields into shell grammar
 
 **Measured miss and comparator evidence.** The reproduction uses an official

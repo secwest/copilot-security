@@ -35,6 +35,21 @@ All notable scanner, application, benchmark, and operational changes are recorde
   validate the public import, CLI, and all 79 bundled plugin files. Generated-
   model drift, formatting, TypeScript checking, the production build, and the
   production advisory audit are clean.
+- Two compiled inventories of the immutable 3,918-file implementation archive
+  at checkpoint `1cdf97a70e90406e716d9803ae9992808d70b2b0` are byte-
+  identical. Each reaches the 256-row cap, is 621,677 bytes, and has SHA-256
+  `f9510f76d4c995bde2475b0b6dcdec7e290514a39fe720d7f195c09b81006ac6`.
+  Exactly one row retains the official Annotated and Body bindings, Pydantic
+  model/string field, relative model and command-wrapper imports,
+  `payload.name`, `shell=True`, and CWE-78; the `ClassVar` control is absent.
+  The 21,411,840-byte source archive has SHA-256
+  `1e78ed3131ac85e2087206d57e487d8cfd0818fd9db2bbf93a01b5397b102199`.
+- All eleven hosted workflow families pass exact implementation checkpoint
+  `1cdf97a`: Node `33300495470` (92/92 jobs, including the direct-and-Annotated
+  pinned FastAPI witness), container `33300495506`, Windows GUI `33300495473`,
+  Linux GUI `33300495462`, Java `33300495474`, Kotlin `33300495471`, .NET
+  `33300495417`, Go `33300495421`, Rust `33300495502`, Ruby `33300495493`, and
+  PHP `33300495456`. The repository remains public on default branch `main`.
 - Closed a reproduced FastAPI/Pydantic request-body command-injection false
   negative. An exact JSON body field on a `pydantic.BaseModel` now crosses a
   same-file, relative-wrapper, or bounded multi-hop Python flow into shell
