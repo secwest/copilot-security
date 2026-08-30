@@ -68,6 +68,38 @@ assertions, skips 31 intentional platform/environment cases, and reports no
 failures across 2,139 tests in 217 files. The standing effectiveness goal
 remains active.
 
+**Immutable self-review.** The tracked archive for exact implementation
+checkpoint `7347faacf59c74a9a8612915f96a4f57f98dec07` contains 3,968 files;
+its 21,657,600-byte tar has SHA-256
+`d8e8b2eb6a276c7623f4204800592d020a0d6c8a3e1cf5a826e97322cb3c2eea`.
+Both protected untracked workspace paths are absent. The archive builds with a
+temporary junction to the already accepted dependency tree; `node_modules` is
+excluded from inventory, so scanner input remains the exact tracked source.
+Two compiled inventories take 42,619.554 and 21,958.991 milliseconds and are
+byte-identical at the 256-row cap: 626,362 bytes with SHA-256
+`63c6085a11989f5b6db7e811b03c605347e2dd25338fdfeb2a15d77aef642ae1`.
+All 256 retained rows are structured; 248 are fixture paths and eight are
+non-fixture paths. Exactly one Flask row retains the official factory and
+route, request source at line 7, redirect sink at line 9, CWE-601, and six
+ordered framework and Location transitions. The fixed-local control is absent.
+
+**Distribution evidence.** Two production package builds are byte-identical.
+The standard strict inspector validates 299 entries in a 2,462,222-byte archive
+with SHA-256
+`34956d772552b3fc84da34e11ed7a04faf22bde48dcf75f79d3b2f4ac20fc426`.
+A fresh isolated installation adds 67 packages and validates the public SDK
+import, executable CLI, and all 79 bundled plugin files. The production
+high-severity advisory audit reports no known vulnerabilities.
+
+**Hosted closure.** All eleven workflow families pass at the exact
+implementation checkpoint. Node CI run `33319844821` completes all 92 jobs,
+including the pinned Flask/Werkzeug witness pair. Container `33319844756`,
+.NET `33319844779`, Go `33319844774`, Java `33319844810`, Kotlin
+`33319844811`, Linux GUI `33319844902`, PHP `33319844727`, Ruby
+`33319844828`, Rust `33319844808`, and Windows GUI `33319844822` also pass.
+GitHub reports the repository public on default branch `main`; the standing
+scanner-effectiveness goal remains active.
+
 ## 2026-08-30 — Preserve balanced multiline FastAPI route decorators
 
 **Measured shared false negative.** Python permits expressions enclosed in

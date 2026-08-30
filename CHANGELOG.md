@@ -37,6 +37,28 @@ All notable scanner, application, benchmark, and operational changes are recorde
   only stale-build, private-ACL, and 191-pair bookkeeping conditions; a fresh
   build, the 192-pair update, and the required native ACL boundary clear all
   seven without changing product expectations.
+- Two compiled inventories of the 3,968-file exact implementation archive at
+  checkpoint `7347faacf59c74a9a8612915f96a4f57f98dec07` are byte-identical.
+  They take 42,619.554 and 21,958.991 milliseconds, reach the 256-row cap with
+  only structured rows, total 626,362 bytes, and have SHA-256
+  `63c6085a11989f5b6db7e811b03c605347e2dd25338fdfeb2a15d77aef642ae1`.
+  Exactly one Flask row retains request source line 7, redirect sink line 9,
+  CWE-601, and six ordered framework and Location transitions; the fixed-local
+  twin is absent. The 21,657,600-byte tracked archive has SHA-256
+  `d8e8b2eb6a276c7623f4204800592d020a0d6c8a3e1cf5a826e97322cb3c2eea`.
+- Two production package builds are byte-identical. Strict inspection validates
+  the 299-entry, 2,462,222-byte archive with SHA-256
+  `34956d772552b3fc84da34e11ed7a04faf22bde48dcf75f79d3b2f4ac20fc426`;
+  an isolated 67-package installation validates the public import, executable
+  CLI, and all 79 bundled plugin files. The production high-severity advisory
+  audit reports no known vulnerabilities.
+- All eleven exact-source workflow families pass at the implementation
+  checkpoint. Node CI run `33319844821` passes all 92 jobs, including the new
+  Flask exploit/control witnesses; container `33319844756`, .NET `33319844779`,
+  Go `33319844774`, Java `33319844810`, Kotlin `33319844811`, Linux GUI
+  `33319844902`, PHP `33319844727`, Ruby `33319844828`, Rust `33319844808`, and
+  Windows GUI `33319844822` also pass. GitHub reports the repository public on
+  default branch `main`.
 - Closed a reproduced shared false negative for balanced multiline FastAPI
   path-operation decorators. The unchanged host passed its 12 existing direct-
   return redirect checks but emitted no finding for the new executable case.
